@@ -1,0 +1,16 @@
+# Build output
+dist/
+
+# Node
+node_modules/
+package-lock.json
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log
+
+# The 3 BGM MP3s are shipped game assets — keep them tracked.
+# Only ignore regenerated local copies outside public/.
+*.mp3
+!public/audio/*.mp3

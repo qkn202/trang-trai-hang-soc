@@ -1,0 +1,25 @@
+{
+  "name": "Trang Trại Hang Sóc & Thung Lũng Hogsmeade — Cozy Wizarding Farm",
+  "short_name": "Hang Sóc Farm",
+  "description": "Game nông trại phép thuật ấm cúng 2.5D Isometric thời gian thực: chăm sóc Trang Trại Hang Sóc nhà Weasley, nướng bánh bà Molly, gửi Cú Đưa Thư và mở rộng thung lũng Hogsmeade từ Cấp 1 đến Cấp 100. Tương thích di động đa hướng xoay màn hình (dọc và ngang).",
+  "lang": "vi",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#2b190d",
+  "theme_color": "#4f2813",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
