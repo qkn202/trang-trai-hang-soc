@@ -143,3 +143,28 @@ export const accessibility = {
   announce,
   refresh: () => refreshFarmStatus(),
 };
+
+export {
+  applyA11ySettingsToDocument,
+  applyDeadzone,
+  DEFAULT_PLATFORM_A11Y_SETTINGS,
+  EscapeBackStack,
+  GAMEPAD_STICK_DEADZONE,
+  GamepadController,
+  getColorblindSafeBadge,
+  MIN_TOUCH_TARGET_PX,
+  RADIAL_QUICK_SLICES,
+  resolveRadialSliceFromStick,
+  syncA11yVolumesToAudio,
+  validateTouchHitTarget,
+} from './platformAndA11y';
+export type {
+  ColorblindMode,
+  ColorblindSafeCue,
+  FontScalePreset,
+  GamepadFrameOutput,
+  GamepadSnapshotInput,
+  PlatformA11ySettings,
+  RadialQuickActionId,
+  SemanticCueTier,
+} from './platformAndA11y';

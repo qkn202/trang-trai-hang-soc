@@ -11450,3 +11450,26 @@ body:has(.hud-shell-root.hud-compact-rolled) .legal-trigger-btn {
   line-height: 1;
 }
 
+/* ============================================================
+   P4 — Platform & Accessibility (Font Scale, High Contrast, Keyboard Focus)
+   ============================================================ */
+html[data-font-scale='125'] {
+  font-size: 125%;
+}
+
+html[data-font-scale='150'] {
+  font-size: 150%;
+}
+
+html[data-high-contrast='true'] {
+  --surface-panel: var(--surface-panel-solid);
+  --ink-soft: var(--ink);
+  --ring-outline: 3.5px;
+}
+
+html[data-kb-focus='true'] :focus-visible {
+  outline: 3px solid var(--focus-color);
+  outline-offset: 2px;
+}
+
+
