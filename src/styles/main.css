@@ -257,6 +257,21 @@
   --tutorial-spot-glow: rgba(251, 191, 36, 0.62);
   --tutorial-spot-fill: rgba(255, 239, 153, 0.14);
   --tutorial-dot-idle: rgba(138, 86, 48, 0.28);
+
+  /* Hogwarts 4-House Cup & Great Hall Gem Hourglass Tokens (Candy Crush × HP Canon) */
+  --house-gryffindor-grad: linear-gradient(135deg, #991b1b 0%, #dc2626 58%, #f59e0b 100%);
+  --house-slytherin-grad: linear-gradient(135deg, #065f46 0%, #10b981 62%, #64748b 100%);
+  --house-ravenclaw-grad: linear-gradient(135deg, #1e40af 0%, #0284c7 65%, #f59e0b 100%);
+  --house-hufflepuff-grad: linear-gradient(135deg, #92400e 0%, #d97706 60%, #eab308 100%);
+  --house-cup-card-border: rgba(253, 224, 71, 0.48);
+  --house-cup-card-active-border: #fde047;
+  --house-cup-card-shadow: rgba(28, 14, 6, 0.36);
+  --house-cup-text-shadow: rgba(0, 0, 0, 0.45);
+  --house-hourglass-track: rgba(15, 10, 8, 0.38);
+  --house-hourglass-fill-left: #fde047;
+  --house-hourglass-fill-right: #ffffff;
+  --house-you-pill-bg: rgba(254, 240, 138, 0.96);
+  --house-you-pill-ink: #451a03;
 }
 
 * {
@@ -9728,6 +9743,365 @@ progress.ts-build-progress::-moz-progress-bar {
   font-size: 12px;
   font-weight: 700;
   color: var(--ink-soft);
+}
+
+/* ============================================================
+   Hogwarts 4-House Cup & Great Hall Gem Hourglasses
+   Inspired by Candy Crush Hogwarts Leaderboard & HP Book Lore
+   ============================================================ */
+.house-cup-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, var(--surface-chip-top), var(--surface-parchment));
+  border: 2px solid var(--farm-sheet-border);
+  box-shadow: inset 0 1px 0 var(--farm-highlight-crisp);
+}
+
+.house-cup-header-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.house-cup-heading-copy {
+  flex: 1 1 280px;
+  min-inline-size: 0;
+}
+
+.house-cup-heading {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 14.5px;
+  font-weight: 900;
+  color: var(--farm-ink-title);
+  margin: 0;
+}
+
+.house-cup-quote {
+  font-size: 11.5px;
+  font-style: italic;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
+.lb-sorting-hat-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.lb-sorting-hat-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--farm-ink-body);
+}
+
+.lb-hat-roll-btn {
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 900;
+}
+
+.lb-hat-roll-btn.is-spinning {
+  transform: rotate(-8deg) scale(1.06);
+}
+
+.lb-my-house-pills {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.lb-my-house-btn {
+  padding: 4px 9px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid var(--border-brass);
+  background: var(--surface-panel-solid);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.lb-my-house-btn:hover {
+  background: var(--surface-chip-hover);
+  transform: translateY(-1px);
+}
+
+.lb-my-house-btn.active {
+  border-color: var(--ts-ink-contour);
+  color: var(--ts-white);
+  text-shadow: 0 1px 2px var(--house-cup-text-shadow);
+  box-shadow: 0 2px 0 var(--shadow-chip);
+}
+
+.lb-my-house-btn.house-pill-gryffindor.active {
+  background: var(--house-gryffindor-grad);
+}
+
+.lb-my-house-btn.house-pill-slytherin.active {
+  background: var(--house-slytherin-grad);
+}
+
+.lb-my-house-btn.house-pill-ravenclaw.active {
+  background: var(--house-ravenclaw-grad);
+}
+
+.lb-my-house-btn.house-pill-hufflepuff.active {
+  background: var(--house-hufflepuff-grad);
+}
+
+.hourglass-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.house-cup-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 13px;
+  padding: 10px 11px;
+  border: 2px solid var(--house-cup-card-border);
+  box-shadow: 0 4px 10px var(--house-cup-card-shadow);
+  color: var(--ts-white);
+  text-align: start;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
+}
+
+.house-cup-card.house-card-gryffindor {
+  background: var(--house-gryffindor-grad);
+}
+
+.house-cup-card.house-card-slytherin {
+  background: var(--house-slytherin-grad);
+}
+
+.house-cup-card.house-card-ravenclaw {
+  background: var(--house-ravenclaw-grad);
+}
+
+.house-cup-card.house-card-hufflepuff {
+  background: var(--house-hufflepuff-grad);
+}
+
+.house-cup-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--house-cup-card-active-border);
+}
+
+.house-cup-card.is-player-house {
+  border-color: var(--house-cup-card-active-border);
+  box-shadow:
+    0 0 0 2px var(--farm-ink-title),
+    0 5px 12px var(--house-cup-card-shadow);
+}
+
+.house-cup-card.is-filtered-house {
+  outline: 3px solid var(--focus-color);
+  outline-offset: 1px;
+}
+
+.house-cup-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 5px;
+}
+
+.house-cup-crest {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 3px var(--house-cup-text-shadow));
+}
+
+.house-cup-crest svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.house-cup-meta {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+.house-cup-name-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.house-cup-name-row strong {
+  font-size: 13px;
+  font-weight: 900;
+  text-shadow: 0 1px 3px var(--house-cup-text-shadow);
+}
+
+.house-you-pill {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--house-you-pill-bg);
+  color: var(--house-you-pill-ink);
+  font-size: 9.5px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.house-cup-vn-title {
+  font-size: 10.8px;
+  font-weight: 800;
+  opacity: 0.96;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.house-cup-stats {
+  font-size: 10.2px;
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.house-cup-hourglass-icon {
+  width: 24px;
+  height: 32px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 4px var(--house-cup-text-shadow));
+}
+
+.house-cup-hourglass-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.house-cup-points-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+
+.house-cup-points {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.05;
+  text-shadow: 0 2px 4px var(--house-cup-text-shadow);
+}
+
+.house-cup-patronus {
+  font-size: 10px;
+  font-weight: 800;
+  opacity: 0.92;
+  white-space: nowrap;
+}
+
+.hourglass-bar {
+  height: 8px;
+  background: var(--house-hourglass-track);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  border: 1px solid var(--house-cup-card-border);
+}
+
+.hourglass-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(
+    90deg,
+    var(--house-hourglass-fill-left),
+    var(--house-hourglass-fill-right)
+  );
+  transition: width 0.35s ease;
+}
+
+.lb-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lb-filter-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.filter-pill {
+  padding: 5px 11px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid var(--border-brass);
+  background: var(--surface-panel-solid);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+
+.filter-pill:hover {
+  background: var(--surface-chip-hover);
+}
+
+.filter-pill.active {
+  background: linear-gradient(180deg, var(--ts-play-cta-top), var(--ts-play-cta-mid));
+  border-color: var(--ts-play-cta-border);
+  color: var(--ts-play-cta-ink);
+  box-shadow: 0 2px 0 var(--ts-play-cta-lip);
+}
+
+.filter-pill-count {
+  font-weight: 700;
+  opacity: 0.82;
+}
+
+.lb-empty-house-cell {
+  padding: 18px 14px !important;
+  text-align: center !important;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 760px) {
+  .hourglass-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lb-sorting-hat-box {
+    align-items: flex-start;
+    width: 100%;
+  }
+}
+
+@media (max-width: 440px) {
+  .hourglass-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .lb-podium-grid {

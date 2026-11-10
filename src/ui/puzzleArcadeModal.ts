@@ -1767,6 +1767,11 @@ export class PuzzleArcadeModalController {
                       : `<span class="m3-reward-chip">🏆 Hạng #${vs.leaderboardRankUp.newRank} môn này</span>`
                     : ''
                 }
+                ${
+                  vs.leaderboardRankUp?.housePointsAwarded && vs.leaderboardRankUp.playerHouse
+                    ? `<span class="m3-reward-chip">⏳ +${vs.leaderboardRankUp.housePointsAwarded} Điểm Cúp Nhà ${escapeHtml(vs.leaderboardRankUp.playerHouse)} (Hạng #${vs.leaderboardRankUp.houseRank ?? 1})</span>`
+                    : ''
+                }
               </div>
               ${winReview ? this.renderTurningPointCardHtml(winReview) : ''}
               <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:6px;">

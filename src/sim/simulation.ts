@@ -149,9 +149,13 @@ import {
   ensureMinigameLeaderboardState,
   getAllCachedCloudLeaderboards,
   getCachedCloudLeaderboardEntries,
+  getPlayerHogwartsHouse,
+  HOGWARTS_HOUSE_META,
   LeaderboardStandingResult,
   PersonalDisciplineSummaryRow,
   recordMinigameSessionResult,
+  rollSortingHatHouse,
+  setPlayerHogwartsHouse,
   submitPlayerCloudLeaderboardEntry,
 } from './minigameLeaderboard';
 import {
@@ -5767,16 +5771,57 @@ export class ParkSimulation {
     return ensureMinigameLeaderboardState(this.state);
   }
 
+  public getPlayerHouse(): HouseName {
+    this.ensureMinigameLeaderboard();
+    return getPlayerHogwartsHouse(this.state);
+  }
+
+  public setPlayerHouse(house: HouseName, activeGameId?: LeaderboardGameId): HouseName {
+    this.ensureMinigameLeaderboard();
+    const chosen = setPlayerHogwartsHouse(this.state, house);
+    const meta = HOGWARTS_HOUSE_META[chosen];
+    this.audio.playSpell();
+    this.onToast?.(
+      `${meta.mascotEmoji} Đã gia nhập ${meta.vnTitle} (${chosen}) — Đồng Hồ Cát ${meta.gemNameVi}!`,
+      meta.mascotEmoji
+    );
+    this.saveToStorage();
+    this.onUiChange?.();
+    if (activeGameId) {
+      void submitPlayerCloudLeaderboardEntry(this.state, activeGameId);
+    }
+    return chosen;
+  }
+
+  public rollPlayerSortingHat(activeGameId?: LeaderboardGameId): HouseName {
+    this.ensureMinigameLeaderboard();
+    const chosen = rollSortingHatHouse(this.state);
+    const meta = HOGWARTS_HOUSE_META[chosen];
+    this.audio.playLevelUp();
+    this.onToast?.(
+      `🎩 Chiếc Nón Phân Loại hô vang: "${chosen.toUpperCase()} — ${meta.vnTitle}!" ${meta.quoteVi}`,
+      '🎩'
+    );
+    this.saveToStorage();
+    this.onUiChange?.();
+    if (activeGameId) {
+      void submitPlayerCloudLeaderboardEntry(this.state, activeGameId);
+    }
+    return chosen;
+  }
+
   public getMinigameLeaderboard(
     gameId: LeaderboardGameId,
-    scope: Exclude<LeaderboardScope, 'personal'> = 'valley'
+    scope: Exclude<LeaderboardScope, 'personal'> = 'valley',
+    houseFilter: 'all' | HouseName = 'all'
   ): LeaderboardStandingResult {
     this.ensureNeighborSocial();
     return buildMinigameLeaderboard(
       this.state,
       gameId,
       scope,
-      getCachedCloudLeaderboardEntries(gameId)
+      getCachedCloudLeaderboardEntries(gameId),
+      houseFilter
     );
   }
 

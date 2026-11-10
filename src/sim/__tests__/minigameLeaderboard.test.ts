@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MagicalAudio } from '../../engine/audio';
 import { generateNextQuizChallenge } from '../languageQuizEngine';
 import {
+  ALL_HOGWARTS_HOUSES,
   ALL_LEADERBOARD_GAMES,
   buildMinigameLeaderboard,
   clearCachedCloudLeaderboards,
+  HOGWARTS_HOUSE_META,
   LEADERBOARD_GAME_META,
   setCachedCloudLeaderboardEntries,
 } from '../minigameLeaderboard';
@@ -352,5 +354,84 @@ describe('Per-Mini-Game Leaderboards (6 Wizarding Disciplines — Real Players O
     expect(game.status).toBe('won');
     expect(game.remainingPairs).toBe(0);
     expect(game.getTurningPointReview()?.mode).toBe('blocks');
+  });
+
+  it('computes 4 Hogwarts Houses Cup Hourglass standings, Sorting Hat selection, and house filtering', () => {
+    const sim = new ParkSimulation(new MagicalAudio());
+    expect(ALL_HOGWARTS_HOUSES).toEqual([
+      'Gryffindor',
+      'Slytherin',
+      'Ravenclaw',
+      'Hufflepuff',
+    ]);
+    for (const h of ALL_HOGWARTS_HOUSES) {
+      expect(HOGWARTS_HOUSE_META[h].emblemSvg).toContain('<svg');
+      expect(HOGWARTS_HOUSE_META[h].hourglassSvg).toContain('<svg');
+      expect(HOGWARTS_HOUSE_META[h].gemNameVi.length).toBeGreaterThan(3);
+    }
+
+    // Switch player House to Slytherin and win a Match-3 stage -> awards Slytherin Emerald Hourglass points!
+    expect(sim.setPlayerHouse('Slytherin')).toBe('Slytherin');
+    expect(sim.getPlayerHouse()).toBe('Slytherin');
+
+    const winRes = sim.completeMatch3LevelVictory(15, { sessionScore: 2800 });
+    expect(winRes.leaderboardRankUp?.playerHouse).toBe('Slytherin');
+    expect(winRes.leaderboardRankUp?.housePointsAwarded).toBeGreaterThan(0);
+    expect(sim.state.housePoints.Slytherin).toBeGreaterThan(0);
+
+    // Seed real online players across the other houses
+    setCachedCloudLeaderboardEntries('match3', [
+      {
+        userId: 'raven_scholar_1',
+        name: 'Cho Chang',
+        parkName: 'Tháp Đại Bàng',
+        friendCode: 'HS-CHOC-01',
+        avatarEmoji: '🦅',
+        house: 'Ravenclaw',
+        primaryValue: 18,
+        ratingScore: 3400,
+        totalWins: 20,
+        bestStreak: 6,
+        detailLabelVi: '20 thắng • 🔥×6',
+        updatedAt: Date.now(),
+      },
+      {
+        userId: 'huff_friend_1',
+        name: 'Cedric Diggory',
+        parkName: 'Thung Lũng Lửng Vàng',
+        friendCode: 'HS-CEDR-02',
+        avatarEmoji: '🦡',
+        house: 'Hufflepuff',
+        primaryValue: 5,
+        ratingScore: 950,
+        totalWins: 5,
+        bestStreak: 3,
+        detailLabelVi: '5 thắng • 🔥×3',
+        updatedAt: Date.now(),
+      },
+    ]);
+
+    const allStanding = sim.getMinigameLeaderboard('match3', 'valley', 'all');
+    expect(allStanding.houseStandings).toHaveLength(4);
+    expect(allStanding.houseStandings[0].rank).toBe(1);
+    expect(allStanding.houseStandings[0].house).toBe('Ravenclaw');
+    expect(
+      allStanding.houseStandings.find((s) => s.house === 'Slytherin')?.isPlayerHouse
+    ).toBe(true);
+
+    // Filtering by house returns only contenders in that house while keeping 4-house standings intact
+    const slytherinOnly = sim.getMinigameLeaderboard('match3', 'valley', 'Slytherin');
+    expect(slytherinOnly.entries).toHaveLength(1);
+    expect(slytherinOnly.entries[0].isPlayer).toBe(true);
+    expect(slytherinOnly.entries[0].house).toBe('Slytherin');
+    expect(slytherinOnly.houseStandings).toHaveLength(4);
+
+    const gryffindorEmpty = sim.getMinigameLeaderboard('match3', 'valley', 'Gryffindor');
+    expect(gryffindorEmpty.entries).toHaveLength(0);
+
+    // Sorting Hat rolls a new house different from current
+    const afterHat = sim.rollPlayerSortingHat();
+    expect(ALL_HOGWARTS_HOUSES).toContain(afterHat);
+    expect(afterHat).not.toBe('Slytherin');
   });
 });

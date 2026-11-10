@@ -694,6 +694,9 @@ export interface LeaderboardRankChange {
   newRank: number;
   rankUpBy: number;
   totalEntries: number;
+  housePointsAwarded?: number;
+  playerHouse?: HouseName;
+  houseRank?: number;
 }
 
 export interface MinigamePersonalRecord {
@@ -708,6 +711,7 @@ export interface MinigamePersonalRecord {
 }
 
 export interface MinigameLeaderboardState {
+  playerHouse?: HouseName;
   records: Record<LeaderboardGameId, MinigamePersonalRecord>;
 }
 

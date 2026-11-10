@@ -1166,6 +1166,11 @@ export class Match3ModalController {
                     : `<span class="m3-reward-chip">🏆 Hạng #${vs.leaderboardRankUp.newRank} Bùa Gặt</span>`
                   : ''
               }
+              ${
+                vs.leaderboardRankUp?.housePointsAwarded && vs.leaderboardRankUp.playerHouse
+                  ? `<span class="m3-reward-chip">⏳ +${vs.leaderboardRankUp.housePointsAwarded} Điểm Cúp Nhà ${escapeHtml(vs.leaderboardRankUp.playerHouse)} (Hạng #${vs.leaderboardRankUp.houseRank ?? 1})</span>`
+                  : ''
+              }
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:100%;margin-top:6px;">
               <button id="btnM3NextLevel" type="button" class="brass-btn gold-cta" style="flex:1;min-width:170px;padding:9px 14px;font-size:13.5px;">

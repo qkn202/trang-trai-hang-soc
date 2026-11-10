@@ -111,6 +111,113 @@ export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMet
   },
 };
 
+export const ALL_HOGWARTS_HOUSES: ReadonlyArray<HouseName> = [
+  'Gryffindor',
+  'Slytherin',
+  'Ravenclaw',
+  'Hufflepuff',
+];
+
+export interface HogwartsHouseMeta {
+  house: HouseName;
+  cssSlug: 'gryffindor' | 'slytherin' | 'ravenclaw' | 'hufflepuff';
+  vnTitle: string;
+  founderVi: string;
+  mascotEmoji: string;
+  gemNameVi: string;
+  gemShortVi: string;
+  gemEmoji: string;
+  traitsVi: string;
+  quoteVi: string;
+  patronusNameVi: string;
+  patronusEmoji: string;
+  emblemSvg: string;
+  hourglassSvg: string;
+}
+
+export const HOGWARTS_HOUSE_META: Record<HouseName, HogwartsHouseMeta> = {
+  Gryffindor: {
+    house: 'Gryffindor',
+    cssSlug: 'gryffindor',
+    vnTitle: 'Nhà Sư Tử Đỏ',
+    founderVi: 'Godric Gryffindor',
+    mascotEmoji: '🦁',
+    gemNameVi: 'Hồng Ngọc (Ruby)',
+    gemShortVi: 'Hồng Ngọc',
+    gemEmoji: '♦️',
+    traitsVi: 'Can Đảm • Gan Dạ • Thượng Võ',
+    quoteVi:
+      '“Có lẽ ngươi thuộc Gryffindor, nơi tụ hội những trái tim dũng cảm và gan góc bậc nhất!”',
+    patronusNameVi: 'Hươu Bạc',
+    patronusEmoji: '🦌',
+    emblemSvg: `<svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 10H52V32C52 46 32 56 32 56C32 56 12 46 12 32V10Z" fill="#B91C1C" stroke="#FDE047" stroke-width="3.5"/><path d="M32 17L36 25L45 26L38.5 32.5L40 41.5L32 37L24 41.5L25.5 32.5L19 26L28 25L32 17Z" fill="#FDE047"/></svg>`,
+    hourglassSvg: `<svg viewBox="0 0 36 48" fill="none" aria-hidden="true"><rect x="6" y="3" width="24" height="4" rx="2" fill="#FDE047"/><rect x="6" y="41" width="24" height="4" rx="2" fill="#FDE047"/><path d="M10 7H26L20 22L26 41H10L16 22L10 7Z" fill="rgba(255,255,255,0.16)" stroke="#FDE047" stroke-width="2"/><path d="M13 11H23L18.5 21H17.5L13 11Z" fill="#FB7185"/><path d="M12 39L16.5 26H19.5L24 39H12Z" fill="#E11D48"/><circle cx="18" cy="24" r="1.6" fill="#FFE4E6"/></svg>`,
+  },
+  Slytherin: {
+    house: 'Slytherin',
+    cssSlug: 'slytherin',
+    vnTitle: 'Nhà Rắn Xanh',
+    founderVi: 'Salazar Slytherin',
+    mascotEmoji: '🐍',
+    gemNameVi: 'Ngọc Lục Bảo (Emerald)',
+    gemShortVi: 'Ngọc Lục Bảo',
+    gemEmoji: '💚',
+    traitsVi: 'Tham Vọng • Khôn Ngoan • Quyết Đoán',
+    quoteVi:
+      '“Hay ở Slytherin, nơi ngươi kết giao những người bạn chân chính và dùng mưu trí vươn tới đỉnh cao!”',
+    patronusNameVi: 'Rắn Thần',
+    patronusEmoji: '🐍',
+    emblemSvg: `<svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 10H52V32C52 46 32 56 32 56C32 56 12 46 12 32V10Z" fill="#047857" stroke="#E2E8F0" stroke-width="3.5"/><path d="M38 20C28 18 22 25 32 30C42 35 36 43 25 41" stroke="#A7F3D0" stroke-width="5" stroke-linecap="round"/></svg>`,
+    hourglassSvg: `<svg viewBox="0 0 36 48" fill="none" aria-hidden="true"><rect x="6" y="3" width="24" height="4" rx="2" fill="#E2E8F0"/><rect x="6" y="41" width="24" height="4" rx="2" fill="#E2E8F0"/><path d="M10 7H26L20 22L26 41H10L16 22L10 7Z" fill="rgba(255,255,255,0.16)" stroke="#E2E8F0" stroke-width="2"/><path d="M13 11H23L18.5 21H17.5L13 11Z" fill="#6EE7B7"/><path d="M12 39L16.5 26H19.5L24 39H12Z" fill="#10B981"/><circle cx="18" cy="24" r="1.6" fill="#D1FAE5"/></svg>`,
+  },
+  Ravenclaw: {
+    house: 'Ravenclaw',
+    cssSlug: 'ravenclaw',
+    vnTitle: 'Nhà Đại Bàng',
+    founderVi: 'Rowena Ravenclaw',
+    mascotEmoji: '🦅',
+    gemNameVi: 'Lam Ngọc (Sapphire)',
+    gemShortVi: 'Lam Ngọc',
+    gemEmoji: '💠',
+    traitsVi: 'Trí Tuệ • Uyên Bác • Sáng Tạo',
+    quoteVi:
+      '“Hoặc giả Ravenclaw thông thái, nơi những bộ óc minh mẫn và ham học hỏi luôn tìm thấy đồng môn!”',
+    patronusNameVi: 'Đại Bàng',
+    patronusEmoji: '🦅',
+    emblemSvg: `<svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 10H52V32C52 46 32 56 32 56C32 56 12 46 12 32V10Z" fill="#1D4ED8" stroke="#FBBF24" stroke-width="3.5"/><path d="M20 35C25 24 32 20 32 20C32 20 39 24 44 35L32 30L20 35Z" fill="#BAE6FD"/></svg>`,
+    hourglassSvg: `<svg viewBox="0 0 36 48" fill="none" aria-hidden="true"><rect x="6" y="3" width="24" height="4" rx="2" fill="#FBBF24"/><rect x="6" y="41" width="24" height="4" rx="2" fill="#FBBF24"/><path d="M10 7H26L20 22L26 41H10L16 22L10 7Z" fill="rgba(255,255,255,0.16)" stroke="#FBBF24" stroke-width="2"/><path d="M13 11H23L18.5 21H17.5L13 11Z" fill="#7DD3FC"/><path d="M12 39L16.5 26H19.5L24 39H12Z" fill="#0284C7"/><circle cx="18" cy="24" r="1.6" fill="#E0F2FE"/></svg>`,
+  },
+  Hufflepuff: {
+    house: 'Hufflepuff',
+    cssSlug: 'hufflepuff',
+    vnTitle: 'Nhà Lửng Vàng',
+    founderVi: 'Helga Hufflepuff',
+    mascotEmoji: '🦡',
+    gemNameVi: 'Hoàng Ngọc (Topaz)',
+    gemShortVi: 'Hoàng Ngọc',
+    gemEmoji: '💛',
+    traitsVi: 'Trung Thành • Kiên Nhẫn • Chân Thật',
+    quoteVi:
+      '“Có thể ngươi thuộc Hufflepuff, nơi của những tấm lòng trung hậu, kiên trì và chẳng ngại gian lao!”',
+    patronusNameVi: 'Lửng Vàng',
+    patronusEmoji: '🦡',
+    emblemSvg: `<svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 10H52V32C52 46 32 56 32 56C32 56 12 46 12 32V10Z" fill="#D97706" stroke="#FEF08A" stroke-width="3.5"/><path d="M23 23L32 18L41 23V35L32 42L23 35V23Z" fill="#422006" stroke="#FEF08A" stroke-width="2.5"/></svg>`,
+    hourglassSvg: `<svg viewBox="0 0 36 48" fill="none" aria-hidden="true"><rect x="6" y="3" width="24" height="4" rx="2" fill="#FEF08A"/><rect x="6" y="41" width="24" height="4" rx="2" fill="#FEF08A"/><path d="M10 7H26L20 22L26 41H10L16 22L10 7Z" fill="rgba(255,255,255,0.16)" stroke="#FEF08A" stroke-width="2"/><path d="M13 11H23L18.5 21H17.5L13 11Z" fill="#FDE047"/><path d="M12 39L16.5 26H19.5L24 39H12Z" fill="#F59E0B"/><circle cx="18" cy="24" r="1.6" fill="#FEF9C3"/></svg>`,
+  },
+};
+
+export interface HouseCupStanding {
+  house: HouseName;
+  rank: number;
+  meta: HogwartsHouseMeta;
+  members: number;
+  totalPrimaryValue: number;
+  totalWins: number;
+  points: number;
+  fillPercent: number;
+  isPlayerHouse: boolean;
+}
+
 export interface LeaderboardLeagueBadge {
   tierId: 'legend' | 'grandmaster' | 'gold' | 'silver' | 'bronze';
   icon: string;
@@ -165,6 +272,9 @@ export interface LeaderboardStandingResult {
   playerRank: number;
   totalEntries: number;
   nextRivalAbove: LeaderboardRowEntry | null;
+  houseStandings: HouseCupStanding[];
+  playerHouse: HouseName;
+  activeHouseFilter: 'all' | HouseName;
 }
 
 export interface PersonalDisciplineSummaryRow {
@@ -377,10 +487,14 @@ export function ensureMinigameLeaderboardState(state: GameState): MinigameLeader
   return state.minigameLeaderboard;
 }
 
-function getDominantPlayerHouse(state: GameState): HouseName {
+export function getPlayerHogwartsHouse(state: GameState): HouseName {
+  const chosen = state.minigameLeaderboard?.playerHouse;
+  if (chosen && ALL_HOGWARTS_HOUSES.includes(chosen)) {
+    return chosen;
+  }
   const hp = state.housePoints;
   if (!hp) return 'Gryffindor';
-  const order: HouseName[] = ['Gryffindor', 'Ravenclaw', 'Hufflepuff', 'Slytherin'];
+  const order: HouseName[] = ['Gryffindor', 'Slytherin', 'Ravenclaw', 'Hufflepuff'];
   let best: HouseName = 'Gryffindor';
   let bestVal = -1;
   for (const h of order) {
@@ -391,6 +505,30 @@ function getDominantPlayerHouse(state: GameState): HouseName {
     }
   }
   return best;
+}
+
+export function setPlayerHogwartsHouse(state: GameState, house: HouseName): HouseName {
+  const safeHouse: HouseName = ALL_HOGWARTS_HOUSES.includes(house) ? house : 'Gryffindor';
+  const lb = ensureMinigameLeaderboardState(state);
+  lb.playerHouse = safeHouse;
+  if (!state.housePoints || typeof state.housePoints !== 'object') {
+    state.housePoints = {
+      Gryffindor: 0,
+      Slytherin: 0,
+      Ravenclaw: 0,
+      Hufflepuff: 0,
+    };
+  }
+  return safeHouse;
+}
+
+export function rollSortingHatHouse(state: GameState, randomFn = Math.random): HouseName {
+  const current = getPlayerHogwartsHouse(state);
+  const candidates = ALL_HOGWARTS_HOUSES.filter((h) => h !== current);
+  const pick =
+    candidates[Math.floor(Math.max(0, Math.min(0.9999, randomFn())) * candidates.length)] ??
+    ALL_HOGWARTS_HOUSES[0];
+  return setPlayerHogwartsHouse(state, pick);
 }
 
 function formatPrimaryDisplayVi(gameId: LeaderboardGameId, primaryVal: number): string {
@@ -504,7 +642,7 @@ export function buildPlayerLeaderboardEntry(
   const lb = ensureMinigameLeaderboardState(state);
   const rec = lb.records[gameId];
   const friendCode = state.neighborSocial?.playerFriendCode || 'HS-YOU1-01';
-  const house = getDominantPlayerHouse(state);
+  const house = getPlayerHogwartsHouse(state);
   const playerTitle =
     state.level >= 80
       ? 'Đại Điền Chủ Thung Lũng'
@@ -551,11 +689,82 @@ function compareEntries(
   return a.id.localeCompare(b.id);
 }
 
+export function buildHouseCupStandings(
+  state: GameState,
+  entries: ReadonlyArray<Omit<LeaderboardRowEntry, 'rank'>>
+): HouseCupStanding[] {
+  const playerHouse = getPlayerHogwartsHouse(state);
+  const map = new Map<
+    HouseName,
+    {
+      house: HouseName;
+      members: number;
+      totalPrimaryValue: number;
+      totalWins: number;
+      points: number;
+    }
+  >();
+
+  for (const h of ALL_HOGWARTS_HOUSES) {
+    const valleyBonus = Math.max(0, Math.floor(state.housePoints?.[h] ?? 0));
+    map.set(h, {
+      house: h,
+      members: 0,
+      totalPrimaryValue: 0,
+      totalWins: 0,
+      points: valleyBonus,
+    });
+  }
+
+  for (const row of entries) {
+    const h: HouseName = ALL_HOGWARTS_HOUSES.includes(row.house) ? row.house : 'Gryffindor';
+    const rec = map.get(h)!;
+    rec.members += 1;
+    rec.totalPrimaryValue += Math.max(0, row.primaryValue);
+    rec.totalWins += Math.max(0, row.totalWins);
+    rec.points +=
+      Math.round(Math.max(0, row.ratingScore) / 10) +
+      Math.max(0, row.primaryValue) * 35 +
+      Math.max(0, row.totalWins) * 15 +
+      Math.max(0, row.bestStreak) * 10;
+  }
+
+  const rawList = ALL_HOGWARTS_HOUSES.map((h) => map.get(h)!).sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    if (b.totalPrimaryValue !== a.totalPrimaryValue) {
+      return b.totalPrimaryValue - a.totalPrimaryValue;
+    }
+    if (b.members !== a.members) return b.members - a.members;
+    if ((a.house === playerHouse) !== (b.house === playerHouse)) {
+      return a.house === playerHouse ? -1 : 1;
+    }
+    return ALL_HOGWARTS_HOUSES.indexOf(a.house) - ALL_HOGWARTS_HOUSES.indexOf(b.house);
+  });
+
+  const maxPts = Math.max(100, ...rawList.map((r) => r.points));
+
+  return rawList.map((item, idx) => ({
+    house: item.house,
+    rank: idx + 1,
+    meta: HOGWARTS_HOUSE_META[item.house],
+    members: item.members,
+    totalPrimaryValue: item.totalPrimaryValue,
+    totalWins: item.totalWins,
+    points: item.points,
+    fillPercent:
+      item.points <= 0
+        ? 10
+        : Math.max(12, Math.min(100, Math.round((item.points / maxPts) * 100))),
+    isPlayerHouse: item.house === playerHouse,
+  }));
+}
+
 export function buildMinigameLeaderboard(
   state: GameState,
   gameId: LeaderboardGameId,
   scope: Exclude<LeaderboardScope, 'personal'> = 'valley',
-  extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>
+  extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>,
+  houseFilter: 'all' | HouseName = 'all'
 ): LeaderboardStandingResult {
   const playerRaw = buildPlayerLeaderboardEntry(state, gameId);
   const neighbors = (state.neighborSocial?.neighbors ?? []).filter(
@@ -623,24 +832,38 @@ export function buildMinigameLeaderboard(
 
   pool.sort(compareEntries);
 
-  const entries: LeaderboardRowEntry[] = pool.map((item, idx) => ({
+  const houseStandings = buildHouseCupStandings(state, pool);
+  const fullEntries: LeaderboardRowEntry[] = pool.map((item, idx) => ({
     ...item,
     rank: idx + 1,
   }));
 
-  const playerIdx = entries.findIndex((e) => e.isPlayer);
-  const playerEntry = entries[Math.max(0, playerIdx)];
-  const nextRivalAbove = playerIdx > 0 ? entries[playerIdx - 1] : null;
+  const playerIdx = fullEntries.findIndex((e) => e.isPlayer);
+  const playerEntry = fullEntries[Math.max(0, playerIdx)];
+  const nextRivalAbove = playerIdx > 0 ? fullEntries[playerIdx - 1] : null;
+
+  const filteredEntries =
+    houseFilter === 'all'
+      ? fullEntries
+      : fullEntries
+          .filter((e) => e.house === houseFilter)
+          .map((item, idx) => ({
+            ...item,
+            rank: idx + 1,
+          }));
 
   return {
     gameId,
     meta: LEADERBOARD_GAME_META[gameId],
     scope,
-    entries,
+    entries: filteredEntries,
     playerEntry,
     playerRank: playerEntry.rank,
-    totalEntries: entries.length,
+    totalEntries: fullEntries.length,
     nextRivalAbove,
+    houseStandings,
+    playerHouse: playerEntry.house,
+    activeHouseFilter: houseFilter,
   };
 }
 
@@ -757,10 +980,30 @@ export function recordMinigameSessionResult(
   rec.highScore = Math.max(rec.highScore + (sessionScore > 0 ? 15 : 8), computedRating);
   rec.updatedAt = input.nowMs ?? Date.now();
 
+  const playerHouse = getPlayerHogwartsHouse(state);
+  if (!state.housePoints || typeof state.housePoints !== 'object') {
+    state.housePoints = {
+      Gryffindor: 0,
+      Slytherin: 0,
+      Ravenclaw: 0,
+      Hufflepuff: 0,
+    };
+  }
+  const housePointsAwarded =
+    gameId === 'seedquiz'
+      ? 10 + Math.min(15, Math.floor(rec.bestStreak * 2))
+      : 20 + Math.min(30, Math.floor(rec.bestStage * 0.25));
+  state.housePoints[playerHouse] = Math.max(
+    0,
+    Math.floor(state.housePoints[playerHouse] ?? 0) + housePointsAwarded
+  );
+
   const afterStanding = buildMinigameLeaderboard(state, gameId, 'valley');
   const newRank = afterStanding.playerRank;
   const rankUpBy = Math.max(0, previousRank - newRank);
   rec.lastRankValley = newRank;
+  const houseRank =
+    afterStanding.houseStandings.find((h) => h.house === playerHouse)?.rank ?? 1;
 
   return {
     gameId,
@@ -768,6 +1011,9 @@ export function recordMinigameSessionResult(
     newRank,
     rankUpBy,
     totalEntries: afterStanding.totalEntries,
+    housePointsAwarded,
+    playerHouse,
+    houseRank,
   };
 }
 
