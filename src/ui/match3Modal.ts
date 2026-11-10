@@ -748,8 +748,8 @@ export class Match3ModalController {
       const used = this.engine.talismanUsed;
       talismanBtn.disabled = used || (!st.sandboxMode && talismanQty <= 0);
       talismanBtn.innerHTML = used
-        ? '🔥 Bùa Phượng Hoàng • Đã dùng 1/1'
-        : `🔥 Bùa Phượng Hoàng (${st.sandboxMode ? '∞' : `×${talismanQty}`}) • +5 Lượt &amp; Chong Chóng`;
+        ? '<span>🔥 Bùa Phượng Hoàng</span><span class="pa-cost-pill">✓</span>'
+        : `<span>🔥 Bùa Phượng Hoàng</span><span class="pa-cost-pill">${st.sandboxMode ? '∞' : `×${talismanQty}`}</span>`;
     }
 
     const hintBanner = box.querySelector('#m3ActionHintBar') as HTMLElement | null;
@@ -765,7 +765,7 @@ export class Match3ModalController {
       pill.classList.toggle('done', done);
       const countSpan = pill.querySelector('.m3-goal-count') as HTMLElement | null;
       if (countSpan) {
-        countSpan.textContent = done ? '✓ Xong' : `${g.current}/${g.target}`;
+        countSpan.textContent = done ? '✓' : `${g.current}/${g.target}`;
       }
       if ((this.prevGoalCounts[idx] ?? 0) < g.current) {
         this.pulseGoalPill(idx);
@@ -793,15 +793,15 @@ export class Match3ModalController {
     if (!this.engine) return '';
     if (this.activeBoosterTargetMode) {
       const def = MATCH3_BOOSTERS.find((b) => b.id === this.activeBoosterTargetMode);
-      return `<span style="color:#fde047;font-weight:800;">🎯 Đang chọn <strong>${escapeHtml(def?.name ?? '')}</strong>: Chạm 1 ô trên bàn cờ để kích hoạt (bấm lại bùa để hủy)</span>`;
+      return `<span style="color:#fde047;font-weight:800;">🎯 <strong>${escapeHtml(def?.shortLabel ?? '')}</strong>: Chạm 1 ô</span>`;
     }
     if (this.selectedCell) {
       const cell = this.engine.grid[this.selectedCell.r]?.[this.selectedCell.c];
       if (cell?.piece?.kind === 'gem' && cell.piece.special !== 'none') {
-        return `<span style="color:#fde68a;font-weight:800;">⚡ Chạm lần nữa để kích nổ ngay tại chỗ, hoặc ghép với ô bên cạnh để tạo Đại Combo!</span>`;
+        return `<span style="color:#fde68a;font-weight:800;">⚡ Chạm để kích nổ</span>`;
       }
     }
-    return `<span>💡 Vuốt trái cây cạnh nhau • Ghép <strong>4</strong> tạo Tên Lửa Mùa Gặt, chữ <strong>T/L</strong> tạo Hũ Mứt Nổ, ghép <strong>5</strong> tạo Chong Chóng Cầu Vồng!</span>`;
+    return `<span>💡 Ghép 3–5 ô</span>`;
   }
 
   public renderDOM(): void {
@@ -817,63 +817,52 @@ export class Match3ModalController {
     const extraMovesCost = getExtraMovesGoldCost(lvDef.level);
 
     const starMini = `<img src="/sprites/m3_icon_star.png" alt="" style="width:14px;height:14px;vertical-align:-2px;" /><span class="m3-sr-only">🌟</span>`;
-    const rewardPart = m3Info.isMaxed ? `👑 Đã phá đảo` : `+${lvDef.starReward} ${starMini}`;
+    const rewardPart = m3Info.isMaxed ? `👑` : `+${lvDef.starReward} ${starMini}`;
     const diffBadge =
       lvDef.difficulty === 'boss'
-        ? `<span class="m3-diff-pill boss">🎃 Đợt Gặt Lớn • ${escapeHtml(tierMeta.label)} • ${rewardPart}</span>`
+        ? `<span class="m3-diff-pill boss">🎃 ${escapeHtml(tierMeta.label)} • ${rewardPart}</span>`
         : lvDef.difficulty === 'hard'
-          ? `<span class="m3-diff-pill hard">🔥 Màn Khó • ${escapeHtml(tierMeta.label)} • ${rewardPart}</span>`
+          ? `<span class="m3-diff-pill hard">🔥 ${escapeHtml(tierMeta.label)} • ${rewardPart}</span>`
           : `<span class="m3-diff-pill normal">🌻 ${escapeHtml(tierMeta.label)} • ${rewardPart}</span>`;
 
-    const streakGifts = getWinStreakGifts(m3.winStreak);
     const streakLabel =
-      m3.winStreak === 0
-        ? 'Chuỗi thắng: 0 — Thắng liên tiếp để nhận Quà Mùa Gặt đầu ván miễn phí!'
-        : `🔥 Chuỗi thắng ×${m3.winStreak} (Tặng đầu ván: ${streakGifts
-            .map((s) =>
-              s === 'snitch'
-                ? 'Chong Chóng Cầu Vồng'
-                : s === 'bomb'
-                  ? 'Hũ Mứt Nổ'
-                  : 'Tên Lửa Mùa Gặt'
-            )
-            .join(' + ')})`;
+      m3.winStreak === 0 ? '' : `🔥 ×${m3.winStreak}`;
 
     const topStripHtml = `
       <div class="m3-top-strip ${lvDef.difficulty}">
         <div class="m3-stage-heading">
-          <span class="m3-chapter-tag">Chương ${lvDef.chapterIndex + 1}/78 • ${escapeHtml(lvDef.chapterName)}</span>
+          <span class="m3-chapter-tag">Chương ${lvDef.chapterIndex + 1}/78</span>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <strong style="font-size:15.5px;color:#ffffff;text-shadow:0 2px 4px rgba(0,0,0,0.45);">${m3Info.isMaxed ? '👑 ' : ''}Màn ${lvDef.level}/${MAX_MINIGAME_STAGE}: ${escapeHtml(lvDef.title)}</strong>
+            <strong style="font-size:15.5px;color:#ffffff;text-shadow:0 2px 4px rgba(0,0,0,0.45);">${m3Info.isMaxed ? '👑 ' : ''}Màn ${lvDef.level}/${MAX_MINIGAME_STAGE}</strong>
             ${diffBadge}
+            ${streakLabel ? `<span class="m3-streak-line" style="font-size:11.5px;color:#fef9c3;font-weight:700;">${streakLabel}</span>` : ''}
           </div>
-          <div class="m3-streak-line" style="font-size:11.5px;color:#fef9c3;font-weight:700;">${streakLabel}</div>
         </div>
 
         <div class="m3-resource-pills">
-          <span class="m3-res-chip" title="Sao Phép Thuật đang có để xây công trình, nâng cấp & mở đất">
+          <span class="m3-res-chip" title="Sao Phép Thuật">
             <img src="/sprites/m3_icon_star.png" alt="Sao" class="m3-res-icon" />
             <strong id="m3ModalStarsText">${st.sandboxMode ? '∞' : m3.stars}</strong>
           </span>
-          <span class="m3-res-chip" title="Tim giải đố (Thắng không mất Tim! Tự hồi 1 Tim mỗi 5 phút)">
+          <span class="m3-res-chip" title="Tim giải đố">
             <img src="/sprites/m3_icon_heart.png" alt="Tim" class="m3-res-icon" />
             <strong id="m3ModalHeartsText">${this.formatHeartsLabel()}</strong>
           </span>
-          <span class="m3-res-chip" title="Vàng Galleon Trang Trại">
+          <span class="m3-res-chip" title="Vàng Galleon">
             <span class="g-coin" style="width:18px;height:18px;font-size:11px;">G</span>
             <strong id="m3ModalGoldText">${st.sandboxMode ? '∞' : st.galleons.toLocaleString('vi-VN')}</strong>
           </span>
-          <span class="m3-res-chip" title="Bùa Trợ Chiến Phượng Hoàng (Tích lũy từ Đơn Cú, 8 câu Thần Chú Đa Ngữ hoặc rèn tại Kho Nông Sản — tối đa 1 lần/lượt thử màn)">
+          <span class="m3-res-chip" title="Bùa Phượng Hoàng">
             🔥 <strong id="m3ModalTalismanText">${st.sandboxMode ? '∞' : this.sim.getPhoenixTalismanCount()}</strong>
           </span>
-          <button id="btnM3OpenLeaderboard" type="button" class="m3-res-chip minigame-lb-chip" title="Bảng Xếp Hạng Gác Xép Bùa Gặt Honeydukes — Hạng hiện tại của bạn: #${m3Rank}">
-            🏆 <strong id="m3ModalRankText">Hạng #${m3Rank}</strong>
+          <button id="btnM3OpenLeaderboard" type="button" class="m3-res-chip minigame-lb-chip" title="Bảng Xếp Hạng (#${m3Rank})">
+            🏆 <strong id="m3ModalRankText">#${m3Rank}</strong>
           </button>
-          <button id="btnM3SwitchPuzzleArcade" type="button" class="m3-res-chip" style="cursor:pointer;background:linear-gradient(180deg,#d97706,#92400e);color:#fffbeb;border-color:#fde68a;" title="Đổi sang Đại Sảnh Khảo Thí Hogwarts: Ngũ Ấn Đạo Tặc, Ma Trận Cửu Bảo Bối, Cờ Phù Thủy &amp; Nối Hình Sinh Vật (Mỗi môn 777 Màn, không tốn Tim!)">
-            ♟️ <strong class="m3-switch-lbl-full">Ngũ Ấn • Bảo Bối • Cờ Phù Thủy • Sinh Vật</strong><strong class="m3-switch-lbl-compact">4 Môn Khảo Thí</strong>
+          <button id="btnM3SwitchPuzzleArcade" type="button" class="m3-res-chip" style="cursor:pointer;background:linear-gradient(180deg,#d97706,#92400e);color:#fffbeb;border-color:#fde68a;" title="Đổi sang Đại Sảnh Khảo Thí Hogwarts">
+            ♟️ <strong class="m3-switch-lbl-full">4 Môn</strong><strong class="m3-switch-lbl-compact">4 Môn</strong>
           </button>
           <form method="dialog" class="m3-inline-close-form">
-            <button type="submit" class="brass-btn m3-inline-close-btn" title="Đóng Gác Xép Bùa Gặt Honeydukes (Esc)">✕ Đóng</button>
+            <button type="submit" class="brass-btn m3-inline-close-btn" title="Đóng (Esc)" aria-label="Đóng">✕</button>
           </form>
         </div>
       </div>
@@ -881,14 +870,14 @@ export class Match3ModalController {
         const bossMeta = getMilestoneBossMeta(lvDef.level);
         if (!bossMeta) return '';
         return `<div class="pa-boss-strip">
-          <span class="pa-boss-crown">👑 ĐẠI TRÙM MỐC ${lvDef.level}</span>
-          <span class="pa-boss-text"><strong>${escapeHtml(bossMeta.bossGuardianVi)}</strong> — ${escapeHtml(bossMeta.bossTitleVi)} • <em>${escapeHtml(bossMeta.mechanicTagVi)}</em></span>
+          <span class="pa-boss-crown">👑 TRÙM MỐC ${lvDef.level}</span>
+          <span class="pa-boss-text"><strong>${escapeHtml(bossMeta.bossGuardianVi)}</strong> • <em>${escapeHtml(bossMeta.mechanicTagVi)}</em></span>
         </div>`;
       })()}
       ${(() => {
         if (this.rescueContext) {
           return `<div class="pa-trial-strip urgent">
-            <span>⚔️ <strong>GIẢI CỨU MÀN KHÓ (1 lần/ngày/bạn):</strong> Đang vượt hộ <strong>Màn ${this.rescueContext.stage}</strong> giúp ${escapeHtml(this.rescueContext.neighborEmoji)} <strong>${escapeHtml(this.rescueContext.neighborName)}</strong> • Không tốn Tim • Thắng nhận <strong>+3 🍀 + 95G + 45 XP</strong>!</span>
+            <span>⚔️ <strong>CỨU MÀN ${this.rescueContext.stage}</strong> (${escapeHtml(this.rescueContext.neighborEmoji)} <strong>${escapeHtml(this.rescueContext.neighborName)}</strong>) • <strong>+3 🍀 + 95G</strong></span>
           </div>`;
         }
         const social = this.sim.ensureNeighborSocial();
@@ -897,12 +886,12 @@ export class Match3ModalController {
         if (mySos && !mySos.claimed && mySos.kind === 'match3' && mySos.stage === lvDef.level) {
           if (mySos.rescuedAt) {
             sosStrip = `<div class="pa-trial-strip done">
-              <span>🎉 <strong>${escapeHtml(mySos.rescuerEmoji ?? '🦉')} ${escapeHtml(mySos.rescuerName ?? 'Hàng xóm')}</strong> vừa giải cứu xong Màn ${mySos.stage} giúp bạn!</span>
-              <button type="button" id="btnM3ClaimSosRescue" class="brass-btn gold-cta pa-trial-jump-btn">🎉 Nhận Qua Màn Ngay!</button>
+              <span>🎉 <strong>${escapeHtml(mySos.rescuerEmoji ?? '🦉')} ${escapeHtml(mySos.rescuerName ?? 'Hàng xóm')}</strong> đã cứu Màn ${mySos.stage}!</span>
+              <button type="button" id="btnM3ClaimSosRescue" class="brass-btn gold-cta pa-trial-jump-btn">🎉 Qua Màn</button>
             </div>`;
           } else {
             sosStrip = `<div class="pa-trial-strip">
-              <span>🦉 Đang phát tín hiệu Cú Đưa Thư nhờ bạn bè giải cứu <strong>Màn ${mySos.stage}</strong>... (Hàng xóm sẽ hoàn tất sau vài giây!)</span>
+              <span>🦉 Đang gọi cứu viện <strong>Màn ${mySos.stage}</strong>...</span>
             </div>`;
           }
         }
@@ -912,33 +901,33 @@ export class Match3ModalController {
         const nextCap = Math.min(100, st.level + 1);
         if (this.victorySummary) {
           return `${sosStrip}<div class="pa-trial-strip done">
-            <span>🎉 <strong>Cấp Giải Đố ${st.level} (${wp.current}/${wp.required} màn)!</strong> Môn Đề Cử kế tiếp (Cấp ${nextCap}): <strong>${req.icon} ${req.shortVi}</strong></span>
+            <span>🎉 <strong>Lv.${st.level} (${wp.current}/${wp.required})</strong> • Đề cử: <strong>${req.icon} ${req.shortVi}</strong></span>
             ${
               req.kind !== 'match3'
-                ? `<button type="button" class="brass-btn gold-cta pa-trial-jump-btn" data-m3-jump-arcade="${req.kind}">Sang ${req.shortVi} (🔥 Đề cử) →</button>`
+                ? `<button type="button" class="brass-btn gold-cta pa-trial-jump-btn" data-m3-jump-arcade="${req.kind}">${req.icon} ${req.shortVi} →</button>`
                 : ''
             }
           </div>`;
         }
         if (m3Info.isMaxed) {
           return `${sosStrip}<div class="pa-trial-strip done">
-            <span>👑 <strong>Đỉnh 777/777 Mùa Gặt!</strong> Chơi lại rèn luyện nhận Vàng &amp; XP • Chuyển sang <strong>${req.icon} ${req.shortVi}</strong> để tiếp tục gom 🌟 Sao!</span>
+            <span>👑 <strong>777/777</strong> • Đề cử: <strong>${req.icon} ${req.shortVi}</strong></span>
             ${
               req.kind !== 'match3'
-                ? `<button type="button" class="brass-btn gold-cta pa-trial-jump-btn" data-m3-jump-arcade="${req.kind}">Sang ${req.shortVi} →</button>`
+                ? `<button type="button" class="brass-btn gold-cta pa-trial-jump-btn" data-m3-jump-arcade="${req.kind}">${req.icon} ${req.shortVi} →</button>`
                 : ''
             }
           </div>`;
         }
         if (req.kind === 'match3') {
           return `${sosStrip}<div class="pa-trial-strip urgent">
-            <span>🔥 <strong>ĐỀ CỬ CỤ DUMBLEDORE:</strong> Thắng Màn ${lvDef.level}/${MAX_MINIGAME_STAGE} nhận <strong>+${lvDef.starReward} 🌟 Sao gốc + Thưởng Đề Cử (+🌟 Mốc Cấp/Chuỗi 5, +1 ⏳ Cát, +35% 🪙)</strong> • Cấp ${st.level} → ${nextCap} (${wp.current}/${wp.required})!</span>
+            <span>🔥 <strong>ĐỀ CỬ:</strong> +${lvDef.starReward} 🌟 + ⏳ Cát • Lv.${st.level}→${nextCap} (${wp.current}/${wp.required})</span>
           </div>`;
         }
         return `${sosStrip}<div class="pa-trial-strip">
-          <span>🎯 Thắng Màn ${lvDef.level}/${MAX_MINIGAME_STAGE} nhận <strong>+${lvDef.starReward} 🌟</strong> &amp; tiến độ Cấp ${nextCap} (${wp.current}/${wp.required}) • Đề cử cấp này: <strong>${req.icon} ${req.shortVi}</strong></span>
+          <span>🎯 +${lvDef.starReward} 🌟 (${wp.current}/${wp.required}) • Đề cử: <strong>${req.icon} ${req.shortVi}</strong></span>
           <button type="button" class="brass-btn gold-cta pa-trial-jump-btn" data-m3-jump-arcade="${req.kind}">
-            Chơi ${req.shortVi} (🔥 Đề cử) →
+            ${req.icon} ${req.shortVi} →
           </button>
         </div>`;
       })()}
@@ -955,24 +944,23 @@ export class Match3ModalController {
         ${topStripHtml}
         <div class="m3-empty-hearts-card">
           <img src="/sprites/m3_icon_heart.png" alt="Tim" style="width:64px;height:64px;object-fit:contain;filter:grayscale(0.25) drop-shadow(0 6px 10px rgba(0,0,0,0.3));" />
-          <h3 style="font-size:19px;font-weight:900;color:#451a03;">Đang Nghỉ Tay Uống Trà Tại Gác Xép!</h3>
+          <h3 style="font-size:19px;font-weight:900;color:#451a03;">Hết Tim!</h3>
           <p style="font-size:13px;max-width:460px;line-height:1.5;color:#78350f;">
-            Tự động hồi <strong>+1 Tim</strong> sau <strong id="m3NoHeartsCountdown" style="color:#b45309;">${mm}:${ss}</strong>.
-            Bạn có thể sang Đại Sảnh Khảo Thí chơi Ngũ Ấn Đạo Tặc, Ma Trận Bảo Bối, Cờ Phù Thủy, Nối Hình Sinh Vật (nhận 🌟 Sao, không tốn Tim!) hoặc uống Bia Bơ hồi đầy Tim ngay!
+            <strong>+1 ❤️</strong> sau <strong id="m3NoHeartsCountdown" style="color:#b45309;">${mm}:${ss}</strong>
           </p>
           <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:6px;">
             <button id="btnM3RefillHeartsNow" type="button" class="brass-btn gold-cta" style="padding:9px 18px;font-size:13.5px;">
               ${
                 butterbeerQty > 0
-                  ? `🍻 Uống 1 Bia Bơ Hồi Đầy 5 Tim (Đang có ×${butterbeerQty})`
-                  : `❤️ Hồi Đầy 5/5 Tim Ngay (🪙 ${REFILL_HEARTS_GOLD_COST}G)`
+                  ? `🍻 Hồi 5 ❤️ (×${butterbeerQty})`
+                  : `❤️ Hồi 5/5 (🪙 ${REFILL_HEARTS_GOLD_COST}G)`
               }
             </button>
             <button id="btnM3EmptyGoArcade" type="button" class="brass-btn pa-hud-cta" style="padding:9px 15px;font-size:13px;">
-              ♟️ Vào Đại Sảnh Khảo Thí Hogwarts (Nhận 🌟 Sao!)
+              ♟️ 4 Môn Khảo Thí
             </button>
             <button id="btnM3BackToPark" type="button" class="brass-btn" style="padding:9px 15px;font-size:13px;">
-              🏡 Về Trang Trại Hang Sóc
+              🏡 Về Vườn
             </button>
           </div>
         </div>
@@ -1025,11 +1013,11 @@ export class Match3ModalController {
             ? `${HONEYCOMB_GOAL_SVG}<span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);">${meta.emoji}</span>`
             : `${COBWEB_GOAL_SVG}<span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);">${meta.emoji}</span>`;
         return `
-          <div class="m3-goal-pill ${done ? 'done' : ''}" data-m3-goal-idx="${idx}" style="border-left: 5px solid ${meta.accent};">
+          <div class="m3-goal-pill ${done ? 'done' : ''}" data-m3-goal-idx="${idx}" style="border-left: 5px solid ${meta.accent};" title="${escapeHtml(meta.label)}">
             <div class="m3-goal-icon-well" style="position:relative;">${iconVisual}</div>
             <div class="m3-goal-meta">
               <div class="m3-goal-name">${escapeHtml(meta.label)}</div>
-              <div class="m3-goal-count">${done ? '✓ Xong' : `${g.current}/${g.target}`}</div>
+              <div class="m3-goal-count">${done ? '✓' : `${g.current}/${g.target}`}</div>
             </div>
           </div>
         `;
@@ -1079,26 +1067,21 @@ export class Match3ModalController {
           <div class="m3-overlay-card victory">
             <div style="font-size:38px;line-height:1;">🏆🍀</div>
             <h3 style="font-size:20px;font-weight:900;color:#451a03;">
-              Giải Cứu Thành Công Cho ${escapeHtml(this.rescueContext.neighborName)}!
+              Cứu Thành Công (${escapeHtml(this.rescueContext.neighborName)})!
             </h3>
-            <p style="font-size:13px;color:#78350f;font-weight:700;">
-              Bạn đã vượt hộ <strong>Màn ${this.rescueContext.stage}</strong> Gác Xép Bùa Gặt Honeydukes cho ${escapeHtml(this.rescueContext.neighborEmoji)} <strong>${escapeHtml(this.rescueContext.neighborName)}</strong>!
-            </p>
             <div class="m3-reward-badges">
-              <span class="m3-reward-chip star">+${rv.tokensEarned} 🍀 Huy Hiệu Tình Bạn</span>
-              <span class="m3-reward-chip">+${rv.goldEarned} 🪙 Galleon</span>
+              <span class="m3-reward-chip star">+${rv.tokensEarned} 🍀</span>
+              <span class="m3-reward-chip">+${rv.goldEarned} 🪙</span>
               <span class="m3-reward-chip">+${rv.xpEarned} ⭐ XP</span>
               ${
                 rv.buildReduction && rv.buildReduction.reducedSec > 0
-                  ? `<span class="m3-reward-chip">🔨 -${formatDurationCompactVi(rv.buildReduction.reducedSec)} xây ${escapeHtml(rv.buildReduction.targetName ?? 'công trình')}</span>`
-                  : rv.buildReduction?.allActiveAtFloor && (rv.buildReduction.activeCount ?? 0) > 0
-                    ? `<span class="m3-reward-chip">🔒 Đã chạm mốc tối thiểu ${formatDurationCompactVi(rv.buildReduction.floorSec ?? 3600)}</span>`
-                    : ''
+                  ? `<span class="m3-reward-chip">🔨 -${formatDurationCompactVi(rv.buildReduction.reducedSec)}</span>`
+                  : ''
               }
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:100%;margin-top:6px;">
               <button id="btnM3UseStarsInPark" type="button" class="brass-btn gold-cta" style="flex:1;min-width:190px;padding:9px 14px;font-size:13.5px;">
-                🏡 Quay Về Vườn / Sổ Hàng Xóm
+                🏡 Về Vườn
               </button>
             </div>
           </div>
@@ -1121,38 +1104,27 @@ export class Match3ModalController {
             <div class="m3-victory-stars-row">${starIconsHtml}</div>
             <h3 style="font-size:20px;font-weight:900;color:#451a03;">${
               vs.isMasterReplay
-                ? `👑 Rèn Luyện Đỉnh 777/777 Thành Công!`
+                ? `👑 777/777!`
                 : lvDef.level >= MAX_MINIGAME_STAGE
-                  ? `👑 CHINH PHỤC ĐỈNH 777/777 MÙA GẶT!`
-                  : `🎉 Thắng Màn ${lvDef.level}/${MAX_MINIGAME_STAGE} • Cấp ${vs.newMasterLevel ?? st.level}!`
+                  ? `👑 ĐỈNH 777/777!`
+                  : `🎉 Thắng Màn ${lvDef.level}/${MAX_MINIGAME_STAGE}!`
             }</h3>
-            <p style="font-size:13px;color:#78350f;font-weight:700;">
-              ${
-                vs.isMasterReplay
-                  ? `Đã đạt tối đa 777/777 màn Mùa Gặt — Thưởng rèn luyện Vàng &amp; XP Điền Trang!`
-                  : vs.featuredBonusApplied
-                    ? `🔥 <strong>THƯỞNG ĐỀ CỬ CỤ DUMBLEDORE!</strong> Đã thắp sáng <strong>${escapeHtml(lvDef.chapterName)}</strong>!`
-                    : `Tích thêm 🌟 Sao xây Điền Trang rực rỡ cho <strong>${escapeHtml(lvDef.chapterName)}</strong>!`
-              }
-            </p>
             <div class="m3-reward-badges">
               ${
                 vs.starsEarned > 0
                   ? `<span class="m3-reward-chip star">
                       <img src="/sprites/m3_icon_star.png" alt="" class="m3-inline-icon" />
-                      +${vs.starsEarned} Sao Phép Thuật${vs.featuredBonusApplied ? ' (🔥 Đề cử)' : ''}
+                      +${vs.starsEarned} 🌟${vs.featuredBonusApplied ? ' 🔥' : ''}
                     </span>`
-                  : `<span class="m3-reward-chip">👑 Đã nhận đủ Sao 777/777</span>`
+                  : `<span class="m3-reward-chip">👑 777/777</span>`
               }
-              <span class="m3-reward-chip">+${vs.goldEarned} 🪙 Galleon</span>
-              <span class="m3-reward-chip">+${vs.xpEarned} ⭐ XP Mùa Gặt</span>
-              ${vs.sandEarned > 0 ? `<span class="m3-reward-chip">+${vs.sandEarned} ⏳ Cát</span>` : ''}
+              <span class="m3-reward-chip">+${vs.goldEarned} 🪙</span>
+              <span class="m3-reward-chip">+${vs.xpEarned} ⭐ XP</span>
+              ${vs.sandEarned > 0 ? `<span class="m3-reward-chip">+${vs.sandEarned} ⏳</span>` : ''}
               ${
                 vs.buildReduction && vs.buildReduction.reducedSec > 0
-                  ? `<span class="m3-reward-chip">🔨 -${formatDurationCompactVi(vs.buildReduction.reducedSec)} xây ${escapeHtml(vs.buildReduction.targetName ?? 'công trình')}${vs.buildReduction.hitMinFloor ? ' (chạm mốc tối thiểu)' : ''}</span>`
-                  : vs.buildReduction?.allActiveAtFloor && (vs.buildReduction.activeCount ?? 0) > 0
-                    ? `<span class="m3-reward-chip">🔒 Công trình chạm mốc tối thiểu ${formatDurationCompactVi(vs.buildReduction.floorSec ?? 3600)}</span>`
-                    : ''
+                  ? `<span class="m3-reward-chip">🔨 -${formatDurationCompactVi(vs.buildReduction.reducedSec)}</span>`
+                  : ''
               }
               ${
                 bonusBoosterDef
@@ -1162,25 +1134,25 @@ export class Match3ModalController {
               ${
                 vs.leaderboardRankUp
                   ? vs.leaderboardRankUp.rankUpBy > 0
-                    ? `<span class="lb-rankup-badge">🏆 Hạng #${vs.leaderboardRankUp.newRank} • 🔼 Tăng +${vs.leaderboardRankUp.rankUpBy} bậc!</span>`
-                    : `<span class="m3-reward-chip">🏆 Hạng #${vs.leaderboardRankUp.newRank} Bùa Gặt</span>`
+                    ? `<span class="lb-rankup-badge">🏆 #${vs.leaderboardRankUp.newRank} (🔼+${vs.leaderboardRankUp.rankUpBy})</span>`
+                    : `<span class="m3-reward-chip">🏆 #${vs.leaderboardRankUp.newRank}</span>`
                   : ''
               }
               ${
                 vs.leaderboardRankUp?.housePointsAwarded && vs.leaderboardRankUp.playerHouse
-                  ? `<span class="m3-reward-chip">⏳ +${vs.leaderboardRankUp.housePointsAwarded} Điểm Cúp Nhà ${escapeHtml(vs.leaderboardRankUp.playerHouse)} (Hạng #${vs.leaderboardRankUp.houseRank ?? 1})</span>`
+                  ? `<span class="m3-reward-chip">⏳ +${vs.leaderboardRankUp.housePointsAwarded}đ ${escapeHtml(vs.leaderboardRankUp.playerHouse)}</span>`
                   : ''
               }
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:100%;margin-top:6px;">
-              <button id="btnM3NextLevel" type="button" class="brass-btn gold-cta" style="flex:1;min-width:170px;padding:9px 14px;font-size:13.5px;">
-                ${vs.isMasterReplay || lvDef.level >= MAX_MINIGAME_STAGE ? `👑 Đấu Lại Đỉnh 777/777` : `▶️ Tiếp Tục Màn ${vs.nextLevel}/${MAX_MINIGAME_STAGE}`}
+              <button id="btnM3NextLevel" type="button" class="brass-btn gold-cta" style="flex:1;min-width:140px;padding:9px 14px;font-size:13.5px;">
+                ${vs.isMasterReplay || lvDef.level >= MAX_MINIGAME_STAGE ? `👑 Chơi Lại` : `▶️ Màn ${vs.nextLevel}`}
               </button>
-              <button id="btnM3VictoryLeaderboard" type="button" class="brass-btn" style="flex:0.85;min-width:150px;padding:9px 12px;font-size:13px;">
-                🏆 Bảng Xếp Hạng (#${m3Rank})
+              <button id="btnM3VictoryLeaderboard" type="button" class="brass-btn" style="flex:0.85;min-width:110px;padding:9px 12px;font-size:13px;">
+                🏆 #${m3Rank}
               </button>
-              <button id="btnM3UseStarsInPark" type="button" class="brass-btn" style="flex:1;min-width:170px;padding:9px 14px;font-size:13px;">
-                🏗️ Về Xây Điền Trang (${st.sandboxMode ? '∞' : m3.stars} 🌟)
+              <button id="btnM3UseStarsInPark" type="button" class="brass-btn" style="flex:1;min-width:130px;padding:9px 14px;font-size:13px;">
+                🏡 Về Vườn (${st.sandboxMode ? '∞' : m3.stars} 🌟)
               </button>
             </div>
           </div>
@@ -1192,32 +1164,29 @@ export class Match3ModalController {
         <div class="m3-board-overlay" role="region" aria-label="Hết lượt đi">
           <div class="m3-overlay-card rescue">
             <img src="/sprites/m3_farm_pinwheel.png" alt="" style="width:58px;height:58px;object-fit:contain;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.35));" />
-            <h3 style="font-size:19px;font-weight:900;color:#451a03;">Hết Lượt Đi! Chỉ Còn Chút Xíu Nữa!</h3>
-            <p style="font-size:12.5px;color:#78350f;line-height:1.45;font-weight:600;">
-              Mua thêm <strong>+${EXTRA_MOVES_COUNT} Lượt Đi</strong> hoặc dùng <strong>🔥 Bùa Phượng Hoàng</strong> để giữ nguyên bàn thu hoạch, bảo toàn <strong>🔥 Chuỗi Thắng ×${m3.winStreak}</strong> và không mất Tim!
-            </p>
+            <h3 style="font-size:19px;font-weight:900;color:#451a03;">Hết Lượt!</h3>
             <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:100%;margin-top:6px;">
               ${
                 canRescueTalisman
-                  ? `<button id="btnM3RescuePhoenixTalisman" type="button" class="brass-btn pa-tool-btn talisman" style="flex:1.4;min-width:210px;padding:9px 14px;">
-                      🔥 Bùa Phượng Hoàng (+5 Lượt &amp; Chong Chóng • ${st.sandboxMode ? '∞' : `×${talismanQty}`})
+                  ? `<button id="btnM3RescuePhoenixTalisman" type="button" class="brass-btn pa-tool-btn talisman" style="flex:1.4;min-width:170px;padding:9px 14px;">
+                      🔥 Bùa (+5 Lượt • ${st.sandboxMode ? '∞' : `×${talismanQty}`})
                     </button>`
                   : ''
               }
-              <button id="btnM3BuyExtraMoves" type="button" class="brass-btn gold-cta" style="flex:1.2;min-width:185px;padding:9px 14px;">
-                🪄 +${EXTRA_MOVES_COUNT} Lượt Đi (${st.sandboxMode ? 'Miễn phí' : `🪙 ${extraMovesCost}G`})
+              <button id="btnM3BuyExtraMoves" type="button" class="brass-btn gold-cta" style="flex:1.2;min-width:150px;padding:9px 14px;">
+                🪄 +${EXTRA_MOVES_COUNT} Lượt (${st.sandboxMode ? '0G' : `🪙 ${extraMovesCost}G`})
               </button>
-              <button id="btnM3GiveUpRetry" type="button" class="brass-btn" style="flex:0.8;min-width:130px;padding:9px 12px;">
-                ${this.rescueContext ? '🔄 Thử lại (Miễn phí)' : '💔 Thử lại (-1 Tim)'}
+              <button id="btnM3GiveUpRetry" type="button" class="brass-btn" style="flex:0.8;min-width:110px;padding:9px 12px;">
+                ${this.rescueContext ? '🔄 Thử Lại' : '💔 Thử Lại (-1 ❤️)'}
               </button>
               ${
                 !this.rescueContext
                   ? mySosMatch3?.rescuedAt
-                    ? `<button id="btnM3OverlayClaimSos" type="button" class="brass-btn gold-cta" style="flex:1.4;min-width:200px;padding:9px 14px;">
-                        🎉 ${escapeHtml(mySosMatch3.rescuerName ?? 'Bạn bè')} Đã Giải Cứu — Qua Màn Ngay!
+                    ? `<button id="btnM3OverlayClaimSos" type="button" class="brass-btn gold-cta" style="flex:1.4;min-width:160px;padding:9px 14px;">
+                        🎉 Qua Màn Ngay!
                       </button>`
-                    : `<button id="btnM3OverlayAskFriend" type="button" class="brass-btn" style="flex:1.2;min-width:185px;padding:9px 12px;" ${rescuesReceivedLeft <= 0 && !mySosMatch3 ? 'disabled' : ''}>
-                        ${mySosMatch3 ? '🦉 Đang chờ bạn giải cứu...' : `🆘 Nhờ Bạn Qua Màn (${rescuesReceivedLeft}/${MAX_DAILY_MINIGAME_RESCUES})`}
+                    : `<button id="btnM3OverlayAskFriend" type="button" class="brass-btn" style="flex:1.2;min-width:150px;padding:9px 12px;" ${rescuesReceivedLeft <= 0 && !mySosMatch3 ? 'disabled' : ''}>
+                        ${mySosMatch3 ? '🦉 Đang chờ...' : `🆘 Cứu (${rescuesReceivedLeft}/${MAX_DAILY_MINIGAME_RESCUES})`}
                       </button>`
                   : ''
               }
@@ -1228,10 +1197,10 @@ export class Match3ModalController {
     }
 
     const restartLabel = this.rescueContext
-      ? '🔄 Đổi bàn giải cứu (Miễn phí)'
+      ? '🔄 Ván Mới'
       : this.movesMadeThisAttempt === 0
-        ? '🔄 Đổi bàn mới (Miễn phí)'
-        : '🔄 Chơi lại (-1 Tim)';
+        ? '🔄 Ván Mới'
+        : '🔄 Lại (-1 ❤️)';
 
     box.innerHTML = `
       ${topStripHtml}
@@ -1242,11 +1211,11 @@ export class Match3ModalController {
           <div class="m3-moves-crest">
             <div class="m3-moves-lbl">LƯỢT</div>
             <div id="m3MovesLeftVal" class="m3-moves-num ${this.engine.movesLeft <= 5 ? 'low-moves' : ''}">${this.engine.movesLeft}</div>
-            <div class="m3-score-sub">Điểm: <strong id="m3ScoreVal">${this.engine.score.toLocaleString('vi-VN')}</strong></div>
+            <div class="m3-score-sub"><strong id="m3ScoreVal">${this.engine.score.toLocaleString('vi-VN')}</strong> đ</div>
           </div>
 
           <div class="m3-goals-box">
-            <div class="m3-box-title">🧺 Mục Tiêu Thu Hoạch</div>
+            <div class="m3-box-title">🧺 Mục Tiêu</div>
             <div class="m3-goals-list">
               ${goalsHtml}
             </div>
@@ -1261,7 +1230,7 @@ export class Match3ModalController {
               width="${VIRTUAL_W}"
               height="${VIRTUAL_W}"
               tabindex="0"
-              aria-label="Bàn phép Gác Xép Bùa Gặt Honeydukes 8 nhân 8. Dùng chuột, cảm ứng vuốt hoặc phím mũi tên và Enter để ghép trái cây và mật ong."
+              aria-label="Bàn phép Gác Xép Bùa Gặt Honeydukes 8 nhân 8"
             ></canvas>
           </div>
         </div>
@@ -1269,7 +1238,7 @@ export class Match3ModalController {
         <!-- 3D BOOSTER DOCK & RESTART -->
         <div class="m3-controls-panel">
           <div class="m3-boosters-box">
-            <div class="m3-box-title">🪄 Dụng Cụ Mùa Gặt (Không tốn lượt)</div>
+            <div class="m3-box-title">🪄 Trợ Giúp</div>
             <div class="m3-booster-row">
               ${boostersHtml}
             </div>
@@ -1279,10 +1248,10 @@ export class Match3ModalController {
               class="pa-tool-btn talisman m3-talisman-btn"
               style="width:100%;margin-top:8px;padding:7px 8px;font-size:11.6px;justify-content:space-between;"
               ${talismanUsed || (!st.sandboxMode && talismanQty <= 0) ? 'disabled' : ''}
-              title="Bùa Trợ Chiến Phượng Hoàng (Tối đa 1 lần/lượt thử màn): +5 Lượt, triệu hồi Chong Chóng + Hũ Mứt Nổ &amp; thanh tẩy chướng ngại!"
+              title="Bùa Phượng Hoàng (+5 Lượt &amp; Chong Chóng)"
             >
               <span>🔥 Bùa Phượng Hoàng</span>
-              <span class="pa-cost-pill">${talismanUsed ? 'Đã dùng' : `×${st.sandboxMode ? '∞' : talismanQty}`}</span>
+              <span class="pa-cost-pill">${talismanUsed ? '✓' : `×${st.sandboxMode ? '∞' : talismanQty}`}</span>
             </button>
           </div>
 
@@ -1298,10 +1267,10 @@ export class Match3ModalController {
               !this.rescueContext
                 ? mySosMatch3?.rescuedAt
                   ? `<button id="btnM3SideClaimSos" type="button" class="brass-btn gold-cta" style="flex:1;font-size:11.8px;padding:7px 10px;">
-                      🎉 Nhận Qua Màn Giải Cứu!
+                      🎉 Qua Màn!
                     </button>`
-                  : `<button id="btnM3AskFriendSos" type="button" class="brass-btn" style="flex:1;font-size:11.8px;padding:7px 10px;" ${rescuesReceivedLeft <= 0 && !mySosMatch3 ? 'disabled' : ''} title="Nhờ bạn bè vào vượt hộ màn khó này (tối đa 5 lần/ngày, reset lúc 00:00)">
-                      ${mySosMatch3 ? '🦉 Đang gọi bạn...' : `🆘 Nhờ Bạn (${rescuesReceivedLeft}/${MAX_DAILY_MINIGAME_RESCUES})`}
+                  : `<button id="btnM3AskFriendSos" type="button" class="brass-btn" style="flex:1;font-size:11.8px;padding:7px 10px;" ${rescuesReceivedLeft <= 0 && !mySosMatch3 ? 'disabled' : ''} title="Nhờ bạn bè giải cứu">
+                      ${mySosMatch3 ? '🦉 Đang gọi...' : `🆘 Cứu (${rescuesReceivedLeft}/${MAX_DAILY_MINIGAME_RESCUES})`}
                     </button>`
                 : ''
             }

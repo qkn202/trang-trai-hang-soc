@@ -987,19 +987,18 @@ export class PuzzleArcadeModalController {
     return `
       <div class="pa-review-card">
         <div class="pa-review-head">
-          <span class="pa-review-title">🪞 Gương Chiếu Hậu Pháp Thuật • ${escapeHtml(rev.outcomeTagVi)} (Lượt ${rev.plyNumber})</span>
+          <span class="pa-review-title">🪞 #${rev.plyNumber}</span>
           ${
             rev.highlightCells.length > 0
               ? `<button id="btnPaToggleReviewInspect" type="button" class="pa-mini-pill ${this.inspectingTurningPoint ? 'active' : ''}">${
-                  this.inspectingTurningPoint ? '🙈 Ẩn Soi Bàn' : '🔍 Soi Nước Ngoặt Trên Bàn'
+                  this.inspectingTurningPoint ? '🙈 Ẩn' : '🔍 Soi Bàn'
                 }</button>`
               : ''
           }
         </div>
-        <p class="pa-review-summary">${escapeHtml(rev.summaryVi)}</p>
         <div class="pa-review-pills">
-          <span class="pa-review-pill">⚡ Nước đã đi: <strong>${escapeHtml(rev.playedCoordVi)}</strong></span>
-          <span class="pa-review-pill best">✨ Nước chuẩn: <strong>${escapeHtml(rev.recommendedCoordVi)}</strong></span>
+          <span class="pa-review-pill">⚡ <strong>${escapeHtml(rev.playedCoordVi)}</strong></span>
+          <span class="pa-review-pill best">✨ <strong>${escapeHtml(rev.recommendedCoordVi)}</strong></span>
         </div>
       </div>
     `;
@@ -1298,16 +1297,16 @@ export class PuzzleArcadeModalController {
     if (modalTitle) {
       if (this.mode === 'chess') {
         modalTitle.innerHTML =
-          '<img src="/paintings/chess/wk.png" alt="" style="width:28px;height:32px;object-fit:contain;vertical-align:-8px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Đại Sảnh Đường Hogwarts • Cờ Phù Thủy McGonagall';
+          '<img src="/paintings/chess/wk.png" alt="" style="width:28px;height:32px;object-fit:contain;vertical-align:-8px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Cờ Phù Thủy';
       } else if (this.mode === 'sudoku') {
         modalTitle.innerHTML =
-          '<img src="/paintings/sudoku/relic_1.png" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Hầm Độc Dược &amp; Cổ Ngữ Hogwarts • Ma Trận Cửu Bảo Bối';
+          '<img src="/paintings/sudoku/relic_1.png" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Cửu Bảo Bối (Sudoku)';
       } else if (this.mode === 'caro') {
         modalTitle.innerHTML =
-          '<img src="/paintings/caro/phoenix_seal.png" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Bản Đồ Đạo Tặc Hogwarts • Trận Pháp Ngũ Ấn Phượng Hoàng';
+          '<img src="/paintings/caro/phoenix_seal.png" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Ngũ Ấn Đạo Tặc (Caro)';
       } else {
         modalTitle.innerHTML =
-          '<img src="/sprites/beast_niffler.png" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Lớp Chăm Sóc Sinh Vật Huyền Bí • Nối Hình Sinh Vật (777 Màn)';
+          '<img src="/sprites/beast_niffler.png" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Nối Hình Sinh Vật (Pikachu)';
       }
     }
 
@@ -1341,8 +1340,8 @@ export class PuzzleArcadeModalController {
     if (bossMeta) {
       statusBannerHtml += `
         <div class="pa-boss-strip">
-          <span class="pa-boss-crown">👑 ĐẠI TRÙM MỐC ${activeStageNum}</span>
-          <span class="pa-boss-text"><strong>${escapeHtml(bossMeta.bossGuardianVi)}</strong> — ${escapeHtml(bossMeta.bossTitleVi)} • <em>${escapeHtml(bossMeta.mechanicTagVi)}</em></span>
+          <span class="pa-boss-crown">👑 TRÙM MỐC ${activeStageNum}</span>
+          <span class="pa-boss-text"><strong>${escapeHtml(bossMeta.bossGuardianVi)}</strong> • <em>${escapeHtml(bossMeta.mechanicTagVi)}</em></span>
         </div>
       `;
     }
@@ -1362,21 +1361,21 @@ export class PuzzleArcadeModalController {
     if (this.rescueContext) {
       statusBannerHtml += `
         <div class="pa-trial-strip urgent">
-          <span>⚔️ <strong>GIẢI CỨU MÀN KHÓ (1 lần/ngày/bạn):</strong> Đang vượt hộ <strong>Màn ${this.rescueContext.stage}</strong> giúp ${escapeHtml(this.rescueContext.neighborEmoji)} <strong>${escapeHtml(this.rescueContext.neighborName)}</strong> • Thắng nhận <strong>+3 🍀 + 95G + 45 XP</strong>!</span>
+          <span>⚔️ <strong>CỨU MÀN ${this.rescueContext.stage}</strong> (${escapeHtml(this.rescueContext.neighborEmoji)} <strong>${escapeHtml(this.rescueContext.neighborName)}</strong>) • <strong>+3 🍀 + 95G</strong></span>
         </div>
       `;
     } else if (mySosArcade) {
       if (mySosArcade.rescuedAt) {
         statusBannerHtml += `
           <div class="pa-trial-strip done">
-            <span>🎉 <strong>${escapeHtml(mySosArcade.rescuerEmoji ?? '🦉')} ${escapeHtml(mySosArcade.rescuerName ?? 'Hàng xóm')}</strong> vừa giải cứu xong Màn ${mySosArcade.stage} giúp bạn!</span>
-            <button type="button" id="btnPaClaimSosRescue" class="pa-mini-pill active">🎉 Nhận Qua Màn Ngay!</button>
+            <span>🎉 <strong>${escapeHtml(mySosArcade.rescuerEmoji ?? '🦉')} ${escapeHtml(mySosArcade.rescuerName ?? 'Hàng xóm')}</strong> đã cứu Màn ${mySosArcade.stage}!</span>
+            <button type="button" id="btnPaClaimSosRescue" class="pa-mini-pill active">🎉 Qua Màn</button>
           </div>
         `;
       } else {
         statusBannerHtml += `
           <div class="pa-trial-strip">
-            <span>🦉 Đang phát tín hiệu Cú Đưa Thư nhờ hội bạn bè vượt hộ <strong>Màn ${mySosArcade.stage}</strong>...</span>
+            <span>🦉 Đang gọi cứu viện <strong>Màn ${mySosArcade.stage}</strong>...</span>
           </div>
         `;
       }
@@ -1387,10 +1386,10 @@ export class PuzzleArcadeModalController {
       if (this.victorySummary) {
         statusBannerHtml += `
           <div class="pa-trial-strip done">
-            <span>🎉 <strong>Cấp Giải Đố ${st.level} (${winsProg.current}/${winsProg.required} màn)!</strong> Môn Đề Cử kế tiếp (Cấp ${nextCap}): <strong>${escapeHtml(reqTrial.icon)} ${escapeHtml(reqTrial.shortVi)}</strong></span>
+            <span>🎉 <strong>Lv.${st.level} (${winsProg.current}/${winsProg.required})</strong> • Đề cử: <strong>${escapeHtml(reqTrial.icon)} ${escapeHtml(reqTrial.shortVi)}</strong></span>
             ${
               !isCurrentTrialTab
-                ? `<button type="button" id="btnPaJumpRequiredTrial" class="pa-mini-pill active">▶️ Tới ${escapeHtml(reqTrial.shortVi)} (🔥 Đề cử)</button>`
+                ? `<button type="button" id="btnPaJumpRequiredTrial" class="pa-mini-pill active">▶️ ${escapeHtml(reqTrial.shortVi)}</button>`
                 : ''
             }
           </div>
@@ -1398,10 +1397,10 @@ export class PuzzleArcadeModalController {
       } else if (curInfo.isMaxed) {
         statusBannerHtml += `
           <div class="pa-trial-strip done">
-            <span>👑 <strong>Đã chinh phục Đỉnh 777/777 môn này!</strong> Đấu lại rèn luyện nhận Vàng &amp; XP • Môn Đề Cử gom 🌟 Sao tiếp theo: <strong>${escapeHtml(reqTrial.icon)} ${escapeHtml(reqTrial.shortVi)}</strong></span>
+            <span>👑 <strong>777/777</strong> • Đề cử: <strong>${escapeHtml(reqTrial.icon)} ${escapeHtml(reqTrial.shortVi)}</strong></span>
             ${
               !isCurrentTrialTab
-                ? `<button type="button" id="btnPaJumpRequiredTrial" class="pa-mini-pill active">▶️ Tới ${escapeHtml(reqTrial.shortVi)} →</button>`
+                ? `<button type="button" id="btnPaJumpRequiredTrial" class="pa-mini-pill active">▶️ ${escapeHtml(reqTrial.shortVi)}</button>`
                 : ''
             }
           </div>
@@ -1410,8 +1409,7 @@ export class PuzzleArcadeModalController {
         statusBannerHtml += `
           <div class="pa-trial-strip urgent">
             <span>
-              🔥 <strong>ĐỀ CỬ CỤ DUMBLEDORE:</strong>
-              Thắng màn <strong>${escapeHtml(reqTrial.icon)} ${escapeHtml(reqTrial.shortVi)}</strong> này nhận <strong>🌟 Sao gốc + Thưởng Đề Cử (+🌟 Mốc Cấp/Chuỗi 5, +1 ⏳ Cát, +35% 🪙)</strong> • Cấp ${st.level} → ${nextCap} (${winsProg.current}/${winsProg.required})!
+              🔥 <strong>ĐỀ CỬ:</strong> +🌟 + ⏳ • Lv.${st.level}→${nextCap} (${winsProg.current}/${winsProg.required})
             </span>
           </div>
         `;
@@ -1419,10 +1417,9 @@ export class PuzzleArcadeModalController {
         statusBannerHtml += `
           <div class="pa-trial-strip">
             <span>
-              🎯 Thắng màn này tích lũy <strong>Cấp ${st.level} → ${nextCap} (${winsProg.current}/${winsProg.required} màn)</strong> • Môn Đề Cử cấp này:
-              <strong>${escapeHtml(reqTrial.icon)} ${escapeHtml(reqTrial.shortVi)}</strong>
+              🎯 Lv.${st.level}→${nextCap} (${winsProg.current}/${winsProg.required}) • Đề cử: <strong>${escapeHtml(reqTrial.icon)} ${escapeHtml(reqTrial.shortVi)}</strong>
             </span>
-            <button type="button" id="btnPaJumpRequiredTrial" class="pa-mini-pill active">▶️ Tới ${escapeHtml(reqTrial.shortVi)} (🔥 Đề cử)</button>
+            <button type="button" id="btnPaJumpRequiredTrial" class="pa-mini-pill active">▶️ ${escapeHtml(reqTrial.shortVi)}</button>
           </div>
         `;
       }
@@ -1433,19 +1430,19 @@ export class PuzzleArcadeModalController {
       rewardSpec = se.reward;
       const dispLbl =
         this.sudokuDisplayMode === 'relic_num'
-          ? '🔮 Bảo Bối + Số'
+          ? '🔮 Hình + Số'
           : this.sudokuDisplayMode === 'relic_only'
-            ? '🏺 Thuần Bảo Bối'
-            : '🔢 Ưu Tiên Số';
+            ? '🏺 Hình'
+            : '🔢 Số';
       const variantBadges = [
-        se.diagonalRule ? '✕ Đường Chéo Vàng' : '',
-        se.parityRule ? '◇Lẻ / ◯Chẵn' : '',
+        se.diagonalRule ? '✕ Chéo' : '',
+        se.parityRule ? '◇Lẻ/◯Chẵn' : '',
       ]
         .filter(Boolean)
         .map((b) => ` • <strong>${b}</strong>`)
         .join('');
-      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${se.stage}/${MAX_MINIGAME_STAGE} • Sách Phép Da Rồng 9×9 (${escapeHtml(se.difficultyLabel)})`;
-      stageSubtitle = `Khắc đủ <strong>9 Bảo Bối (1: Snitch → 9: Fawkes)</strong>${variantBadges} • Đã khảm: <strong id="paSudokuProgress">${se.filledCount}/81</strong> ô • Sai: <strong id="paSudokuMistakes" class="${se.mistakesCount > 0 ? 'pa-err-inline' : ''}">${se.mistakesCount}/${se.maxMistakes}</strong>`;
+      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${se.stage}/${MAX_MINIGAME_STAGE} • ${escapeHtml(se.difficultyLabel)}`;
+      stageSubtitle = `🔢 <strong id="paSudokuProgress">${se.filledCount}/81</strong> • ❌ <strong id="paSudokuMistakes" class="${se.mistakesCount > 0 ? 'pa-err-inline' : ''}">${se.mistakesCount}/${se.maxMistakes}</strong>${variantBadges}`;
       const canSudokuHint =
         se.status === 'playing' && (st.sandboxMode || se.freeHintsLeft + se.paidHintsLeft > 0);
       const canTalisman =
@@ -1455,47 +1452,47 @@ export class PuzzleArcadeModalController {
       const hintCostLbl = st.sandboxMode
         ? '∞'
         : se.freeHintsLeft > 0
-          ? `Miễn phí (${se.freeHintsLeft})`
+          ? `${se.freeHintsLeft}`
           : se.paidHintsLeft > 0
-            ? `${se.hintGoldCost}G (${se.paidHintsLeft})`
-            : 'Hết lượt';
+            ? `${se.hintGoldCost}G`
+            : '0';
       controlsHtml = `
-        <button id="btnPaSudokuDisplayMode" type="button" class="pa-tool-btn ${this.sudokuDisplayMode !== 'num_only' ? 'active' : ''}" title="Đổi chế độ hiển thị Hình Bảo Bối / Chữ Số (Phím H)">
+        <button id="btnPaSudokuDisplayMode" type="button" class="pa-tool-btn ${this.sudokuDisplayMode !== 'num_only' ? 'active' : ''}" title="Đổi chế độ hiển thị (H)">
           ${dispLbl}
         </button>
         <button id="btnPaSudokuPencil" type="button" class="pa-tool-btn ${se.pencilMode ? 'active' : ''}" ${se.status !== 'playing' ? 'disabled' : ''}>
-          🪶 Nháp (N): <strong>${se.pencilMode ? 'Bật' : 'Tắt'}</strong>
+          🪶 Nháp: <strong>${se.pencilMode ? 'Bật' : 'Tắt'}</strong>
         </button>
         <button id="btnPaSudokuClear" type="button" class="pa-tool-btn" ${se.status !== 'playing' ? 'disabled' : ''}>
-          🧹 Xóa Ô (Del)
+          🧹 Xóa
         </button>
         <button id="btnPaSudokuHint" type="button" class="pa-tool-btn gold" ${!canSudokuHint ? 'disabled' : ''}>
-          🧪 Phúc Lạc Dược Soi Ô <span class="pa-cost-pill">${hintCostLbl}</span>
+          💡 Gợi Ý <span class="pa-cost-pill">${hintCostLbl}</span>
         </button>
-        <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="Tối đa 1 lần/lượt thử: Xoá ô sai + Soi 2 ô đáp án + Tăng +1 giới hạn sai (Nhận từ Ôn Ngoại Ngữ, Đơn Cú &amp; Kho Đỏ)">
-          🔥 Bùa Phượng Hoàng <span class="pa-cost-pill">${se.talismanUsed ? 'Đã dùng' : `×${talismanDisp}`}</span>
+        <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="Bùa Phượng Hoàng">
+          🔥 Bùa <span class="pa-cost-pill">${se.talismanUsed ? '✓' : `×${talismanDisp}`}</span>
         </button>
         <button id="btnPaRestart" type="button" class="pa-tool-btn">
-          🔄 Trang Sách Mới
+          🔄 Ván Mới
         </button>
       `;
       if (se.status === 'lost') {
         statusBannerHtml += `
           <div class="pa-alert-strip">
-            <span>📕 Sách Phép Da Rồng đã quá giới hạn sai (<strong>${se.mistakesCount}/${se.maxMistakes}</strong>)! ${canTalisman ? 'Triệu hồi <strong>🔥 Bùa Phượng Hoàng</strong> hoặc bấm ' : 'Bấm '}<strong>🔄 Trang Sách Mới</strong> để giải lại (Không tốn Tim!).</span>
-            ${canTalisman ? `<button id="btnPaRescuePhoenixTalisman" type="button" class="pa-tool-btn talisman">🔥 Hồi Sinh Bùa (×${talismanDisp})</button>` : ''}
+            <span>📕 Quá giới hạn sai (<strong>${se.mistakesCount}/${se.maxMistakes}</strong>)!</span>
+            ${canTalisman ? `<button id="btnPaRescuePhoenixTalisman" type="button" class="pa-tool-btn talisman">🔥 Bùa (×${talismanDisp})</button>` : ''}
           </div>
         `;
       }
     } else if (this.mode === 'caro' && this.caroEngine) {
       const ce = this.caroEngine;
       rewardSpec = ce.reward;
-      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${ce.stage}/${MAX_MINIGAME_STAGE} • Bản Đồ Đạo Tặc 13×13 — ${escapeHtml(ce.opponent.emoji)} ${escapeHtml(ce.opponent.name)} (${escapeHtml(ce.difficultyLabel)})`;
+      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${ce.stage}/${MAX_MINIGAME_STAGE} • ${escapeHtml(ce.opponent.emoji)} ${escapeHtml(ce.opponent.name)} (${escapeHtml(ce.difficultyLabel)})`;
       const sealNote =
         ce.runeSealCount > 0
-          ? ` • <strong>🔒 ${ce.runeSealCount} Ấn Chì Cổ Ngữ</strong> khóa giao điểm`
+          ? ` • 🔒 ${ce.runeSealCount}`
           : '';
-      stageSubtitle = `Bạn cầm <strong>🔥 Ấn Phượng Hoàng</strong> nối <strong>5 ấn liên tiếp</strong> chống lại <strong>🐍 Ấn Đầu Lâu Xà</strong>${sealNote} (<strong id="paCaroMoves">${ce.moveHistory.length} nước</strong>)`;
+      stageSubtitle = `🔥 Nối 5${sealNote} • <strong id="paCaroMoves">${ce.moveHistory.length}</strong> nước`;
       const canCaroUndo =
         ce.moveHistory.length > ce.initialHistoryLen &&
         ce.status !== 'ai_thinking' &&
@@ -1510,29 +1507,29 @@ export class PuzzleArcadeModalController {
       const undoLbl = st.sandboxMode
         ? '∞'
         : ce.freeUndosLeft > 0
-          ? `Miễn phí (${ce.freeUndosLeft})`
+          ? `${ce.freeUndosLeft}`
           : ce.paidUndosLeft > 0
-            ? `${ce.undoGoldCost}G (${ce.paidUndosLeft})`
-            : 'Hết lượt';
+            ? `${ce.undoGoldCost}G`
+            : '0';
       const hintLbl = st.sandboxMode
         ? '∞'
         : ce.freeHintsLeft > 0
-          ? `Miễn phí (${ce.freeHintsLeft})`
+          ? `${ce.freeHintsLeft}`
           : ce.paidHintsLeft > 0
-            ? `${ce.hintGoldCost}G (${ce.paidHintsLeft})`
-            : 'Hết lượt';
+            ? `${ce.hintGoldCost}G`
+            : '0';
       controlsHtml = `
         <button id="btnPaCaroUndo" type="button" class="pa-tool-btn" ${!canCaroUndo ? 'disabled' : ''}>
-          ↩️ Xoay Thời Gian <span class="pa-cost-pill">${undoLbl}</span>
+          ↩️ Lùi <span class="pa-cost-pill">${undoLbl}</span>
         </button>
         <button id="btnPaCaroHint" type="button" class="pa-tool-btn gold" ${!canCaroHint ? 'disabled' : ''}>
-          🗺️ Bản Đồ Chỉ Nước Đinh <span class="pa-cost-pill">${hintLbl}</span>
+          💡 Gợi Ý <span class="pa-cost-pill">${hintLbl}</span>
         </button>
-        <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="Tối đa 1 lần/lượt thử: Thanh tẩy Ấn Hắc Ám nguy hiểm + Chỉ điểm nước công Phượng Hoàng">
-          🔥 Bùa Phượng Hoàng <span class="pa-cost-pill">${ce.talismanUsed ? 'Đã dùng' : `×${talismanDisp}`}</span>
+        <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="Bùa Phượng Hoàng">
+          🔥 Bùa <span class="pa-cost-pill">${ce.talismanUsed ? '✓' : `×${talismanDisp}`}</span>
         </button>
         <button id="btnPaRestart" type="button" class="pa-tool-btn">
-          🔄 Trải Lại Bản Đồ
+          🔄 Ván Mới
         </button>
       `;
       if (ce.status === 'lost' || ce.status === 'draw') {
@@ -1541,10 +1538,10 @@ export class PuzzleArcadeModalController {
           <div class="pa-alert-strip">
             <span>${
               ce.status === 'lost'
-                ? `${escapeHtml(ce.opponent.emoji)} <strong>${escapeHtml(ce.opponent.name)}</strong> vừa kết nối 5 Ấn Đầu Lâu Xà! Dùng <strong>🔥 Bùa Phượng Hoàng</strong>, <strong>↩️ Xoay Thời Gian</strong> hoặc <strong>🔄 Trải Lại Bản Đồ</strong>!`
-                : `🤝 Bản Đồ Đạo Tặc đã kín ấn bất phân thắng bại! Bấm <strong>🔄 Trải Lại Bản Đồ</strong> để tái đấu!`
+                ? `${escapeHtml(ce.opponent.emoji)} <strong>${escapeHtml(ce.opponent.name)}</strong> thắng!`
+                : `🤝 Hòa cờ!`
             }</span>
-            ${canTalisman ? `<button id="btnPaRescuePhoenixTalisman" type="button" class="pa-tool-btn talisman">🔥 Hoá Giải Bằng Bùa (×${talismanDisp})</button>` : ''}
+            ${canTalisman ? `<button id="btnPaRescuePhoenixTalisman" type="button" class="pa-tool-btn talisman">🔥 Bùa (×${talismanDisp})</button>` : ''}
           </div>
           ${caroRev ? this.renderTurningPointCardHtml(caroRev) : ''}
         `;
@@ -1553,14 +1550,14 @@ export class PuzzleArcadeModalController {
       const we = this.chessEngine;
       rewardSpec = we.reward;
       const isTactics = we.subMode === 'tactics';
-      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${we.stage}/${MAX_MINIGAME_STAGE} • ${escapeHtml(we.title)} (${escapeHtml(we.difficultyLabel)})`;
-      stageSubtitle = `${escapeHtml(we.subtitle)} • Phe bạn: <strong>🦁 Hội Phượng Hoàng</strong> (<strong id="paChessTurn">${
+      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${we.stage}/${MAX_MINIGAME_STAGE} • ${escapeHtml(we.difficultyLabel)}`;
+      stageSubtitle = `🦁 <strong id="paChessTurn">${
         we.status === 'ai_thinking'
-          ? `${escapeHtml(we.opponentName)} đang điều quân Slytherin...`
+          ? `${escapeHtml(we.opponentName)} đang đi...`
           : we.isInCheck('w')
-            ? '⚠️ Cụ Dumbledore (Vua) đang bị chiếu!'
-            : 'Lượt của bạn'
-      }</strong>)`;
+            ? '⚠️ Chiếu tướng!'
+            : 'Lượt bạn'
+      }</strong>`;
       const canChessUndo =
         we.moveCount > 0 &&
         we.status !== 'ai_thinking' &&
@@ -1574,33 +1571,33 @@ export class PuzzleArcadeModalController {
       const undoLbl = st.sandboxMode
         ? '∞'
         : we.freeUndosLeft > 0
-          ? `Miễn phí (${we.freeUndosLeft})`
+          ? `${we.freeUndosLeft}`
           : we.paidUndosLeft > 0
-            ? `${we.undoGoldCost}G (${we.paidUndosLeft})`
-            : 'Hết lượt';
+            ? `${we.undoGoldCost}G`
+            : '0';
       const hintLbl = st.sandboxMode
         ? '∞'
         : we.freeHintsLeft > 0
-          ? `Miễn phí (${we.freeHintsLeft})`
+          ? `${we.freeHintsLeft}`
           : we.paidAssistsLeft > 0
-            ? `${we.assistGoldCost}G (${we.paidAssistsLeft})`
-            : 'Hết lượt';
+            ? `${we.assistGoldCost}G`
+            : '0';
       controlsHtml = `
-        <div class="pa-submode-switch" role="group" aria-label="Kiểu chơi Cờ Phù Thủy" title="${we.subModeLocked ? 'Từ Màn 11/777 thể thức màn được ấn định cố định theo Tháp Giải Đố' : 'Chọn thể thức tập luyện (Màn 1–10)'}">
-          <button id="btnPaChessTactics" type="button" class="pa-mini-pill ${isTactics ? 'active' : ''}" ${we.subModeLocked && !isTactics ? 'disabled' : ''}>${we.subModeLocked && !isTactics ? '🔒 ' : '⚡ '}Giải Thế Cờ</button>
-          <button id="btnPaChessMatch" type="button" class="pa-mini-pill ${!isTactics ? 'active' : ''}" ${we.subModeLocked && isTactics ? 'disabled' : ''}>${we.subModeLocked && isTactics ? '🔒 ' : '👑 '}Đại Chiến 8×8</button>
+        <div class="pa-submode-switch" role="group" aria-label="Kiểu chơi Cờ Phù Thủy">
+          <button id="btnPaChessTactics" type="button" class="pa-mini-pill ${isTactics ? 'active' : ''}" ${we.subModeLocked && !isTactics ? 'disabled' : ''}>${we.subModeLocked && !isTactics ? '🔒 ' : '⚡ '}Thế Cờ</button>
+          <button id="btnPaChessMatch" type="button" class="pa-mini-pill ${!isTactics ? 'active' : ''}" ${we.subModeLocked && isTactics ? 'disabled' : ''}>${we.subModeLocked && isTactics ? '🔒 ' : '👑 '}8×8</button>
         </div>
         <button id="btnPaChessUndo" type="button" class="pa-tool-btn" ${!canChessUndo ? 'disabled' : ''}>
-          ↩️ Đi Lại <span class="pa-cost-pill">${undoLbl}</span>
+          ↩️ Lùi <span class="pa-cost-pill">${undoLbl}</span>
         </button>
         <button id="btnPaChessAssist" type="button" class="pa-tool-btn gold" ${!canChessAssist ? 'disabled' : ''}>
-          🪄 Lệnh Nước Tối Ưu <span class="pa-cost-pill">${hintLbl}</span>
+          💡 Gợi Ý <span class="pa-cost-pill">${hintLbl}</span>
         </button>
-        <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="Tối đa 1 lần/lượt thử: Lội ngược thế thua (nếu có) &amp; tung 1 nước chuẩn xác Fawkes">
-          🔥 Bùa Phượng Hoàng <span class="pa-cost-pill">${we.talismanUsed ? 'Đã dùng' : `×${talismanDisp}`}</span>
+        <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="Bùa Phượng Hoàng">
+          🔥 Bùa <span class="pa-cost-pill">${we.talismanUsed ? '✓' : `×${talismanDisp}`}</span>
         </button>
         <button id="btnPaRestart" type="button" class="pa-tool-btn">
-          🔄 Bày Lại Quân Cờ
+          🔄 Ván Mới
         </button>
       `;
       if (we.status === 'lost' || we.status === 'draw') {
@@ -1609,10 +1606,10 @@ export class PuzzleArcadeModalController {
           <div class="pa-alert-strip">
             <span>${
               we.status === 'lost'
-                ? `🏰 Cụ Dumbledore đã bị chiếu bí trên bàn cờ Đại Sảnh! Bấm <strong>↩️ Đi Lại</strong>, <strong>🔥 Bùa Phượng Hoàng</strong> hoặc <strong>🔄 Bày Lại Quân Cờ</strong>!`
-                : `🤝 Trận Cờ Phù Thủy Đại Sảnh Đường bất phân thắng bại! Bấm <strong>🔄 Bày Lại Quân Cờ</strong> để tái đấu!`
+                ? `🏰 Bị chiếu bí!`
+                : `🤝 Hòa cờ!`
             }</span>
-            ${canTalisman ? `<button id="btnPaRescuePhoenixTalisman" type="button" class="pa-tool-btn talisman">🔥 Phản Công Bằng Bùa (×${talismanDisp})</button>` : ''}
+            ${canTalisman ? `<button id="btnPaRescuePhoenixTalisman" type="button" class="pa-tool-btn talisman">🔥 Bùa (×${talismanDisp})</button>` : ''}
           </div>
           ${chessRev ? this.renderTurningPointCardHtml(chessRev) : ''}
         `;
@@ -1620,8 +1617,8 @@ export class PuzzleArcadeModalController {
     } else if (this.mode === 'blocks' && this.onetEngine) {
       const oe = this.onetEngine;
       rewardSpec = oe.reward;
-      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${oe.stage}/${MAX_MINIGAME_STAGE} • ${escapeHtml(oe.title)} (${escapeHtml(oe.difficultyLabel)})`;
-      stageSubtitle = `Nối 2 Sinh Vật giống nhau qua tối đa <strong>3 đoạn thẳng</strong> (cổ điển, không đếm giờ) • Đã ghép: <strong id="paOnetProgress">${oe.matchedPairs}/${oe.totalPairs}</strong> cặp • Chuỗi: <strong id="paOnetCombo">×${oe.combo}</strong>`;
+      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${oe.stage}/${MAX_MINIGAME_STAGE} • ${escapeHtml(oe.difficultyLabel)}`;
+      stageSubtitle = `🦄 <strong id="paOnetProgress">${oe.matchedPairs}/${oe.totalPairs}</strong> cặp • ⚡ <strong id="paOnetCombo">×${oe.combo}</strong>`;
       const canHint =
         oe.status === 'playing' && (st.sandboxMode || oe.freeHintsLeft + oe.paidHintsLeft > 0);
       const canShuffle =
@@ -1632,29 +1629,29 @@ export class PuzzleArcadeModalController {
       const hintCostLbl = st.sandboxMode
         ? '∞'
         : oe.freeHintsLeft > 0
-          ? `Miễn phí (${oe.freeHintsLeft})`
+          ? `${oe.freeHintsLeft}`
           : oe.paidHintsLeft > 0
-            ? `${oe.hintGoldCost}G (${oe.paidHintsLeft})`
-            : 'Hết lượt';
+            ? `${oe.hintGoldCost}G`
+            : '0';
       const shuffleCostLbl = st.sandboxMode
         ? '∞'
         : oe.freeShufflesLeft > 0
-          ? `Miễn phí (${oe.freeShufflesLeft})`
+          ? `${oe.freeShufflesLeft}`
           : oe.paidShufflesLeft > 0
-            ? `${oe.shuffleGoldCost}G (${oe.paidShufflesLeft})`
-            : 'Hết lượt';
+            ? `${oe.shuffleGoldCost}G`
+            : '0';
       controlsHtml = `
-        <button id="btnPaOnetHint" type="button" class="pa-tool-btn gold" ${!canHint ? 'disabled' : ''} title="Soi sáng 1 cặp Sinh Vật Huyền Bí nối được ngay (Phím H)">
-          🔍 Dò Cặp <span class="pa-cost-pill">${hintCostLbl}</span>
+        <button id="btnPaOnetHint" type="button" class="pa-tool-btn gold" ${!canHint ? 'disabled' : ''} title="Dò Cặp (H)">
+          🔍 Dò <span class="pa-cost-pill">${hintCostLbl}</span>
         </button>
-        <button id="btnPaOnetShuffle" type="button" class="pa-tool-btn" ${!canShuffle ? 'disabled' : ''} title="Đảo vị trí các Sinh Vật còn lại trên bàn (Phím S) — Tự động đảo miễn phí khi hết nước đi!">
-          🔀 Đảo Đàn Thú <span class="pa-cost-pill">${shuffleCostLbl}</span>
+        <button id="btnPaOnetShuffle" type="button" class="pa-tool-btn" ${!canShuffle ? 'disabled' : ''} title="Đảo Đàn Thú (S)">
+          🔀 Đảo <span class="pa-cost-pill">${shuffleCostLbl}</span>
         </button>
-        <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="Tối đa 1 lần/lượt thử: Lửa Phượng Hoàng tự động ghép 3 cặp Sinh Vật & tặng thêm +1 Dò Cặp">
-          🔥 Bùa Phượng Hoàng <span class="pa-cost-pill">${oe.talismanUsed ? 'Đã dùng' : `×${talismanDisp}`}</span>
+        <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="Bùa Phượng Hoàng">
+          🔥 Bùa <span class="pa-cost-pill">${oe.talismanUsed ? '✓' : `×${talismanDisp}`}</span>
         </button>
         <button id="btnPaRestart" type="button" class="pa-tool-btn">
-          🔄 Chơi Lại Màn
+          🔄 Ván Mới
         </button>
       `;
     }
@@ -1663,12 +1660,12 @@ export class PuzzleArcadeModalController {
       controlsHtml += mySosArcade?.rescuedAt
         ? `
           <button id="btnPaSideClaimSos" type="button" class="pa-tool-btn active">
-            🎉 Nhận Qua Màn Giải Cứu!
+            🎉 Qua Màn!
           </button>
         `
         : `
-          <button id="btnPaAskFriendSos" type="button" class="pa-tool-btn" ${rescuesReceivedLeft <= 0 && !mySosArcade ? 'disabled' : ''} title="Nhờ bạn bè vào vượt hộ màn khó này (tối đa 5 lần/ngày, reset lúc 00:00)">
-            ${mySosArcade ? '🦉 Đang gọi bạn...' : `🆘 Nhờ Bạn Qua Màn (${rescuesReceivedLeft}/${MAX_DAILY_MINIGAME_RESCUES})`}
+          <button id="btnPaAskFriendSos" type="button" class="pa-tool-btn" ${rescuesReceivedLeft <= 0 && !mySosArcade ? 'disabled' : ''} title="Nhờ bạn bè giải cứu">
+            ${mySosArcade ? '🦉 Đang gọi...' : `🆘 Cứu (${rescuesReceivedLeft}/${MAX_DAILY_MINIGAME_RESCUES})`}
           </button>
         `;
     }
@@ -1681,26 +1678,21 @@ export class PuzzleArcadeModalController {
         <div class="pa-victory-overlay" role="region" aria-label="Giải cứu thành công">
           <div class="pa-victory-card">
             <div class="pa-victory-title">
-              🏆 Giải Cứu Thành Công Cho ${escapeHtml(this.rescueContext.neighborName)}!
-            </div>
-            <div style="font-size:12.5px;font-weight:800;color:#78350f;">
-              Đã vượt hộ <strong>Màn ${this.rescueContext.stage}</strong> giúp ${escapeHtml(this.rescueContext.neighborEmoji)} <strong>${escapeHtml(this.rescueContext.neighborName)}</strong>!
+              🏆 Cứu Thành Công (${escapeHtml(this.rescueContext.neighborName)})!
             </div>
             <div class="m3-reward-badges">
-              <span class="m3-reward-chip star">+${rv.tokensEarned} 🍀 Huy Hiệu Tình Bạn</span>
+              <span class="m3-reward-chip star">+${rv.tokensEarned} 🍀</span>
               <span class="m3-reward-chip">🪙 +${rv.goldEarned}G</span>
               <span class="m3-reward-chip">⭐ +${rv.xpEarned} XP</span>
               ${
                 rv.buildReduction && rv.buildReduction.reducedSec > 0
-                  ? `<span class="m3-reward-chip">🔨 -${formatDurationCompactVi(rv.buildReduction.reducedSec)} xây ${escapeHtml(rv.buildReduction.targetName ?? 'công trình')}</span>`
-                  : rv.buildReduction?.allActiveAtFloor && (rv.buildReduction.activeCount ?? 0) > 0
-                    ? `<span class="m3-reward-chip">🔒 Đã chạm mốc tối thiểu ${formatDurationCompactVi(rv.buildReduction.floorSec ?? 3600)}</span>`
-                    : ''
+                  ? `<span class="m3-reward-chip">🔨 -${formatDurationCompactVi(rv.buildReduction.reducedSec)}</span>`
+                  : ''
               }
             </div>
             <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:6px;">
               <button id="btnPaBackToPark" type="button" class="brass-btn gold-cta" style="padding:9px 18px;font-size:13.5px;">
-                🏡 Quay Về Vườn / Sổ Hàng Xóm
+                🏡 Về Vườn
               </button>
             </div>
           </div>
@@ -1713,10 +1705,10 @@ export class PuzzleArcadeModalController {
       if (this.inspectingTurningPoint && winReview) {
         inspectReturnBarHtml = `
           <div class="pa-inspect-return-bar" role="region" aria-label="Đang soi Gương Chiếu Hậu Pháp Thuật">
-            <span>🪞 <strong>Gương Chiếu Hậu Pháp Thuật:</strong> ${escapeHtml(winReview.summaryVi)}</span>
+            <span>🪞 ${escapeHtml(winReview.playedCoordVi)} → <strong>${escapeHtml(winReview.recommendedCoordVi)}</strong></span>
             <div class="pa-inspect-return-actions">
-              <button id="btnPaReturnVictoryCard" type="button" class="brass-btn gold-cta">🏆 Về Bảng Thưởng</button>
-              <button id="btnPaNextStage" type="button" class="brass-btn">▶️ Sang Màn ${vs.nextStage}</button>
+              <button id="btnPaReturnVictoryCard" type="button" class="brass-btn gold-cta">🏆 Bảng Thưởng</button>
+              <button id="btnPaNextStage" type="button" class="brass-btn">▶️ Màn ${vs.nextStage}</button>
             </div>
           </div>
         `;
@@ -1725,15 +1717,13 @@ export class PuzzleArcadeModalController {
           <div class="pa-victory-overlay" role="region" aria-label="Hoàn thành màn giải đố">
             <div class="pa-victory-card">
               <div class="pa-victory-title">${
-                vs.isMasterReplay
-                  ? `👑 Rèn Luyện Đỉnh 777/777 Thành Công!`
-                  : curInfo.isMaxed
-                    ? `👑 CHINH PHỤC ĐỈNH 777/777!`
-                    : `🎉 Tuyệt Đỉnh Trí Tuệ • Cấp ${vs.newMasterLevel ?? st.level}!`
+                vs.isMasterReplay || curInfo.isMaxed
+                  ? `👑 777/777!`
+                  : `🎉 Thắng • Lv.${vs.newMasterLevel ?? st.level}!`
               }</div>
               ${
                 vs.featuredBonusApplied
-                  ? `<div style="font-size:12.5px;font-weight:900;color:#b45309;background:#fef3c7;border:1.5px solid #f59e0b;border-radius:999px;padding:3px 12px;">🔥 THƯỞNG ĐỀ CỬ CỤ DUMBLEDORE!</div>`
+                  ? `<div style="font-size:12.5px;font-weight:900;color:#b45309;background:#fef3c7;border:1.5px solid #f59e0b;border-radius:999px;padding:3px 12px;">🔥 ĐỀ CỬ</div>`
                   : ''
               }
               <div class="m3-reward-badges">
@@ -1741,49 +1731,47 @@ export class PuzzleArcadeModalController {
                   vs.starsEarned > 0
                     ? `<span class="m3-reward-chip star">
                         <img src="/sprites/m3_icon_star.png" alt="" style="width:16px;height:16px;" />
-                        +${vs.starsEarned} Sao Phép Thuật${vs.featuredBonusApplied ? ' (🔥 Đề cử)' : ''}
+                        +${vs.starsEarned} 🌟${vs.featuredBonusApplied ? ' 🔥' : ''}
                       </span>`
-                    : `<span class="m3-reward-chip">👑 Đã nhận đủ Sao 777/777</span>`
+                    : `<span class="m3-reward-chip">👑 777/777</span>`
                 }
                 ${
                   vs.sandEarned > 0
                     ? `<span class="m3-reward-chip" style="border-color:#0284c7;color:#0c4a6e;background:#e0f2fe;">
-                        ⏳ +${vs.sandEarned} Cát Xoay Thời Gian
+                        ⏳ +${vs.sandEarned}
                       </span>`
                     : ''
                 }
                 <span class="m3-reward-chip">🪙 +${vs.goldEarned}G</span>
-                <span class="m3-reward-chip">⭐ +${vs.xpEarned} XP Mùa Gặt</span>
+                <span class="m3-reward-chip">⭐ +${vs.xpEarned} XP</span>
                 ${
                   vs.buildReduction && vs.buildReduction.reducedSec > 0
-                    ? `<span class="m3-reward-chip">🔨 -${formatDurationCompactVi(vs.buildReduction.reducedSec)} xây ${escapeHtml(vs.buildReduction.targetName ?? 'công trình')}${vs.buildReduction.hitMinFloor ? ' (chạm mốc tối thiểu)' : ''}</span>`
-                    : vs.buildReduction?.allActiveAtFloor && (vs.buildReduction.activeCount ?? 0) > 0
-                      ? `<span class="m3-reward-chip">🔒 Công trình chạm mốc tối thiểu ${formatDurationCompactVi(vs.buildReduction.floorSec ?? 3600)}</span>`
-                      : ''
+                    ? `<span class="m3-reward-chip">🔨 -${formatDurationCompactVi(vs.buildReduction.reducedSec)}</span>`
+                    : ''
                 }
                 ${
                   vs.leaderboardRankUp
                     ? vs.leaderboardRankUp.rankUpBy > 0
-                      ? `<span class="lb-rankup-badge">🏆 Hạng #${vs.leaderboardRankUp.newRank} • 🔼 Tăng +${vs.leaderboardRankUp.rankUpBy} bậc!</span>`
-                      : `<span class="m3-reward-chip">🏆 Hạng #${vs.leaderboardRankUp.newRank} môn này</span>`
+                      ? `<span class="lb-rankup-badge">🏆 #${vs.leaderboardRankUp.newRank} (🔼+${vs.leaderboardRankUp.rankUpBy})</span>`
+                      : `<span class="m3-reward-chip">🏆 #${vs.leaderboardRankUp.newRank}</span>`
                     : ''
                 }
                 ${
                   vs.leaderboardRankUp?.housePointsAwarded && vs.leaderboardRankUp.playerHouse
-                    ? `<span class="m3-reward-chip">⏳ +${vs.leaderboardRankUp.housePointsAwarded} Điểm Cúp Nhà ${escapeHtml(vs.leaderboardRankUp.playerHouse)} (Hạng #${vs.leaderboardRankUp.houseRank ?? 1})</span>`
+                    ? `<span class="m3-reward-chip">⏳ +${vs.leaderboardRankUp.housePointsAwarded}đ ${escapeHtml(vs.leaderboardRankUp.playerHouse)}</span>`
                     : ''
                 }
               </div>
               ${winReview ? this.renderTurningPointCardHtml(winReview) : ''}
               <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:6px;">
                 <button id="btnPaNextStage" type="button" class="brass-btn gold-cta" style="padding:9px 18px;font-size:13.5px;">
-                  ${vs.isMasterReplay || curInfo.isMaxed ? `👑 Đấu Lại Đỉnh 777/777` : `▶️ Sang Màn ${vs.nextStage}/${MAX_MINIGAME_STAGE}`}
+                  ${vs.isMasterReplay || curInfo.isMaxed ? `👑 Chơi Lại` : `▶️ Màn ${vs.nextStage}`}
                 </button>
                 <button id="btnPaVictoryLeaderboard" type="button" class="brass-btn" style="padding:9px 14px;font-size:13px;">
-                  ${isScoredMode ? `🏆 Bảng Xếp Hạng (#${activeModeRank})` : '🏆 BXH 3 Môn Tính Điểm'}
+                  ${isScoredMode ? `🏆 #${activeModeRank}` : '🏆 BXH'}
                 </button>
                 <button id="btnPaBackToPark" type="button" class="brass-btn" style="padding:9px 14px;font-size:13px;">
-                  🏗️ Về Xây Điền Trang (${st.sandboxMode ? '∞' : st.match3.stars} 🌟)
+                  🏡 Về Vườn (${st.sandboxMode ? '∞' : st.match3.stars} 🌟)
                 </button>
               </div>
             </div>
@@ -1795,7 +1783,7 @@ export class PuzzleArcadeModalController {
     const trialBadgeFor = (kind: PuzzleArcadeMode | 'match3'): string => {
       if (!reqTrial || st.sandboxMode || this.sim.isHeadmasterPreview) return '';
       if (reqTrial.kind !== kind) return '';
-      return `<span class="pa-tab-trial" title="Môn Đề Cử thưởng thêm 🌟 Sao Mốc + ⏳ Cát + 35% 🪙">🔥</span>`;
+      return `<span class="pa-tab-trial" title="Môn Đề Cử">🔥</span>`;
     };
 
     const fmtTabLv = (kind: PuzzleArcadeMode | 'match3'): string => {
@@ -1812,56 +1800,56 @@ export class PuzzleArcadeModalController {
           <div class="pa-top-bar">
             <div class="pa-dock-head-row">
               <div class="pa-currencies">
-                <span class="m3-res-chip" title="Cấp Giải Đố Tổng (${winsProg.current}/${winsProg.required} màn tới Cấp ${nextCap})">
+                <span class="m3-res-chip" title="Cấp Giải Đố (${winsProg.current}/${winsProg.required})">
                   <span>🏆</span>
-                  <strong>Cấp ${st.level} (${winsProg.current}/${winsProg.required})</strong>
+                  <strong>Lv.${st.level} (${winsProg.current}/${winsProg.required})</strong>
                 </span>
-                <span class="m3-res-chip" title="Sao Phép Thuật dùng để mở khóa vùng đất &amp; dựng các công trình Điền Trang (0 tốn Vàng!)">
+                <span class="m3-res-chip" title="Sao Phép Thuật">
                   <img src="/sprites/m3_icon_star.png" alt="Sao" class="m3-res-icon" />
                   <strong id="paStarsText">${st.sandboxMode ? '∞' : st.match3.stars}</strong>
                 </span>
-                <span class="m3-res-chip" title="Cát Xoay Thời Gian dùng để thu hoạch ruộng &amp; ra lò bánh tức thì">
+                <span class="m3-res-chip" title="Cát Xoay Thời Gian">
                   <span>⏳</span>
                   <strong id="paSandText">${st.sandboxMode ? '∞' : st.timeSand}</strong>
                 </span>
-                <span class="m3-res-chip" title="Vàng Galleon Điền Trang">
+                <span class="m3-res-chip" title="Vàng Galleon">
                   <span class="g-coin" style="width:17px;height:17px;font-size:10.5px;">G</span>
                   <strong id="paGoldText">${st.sandboxMode ? '∞' : st.galleons.toLocaleString('vi-VN')}</strong>
                 </span>
-                <span class="m3-res-chip" title="Bùa Trợ Chiến Phượng Hoàng (tối đa 12; dùng 1 lần/màn — nhận khi Ôn Ngoại Ngữ, Giao Đơn Cú hoặc Rèn tại Kho Đỏ)">
+                <span class="m3-res-chip" title="Bùa Phượng Hoàng">
                   <span>🔥</span>
                   <strong id="paTalismanText">${talismanDisp}</strong>
                 </span>
-                <button id="btnPaOpenLeaderboard" type="button" class="m3-res-chip minigame-lb-chip" title="${isScoredMode ? `Mở Bảng Xếp Hạng riêng cho môn đang chọn — Hạng hiện tại của bạn: #${activeModeRank}` : 'Chỉ tính điểm xếp hạng ở 3 môn: Match-3, Sudoku & Pikachu (môn hiện tại không tính điểm)'}">
+                <button id="btnPaOpenLeaderboard" type="button" class="m3-res-chip minigame-lb-chip" title="Bảng Xếp Hạng">
                   <span>🏆</span>
-                  <strong id="paRankText">${isScoredMode ? `Hạng #${activeModeRank}` : 'BXH 3 Môn'}</strong>
+                  <strong id="paRankText">${isScoredMode ? `#${activeModeRank}` : 'BXH'}</strong>
                 </button>
                 ${
                   streakCount > 0
-                    ? `<span class="m3-res-chip" title="Chuỗi Thắng Liên Tiếp dùng chung cho cả 5 môn giải đố!">⚡ <strong>×${streakCount}</strong></span>`
+                    ? `<span class="m3-res-chip" title="Chuỗi Thắng">⚡ <strong>×${streakCount}</strong></span>`
                     : ''
                 }
               </div>
               <form method="dialog" class="pa-inline-close-form">
-                <button type="submit" class="brass-btn pa-inline-close-btn" title="Đóng sảnh trò chơi (Esc)">✕ Đóng</button>
+                <button type="submit" class="brass-btn pa-inline-close-btn" title="Đóng (Esc)" aria-label="Đóng">✕</button>
               </form>
             </div>
 
             <div class="pa-mode-tabs" role="tablist" aria-label="Chọn môn khảo thí phép thuật Hogwarts" ${this.rescueContext ? 'style="opacity:0.65;pointer-events:none;"' : ''}>
-              <button type="button" role="tab" aria-selected="${this.mode === 'caro'}" data-pa-mode="caro" class="pa-mode-tab ${this.mode === 'caro' ? 'active' : ''}" title="Trận Pháp Ngũ Ấn Bản Đồ Đạo Tặc (777 Màn)">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🗺️ Ngũ Ấn Đạo Tặc</span><span class="pa-tab-name-short">🗺️ Ngũ Ấn</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('caro')}</span>${trialBadgeFor('caro')}</span>
+              <button type="button" role="tab" aria-selected="${this.mode === 'caro'}" data-pa-mode="caro" class="pa-mode-tab ${this.mode === 'caro' ? 'active' : ''}" title="Ngũ Ấn Đạo Tặc">
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🗺️ Caro</span><span class="pa-tab-name-short">🗺️ Caro</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('caro')}</span>${trialBadgeFor('caro')}</span>
               </button>
-              <button type="button" role="tab" aria-selected="${this.mode === 'sudoku'}" data-pa-mode="sudoku" class="pa-mode-tab ${this.mode === 'sudoku' ? 'active' : ''}" title="Ma Trận Cửu Bảo Bối Hầm Độc Dược (777 Màn)">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🔮 Cửu Bảo Bối</span><span class="pa-tab-name-short">🔮 Bảo Bối</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('sudoku')}</span>${trialBadgeFor('sudoku')}</span>
+              <button type="button" role="tab" aria-selected="${this.mode === 'sudoku'}" data-pa-mode="sudoku" class="pa-mode-tab ${this.mode === 'sudoku' ? 'active' : ''}" title="Cửu Bảo Bối (Sudoku)">
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🔮 Sudoku</span><span class="pa-tab-name-short">🔮 Sudoku</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('sudoku')}</span>${trialBadgeFor('sudoku')}</span>
               </button>
-              <button type="button" role="tab" aria-selected="${this.mode === 'chess'}" data-pa-mode="chess" class="pa-mode-tab ${this.mode === 'chess' ? 'active' : ''}" title="Cờ Phù Thủy Đại Sảnh Đường (777 Màn)">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🏰 Cờ Phù Thủy</span><span class="pa-tab-name-short">🏰 Cờ Vua</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('chess')}</span>${trialBadgeFor('chess')}</span>
+              <button type="button" role="tab" aria-selected="${this.mode === 'chess'}" data-pa-mode="chess" class="pa-mode-tab ${this.mode === 'chess' ? 'active' : ''}" title="Cờ Phù Thủy">
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🏰 Cờ Vua</span><span class="pa-tab-name-short">🏰 Cờ Vua</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('chess')}</span>${trialBadgeFor('chess')}</span>
               </button>
-              <button type="button" role="tab" aria-selected="${this.mode === 'blocks'}" data-pa-mode="blocks" class="pa-mode-tab ${this.mode === 'blocks' ? 'active' : ''}" title="Nối Hình Sinh Vật Huyền Bí Cổ Điển (777 Màn)">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🦄 Nối Sinh Vật</span><span class="pa-tab-name-short">🦄 Nối Thú</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('blocks')}</span>${trialBadgeFor('blocks')}</span>
+              <button type="button" role="tab" aria-selected="${this.mode === 'blocks'}" data-pa-mode="blocks" class="pa-mode-tab ${this.mode === 'blocks' ? 'active' : ''}" title="Nối Hình Sinh Vật (Pikachu)">
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🦄 Pikachu</span><span class="pa-tab-name-short">🦄 Pikachu</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('blocks')}</span>${trialBadgeFor('blocks')}</span>
               </button>
-              <button id="btnPaGoMatch3" type="button" class="pa-mode-tab switch-m3" title="Chuyển sang Gác Xép Bùa Gặt Honeydukes (777 Màn)">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🍓 Bùa Gặt Kẹo</span><span class="pa-tab-name-short">🍓 Bùa Gặt</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('match3')}</span>${trialBadgeFor('match3')}</span>
+              <button id="btnPaGoMatch3" type="button" class="pa-mode-tab switch-m3" title="Gác Xép Bùa Gặt (Match-3)">
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🍓 Match-3</span><span class="pa-tab-name-short">🍓 Match-3</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('match3')}</span>${trialBadgeFor('match3')}</span>
               </button>
             </div>
           </div>
@@ -1871,11 +1859,11 @@ export class PuzzleArcadeModalController {
               <div class="pa-stage-title">${stageHeadline}</div>
               <div class="pa-stage-sub">${stageSubtitle}</div>
             </div>
-            <div class="pa-reward-preview" title="Phần thưởng khi hoàn thành màn này">
+            <div class="pa-reward-preview" title="Phần thưởng màn">
               ${
                 curInfo.isMaxed
-                  ? `<span>👑 Rèn luyện 777/777:</span><strong>+${ Math.max(18, Math.round(rewardSpec.gold * 0.5)) }G</strong>`
-                  : `<span>${isFeaturedModeNow ? '🔥 Đề cử:' : 'Thưởng màn:'}</span>
+                  ? `<span>👑</span><strong>+${Math.max(18, Math.round(rewardSpec.gold * 0.5))}G</strong>`
+                  : `${isFeaturedModeNow ? '<span>🔥</span>' : ''}
                      <strong>+${rewardSpec.stars}${isFeaturedModeNow ? '+' : ''} 🌟</strong>
                      <strong>+${previewSand} ⏳</strong>
                      <strong>+${rewardSpec.gold}G</strong>`

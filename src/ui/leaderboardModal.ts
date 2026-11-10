@@ -66,8 +66,8 @@ export class LeaderboardModalController {
       dlg.innerHTML = `
         <div class="parchment-panel modal-inner lb-modal-inner">
           <div class="modal-header">
-            <h2 id="leaderboardDialogTitle" class="modal-title">🏆 Bảng Vàng Xếp Hạng &amp; Cúp 4 Nhà Hogwarts</h2>
-            <form method="dialog"><button type="submit" class="brass-btn" autofocus>✕ Đóng</button></form>
+            <h2 id="leaderboardDialogTitle" class="modal-title">🏆 Bảng Xếp Hạng</h2>
+            <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
           </div>
           <div id="leaderboardDialogContent"></div>
         </div>
@@ -146,7 +146,6 @@ export class LeaderboardModalController {
     playerHouse: HouseName
   ): string {
     const playerHouseMeta = HOGWARTS_HOUSE_META[playerHouse] ?? HOGWARTS_HOUSE_META.Gryffindor;
-    const primaryUnitVi = this.activeGameId === 'seedquiz' ? 'câu đúng' : 'màn đỉnh';
 
     const houseCardsHtml = houseStandings
       .map((item) => {
@@ -160,23 +159,22 @@ export class LeaderboardModalController {
             class="house-cup-card house-card-${h.cssSlug} ${item.isPlayerHouse ? 'is-player-house' : ''} ${isFiltered ? 'is-filtered-house' : ''}"
             data-lb-house-card="${item.house}"
             aria-pressed="${isFiltered}"
-            title="Nhấn để lọc học viên ${escapeHtml(h.vnTitle)} (${escapeHtml(h.gemNameVi)})"
+            title="${escapeHtml(h.vnTitle)} (${escapeHtml(h.gemNameVi)})"
           >
             <div class="house-cup-top">
               <span class="house-cup-crest" aria-hidden="true">${h.emblemSvg}</span>
               <div class="house-cup-meta">
                 <div class="house-cup-name-row">
                   <strong>${rankCrown} ${escapeHtml(h.house)}</strong>
-                  ${item.isPlayerHouse ? `<span class="house-you-pill">Nhà Bạn</span>` : ''}
+                  ${item.isPlayerHouse ? `<span class="house-you-pill">Bạn</span>` : ''}
                 </div>
-                <div class="house-cup-vn-title">${escapeHtml(h.vnTitle)} • ${h.gemEmoji} ${escapeHtml(h.gemShortVi)}</div>
-                <div class="house-cup-stats">${item.members} thành viên • ${item.totalPrimaryValue.toLocaleString('vi-VN')} ${primaryUnitVi}</div>
+                <div class="house-cup-vn-title">${h.gemEmoji} ${escapeHtml(h.gemShortVi)} • 👥 ${item.members}</div>
               </div>
               <span class="house-cup-hourglass-icon" aria-hidden="true" title="Đồng hồ cát ${escapeHtml(h.gemNameVi)}">${h.hourglassSvg}</span>
             </div>
             <div class="house-cup-points-row">
               <span class="house-cup-points">${item.points.toLocaleString('vi-VN')} đ</span>
-              <span class="house-cup-patronus" title="Thần Hộ Mệnh: ${escapeHtml(h.patronusNameVi)}">${h.patronusEmoji} ${escapeHtml(h.patronusNameVi)}</span>
+              <span class="house-cup-patronus" title="${escapeHtml(h.patronusNameVi)}">${h.patronusEmoji}</span>
             </div>
             <div class="hourglass-bar" role="progressbar" aria-valuenow="${item.fillPercent}" aria-valuemin="0" aria-valuemax="100" aria-label="Mực đá quý ${escapeHtml(h.gemShortVi)} của nhà ${escapeHtml(h.house)}">
               <div class="hourglass-bar-fill" style="width:${item.fillPercent}%"></div>
@@ -195,7 +193,7 @@ export class LeaderboardModalController {
           class="lb-my-house-btn house-pill-${hm.cssSlug} ${isMyHouse ? 'active' : ''}"
           data-lb-pick-house="${hName}"
           aria-pressed="${isMyHouse}"
-          title="Gia nhập ${escapeHtml(hm.vnTitle)} (${escapeHtml(hm.traitsVi)})"
+          title="${escapeHtml(hm.vnTitle)} (${escapeHtml(hm.traitsVi)})"
         >
           ${hm.mascotEmoji} ${escapeHtml(hm.house)}
         </button>
@@ -210,7 +208,7 @@ export class LeaderboardModalController {
           data-lb-house-filter="all"
           aria-pressed="${this.activeHouseFilter === 'all'}"
         >
-          🏰 Tất Cả 4 Nhà
+          🏰 Tất Cả
         </button>
       `,
       ...ALL_HOGWARTS_HOUSES.map((hName) => {
@@ -231,22 +229,22 @@ export class LeaderboardModalController {
     ].join('');
 
     return `
-      <section class="house-cup-section" aria-label="Cúp 4 Nhà Hogwarts — Đồng Hồ Cát Đá Quý Đại Sảnh Đường">
+      <section class="house-cup-section" aria-label="Cúp 4 Nhà Hogwarts">
         <div class="house-cup-header-bar">
           <div class="house-cup-heading-copy">
-            <h3 class="house-cup-heading">🏆 Cúp 4 Nhà Hogwarts — Đồng Hồ Cát Đá Quý Đại Sảnh Đường</h3>
-            <p class="house-cup-quote">${escapeHtml(playerHouseMeta.quoteVi)} • <strong>Chỉ tính điểm ở 3 môn: 🍓 Match-3, 🔮 Sudoku &amp; 🦄 Pikachu</strong></p>
+            <h3 class="house-cup-heading">🏆 Cúp 4 Nhà Hogwarts</h3>
+            <p class="house-cup-quote">🍓 Match-3 • 🔮 Sudoku • 🦄 Pikachu</p>
           </div>
           <div class="lb-sorting-hat-box">
             <div class="lb-sorting-hat-label">
-              <span>🎩 Nhà của bạn: <strong>${playerHouseMeta.mascotEmoji} ${escapeHtml(playerHouseMeta.vnTitle)}</strong></span>
+              <span>🎩 <strong>${playerHouseMeta.mascotEmoji} ${escapeHtml(playerHouseMeta.house)}</strong></span>
               <button
                 id="btnLbSortingHat"
                 type="button"
                 class="brass-btn lb-hat-roll-btn ${this.sortingHatSpinning ? 'is-spinning' : ''}"
-                title="Đội Chiếc Nón Phân Loại để chọn ngẫu nhiên Nhà Hogwarts của bạn!"
+                title="Đội Chiếc Nón Phân Loại"
               >
-                🎩 Đội Nón Phân Loại
+                🎩 Phân Loại
               </button>
             </div>
             <div class="lb-my-house-pills" role="group" aria-label="Chọn Nhà Hogwarts của bạn">
@@ -275,10 +273,10 @@ export class LeaderboardModalController {
     const activeMeta = LEADERBOARD_GAME_META[this.activeGameId];
     const titleEl = this.root.querySelector('#leaderboardDialogTitle') as HTMLElement | null;
     if (titleEl) {
-      titleEl.innerHTML = `🏆 Bảng Xếp Hạng • ${escapeHtml(activeMeta.titleVi)}`;
+      titleEl.innerHTML = `🏆 Bảng Xếp Hạng • ${escapeHtml(activeMeta.shortVi)}`;
     }
 
-    // 1. 6 Mini-Game Discipline Tabs with live rank pill
+    // 1. 3 Scored Mini-Game Discipline Tabs with live rank pill
     const gameTabsHtml = ALL_LEADERBOARD_GAMES.map((gid) => {
       const m = LEADERBOARD_GAME_META[gid];
       const rank = this.sim.getPlayerMinigameRank(gid, 'valley');
@@ -290,18 +288,18 @@ export class LeaderboardModalController {
           aria-selected="${isAct}"
           data-lb-game="${gid}"
           class="lb-game-tab ${isAct ? 'active' : ''}"
-          title="${escapeHtml(m.titleVi)} — Hạng hiện tại: #${rank}"
+          title="${escapeHtml(m.titleVi)} — #${rank}"
         >
           <img src="${m.spriteIcon}" alt="" class="lb-tab-sprite" />
           <span class="lb-tab-copy">
             <strong>${escapeHtml(m.shortVi)}</strong>
-            <span class="lb-tab-rank-pill">${rank <= 3 ? '👑 ' : ''}Hạng #${rank}</span>
+            <span class="lb-tab-rank-pill">${rank <= 3 ? '👑 ' : ''}#${rank}</span>
           </span>
         </button>
       `;
     }).join('');
 
-    // 2. Scope Switcher (Valley / Friends / Personal 6-Game Codex) + Jump CTA
+    // 2. Scope Switcher (Valley / Friends / Personal) + Jump CTA
     const scopeTabsHtml = `
       <div class="lb-toolbar-row">
         <div class="lb-scope-pills" role="tablist" aria-label="Phạm vi bảng xếp hạng">
@@ -312,7 +310,7 @@ export class LeaderboardModalController {
             data-lb-scope="valley"
             class="lb-scope-pill ${this.activeScope === 'valley' ? 'active' : ''}"
           >
-            🌍 Toàn Thung Lũng
+            🌍 Thung Lũng
           </button>
           <button
             type="button"
@@ -321,7 +319,7 @@ export class LeaderboardModalController {
             data-lb-scope="friends"
             class="lb-scope-pill ${this.activeScope === 'friends' ? 'active' : ''}"
           >
-            🤝 Bạn Bè &amp; Hàng Xóm
+            🤝 Bạn Bè
           </button>
           <button
             type="button"
@@ -330,20 +328,20 @@ export class LeaderboardModalController {
             data-lb-scope="personal"
             class="lb-scope-pill ${this.activeScope === 'personal' ? 'active' : ''}"
           >
-            📜 Kỷ Lục 3 Môn Tính Điểm
+            📜 Kỷ Lục
           </button>
         </div>
 
         <div class="lb-toolbar-actions">
           ${
             this.activeScope === 'friends'
-              ? `<button id="btnLbOpenFriendsBook" type="button" class="brass-btn lb-action-btn" title="Mở Sổ Hàng Xóm để kết bạn thêm qua Mã Điền Trang HS-XXXX-XX">
-                  🦉 Thêm Bạn Mã HS
+              ? `<button id="btnLbOpenFriendsBook" type="button" class="brass-btn lb-action-btn" title="Kết bạn qua Mã Điền Trang">
+                  🦉 Thêm Bạn
                 </button>`
               : ''
           }
           <button id="btnLbPlayActiveGame" type="button" class="brass-btn gold-cta lb-action-btn">
-            ▶️ Đấu ${escapeHtml(activeMeta.shortVi)}
+            ▶️ ${escapeHtml(activeMeta.shortVi)}
           </button>
         </div>
       </div>
@@ -377,7 +375,7 @@ export class LeaderboardModalController {
 
     return `
       <div class="lb-podium-card place-${place} ${entry.isPlayer ? 'is-player' : ''}">
-        <div class="lb-podium-medal">${crownEmoji} Hạng ${place}</div>
+        <div class="lb-podium-medal">${crownEmoji} #${place}</div>
         <div class="lb-podium-avatar-wrap">${avatarHtml}</div>
         <div class="lb-podium-name">${escapeHtml(entry.name)}</div>
         <div class="lb-podium-house ${houseMeta.cls}">${houseMeta.emoji} ${houseMeta.label}</div>
@@ -405,12 +403,8 @@ export class LeaderboardModalController {
     } = standing;
 
     const chaseBannerText = nextRivalAbove
-      ? `🎯 Đang bám sát <strong>#${nextRivalAbove.rank} ${escapeHtml(nextRivalAbove.name)}</strong> (${escapeHtml(nextRivalAbove.primaryDisplayVi)} • ${escapeHtml(nextRivalAbove.ratingDisplayVi)}) — Thắng thêm để vượt hạng!`
-      : totalEntries <= 1
-        ? scope === 'friends'
-          ? `🤝 Chỉ hiển thị <strong>người chơi thật</strong> (0 NPC) — Hãy kết bạn qua Mã Thung Lũng để cùng đua Top bộ môn <strong>${escapeHtml(meta.shortVi)}</strong>!`
-          : `🌐 Chỉ hiển thị <strong>người chơi thật</strong> (0 NPC) — Kỷ lục của bạn đang giữ <strong>#1</strong> trực tuyến bộ môn <strong>${escapeHtml(meta.shortVi)}</strong>!`
-        : `👑 Tuyệt đỉnh! Bạn đang giữ <strong>Ngôi Quán Quân #1</strong> trước ${totalEntries - 1} người chơi thật khác ở bộ môn <strong>${escapeHtml(meta.shortVi)}</strong>!`;
+      ? `🎯 Đuổi <strong>#${nextRivalAbove.rank} ${escapeHtml(nextRivalAbove.name)}</strong> (${escapeHtml(nextRivalAbove.primaryDisplayVi)})`
+      : `👑 Đang dẫn đầu <strong>#1</strong> (${escapeHtml(meta.shortVi)})`;
 
     const houseCupHtml = this.renderHouseCupSectionHtml(houseStandings, playerHouse);
 
@@ -434,13 +428,13 @@ export class LeaderboardModalController {
               const roleTag = row.isPlayer
                 ? `<span class="lb-role-tag you">Bạn</span>`
                 : row.isCloudPlayer
-                  ? `<span class="lb-role-tag cloud">🌐 Online</span>`
+                  ? `<span class="lb-role-tag cloud">🌐</span>`
                   : row.isFriend
-                    ? `<span class="lb-role-tag friend">🤝 Hàng xóm</span>`
+                    ? `<span class="lb-role-tag friend">🤝</span>`
                     : '';
               const visitBtn =
                 !row.isPlayer && row.neighborId
-                  ? `<button type="button" class="lb-mini-visit-btn" data-lb-visit="${escapeHtml(row.neighborId)}" title="Sang thăm điền trang của ${escapeHtml(row.name)}">🏡 Thăm</button>`
+                  ? `<button type="button" class="lb-mini-visit-btn" data-lb-visit="${escapeHtml(row.neighborId)}" title="Thăm ${escapeHtml(row.name)}">🏡</button>`
                   : '';
 
               return `
@@ -456,7 +450,6 @@ export class LeaderboardModalController {
                   </div>
                   <div class="lb-contender-sub">
                     <span class="${houseMeta.cls}">${houseMeta.emoji} ${houseMeta.label}</span>
-                    <span>• ${escapeHtml(row.parkName)}</span>
                   </div>
                 </div>
               </div>
@@ -483,11 +476,7 @@ export class LeaderboardModalController {
         : `
           <tr class="lb-row lb-empty-house-row">
             <td colspan="5" class="lb-empty-house-cell">
-              ${
-                this.activeHouseFilter !== 'all'
-                  ? `Chưa có người chơi thật nào thuộc <strong>${HOGWARTS_HOUSE_META[this.activeHouseFilter].mascotEmoji} ${escapeHtml(HOGWARTS_HOUSE_META[this.activeHouseFilter].vnTitle)} (${escapeHtml(this.activeHouseFilter)})</strong> ở bộ môn này. Hãy kết bạn hoặc chọn gia nhập Nhà ${escapeHtml(this.activeHouseFilter)} để ghi điểm đầu tiên!`
-                  : 'Chưa có người chơi nào ở mục này.'
-              }
+              Chưa có học viên.
             </td>
           </tr>
         `;
@@ -496,12 +485,11 @@ export class LeaderboardModalController {
       <div class="lb-cup-banner">
         <img src="${meta.spriteIcon}" alt="" class="lb-cup-icon" />
         <div class="lb-cup-copy">
-          <div class="lb-cup-title">${escapeHtml(meta.cupTitleVi)}</div>
-          <div class="lb-cup-sub">${escapeHtml(meta.subtitleVi)}</div>
+          <div class="lb-cup-title">${escapeHtml(meta.shortVi)}</div>
           <div class="lb-cup-chase">${chaseBannerText}</div>
         </div>
         <div class="lb-player-rank-box">
-          <span class="lb-player-rank-lbl">Hạng Của Bạn</span>
+          <span class="lb-player-rank-lbl">Hạng</span>
           <strong class="lb-player-rank-num">#${playerRank}<span>/${totalEntries}</span></strong>
           <span class="lb-league-pill tier-${playerEntry.league.tierId}">${playerEntry.league.icon} ${escapeHtml(playerEntry.league.labelVi)}</span>
         </div>
@@ -514,18 +502,18 @@ export class LeaderboardModalController {
       <div tabindex="0" role="region" aria-labelledby="lbTableCaption" class="lb-table-wrapper">
         <table
           class="lb-table"
-          style="--label-2: 'Danh Hiệu'; --label-3: '${escapeHtml(meta.primaryColVi)}'; --label-4: '${escapeHtml(meta.secondaryColVi)}'; --label-5: '${escapeHtml(meta.detailColVi)}';"
+          style="--label-2: 'Bậc'; --label-3: '${escapeHtml(meta.primaryColVi)}'; --label-4: '${escapeHtml(meta.secondaryColVi)}'; --label-5: 'Chi Tiết';"
         >
           <caption id="lbTableCaption" class="lb-table-caption">
-            Bảng xếp hạng ${scope === 'friends' ? 'Hàng Xóm & Bạn Bè' : 'Toàn Thung Lũng'}${this.activeHouseFilter !== 'all' ? ` • ${HOGWARTS_HOUSE_META[this.activeHouseFilter].mascotEmoji} ${escapeHtml(HOGWARTS_HOUSE_META[this.activeHouseFilter].vnTitle)}` : ''} — ${escapeHtml(meta.titleVi)} (${entries.length}/${totalEntries} phù thủy)
+            ${escapeHtml(meta.shortVi)} (${entries.length}/${totalEntries})
           </caption>
           <thead>
             <tr>
-              <th scope="col">Hạng &amp; Phù Thủy</th>
-              <th scope="col">Danh Hiệu</th>
+              <th scope="col">Hạng</th>
+              <th scope="col">Bậc</th>
               <th scope="col">${escapeHtml(meta.primaryColVi)}</th>
               <th scope="col">${escapeHtml(meta.secondaryColVi)}</th>
-              <th scope="col">${escapeHtml(meta.detailColVi)}</th>
+              <th scope="col">Chi Tiết</th>
             </tr>
           </thead>
           <tbody>
@@ -547,7 +535,7 @@ export class LeaderboardModalController {
                 <img src="${s.meta.spriteIcon}" alt="" class="lb-tab-sprite" />
                 <div class="lb-contender-meta">
                   <div class="lb-contender-name-line">
-                    <strong>${escapeHtml(s.meta.titleVi)}</strong>
+                    <strong>${escapeHtml(s.meta.shortVi)}</strong>
                   </div>
                   <div class="lb-contender-sub">
                     <span class="lb-league-pill tier-${s.league.tierId}">${s.league.icon} ${escapeHtml(s.league.labelVi)}</span>
@@ -557,7 +545,7 @@ export class LeaderboardModalController {
             </th>
             <td class="lb-cell-league">
               <strong>🌍 #${s.valleyRank}/${s.valleyTotal}</strong>
-              <div class="lb-sub-stat">🤝 Bạn bè: #${s.friendsRank}/${s.friendsTotal}</div>
+              <div class="lb-sub-stat">🤝 #${s.friendsRank}/${s.friendsTotal}</div>
             </td>
             <td class="lb-cell-primary">
               <strong>${escapeHtml(s.primaryDisplayVi)}</strong>
@@ -569,7 +557,7 @@ export class LeaderboardModalController {
               <div class="lb-detail-flex">
                 <span>${escapeHtml(s.detailDisplayVi)}</span>
                 <button type="button" class="brass-btn gold-cta lb-mini-play-btn" data-lb-jump-play="${s.gameId}">
-                  ▶️ Vào Đấu
+                  ▶️ Chơi
                 </button>
               </div>
             </td>
@@ -582,26 +570,26 @@ export class LeaderboardModalController {
       <div class="lb-cup-banner">
         <img src="/sprites/m3_icon_star.png" alt="" class="lb-cup-icon" />
         <div class="lb-cup-copy">
-          <div class="lb-cup-title">📜 Hồ Sơ Kỷ Lục Cá Nhân — 3 Bộ Môn Tính Điểm</div>
-          <div class="lb-cup-sub">Chỉ tính điểm xếp hạng &amp; Cúp 4 Nhà Hogwarts ở 3 bộ môn: 🍓 Bùa Gặt (Match-3), 🔮 Cửu Bảo Bối (Sudoku) và 🦄 Nối Sinh Vật (Pikachu). Các môn còn lại không tính điểm.</div>
+          <div class="lb-cup-title">📜 Kỷ Lục 3 Môn Tính Điểm</div>
+          <div class="lb-cup-sub">🍓 Match-3 • 🔮 Sudoku • 🦄 Pikachu</div>
         </div>
       </div>
 
       <div tabindex="0" role="region" aria-labelledby="lbPersonalTableCaption" class="lb-table-wrapper">
         <table
           class="lb-table"
-          style="--label-2: 'Thứ Hạng'; --label-3: 'Mốc Đỉnh'; --label-4: 'Điểm Phép'; --label-5: 'Thành Tích &amp; Chơi';"
+          style="--label-2: 'Hạng'; --label-3: 'Đỉnh'; --label-4: 'Điểm'; --label-5: 'Chơi';"
         >
           <caption id="lbPersonalTableCaption" class="lb-table-caption">
-            Bảng tổng hợp kỷ lục cá nhân trên 3 bộ môn tính điểm (Match-3, Sudoku, Pikachu) tại Trang Trại Hang Sóc
+            Kỷ lục cá nhân 3 môn tính điểm
           </caption>
           <thead>
             <tr>
-              <th scope="col">Bộ Môn Tính Điểm</th>
-              <th scope="col">Thứ Hạng</th>
-              <th scope="col">Mốc Đỉnh</th>
-              <th scope="col">Điểm Phép</th>
-              <th scope="col">Thành Tích &amp; Hành Động</th>
+              <th scope="col">Môn</th>
+              <th scope="col">Hạng</th>
+              <th scope="col">Đỉnh</th>
+              <th scope="col">Điểm</th>
+              <th scope="col">Chơi</th>
             </tr>
           </thead>
           <tbody>

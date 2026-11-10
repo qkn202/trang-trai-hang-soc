@@ -298,10 +298,10 @@ export class SeedQuizModalController {
       if (pb && getCatalogItem(pb.itemId)?.isFarmlandPlot && !pb.cropId) {
         plotContextBanner = `
           <div class="sq-plot-target-banner">
-            <span>🌾 Đang chọn gieo xuống <strong>Thửa Đất [${pb.gx}, ${pb.gy}]</strong> — Nhận hạt xong có thể bấm <strong>Gieo Ngay</strong>!</span>
+            <span>🌾 <strong>[${pb.gx}, ${pb.gy}]</strong></span>
             ${
               seedCount > 0
-                ? `<button id="btnSqBannerSowNow" type="button" class="brass-btn sq-sow-cta">🌱 Gieo 1 Hạt ${escapeHtml(crop.name)} Ngay (Có ${seedCount})</button>`
+                ? `<button id="btnSqBannerSowNow" type="button" class="brass-btn sq-sow-cta">🌱 Gieo (×${seedCount})</button>`
                 : ''
             }
           </div>
@@ -322,9 +322,9 @@ export class SeedQuizModalController {
     });
     const cropFilterPillsHtml = (
       [
-        { id: 'all', label: `🌱 Tất cả (${allCropList.length})` },
-        { id: 'flowers', label: `🌸 Hạt Giống Hoa (${flowerTotal})` },
-        { id: 'crops', label: `🌾 Nông Sản (${harvestCropTotal})` },
+        { id: 'all', label: `🌱 (${allCropList.length})` },
+        { id: 'flowers', label: `🌸 Hoa (${flowerTotal})` },
+        { id: 'crops', label: `🌾 Cây (${harvestCropTotal})` },
       ] as const
     )
       .map(
@@ -351,13 +351,13 @@ export class SeedQuizModalController {
             data-sq-crop="${c.id}"
             aria-pressed="${active}"
             ${locked ? 'disabled' : ''}
-            title="${locked ? `Mở khóa ở Cấp ${c.unlockLevel} (⏱️ ${cGrowLabel})` : `${c.name} — Chín sau ${cGrowLabel} • Giá mua lẻ: ${c.seedCost.toLocaleString('vi-VN')}G/hạt`}"
+            title="${locked ? `Lv.${c.unlockLevel} (⏱️ ${cGrowLabel})` : `${c.name} • ⏱️ ${cGrowLabel} • 🪙 ${c.seedCost.toLocaleString('vi-VN')}G`}"
           >
             <img src="${getFarmItemIconSrc(c.id)}" alt="" class="sq-crop-pill-img" />
             <span class="sq-crop-pill-info">
               <span class="sq-crop-pill-name">${escapeHtml(c.name)}</span>
               <span class="sq-crop-pill-sub">
-                ${locked ? `🔒 Cấp ${c.unlockLevel} • ⏱️${cGrowLabel}` : `🌱 ${sCount} hạt • ⏱️${cGrowLabel}`}
+                ${locked ? `🔒 Lv.${c.unlockLevel}` : `🌱 ${sCount} • ⏱️${cGrowLabel}`}
               </span>
             </span>
           </button>
@@ -391,9 +391,9 @@ export class SeedQuizModalController {
 
     // 3. Tier Selector Buttons
     const tiers: Array<{ id: QuizProficiencyTier; icon: string; rewardTag: string }> = [
-      { id: 'beginner', icon: '🪄', rewardTag: '+1–2 hạt/câu' },
-      { id: 'intermediate', icon: '🦉', rewardTag: '+2 hạt/câu' },
-      { id: 'advanced', icon: '👑', rewardTag: '+2 hạt/câu' },
+      { id: 'beginner', icon: '🪄', rewardTag: '+1–2 🌱' },
+      { id: 'intermediate', icon: '🦉', rewardTag: '+2 🌱' },
+      { id: 'advanced', icon: '👑', rewardTag: '+2 🌱' },
     ];
     const tierBtnsHtml = tiers
       .map((t) => {
@@ -439,19 +439,16 @@ export class SeedQuizModalController {
         <div class="sq-top-strip">
           <div class="sq-top-strip-head">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-              <span class="sq-strip-title">🌱 Chọn loại hạt giống muốn nhận:</span>
+              <span class="sq-strip-title">🌱 Hạt giống:</span>
               <div class="seed-filter-bar" role="group" aria-label="Bộ lọc nhóm hạt giống">${cropFilterPillsHtml}</div>
             </div>
             <div class="sq-wallet-pills">
-              <span class="sq-wallet-chip" title="Vàng Galleon hiện có">🪙 Vàng: <strong>${galleons.toLocaleString('vi-VN')}G</strong></span>
-              <span class="sq-wallet-chip sq-wallet-seed" title="Số hạt giống ${escapeHtml(crop.name)} đang có sẵn để gieo">
-                🌱 Túi hạt ${escapeHtml(crop.name)}: <strong>${seedCount} hạt</strong>
+              <span class="sq-wallet-chip" title="Vàng Galleon">🪙 <strong>${galleons.toLocaleString('vi-VN')}G</strong></span>
+              <span class="sq-wallet-chip sq-wallet-seed" title="Túi hạt ${escapeHtml(crop.name)}">
+                🌱 ${escapeHtml(crop.name)}: <strong>×${seedCount}</strong>
               </span>
-              <span class="sq-wallet-chip" title="Tổng số hạt đã nhận miễn phí nhờ Học Viện Thần Chú Đa Ngữ">
-                🪄 Đã niệm nhận: <strong>${Object.values(quiz.profiles).reduce((s, p) => s + p.seedsEarned, 0)} hạt</strong>
-              </span>
-              <span class="sq-wallet-chip sq-wallet-talisman" title="Cứ mỗi 8 câu thần chú đúng tặng +1 Bùa Trợ Chiến Phượng Hoàng (dùng trong cả 5 môn Khảo Thí Pháp Thuật 777 Màn)!">
-                🔥 Bùa Phượng Hoàng: <strong>${talismanCount}</strong> <small>(${talismanProg}/8 câu)</small>
+              <span class="sq-wallet-chip sq-wallet-talisman" title="Bùa Phượng Hoàng (${talismanProg}/8 câu)">
+                🔥 <strong>${talismanCount}</strong> <small>(${talismanProg}/8)</small>
               </span>
               ${(() => {
                 const nowMs = Date.now();
@@ -462,8 +459,8 @@ export class SeedQuizModalController {
                 const remSec = Math.max(1, Math.ceil((b0.constructEndsAt - nowMs) / 1000));
                 const floorSec = this.sim.getBuildingMinFloorSec(b0);
                 const atFloor = remSec <= floorSec;
-                return `<span class="sq-wallet-chip" title="Niệm đúng mỗi câu Thần Chú Đa Ngữ tự động giảm 10–25 phút thời gian xây công trình (xuống tối thiểu ${formatDurationCompactVi(floorSec)})!">
-                  🔨 ${escapeHtml(it0?.name ?? 'Đang xây')}: <strong>${formatDurationCompactVi(remSec)}</strong> <small>${atFloor ? '(đã chạm sàn)' : '(-10p~25p/câu)'}</small>
+                return `<span class="sq-wallet-chip" title="Giảm giờ xây công trình">
+                  🔨 ${escapeHtml(it0?.name ?? 'Đang xây')}: <strong>${formatDurationCompactVi(remSec)}</strong> <small>${atFloor ? '🔒' : '⚡'}</small>
                 </span>`;
               })()}
             </div>
@@ -475,20 +472,18 @@ export class SeedQuizModalController {
         <div class="sq-options-layout">
           <!-- OPTION 1: HIGH GOLD DIRECT PURCHASE -->
           <aside class="sq-option-card sq-option-gold">
-            <div class="sq-option-ribbon sq-ribbon-gold">🪙 LỰA CHỌN 1 • MUA TRỰC TIẾP</div>
+            <div class="sq-option-ribbon sq-ribbon-gold">🪙 MUA HẠT</div>
             <div class="sq-gold-crop-hero">
               <img src="${getFarmItemIconSrc(crop.id)}" alt="${escapeHtml(crop.name)}" class="sq-gold-crop-img" />
               <div class="sq-gold-crop-meta">
                 <h3>${escapeHtml(crop.name)}</h3>
-                <p>⏱️ Chín sau <strong>${formatDurationCompactVi(crop.growSec)}</strong> • 🌾 Gặt <strong>+${crop.yieldQty}</strong> nông sản</p>
-                <p>🏡 Tồn kho nông sản: <strong>${barnHarvestStock}</strong></p>
+                <p>⏱️ <strong>${formatDurationCompactVi(crop.growSec)}</strong> • 🌾 <strong>+${crop.yieldQty}</strong></p>
+                <p>🏡 Kho: <strong>${barnHarvestStock}</strong></p>
               </div>
             </div>
 
             <div class="sq-price-callout">
-              <div class="sq-price-label">Giá nhập hạt giống lẻ đặc biệt</div>
-              <div class="sq-price-val">🪙 ${cost1.toLocaleString('vi-VN')} Galleon <small>/ 1 hạt</small></div>
-              <div class="sq-price-note">Tiết kiệm 100% Vàng nếu niệm Thần Chú Đa Ngữ ở Lựa Chọn 2!</div>
+              <div class="sq-price-val">🪙 ${cost1.toLocaleString('vi-VN')}G <small>/ hạt</small></div>
             </div>
 
             <div class="sq-gold-btn-stack">
@@ -498,7 +493,7 @@ export class SeedQuizModalController {
                 class="brass-btn gold-cta sq-buy-btn"
                 ${canBuy1 ? '' : 'disabled'}
               >
-                🪙 Mua Lẻ 1 Hạt (-${cost1.toLocaleString('vi-VN')}G)
+                🪙 +1 Hạt (-${cost1.toLocaleString('vi-VN')}G)
               </button>
               <button
                 id="btnSqBuy3"
@@ -506,13 +501,13 @@ export class SeedQuizModalController {
                 class="brass-btn sq-buy-btn"
                 ${canBuy3 ? '' : 'disabled'}
               >
-                🪙 Mua Nhanh 3 Hạt (-${cost3.toLocaleString('vi-VN')}G)
+                🪙 +3 Hạt (-${cost3.toLocaleString('vi-VN')}G)
               </button>
             </div>
 
             <div class="sq-seed-pocket-box ${seedCount > 0 ? 'has-seeds' : 'empty-seeds'}">
               <div class="sq-pocket-status">
-                🌱 Túi hạt <strong>${escapeHtml(crop.name)}</strong> hiện có: <strong>${seedCount} hạt</strong>
+                🌱 <strong>${escapeHtml(crop.name)}</strong>: <strong>×${seedCount}</strong>
               </div>
               <button
                 id="btnSqSowNow"
@@ -520,11 +515,7 @@ export class SeedQuizModalController {
                 class="brass-btn sq-sow-cta"
                 ${seedCount > 0 ? '' : 'disabled'}
               >
-                ${
-                  this.pendingPlotUid
-                    ? `🌱 Gieo Xuống Thửa Đất Ngay`
-                    : `🌱 Cầm Hạt Đi Gieo (${seedCount} hạt)`
-                }
+                🌱 Gieo (×${seedCount})
               </button>
             </div>
           </aside>
@@ -532,10 +523,10 @@ export class SeedQuizModalController {
           <!-- OPTION 2: MULTI-LANGUAGE ADAPTIVE QUIZ -->
           <section class="sq-option-card sq-option-quiz">
             <div class="sq-quiz-top-header">
-              <span class="sq-option-ribbon sq-ribbon-quiz">🪄 LỰA CHỌN 2 • HỌC VIỆN THẦN CHÚ ĐA NGỮ (0G → NHẬN 1–2 HẠT/CÂU)</span>
-              <label class="sq-autospeak-toggle" title="Tự động phát âm bản xứ khi chuyển câu &amp; khi hiện đáp án">
+              <span class="sq-option-ribbon sq-ribbon-quiz">🪄 ĐỐ NHẬN HẠT (0G • +1–2 🌱)</span>
+              <label class="sq-autospeak-toggle" title="Tự động phát âm bản xứ">
                 <input id="chkSqAutoSpeak" type="checkbox" ${quiz.autoSpeak ? 'checked' : ''} />
-                <span>🔊 Tự đọc mẫu</span>
+                <span>🔊 Tự đọc</span>
               </label>
             </div>
 
@@ -550,7 +541,7 @@ export class SeedQuizModalController {
                 data-sq-subview="practice"
                 aria-selected="${this.activeSubView === 'practice'}"
               >
-                🪄 Luyện Thần Chú Nhận Hạt
+                🪄 Luyện
               </button>
               <button
                 type="button"
@@ -558,15 +549,15 @@ export class SeedQuizModalController {
                 data-sq-subview="codex"
                 aria-selected="${this.activeSubView === 'codex'}"
               >
-                📖 Sổ Tay Cổ Ngữ (${poolStats.lexiconCount} từ • 📦 ${srsSummary.masteredCount} thuộc)
+                📖 Từ Điển (${srsSummary.masteredCount}/${poolStats.lexiconCount})
               </button>
               <button
                 id="btnSqOpenLeaderboard"
                 type="button"
                 class="sq-view-tab minigame-lb-chip"
-                title="Mở Bảng Xếp Hạng &amp; Cúp 4 Nhà Hogwarts (Chỉ tính điểm ở 3 môn: Match-3, Sudoku &amp; Pikachu)"
+                title="Bảng Xếp Hạng 3 Môn Tính Điểm"
               >
-                🏆 BXH 3 Môn Giải Đố
+                🏆 BXH
               </button>
             </div>
 
@@ -578,24 +569,24 @@ export class SeedQuizModalController {
                   <div class="sq-tier-panel">
                     <div class="sq-tier-row" role="group" aria-label="Chọn cấp bậc phù thủy O.W.L. và N.E.W.T.">${tierBtnsHtml}</div>
                     <div class="sq-mastery-strip">
-                      <div class="sq-mastery-bar-wrap" title="Pháp lực thích ứng tự động tăng/giảm theo câu trả lời (kết hợp cấp Trang Trại 1–100)">
+                      <div class="sq-mastery-bar-wrap" title="Cấp ${profile.masteryScore}/100 (Quyển ${targetBand}/10)">
                         <div class="sq-mastery-labels">
-                          <span>📈 ${langMeta.flag} ${escapeHtml(langMeta.academyVi)}: <strong>Cấp ${profile.masteryScore}/100</strong> (Quyển ${targetBand}/10)</span>
-                          <span>Đúng: <strong>${profile.totalCorrect}/${profile.totalAnswered}</strong> (${accuracyPct}%)</span>
+                          <span>📈 ${langMeta.flag} <strong>Lv.${profile.masteryScore}/100</strong></span>
+                          <span>🎯 <strong>${profile.totalCorrect}/${profile.totalAnswered}</strong> (${accuracyPct}%)</span>
                         </div>
                         <div class="sq-mastery-track">
                           <div class="sq-mastery-fill" style="width:${Math.max(4, profile.masteryScore)}%"></div>
                         </div>
                       </div>
                       <div class="sq-streak-pills">
-                        <span class="sq-stat-pill" title="Trả lời đúng liên tiếp từ 2 câu trở lên luôn nhận 2 hạt/câu!">🔥 Chuỗi: <strong>${profile.streak}</strong></span>
+                        <span class="sq-stat-pill" title="Chuỗi đúng liên tiếp">🔥 <strong>×${profile.streak}</strong></span>
                         <button
                           type="button"
                           class="sq-stat-pill sq-stat-pill-btn ${srsSummary.dueCount > 0 ? 'has-review' : ''}"
                           data-sq-subview="codex"
-                          title="Nhấp mở Sổ Tay Cổ Ngữ Leitner SRS 5 Hộp (${poolStats.totalQuestionsEstimate}+ bài tập)"
+                          title="Sổ Tay Cổ Ngữ SRS"
                         >
-                          📦 SRS: <strong>${srsSummary.masteredCount} thuộc</strong> • Cần ôn: <strong>${srsSummary.dueCount}</strong> 📖
+                          📦 <strong>${srsSummary.masteredCount}</strong> • 🔄 <strong>${srsSummary.dueCount}</strong> 📖
                         </button>
                       </div>
                     </div>
@@ -651,9 +642,9 @@ export class SeedQuizModalController {
     const filterBtns = (
       [
         { id: 'all', label: `📖 Tất cả (${allEntries.length})` },
-        { id: 'mastered', label: `🏆 Hộp 5 Thuộc lòng (${masteredCount})` },
-        { id: 'learning', label: `📚 Hộp 1–4 Đang rèn (${learningCount})` },
-        { id: 'unseen', label: `✨ Chưa mở (${unseenCount})` },
+        { id: 'mastered', label: `🏆 Thuộc (${masteredCount})` },
+        { id: 'learning', label: `📚 Đang học (${learningCount})` },
+        { id: 'unseen', label: `✨ Mới (${unseenCount})` },
       ] as const
     )
       .map(
@@ -671,15 +662,15 @@ export class SeedQuizModalController {
     return `
       <div class="sq-codex-panel">
         <div class="sq-codex-summary">
-          <span>📜 <strong>Sổ Tay Cổ Ngữ ${langMeta.flag} ${escapeHtml(langMeta.academyVi)}</strong> — Lưu toàn bộ từ điển phép thuật, phiên âm ${escapeHtml(langMeta.phoneticLabel)}, câu mẫu &amp; tiến độ 5 Hộp Leitner SRS.</span>
-          <span class="sq-codex-pack-tag">${isLanguageQuizPackLoaded(lang) ? `✅ Đã nạp đủ ${allEntries.length} mục từ` : '⏳ Đang mở thư viện...'}</span>
+          <span>📜 <strong>${langMeta.flag} ${escapeHtml(langMeta.nameVi)}</strong></span>
+          <span class="sq-codex-pack-tag">${isLanguageQuizPackLoaded(lang) ? `✅ ${allEntries.length} từ` : '⏳...'}</span>
         </div>
         <div class="sq-codex-toolbar">
           <input
             id="inpSqCodexSearch"
             type="search"
             class="sq-codex-search"
-            placeholder="🔍 Gõ từ ngoại ngữ, phiên âm, nghĩa tiếng Việt hoặc câu mẫu..."
+            placeholder="🔍 Tìm từ..."
             value="${escapeHtml(this.codexQuery)}"
             aria-label="Tra cứu Sổ Tay Cổ Ngữ"
           />
@@ -961,22 +952,22 @@ export class SeedQuizModalController {
             <span class="sq-badge sq-badge-format">${fmtMeta.icon} ${escapeHtml(fmtMeta.labelVi)}</span>
             ${
               ch.isReview
-                ? `<span class="sq-badge sq-badge-review">🔄 Ôn tập SRS • Hộp ${ch.srsBox ?? 1}/5 (+2 🌱 Hạt)</span>`
+                ? `<span class="sq-badge sq-badge-review">🔄 SRS ${ch.srsBox ?? 1}/5 (+2 ${crop.emoji})</span>`
                 : ch.srsBox
-                  ? `<span class="sq-badge sq-badge-reward">📦 Hộp SRS ${ch.srsBox}/5 • +1–2 🌱 Hạt ${escapeHtml(crop.name)}</span>`
-                  : `<span class="sq-badge sq-badge-reward">🎁 Thưởng: +1–2 🌱 Hạt ${escapeHtml(crop.name)}</span>`
+                  ? `<span class="sq-badge sq-badge-reward">📦 ${ch.srsBox}/5 • +1–2 ${crop.emoji}</span>`
+                  : `<span class="sq-badge sq-badge-reward">🎁 +1–2 ${crop.emoji}</span>`
             }
           </div>
           <div class="sq-tts-btns">
-            <button id="btnSqSpeakNormal" type="button" class="brass-btn sq-tts-btn" title="Nghe phát âm bản xứ tốc độ chuẩn (1.0x)">
-              🔊 Nghe mẫu
+            <button id="btnSqSpeakNormal" type="button" class="brass-btn sq-tts-btn" title="Nghe chuẩn (1.0x)">
+              🔊 Nghe
             </button>
-            <button id="btnSqSpeakSlow" type="button" class="brass-btn sq-tts-btn" title="Nghe phát âm chậm rõ từng âm tiết (0.72x)">
-              🐢 Nghe chậm
+            <button id="btnSqSpeakSlow" type="button" class="brass-btn sq-tts-btn" title="Nghe chậm (0.72x)">
+              🐢 Chậm
             </button>
             ${
               !isAnswered
-                ? `<button id="btnSqSkipQuestion" type="button" class="brass-btn sq-tts-btn" title="Đổi sang câu hỏi khác">🔀 Đổi câu</button>`
+                ? `<button id="btnSqSkipQuestion" type="button" class="brass-btn sq-tts-btn" title="Đổi câu">🔀 Đổi</button>`
                 : ''
             }
           </div>
@@ -1013,7 +1004,7 @@ export class SeedQuizModalController {
               type="button"
               class="sq-vocab-speak"
               data-sq-speak-word="${idx}"
-              title="Nghe phát âm từ ${escapeHtml(v.word)}"
+              title="Nghe ${escapeHtml(v.word)}"
             >🔊</button>
             <div class="sq-vocab-text">
               <strong>${escapeHtml(v.word)}</strong>
@@ -1032,41 +1023,39 @@ export class SeedQuizModalController {
           <div class="sq-explain-status">
             ${
               outcome.correct
-                ? `🎉 <strong>Tuyệt vời!</strong> Bạn nhận được <strong>+${outcome.seedsAwarded} 🌱 Hạt ${escapeHtml(outcome.cropName)}</strong> &amp; <strong>+${outcome.xpAwarded} ⭐ XP</strong>${outcome.newSrsBox ? ` • 📦 Lên Hộp SRS <strong>${outcome.newSrsBox}/5</strong>` : ''}!`
-                : `💡 <strong>Chưa chính xác</strong> (+${outcome.xpAwarded} ⭐ XP khích lệ) — Đã đưa về <strong>📦 Hộp SRS 1/5</strong> để ôn lại sau 2 lượt!`
+                ? `🎉 <strong>Đúng!</strong> +${outcome.seedsAwarded} 🌱 ${escapeHtml(outcome.cropName)} • +${outcome.xpAwarded} ⭐ XP${outcome.newSrsBox ? ` • 📦 ${outcome.newSrsBox}/5` : ''}`
+                : `💡 <strong>Chưa đúng</strong> (+${outcome.xpAwarded} ⭐ XP • 📦 1/5)`
             }
             ${
               outcome.buildReduction && outcome.buildReduction.reducedSec > 0
-                ? `<div class="sq-promo-callout">🔨 Đã rút ngắn <strong>-${formatDurationCompactVi(outcome.buildReduction.reducedSec)}</strong> thời gian xây <strong>${escapeHtml(outcome.buildReduction.targetName ?? 'công trình')}</strong>${outcome.buildReduction.remainAfterSec ? ` (còn lại ${formatDurationCompactVi(outcome.buildReduction.remainAfterSec)}${outcome.buildReduction.hitMinFloor ? ' — đã chạm mốc tối thiểu!' : ''})` : ''}!</div>`
-                : outcome.buildReduction?.allActiveAtFloor && (outcome.buildReduction.activeCount ?? 0) > 0
-                  ? `<div class="sq-promo-callout">🔒 Công trình đang xây đã chạm mốc tối thiểu <strong>${formatDurationCompactVi(outcome.buildReduction.floorSec ?? 3600)}</strong> — sẽ tự hoàn thành nốt!</div>`
-                  : ''
+                ? `<div class="sq-promo-callout">🔨 -${formatDurationCompactVi(outcome.buildReduction.reducedSec)} (${escapeHtml(outcome.buildReduction.targetName ?? 'công trình')})</div>`
+                : ''
             }
             ${
               outcome.phoenixTalismanAwarded
-                ? `<div class="sq-promo-callout">🔥 Phần thưởng học chăm: <strong>+${outcome.phoenixTalismanAwarded} Bùa Trợ Chiến Phượng Hoàng</strong> (trợ chiến 1 lần/ván ở cả 5 môn Giải Đố 777 Màn)!</div>`
+                ? `<div class="sq-promo-callout">🔥 +${outcome.phoenixTalismanAwarded} Bùa Phượng Hoàng</div>`
                 : ''
             }
             ${
               outcome.tierAutoPromoted
-                ? `<div class="sq-promo-callout">🏆 Xuất sắc! Trình độ tự động thăng lên <strong>${escapeHtml(langMeta.tierLabels[outcome.tierAutoPromoted])}</strong>!</div>`
+                ? `<div class="sq-promo-callout">🏆 Thăng bậc ${escapeHtml(langMeta.tierLabels[outcome.tierAutoPromoted])}!</div>`
                 : ''
             }
           </div>
           <div class="sq-explain-tts">
-            <button id="btnSqSpeakFull" type="button" class="brass-btn sq-tts-btn">🔊 Đọc cả câu</button>
-            <button id="btnSqSpeakFullSlow" type="button" class="brass-btn sq-tts-btn">🐢 Đọc chậm</button>
+            <button id="btnSqSpeakFull" type="button" class="brass-btn sq-tts-btn">🔊 Đọc</button>
+            <button id="btnSqSpeakFullSlow" type="button" class="brass-btn sq-tts-btn">🐢 Chậm</button>
           </div>
         </div>
 
         <div class="sq-full-sentence-box">
           <div class="sq-full-native">${escapeHtml(ch.fullSentence)}</div>
           <div class="sq-full-ph">${escapeHtml(langMeta.phoneticLabel)}: ${escapeHtml(ch.fullPhonetic)}</div>
-          <div class="sq-full-vi">🇻🇳 Nghĩa: <strong>${escapeHtml(ch.translationVi)}</strong></div>
+          <div class="sq-full-vi">🇻🇳 <strong>${escapeHtml(ch.translationVi)}</strong></div>
         </div>
 
         <div class="sq-grammar-box">
-          <div class="sq-grammar-title">📘 Ngữ pháp cốt lõi: ${escapeHtml(ch.grammarTitleVi)}</div>
+          <div class="sq-grammar-title">📘 ${escapeHtml(ch.grammarTitleVi)}</div>
           <p class="sq-grammar-desc">${escapeHtml(ch.grammarExplainVi)}</p>
         </div>
 
@@ -1074,7 +1063,7 @@ export class SeedQuizModalController {
           vocabRows
             ? `
               <div class="sq-vocab-box">
-                <div class="sq-vocab-title">📗 Từ vựng quan trọng trong câu (nhấp 🔊 để nghe từng từ):</div>
+                <div class="sq-vocab-title">📗 Từ vựng:</div>
                 <div class="sq-vocab-list">${vocabRows}</div>
               </div>
             `
@@ -1086,13 +1075,13 @@ export class SeedQuizModalController {
             seedCount > 0
               ? `
                 <button id="btnSqExplainSow" type="button" class="brass-btn sq-sow-cta">
-                  🌱 ${this.pendingPlotUid ? 'Gieo Xuống Thửa Đất Ngay' : 'Cầm Hạt Đi Gieo'} (Có ${seedCount} hạt)
+                  🌱 Gieo (×${seedCount})
                 </button>
               `
               : ''
           }
           <button id="btnSqNextQuestion" type="button" class="brass-btn gold-cta">
-            ➡️ Câu Tiếp Theo (+1–2 🌱 Hạt)
+            ➡️ Câu Tiếp (+1–2 🌱)
           </button>
         </div>
       </div>

@@ -138,10 +138,10 @@ export const BUILD_HUD_CATEGORIES: ReadonlyArray<BuildingCategory> = [
 ];
 
 const HEATMAP_CYCLE: Array<{ mode: HeatmapMode; label: string }> = [
-  { mode: 'none', label: '🌡️ Bản Đồ Nhiệt' },
-  { mode: 'cleanliness', label: '🧹 Nhiệt: Vệ Sinh & Hậu Cần' },
-  { mode: 'wonder', label: '✨ Nhiệt: Kỳ Diệu' },
-  { mode: 'biome', label: '🌿 Nhiệt: Sinh Thái Thú' },
+  { mode: 'none', label: '🌡️ Nhiệt' },
+  { mode: 'cleanliness', label: '🧹 Vệ Sinh' },
+  { mode: 'wonder', label: '✨ Kỳ Diệu' },
+  { mode: 'biome', label: '🌿 Sinh Thái' },
 ];
 
 export class GameHUD {
@@ -405,7 +405,7 @@ export class GameHUD {
                   </div>
                   <div id="xpBarShell" class="ts-wood-bar ts-xp-bar-shell" title="Tiến độ Rương Mùa Gặt Điền Trang (mỗi 200 XP tặng +65G +1⏳) — Nhấp xem Lộ trình Bản Vẽ Cấp 1 → 100">
                     <div id="barXpFill" class="ts-xp-fill" style="width:10%"></div>
-                    <span id="lblXpFraction" class="ts-xp-fraction">🎁 0/200 XP</span>
+                    <span id="lblXpFraction" class="ts-xp-fraction">🎁 0/200</span>
                   </div>
                 </div>
               </div>
@@ -418,7 +418,7 @@ export class GameHUD {
                   <circle cx="18" cy="18" r="5" fill="#428ad4" stroke="#3a2212" stroke-width="2.3"/>
                 </svg>
               </button>
-              <button id="btnToggleManageMenu" type="button" class="ts-blue-sq-btn" aria-expanded="false" aria-controls="managePopoverMenu" title="Mở Hòm Quản Lý: Bùa Gặt Honeydukes, Đại Sảnh Khảo Thí Hogwarts, Vali Thú, Sổ Tài Chính &amp; Công Cụ">
+              <button id="btnToggleManageMenu" type="button" class="ts-blue-sq-btn" aria-label="Quản lý" aria-expanded="false" aria-controls="managePopoverMenu" title="Mở Hòm Quản Lý: Bùa Gặt Honeydukes, Đại Sảnh Khảo Thí Hogwarts, Vali Thú, Sổ Tài Chính &amp; Công Cụ">
                 <svg viewBox="0 0 36 36" aria-hidden="true">
                   <path d="M6 14 L18 8 L30 14 L30 26 L18 31 L6 26 Z" fill="#c97b36" stroke="#3a2212" stroke-width="2.4" stroke-linejoin="round"/>
                   <path d="M6 14 L18 19 L30 14 L18 8 Z" fill="#e59c52" stroke="#3a2212" stroke-width="2" stroke-linejoin="round"/>
@@ -438,7 +438,7 @@ export class GameHUD {
                 <img src="/sprites/m3_icon_star.png" alt="" class="m3-inline-icon" />
                 <strong id="lblHudHubStars">3</strong>
                 <span class="ts-hub-sep">•</span>
-                <span id="lblHudHubTrial">🔥 x2: 🍓 Bùa Gặt Honeydukes</span>
+                <span id="lblHudHubTrial">🔥 🍓</span>
               </button>
               <button id="btnHudActiveBuilds" type="button" class="stat-chip stat-chip-btn hidden" title="Các công trình đang xây theo thời gian thực">🔨 <span id="lblActiveBuilds">0</span></button>
             </div>
@@ -448,7 +448,7 @@ export class GameHUD {
           <div id="tsParchmentBanner" class="ts-parchment-ribbon">
             <div class="ts-ribbon-tail ts-ribbon-tail-left" aria-hidden="true"></div>
             <div class="ts-ribbon-body">
-              <div id="lblParkRibbonName" class="ts-ribbon-title">Trang Trại Hang Sóc</div>
+              <div id="lblParkRibbonName" class="ts-ribbon-title">Hang Sóc</div>
             </div>
             <div class="ts-ribbon-tail ts-ribbon-tail-right" aria-hidden="true"></div>
           </div>
@@ -472,7 +472,7 @@ export class GameHUD {
                   </svg>
                 </span>
                 <span id="lblGalleons" class="ts-res-val">1.450</span>
-                <button id="btnPlusGalleons" type="button" class="ts-plus-btn" title="Chơi Giải Đố kiếm thêm Vàng Galleon">+</button>
+                <button id="btnPlusGalleons" type="button" class="ts-plus-btn" aria-label="Kiếm thêm Vàng" title="Chơi Giải Đố kiếm thêm Vàng Galleon">+</button>
               </div>
 
               <div id="btnHudSandChip" data-fly-target="sand" class="ts-res-pill ts-res-gem" title="Ngọc & Cát Thời Gian — Tăng tốc sản xuất & xây dựng">
@@ -490,7 +490,7 @@ export class GameHUD {
                   </svg>
                 </span>
                 <span id="lblSand" class="ts-res-val">28</span>
-                <button id="btnPlusSand" type="button" class="ts-plus-btn" title="Mở Sảnh Bàn Cờ &amp; Cổ Ngữ kiếm thêm Ngọc Thời Gian">+</button>
+                <button id="btnPlusSand" type="button" class="ts-plus-btn" aria-label="Kiếm thêm Ngọc Thời Gian" title="Mở Sảnh Bàn Cờ &amp; Cổ Ngữ kiếm thêm Ngọc Thời Gian">+</button>
               </div>
             </div>
 
@@ -504,12 +504,12 @@ export class GameHUD {
                     <path d="M14 21 L28 36 M28 21 L14 36" stroke="#f7e6c4" stroke-width="1.8"/>
                   </svg>
                 </span>
-                <span id="lblStorageBarn" class="ts-res-val">Kho 42/60</span>
-                <button id="btnOpenStorageBarn" type="button" class="ts-plus-btn" title="Mở Kho Nông Sản & Tàu Hàng Tốc Hành">+</button>
+                <span id="lblStorageBarn" class="ts-res-val">42/60</span>
+                <button id="btnOpenStorageBarn" type="button" class="ts-plus-btn" aria-label="Mở Kho Nông Sản" title="Mở Kho Nông Sản & Tàu Hàng Tốc Hành">+</button>
               </div>
             </div>
 
-            <button id="btnHappySmiley" type="button" class="ts-smiley-btn" title="Chỉ Số Hạnh Phúc & Sổ Cái Trang Trại">
+            <button id="btnHappySmiley" type="button" class="ts-smiley-btn" aria-label="Sổ Cái Tài Chính" title="Chỉ Số Hạnh Phúc & Sổ Cái Trang Trại">
               <svg viewBox="0 0 36 36" aria-hidden="true">
                 <path d="M10.5 14.5 Q12.5 11.5 14.5 14.5" fill="none" stroke="#4a2810" stroke-width="2.6" stroke-linecap="round"/>
                 <path d="M21.5 14.5 Q23.5 11.5 25.5 14.5" fill="none" stroke="#4a2810" stroke-width="2.6" stroke-linecap="round"/>
@@ -522,63 +522,63 @@ export class GameHUD {
         <!-- COZY PROGRESSIVE-DISCLOSURE POPOVER 1: PARK MANAGEMENT & MINIGAMES DRAWER -->
         <div id="managePopoverMenu" class="hud-floating-popover hidden" role="region" aria-label="Hòm quản lý trang trại">
           <div class="hud-popover-title">
-            <span>🧰 Hòm Quản Lý Trang Trại</span>
+            <span>🧰 Quản Lý</span>
           </div>
           <div class="manage-status-strip">
             <button id="btnHudStarChip" type="button" class="stat-chip stat-chip-btn" title="Sao Phép Thuật"><img src="/sprites/m3_icon_star.png" alt="" class="m3-inline-icon" /> <span id="lblPuzzleStars">3</span></button>
             <button id="btnHudHeartChip" type="button" class="stat-chip stat-chip-btn" title="Tim Giải Đố"><img src="/sprites/m3_icon_heart.png" alt="" class="m3-inline-icon" /> <span id="lblPuzzleHearts">5/5</span></button>
             <span class="stat-chip">★ <span id="lblWonder">4.5</span></span>
             <button id="lblClock" type="button" class="stat-chip stat-chip-btn chip-clock chip-clock-btn" aria-expanded="false" aria-controls="weatherPopoverMenu">🕒 --:--</button>
-            <span id="lblFestival" class="stat-chip chip-fest hidden">🎃 Halloween</span>
+            <span id="lblFestival" class="stat-chip chip-fest hidden">🎃</span>
           </div>
           <div class="manage-menu-grid">
             <button id="btnOpenMatch3" type="button" class="brass-btn m3-play-cta" title="Gác Xép Bùa Gặt Honeydukes — 777 Màn (Phím J)">
-              <img src="/sprites/m3_farm_pinwheel.png" alt="" class="m3-inline-icon" /> Bùa Gặt <span id="lblMatch3Lv">1/777</span>
+              <img src="/sprites/m3_farm_pinwheel.png" alt="" class="m3-inline-icon" /> Match-3 <span id="lblMatch3Lv">1/777</span>
             </button>
-            <button id="btnOpenPuzzleArcade" type="button" class="brass-btn pa-hud-cta" title="Đại Sảnh Khảo Thí Hogwarts: Ngũ Ấn Đạo Tặc, Ma Trận Cửu Bảo Bối, Cờ Phù Thủy &amp; Nối Hình Sinh Vật Huyền Bí — Mỗi môn 777 Màn (Phím K)">
+            <button id="btnOpenPuzzleArcade" type="button" class="brass-btn pa-hud-cta" title="Đại Sảnh Khảo Thí Hogwarts (Phím K)">
               <img src="/sprites/ui_icon_jigsaw.png" alt="" class="hud-3d-icon" /> Khảo Thí <span id="lblArcadeTowerLv">0/3108</span>
             </button>
             <button id="btnAccioAll" type="button" class="brass-btn gold-cta" title="Phép Accio gom toàn bộ nông sản, bánh & vàng">
-              <img src="/sprites/ui_icon_accio.png" alt="" class="hud-3d-icon" /> Accio Gom Mùa
+              <img src="/sprites/ui_icon_accio.png" alt="" class="hud-3d-icon" /> Accio
             </button>
-            <button id="btnManageOpenNeighbors" type="button" class="brass-btn gold-cta" title="Sổ Hàng Xóm — Sang thăm vườn bạn bè, đóng hộ Đơn Cú &amp; Giải Cứu Màn Khó (Phím N)">
-              🤝 Hàng Xóm <span id="badgeManageNeighborCount" class="badge-dot hidden">!</span>
+            <button id="btnManageOpenNeighbors" type="button" class="brass-btn gold-cta" title="Sổ Hàng Xóm (Phím N)">
+              🤝 Bạn Bè <span id="badgeManageNeighborCount" class="badge-dot hidden">!</span>
             </button>
-            <button id="btnManageOpenFeast" type="button" class="brass-btn gold-cta" title="Đại Tiệc Mùa Gặt Hang Sóc — Tích điểm 🍁 mở 30 nấc quà lớn của Bà Molly">
-              🍁 Tiệc Mùa Gặt <span id="badgeManageFeastCount" class="badge-dot hidden">0</span>
+            <button id="btnManageOpenFeast" type="button" class="brass-btn gold-cta" title="Đại Tiệc Mùa Gặt Hang Sóc">
+              🍁 Lễ Hội <span id="badgeManageFeastCount" class="badge-dot hidden">0</span>
             </button>
-            <button id="btnOpenLeaderboard" type="button" class="brass-btn gold-cta" title="Bảng Xếp Hạng &amp; Cúp 4 Nhà Hogwarts (3 Môn Tính Điểm: Match-3, Sudoku &amp; Pikachu)">
-              🏆 Bảng Xếp Hạng
+            <button id="btnOpenLeaderboard" type="button" class="brass-btn gold-cta" title="Bảng Xếp Hạng &amp; Cúp 4 Nhà">
+              🏆 BXH
             </button>
             <button id="btnOpenSuitcase" type="button" class="brass-btn" title="Vali Bảo Tồn Sinh Vật Huyền Bí (Phím B)">
-              <img src="/sprites/ui_icon_suitcase.png" alt="" class="hud-3d-icon" /> Vali Thú <span id="badgeSuitcaseCount" class="badge-dot hidden">0</span>
+              <img src="/sprites/ui_icon_suitcase.png" alt="" class="hud-3d-icon" /> Vali <span id="badgeSuitcaseCount" class="badge-dot hidden">0</span>
             </button>
             <button id="btnOpenWorkshop" type="button" class="brass-btn" title="Kho Nông Sản Hang Sóc, Xưởng Chế Biến & Tàu Hàng">
-              🏡 Kho &amp; Xưởng <span id="badgeWorkshopCount" class="badge-dot hidden">!</span>
+              🏡 Kho <span id="badgeWorkshopCount" class="badge-dot hidden">!</span>
             </button>
             <button id="btnOpenZones" type="button" class="brass-btn" title="Đại Bản Đồ 10 Phân Khu &amp; Lộ Trình 100 Cấp">
-              🗺️ 10 Vùng Đất
+              🗺️ Bản Đồ
             </button>
             <button id="btnOpenFinance" type="button" class="brass-btn" title="Sổ Cái Tài Chính &amp; Giá Vé">
-              📊 Sổ Tài Chính
+              📊 Sổ Cái
             </button>
             <button id="btnOpenAlbum" type="button" class="brass-btn" title="Cúp 4 Nhà Hogwarts &amp; Bảng Điểm Các Nhà">
-              🏆 Cúp 4 Nhà <span id="badgeCardCount" class="badge-dot hidden">!</span>
+              🏆 Cúp Nhà <span id="badgeCardCount" class="badge-dot hidden">!</span>
             </button>
             <button id="btnToggleMinimapHud" type="button" class="brass-btn" title="Hiện hoặc ẩn Radar thu nhỏ">
-              🧭 Bật/Tắt Radar
+              🧭 Radar
             </button>
             <button id="btnToggleQuestTrackerHud" type="button" class="brass-btn" title="Ghim bảng nhiệm vụ lên màn hình">
-              📌 Ghim Nhiệm Vụ
+              📌 Nhiệm Vụ
             </button>
             <button id="btnCycleHeatmap" type="button" class="brass-btn span-2" aria-pressed="false" title="Bật lớp màu Bản Đồ Nhiệt">
-              🌡️ Bản Đồ Nhiệt
+              🌡️ Nhiệt
             </button>
             <button id="btnManageToggleHudRollup" type="button" class="brass-btn span-2" title="Cuộn gọn các thanh HUD quanh màn hình (Phím H)">
-              📜 Cuộn Gọn Các Thanh HUD (Phím H)
+              📜 Ẩn/Hiện HUD
             </button>
             <button id="btnPhotoMode" type="button" class="brass-btn span-2" aria-label="Chế độ chụp ảnh (Phím P)" title="Ẩn giao diện để ngắm cảnh &amp; chụp ảnh (Phím P)">
-              📷 Chế Độ Chụp Ảnh (Phím P)
+              📷 Chụp Ảnh
             </button>
           </div>
         </div>
@@ -600,7 +600,7 @@ export class GameHUD {
           <div class="floating-banner-btns">
             <button id="btnFloatingSecondary" type="button" class="brass-btn hidden" style="padding:4px 8px;font-size:12px;"></button>
             <button id="btnFloatingSwap" type="button" class="brass-btn hidden" style="padding:4px 8px;font-size:12px;"></button>
-            <button id="btnFloatingExit" type="button" class="brass-btn gold-cta" style="padding:4px 8px;font-size:12px;">Thoát</button>
+            <button id="btnFloatingExit" type="button" class="brass-btn gold-cta" aria-label="Thoát" style="padding:4px 8px;font-size:12px;">✕</button>
           </div>
         </div>
 
@@ -608,8 +608,8 @@ export class GameHUD {
           <!-- LEFT QUEST TRACKER (Hidden by default in clean Township view; toggleable) -->
           <aside id="questTrackerPanel" class="parchment-panel quest-tracker hidden" aria-label="Nhiệm vụ đang làm">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-              <div style="font-weight:800;font-size:13.5px;color:#5c2d0c;">🦉 Nhiệm Vụ Đang Làm</div>
-              <button id="btnToggleQuestCollapse" type="button" class="brass-btn" aria-expanded="${!this.questCollapsed}" style="padding:3px 9px;font-size:12px;">${this.questCollapsed ? 'Mở rộng' : 'Thu gọn'}</button>
+              <div style="font-weight:800;font-size:13.5px;color:#5c2d0c;">🦉 Nhiệm Vụ</div>
+              <button id="btnToggleQuestCollapse" type="button" class="brass-btn" aria-label="Thu gọn hoặc mở rộng nhiệm vụ" aria-expanded="${!this.questCollapsed}" style="padding:3px 9px;font-size:12px;">${this.questCollapsed ? '+' : '–'}</button>
             </div>
             <div id="questTrackerBody" class="${this.questCollapsed ? 'hidden' : ''}"></div>
           </aside>
@@ -622,15 +622,15 @@ export class GameHUD {
       <!-- TOUCH PLACEMENT CONFIRM BAR (App Store Mobile/Tablet UX) -->
       <div id="touchConfirmBar" class="parchment-dark touch-confirm-bar hidden">
         <span id="lblTouchConfirm" style="font-size:12.5px;font-weight:800;color:#fde68a;"></span>
-        <button id="btnTouchConfirmOk" type="button" class="brass-btn gold-cta">✓ Đặt</button>
-        <button id="btnTouchRotate" type="button" class="brass-btn">↻ Xoay</button>
-        <button id="btnTouchCancel" type="button" class="brass-btn">✕ Hủy</button>
+        <button id="btnTouchConfirmOk" type="button" class="brass-btn gold-cta" aria-label="Đặt">✓</button>
+        <button id="btnTouchRotate" type="button" class="brass-btn" aria-label="Xoay">↻</button>
+        <button id="btnTouchCancel" type="button" class="brass-btn" aria-label="Hủy">✕</button>
       </div>
 
       <!-- INTERACTIVE ISOMETRIC MINIMAP (Tucked cleanly until requested) -->
       <div id="minimapWrap" class="parchment-dark minimap-wrap ts-minimap-docked hidden">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-          <span class="minimap-title">🧭 Radar Công Viên</span>
+          <span class="minimap-title">🧭 Radar</span>
           <button id="btnToggleMinimap" type="button" class="brass-btn" aria-label="Thu gọn hoặc mở rộng bản đồ thu nhỏ" aria-expanded="${!this.minimapCollapsed}" style="padding:2px 7px;font-size:12px;">${this.minimapCollapsed ? '+' : '–'}</button>
         </div>
         <canvas id="minimapCanvas" class="${this.minimapCollapsed ? 'hidden' : ''}" width="168" height="102" aria-label="Bản đồ thu nhỏ công viên"></canvas>
@@ -638,9 +638,9 @@ export class GameHUD {
 
       <!-- PHOTO MODE FLOATING BAR -->
       <div id="photoModeBar" class="parchment-dark photo-mode-bar hidden">
-        <span style="font-size:12.5px;font-weight:800;color:#fde68a;">📷 Chế Độ Chụp Ảnh</span>
-        <button id="btnSavePhotoPng" type="button" class="brass-btn gold-cta">💾 Tải Ảnh PNG</button>
-        <button id="btnExitPhoto" type="button" class="brass-btn">Thoát (P)</button>
+        <span style="font-size:12.5px;font-weight:800;color:#fde68a;">📷</span>
+        <button id="btnSavePhotoPng" type="button" class="brass-btn gold-cta">💾 PNG</button>
+        <button id="btnExitPhoto" type="button" class="brass-btn" aria-label="Thoát chế độ chụp ảnh">✕</button>
       </div>
 
       <!-- ROUND IN-GAME HUD ROLL-UP ORB ("NÚT CUỘN TRÒN INGAME" — TAP TO ROLL/UNROLL ALL HUDS, DRAG TO REPOSITION) -->
@@ -653,7 +653,7 @@ export class GameHUD {
         title="Chạm để cuộn gọn / mở rộng toàn bộ HUD (Phím H) • Giữ kéo để dời vị trí nút"
       >
         <span class="hud-round-orb-disc" aria-hidden="true">
-          <svg viewBox="0 0 40 40" class="hud-round-orb-svg">
+          <svg viewBox="0 0 40 40" class="hud-round-orb-svg" aria-hidden="true">
             <defs>
               <radialGradient id="hudOrbGold" cx="35%" cy="28%" r="72%">
                 <stop offset="0%" stop-color="#fff7c2"/>
@@ -668,7 +668,7 @@ export class GameHUD {
             <path id="svgRoundOrbChevron" d="M16 23.2 L20 19.2 L24 23.2" fill="none" stroke="#92400e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </span>
-        <span id="lblHudRoundOrbTag" class="hud-round-orb-tag">Thu HUD</span>
+        <span id="lblHudRoundOrbTag" class="hud-round-orb-tag visually-hidden">HUD</span>
       </button>
 
       <!-- TOAST STACK -->
@@ -684,42 +684,42 @@ export class GameHUD {
       <div id="tsCornerLeft" class="ts-corner-left">
         <button id="btnOpenQuests" type="button" class="ts-card-btn ts-card-lg" title="Sổ Đơn Hàng Cú Đưa Thư & Cốt Truyện Hang Sóc">
           <img src="/sprites/ui_icon_owl_orders.png" alt="" class="ts-card-art" />
-          <span class="ts-card-label">Đơn Hàng Cú</span>
+          <span class="ts-card-label">Đơn Cú</span>
           <span id="badgeQuestCount" class="ts-red-badge">3</span>
         </button>
-        <button id="btnOpenSeedSilo" type="button" aria-pressed="false" class="ts-card-btn ts-card-md" title="Túi Hạt Giống &amp; Hoa Hang Sóc — Chọn &amp; Lướt Tay Gieo 22 Hạt Giống &amp; Hoa">
+        <button id="btnOpenSeedSilo" type="button" aria-pressed="false" class="ts-card-btn ts-card-md" title="Túi Hạt Giống &amp; Hoa Hang Sóc">
           <img src="/sprites/ui_icon_seed_sack.png" alt="" class="ts-card-art" />
-          <span class="ts-card-label">Kho Hạt</span>
+          <span class="ts-card-label">Hạt</span>
         </button>
-        <button id="btnOpenPastureTray" type="button" aria-pressed="false" class="ts-card-btn ts-card-md" title="Đồng Cỏ Chăn Thả — Thả Gà, Cừu, Bò Sữa &amp; Thú Phép lên đồng cỏ ghép liền">
+        <button id="btnOpenPastureTray" type="button" aria-pressed="false" class="ts-card-btn ts-card-md" title="Đồng Cỏ Chăn Thả">
           <img src="/sprites/ui_icon_pasture_bell.png" alt="" class="ts-card-art" />
-          <span class="ts-card-label">Chăn Thả</span>
+          <span class="ts-card-label">Thú</span>
         </button>
-        <button id="btnOpenNeighbors" data-fly-target="friendship" type="button" class="ts-card-btn ts-card-md" title="Sổ Hàng Xóm &amp; Hội Tương Trợ — Tham quan vườn bạn bè, đóng Đơn Cú &amp; Giải Cứu Khảo Thí Pháp Thuật 1 ngày/lần (Phím N)">
+        <button id="btnOpenNeighbors" data-fly-target="friendship" type="button" class="ts-card-btn ts-card-md" title="Sổ Hàng Xóm (Phím N)">
           <img src="/sprites/ui_icon_staff.png" alt="" class="ts-card-art" />
-          <span class="ts-card-label">Hàng Xóm</span>
+          <span class="ts-card-label">Bạn Bè</span>
           <span id="badgeNeighborCount" class="ts-red-badge hidden">1</span>
         </button>
-        <button id="btnOpenHarvestFeast" type="button" class="ts-card-btn ts-card-md" title="Đại Tiệc Mùa Gặt Hang Sóc — Thu hoạch, giao Đơn Cú &amp; vượt Khảo Thí nhận 30 nấc quà lớn!">
+        <button id="btnOpenHarvestFeast" type="button" class="ts-card-btn ts-card-md" title="Đại Tiệc Mùa Gặt Hang Sóc">
           <img src="/sprites/prop_ribbon_unveil.png" alt="" class="ts-card-art" />
-          <span class="ts-card-label">Tiệc Mùa</span>
+          <span class="ts-card-label">Lễ Hội</span>
           <span id="badgeFeastCount" class="ts-red-badge hidden">1</span>
         </button>
       </div>
 
       <!-- 5. BOTTOM-RIGHT TOWNSHIP × GARDENSCAPES CARDS: Chơi Lên Cấp (Tháp 5×777), Xây Dựng & Bản Đồ -->
       <div id="tsCornerRight" class="ts-corner-right">
-        <button id="btnCornerPlayPuzzle" type="button" class="ts-card-btn ts-card-lg ts-card-play-stage" title="Chinh phục Tháp 5 Môn × 777 Màn (3.885 Màn) tích lũy Cấp Độ &amp; 🌟 Sao Phép Thuật mở khóa Đại Điền Trang!">
+        <button id="btnCornerPlayPuzzle" type="button" class="ts-card-btn ts-card-lg ts-card-play-stage" title="Chinh phục Tháp 5 Môn × 777 Màn">
           <img src="/sprites/m3_farm_pinwheel.png" alt="" class="ts-card-art" />
-          <span id="lblCornerPlayStage" class="ts-card-label">▶️ Cấp 2 (0/1)</span>
+          <span id="lblCornerPlayStage" class="ts-card-label">▶️ Cấp 2</span>
           <span id="badgeCornerPlayBonus" class="ts-red-badge ts-bonus-x2-badge">🔥 +🌟</span>
         </button>
-        <button id="btnToggleBuildDock" type="button" aria-pressed="false" class="ts-card-btn ts-card-md-plus" title="Mở Kho Xây Dựng Bản Vẽ Công Trình (Dùng 🌟 Sao dựng công trình), Đường Đi & Trang Trí">
+        <button id="btnToggleBuildDock" type="button" aria-pressed="false" class="ts-card-btn ts-card-md-plus" title="Mở Kho Xây Dựng Bản Vẽ Công Trình">
           <img src="/sprites/ui_icon_hammer_wand.png" alt="" class="ts-card-art" />
-          <span class="ts-card-label">Xây Dựng</span>
+          <span class="ts-card-label">Xây</span>
           <span id="badgeBuildReadyCount" class="ts-red-badge is-ready-green hidden">1</span>
         </button>
-        <button id="btnOpenWorldMap" type="button" class="ts-card-btn ts-card-md" title="Mở Đại Bản Đồ Thế Giới Phù Thủy & 10 Vùng Đất">
+        <button id="btnOpenWorldMap" type="button" class="ts-card-btn ts-card-md" title="Mở Đại Bản Đồ 10 Vùng Đất">
           <img src="/sprites/ui_icon_world_map.png" alt="" class="ts-card-art" />
           <span class="ts-card-label">Bản Đồ</span>
         </button>
@@ -739,32 +739,32 @@ export class GameHUD {
         <div id="buildDrawer" class="parchment-panel build-drawer hidden"></div>
 
         <div id="secondaryMapToolsBar" class="parchment-dark secondary-map-tools-bar hidden" role="region" aria-label="Công cụ chỉnh sửa và bản đồ">
-          <button id="btnMoveTool" type="button" aria-pressed="false" class="brass-btn" title="Di dời công trình miễn phí mà không mất Sao (Phím M)">✋ Dời (M)</button>
-          <button id="btnBulldoze" type="button" aria-pressed="false" class="brass-btn" title="Phá dỡ hoàn vàng, tháo ray hoặc dọn vũng bùa lỗi (Phím X)">🧹 Xóa (X)</button>
-          <button id="btnRotate" type="button" class="brass-btn" title="Xoay hướng Cổng Vào / Cổng Ra của công trình (Phím R)">🔄 Cửa (R)</button>
-          <button id="btnRotateCam" type="button" aria-pressed="false" class="brass-btn" title="Xoay góc nhìn bản đồ Isometric 90° (Phím Q / E)">🧭 Bắc (0°)</button>
-          <button id="btnPincerTool" type="button" aria-pressed="false" class="brass-btn" title="Kẹp Gắp Nhân Sự / Khách thả tới điểm nóng (Phím G)">🤏 Gắp (G)</button>
-          <button id="btnCutaway" type="button" aria-pressed="false" class="brass-btn" title="Nhìn xuyên thấu công trình cao để lát đường & sửa ray phía sau (Phím V)">👁️ Xuyên (V)</button>
-          <button id="btnGrid" type="button" aria-pressed="false" class="brass-btn" title="Bật/Tắt lưới ô kim cương">✨ Lưới</button>
-          <button id="btnHomeCam" type="button" class="brass-btn" title="Đưa camera về Trang Trại Hang Sóc">🏡 Về Hang Sóc</button>
+          <button id="btnMoveTool" type="button" aria-pressed="false" class="brass-btn" title="Di dời công trình (Phím M)">✋ Dời</button>
+          <button id="btnBulldoze" type="button" aria-pressed="false" class="brass-btn" title="Phá dỡ (Phím X)">🧹 Xóa</button>
+          <button id="btnRotate" type="button" class="brass-btn" title="Xoay hướng công trình (Phím R)">🔄 90°</button>
+          <button id="btnRotateCam" type="button" aria-pressed="false" class="brass-btn" title="Xoay góc nhìn bản đồ 90° (Phím Q / E)">🧭 Bắc</button>
+          <button id="btnPincerTool" type="button" aria-pressed="false" class="brass-btn" title="Kẹp Gắp Nhân Sự (Phím G)">🤏 Gắp</button>
+          <button id="btnCutaway" type="button" aria-pressed="false" class="brass-btn" title="Nhìn xuyên nhà cao (Phím V)">👁️ Xuyên</button>
+          <button id="btnGrid" type="button" aria-pressed="false" class="brass-btn" title="Bật/Tắt lưới ô">✨ Lưới</button>
+          <button id="btnHomeCam" type="button" class="brass-btn" title="Về Hang Sóc">🏡 Nhà</button>
         </div>
 
         <div class="parchment-dark bottom-bar">
-          <button type="button" data-cat="path" aria-pressed="false" class="brass-btn"><img src="/sprites/ui_icon_path.png" alt="" class="hud-3d-icon" /> Đường Quê</button>
-          <button type="button" data-cat="shop" aria-pressed="false" class="brass-btn"><img src="/sprites/ui_icon_shop.png" alt="" class="hud-3d-icon" /> Xưởng &amp; Quán</button>
-          <button type="button" data-cat="creature" aria-pressed="false" class="brass-btn"><img src="/sprites/ui_icon_creature.png" alt="" class="hud-3d-icon" /> Đồng Cỏ &amp; Thú</button>
-          <button type="button" data-cat="decor" aria-pressed="false" class="brass-btn"><img src="/sprites/ui_icon_decor.png" alt="" class="hud-3d-icon" /> Ruộng &amp; Cảnh</button>
-          <button type="button" data-cat="staff" aria-pressed="false" class="brass-btn"><img src="/sprites/ui_icon_staff.png" alt="" class="hud-3d-icon" /> Gia Đình</button>
+          <button type="button" data-cat="path" aria-pressed="false" class="brass-btn"><img src="/sprites/ui_icon_path.png" alt="" class="hud-3d-icon" /> Đường</button>
+          <button type="button" data-cat="shop" aria-pressed="false" class="brass-btn"><img src="/sprites/ui_icon_shop.png" alt="" class="hud-3d-icon" /> Xưởng</button>
+          <button type="button" data-cat="creature" aria-pressed="false" class="brass-btn"><img src="/sprites/ui_icon_creature.png" alt="" class="hud-3d-icon" /> Thú</button>
+          <button type="button" data-cat="decor" aria-pressed="false" class="brass-btn"><img src="/sprites/ui_icon_decor.png" alt="" class="hud-3d-icon" /> Cảnh</button>
+          <button type="button" data-cat="staff" aria-pressed="false" class="brass-btn"><img src="/sprites/ui_icon_staff.png" alt="" class="hud-3d-icon" /> Phụ Tá</button>
 
           <span class="dock-divider" aria-hidden="true">|</span>
 
-          <button id="btnToggleMapTools" type="button" aria-pressed="false" aria-expanded="false" aria-controls="secondaryMapToolsBar" class="brass-btn" title="Mở thanh công cụ Sửa &amp; Góc Nhìn: Dời (M), Xóa (X), Xoay Cửa (R), Xoay Bản Đồ (Q/E), Gắp (G), Nhìn Xuyên (V)">🛠️ Sửa ▾</button>
+          <button id="btnToggleMapTools" type="button" aria-pressed="false" aria-expanded="false" aria-controls="secondaryMapToolsBar" class="brass-btn" title="Công cụ Sửa &amp; Góc Nhìn">🛠️ Công Cụ</button>
         </div>
       </section>
 
       <!-- TOWNSHIP SOFT SPOTLIGHT RING FOR ACTIVE TUTORIAL HUD TARGET (Must follow HUD targets in tree order for CSS Anchor Positioning) -->
       <div id="tutorialHudSpotlight" class="tutorial-hud-spotlight hidden" aria-hidden="true">
-        <span id="tutorialHudSpotlightLabel" class="tutorial-hud-spotlight-pill">👇 Bấm tại đây</span>
+        <span id="tutorialHudSpotlightLabel" class="tutorial-hud-spotlight-pill">👇</span>
       </div>
 
       <!-- BÀ MOLLY WEASLEY 2.5D PERSISTENT TUTORIAL COACH POPOVER -->
@@ -780,8 +780,8 @@ export class GameHUD {
       <dialog id="questDialog" closedby="any" aria-labelledby="questDialogTitle">
         <div class="parchment-panel modal-inner owl-orders-modal-inner">
           <div class="modal-header">
-            <h2 id="questDialogTitle" class="modal-title"><img src="/sprites/ui_icon_owl_orders.png" alt="" style="width:28px;height:28px;vertical-align:-6px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Bảng Đơn Hàng Cú &amp; Nhật Ký Hang Sóc</h2>
-            <form method="dialog"><button type="submit" class="brass-btn" autofocus>Đóng</button></form>
+            <h2 id="questDialogTitle" class="modal-title"><img src="/sprites/ui_icon_owl_orders.png" alt="" style="width:28px;height:28px;vertical-align:-6px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Đơn Cú &amp; Nhiệm Vụ</h2>
+            <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
           </div>
           <div id="questDialogContent"></div>
         </div>
@@ -791,8 +791,8 @@ export class GameHUD {
       <dialog id="roadmapDialog" closedby="any" aria-labelledby="roadmapDialogTitle">
         <div class="parchment-panel modal-inner">
           <div class="modal-header">
-            <h2 id="roadmapDialogTitle" class="modal-title">🗺️ Đại Bản Đồ 10 Phân Khu & Lộ Trình 100 Cấp</h2>
-            <form method="dialog"><button type="submit" class="brass-btn" autofocus>Đóng</button></form>
+            <h2 id="roadmapDialogTitle" class="modal-title">🗺️ Bản Đồ &amp; Lộ Trình</h2>
+            <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
           </div>
           <div id="roadmapDialogContent"></div>
         </div>
@@ -802,8 +802,8 @@ export class GameHUD {
       <dialog id="financeDialog" closedby="any" aria-labelledby="financeDialogTitle">
         <div class="parchment-panel modal-inner">
           <div class="modal-header">
-            <h2 id="financeDialogTitle" class="modal-title">📊 Sổ Cái Tài Chính Gringotts & Điều Giá</h2>
-            <form method="dialog"><button type="submit" class="brass-btn" autofocus>Đóng</button></form>
+            <h2 id="financeDialogTitle" class="modal-title">📊 Sổ Cái</h2>
+            <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
           </div>
           <div id="financeDialogContent"></div>
         </div>
@@ -813,8 +813,8 @@ export class GameHUD {
       <dialog id="albumDialog" closedby="any" aria-labelledby="albumDialogTitle">
         <div class="parchment-panel modal-inner">
           <div class="modal-header">
-            <h2 id="albumDialogTitle" class="modal-title">🏆 Đồng Hồ Cát &amp; Cúp 4 Nhà Hogwarts</h2>
-            <form method="dialog"><button type="submit" class="brass-btn" autofocus>Đóng</button></form>
+            <h2 id="albumDialogTitle" class="modal-title">🏆 Cúp 4 Nhà</h2>
+            <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
           </div>
           <div id="albumDialogContent"></div>
         </div>
@@ -824,8 +824,8 @@ export class GameHUD {
       <dialog id="settingsDialog" closedby="any" aria-labelledby="settingsDialogTitle">
         <div class="parchment-panel modal-inner">
           <div class="modal-header">
-            <h2 id="settingsDialogTitle" class="modal-title">⚙️ Cài Đặt, Nhạc Giao Hưởng & Quản Lý File Lưu</h2>
-            <form method="dialog"><button type="submit" class="brass-btn" autofocus>Đóng</button></form>
+            <h2 id="settingsDialogTitle" class="modal-title">⚙️ Cài Đặt</h2>
+            <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
           </div>
           <div id="settingsDialogContent"></div>
         </div>
@@ -835,8 +835,8 @@ export class GameHUD {
       <dialog id="offlineDialog" closedby="any" aria-labelledby="offlineDialogTitle">
         <div class="parchment-panel modal-inner" style="max-width:480px;">
           <div class="modal-header">
-            <h2 id="offlineDialogTitle" class="modal-title">🧦 Chào Mừng Quản Lý Trở Lại!</h2>
-            <form method="dialog"><button type="submit" class="brass-btn gold-cta" autofocus>Tuyệt vời!</button></form>
+            <h2 id="offlineDialogTitle" class="modal-title">🧦 Thu Hoạch Offline</h2>
+            <form method="dialog"><button type="submit" class="brass-btn gold-cta" aria-label="Nhận" autofocus>✓</button></form>
           </div>
           <div id="offlineDialogContent"></div>
         </div>
@@ -846,8 +846,8 @@ export class GameHUD {
       <dialog id="workshopDialog" closedby="any" aria-labelledby="workshopDialogTitle">
         <div class="parchment-panel modal-inner">
           <div class="modal-header">
-            <h2 id="workshopDialogTitle" class="modal-title">🏡 Kho Nông Sản Hang Sóc, Xưởng Chế Biến &amp; Tàu Hàng</h2>
-            <form method="dialog"><button type="submit" class="brass-btn" autofocus>Đóng</button></form>
+            <h2 id="workshopDialogTitle" class="modal-title">🏡 Kho &amp; Xưởng</h2>
+            <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
           </div>
           <div id="workshopDialogContent"></div>
         </div>
@@ -857,8 +857,8 @@ export class GameHUD {
       <dialog id="suitcaseDialog" closedby="any" aria-labelledby="suitcaseDialogTitle">
         <div class="parchment-panel modal-inner">
           <div class="modal-header">
-            <h2 id="suitcaseDialogTitle" class="modal-title">🧳 Chiếc Vali Bảo Tồn Sinh Vật Huyền Bí</h2>
-            <form method="dialog"><button type="submit" class="brass-btn" autofocus>Đóng</button></form>
+            <h2 id="suitcaseDialogTitle" class="modal-title">🧳 Vali Thú</h2>
+            <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
           </div>
           <div id="suitcaseDialogContent"></div>
         </div>
@@ -868,8 +868,8 @@ export class GameHUD {
       <dialog id="match3Dialog" closedby="any" aria-labelledby="match3DialogTitle">
         <div class="parchment-panel modal-inner m3-modal-inner">
           <div class="modal-header">
-            <h2 id="match3DialogTitle" class="modal-title"><img src="/sprites/m3_farm_pinwheel.png" alt="" style="width:26px;height:26px;vertical-align:-6px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Gác Xép Bùa Gặt Honeydukes • Thu Thập Kẹo &amp; Nông Sản Phép</h2>
-            <form method="dialog"><button type="submit" class="brass-btn" autofocus>Đóng</button></form>
+            <h2 id="match3DialogTitle" class="modal-title"><img src="/sprites/m3_farm_pinwheel.png" alt="" style="width:26px;height:26px;vertical-align:-6px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Match-3</h2>
+            <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
           </div>
           <div id="match3DialogContent"></div>
         </div>
@@ -879,8 +879,8 @@ export class GameHUD {
       <dialog id="puzzleArcadeDialog" closedby="any" aria-labelledby="puzzleArcadeDialogTitle">
         <div class="parchment-panel modal-inner pa-modal-inner">
           <div class="modal-header">
-            <h2 id="puzzleArcadeDialogTitle" class="modal-title"><img src="/sprites/m3_piece_scroll.png" alt="" style="width:26px;height:26px;vertical-align:-6px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Đại Sảnh Khảo Thí Pháp Thuật Hogwarts • Ngũ Ấn, Bảo Bối &amp; Cờ Phù Thủy</h2>
-            <form method="dialog"><button type="submit" class="brass-btn" autofocus>Đóng</button></form>
+            <h2 id="puzzleArcadeDialogTitle" class="modal-title"><img src="/sprites/m3_piece_scroll.png" alt="" style="width:26px;height:26px;vertical-align:-6px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Khảo Thí</h2>
+            <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
           </div>
           <div id="puzzleArcadeDialogContent"></div>
         </div>
@@ -890,8 +890,8 @@ export class GameHUD {
       <dialog id="seedQuizDialog" closedby="any" aria-labelledby="seedQuizDialogTitle">
         <div class="parchment-panel modal-inner sq-modal-inner">
           <div class="modal-header">
-            <h2 id="seedQuizDialogTitle" class="modal-title">🪄 Tiệm Hạt Giống &amp; Học Viện Thần Chú Đa Ngữ Hogwarts</h2>
-            <form method="dialog"><button type="submit" class="brass-btn" autofocus>Đóng</button></form>
+            <h2 id="seedQuizDialogTitle" class="modal-title">🪄 Học Viện</h2>
+            <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
           </div>
           <div id="seedQuizDialogContent"></div>
         </div>
@@ -901,8 +901,8 @@ export class GameHUD {
       <dialog id="neighborDialog" closedby="any" aria-labelledby="neighborDialogTitle">
         <div class="parchment-panel modal-inner neighbor-modal-inner">
           <div class="modal-header">
-            <h2 id="neighborDialogTitle" class="modal-title">🤝 Sổ Hàng Xóm &amp; Hội Tương Trợ Thung Lũng</h2>
-            <form method="dialog"><button type="submit" class="brass-btn" autofocus>Đóng</button></form>
+            <h2 id="neighborDialogTitle" class="modal-title">🤝 Bạn Bè</h2>
+            <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
           </div>
           <div id="neighborDialogContent"></div>
         </div>
@@ -912,8 +912,8 @@ export class GameHUD {
       <dialog id="harvestFeastDialog" closedby="any" aria-labelledby="harvestFeastDialogTitle">
         <div class="parchment-panel modal-inner feast-modal-inner">
           <div class="modal-header">
-            <h2 id="harvestFeastDialogTitle" class="modal-title"><img src="/sprites/prop_ribbon_unveil.png" alt="" class="feast-title-icon" />Đại Tiệc Mùa Gặt Hang Sóc • 30 Nấc Quà Weasley</h2>
-            <form method="dialog"><button type="submit" class="brass-btn" autofocus>Đóng</button></form>
+            <h2 id="harvestFeastDialogTitle" class="modal-title"><img src="/sprites/prop_ribbon_unveil.png" alt="" class="feast-title-icon" />Lễ Hội Mùa Gặt</h2>
+            <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
           </div>
           <div id="harvestFeastDialogContent"></div>
         </div>
@@ -923,8 +923,8 @@ export class GameHUD {
       <dialog id="leaderboardDialog" closedby="any" aria-labelledby="leaderboardDialogTitle">
         <div class="parchment-panel modal-inner lb-modal-inner">
           <div class="modal-header">
-            <h2 id="leaderboardDialogTitle" class="modal-title">🏆 Bảng Vàng Xếp Hạng 6 Môn Khảo Thí &amp; Thần Chú</h2>
-            <form method="dialog"><button type="submit" class="brass-btn" autofocus>✕ Đóng</button></form>
+            <h2 id="leaderboardDialogTitle" class="modal-title">🏆 Bảng Xếp Hạng</h2>
+            <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
           </div>
           <div id="leaderboardDialogContent"></div>
         </div>
@@ -1126,10 +1126,9 @@ export class GameHUD {
       <div class="ribbon-unveil-banner-inner">
         <img src="/sprites/prop_ribbon_unveil.png" alt="" class="ribbon-unveil-banner-art" />
         <div class="ribbon-unveil-banner-body">
-          <div class="ribbon-unveil-banner-kicker">🎀 LỄ CẮT BĂNG KHÁNH THÀNH • ${escapeHtml(info.speakerEmoji)} ${escapeHtml(info.speakerName)}</div>
-          <div class="ribbon-unveil-banner-title">${escapeHtml(info.buildingName)} chính thức đi vào hoạt động!</div>
-          <div class="ribbon-unveil-banner-quote">“${escapeHtml(info.quoteVi)}”</div>
-          <div class="ribbon-unveil-banner-rewards">+${info.bonusGalleons.toLocaleString('vi-VN')} 🪙 • +${info.bonusXp.toLocaleString('vi-VN')} ⭐ • +${info.feastPoints} 🍁 Điểm Tiệc Mùa</div>
+          <div class="ribbon-unveil-banner-kicker">🎀 ${escapeHtml(info.speakerEmoji)} ${escapeHtml(info.speakerName)}</div>
+          <div class="ribbon-unveil-banner-title">${escapeHtml(info.buildingName)}</div>
+          <div class="ribbon-unveil-banner-rewards">+${info.bonusGalleons.toLocaleString('vi-VN')} 🪙 • +${info.bonusXp.toLocaleString('vi-VN')} ⭐ • +${info.feastPoints} 🍁</div>
         </div>
       </div>
     `;
@@ -1169,23 +1168,23 @@ export class GameHUD {
       return `
         <article class="feast-tier-card ${stateClass} ${isGrand ? 'is-grand' : ''}">
           <div class="feast-tier-badge">
-            <span class="feast-tier-num">Nấc ${tierDef.tier}</span>
+            <span class="feast-tier-num">#${tierDef.tier}</span>
             <span class="feast-tier-pts">🍁 ${tierDef.pointsRequired.toLocaleString('vi-VN')}</span>
           </div>
           <div class="feast-tier-main">
             <div class="feast-tier-title">
               <span>${escapeHtml(tierDef.icon)} ${escapeHtml(tierDef.titleVi)}</span>
-              ${isGrand ? '<span class="feast-grand-pill">👑 Mốc Lớn</span>' : ''}
+              ${isGrand ? '<span class="feast-grand-pill">👑</span>' : ''}
             </div>
             <div class="feast-tier-reward">${escapeHtml(rewardLabel)}</div>
           </div>
           <div class="feast-tier-cta">
             ${
               isClaimed
-                ? '<span class="feast-claimed-pill">✓ Đã nhận</span>'
+                ? '<span class="feast-claimed-pill">✓</span>'
                 : canClaim
-                  ? `<button type="button" data-claim-feast-tier="${tierDef.tier}" class="brass-btn gold-cta">🎁 Nhận quà</button>`
-                  : `<span class="feast-need-pill">Còn ${(tierDef.pointsRequired - feast.points).toLocaleString('vi-VN')} 🍁</span>`
+                  ? `<button type="button" data-claim-feast-tier="${tierDef.tier}" class="brass-btn gold-cta">🎁 Nhận</button>`
+                  : `<span class="feast-need-pill">-${(tierDef.pointsRequired - feast.points).toLocaleString('vi-VN')} 🍁</span>`
             }
           </div>
         </article>
@@ -1196,14 +1195,14 @@ export class GameHUD {
       <div class="feast-hero-banner">
         <div class="feast-hero-top">
           <div>
-            <div class="feast-hero-kicker">🍲 BÀN TIỆC LỚN SÂN HANG SÓC • MÙA LỄ HỘI THỨ ${feast.seasonCycle}</div>
-            <div class="feast-hero-points">🍁 ${feast.points.toLocaleString('vi-VN')} / ${maxPts.toLocaleString('vi-VN')} Điểm Mùa Gặt</div>
+            <div class="feast-hero-kicker">🍲 MÙA ${feast.seasonCycle}</div>
+            <div class="feast-hero-points">🍁 ${feast.points.toLocaleString('vi-VN')} / ${maxPts.toLocaleString('vi-VN')}</div>
             <div class="feast-hero-sub">
               ${
                 allClaimed
-                  ? '🎉 Đã rước trọn 30/30 nấc quà! Khai tiệc Mùa mới để tiếp tục nhận báu vật Weasley!'
+                  ? '🎉 30/30!'
                   : nextUnclaimed
-                    ? `Mốc kế tiếp: Nấc ${nextUnclaimed.tier} (${escapeHtml(nextUnclaimed.titleVi)}) ở ${nextUnclaimed.pointsRequired.toLocaleString('vi-VN')} 🍁`
+                    ? ` Kế tiếp: #${nextUnclaimed.tier} (${nextUnclaimed.pointsRequired.toLocaleString('vi-VN')} 🍁)`
                     : ''
               }
             </div>
@@ -1211,24 +1210,24 @@ export class GameHUD {
           <div class="feast-hero-actions">
             ${
               claimableCount > 0
-                ? `<button id="btnFeastClaimAll" type="button" class="brass-btn gold-cta">🎁 Nhận Tất Cả (${claimableCount})</button>`
+                ? `<button id="btnFeastClaimAll" type="button" class="brass-btn gold-cta">🎁 Nhận (${claimableCount})</button>`
                 : ''
             }
             ${
               allClaimed
-                ? `<button id="btnFeastNextSeason" type="button" class="brass-btn gold-cta">✨ Khai Tiệc Mùa Thứ ${feast.seasonCycle + 1}</button>`
+                ? `<button id="btnFeastNextSeason" type="button" class="brass-btn gold-cta">✨ Mùa ${feast.seasonCycle + 1}</button>`
                 : ''
             }
           </div>
         </div>
         <progress class="ts-build-progress feast-progress-bar" max="100" value="${pct}" aria-label="Tiến độ Đại Tiệc Mùa Gặt"></progress>
         <div class="feast-earn-guide">
-          <span>🌾 Thu hoạch ruộng/đồng cỏ: <strong>+5~7 🍁</strong></span>
-          <span>🥧 Xưởng ra lò: <strong>+10 🍁</strong></span>
-          <span>🪄 Thần Chú Đa Ngữ: <strong>+12 🍁</strong></span>
-          <span>🦉 Đơn Hàng Cú: <strong>+22 🍁</strong></span>
-          <span>🎀 Cắt băng khánh thành: <strong>+25 🍁</strong></span>
-          <span>🧩 Thắng Khảo Thí: <strong>+28~40 🍁</strong></span>
+          <span>🌾 +5~7🍁</span>
+          <span>🥧 +10🍁</span>
+          <span>🪄 +12🍁</span>
+          <span>🦉 +22🍁</span>
+          <span>🎀 +25🍁</span>
+          <span>🧩 +28~40🍁</span>
         </div>
       </div>
 
@@ -1357,8 +1356,8 @@ export class GameHUD {
     ) as HTMLButtonElement | null;
     if (btnManageRoll) {
       btnManageRoll.textContent = this.hudRolledUp
-        ? '📜 Mở Rộng Lại Các Thanh HUD (Phím H)'
-        : '📜 Cuộn Gọn Các Thanh HUD (Phím H)';
+        ? '📜 Mở HUD'
+        : '📜 Ẩn HUD';
     }
     const roundOrb = this.root.querySelector('#btnHudRoundOrb') as HTMLButtonElement | null;
     if (roundOrb) {
@@ -1579,8 +1578,8 @@ export class GameHUD {
 
     pop.innerHTML = `
       <div class="hud-popover-title">
-        <span>🌦️ Khí Tượng &amp; Nhịp Sống</span>
-        <span class="weather-slot-meta">${isAuto ? 'Tự động 2 phút/đợt' : 'Đang khóa thời tiết'}</span>
+        <span>🌦️ Thời Tiết</span>
+        <span class="weather-slot-meta">${isAuto ? 'Tự động' : 'Khóa'}</span>
       </div>
       <div class="weather-current-banner">
         <div class="weather-current-head">${cur.icon} ${escapeHtml(cur.labelVi)}</div>
@@ -1588,10 +1587,10 @@ export class GameHUD {
       </div>
       <div class="speed-toggle-row" role="group" aria-label="Tốc độ nhịp sống công viên">
         <button type="button" data-sim-speed="1" data-active="${this.sim.simSpeed === 1}" aria-pressed="${this.sim.simSpeed === 1}" class="brass-btn">
-          🐢 1× Thư Thả
+          🐢 1×
         </button>
         <button type="button" data-sim-speed="2" data-active="${this.sim.simSpeed === 2}" aria-pressed="${this.sim.simSpeed === 2}" class="brass-btn">
-          ⚡ 2× Nhộn Nhịp
+          ⚡ 2×
         </button>
       </div>
       <div class="weather-forecast-list">
@@ -1599,7 +1598,7 @@ export class GameHUD {
           .map((s, idx) => {
             const timeTag =
               idx === 0
-                ? 'Hiện tại'
+                ? 'Nay'
                 : `+${formatDurationCountdownVi(Math.max(1, s.startsInSec))}`;
             return `
               <div class="weather-slot-row ${idx === 0 ? 'is-now' : ''}">
@@ -2117,7 +2116,7 @@ export class GameHUD {
       const body = this.root.querySelector('#questTrackerBody') as HTMLElement;
       body.classList.toggle('hidden', this.questCollapsed);
       const btn = e.currentTarget as HTMLButtonElement;
-      btn.textContent = this.questCollapsed ? 'Mở rộng' : 'Thu gọn';
+      btn.textContent = this.questCollapsed ? '+' : '–';
       btn.setAttribute('aria-expanded', String(!this.questCollapsed));
     });
 
@@ -2516,13 +2515,11 @@ export class GameHUD {
     const mins = Math.max(1, Math.round(report.awaySeconds / 60));
     const content = this.root.querySelector('#offlineDialogContent')!;
     content.innerHTML = `
-      <p style="font-size:14px;line-height:1.55;margin-bottom:12px;">
-        Trong <strong>${mins} phút</strong> bạn vắng mặt, các Gia Tinh và nhân viên đã tận tụy chăm nom công viên:
-      </p>
       <div class="quest-card-mini" style="font-size:13.5px;display:flex;flex-direction:column;gap:6px;">
-        <div>🪙 Vàng Galleon Gia Tinh gom sẵn: <strong>+${report.galleonsEarned} Galleon</strong></div>
-        <div>⭐ Kinh nghiệm tích lũy: <strong>+${report.xpEarned} XP</strong></div>
-        <div>🏗️ Công trình / Trứng hoàn tất: <strong>${report.buildingsFinished}</strong></div>
+        <div>⏱️ Vắng mặt: <strong>${mins} phút</strong></div>
+        <div>🪙 Vàng: <strong>+${report.galleonsEarned}G</strong></div>
+        <div>⭐ XP: <strong>+${report.xpEarned}</strong></div>
+        <div>🏗️ Hoàn tất: <strong>${report.buildingsFinished}</strong></div>
       </div>
     `;
     (this.root.querySelector('#offlineDialog') as HTMLDialogElement).showModal();
@@ -2550,10 +2547,10 @@ export class GameHUD {
         this.rideCamUid = null;
       } else {
         banner.classList.remove('hidden');
-        txt.textContent = `🎥 Ride Cam: ${it.name}${this.rideCamSpeedText ? ` • ${this.rideCamSpeedText}` : ''}`;
-        btnSec.textContent = '🧭 Xoay Góc 90°';
+        txt.textContent = `🎥 ${it.name}${this.rideCamSpeedText ? ` • ${this.rideCamSpeedText}` : ''}`;
+        btnSec.textContent = '🧭 90°';
         btnSec.classList.remove('hidden');
-        btnExit.textContent = 'Rời Tàu (Esc)';
+        btnExit.textContent = '✕';
         return;
       }
     }
@@ -2561,10 +2558,10 @@ export class GameHUD {
     if (this.pincerActive) {
       banner.classList.remove('hidden');
       txt.textContent = this.pincerPicked
-        ? `🤏 Đang điều phối: ${this.pincerPicked.label} — Nhấp ô bất kỳ trên bản đồ để thả xuống!`
-        : '🤏 Điều phối (Phím G): Nhấp ô bất kỳ trên bản đồ để cử nhân sự tới xử lý!';
+        ? `🤏 ${this.pincerPicked.label}`
+        : '🤏 Gắp nhân sự';
       btnSec.classList.add('hidden');
-      btnExit.textContent = 'Đóng Kẹp (Esc)';
+      btnExit.textContent = '✕';
       return;
     }
 
@@ -2573,23 +2570,23 @@ export class GameHUD {
       if (this.movingBuildingUid) {
         const mb = this.sim.state.buildings.find((x) => x.uid === this.movingBuildingUid);
         const mIt = mb ? getCatalogItem(mb.itemId) : undefined;
-        txt.textContent = `✋ Đang dời "${mIt?.name ?? 'Công trình'}" — Nhấp ô trống mới trên bản đồ để đặt xuống!`;
-        btnSec.textContent = `🔄 Xoay (${this.rotation * 90}°)`;
+        txt.textContent = `✋ ${mIt?.name ?? 'Dời chỗ'}`;
+        btnSec.textContent = `🔄 ${this.rotation * 90}°`;
         btnSec.classList.remove('hidden');
-        btnExit.textContent = 'Huỷ Dời (Esc)';
+        btnExit.textContent = '✕';
       } else {
-        txt.textContent = '✋ Chế độ Di Dời (0G) — Nhấp chọn công trình trên bản đồ để nhấc lên!';
+        txt.textContent = '✋ Chọn công trình để dời';
         btnSec.classList.add('hidden');
-        btnExit.textContent = 'Thoát Dời (Esc)';
+        btnExit.textContent = '✕';
       }
       return;
     }
 
     if (this.bulldozerActive) {
       banner.classList.remove('hidden');
-      txt.textContent = '🧹 Chế độ Ủi Xóa — Nhấp vào công trình hoặc đường đi trên bản đồ để tháo dỡ!';
+      txt.textContent = '🧹 Phá dỡ';
       btnSec.classList.add('hidden');
-      btnExit.textContent = 'Thoát Xóa (Esc)';
+      btnExit.textContent = '✕';
       return;
     }
 
@@ -2601,33 +2598,24 @@ export class GameHUD {
         !it.isFarmlandPlot &&
         !it.connectableGroup &&
         !it.isZooFence;
-      const canDrag =
-        it.category === 'path' ||
-        it.category === 'terrain' ||
-        Boolean(it.isCoasterTrackPiece) ||
-        Boolean(it.isZooFence) ||
-        Boolean(it.isFarmlandPlot) ||
-        Boolean(it.connectableGroup);
       const effStars = this.sim.getEffectiveItemStarCost(it);
       const costTxt =
         effStars > 0
-          ? `🌟 ${effStars} Sao`
+          ? `🌟 ${effStars}`
           : it.cost === 0
-            ? 'Miễn phí'
+            ? '0G'
             : `${it.cost.toLocaleString('vi-VN')}G`;
       banner.classList.remove('hidden');
-      txt.textContent = `🏗️ Đang đặt: ${it.name} (${costTxt}) — ${
-        canDrag ? 'Nhấp hoặc kéo trên bản đồ để đặt!' : 'Nhấp ô trống trên bản đồ để xây!'
-      }`;
+      txt.textContent = `🏗️ ${it.name} • ${costTxt}`;
       if (canRotate) {
-        btnSec.textContent = `🔄 Xoay (${this.rotation * 90}°)`;
+        btnSec.textContent = `🔄 ${this.rotation * 90}°`;
         btnSec.classList.remove('hidden');
       } else {
         btnSec.classList.add('hidden');
       }
-      btnSwap.textContent = '📦 Đổi Món';
+      btnSwap.textContent = '📦 Đổi';
       btnSwap.classList.remove('hidden');
-      btnExit.textContent = 'Xong (Esc)';
+      btnExit.textContent = '✕';
       return;
     }
 
@@ -2635,31 +2623,28 @@ export class GameHUD {
       const c = FARM_CROPS[this.activeSeedCropId];
       const seedLeft = this.sim.getSeedCount(this.activeSeedCropId);
       banner.classList.remove('hidden');
-      txt.textContent =
-        seedLeft > 0
-          ? `🌱 Đang cầm hạt ${c.emoji} ${c.name} (Túi còn ${seedLeft} hạt) — Nhấp hoặc kéo lướt qua Thửa Đất trống để gieo!`
-          : `🌱 Hết hạt ${c.emoji} ${c.name} — Nhấp vào Thửa Đất trống để Mua Vàng (${c.seedCost.toLocaleString('vi-VN')}G) hoặc niệm Thần Chú Đa Ngữ (0G)!`;
-      btnSec.textContent = '🌱 Đổi / Nạp Hạt';
+      txt.textContent = `🌱 ${c.emoji} ${c.name} (${seedLeft})`;
+      btnSec.textContent = '🌱 Đổi';
       btnSec.classList.remove('hidden');
-      btnExit.textContent = 'Cất Hạt (Esc)';
+      btnExit.textContent = '✕';
       return;
     }
 
     if (this.activePastureAnimalId && !this.pastureTrayOpen) {
       const a = PASTURE_ANIMALS[this.activePastureAnimalId];
       banner.classList.remove('hidden');
-      txt.textContent = `🐾 Đang dẫn ${a.emoji} ${a.name} (${a.cost.toLocaleString('vi-VN')}G/ô) — Nhấp hoặc kéo lướt qua Đồng Cỏ Chăn Thả trống để thả thú!`;
-      btnSec.textContent = '🐾 Đổi Thú';
+      txt.textContent = `🐾 ${a.emoji} ${a.name} (${a.cost.toLocaleString('vi-VN')}G)`;
+      btnSec.textContent = '🐾 Đổi';
       btnSec.classList.remove('hidden');
-      btnExit.textContent = 'Cất Chuông (Esc)';
+      btnExit.textContent = '✕';
       return;
     }
 
     if (this.sim.state.settings.cutawayMode) {
       banner.classList.remove('hidden');
-      txt.textContent = '👁️ Đang bật Nhìn Xuyên Nhà Cao — giúp dễ quan sát lối đi & ô đất khuất phía sau!';
+      txt.textContent = '👁️ Nhìn xuyên';
       btnSec.classList.add('hidden');
-      btnExit.textContent = 'Tắt Nhìn Xuyên (V)';
+      btnExit.textContent = '✕';
       return;
     }
 
@@ -2772,9 +2757,9 @@ export class GameHUD {
     });
     const filterPillsHtml = (
       [
-        { id: 'all', label: `🌱 Tất cả (${allCrops.length})` },
-        { id: 'flowers', label: `🌸 Hạt Giống Hoa (${flowerCount})` },
-        { id: 'crops', label: `🌾 Nông Sản (${harvestCropCount})` },
+        { id: 'all', label: `🌱 (${allCrops.length})` },
+        { id: 'flowers', label: `🌸 (${flowerCount})` },
+        { id: 'crops', label: `🌾 (${harvestCropCount})` },
       ] as const
     )
       .map(
@@ -2812,18 +2797,18 @@ export class GameHUD {
                   locked
                     ? `🔒 Cấp ${crop.unlockLevel}`
                     : seedCount > 0
-                      ? `🌱 Hạt: ${seedCount}`
-                      : `🎓 0 hạt • Nhận`
+                      ? `🌱 ${seedCount}`
+                      : `🪄 0G`
                 }
               </span>
               <span class="seed-card-meta">
                 ${locked ? `⏱️ ${growLabel}` : `⏱️ ${growLabel} • 🪙${crop.seedCost.toLocaleString('vi-VN')}G`}
               </span>
-              <span class="seed-card-stock">Kho gặt: ${stock}</span>
+              <span class="seed-card-stock">📦 ${stock}</span>
             </button>
             ${
               !locked
-                ? `<button type="button" class="seed-card-add-btn" data-acquire-seed="${crop.id}" title="Mua lẻ hạt ${escapeHtml(crop.name)} bằng Vàng (${crop.seedCost.toLocaleString('vi-VN')}G) hoặc niệm Thần Chú Đa Ngữ (0G)">+ Nạp</button>`
+                ? `<button type="button" class="seed-card-add-btn" data-acquire-seed="${crop.id}" aria-label="Nạp hạt ${escapeHtml(crop.name)}" title="Mua hạt ${escapeHtml(crop.name)} (${crop.seedCost.toLocaleString('vi-VN')}G) hoặc Đố 0G">+</button>`
                 : ''
             }
           </div>
@@ -2837,27 +2822,27 @@ export class GameHUD {
           <div class="seed-tray-title">
             ${
               activeCrop
-                ? `🌱 Đang chọn: <strong>${escapeHtml(activeCrop.name)}</strong> (Túi có <strong>${this.sim.getSeedCount(activeCrop.id)} hạt</strong>) — Nhấp hạt để gieo hoặc bấm <strong>+ Nạp</strong>!`
-                : '🌱 Túi Hạt Giống & Hoa Hang Sóc • 22 Loại Hạt & Hoa Cảnh (Mua Vàng hoặc Niệm Thần Chú 0G)!'
+                ? `🌱 <strong>${escapeHtml(activeCrop.name)}</strong> (${this.sim.getSeedCount(activeCrop.id)})`
+                : '🌱 Hạt Giống & Hoa'
             }
           </div>
           <div class="seed-tray-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:3px;">
-            <span>Thửa Đất trống: <strong>${emptyPlotCount}/${totalPlotCount}</strong> • Chín thu hoạch <strong>+${activeCrop?.yieldQty ?? 2}</strong> vào Kho</span>
+            <span>Ô trống: <strong>${emptyPlotCount}/${totalPlotCount}</strong></span>
             <div class="seed-filter-bar" role="group" aria-label="Bộ lọc nhóm hạt giống">${filterPillsHtml}</div>
           </div>
         </div>
         <div class="seed-tray-actions">
-          <button id="btnSeedTrayOpenQuiz" type="button" class="brass-btn sq-tray-quiz-cta" title="Mua Hạt Giống Bằng Vàng hoặc Niệm Thần Chú Đa Ngữ Anh, Hàn, Trung, Tây Ban Nha, Nhật (0G)">
-            🪄 Mua Vàng / Thần Chú Hạt
+          <button id="btnSeedTrayOpenQuiz" type="button" class="brass-btn sq-tray-quiz-cta" title="Mua Hạt hoặc Đố Ngoại Ngữ 0G">
+            🪄 Hạt 0G
           </button>
-          <button id="btnSeedTrayBuyPlot" type="button" class="brass-btn gold-cta" title="Đặt thêm Thửa Đất Canh Tác mới (30G)">
-            + Thửa Đất (30G)
+          <button id="btnSeedTrayBuyPlot" type="button" class="brass-btn gold-cta" title="Đặt thêm Thửa Đất (30G)">
+            + Đất 30G
           </button>
-          <button id="btnSeedTrayBuyFlowerGarden" type="button" class="brass-btn" title="Đặt Ô Vườn Hoa Cảnh Hang Sóc ghép liền rào (55G)">
-            🌸 + Vườn Hoa (55G)
+          <button id="btnSeedTrayBuyFlowerGarden" type="button" class="brass-btn" title="Đặt Ô Vườn Hoa (55G)">
+            🌸 + Vườn 55G
           </button>
-          <button id="btnSeedTrayOpenBarn" type="button" class="brass-btn" title="Mở Kho Nông Sản Đỏ Hang Sóc">
-            📦 Kho Nông Sản
+          <button id="btnSeedTrayOpenBarn" type="button" class="brass-btn" title="Mở Kho">
+            📦 Kho
           </button>
           <button id="btnCloseSeedTray" type="button" class="brass-btn" aria-label="Đóng túi hạt giống">✕</button>
         </div>
@@ -3036,14 +3021,14 @@ export class GameHUD {
                 ${
                   locked
                     ? `🔒 Cấp ${animal.unlockLevel}`
-                    : `🪙 ${animal.cost.toLocaleString('vi-VN')}G/ô`
+                    : `🪙 ${animal.cost.toLocaleString('vi-VN')}G`
                 }
               </span>
               <span class="seed-card-meta">
                 ⏱️${animal.cycleSec}s • +${animal.sellValue}G
               </span>
               <span class="seed-card-stock">
-                ${prodMeta ? `+${animal.yieldQty} ${escapeHtml(prodMeta.name)}` : 'Sản vật quý'}
+                ${prodMeta ? `+${animal.yieldQty} ${escapeHtml(prodMeta.name)}` : ''}
               </span>
             </button>
           </div>
@@ -3057,20 +3042,20 @@ export class GameHUD {
           <div class="seed-tray-title">
             ${
               activeAnimal
-                ? `🐾 Đang dẫn: <strong>${escapeHtml(activeAnimal.name)}</strong> (${activeAnimal.cost.toLocaleString('vi-VN')}G/ô) — Nhấp hoặc kéo lướt qua Đồng Cỏ trống để thả!`
-                : '🐾 Đồng Cỏ Chăn Thả Hang Sóc • Đặt các ô cạnh nhau để tự động mở rào thành đồng cỏ rộng!'
+                ? `🐾 <strong>${escapeHtml(activeAnimal.name)}</strong> (${activeAnimal.cost.toLocaleString('vi-VN')}G)`
+                : '🐾 Chăn Thả'
             }
           </div>
           <div class="seed-tray-sub">
-            Đồng Cỏ trống: <strong>${emptyPastureCount}/${totalPastureCount}</strong> • Cho ăn Thảo Mộc tăng tốc <strong>+35%</strong> • Thu hoạch xong thú tự chăn thả chu kỳ mới!
+            Ô trống: <strong>${emptyPastureCount}/${totalPastureCount}</strong>
           </div>
         </div>
         <div class="seed-tray-actions">
-          <button id="btnPastureTrayBuyPlot" type="button" class="brass-btn gold-cta" title="Đặt thêm Đồng Cỏ Chăn Thả mới ghép liền rào (45G)">
-            🐾 + Đồng Cỏ (45G)
+          <button id="btnPastureTrayBuyPlot" type="button" class="brass-btn gold-cta" title="Đặt thêm Đồng Cỏ (45G)">
+            🐾 + Đồng Cỏ 45G
           </button>
-          <button id="btnPastureTrayOpenBarn" type="button" class="brass-btn" title="Mở Kho Nông Sản Đỏ Hang Sóc">
-            📦 Kho Nông Sản
+          <button id="btnPastureTrayOpenBarn" type="button" class="brass-btn" title="Mở Kho">
+            📦 Kho
           </button>
           <button id="btnClosePastureTray" type="button" class="brass-btn" aria-label="Đóng khay chọn thú chăn thả">✕</button>
         </div>
@@ -3144,7 +3129,7 @@ export class GameHUD {
       return;
     }
     bar.classList.remove('hidden');
-    lbl.textContent = `📍 ${this.pendingTouchTile.label} [Ô ${this.pendingTouchTile.gx},${this.pendingTouchTile.gy} • ${this.rotation * 90}°]`;
+    lbl.textContent = `📍 ${this.pendingTouchTile.label}`;
   }
 
   public refreshAll(): void {
@@ -3208,7 +3193,7 @@ export class GameHUD {
     const lblClock = this.root.querySelector('#lblClock') as HTMLElement | null;
     if (lblClock) {
       const speedBadge = this.sim.simSpeed === 2 ? ' <span class="speed-mini-tag">2×</span>' : '';
-      lblClock.innerHTML = `${weather.icon} <span>${periodNames[period]} • ${hh}:${mm}</span>${speedBadge}`;
+      lblClock.innerHTML = `${weather.icon} <span>${hh}:${mm}</span>${speedBadge}`;
     }
     if (this.weatherPopoverOpen) {
       this.renderWeatherPopover();
@@ -3219,13 +3204,13 @@ export class GameHUD {
     if (lblFest) {
       if (fest === 'halloween') {
         lblFest.classList.remove('hidden');
-        lblFest.textContent = '🎃 Halloween (+35% XP)';
+        lblFest.textContent = '🎃 +35% XP';
       } else if (fest === 'christmas') {
         lblFest.classList.remove('hidden');
-        lblFest.textContent = '🎄 Giáng Sinh (+25% Vàng)';
+        lblFest.textContent = '🎄 +25% 🪙';
       } else if (fest === 'quidditch_cup') {
         lblFest.classList.remove('hidden');
-        lblFest.textContent = '🏆 Cúp Quidditch (+Điểm Nhà)';
+        lblFest.textContent = '🏆 +Cúp';
       } else {
         lblFest.classList.add('hidden');
       }
@@ -3305,13 +3290,13 @@ export class GameHUD {
     }
     const lblXpFrac = this.root.querySelector('#lblXpFraction') as HTMLElement | null;
     if (lblXpFrac) {
-      lblXpFrac.textContent = `🎁 ${chestXp}/${FARM_HARVEST_CHEST_XP} XP`;
+      lblXpFrac.textContent = `🎁 ${chestXp}/${FARM_HARVEST_CHEST_XP}`;
     }
     const barn = this.sim.ensureFarmBarn();
     const barnUsed = this.sim.getBarnTotalUsed();
     const lblBarn = this.root.querySelector('#lblStorageBarn') as HTMLElement | null;
     if (lblBarn) {
-      lblBarn.textContent = `Kho ${barnUsed}/${barn.capacity}`;
+      lblBarn.textContent = `${barnUsed}/${barn.capacity}`;
     }
 
     this.animateGalleonsTo(st.galleons);
@@ -3329,7 +3314,7 @@ export class GameHUD {
       if (st.level >= MAX_LEVEL || st.sandboxMode || this.sim.isHeadmasterPreview || !reqTrial) {
         lblHubTrial.textContent = `♟️ ${towerProg.cleared}/${towerProg.total}`;
       } else {
-        lblHubTrial.textContent = `🔥 ${reqTrial.icon} ${reqTrial.shortVi} (${winsProg.current}/${winsProg.required})`;
+        lblHubTrial.textContent = `🔥 ${reqTrial.icon} ${winsProg.current}/${winsProg.required}`;
       }
     }
     this.root.querySelector('#btnHudMinigameHub')?.classList.remove('trial-urgent');
@@ -3340,7 +3325,7 @@ export class GameHUD {
       lblCornerStage.textContent =
         st.level >= MAX_LEVEL
           ? `▶️ ${towerProg.cleared}/${towerProg.total}`
-          : `▶️ Cấp ${st.level + 1} (${winsProg.current}/${winsProg.required})`;
+          : `▶️ Cấp ${st.level + 1}`;
     }
     const badgeCornerBonus = this.root.querySelector('#badgeCornerPlayBonus') as HTMLElement | null;
     if (badgeCornerBonus) {
@@ -3498,20 +3483,13 @@ export class GameHUD {
     let html = '';
     if (reqTrial && !st.sandboxMode && !this.sim.isHeadmasterPreview) {
       const wp = this.sim.getWinsProgressForCurrentLevel();
-      const tp = this.sim.getTotalTowerClearedStages();
       const dInfo = this.sim.getDisciplineStageInfo(reqTrial.kind);
       html += `
         <div class="quest-card-mini trial-quest-card">
-          <div style="font-size:12px;font-weight:800;">
-            🔥 Đề Cử Cấp ${st.level + 1} (${wp.current}/${wp.required} màn) • Tháp ${tp.cleared}/${tp.total}
-          </div>
-          <div style="font-size:12px;margin-top:2px;">
-            ${reqTrial.icon} <strong>${escapeHtml(reqTrial.shortVi)}</strong> (Màn ${dInfo.currentStage}/${MAX_MINIGAME_STAGE}) — Thắng tích lũy Cấp &amp; nhận thưởng Đề Cử!
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-top:6px;font-size:12px;font-weight:700;">
-            <span>Thưởng: +🌟 Mốc + 1 ⏳ +35%🪙</span>
-            <button type="button" data-open-trial="${reqTrial.kind}" class="brass-btn gold-cta" style="padding:4px 9px;font-size:11.5px;">
-              ▶️ Chơi ${escapeHtml(reqTrial.shortVi)}
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;font-size:12px;font-weight:800;">
+            <span>🔥 ${reqTrial.icon} ${escapeHtml(reqTrial.shortVi)} (${dInfo.currentStage}/${MAX_MINIGAME_STAGE}) • ${wp.current}/${wp.required}</span>
+            <button type="button" data-open-trial="${reqTrial.kind}" class="brass-btn gold-cta" style="padding:3px 8px;font-size:11.5px;">
+              ▶️ Chơi
             </button>
           </div>
         </div>
@@ -3520,19 +3498,15 @@ export class GameHUD {
     if (story) {
       const pct = Math.min(100, Math.round((story.progress / Math.max(1, story.targetAmount)) * 100));
       const autoAct = this.sim.getStoryAutoActionPreview();
-      const chNum = story.chapter ?? 1;
-      const chTitle = STORY_CHAPTER_TITLES_VI[chNum] ?? 'Hang Sóc';
       html += `
         <div class="quest-card-mini" style="border-color:var(--brand-color);background:var(--quest-accent-bg);">
-          <div style="font-size:11px;font-weight:800;color:var(--brand-strong);margin-bottom:2px;">📖 Chương ${chNum}: ${escapeHtml(chTitle)} (${st.storyQuestIndex + 1}/${STORY_QUESTS.length})</div>
           <div style="font-size:12px;font-weight:800;color:var(--ink);">${escapeHtml(story.giverEmoji)} ${escapeHtml(story.title)}</div>
-          <div style="font-size:12px;opacity:0.88;margin-top:2px;">${escapeHtml(story.dialogue)}</div>
           <div class="quest-bar"><div class="quest-bar-fill" style="width:${pct}%"></div></div>
           <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;flex-wrap:wrap;font-size:12px;font-weight:700;">
-            <span>Tiến độ: ${Math.min(story.progress, story.targetAmount)}/${story.targetAmount}</span>
+            <span>${Math.min(story.progress, story.targetAmount)}/${story.targetAmount}</span>
             ${
               story.completed
-                ? `<button type="button" data-claim="${escapeHtml(story.id)}" class="brass-btn gold-cta" style="padding:4px 9px;font-size:12px;">🎁 Nhận +${story.rewardGalleons}G</button>`
+                ? `<button type="button" data-claim="${escapeHtml(story.id)}" class="brass-btn gold-cta" style="padding:3px 8px;font-size:12px;">🎁 +${story.rewardGalleons}G</button>`
                 : `<button type="button" data-star-story="1" class="brass-btn gold-cta" style="padding:3px 8px;font-size:11.5px;" title="${escapeHtml(autoAct.longLabel)}">${escapeHtml(autoAct.shortLabel)}</button>`
             }
           </div>
@@ -3550,7 +3524,7 @@ export class GameHUD {
             <span>${Math.min(q.progress, q.targetAmount)}/${q.targetAmount}</span>
             ${
               q.completed
-                ? `<button type="button" data-claim="${escapeHtml(q.id)}" class="brass-btn gold-cta" style="padding:3px 8px;font-size:12px;">🎁 Nhận thưởng</button>`
+                ? `<button type="button" data-claim="${escapeHtml(q.id)}" class="brass-btn gold-cta" style="padding:3px 8px;font-size:12px;">🎁 Nhận</button>`
                 : `<span>+${q.rewardGalleons}🪙 +${q.rewardXp}⭐</span>`
             }
           </div>
@@ -3690,34 +3664,15 @@ export class GameHUD {
           : `<div style="height:64px;display:flex;align-items:center;justify-content:center;font-size:28px;">${fallbackEmoji}</div>`;
 
         const starCost = this.sim.getEffectiveItemStarCost(item);
-        const hasEnoughStars = sandbox || starCost === 0 || (this.sim.state.match3?.stars ?? 0) >= starCost;
         const buildTag =
           item.buildDurationSec > 0
             ? `🔨 ${formatDurationCompactVi(item.buildDurationSec)}`
-            : '⚡ Đặt ngay';
+            : '⚡';
         const subInfo = locked
-          ? `🔒 Mở ở Cấp Giải Đố ${item.unlockLevel}`
+          ? `🔒 Cấp ${item.unlockLevel}`
           : starCost > 0
-            ? item.baseIncome > 0
-              ? `🌟 ${starCost} Sao • ${buildTag} (+${item.baseIncome}G/${item.cycleSec}s)`
-              : `🌟 ${starCost} Sao • ${buildTag}`
-            : item.baseIncome > 0
-              ? `🪙 ${item.cost.toLocaleString('vi-VN')}G • ${
-                  item.buildDurationSec > 0 ? `${buildTag} • ` : ''
-                }+${item.baseIncome}G/${item.cycleSec}s`
-              : `🪙 ${item.cost.toLocaleString('vi-VN')}G • +${item.xpPerCollect}⭐`;
-        const readyStarPill =
-          !locked && starCost > 0
-            ? `<div style="font-size:11px;color:${hasEnoughStars ? '#15803d' : '#b45309'};font-weight:800;margin-top:2px;">${
-                hasEnoughStars
-                  ? item.buildDurationSec > 0
-                    ? `✓ Đủ Sao khởi công (${formatDurationCompactVi(item.buildDurationSec)})`
-                    : '✓ Đủ Sao đặt ngay!'
-                  : `▶️ Chơi Giải Đố gom thêm 🌟 Sao`
-              }</div>`
-            : !locked && item.connectableGroup && !item.isFarmlandPlot
-              ? `<div style="font-size:11px;color:#15803d;font-weight:800;margin-top:2px;">✓ Ghép nối liền rào bằng Vàng!</div>`
-              : '';
+            ? `🌟 ${starCost} • ${buildTag}`
+            : `🪙 ${item.cost.toLocaleString('vi-VN')}G`;
 
         return `
           <button
@@ -3731,7 +3686,6 @@ export class GameHUD {
             ${imgTag}
             <div style="font-size:12px;font-weight:800;line-height:1.25;">${escapeHtml(item.name)}</div>
             <div style="font-size:12px;color:#78350f;font-weight:700;">${subInfo}</div>
-            ${readyStarPill}
           </button>
         `;
       })
@@ -3843,10 +3797,9 @@ export class GameHUD {
         const maxed = count >= MAX_STAFF_PER_ROLE;
         const cost = r.baseCost * (1 + count);
         return `
-          <div class="catalog-card catalog-card-static" style="flex:0 0 185px;">
-            <div style="font-size:22px;">${r.icon} <span style="font-size:12px;font-weight:800;">Đang có: ${count}/${MAX_STAFF_PER_ROLE}</span></div>
+          <div class="catalog-card catalog-card-static" style="flex:0 0 156px;">
+            <div style="font-size:22px;">${r.icon} <span style="font-size:12px;font-weight:800;">${count}/${MAX_STAFF_PER_ROLE}</span></div>
             <div style="font-size:12.5px;font-weight:800;">${r.name}</div>
-            <div style="font-size:12px;opacity:0.85;line-height:1.3;">${r.desc}</div>
             <button
               type="button"
               data-hire="${r.key}"
@@ -3854,7 +3807,7 @@ export class GameHUD {
               ${maxed ? 'disabled' : ''}
               style="width:100%;padding:5px 8px;font-size:12px;"
             >
-              ${maxed ? `Đã tối đa (${MAX_STAFF_PER_ROLE}/${MAX_STAFF_PER_ROLE})` : `Tuyển thêm (🪙 ${cost})`}
+              ${maxed ? `✓ ${MAX_STAFF_PER_ROLE}/${MAX_STAFF_PER_ROLE}` : `+ 🪙 ${cost}`}
             </button>
           </div>
         `;
@@ -3865,17 +3818,13 @@ export class GameHUD {
       .map((s) => {
         const pZone = this.sim.state.staffPatrolZones?.[s.id] ?? s.patrolZoneId ?? 'all';
         return `
-          <div class="catalog-card catalog-card-static" style="flex:0 0 205px;background:rgba(254,243,199,0.92);">
+          <div class="catalog-card catalog-card-static" style="flex:0 0 170px;background:rgba(254,243,199,0.92);">
             <div style="font-size:12px;font-weight:800;color:#7c2d12;">🧙 ${escapeHtml(s.name)}</div>
-            <div style="font-size:12px;opacity:0.86;line-height:1.25;">"${escapeHtml(s.actionText)}"</div>
-            <label style="font-size:12px;font-weight:700;">
-              Khu tuần tra:
-              <select data-patrol-staff="${escapeHtml(s.id)}" style="width:100%;margin-top:2px;padding:3px 5px;border-radius:6px;border:1px solid #9a5b1e;font-size:12px;background:#fffdf7;color:#3a2615;">
-                ${zoneOptions(pZone)}
-              </select>
-            </label>
+            <select data-patrol-staff="${escapeHtml(s.id)}" aria-label="Khu tuần tra" style="width:100%;margin-top:2px;padding:3px 5px;border-radius:6px;border:1px solid #9a5b1e;font-size:12px;background:#fffdf7;color:#3a2615;">
+              ${zoneOptions(pZone)}
+            </select>
             <button type="button" data-pick-staff="${escapeHtml(s.id)}" class="brass-btn" style="width:100%;padding:4px 8px;font-size:12px;">
-              🤏 Gắp thả tới điểm nóng
+              🤏 Gắp
             </button>
           </div>
         `;
@@ -3977,10 +3926,10 @@ export class GameHUD {
       const canRideCam = Boolean(item.isCustomCoasterStation) && !isBuilding;
 
       const stageNames: Record<string, string> = {
-        egg: '🥚 Trứng Phép Thuật',
-        baby: '🐣 Thú Non Dễ Thương',
-        adult: '🦄 Trưởng Thành Khỏe Mạnh',
-        legendary: '🌟 Huyền Thoại Ánh Sao',
+        egg: '🥚 Trứng',
+        baby: '🐣 Non',
+        adult: '🦄 Trưởng thành',
+        legendary: '🌟 Huyền thoại',
       };
 
       const bio = item.isCreatureHabitat ? this.sim.biomeCache.get(b.uid) : undefined;
@@ -4006,9 +3955,9 @@ export class GameHUD {
                 });
                 const filterPills = (
                   [
-                    { id: 'all', label: `🌱 Tất cả (${allCropList.length})` },
-                    { id: 'flowers', label: `🌸 Hoa (${flowerTotal})` },
-                    { id: 'crops', label: `🌾 Nông Sản (${cropTotal})` },
+                    { id: 'all', label: `🌱 (${allCropList.length})` },
+                    { id: 'flowers', label: `🌸 (${flowerTotal})` },
+                    { id: 'crops', label: `🌾 (${cropTotal})` },
                   ] as const
                 )
                   .map(
@@ -4041,16 +3990,16 @@ export class GameHUD {
                         <span class="seed-card-seed-badge ${seedCount > 0 ? 'has-seed' : 'no-seed'}">
                           ${
                             lockedCrop
-                              ? `🔒 Cấp ${crop.unlockLevel}`
+                              ? `🔒 Lv.${crop.unlockLevel}`
                               : seedCount > 0
-                                ? `🌱 Hạt: ${seedCount}`
-                                : `🎓 0 hạt • Nhận`
+                                ? `🌱 ×${seedCount}`
+                                : `🎓 +Hạt`
                           }
                         </span>
                         <span class="seed-card-meta">
-                          ${lockedCrop ? `⏱️ ${growLabel}` : `⏱️ ${growLabel} • 🪙${crop.seedCost.toLocaleString('vi-VN')}G`}
+                          ${lockedCrop ? `⏱️ ${growLabel}` : `⏱️ ${growLabel} • 🪙${crop.seedCost}G`}
                         </span>
-                        <span class="seed-card-stock">Kho gặt: ${stock}</span>
+                        <span class="seed-card-stock">🧺 ${stock}</span>
                       </button>
                     `;
                   })
@@ -4058,9 +4007,9 @@ export class GameHUD {
                 return `
                   <div class="ws-inspector-board">
                     <div class="ws-board-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-                      <span>🌱 Chọn Hạt Giống & Hoa Gieo Xuống Thửa Đất</span>
+                      <span>🌱 Chọn Hạt</span>
                       <button id="btnInspOpenSeedQuiz" type="button" class="brass-btn sq-tray-quiz-cta" style="padding:4px 9px;font-size:11.5px;">
-                        🪄 Mua Vàng / Thần Chú Hạt
+                        🪄 +Hạt
                       </button>
                     </div>
                     <div class="seed-filter-bar" role="group" aria-label="Bộ lọc hạt giống" style="margin-bottom:6px;">${filterPills}</div>
@@ -4087,7 +4036,7 @@ export class GameHUD {
                     <div style="flex:1;">
                       <div style="font-size:13.5px;font-weight:900;">${escapeHtml(cropDef.name)}</div>
                       <div style="font-size:12px;font-weight:700;opacity:0.86;">
-                        ${isRipe ? '🌾 Chín vàng trĩu hạt — sẵn sàng gặt vào Kho!' : `🌱 Đang vươn mầm (${formatDurationCountdownVi(cropLeftSec)})`}
+                        ${isRipe ? '🌾 Chín!' : `⏱️ ${formatDurationCountdownVi(cropLeftSec)}`}
                       </div>
                     </div>
                   </div>
@@ -4099,17 +4048,17 @@ export class GameHUD {
                       ? `
                         <button id="btnInspHarvestCrop" type="button" class="owl-green-send-btn" style="width:100%;padding:8px 12px;font-size:13px;">
                           <img src="/sprites/ui_icon_golden_sickle.png" alt="" style="width:20px;height:20px;object-fit:contain;vertical-align:-4px;margin-right:4px;" />
-                          Gặt ${escapeHtml(cropDef.name)} Vào Kho (+${cropDef.yieldQty})!
+                          Gặt (+${cropDef.yieldQty})
                         </button>
                       `
                       : !b.cropWateredBoost
                         ? `
                           <button id="btnInspWaterCrop" type="button" class="brass-btn gold-cta" style="width:100%;">
                             <img src="/sprites/ui_icon_watering_can.png" alt="" style="width:18px;height:18px;object-fit:contain;vertical-align:-3px;margin-right:4px;" />
-                            Tưới Nước Mát Aguamenti (-30% giờ chín)
+                            💧 Tưới (-30%)
                           </button>
                         `
-                        : `<div style="font-size:11.5px;font-weight:800;text-align:center;opacity:0.88;">💧 Đã tưới đẫm nước suối mát — cây đang lớn vù vù!</div>`
+                        : `<div style="font-size:11.5px;font-weight:800;text-align:center;opacity:0.88;">💧 Đã tưới</div>`
                   }
                 </div>
               `;
@@ -4138,7 +4087,7 @@ export class GameHUD {
                           .join('')}
                       </div>
                       <button id="btnInspCollectGoods" type="button" class="owl-green-send-btn ws-collect-btn">
-                        🧺 Thu Vào Kho (${readyGoods.length})
+                        🧺 Thu (${readyGoods.length})
                       </button>
                     </div>
                   `
@@ -4158,7 +4107,7 @@ export class GameHUD {
                       const im = getFarmItemMeta(inp.itemId);
                       const have = this.sim.getFarmItemCount(inp.itemId);
                       const ok = this.sim.state.sandboxMode || have >= inp.qty;
-                      return `<span class="ws-ing-chip ${ok ? 'ok' : 'lack'}">${inp.qty} ${escapeHtml(im.name)} (${this.sim.state.sandboxMode ? '∞' : have}/${inp.qty})</span>`;
+                      return `<span class="ws-ing-chip ${ok ? 'ok' : 'lack'}">${escapeHtml(im.name)} ${this.sim.state.sandboxMode ? '∞' : have}/${inp.qty}</span>`;
                     })
                     .join(' ');
                   return `
@@ -4174,7 +4123,7 @@ export class GameHUD {
                         ${canCraft ? '<span class="ws-check-dot">✓</span>' : ''}
                       </div>
                       <div class="ws-recipe-ings">
-                        ${lockedRec ? `🔒 Cấp ${rec.unlockLevel}` : reqFormula}
+                        ${lockedRec ? `🔒 Lv.${rec.unlockLevel}` : reqFormula}
                       </div>
                       <div class="ws-recipe-time">⏱️ ${rec.craftSec}s</div>
                     </button>
@@ -4204,14 +4153,14 @@ export class GameHUD {
                 }
                 if (idx === queue.length - (activeSlot ? 1 : 0)) {
                   return `
-                    <div class="ws-slot-plus" title="Chạm vào món trên kệ để xếp thêm vào khay chờ!">
+                    <div class="ws-slot-plus" title="Thêm vào khay">
                       <span>+</span>
                     </div>
                   `;
                 }
                 return `
-                  <div class="ws-slot-card empty" title="Khay chờ trống">
-                    <span style="font-size:11px;font-weight:800;opacity:0.65;">Khay trống</span>
+                  <div class="ws-slot-card empty" title="Trống">
+                    <span style="font-size:11px;font-weight:800;opacity:0.65;">Trống</span>
                   </div>
                 `;
               }).join('');
@@ -4236,13 +4185,13 @@ export class GameHUD {
                       <div class="ws-oven-caption">
                         ${
                           activeSlot
-                            ? `<span>Đang làm</span><strong>${mm}:${ss}</strong>`
-                            : `<span>Lò ấm</span><strong>Sẵn sàng</strong>`
+                            ? `<strong>${mm}:${ss}</strong>`
+                            : `<strong>Trống</strong>`
                         }
                       </div>
                       ${
                         activeSlot
-                          ? `<button id="btnInspSpeedSlot" type="button" class="ws-speed-pill" title="Dùng 1 Cát Thời Gian ra lò ngay!">⚡ 1⏳</button>`
+                          ? `<button id="btnInspSpeedSlot" type="button" class="ws-speed-pill" title="Dùng 1 Cát">⚡ 1⏳</button>`
                           : ''
                       }
                     </div>
@@ -4272,10 +4221,10 @@ export class GameHUD {
                         <img src="/sprites/${animal.spritePair[0]}.png" alt="${escapeHtml(animal.name)}" class="seed-card-img pasture-card-img" />
                         <span class="seed-card-name">${escapeHtml(animal.name)}</span>
                         <span class="seed-card-seed-badge ${lockedAnimal ? 'no-seed' : 'has-seed'}">
-                          ${lockedAnimal ? `🔒 Cấp ${animal.unlockLevel}` : `🪙 ${animal.cost.toLocaleString('vi-VN')}G`}
+                          ${lockedAnimal ? `🔒 Lv.${animal.unlockLevel}` : `🪙 ${animal.cost}G`}
                         </span>
                         <span class="seed-card-meta">⏱️${animal.cycleSec}s • +${animal.sellValue}G</span>
-                        <span class="seed-card-stock">${prodMeta ? `+${animal.yieldQty} ${escapeHtml(prodMeta.name)}` : 'Sản vật quý'}</span>
+                        <span class="seed-card-stock">${prodMeta ? `+${animal.yieldQty} ${escapeHtml(prodMeta.name)}` : 'Sản vật'}</span>
                       </button>
                     `;
                   })
@@ -4283,7 +4232,7 @@ export class GameHUD {
                 return `
                   <div class="ws-inspector-board">
                     <div class="ws-board-title">
-                      <span>🐾 Chọn Gia Súc & Thú Phép Thả Vào Đồng Cỏ</span>
+                      <span>🐾 Chọn Thú</span>
                     </div>
                     <div class="seed-picker-grid">${animalCards}</div>
                   </div>
@@ -4314,8 +4263,8 @@ export class GameHUD {
                       <div style="font-size:12px;font-weight:700;opacity:0.86;">
                         ${
                           isReady
-                            ? `🧺 Đã sẵn sàng thu hoạch ${prodMeta ? `+${animalDef.yieldQty} ${escapeHtml(prodMeta.name)}` : ''} & +${animalDef.sellValue}G!`
-                            : `🌿 Đang nhẩn nha gặm cỏ (${formatDurationCountdownVi(leftSec)})`
+                            ? `🧺 +${animalDef.sellValue}G${prodMeta ? ` +${animalDef.yieldQty} ${escapeHtml(prodMeta.name)}` : ''}`
+                            : `⏱️ ${formatDurationCountdownVi(leftSec)}`
                         }
                       </div>
                     </div>
@@ -4328,19 +4277,19 @@ export class GameHUD {
                       isReady
                         ? `
                           <button id="btnInspHarvestPasture" type="button" class="owl-green-send-btn" style="flex:1;padding:8px 12px;font-size:13px;">
-                            🧺 Thu Hoạch (+${animalDef.sellValue}G${prodMeta ? ` & +${animalDef.yieldQty} ${escapeHtml(prodMeta.name)}` : ''})
+                            🧺 Thu (+${animalDef.sellValue}G)
                           </button>
                         `
                         : !b.pastureFedBoost
                           ? `
                             <button id="btnInspFeedPasture" type="button" class="brass-btn gold-cta" style="flex:1;">
-                              🌾 Cho ăn Thảo Mộc (-35% giờ chờ)
+                              🌾 Cho ăn (-35%)
                             </button>
                           `
-                          : `<div style="flex:1;font-size:11.5px;font-weight:800;text-align:center;opacity:0.88;padding:6px 4px;">🌾 Đã cho ăn no nê — thú đang cho sản vật nhanh!</div>`
+                          : `<div style="flex:1;font-size:11.5px;font-weight:800;text-align:center;opacity:0.88;padding:6px 4px;">🌾 Đã cho ăn</div>`
                     }
-                    <button id="btnInspClearPasture" type="button" class="brass-btn" title="Đưa thú về chuồng để thả loài thú khác">
-                      🔄 Đổi thú
+                    <button id="btnInspClearPasture" type="button" class="brass-btn" title="Đổi thú">
+                      🔄 Đổi
                     </button>
                   </div>
                 </div>
@@ -4363,21 +4312,21 @@ export class GameHUD {
             <div style="min-width:0;">
               <div style="font-size:14px;font-weight:800;color:#45230c;">${escapeHtml(item.name)}</div>
               <div style="font-size:12.5px;color:#b45309;font-weight:800;">${'★'.repeat(b.stars)}${'☆'.repeat(5 - b.stars)}</div>
-              <div style="font-size:12px;opacity:0.85;">${
+              <div style="font-size:11.5px;opacity:0.82;">${
                 item.isFarmlandPlot
-                  ? 'Thửa ruộng canh tác 4 giai đoạn'
+                  ? '🌱 Ruộng'
                   : item.isAnimalPasturePlot
-                    ? 'Đồng cỏ chăn thả ghép liền rào'
+                    ? '🐾 Đồng cỏ'
                     : item.connectableGroup === 'flower_garden'
-                      ? 'Vườn hoa cảnh Hang Sóc ghép liền rào'
+                      ? '🌸 Vườn hoa'
                       : item.workshopGroupId
-                        ? 'Xưởng thủ công truyền thống Hang Sóc'
-                        : `Đã đón ${b.visitorsServed} lượt ghé thăm`
-              }${isRide ? ` • Xếp hàng: ${queueCount}/${MAX_RIDE_QUEUE}` : ''}</div>
+                        ? '🔥 Xưởng'
+                        : `👥 ${b.visitorsServed}`
+              }${isRide ? ` • 🎟️ ${queueCount}/${MAX_RIDE_QUEUE}` : ''}</div>
             </div>
           </div>
           <div style="display:flex;gap:4px;flex-shrink:0;">
-            <button id="btnToggleInspRollup" type="button" class="brass-btn" aria-expanded="${!this.inspectorCollapsed}" title="Cuộn gọn hoặc mở rộng bảng chi tiết" style="padding:3px 7px;font-size:11.5px;">${this.inspectorCollapsed ? '▴ Mở' : '▾ Gọn'}</button>
+            <button id="btnToggleInspRollup" type="button" class="brass-btn" aria-expanded="${!this.inspectorCollapsed}" title="Thu gọn / Mở rộng" style="padding:3px 7px;font-size:11.5px;">${this.inspectorCollapsed ? '▴' : '▾'}</button>
             <button id="btnCloseInsp" type="button" class="brass-btn" aria-label="Đóng bảng chi tiết" style="padding:3px 8px;">✕</button>
           </div>
         </div>
@@ -4386,24 +4335,18 @@ export class GameHUD {
         ${pastureHtml}
         ${workshopBoardHtml}
 
-        <p style="font-size:12px;line-height:1.45;margin-bottom:6px;">${item.description}</p>
-
         <div class="quest-card-mini" style="margin-bottom:8px;font-size:12px;display:flex;flex-direction:column;gap:4px;">
           <div style="font-weight:800;color:${isConnected ? '#15803d' : '#dc2626'};">
-            ${
-              isConnected
-                ? '🟢 Đã nối đường chính / Mạng Lưới Floo'
-                : '🚧 Chưa nối đường tới Ga (Sản lượng giảm còn 25% — Hãy lát đường nối vào!)'
-            }
+            ${isConnected ? '🟢 Đã nối đường' : '🚧 Chưa nối đường (25%)'}
           </div>
           ${
             synGold > 1
-              ? `<div style="font-weight:800;color:#b45309;">🌟 Hào Quang Combo Khu Phố: +${Math.round((synGold - 1) * 100)}% Vàng • +${Math.round((synXp - 1) * 100)}% XP</div>`
+              ? `<div style="font-weight:800;color:#b45309;">🌟 Combo: +${Math.round((synGold - 1) * 100)}%G • +${Math.round((synXp - 1) * 100)}%XP</div>`
               : ''
           }
           ${
             item.producesIngredient
-              ? `<div style="color:#5c2d0c;">🌿 Rơi nguyên liệu Xưởng: <strong>${RAW_INGREDIENTS_INFO[item.producesIngredient].emoji} ${RAW_INGREDIENTS_INFO[item.producesIngredient].name}</strong></div>`
+              ? `<div style="color:#5c2d0c;">🌿 Rơi: <strong>${RAW_INGREDIENTS_INFO[item.producesIngredient].emoji} ${RAW_INGREDIENTS_INFO[item.producesIngredient].name}</strong></div>`
               : ''
           }
         </div>
@@ -4421,17 +4364,6 @@ export class GameHUD {
                   1,
                   Math.min(99, Math.floor((1 - (b.constructEndsAt - now) / totalMs) * 100))
                 );
-                const nowDate = new Date(now);
-                const finishDate = new Date(b.constructEndsAt);
-                const hh = String(finishDate.getHours()).padStart(2, '0');
-                const mm = String(finishDate.getMinutes()).padStart(2, '0');
-                const ss = String(finishDate.getSeconds()).padStart(2, '0');
-                const sameDay = finishDate.toDateString() === nowDate.toDateString();
-                const finishClock = sameDay
-                  ? `${hh}:${mm}:${ss}`
-                  : `${hh}:${mm} ngày ${String(finishDate.getDate()).padStart(2, '0')}/${String(
-                      finishDate.getMonth() + 1
-                    ).padStart(2, '0')}`;
                 const floorSec = this.sim.getBuildingMinFloorSec(b);
                 const reducibleSec = Math.max(0, remainSec - floorSec);
                 const hasOtherReducible =
@@ -4445,43 +4377,33 @@ export class GameHUD {
                     );
                 const canTriggerSpeedup = reducibleSec > 0 || hasOtherReducible;
                 const progLabel = item.isCreatureHabitat
-                  ? 'Tiến độ ấp trứng thực tế'
-                  : 'Tiến độ xây dựng thực tế';
+                  ? 'Tiến độ ấp trứng'
+                  : 'Tiến độ xây dựng';
                 return `
                   <div class="quest-card-mini" style="margin-bottom:8px;background:var(--surface-panel);border-color:var(--sky-deep);">
                     <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;font-weight:800;color:var(--sky-deep);">
-                      <span>${item.isCreatureHabitat ? '🥚 Đang ấp trứng thực tế' : '🔨 Đang xây dựng thực tế'}</span>
+                      <span>${item.isCreatureHabitat ? '🥚 Đang ấp' : '🔨 Đang xây'}</span>
                       <span>${buildPct}%</span>
                     </div>
                     <progress class="ts-build-progress" max="100" value="${buildPct}" aria-label="${progLabel}"></progress>
                     <div style="font-size:12px;font-weight:700;color:var(--ink);">
-                      ⏳ Còn lại: <strong>${formatDurationCountdownVi(remainSec)}</strong>${
+                      ⏳ <strong>${formatDurationCountdownVi(remainSec)}</strong>${
                         reducedSec > 0
-                          ? ` • <span style="color:var(--teal-deep);">Đã giảm -${formatDurationCompactVi(reducedSec)}</span>`
+                          ? ` • <span style="color:var(--teal-deep);">-${formatDurationCompactVi(reducedSec)}</span>`
                           : ''
                       }
                     </div>
-                    <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">🕒 Xong lúc <strong>${finishClock}</strong> • Tự xây tiếp cả khi tắt game</div>
-                    <div style="font-size:11.2px;font-weight:700;color:${reducibleSec > 0 ? 'var(--teal-deep)' : 'var(--brand-strong)'};margin-top:4px;">
-                      ${
-                        reducibleSec > 0
-                          ? `🎯 Vượt Khảo Thí / Thần Chú để giảm thêm <strong>${formatDurationCompactVi(reducibleSec)}</strong> (sàn tối thiểu <strong>${formatDurationCompactVi(floorSec)}</strong> để hoàn thành)`
-                          : hasOtherReducible
-                            ? `🔒 Đã chạm mốc tối thiểu <strong>${formatDurationCompactVi(floorSec)}</strong> — giờ thưởng tiếp theo tự chuyển sang công trình đang xây khác!`
-                            : `🔒 Đã chạm mốc tối thiểu <strong>${formatDurationCompactVi(floorSec)}</strong> — tự hoàn thành nốt!`
-                      }
-                    </div>
                     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px;">
-                      <button id="btnInspPlayMinigameSpeed" type="button" class="brass-btn gold-cta" style="flex:1;" ${canTriggerSpeedup ? '' : 'disabled'} title="Thắng 1 ván Bùa Gặt Honeydukes hoặc Đại Sảnh Khảo Thí Hogwarts tự động trừ 30–75 phút thời gian xây!">
-                        ⚡ Khảo Thí Pháp Thuật (-30p~75p)
+                      <button id="btnInspPlayMinigameSpeed" type="button" class="brass-btn gold-cta" style="flex:1;" ${canTriggerSpeedup ? '' : 'disabled'} title="Thắng 1 màn trừ 30–75p giờ xây">
+                        ⚡ Khảo Thí (-30~75p)
                       </button>
-                      <button id="btnInspQuizSpeed" type="button" class="brass-btn" style="flex:1;" ${canTriggerSpeedup ? '' : 'disabled'} title="Niệm đúng 1 câu Thần Chú Đa Ngữ nhận hạt 0G &amp; trừ 10–25 phút thời gian xây!">
-                        🪄 Thần Chú Đa Ngữ (-10p~25p)
+                      <button id="btnInspQuizSpeed" type="button" class="brass-btn" style="flex:1;" ${canTriggerSpeedup ? '' : 'disabled'} title="Đố ngoại ngữ trừ 10–25p giờ xây">
+                        🪄 Thần Chú (-10~25p)
                       </button>
                       ${
                         this.sim.state.sandboxMode
-                          ? `<button id="btnFinishNowSand" type="button" class="brass-btn" style="flex:1;" title="Chế độ Sáng Tạo: hoàn tất xây dựng ngay lập tức">
-                              ⚡ Xong ngay (Sandbox)
+                          ? `<button id="btnFinishNowSand" type="button" class="brass-btn" style="flex:1;" title="Hoàn tất ngay">
+                              ⚡ Xong ngay
                             </button>`
                           : ''
                       }
@@ -4492,10 +4414,9 @@ export class GameHUD {
             : b.awaitingUnveil
               ? `
                 <div class="quest-card-mini feast-unveil-insp-card">
-                  <div class="feast-unveil-insp-title">🎀 Công trình đã hoàn thiện — Chờ Cắt Băng Khánh Thành!</div>
-                  <div class="feast-unveil-insp-sub">Nhấp vào dải nơ đỏ trên mái nhà hoặc bấm nút dưới đây để rước lộc gia đình Weasley (+🪙 Vàng, +⭐ XP &amp; +25 🍁 Điểm Tiệc Mùa Gặt)!</div>
+                  <div class="feast-unveil-insp-title">🎀 Hoàn thiện!</div>
                   <button id="btnInspUnveilBuilding" type="button" class="brass-btn gold-cta" style="width:100%;margin-top:7px;">
-                    🎀 Cắt Băng Khánh Thành Ngay!
+                    🎀 Cắt Băng
                   </button>
                 </div>
               `
@@ -4508,16 +4429,15 @@ export class GameHUD {
                   const cycLeft = Math.max(1, Math.ceil(effCycle - (rawEl % effCycle)));
                   return `
                     <div class="quest-card-mini" style="margin-bottom:8px;font-size:12px;">
-                      <div>Sản lượng: <strong id="lblBuildingProdVal">+${prod.galleons} 🪙 & +${prod.xp} ⭐</strong> / ${item.cycleSec}s</div>
+                      <div><strong id="lblBuildingProdVal">+${prod.galleons}🪙 +${prod.xp}⭐</strong> / ${item.cycleSec}s</div>
                       ${
                         item.cycleSec > 0 && !item.isFarmlandPlot && !item.isAnimalPasturePlot
-                          ? `<div style="margin-top:3px;">⏱️ Chu kỳ kế tiếp: <strong>${formatDurationCountdownVi(cycLeft)}</strong></div>`
-                          : ''
+                          ? `<div style="margin-top:3px;">⏱️ <strong>${formatDurationCountdownVi(cycLeft)}</strong> • Kho: <strong>${b.storedGalleons}🪙</strong></div>`
+                          : `<div style="margin-top:3px;">Kho: <strong>${b.storedGalleons}🪙</strong></div>`
                       }
-                      <div style="margin-top:3px;">Đang tích trữ: <strong>${b.storedGalleons} 🪙</strong></div>
                       ${
                         b.storedGalleons > 0
-                          ? `<button id="btnCollectSingle" type="button" class="brass-btn gold-cta" style="width:100%;margin-top:6px;">🪙 Thu hoạch ngay (+${b.storedGalleons}G)</button>`
+                          ? `<button id="btnCollectSingle" type="button" class="brass-btn gold-cta" style="width:100%;margin-top:6px;">🪙 Thu (+${b.storedGalleons}G)</button>`
                           : ''
                       }
                     </div>
@@ -4531,19 +4451,14 @@ export class GameHUD {
             ? `
               <div class="quest-card-mini" style="margin-bottom:8px;font-size:12px;">
                 <div style="display:flex;justify-content:space-between;font-weight:800;margin-bottom:4px;">
-                  <span>⚙️ Độ bền Bùa Chú Vận Hành:</span>
+                  <span>⚙️ Độ bền:</span>
                   <span style="color:${b.isBrokenDown ? '#dc2626' : b.durability < 50 ? '#b45309' : '#15803d'};">${Math.round(b.durability)}%</span>
                 </div>
-                <progress max="100" value="${Math.round(b.durability)}" aria-label="Độ bền bùa chú vận hành"></progress>
-                ${
-                  b.isBrokenDown
-                    ? `<div style="margin-top:4px;font-weight:800;color:#dc2626;">🚨 Sự cố: "${escapeHtml(b.breakdownReason ?? 'Cần bảo trì bùa chú!')}"</div>`
-                    : ''
-                }
+                <progress max="100" value="${Math.round(b.durability)}" aria-label="Độ bền"></progress>
                 ${
                   b.isBrokenDown || b.durability < 98
                     ? `<button id="btnRepairRide" type="button" class="brass-btn ${b.isBrokenDown ? 'gold-cta' : ''}" style="width:100%;margin-top:6px;">
-                        🪄 Niệm Reparo Bảo Trì Ngay (Miễn phí)
+                        🪄 Sửa (0G)
                       </button>`
                     : ''
                 }
@@ -4557,8 +4472,8 @@ export class GameHUD {
             ? `
               <div class="quest-card-mini" style="margin-bottom:8px;font-size:12px;">
                 <label for="inpBuildingPrice" style="display:flex;justify-content:space-between;font-weight:800;margin-bottom:4px;">
-                  <span>🎟️ Giá Vé / Giá Bán (${priceBounds.min}–${priceBounds.max}G):</span>
-                  <span id="lblBuildingPriceVal">${curPrice} Galleon</span>
+                  <span>🎟️ Giá (${priceBounds.min}–${priceBounds.max}G):</span>
+                  <span id="lblBuildingPriceVal">${curPrice}G</span>
                 </label>
                 <input id="inpBuildingPrice" type="range" min="${priceBounds.min}" max="${priceBounds.max}" value="${curPrice}" />
                 <div id="lblPriceVerdict" style="margin-top:4px;font-weight:700;color:${priceVerdict.color};">
@@ -4573,11 +4488,9 @@ export class GameHUD {
           item.isCustomCoasterStation && b.coasterStats && !isBuilding
             ? `
               <div class="quest-card-mini" style="margin-bottom:8px;font-size:12px;">
-                <div style="font-weight:800;color:#7c2d12;margin-bottom:4px;">🎢 Chỉ Số Đường Ray Tàu Lượn (Vật Lý Trọng Lực)</div>
-                <div>Chiều dài ray: <strong>${b.coasterStats.lengthMeters}m</strong> (${b.coasterStats.tileCount} đốt • Đổ đèo +${b.coasterStats.maxDrop} • Đỉnh ${b.coasterStats.topSpeedKmh ?? 52} km/h)</div>
-                <div>🔥 Phấn khích: <strong>${b.coasterStats.excitement}/10</strong> • ⚡ Kịch tính: <strong>${b.coasterStats.intensity}</strong> • 💫 Chóng mặt: <strong>${b.coasterStats.nausea}</strong></div>
-                <button id="btnAutoLoopCoaster" type="button" class="brass-btn gold-cta" style="width:100%;margin-top:6px;">
-                  ✨ Tự Lắp Vòng Đường Ray Đồi Đá Mẫu
+                <div style="font-weight:800;color:#7c2d12;margin-bottom:4px;">🎢 Ray: ${b.coasterStats.lengthMeters}m • 🔥 ${b.coasterStats.excitement}/10</div>
+                <button id="btnAutoLoopCoaster" type="button" class="brass-btn gold-cta" style="width:100%;margin-top:4px;">
+                  ✨ Tự Lắp Ray
                 </button>
               </div>
             `
@@ -4588,7 +4501,7 @@ export class GameHUD {
           canRideCam
             ? `
               <button id="btnEnterRideCam" type="button" class="brass-btn gold-cta" style="width:100%;margin-bottom:8px;">
-                🎥 Ngồi Thử Tàu Lượn (Ride Cam Góc Nhìn Toa Đầu)
+                🎥 Ride Cam
               </button>
             `
             : ''
@@ -4599,11 +4512,11 @@ export class GameHUD {
             ? `
               <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
                 <button id="btnInspOpenWorkshop" type="button" class="brass-btn gold-cta" style="flex:1;">
-                  🧪 Mở Xưởng Ủ & Tàu Hàng
+                  🧪 Xưởng
                 </button>
                 ${
                   item.isFireworksLauncher
-                    ? `<button id="btnInspFireworks" type="button" class="brass-btn" style="flex:1;">🎆 Bắn Pháo Hoa Rồng</button>`
+                    ? `<button id="btnInspFireworks" type="button" class="brass-btn" style="flex:1;">🎆 Pháo Hoa</button>`
                     : ''
                 }
               </div>
@@ -4621,23 +4534,13 @@ export class GameHUD {
                     ${MORPH_INFO[b.creatureMorph ?? 'normal'].badge}
                   </span>
                 </div>
-                <div>💝 Gắn kết: <strong>Cấp ${b.creatureBondLevel ?? 1}/${MAX_BOND_LEVEL}</strong> (+${Math.round((getBondIncomeMultiplier(b.creatureBondLevel ?? 1) - 1) * 100)}%G) • Giai đoạn: <strong>${stageNames[b.creatureStage ?? 'baby']}</strong> ${
-                  b.hasBabyOffspring ? '<span style="color:#15803d;font-weight:800;">• 🐣 Đã sinh Thú Non (+35%G)</span>' : ''
-                }</div>
-                <div style="margin-top:3px;">🌿 Sinh thái Zoo Tycoon: <strong>${bio?.score ?? 50}%</strong> (Ưa: ${bio?.preferredLabel ?? 'Cỏ'})</div>
-                <progress max="100" value="${bio?.score ?? 50}" aria-label="Điểm sinh thái khu bảo tồn"></progress>
-                ${
-                  bio && bio.tips.length > 0 && !b.hasBabyOffspring
-                    ? `<div style="margin-top:4px;color:#78350f;">💡 Mẹo lên 80% sinh sản: ${bio.tips[0]}</div>`
-                    : ''
-                }
-                <div style="margin-top:4px;">No bụng & Bùa chắn: <strong>${Math.round(b.creatureHunger ?? 90)}%</strong></div>
+                <div>💝 Lv.${b.creatureBondLevel ?? 1}/${MAX_BOND_LEVEL} • ${stageNames[b.creatureStage ?? 'baby']} • 🌿 ${bio?.score ?? 50}% • 🥩 ${Math.round(b.creatureHunger ?? 90)}%</div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
                   <button id="btnFeedBeast" type="button" class="brass-btn" style="flex:1;">
                     🥩 Cho ăn
                   </button>
                   <button id="btnInspOpenSuitcase" type="button" class="brass-btn gold-cta" style="flex:1.3;">
-                    🧳 Chăm Sóc Trong Vali Thú
+                    🧳 Vali
                   </button>
                 </div>
               </div>
@@ -4649,13 +4552,8 @@ export class GameHUD {
           item.isBackstage && backstage && !isBuilding
             ? `
               <div class="quest-card-mini" style="margin-bottom:8px;font-size:12px;">
-                <div style="font-weight:800;">📦 Tầm Nhìn Hậu Cần (Parkitect):</div>
-                <div style="margin-top:3px;font-weight:700;color:${backstage.isShielded ? '#15803d' : '#dc2626'};">
-                  ${
-                    backstage.isShielded
-                      ? `✅ Đã che chắn tinh tế (${backstage.shieldCount}/${backstage.needed} cây/rào) — Cửa tiệm lân cận +25% vàng!`
-                      : `⚠️ Đang lộ tầm nhìn (${backstage.shieldCount}/${backstage.needed}) — Hãy đặt thêm Hàng Rào Cây quanh kho!`
-                  }
+                <div style="font-weight:700;color:${backstage.isShielded ? '#15803d' : '#dc2626'};">
+                  📦 Che chắn: ${backstage.shieldCount}/${backstage.needed} ${backstage.isShielded ? '✅ (+25%G)' : '⚠️'}
                 </div>
               </div>
             `
@@ -4666,15 +4564,15 @@ export class GameHUD {
           ${
             !isBuilding && b.stars < 5
               ? `<button id="btnUpgStar" type="button" class="brass-btn" style="flex:1;">
-                  ⬆️ Lên ${b.stars + 1}★ (🌟${getUpgradePuzzleStarCost(b.stars, item)} + 🪙 ${upgCost.toLocaleString('vi-VN')})
+                  ⬆️ ${b.stars + 1}★ (🌟${getUpgradePuzzleStarCost(b.stars, item)} + 🪙${upgCost.toLocaleString('vi-VN')})
                 </button>`
               : !isBuilding
-                ? `<div style="width:100%;text-align:center;font-size:12px;font-weight:800;color:#15803d;">🌟 Đã đạt cấp 5 Sao Tối Thượng!</div>`
+                ? `<div style="width:100%;text-align:center;font-size:12px;font-weight:800;color:#15803d;">🌟 5★ Tối Đa</div>`
                 : ''
           }
           ${
             !b.isIndestructible
-              ? `<button id="btnMoveThis" type="button" class="brass-btn" title="Nhấc công trình này lên để dời sang ô khác">✋ Dời chỗ</button>`
+              ? `<button id="btnMoveThis" type="button" class="brass-btn" title="Dời công trình">✋ Dời</button>`
               : ''
           }
         </div>
@@ -4897,22 +4795,21 @@ export class GameHUD {
         <div class="inspector-header-bar" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:${this.inspectorCollapsed ? '0' : '8px'};">
           <div>
             <div style="font-size:14.5px;font-weight:800;">🧙 ${escapeHtml(st.name)}</div>
-            <div style="font-size:12px;font-weight:700;color:#92400e;">Nhân sự vận hành công viên</div>
           </div>
           <div style="display:flex;gap:4px;flex-shrink:0;">
-            <button id="btnToggleInspRollup" type="button" class="brass-btn" aria-expanded="${!this.inspectorCollapsed}" title="Cuộn gọn hoặc mở rộng bảng chi tiết" style="padding:3px 7px;font-size:11.5px;">${this.inspectorCollapsed ? '▴ Mở' : '▾ Gọn'}</button>
+            <button id="btnToggleInspRollup" type="button" class="brass-btn" aria-expanded="${!this.inspectorCollapsed}" title="Thu gọn / Mở rộng" style="padding:3px 7px;font-size:11.5px;">${this.inspectorCollapsed ? '▴' : '▾'}</button>
             <button id="btnCloseInsp" type="button" class="brass-btn" aria-label="Đóng bảng chi tiết" style="padding:3px 8px;">✕</button>
           </div>
         </div>
 
         <div class="quest-card-mini" style="font-size:12.5px;margin-bottom:8px;">
-          Trạng thái: <strong>"${escapeHtml(st.actionText)}"</strong>
+          <strong>"${escapeHtml(st.actionText)}"</strong>
         </div>
 
         <div class="quest-card-mini" style="font-size:12px;margin-bottom:10px;">
-          <label for="selInspPatrolZone" style="display:block;font-weight:800;margin-bottom:5px;">📍 Phân công Khu Vực Tuần Tra:</label>
+          <label for="selInspPatrolZone" style="display:block;font-weight:800;margin-bottom:5px;">📍 Khu vực:</label>
           <select id="selInspPatrolZone" style="width:100%;padding:6px 8px;border-radius:8px;border:1.5px solid #9a5b1e;background:#fffdf7;color:#3a2615;font-weight:700;">
-            <option value="all" ${pZone === 'all' ? 'selected' : ''}>🗺️ Toàn bộ công viên</option>
+            <option value="all" ${pZone === 'all' ? 'selected' : ''}>🗺️ Toàn bộ</option>
             ${ZONES.filter((z) => this.sim.state.sandboxMode || unlockedSet.has(z.id))
               .map((z) => `<option value="${z.id}" ${pZone === z.id ? 'selected' : ''}>📍 ${z.name}</option>`)
               .join('')}
@@ -4920,7 +4817,7 @@ export class GameHUD {
         </div>
 
         <button id="btnPickInspStaff" type="button" class="brass-btn gold-cta" style="width:100%;">
-          🤏 Gắp Nhân Sự Này Tới Điểm Nóng
+          🤏 Gắp
         </button>
       `;
 
@@ -4957,19 +4854,15 @@ export class GameHUD {
         <div class="inspector-header-bar" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:${this.inspectorCollapsed ? '0' : '8px'};">
           <div style="font-size:15px;font-weight:800;">🌫️ ${escapeHtml(z.name)}</div>
           <div style="display:flex;gap:4px;flex-shrink:0;">
-            <button id="btnToggleInspRollup" type="button" class="brass-btn" aria-expanded="${!this.inspectorCollapsed}" title="Cuộn gọn hoặc mở rộng bảng chi tiết" style="padding:3px 7px;font-size:11.5px;">${this.inspectorCollapsed ? '▴ Mở' : '▾ Gọn'}</button>
+            <button id="btnToggleInspRollup" type="button" class="brass-btn" aria-expanded="${!this.inspectorCollapsed}" title="Thu gọn / Mở rộng" style="padding:3px 7px;font-size:11.5px;">${this.inspectorCollapsed ? '▴' : '▾'}</button>
             <button id="btnCloseInsp" type="button" class="brass-btn" aria-label="Đóng bảng chi tiết" style="padding:3px 8px;">✕</button>
           </div>
         </div>
-        <p style="font-size:12.5px;margin-bottom:8px;">${z.subtitle}</p>
-        <div class="quest-card-mini" style="font-size:12px;margin-bottom:10px;">
-          <strong>${z.guardianName}:</strong> "${z.guardianQuote}"
-        </div>
-        <div style="font-size:12.5px;margin-bottom:10px;">
-          Điều kiện mở khóa: <strong>Cấp Giải Đố ${z.unlockLevel}</strong> • Chi phí: <strong>🌟 ${zStars} Sao Phép Thuật</strong>
+        <div style="font-size:12.5px;margin-bottom:10px;font-weight:700;">
+          🔒 Lv.${z.unlockLevel} • <strong>🌟 ${zStars}</strong>
         </div>
         <button id="btnConfirmUnlockZone" type="button" class="brass-btn ${canLv ? 'gold-cta' : ''}" style="width:100%;">
-          🔓 Phá Phong Ấn (🌟 ${zStars} Sao)
+          🔓 Mở (🌟 ${zStars})
         </button>
       `;
       panel.querySelector('#btnToggleInspRollup')?.addEventListener('click', () => {
@@ -5000,33 +4893,25 @@ export class GameHUD {
     const wagePerCycle = this.sim.getHourlyStaffWage();
 
     box.innerHTML = `
-      <div class="quest-card-mini" style="margin-bottom:14px;padding:14px;">
-        <div style="font-size:14px;font-weight:800;margin-bottom:4px;">🏡 Sổ Cái Kinh Tế Trang Trại Hang Sóc</div>
-        <div style="font-size:12px;opacity:0.86;">
-          💡 Giao Đơn Hàng Cú Đưa Thư, thu hoạch mùa vụ và ra lò đặc sản từ Lò Bánh Bà Molly &amp; các xưởng thủ công để gia tăng dòng tiền cho thung lũng!
-        </div>
-      </div>
-
       <div class="grid-2col" style="margin-bottom:14px;">
         <div class="quest-card-mini" style="padding:12px;">
-          <div style="font-size:14px;font-weight:800;color:#15803d;margin-bottom:6px;">📈 Nguồn Thu Lũy Kế</div>
+          <div style="font-size:14px;font-weight:800;color:#15803d;margin-bottom:6px;">📈 Thu</div>
           <div style="font-size:12.5px;display:flex;flex-direction:column;gap:5px;">
-            <div style="display:flex;justify-content:space-between;"><span>🌾 Thu hoạch mùa màng, Đơn Cú &amp; Xưởng:</span><strong>+${f.harvestRevenue.toLocaleString('vi-VN')} G</strong></div>
-            <div style="display:flex;justify-content:space-between;"><span>🍻 Quán Ba Cây Chổi &amp; Cửa Tiệm:</span><strong>+${(f.shopRevenue + f.ticketRevenue + f.gateRevenue).toLocaleString('vi-VN')} G</strong></div>
+            <div style="display:flex;justify-content:space-between;"><span>🌾 Nông sản &amp; Đơn Cú:</span><strong>+${f.harvestRevenue.toLocaleString('vi-VN')} G</strong></div>
+            <div style="display:flex;justify-content:space-between;"><span>🍻 Cửa tiệm:</span><strong>+${(f.shopRevenue + f.ticketRevenue + f.gateRevenue).toLocaleString('vi-VN')} G</strong></div>
             <hr style="border:none;border-top:1px solid rgba(138,90,43,0.25);margin:3px 0;" />
             <div style="display:flex;justify-content:space-between;font-size:13.5px;color:#15803d;"><span>Tổng Thu:</span><strong>+${totalIn.toLocaleString('vi-VN')} G</strong></div>
           </div>
         </div>
 
         <div class="quest-card-mini" style="padding:12px;">
-          <div style="font-size:14px;font-weight:800;color:#9a3412;margin-bottom:6px;">📉 Chi Phí Đầu Tư &amp; Vận Hành</div>
+          <div style="font-size:14px;font-weight:800;color:#9a3412;margin-bottom:6px;">📉 Chi</div>
           <div style="font-size:12.5px;display:flex;flex-direction:column;gap:5px;">
-            <div style="display:flex;justify-content:space-between;"><span>🏗️ Xây dựng, Mở đất &amp; Nâng Sao:</span><strong>-${f.constructionSpent.toLocaleString('vi-VN')} G</strong></div>
-            <div style="display:flex;justify-content:space-between;"><span>🧦 Phụ cấp phụ tá &amp; Gia Tinh:</span><strong>-${f.staffWagesPaid.toLocaleString('vi-VN')} G</strong></div>
-            <div style="display:flex;justify-content:space-between;"><span>⏱️ Định mức phụ cấp hiện tại:</span><strong>${wagePerCycle} G / ca</strong></div>
+            <div style="display:flex;justify-content:space-between;"><span>🏗️ Xây dựng &amp; Nâng Sao:</span><strong>-${f.constructionSpent.toLocaleString('vi-VN')} G</strong></div>
+            <div style="display:flex;justify-content:space-between;"><span>🧦 Phụ tá (${wagePerCycle}G/ca):</span><strong>-${f.staffWagesPaid.toLocaleString('vi-VN')} G</strong></div>
             <hr style="border:none;border-top:1px solid rgba(138,90,43,0.25);margin:3px 0;" />
             <div style="display:flex;justify-content:space-between;font-size:13.5px;color:${net >= 0 ? '#15803d' : '#b45309'};">
-              <span>Dòng Tiền Ròng:</span><strong>${net >= 0 ? '+' : ''}${net.toLocaleString('vi-VN')} G</strong>
+              <span>Ròng:</span><strong>${net >= 0 ? '+' : ''}${net.toLocaleString('vi-VN')} G</strong>
             </div>
           </div>
         </div>
@@ -5053,8 +4938,8 @@ export class GameHUD {
     box.innerHTML = `
       <div class="quest-card-mini" style="padding:13px;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
-          <div style="font-size:15px;font-weight:800;">🏆 Đồng Hồ Cát Đua Cúp 4 Nhà Hogwarts</div>
-          <span style="font-size:12px;font-weight:700;color:#78350f;">Tổng điểm toàn trường: ${totalPts} / ${milestoneTarget}</span>
+          <div style="font-size:15px;font-weight:800;">🏆 Cúp 4 Nhà</div>
+          <span style="font-size:12px;font-weight:700;color:#78350f;">${totalPts} / ${milestoneTarget}</span>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-bottom:10px;">
           ${houses
@@ -5062,7 +4947,7 @@ export class GameHUD {
               (h, idx) => `
               <div style="background:rgba(255,255,255,0.65);border:2px solid ${h.color};border-radius:10px;padding:8px;">
                 <div style="font-size:13px;font-weight:800;color:${h.color};">${idx === 0 ? '👑 ' : ''}${h.icon} ${h.house}</div>
-                <div style="font-size:16px;font-weight:800;margin-top:2px;">${h.pts} điểm</div>
+                <div style="font-size:16px;font-weight:800;margin-top:2px;">${h.pts} đ</div>
               </div>
             `
             )
@@ -5071,8 +4956,8 @@ export class GameHUD {
         <progress max="${milestoneTarget}" value="${Math.min(milestoneTarget, totalPts)}"></progress>
         ${
           canClaimCup
-            ? `<button id="btnClaimHouseCup" type="button" class="brass-btn gold-cta" style="width:100%;margin-top:8px;">🏆 Trao Cúp Nhà Đợt ${st.houseCupMilestoneTier} & Nhận Thưởng Lớn!</button>`
-            : `<div style="font-size:12px;margin-top:5px;opacity:0.85;">Khách tham quan dạo thung lũng, thưởng thức Bia Bơ & vẫy Đũa phép sẽ liên tục mang Điểm về cho Nhà của họ!</div>`
+            ? `<button id="btnClaimHouseCup" type="button" class="brass-btn gold-cta" style="width:100%;margin-top:8px;">🏆 Nhận Cúp Đợt ${st.houseCupMilestoneTier}</button>`
+            : ''
         }
       </div>
     `;
@@ -5104,12 +4989,12 @@ export class GameHUD {
     }
 
     const tabsSwitchHtml = `
-      <div class="workshop-tabs" role="group" aria-label="Chuyên mục Đơn Hàng Cú & Nhật Ký" style="margin-bottom:12px;">
+      <div class="workshop-tabs" role="group" aria-label="Đơn Hàng Cú & Nhiệm Vụ" style="margin-bottom:12px;">
         <button type="button" data-qtab="orders" data-active="${this.activeQuestTab === 'orders'}" aria-pressed="${this.activeQuestTab === 'orders'}" class="brass-btn">
-          🦉 Bảng Đơn Hàng Cú (${readyOwlCount}/${barn.owlOrders.length})
+          🦉 Đơn Cú (${readyOwlCount}/${barn.owlOrders.length})
         </button>
         <button type="button" data-qtab="quests" data-active="${this.activeQuestTab === 'quests'}" aria-pressed="${this.activeQuestTab === 'quests'}" class="brass-btn">
-          📖 Cốt Truyện &amp; Hàng Ngày ${readyQuestCount > 0 ? `(${readyQuestCount})` : ''}
+          📖 Nhiệm Vụ ${readyQuestCount > 0 ? `(${readyQuestCount})` : ''}
         </button>
       </div>
     `;
@@ -5147,7 +5032,7 @@ export class GameHUD {
               <div class="owl-note-info">
                 <div class="owl-note-sender">${escapeHtml(order.senderName)}</div>
                 <div class="owl-note-mini-row">${miniIcons}</div>
-                ${order.isFeastMarquee ? '<span class="owl-feast-tag">🎪 Đại Tiệc</span>' : ''}
+                ${order.isFeastMarquee ? '<span class="owl-feast-tag">🎪 Tiệc</span>' : ''}
               </div>
               ${isReady ? '<span class="owl-ready-tick" aria-label="Đủ hàng">✓</span>' : ''}
             </button>
@@ -5160,15 +5045,13 @@ export class GameHUD {
           <div class="owl-detail-sheet">
             <div class="owl-detail-head">
               <div>
-                <div class="owl-detail-title">Đơn Của ${escapeHtml(selectedOrder.senderName)}</div>
-                <div class="owl-detail-sub">${escapeHtml(selectedOrder.senderTitle)} • 🦉 Cú ${escapeHtml(selectedOrder.owlName)}</div>
+                <div class="owl-detail-title">${escapeHtml(selectedOrder.senderName)}</div>
+                <div class="owl-detail-sub">🦉 ${escapeHtml(selectedOrder.owlName)}</div>
               </div>
-              <button type="button" id="btnRefreshOwlOrder" class="brass-btn" style="padding:4px 9px;font-size:11.5px;" title="Đổi sang đơn đặt hàng khác">
-                🔄 Đổi đơn
+              <button type="button" id="btnRefreshOwlOrder" class="brass-btn" style="padding:4px 9px;font-size:11.5px;" title="Đổi đơn">
+                🔄 Đổi
               </button>
             </div>
-
-            <div class="owl-detail-quote">“${escapeHtml(selectedOrder.noteVi)}”</div>
 
             <div class="owl-req-list">
               ${selectedOrder.requirements
@@ -5184,18 +5067,18 @@ export class GameHUD {
                   const helpedByFriend = Boolean(helpReq?.fulfilledAt);
                   const ok = this.sim.state.sandboxMode || helpedByFriend || have >= req.qty;
                   const coOpControlHtml = helpedByFriend
-                    ? `<span class="owl-help-tag done" title="Hàng xóm đã đóng hộ kiện hàng này!">✓ ${escapeHtml(helpReq?.helperEmoji ?? '🦉')} ${escapeHtml(helpReq?.helperName ?? 'Bạn bè')} đóng hộ</span>`
+                    ? `<span class="owl-help-tag done">✓ ${escapeHtml(helpReq?.helperEmoji ?? '🦉')}</span>`
                     : helpReq
-                      ? `<span class="owl-help-tag waiting">🦉 Đang gọi bạn...</span>`
+                      ? `<span class="owl-help-tag waiting">🦉 Đang gọi...</span>`
                       : !ok
-                        ? `<button type="button" class="brass-btn owl-ask-help-btn" data-ask-owl-help="${reqIdx}" ${owlHelpLeft <= 0 ? 'disabled' : ''} title="Nhờ hàng xóm đóng hộ kiện hàng khó này (tối đa ${MAX_DAILY_OWL_HELP_REQUESTS} kiện/ngày, reset 00:00)">🤝 Nhờ bạn (${owlHelpLeft}/${MAX_DAILY_OWL_HELP_REQUESTS})</button>`
+                        ? `<button type="button" class="brass-btn owl-ask-help-btn" data-ask-owl-help="${reqIdx}" ${owlHelpLeft <= 0 ? 'disabled' : ''} title="Nhờ bạn">🤝 Nhờ (${owlHelpLeft})</button>`
                         : `<span class="owl-req-status">✓</span>`;
                   return `
                     <div class="owl-req-row ${ok ? 'ok' : 'lack'}">
                       <img src="${meta.iconSrc}" alt="${escapeHtml(meta.name)}" class="owl-req-img" />
                       <div class="owl-req-meta">
-                        <div class="owl-req-name">${req.qty} ${escapeHtml(meta.name)}</div>
-                        <div class="owl-req-count">${helpedByFriend ? '✓ Đã đóng hộ' : `${this.sim.state.sandboxMode ? '∞' : have}/${req.qty}`}</div>
+                        <div class="owl-req-name">${escapeHtml(meta.name)}</div>
+                        <div class="owl-req-count">${helpedByFriend ? '✓' : `${this.sim.state.sandboxMode ? '∞' : have}/${req.qty}`}</div>
                       </div>
                       ${coOpControlHtml}
                     </div>
@@ -5205,19 +5088,18 @@ export class GameHUD {
             </div>
 
             <div class="owl-reward-box">
-              <div class="owl-reward-lbl">Phần Thưởng Giao Hàng</div>
               <div class="owl-reward-pills">
                 <span class="owl-rew-pill gold">🪙 +${selectedOrder.rewardGalleons}</span>
-                <span class="owl-rew-pill xp">⭐ +${selectedOrder.rewardXp} XP</span>
+                <span class="owl-rew-pill xp">⭐ +${selectedOrder.rewardXp}</span>
                 ${
                   selectedOrder.rewardMugglePlug
-                    ? `<span class="owl-rew-pill plug">🔌 +${selectedOrder.rewardMugglePlug} Phích Cắm</span>`
+                    ? `<span class="owl-rew-pill plug">🔌 +${selectedOrder.rewardMugglePlug}</span>`
                     : ''
                 }
                 ${
                   (selectedOrder.isFeastMarquee || (barn.ordersDelivered + 1) % 3 === 0) &&
                   this.sim.getPhoenixTalismanCount() < MAX_PHOENIX_TALISMANS
-                    ? `<span class="owl-rew-pill plug" title="Trợ chiến 1 lần/màn cho cả 5 môn giải đố!">🔥 +1 Bùa Phượng Hoàng</span>`
+                    ? `<span class="owl-rew-pill plug">🔥 +1</span>`
                     : ''
                 }
               </div>
@@ -5239,7 +5121,7 @@ export class GameHUD {
               id="btnSendOwlOrder"
               class="owl-green-send-btn ${canSendSelected ? 'ready' : 'not-ready'}"
             >
-              🦉 ${canSendSelected ? 'Gửi Cú Giao Hàng!' : 'Xem Kho & Chuẩn Bị Nông Sản'}
+              🦉 ${canSendSelected ? 'Giao Hàng!' : 'Mở Kho'}
             </button>
           </div>
         </div>
@@ -5307,19 +5189,18 @@ export class GameHUD {
             <span style="font-size:13.5px;font-weight:800;">${escapeHtml(q.giverEmoji)} ${escapeHtml(q.title)}</span>
             <span style="font-size:12px;font-weight:700;color:#92400e;">${escapeHtml(tag)}</span>
           </div>
-          <div style="font-size:12px;opacity:0.85;margin:4px 0;"><strong>${escapeHtml(q.giverName)}:</strong> "${escapeHtml(q.dialogue)}"</div>
           <div class="quest-bar"><div class="quest-bar-fill" style="width:${pct}%"></div></div>
           <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;font-weight:700;">
-            <span>Tiến độ: ${Math.min(q.progress, q.targetAmount)} / ${q.targetAmount}</span>
-            <span>Thưởng: 🪙${q.rewardGalleons} • ⭐${q.rewardXp} ${q.rewardTimeSand > 0 ? `• ⏳${q.rewardTimeSand}` : ''}</span>
+            <span>${Math.min(q.progress, q.targetAmount)}/${q.targetAmount}</span>
+            <span>🪙${q.rewardGalleons} • ⭐${q.rewardXp} ${q.rewardTimeSand > 0 ? `• ⏳${q.rewardTimeSand}` : ''}</span>
           </div>
           ${
             q.claimed
-              ? `<div style="margin-top:6px;font-size:12px;color:#15803d;font-weight:700;">✓ Đã nhận thưởng hôm nay</div>`
+              ? `<div style="margin-top:6px;font-size:12px;color:#15803d;font-weight:700;">✓ Đã nhận</div>`
               : q.completed
-                ? `<button type="button" data-modal-claim="${escapeHtml(q.id)}" class="brass-btn gold-cta" style="width:100%;margin-top:8px;">🎁 Nhận Phần Thưởng</button>`
+                ? `<button type="button" data-modal-claim="${escapeHtml(q.id)}" class="brass-btn gold-cta" style="width:100%;margin-top:8px;">🎁 Nhận</button>`
                 : isStory
-                  ? `<button id="btnModalStarStory" type="button" class="brass-btn gold-cta" style="width:100%;margin-top:8px;">${escapeHtml(autoAct.longLabel)}</button>`
+                  ? `<button id="btnModalStarStory" type="button" class="brass-btn gold-cta" style="width:100%;margin-top:8px;">${escapeHtml(autoAct.shortLabel)}</button>`
                   : ''
           }
         </div>
@@ -5328,7 +5209,6 @@ export class GameHUD {
 
     const reqTrial = this.sim.getRequiredLevelTrial();
     const wpModal = this.sim.getWinsProgressForCurrentLevel();
-    const tpModal = this.sim.getTotalTowerClearedStages();
     const fmtStagePill = (k: MinigameTrialKind) => {
       const inf = this.sim.getDisciplineStageInfo(k);
       return inf.isMaxed ? `👑777` : `${inf.currentStage}/777`;
@@ -5338,20 +5218,15 @@ export class GameHUD {
         ? `
         <div class="quest-card-mini trial-quest-card" style="margin-bottom:12px;">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-            <div>
-              <div style="font-size:13.5px;font-weight:900;">
-                🔥 Đề Cử Của Cụ Dumbledore (Cấp ${this.sim.state.level} → ${this.sim.state.level + 1}: ${wpModal.current}/${wpModal.required} màn • Tháp ${tpModal.cleared}/${tpModal.total}): ${reqTrial.icon} ${escapeHtml(reqTrial.shortVi)}
-              </div>
-              <div style="font-size:12px;margin-top:2px;opacity:0.9;">
-                Mỗi môn gồm 777 màn bậc thang chiến thuật; thắng đúng Môn Đề Cử nhận thêm 🌟 Sao Mốc Cấp/Chuỗi 5 + 1 ⏳ Cát + 35% 🪙 Vàng!
-              </div>
+            <div style="font-size:13.5px;font-weight:900;">
+              🔥 Đề Cử (${wpModal.current}/${wpModal.required}): ${reqTrial.icon} ${escapeHtml(reqTrial.shortVi)}
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
-              <button type="button" data-modal-open-trial="match3" class="brass-btn ${reqTrial.kind === 'match3' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🍓 Bùa Gặt (${fmtStagePill('match3')})</button>
-              <button type="button" data-modal-open-trial="caro" class="brass-btn ${reqTrial.kind === 'caro' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🗺️ Ngũ Ấn (${fmtStagePill('caro')})</button>
-              <button type="button" data-modal-open-trial="sudoku" class="brass-btn ${reqTrial.kind === 'sudoku' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🔮 Bảo Bối (${fmtStagePill('sudoku')})</button>
-              <button type="button" data-modal-open-trial="chess" class="brass-btn ${reqTrial.kind === 'chess' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🏰 Cờ Phù Thủy (${fmtStagePill('chess')})</button>
-              <button type="button" data-modal-open-trial="blocks" class="brass-btn ${reqTrial.kind === 'blocks' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🧱 Cổ Ngữ (${fmtStagePill('blocks')})</button>
+              <button type="button" data-modal-open-trial="match3" class="brass-btn ${reqTrial.kind === 'match3' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🍓 (${fmtStagePill('match3')})</button>
+              <button type="button" data-modal-open-trial="caro" class="brass-btn ${reqTrial.kind === 'caro' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🗺️ (${fmtStagePill('caro')})</button>
+              <button type="button" data-modal-open-trial="sudoku" class="brass-btn ${reqTrial.kind === 'sudoku' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🔮 (${fmtStagePill('sudoku')})</button>
+              <button type="button" data-modal-open-trial="chess" class="brass-btn ${reqTrial.kind === 'chess' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🏰 (${fmtStagePill('chess')})</button>
+              <button type="button" data-modal-open-trial="blocks" class="brass-btn ${reqTrial.kind === 'blocks' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🦄 (${fmtStagePill('blocks')})</button>
             </div>
           </div>
         </div>
@@ -5359,23 +5234,23 @@ export class GameHUD {
         : '';
 
     const storyChapterTag = story
-      ? `Chương ${story.chapter ?? 1}: ${STORY_CHAPTER_TITLES_VI[story.chapter ?? 1] ?? 'Hang Sóc'} • Mục ${this.sim.state.storyQuestIndex + 1}/${STORY_QUESTS.length}`
+      ? `Ch.${story.chapter ?? 1} • ${this.sim.state.storyQuestIndex + 1}/${STORY_QUESTS.length}`
       : '';
 
     box.innerHTML = `
       ${tabsSwitchHtml}
       ${trialBannerHtml}
-      <h3 style="font-size:15px;font-weight:800;margin-bottom:6px;">📖 Nhật Ký Cốt Truyện Hang Sóc (10 Chương • ${STORY_QUESTS.length} Nhiệm Vụ — Lv 1 → 100)</h3>
-      ${story ? renderCard(story, storyChapterTag, true) : `<div class="quest-card-mini">🎉 Bạn đã hoàn thành trọn vẹn toàn bộ 10 Chương (${STORY_QUESTS.length} Nhiệm Vụ) Cốt Truyện Hang Sóc!</div>`}
+      <h3 style="font-size:15px;font-weight:800;margin-bottom:6px;">📖 Cốt Truyện</h3>
+      ${story ? renderCard(story, storyChapterTag, true) : `<div class="quest-card-mini">🎉 Đã hoàn thành!</div>`}
 
-      <h3 style="font-size:15px;font-weight:800;margin:14px 0 6px;">🦉 Việc Quê Xoay Vòng (Làm Liên Tục)</h3>
+      <h3 style="font-size:15px;font-weight:800;margin:14px 0 6px;">🦉 Xoay Vòng</h3>
       <div class="grid-2col">
         ${this.sim.state.owlQuests.map((q) => renderCard(q, 'Xoay vòng')).join('')}
       </div>
 
-      <h3 style="font-size:15px;font-weight:800;margin:14px 0 6px;">📰 Việc Hàng Ngày Thung Lũng Ottery (Làm mới 00:00)</h3>
+      <h3 style="font-size:15px;font-weight:800;margin:14px 0 6px;">📰 Hàng Ngày</h3>
       <div class="grid-2col">
-        ${this.sim.state.dailyQuests.map((q) => renderCard(q, 'Hàng ngày')).join('')}
+        ${this.sim.state.dailyQuests.map((q) => renderCard(q, '00:00')).join('')}
       </div>
     `;
 
@@ -5426,7 +5301,6 @@ export class GameHUD {
     const box = this.root.querySelector('#roadmapDialogContent') as HTMLElement;
     const unlockedSet = new Set(this.sim.state.unlockedZones);
     const reqTrial = this.sim.getRequiredLevelTrial();
-    const trialDone = this.sim.isCurrentLevelTrialPassed();
 
     const zonesHtml = ZONES.map((z) => {
       const isOpen = unlockedSet.has(z.id) || this.sim.state.sandboxMode;
@@ -5434,17 +5308,14 @@ export class GameHUD {
       const zStarCost = getZonePuzzleStarCost(z);
       return `
         <div class="quest-card-mini" style="display:flex;flex-direction:column;justify-content:space-between;gap:6px;">
-          <div>
-            <div style="font-size:13.5px;font-weight:800;">${isOpen ? '✅' : '🌫️'} ${z.name}</div>
-            <div style="font-size:12px;opacity:0.85;">${z.subtitle}</div>
-          </div>
+          <div style="font-size:13.5px;font-weight:800;">${isOpen ? '✅' : '🌫️'} ${z.name}</div>
           <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:12px;font-weight:700;">
-            <span>Cấp Giải Đố ${z.unlockLevel} • ${zStarCost > 0 ? `🌟 ${zStarCost} Sao` : 'Đã mở sẵn'}</span>
+            <span>Lv.${z.unlockLevel} • ${zStarCost > 0 ? `🌟 ${zStarCost}` : '✓'}</span>
             <div style="display:flex;gap:5px;">
-              <button type="button" data-cam-zone="${z.id}" class="brass-btn" style="padding:4px 8px;font-size:12px;">👁️ Tới xem</button>
+              <button type="button" data-cam-zone="${z.id}" class="brass-btn" style="padding:4px 8px;font-size:12px;">👁️ Xem</button>
               ${
                 canOpen
-                  ? `<button type="button" data-unlock-zone="${z.id}" class="brass-btn gold-cta" style="padding:4px 8px;font-size:12px;">🔓 Mở khóa</button>`
+                  ? `<button type="button" data-unlock-zone="${z.id}" class="brass-btn gold-cta" style="padding:4px 8px;font-size:12px;">🔓 Mở</button>`
                   : ''
               }
             </div>
@@ -5462,25 +5333,21 @@ export class GameHUD {
         reqTrial && !this.sim.state.sandboxMode && !this.sim.isHeadmasterPreview
           ? (() => {
               const wpR = this.sim.getWinsProgressForCurrentLevel();
-              const tpR = this.sim.getTotalTowerClearedStages();
               return `<div class="quest-card-mini trial-quest-card" style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
-              <div>
-                <div style="font-size:13.5px;font-weight:900;">
-                  🔥 Đề Cử Cấp ${this.sim.state.level} → ${this.sim.state.level + 1} (${wpR.current}/${wpR.required} màn • Tháp ${tpR.cleared.toLocaleString('vi-VN')}/${tpR.total.toLocaleString('vi-VN')}): ${reqTrial.icon} ${escapeHtml(reqTrial.shortVi)}
-                </div>
-                <div style="font-size:12px;opacity:0.9;">5 môn Giải Đố × 777 Màn (Tổng kho 7.150 🌟 Sao cho 33 Công Trình &amp; 10 Vùng Đất) — Chơi đúng Môn Đề Cử nhận thêm 🌟 Sao Mốc + ⏳ Cát + 35% 🪙!</div>
+              <div style="font-size:13.5px;font-weight:900;">
+                🔥 Đề Cử Lv.${this.sim.state.level} (${wpR.current}/${wpR.required}): ${reqTrial.icon} ${escapeHtml(reqTrial.shortVi)}
               </div>
               <button type="button" id="btnRoadmapPlayTrial" class="brass-btn gold-cta" style="padding:6px 12px;font-size:12.5px;">
-                ▶️ Chơi ${escapeHtml(reqTrial.shortVi)}
+                ▶️ Chơi
               </button>
             </div>`;
             })()
           : ''
       }
-      <h3 style="font-size:15px;font-weight:800;margin-bottom:8px;">🗺️ 10 Phân Khu Đại Điền Trang (${GRID_SIZE}×${GRID_SIZE} Ô Lưới — 5.184 Ô)</h3>
+      <h3 style="font-size:15px;font-weight:800;margin-bottom:8px;">🗺️ 10 Vùng Đất</h3>
       <div class="grid-2col" style="margin-bottom:16px;">${zonesHtml}</div>
 
-      <h3 style="font-size:15px;font-weight:800;margin-bottom:8px;">🌟 Cột Mốc Mở Khóa Tiêu Biểu (Level 1 → 100)</h3>
+      <h3 style="font-size:15px;font-weight:800;margin-bottom:8px;">🌟 Cột Mốc (Lv.1 → 100)</h3>
       <div style="display:flex;flex-direction:column;gap:6px;">
         ${milestones
           .map((m) => {
@@ -5489,16 +5356,11 @@ export class GameHUD {
               .map((id) => getCatalogItem(id)?.name)
               .filter(Boolean)
               .join(', ');
-            const prevReq = m.level > 1 ? LEVELS[m.level - 2]?.trialRequirement : undefined;
             return `
               <div class="quest-card-mini" style="display:flex;justify-content:space-between;align-items:center;gap:10px;opacity:${reached ? '1' : '0.78'};">
                 <div>
-                  <span style="font-weight:800;font-size:13px;">${reached ? '🌟' : '🔒'} Cấp ${m.level}</span>
-                  ${m.titleUnlock ? `<span style="font-size:12px;color:#92400e;font-weight:700;"> — Danh hiệu: ${m.titleUnlock}</span>` : ''}
-                  ${prevReq ? `<span style="font-size:11.5px;opacity:0.85;"> • Thử thách mở cấp: ${prevReq.icon} ${escapeHtml(prevReq.shortVi)}</span>` : ''}
-                  <div style="font-size:12px;margin-top:2px;">
-                    ${m.milestoneNote ?? ''} ${itemNames ? `(Mở công trình: ${itemNames})` : ''}
-                  </div>
+                  <span style="font-weight:800;font-size:13px;">${reached ? '🌟' : '🔒'} Lv.${m.level}</span>
+                  ${itemNames ? `<span style="font-size:12px;margin-left:6px;">${itemNames}</span>` : ''}
                 </div>
                 <span style="font-size:12px;font-weight:700;white-space:nowrap;">+🪙${m.rewardGalleons}</span>
               </div>
@@ -5552,8 +5414,8 @@ export class GameHUD {
         const ready = herbWait === 0 || st.sandboxMode;
         herbBtn.classList.toggle('gold-cta', ready);
         herbBtn.textContent = ready
-          ? '🌿 Hái Rổ Thảo Dược Tươi Ngay!'
-          : `🌱 Đang nảy mầm (${herbWait}s)`;
+          ? '🌿 Hái Thảo Dược'
+          : `🌱 (${herbWait}s)`;
       }
 
       const brewLbl = box.querySelector('[data-ws-brew-left]') as HTMLElement | null;
@@ -5561,7 +5423,7 @@ export class GameHUD {
         const brewRec = CRAFT_RECIPES.find((r) => r.id === st.supply.activeBrew?.goodId);
         const brewLeftSec = Math.max(0, Math.ceil((st.supply.activeBrew.endsAt - now) / 1000));
         if (brewRec) {
-          brewLbl.textContent = `🔥 Vạc Phép Đang Ủ: ${brewRec.emoji} ${brewRec.name} (còn ${brewLeftSec}s)`;
+          brewLbl.textContent = `🔥 ${brewRec.emoji} ${brewRec.name} (${brewLeftSec}s)`;
         }
       }
 
@@ -5574,9 +5436,9 @@ export class GameHUD {
         } else {
           buffBox.classList.remove('hidden');
           const parts: string[] = [];
-          if (bbLeft > 0) parts.push(`🍻 Bia Bơ Ủ Tuyết (+85% Vàng Tiệm: còn ${bbLeft}s)`);
-          if (fxLeft > 0) parts.push(`🧪 Phúc Lạc Dược (+35% XP & x2 Thẻ: còn ${fxLeft}s)`);
-          buffBox.textContent = `✨ Bùa Cường Hóa Đang Hiệu Lực: ${parts.join(' • ')}`;
+          if (bbLeft > 0) parts.push(`🍻 +85%G (${bbLeft}s)`);
+          if (fxLeft > 0) parts.push(`🧪 +35%XP (${fxLeft}s)`);
+          buffBox.textContent = `✨ ${parts.join(' • ')}`;
         }
       }
     }
@@ -5595,18 +5457,18 @@ export class GameHUD {
     const barnUsed = this.sim.getBarnTotalUsed();
 
     const tabsHtml = `
-      <div class="workshop-tabs" role="group" aria-label="Chuyên mục Kho Nông Sản & Xưởng">
+      <div class="workshop-tabs" role="group" aria-label="Kho & Xưởng">
         <button type="button" data-ws-tab="barn" data-active="${this.activeWorkshopTab === 'barn'}" aria-pressed="${this.activeWorkshopTab === 'barn'}" class="brass-btn">
-          🏡 Kho Nông Sản (${barnUsed}/${barn.capacity})
+          🏡 Kho (${barnUsed}/${barn.capacity})
         </button>
         <button type="button" data-ws-tab="brew" data-active="${this.activeWorkshopTab === 'brew'}" aria-pressed="${this.activeWorkshopTab === 'brew'}" class="brass-btn">
-          🧪 Vạc Phép &amp; Thảo Dược
+          🧪 Vạc Phép
         </button>
         <button type="button" data-ws-tab="cargo" data-active="${this.activeWorkshopTab === 'cargo'}" aria-pressed="${this.activeWorkshopTab === 'cargo'}" class="brass-btn">
-          🚂 Tàu Hàng (${cratesDone}/3)
+          🚂 Tàu (${cratesDone}/3)
         </button>
         <button type="button" data-ws-tab="synergy" data-active="${this.activeWorkshopTab === 'synergy'}" aria-pressed="${this.activeWorkshopTab === 'synergy'}" class="brass-btn">
-          🌟 12 Combo (${activeSynCount}/12)
+          🌟 Combo (${activeSynCount}/12)
         </button>
       </div>
     `;
@@ -5628,7 +5490,7 @@ export class GameHUD {
               <div class="barn-stock-card ${qty > 0 ? 'in-stock' : 'empty'}">
                 <img src="${meta.iconSrc}" alt="${escapeHtml(meta.name)}" class="barn-stock-img" />
                 <div class="barn-stock-name">${escapeHtml(meta.name)}</div>
-                <div class="barn-stock-qty">Đang có: <strong>${st.sandboxMode ? '∞' : qty}</strong></div>
+                <div class="barn-stock-qty"><strong>×${st.sandboxMode ? '∞' : qty}</strong></div>
                 <button
                   type="button"
                   class="brass-btn ${qty > 0 || st.sandboxMode ? 'gold-cta' : ''}"
@@ -5636,7 +5498,7 @@ export class GameHUD {
                   ${qty <= 0 && !st.sandboxMode ? 'disabled' : ''}
                   style="width:100%;padding:4px 8px;font-size:11.5px;"
                 >
-                  🪙 Bán 1 (+${meta.sellValue}G)
+                  🪙 +${meta.sellValue}G
                 </button>
               </div>
             `;
@@ -5651,31 +5513,21 @@ export class GameHUD {
         (talCount < MAX_PHOENIX_TALISMANS &&
           Boolean(craftGood) &&
           st.galleons >= PHOENIX_FORGE_GOLD_COST);
-      const forgeSubHtml =
-        talCount >= MAX_PHOENIX_TALISMANS && !st.sandboxMode
-          ? `Đã tích trữ đầy túi <strong>${MAX_PHOENIX_TALISMANS}/${MAX_PHOENIX_TALISMANS} 🔥 Bùa</strong>! Hãy mang vào Sảnh 5 Môn Giải Đố (dùng tối đa 1 lần/lượt thử màn).`
-          : craftMeta
-            ? `Hiến 1 <strong>${escapeHtml(craftMeta.name)}</strong> trong Kho Đỏ + <strong>🪙${PHOENIX_FORGE_GOLD_COST}G</strong> → Rèn ngay <strong>+1 🔥 Bùa Phượng Hoàng</strong> (trợ chiến 5 môn × 777 màn)!`
-            : `Cần ít nhất <strong>1 Đặc sản Lò Bánh / Xưởng Thủ Công</strong> trong Kho Đỏ + <strong>🪙${PHOENIX_FORGE_GOLD_COST}G</strong> để rèn +1 🔥 Bùa (hoặc ôn 8 câu Ngoại Ngữ / giao 3 Đơn Cú)!`;
 
       bodyHtml = `
         <div class="barn-header-card">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
             <div>
-              <div style="font-size:15px;font-weight:900;">🏡 Kho Nông Sản &amp; Hạt Giống Hang Sóc</div>
+              <div style="font-size:15px;font-weight:900;">🏡 Kho Đỏ (${barnUsed}/${barn.capacity})</div>
               <div style="font-size:12px;font-weight:700;opacity:0.86;">
-                🦉 Đã giao: <strong>${barn.ordersDelivered}</strong> đơn cú • 🔌 Phích cắm Muggle: <strong>×${plugs}</strong>
+                🦉 ${barn.ordersDelivered} • 🔌 ×${plugs}
               </div>
             </div>
             <button id="btnUpgradeFarmBarn" type="button" class="owl-green-send-btn" style="padding:7px 14px;font-size:12.5px;">
-              🔌 Nâng Cấp Kho +20 Ô (1🔌 + 🪙${upgGold})
+              🔌 +20 Ô (1🔌 + 🪙${upgGold})
             </button>
           </div>
-          <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:800;margin-top:8px;">
-            <span>Sức chứa hiện tại:</span>
-            <span>${barnUsed} / ${barn.capacity} ô (${capPct}%)</span>
-          </div>
-          <div class="quest-bar" style="height:10px;margin-top:4px;">
+          <div class="quest-bar" style="height:10px;margin-top:8px;">
             <div class="quest-bar-fill" style="width:${capPct}%"></div>
           </div>
         </div>
@@ -5683,9 +5535,8 @@ export class GameHUD {
         <div class="barn-talisman-forge">
           <div class="barn-talisman-forge-meta">
             <div class="barn-talisman-forge-title">
-              🔥 Lò Rèn Bùa Trợ Chiến Phượng Hoàng (Đang có: ${st.sandboxMode ? '∞' : `${talCount}/${MAX_PHOENIX_TALISMANS}`})
+              🔥 Bùa Phượng Hoàng (${st.sandboxMode ? '∞' : `${talCount}/${MAX_PHOENIX_TALISMANS}`})
             </div>
-            <div class="barn-talisman-forge-sub">${forgeSubHtml}</div>
           </div>
           <button
             id="btnCraftPhoenixTalisman"
@@ -5694,16 +5545,16 @@ export class GameHUD {
             ${!canForgeTalisman ? 'disabled' : ''}
             style="padding:8px 13px;font-size:12.5px;"
           >
-            🔥 Rèn +1 Bùa (${craftMeta ? `1 ${escapeHtml(craftMeta.name)}` : '1 Đặc sản'} + ${PHOENIX_FORGE_GOLD_COST}G)
+            🔥 Rèn +1 (${craftMeta ? `1 ${escapeHtml(craftMeta.name)}` : '1 Đặc sản'} + ${PHOENIX_FORGE_GOLD_COST}G)
           </button>
         </div>
 
-        <h3 style="font-size:14.5px;font-weight:900;margin:12px 0 6px;">🌾 ${Object.keys(FARM_CROPS).length} Nông Sản &amp; Thảo Mộc Đồng Nội</h3>
+        <h3 style="font-size:14.5px;font-weight:900;margin:12px 0 6px;">🌾 Nông Sản (${Object.keys(FARM_CROPS).length})</h3>
         <div class="barn-stock-grid">
           ${renderStockCards(Object.keys(FARM_CROPS) as FarmItemId[])}
         </div>
 
-        <h3 style="font-size:14.5px;font-weight:900;margin:14px 0 6px;">🥧 12 Đặc Sản Lò Bánh &amp; Xưởng Thủ Công</h3>
+        <h3 style="font-size:14.5px;font-weight:900;margin:14px 0 6px;">🥧 Đặc Sản (${Object.keys(FARM_GOODS).length})</h3>
         <div class="barn-stock-grid">
           ${renderStockCards(Object.keys(FARM_GOODS) as FarmItemId[])}
         </div>
@@ -5728,12 +5579,9 @@ export class GameHUD {
 
       bodyHtml = `
         <div class="quest-card-mini" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-          <div>
-            <div style="font-size:13.5px;font-weight:800;color:#7c2d12;">🌿 Luống Thảo Dược Tươi Cạnh Xưởng</div>
-            <div style="font-size:12px;opacity:0.86;">Thu hoạch thêm nguyên liệu mỗi 20 giây (hoặc tự động rơi khi thu vàng tại các công trình)!</div>
-          </div>
+          <div style="font-size:13.5px;font-weight:800;color:#7c2d12;">🌿 Luống Thảo Dược</div>
           <button id="btnWsQuickHerb" type="button" class="brass-btn ${herbWait === 0 || st.sandboxMode ? 'gold-cta' : ''}">
-            ${herbWait > 0 && !st.sandboxMode ? `🌱 Đang nảy mầm (${herbWait}s)` : '🌿 Hái Rổ Thảo Dược Tươi Ngay!'}
+            ${herbWait > 0 && !st.sandboxMode ? `🌱 (${herbWait}s)` : '🌿 Hái Thảo Dược'}
           </button>
         </div>
 
@@ -5748,7 +5596,6 @@ export class GameHUD {
                     <span>${info.emoji} ${info.name}</span>
                     <span style="color:#b45309;">×${st.sandboxMode ? '∞' : qty}</span>
                   </div>
-                  <div style="font-size:12px;opacity:0.8;line-height:1.25;">${escapeHtml(info.sourceHint)}</div>
                 </div>
               `;
             })
@@ -5759,9 +5606,7 @@ export class GameHUD {
           bbLeft > 0 || fxLeft > 0
             ? `
               <div data-ws-buff-banner="1" class="quest-card-mini" style="margin-bottom:12px;background:rgba(220,252,231,0.75);border-color:#16a34a;font-size:12.5px;font-weight:800;color:#15803d;">
-                ✨ Bùa Cường Hóa Đang Hiệu Lực:
-                ${bbLeft > 0 ? `🍻 Bia Bơ Ủ Tuyết (+85% Vàng Tiệm: còn ${bbLeft}s) ` : ''}
-                ${fxLeft > 0 ? `• 🧪 Phúc Lạc Dược (+35% XP & x2 Thẻ: còn ${fxLeft}s)` : ''}
+                ✨ ${bbLeft > 0 ? `🍻 +85%G (${bbLeft}s) ` : ''}${fxLeft > 0 ? `• 🧪 +35%XP (${fxLeft}s)` : ''}
               </div>
             `
             : ''
@@ -5773,10 +5618,10 @@ export class GameHUD {
               <div class="quest-card-mini" style="margin-bottom:12px;border-color:#9333ea;background:rgba(243,232,255,0.82);">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
                   <div data-ws-brew-left="1" style="font-size:13.5px;font-weight:800;color:#6b21a8;">
-                    🔥 Vạc Phép Đang Ủ: ${brewRec.emoji} ${escapeHtml(brewRec.name)} (còn ${brewLeftSec}s)
+                    🔥 ${brewRec.emoji} ${escapeHtml(brewRec.name)} (${brewLeftSec}s)
                   </div>
                   <button id="btnWsSpeedBrew" type="button" class="brass-btn gold-cta" style="padding:4px 10px;">
-                    ⏳ Dùng 1 Cát Ra Lò Ngay!
+                    ⏳ 1 Cát
                   </button>
                 </div>
               </div>
@@ -5802,10 +5647,9 @@ export class GameHUD {
                 <div>
                   <div style="display:flex;justify-content:space-between;align-items:center;">
                     <span style="font-size:14px;font-weight:800;">${rec.emoji} ${rec.name}</span>
-                    <span style="font-size:12px;font-weight:800;color:#7c2d12;">Kho: ${st.sandboxMode ? '∞' : stock}</span>
+                    <span style="font-size:12px;font-weight:800;color:#7c2d12;">×${st.sandboxMode ? '∞' : stock}</span>
                   </div>
-                  <div style="font-size:12px;margin:4px 0;">Nguyên liệu: ${reqText}</div>
-                  <div style="font-size:12px;opacity:0.88;line-height:1.35;">${rec.effectSummary}</div>
+                  <div style="font-size:12px;margin:4px 0;">${reqText}</div>
                 </div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;">
                   <button type="button" data-brew-good="${rec.id}" class="brass-btn gold-cta" style="flex:1;">
@@ -5827,12 +5671,9 @@ export class GameHUD {
         <div class="quest-card-mini" style="padding:13px;margin-bottom:14px;background:rgba(254,243,199,0.85);border-color:#b45309;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
             <div style="font-size:15px;font-weight:800;color:#7c2d12;">
-              🚂 Chuyến Tàu Hàng Tốc Hành Hogwarts #${st.supply.cargoTrainIndex}
+              🚂 Tàu #${st.supply.cargoTrainIndex}
             </div>
-            <span style="font-size:12px;font-weight:800;">Đã xuất bến thành công: ${st.stats.cargoTrainsSent ?? 0} chuyến</span>
-          </div>
-          <div style="font-size:12.5px;margin-top:5px;">
-            🎁 <strong>Thưởng xuất bến trọn 3 kiện hàng:</strong> +${bonusG.toLocaleString('vi-VN')} 🪙, +${bonusXp} ⭐, +2 ⏳ Cát Thời Gian &amp; <strong>Pháo Hoa Rồng Lễ Hội!</strong>
+            <span style="font-size:12px;font-weight:800;">🎁 +${bonusG.toLocaleString('vi-VN')}🪙 +${bonusXp}⭐ +2⏳</span>
           </div>
         </div>
 
@@ -5846,20 +5687,20 @@ export class GameHUD {
                 <div class="crate-card ${crate.fulfilled ? 'done' : ''}">
                   <div>
                     <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:800;color:#92400e;">
-                      <span>TOA HÀNG #${idx + 1}</span>
-                      <span>${crate.fulfilled ? '✅ ĐÃ CHẤT HÀNG' : `Kho: ${st.sandboxMode ? '∞' : have}/${crate.qtyRequired}`}</span>
+                      <span>#${idx + 1}</span>
+                      <span>${crate.fulfilled ? '✅' : `${st.sandboxMode ? '∞' : have}/${crate.qtyRequired}`}</span>
                     </div>
                     <div style="font-size:15px;font-weight:800;margin:6px 0;">${rec.emoji} ${rec.name} ×${crate.qtyRequired}</div>
                     <div style="font-size:12px;font-weight:700;color:#15803d;">
-                      Thưởng kiện: +${crate.rewardGalleons} 🪙 • +${crate.rewardXp} ⭐ • +${crate.rewardTimeSand} ⏳
+                      +${crate.rewardGalleons}🪙 • +${crate.rewardXp}⭐ • +${crate.rewardTimeSand}⏳
                     </div>
                   </div>
                   ${
                     crate.fulfilled
-                      ? `<div style="font-size:12.5px;font-weight:800;color:#15803d;text-align:center;padding:6px 0;">✓ Sẵn sàng lăn bánh</div>`
+                      ? `<div style="font-size:12.5px;font-weight:800;color:#15803d;text-align:center;padding:6px 0;">✓ Đã chất</div>`
                       : canLoad
-                        ? `<button type="button" data-fulfill-crate="${crate.id}" class="brass-btn gold-cta" style="width:100%;">📦 Chất Kiện Lên Tàu</button>`
-                        : `<button type="button" data-goto-brew="1" class="brass-btn" style="width:100%;">🧪 Qua Xưởng Nấu Thêm</button>`
+                        ? `<button type="button" data-fulfill-crate="${crate.id}" class="brass-btn gold-cta" style="width:100%;">📦 Chất Hàng</button>`
+                        : `<button type="button" data-goto-brew="1" class="brass-btn" style="width:100%;">🧪 Nấu</button>`
                   }
                 </div>
               `;
@@ -5869,9 +5710,6 @@ export class GameHUD {
       `;
     } else {
       bodyHtml = `
-        <div class="quest-card-mini" style="margin-bottom:12px;font-size:12.5px;">
-          💡 <strong>Quy hoạch Thung Lũng Thông Minh (Combo Hào Quang):</strong> Khi đặt 2 công trình cùng chủ đề nằm trong bán kính ô quy định, một đường <strong>hào quang vàng</strong> sẽ tự động nối giữa chúng trên bản đồ và cộng dồn sản lượng Vàng + XP!
-        </div>
         <div class="grid-2col">
           ${DISTRICT_SYNERGIES.map((syn) => {
             const active = this.sim.activeSynergies.activeIds.has(syn.id);
@@ -5883,13 +5721,12 @@ export class GameHUD {
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
                   <span style="font-size:13.5px;font-weight:800;">${syn.emoji} ${escapeHtml(syn.name)}</span>
                   <span style="font-size:12px;font-weight:800;color:${active ? '#15803d' : '#78350f'};">
-                    ${active ? '✅ ĐÃ KÍCH HOẠT' : `Cách ≤ ${syn.maxRadius} ô`}
+                    ${active ? '✅' : `≤${syn.maxRadius} ô`}
                   </span>
                 </div>
                 <div style="font-size:12px;font-weight:700;color:#92400e;margin:4px 0;">🔗 ${names}</div>
-                <div style="font-size:12px;opacity:0.86;line-height:1.35;margin-bottom:5px;">${syn.description}</div>
                 <div style="font-size:12px;font-weight:800;color:#15803d;">
-                  Thưởng hào quang: +${syn.goldBonusPct}% Vàng • +${syn.xpBonusPct}% Sao XP
+                  +${syn.goldBonusPct}%G • +${syn.xpBonusPct}%XP
                 </div>
               </div>
             `;
@@ -5991,55 +5828,53 @@ export class GameHUD {
     box.innerHTML = `
       <div class="grid-2col" style="margin-bottom:14px;">
         <div class="quest-card-mini">
-          <div style="font-size:13.5px;font-weight:800;margin-bottom:8px;">🎵 Âm Thanh, Giao Hưởng & Hiển Thị</div>
+          <div style="font-size:13.5px;font-weight:800;margin-bottom:8px;">🎵 Âm Thanh &amp; Hiển Thị</div>
           <div style="display:flex;flex-direction:column;gap:7px;">
             <label class="switch-row">
-              <span>🎼 Nhạc nền Giao hưởng Celesta & Đàn Hạc (Đổi Ngày/Đêm)</span>
+              <span>🎼 Nhạc nền (BGM)</span>
               <input id="swBgm" type="checkbox" switch ${st.settings.bgmEnabled ? 'checked' : ''} />
             </label>
             <label class="switch-row">
-              <span>🔔 Hiệu ứng chuông phép, còi tàu & cú đêm (SFX)</span>
+              <span>🔔 Âm hiệu ứng (SFX)</span>
               <input id="swSfx" type="checkbox" switch ${st.settings.soundEnabled ? 'checked' : ''} />
             </label>
             <label class="switch-row">
-              <span>👁️ Chế độ Nhìn Xuyên Nhà Cao (Cutaway View — Phím V)</span>
+              <span>👁️ Nhìn xuyên nhà (V)</span>
               <input id="swCutaway" type="checkbox" switch ${st.settings.cutawayMode ? 'checked' : ''} />
             </label>
             <label class="switch-row">
-              <span>✨ Luôn hiển thị lưới ô kim cương trên đất</span>
+              <span>✨ Hiện lưới ô</span>
               <input id="swGrid" type="checkbox" switch ${st.settings.showGrid ? 'checked' : ''} />
             </label>
             <label class="switch-row">
-              <span>♾️ Chế độ Sandbox (Vàng vô hạn & mở mọi công trình)</span>
+              <span>♾️ Sandbox</span>
               <input id="swSandbox" type="checkbox" switch ${st.sandboxMode ? 'checked' : ''} />
             </label>
           </div>
         </div>
 
         <div class="quest-card-mini">
-          <div style="font-size:13.5px;font-weight:800;margin-bottom:6px;">🕒 Kính Tiềm Vọng Thời Gian & Lễ Hội</div>
-          <p style="font-size:12px;margin-bottom:6px;">Ánh sáng & Đổ bóng (mặc định khớp đồng hồ 24h):</p>
+          <div style="font-size:13.5px;font-weight:800;margin-bottom:6px;">🕒 Thời Gian &amp; Thời Tiết</div>
           <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">
             ${(['realtime', 'dawn', 'day', 'dusk', 'night'] as TimeOverride[])
               .map((t) => {
                 const labels: Record<TimeOverride, string> = {
-                  realtime: 'Đồng hồ 24h',
-                  dawn: 'Bình minh',
-                  day: 'Ban ngày',
-                  dusk: 'Hoàng hôn',
-                  night: 'Đêm sao',
+                  realtime: '🕒 24h',
+                  dawn: '🌅 Bình minh',
+                  day: '☀️ Ngày',
+                  dusk: '🌇 Chiều',
+                  night: '🌙 Đêm',
                 };
                 return `<button type="button" data-time="${t}" data-active="${st.settings.timeOverride === t}" aria-pressed="${st.settings.timeOverride === t}" class="brass-btn" style="padding:4px 8px;font-size:12px;">${labels[t]}</button>`;
               })
               .join('')}
           </div>
 
-          <p style="font-size:12px;margin-bottom:6px;">Sự kiện Lễ Hội:</p>
           <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">
             ${(['auto', 'halloween', 'christmas', 'quidditch_cup'] as Array<'auto' | FestivalType>)
               .map((f) => {
                 const labels: Record<string, string> = {
-                  auto: 'Tự động',
+                  auto: '🎪 Tự động',
                   halloween: '🎃 Halloween',
                   christmas: '🎄 Giáng Sinh',
                   quidditch_cup: '🏆 Quidditch',
@@ -6049,63 +5884,58 @@ export class GameHUD {
               .join('')}
           </div>
 
-          <p style="font-size:12px;margin-bottom:6px;">Thời tiết Phép thuật (mặc định tự động đổi mỗi 2 phút):</p>
           <div style="display:flex;flex-wrap:wrap;gap:5px;">
             ${(['auto', 'clear', 'cloudy', 'rain', 'storm', 'snow', 'fog'] as WeatherOverride[])
               .map((w) => {
                 const labels: Record<string, string> = {
                   auto: '🌦️ Tự động',
-                  clear: '☀️ Nắng ấm',
-                  cloudy: '⛅ Mây bay',
-                  rain: '🌧️ Mưa xuân',
-                  storm: '⛈️ Giông sấm',
-                  snow: '❄️ Tuyết rơi',
-                  fog: '🌫️ Sương sớm',
+                  clear: '☀️ Nắng',
+                  cloudy: '⛅ Mây',
+                  rain: '🌧️ Mưa',
+                  storm: '⛈️ Giông',
+                  snow: '❄️ Tuyết',
+                  fog: '🌫️ Sương',
                 };
                 return `<button type="button" data-weather="${w}" data-active="${st.settings.weatherOverride === w}" aria-pressed="${st.settings.weatherOverride === w}" class="brass-btn" style="padding:4px 8px;font-size:12px;">${labels[w]}</button>`;
               })
               .join('')}
           </div>
 
-          <p style="font-size:12px;margin-bottom:6px;margin-top:12px;">Phong cách đồ hoạ:</p>
-          <div style="display:flex;flex-wrap:wrap;gap:5px;">
-            <button type="button" data-toon="on" data-active="${toonOn}" aria-pressed="${toonOn}" class="brass-btn" style="padding:4px 8px;font-size:12px;">🎨 Tranh vẽ (viền nâu)</button>
-            <button type="button" data-toon="off" data-active="${!toonOn}" aria-pressed="${!toonOn}" class="brass-btn" style="padding:4px 8px;font-size:12px;">🖼️ Nguyên bản vẽ tay</button>
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;">
+            <button type="button" data-toon="on" data-active="${toonOn}" aria-pressed="${toonOn}" class="brass-btn" style="padding:4px 8px;font-size:12px;">🎨 Viền nâu</button>
+            <button type="button" data-toon="off" data-active="${!toonOn}" aria-pressed="${!toonOn}" class="brass-btn" style="padding:4px 8px;font-size:12px;">🖼️ 2.5D Gốc</button>
           </div>
-          <p style="font-size:11.5px;opacity:0.75;margin-top:5px;">
-            Chế độ Tranh vẽ thêm viền nâu đậm &amp; tông màu phẳng cho toàn bộ công trình, giúp công viên đọc như một cuốn sách tranh vẽ.
-          </p>
         </div>
       </div>
 
       <div class="quest-card-mini" style="margin-bottom:14px;">
-        <div style="font-size:13.5px;font-weight:800;margin-bottom:6px;">🔮 Trải Nghiệm Nhanh & Sự Kiện Vui</div>
+        <div style="font-size:13.5px;font-weight:800;margin-bottom:6px;">🔮 Tiện Ích</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;">
           <button id="btnReplayTutorial" type="button" class="brass-btn gold-cta">
-            📖 Xem Lại Hướng Dẫn Bà Molly (6 Bước)
+            📖 Hướng Dẫn
           </button>
           <button id="btnPreview100" type="button" class="brass-btn gold-cta">
-            ${this.sim.isHeadmasterPreview ? '↩️ Quay về File Save Chính' : '🌾 Xem Thử Đại Điền Trang Hang Sóc & Hogsmeade (Cấp 100)'}
+            ${this.sim.isHeadmasterPreview ? '↩️ Về Save' : '🌾 Xem Lv.100'}
           </button>
           <button id="btnTestFireworks" type="button" class="brass-btn">
-            🎆 Bắn Pháo Hoa Rồng!
+            🎆 Pháo Hoa
           </button>
           <button id="btnTestEscape" type="button" class="brass-btn">
-            🐾 Thả Niffler dạo chơi!
+            🐾 Thả Niffler
           </button>
         </div>
       </div>
 
       <div class="quest-card-mini">
-        <div style="font-size:13.5px;font-weight:800;margin-bottom:6px;">💾 Sao Lưu & Khôi Phục Tiến Trình 100 Level</div>
+        <div style="font-size:13.5px;font-weight:800;margin-bottom:6px;">💾 Dữ Liệu</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;">
-          <button id="btnExportSave" type="button" class="brass-btn">📥 Tải File Save (.json)</button>
+          <button id="btnExportSave" type="button" class="brass-btn">📥 Xuất (.json)</button>
           <label class="brass-btn" style="cursor:pointer;">
-            📤 Nhập File Save (.json)
+            📤 Nhập (.json)
             <input id="inpImportSave" type="file" accept=".json" style="display:none;" />
           </label>
           <button id="btnResetPark" type="button" class="brass-btn" style="border-color:#ef4444;color:#fecaca;">
-            🌱 Chơi Lại Từ Level 1
+            🌱 Chơi Lại
           </button>
         </div>
       </div>
@@ -6277,7 +6107,7 @@ export class GameHUD {
       const totalMs = Math.max(1000, sc.activeIncubation.endsAt - sc.activeIncubation.startedAt);
       const pct = Math.min(100, Math.round(((now - sc.activeIncubation.startedAt) / totalMs) * 100));
       const lbl = box.querySelector('[data-suitcase-inc-left]');
-      if (lbl) lbl.textContent = `Còn ${leftSec}s`;
+      if (lbl) lbl.textContent = `${leftSec}s`;
       const prog = box.querySelector('[data-suitcase-inc-prog]') as HTMLProgressElement | null;
       if (prog) prog.value = pct;
     }
@@ -6287,7 +6117,7 @@ export class GameHUD {
       const totalMs = Math.max(1000, sc.activeExpedition.endsAt - sc.activeExpedition.startedAt);
       const pct = Math.min(100, Math.round(((now - sc.activeExpedition.startedAt) / totalMs) * 100));
       const lbl = box.querySelector('[data-suitcase-exp-left]');
-      if (lbl) lbl.textContent = `Còn ${leftSec}s`;
+      if (lbl) lbl.textContent = `${leftSec}s`;
       const prog = box.querySelector('[data-suitcase-exp-prog]') as HTMLProgressElement | null;
       if (prog) prog.value = pct;
     }
@@ -6307,15 +6137,15 @@ export class GameHUD {
         if (groomBtn) {
           groomBtn.textContent =
             groomWait > 0
-              ? `🪮 Đang lim dim (${groomWait}s)`
-              : '🪮 Chải Lông Êm Ái (Miễn phí • +30💝)';
+              ? `🪮 (${groomWait}s)`
+              : '🪮 Chải (+30💝)';
         }
         const trainBtn = box.querySelector('#btnScTrain') as HTMLButtonElement | null;
         if (trainBtn) {
           trainBtn.textContent =
             trainWait > 0
-              ? `🎾 Đang nghỉ (${trainWait}s)`
-              : '🎾 Tập Biểu Diễn (20G • +45💝)';
+              ? `🎾 (${trainWait}s)`
+              : '🎾 Tập (20G • +45💝)';
         }
       }
     }
@@ -6347,30 +6177,30 @@ export class GameHUD {
 
     const incStatusLabel = sc.activeIncubation
       ? now >= sc.activeIncubation.endsAt
-        ? '🐣 Nở rồi!'
-        : '🥚 Đang ấp'
-      : '🧬 Sẵn sàng';
+        ? '🐣 Nở!'
+        : '🥚 Ấp'
+      : '🧬';
     const expStatusLabel = sc.activeExpedition
       ? now >= sc.activeExpedition.endsAt
-        ? '🎒 Đã về!'
-        : '🧭 Đang đi'
+        ? '🎒 Về!'
+        : '🧭 Đi'
       : `${discoveredCount}/${totalCompendiumEntries}`;
 
     const summaryHtml = `
       <div class="suitcase-summary-bar">
-        <span>🐾 Đang nuôi trong công viên: <strong>${habitats.length}</strong> cá thể</span>
-        <span>📖 Sổ Tay Newt: <strong>${discoveredCount}/${totalCompendiumEntries}</strong> (+${masteryPct}% sản lượng toàn bộ thú)</span>
-        <span>✨ Bụi Ánh Sao: <strong>${st.sandboxMode ? '∞' : starlightQty}</strong> • ⏳ Cát: <strong>${st.sandboxMode ? '∞' : st.timeSand}</strong></span>
+        <span>🐾 <strong>${habitats.length}</strong></span>
+        <span>📖 <strong>${discoveredCount}/${totalCompendiumEntries}</strong> (+${masteryPct}%)</span>
+        <span>✨ <strong>${st.sandboxMode ? '∞' : starlightQty}</strong> • ⏳ <strong>${st.sandboxMode ? '∞' : st.timeSand}</strong></span>
       </div>
-      <div class="workshop-tabs" role="group" aria-label="Chuyên mục Chiếc Vali Sinh Vật">
+      <div class="workshop-tabs" role="group" aria-label="Vali Sinh Vật">
         <button type="button" data-sc-tab="care" data-active="${this.activeSuitcaseTab === 'care'}" aria-pressed="${this.activeSuitcaseTab === 'care'}" class="brass-btn">
-          🐾 Khu Bảo Tồn &amp; Gắn Kết (${habitats.length})
+          🐾 Chăm Sóc (${habitats.length})
         </button>
         <button type="button" data-sc-tab="morph" data-active="${this.activeSuitcaseTab === 'morph'}" aria-pressed="${this.activeSuitcaseTab === 'morph'}" class="brass-btn">
-          🧬 Ấp Trứng &amp; Biến Thể (${incStatusLabel})
+          🧬 Ấp Trứng (${incStatusLabel})
         </button>
         <button type="button" data-sc-tab="expedition" data-active="${this.activeSuitcaseTab === 'expedition'}" aria-pressed="${this.activeSuitcaseTab === 'expedition'}" class="brass-btn">
-          🧭 Thám Hiểm &amp; Sổ Tay (${expStatusLabel})
+          🧭 Thám Hiểm (${expStatusLabel})
         </button>
       </div>
     `;
@@ -6382,14 +6212,11 @@ export class GameHUD {
         bodyHtml = `
           <div class="quest-card-mini" style="text-align:center;padding:22px 14px;">
             <div style="font-size:32px;margin-bottom:6px;">🧳✨</div>
-            <div style="font-size:15px;font-weight:800;color:#45230c;margin-bottom:6px;">
-              Chiếc Vali Phép Thuật Đang Chờ Sinh Vật Đầu Tiên!
+            <div style="font-size:15px;font-weight:800;color:#45230c;margin-bottom:10px;">
+              Chưa có chuồng thú
             </div>
-            <p style="font-size:13px;line-height:1.5;max-width:520px;margin:0 auto 12px;">
-              Hãy xây dựng ít nhất một Khu Bảo Tồn Sinh Vật trên bản đồ (từ Cấp 4 mở khóa <strong>Hang Đào Mỏ Niffler</strong>) để mở không gian chăm sóc cận cảnh, đặt tên riêng, vuốt ve tăng độ gắn kết và lai tạo Biến Thể Hoàng Kim!
-            </p>
             <button id="btnScOpenCreatureBuild" type="button" class="brass-btn gold-cta">
-              🐾 Mở Khay Xây Chuồng Sinh Vật Ngay
+              🐾 Xây Chuồng
             </button>
           </div>
         `;
@@ -6436,7 +6263,7 @@ export class GameHUD {
                         ${escapeHtml(hName)}
                       </div>
                       <div style="font-size:11.5px;color:#78350f;font-weight:700;">
-                        💝 Lv.${hb.creatureBondLevel ?? 1} • ${hmMeta.shortLabel}
+                        💝 Lv.${hb.creatureBondLevel ?? 1}
                       </div>
                     </div>
                   </button>
@@ -6457,7 +6284,7 @@ export class GameHUD {
                 </span>
               </div>
 
-              <button id="btnScPetStage" type="button" class="suitcase-diorama-stage" aria-label="Chạm vuốt ve ${escapeHtml(displayPetName)}" title="Chạm vào sinh vật để vuốt ve làm quen!" style="background:none;border:none;">
+              <button id="btnScPetStage" type="button" class="suitcase-diorama-stage" aria-label="Vuốt ve ${escapeHtml(displayPetName)}" title="Vuốt ve" style="background:none;border:none;">
                 <img
                   src="/sprites/${profile.beastSpriteKey}.png"
                   alt="${escapeHtml(displayPetName)}"
@@ -6471,7 +6298,7 @@ export class GameHUD {
                   ${profile.emoji} ${escapeHtml(displayPetName)}
                 </div>
                 <div style="font-size:11.5px;opacity:0.92;margin-top:2px;">
-                  ${escapeHtml(profile.morphNames[morph])}${isAwayOnExp ? ' • 🧭 Đang đi thám hiểm' : ''}
+                  ${escapeHtml(profile.morphNames[morph])}${isAwayOnExp ? ' • 🧭' : ''}
                 </div>
               </div>
             </div>
@@ -6479,7 +6306,7 @@ export class GameHUD {
             <div class="suitcase-care-details">
               <form id="formSuitcaseRename" class="suitcase-rename-form">
                 <label for="inpSuitcasePetName" style="font-size:12.5px;font-weight:800;color:#5c2d0c;">
-                  🏷️ Tên thân mật:
+                  🏷️
                 </label>
                 <input
                   id="inpSuitcasePetName"
@@ -6492,43 +6319,40 @@ export class GameHUD {
                   placeholder="${escapeHtml(item.creatureName ?? item.name)}"
                   value="${escapeHtml(b.creatureNickname ?? '')}"
                 />
-                <button type="submit" class="brass-btn" style="padding:5px 11px;">Lưu tên</button>
+                <button type="submit" class="brass-btn" style="padding:5px 11px;">Lưu</button>
               </form>
 
               <div class="quest-card-mini" style="margin-top:0;">
                 <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;font-weight:800;margin-bottom:4px;">
-                  <span>💝 Độ Gắn Kết: Cấp ${bondLv}/${MAX_BOND_LEVEL} (+${bondBonusPct}% Vàng &amp; XP)</span>
-                  <span style="color:#b45309;">${bondLv >= MAX_BOND_LEVEL ? 'TỐI ĐA' : `${bondXp}/${bondReq} XP`}</span>
+                  <span>💝 Lv.${bondLv}/${MAX_BOND_LEVEL} (+${bondBonusPct}%)</span>
+                  <span style="color:#b45309;">${bondLv >= MAX_BOND_LEVEL ? 'MAX' : `${bondXp}/${bondReq}`}</span>
                 </div>
                 <progress max="${bondReq}" value="${bondProgressVal}" aria-label="Điểm gắn kết sinh vật"></progress>
                 <div style="font-size:12px;margin-top:5px;color:#5c2d0c;">
-                  🍬 Món khoái khẩu: <strong>${escapeHtml(profile.favoriteTreat)}</strong> • Sản lượng chuồng: <strong>+${prod.galleons.toLocaleString('vi-VN')}🪙 / ${item.cycleSec}s</strong>
+                  🍬 ${escapeHtml(profile.favoriteTreat)} • <strong>+${prod.galleons.toLocaleString('vi-VN')}🪙 / ${item.cycleSec}s</strong>
                 </div>
               </div>
 
               <div class="quest-card-mini" style="margin-top:0;">
                 <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:800;margin-bottom:4px;">
-                  <span>🥩 No bụng &amp; Bùa chắn: ${hunger}%</span>
-                  <span>🌿 Sinh thái chuồng: ${bio?.score ?? 60}% ${b.hasBabyOffspring ? '• 🐣 Có Thú Non' : ''}</span>
+                  <span>🥩 ${hunger}%</span>
+                  <span>🌿 ${bio?.score ?? 60}% ${b.hasBabyOffspring ? '• 🐣' : ''}</span>
                 </div>
-                <progress max="100" value="${hunger}" aria-label="Độ no bụng và bùa chắn"></progress>
-                <div style="font-size:11.5px;opacity:0.86;margin-top:4px;">
-                  📖 <em>${escapeHtml(profile.loreNote)}</em>
-                </div>
+                <progress max="100" value="${hunger}" aria-label="Độ no bụng"></progress>
               </div>
 
               <div class="suitcase-actions-grid">
                 <button id="btnScFeed" type="button" class="brass-btn">
-                  🥩 Đút Thức Ăn (${st.sandboxMode ? 'Miễn phí' : `${feedCost}G`} • +22💝)
+                  🥩 Ăn (${st.sandboxMode ? '0G' : `${feedCost}G`} • +22💝)
                 </button>
                 <button id="btnScGroom" type="button" class="brass-btn ${groomWait === 0 ? 'gold-cta' : ''}">
-                  ${groomWait > 0 ? `🪮 Đang lim dim (${groomWait}s)` : '🪮 Chải Lông Êm Ái (Miễn phí • +30💝)'}
+                  ${groomWait > 0 ? `🪮 (${groomWait}s)` : '🪮 Chải (+30💝)'}
                 </button>
                 <button id="btnScTrain" type="button" class="brass-btn">
-                  ${trainWait > 0 ? `🎾 Đang nghỉ (${trainWait}s)` : '🎾 Tập Biểu Diễn (20G • +45💝)'}
+                  ${trainWait > 0 ? `🎾 (${trainWait}s)` : '🎾 Tập (20G • +45💝)'}
                 </button>
                 <button id="btnScLocate" type="button" class="brass-btn">
-                  📍 Bay Tới Chuồng Trên Bản Đồ
+                  📍 Tới Chuồng
                 </button>
               </div>
             </div>
@@ -6550,19 +6374,19 @@ export class GameHUD {
           <div class="quest-card-mini" style="margin-bottom:12px;border-color:#d97706;background:linear-gradient(180deg,#fffbeb,#fef3c7);">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
               <div style="font-size:14px;font-weight:800;color:#78350f;">
-                🥚 Lồng Ấp Cổ Ngữ: Trứng ${escapeHtml(incProfile?.speciesName ?? incItem?.name ?? 'Sinh Vật')}
-                ${inc.boostedWithStarlight ? '<span style="color:#0369a1;"> • ✨ Đã rắc Bụi Ánh Sao (×2 tỉ lệ hiếm!)</span>' : ''}
+                🥚 ${escapeHtml(incProfile?.speciesName ?? incItem?.name ?? 'Trứng')}
+                ${inc.boostedWithStarlight ? '<span style="color:#0369a1;"> • ✨ ×2</span>' : ''}
               </div>
               <span data-suitcase-inc-left="1" style="font-size:13px;font-weight:800;color:#b45309;">
-                ${isReady ? '✨ Đã nứt vỏ ánh vàng!' : `Còn ${leftSec}s`}
+                ${isReady ? '✨ Nở!' : `${leftSec}s`}
               </span>
             </div>
-            <progress data-suitcase-inc-prog="1" max="100" value="${pct}" aria-label="Tiến độ ấp trứng cổ ngữ"></progress>
+            <progress data-suitcase-inc-prog="1" max="100" value="${pct}" aria-label="Tiến độ ấp trứng"></progress>
             <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
               ${
                 isReady
-                  ? `<button id="btnScClaimEgg" type="button" class="brass-btn gold-cta">🐣 Tách Vỏ Đón Biến Thể Chào Đời!</button>`
-                  : `<button id="btnScSpeedEgg" type="button" class="brass-btn gold-cta">⏳ Dùng 1 Cát Thời Gian Nở Ngay!</button>`
+                  ? `<button id="btnScClaimEgg" type="button" class="brass-btn gold-cta">🐣 Tách Vỏ</button>`
+                  : `<button id="btnScSpeedEgg" type="button" class="brass-btn gold-cta">⏳ 1 Cát</button>`
               }
             </div>
           </div>
@@ -6570,15 +6394,10 @@ export class GameHUD {
       } else {
         incChamberHtml = `
           <div class="quest-card-mini" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
-            <div>
-              <div style="font-size:13.5px;font-weight:800;color:#7c2d12;">🧬 Lồng Ấp Cổ Ngữ Biến Thể (75 giây/mẻ)</div>
-              <div style="font-size:12px;opacity:0.88;">
-                Ấp trứng cho chuồng đang nuôi để mở khóa <strong>🌙 Lam Tinh (+35%G, +0.6 Kỳ Diệu)</strong> hoặc <strong>✨ Hoàng Kim Thần Thoại (+75%G, +1.3 Kỳ Diệu)</strong>! Không bao giờ làm tụt phẩm chất hiện có.
-              </div>
-            </div>
+            <div style="font-size:13.5px;font-weight:800;color:#7c2d12;">🧬 Lồng Ấp (75s)</div>
             <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:800;color:#0369a1;cursor:pointer;">
               <input id="chkScStarlight" type="checkbox" ${this.useStarlightForIncubation && (st.sandboxMode || starlightQty > 0) ? 'checked' : ''} />
-              ✨ Rắc 1 Bụi Ánh Sao (Đảm bảo ≥ Lam Tinh, 36% Hoàng Kim!)
+              ✨ +1 Bụi Sao
             </label>
           </div>
         `;
@@ -6586,7 +6405,7 @@ export class GameHUD {
 
       const cardsHtml =
         habitats.length === 0
-          ? `<div class="quest-card-mini" style="font-size:13px;">Hãy xây ít nhất một Khu Bảo Tồn Sinh Vật trên bản đồ để bắt đầu ấp trứng cổ ngữ nhé!</div>`
+          ? `<div class="quest-card-mini" style="font-size:13px;">Chưa có chuồng thú</div>`
           : `
             <div class="grid-2col">
               ${habitats
@@ -6601,7 +6420,7 @@ export class GameHUD {
                         <img src="/sprites/${hp?.beastSpriteKey ?? hi.spriteKey}.png" alt="" style="width:52px;height:52px;object-fit:contain;filter:${MORPH_INFO[curMorph].cssFilter};" />
                         <div style="min-width:0;">
                           <div style="font-size:13.5px;font-weight:800;color:#45230c;">${escapeHtml(petLabel)}</div>
-                          <div style="font-size:12px;color:#78350f;">Hiện tại: <strong>${MORPH_INFO[curMorph].badge}</strong></div>
+                          <div style="font-size:12px;color:#78350f;"><strong>${MORPH_INFO[curMorph].badge}</strong></div>
                         </div>
                       </div>
                       <div style="display:flex;gap:5px;flex-wrap:wrap;">
@@ -6618,7 +6437,7 @@ export class GameHUD {
                         class="brass-btn ${!inc ? 'gold-cta' : ''}"
                         ${inc ? 'disabled' : ''}
                       >
-                        ${inc ? '🥚 Lồng ấp đang bận' : `🥚 Ấp Trứng Biến Thể (${st.sandboxMode ? 'Miễn phí' : `${cost}G`})`}
+                        ${inc ? '🥚 Đang ấp' : `🥚 Ấp (${st.sandboxMode ? '0G' : `${cost}G`})`}
                       </button>
                     </div>
                   `;
@@ -6647,18 +6466,18 @@ export class GameHUD {
           <div class="quest-card-mini" style="margin-bottom:14px;border-color:#15803d;background:rgba(220,252,231,0.82);">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
               <div style="font-size:14px;font-weight:800;color:#14532d;">
-                ${expDef.emoji} ${escapeHtml(petLabel)} đang thám hiểm "${escapeHtml(expDef.name)}"
+                ${expDef.emoji} ${escapeHtml(petLabel)} • ${escapeHtml(expDef.name)}
               </div>
               <span data-suitcase-exp-left="1" style="font-size:13px;font-weight:800;color:#15803d;">
-                ${isReady ? '🎒 Đã mang túi quà về cửa Vali!' : `Còn ${leftSec}s`}
+                ${isReady ? '🎒 Đã về!' : `${leftSec}s`}
               </span>
             </div>
-            <progress data-suitcase-exp-prog="1" max="100" value="${pct}" aria-label="Tiến độ chuyến thám hiểm sinh vật"></progress>
+            <progress data-suitcase-exp-prog="1" max="100" value="${pct}" aria-label="Tiến độ thám hiểm"></progress>
             <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
               ${
                 isReady
-                  ? `<button id="btnScClaimExp" type="button" class="brass-btn gold-cta">🎒 Đón Thú &amp; Nhận Thảo Dược Quý!</button>`
-                  : `<button id="btnScSpeedExp" type="button" class="brass-btn gold-cta">⏳ Dùng 1 Cát Đón Về Ngay!</button>`
+                  ? `<button id="btnScClaimExp" type="button" class="brass-btn gold-cta">🎒 Nhận</button>`
+                  : `<button id="btnScSpeedExp" type="button" class="brass-btn gold-cta">⏳ 1 Cát</button>`
               }
             </div>
           </div>
@@ -6666,7 +6485,7 @@ export class GameHUD {
       } else if (habitats.length === 0) {
         expSectionHtml = `
           <div class="quest-card-mini" style="margin-bottom:14px;font-size:13px;">
-            🧭 Hãy xây ít nhất một Khu Bảo Tồn Sinh Vật để cử thú cưng đi thám hiểm Rừng Cấm mang Thảo Dược về Xưởng Ủ Phép nhé!
+            🧭 Chưa có chuồng thú
           </div>
         `;
       } else {
@@ -6680,14 +6499,14 @@ export class GameHUD {
         expSectionHtml = `
           <div class="quest-card-mini" style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
             <label for="selScExpPet" style="font-size:13px;font-weight:800;color:#45230c;">
-              🐾 Chọn sinh vật cử đi thám hiểm:
+              🐾 Thú:
             </label>
             <select id="selScExpPet" class="suitcase-select" style="max-width:340px;">
               ${habitats
                 .map(({ building: hb, item: hi }) => {
                   const pName = hb.creatureNickname || hi.creatureName || hi.name;
                   const mBadge = MORPH_INFO[hb.creatureMorph ?? 'normal'].shortLabel;
-                  return `<option value="${escapeHtml(hb.uid)}" ${hb.uid === cb.uid ? 'selected' : ''}>${escapeHtml(pName)} (💝Lv.${hb.creatureBondLevel ?? 1} • ${mBadge} • No ${Math.round(hb.creatureHunger ?? 90)}%)</option>`;
+                  return `<option value="${escapeHtml(hb.uid)}" ${hb.uid === cb.uid ? 'selected' : ''}>${escapeHtml(pName)} (💝Lv.${hb.creatureBondLevel ?? 1} • ${mBadge})</option>`;
                 })
                 .join('')}
             </select>
@@ -6701,20 +6520,16 @@ export class GameHUD {
               const herbsText = exp.guaranteedIngredients
                 .map(
                   (g) =>
-                    `+${g.qty + bonusHerb} ${RAW_INGREDIENTS_INFO[g.id].emoji} ${RAW_INGREDIENTS_INFO[g.id].name}`
+                    `+${g.qty + bonusHerb} ${RAW_INGREDIENTS_INFO[g.id].emoji}`
                 )
-                .join(' • ');
+                .join(' ');
               return `
                 <div class="crate-card">
-                  <div>
-                    <div style="font-size:13.5px;font-weight:800;color:#45230c;">
-                      ${exp.emoji} ${escapeHtml(exp.name)} <span style="font-size:11.5px;color:#78350f;">(${exp.durationSec}s)</span>
-                    </div>
-                    <div style="font-size:12px;opacity:0.86;margin-top:3px;">${escapeHtml(exp.description)}</div>
+                  <div style="font-size:13.5px;font-weight:800;color:#45230c;">
+                    ${exp.emoji} ${escapeHtml(exp.name)} <span style="font-size:11.5px;color:#78350f;">(${exp.durationSec}s)</span>
                   </div>
                   <div style="font-size:12px;font-weight:700;color:#15803d;">
-                    🎁 +${estGold}🪙 • +${estXp}⭐<br/>
-                    🌿 ${herbsText}
+                    +${estGold}🪙 • +${estXp}⭐ • ${herbsText}
                   </div>
                   <button
                     type="button"
@@ -6722,7 +6537,7 @@ export class GameHUD {
                     class="brass-btn ${locked ? '' : 'gold-cta'}"
                     ${locked ? 'disabled' : ''}
                   >
-                    ${locked ? `🔒 Cần Công Viên Cấp ${exp.minParkLevel}` : '🧭 Cử Đi Thám Hiểm Ngay'}
+                    ${locked ? `🔒 Lv.${exp.minParkLevel}` : '🧭 Cử Đi'}
                   </button>
                 </div>
               `;
@@ -6734,10 +6549,10 @@ export class GameHUD {
       const compendiumHtml = `
         <div class="quest-card-mini" style="margin-bottom:10px;">
           <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:800;margin-bottom:4px;">
-            <span>📖 Sổ Tay Nghiên Cứu Sinh Vật Của Newt Scamander (${discoveredCount}/${totalCompendiumEntries})</span>
-            <span style="color:#15803d;">Hào quang thông thạo: +${masteryPct}% Vàng &amp; XP mọi chuồng thú</span>
+            <span>📖 Sổ Tay (${discoveredCount}/${totalCompendiumEntries})</span>
+            <span style="color:#15803d;">+${masteryPct}%</span>
           </div>
-          <progress max="${totalCompendiumEntries}" value="${discoveredCount}" aria-label="Tiến độ Sổ Tay Sinh Vật Huyền Bí"></progress>
+          <progress max="${totalCompendiumEntries}" value="${discoveredCount}" aria-label="Tiến độ Sổ Tay"></progress>
         </div>
         <div class="compendium-grid">
           ${CREATURE_SPECIES_PROFILES.map((sp) => {
@@ -6747,14 +6562,13 @@ export class GameHUD {
                   <img src="/sprites/${sp.beastSpriteKey}.png" alt="" style="width:44px;height:44px;object-fit:contain;" />
                   <div>
                     <div style="font-size:13px;font-weight:800;color:#45230c;">${sp.emoji} ${escapeHtml(sp.speciesName)}</div>
-                    <div style="font-size:11.5px;color:#78350f;">🏡 ${escapeHtml(sp.sanctuaryRoomTitle)}</div>
                   </div>
                 </div>
                 <div style="display:flex;gap:4px;flex-wrap:wrap;">
                   ${(['normal', 'mystic', 'radiant'] as CreatureMorphVariant[])
                     .map((mv) => {
                       const ok = discoveredSet.has(`${sp.habitatItemId}:${mv}`);
-                      return `<span class="morph-pill ${ok ? (mv === 'radiant' ? 'radiant' : mv === 'mystic' ? 'mystic' : '') : 'locked'}">${ok ? MORPH_INFO[mv].shortLabel : '🔒 ???'}</span>`;
+                      return `<span class="morph-pill ${ok ? (mv === 'radiant' ? 'radiant' : mv === 'mystic' ? 'mystic' : '') : 'locked'}">${ok ? MORPH_INFO[mv].shortLabel : '🔒'}</span>`;
                     })
                     .join('')}
                 </div>
@@ -6996,31 +6810,30 @@ export class GameHUD {
         <div class="visitor-meta-col">
           <div class="visitor-title-row">
             <strong>${escapeHtml(nb.name)}</strong>
-            <span class="visitor-lv-tag">Cấp ${nb.level}</span>
-            <span class="visitor-readonly-tag" title="Chế độ khách tham quan an toàn: chỉ ngắm cảnh &amp; tương trợ, không thể phá dỡ hay lấy trộm nông sản">🛡️ Tham quan an toàn</span>
+            <span class="visitor-lv-tag">Lv.${nb.level}</span>
           </div>
           <div class="visitor-sub-row">
-            <span>💧 Chăm vườn: <strong>${helpsDone}/${maxGardenHelps}</strong></span>
+            <span>💧 <strong>${helpsDone}/${maxGardenHelps}</strong></span>
             <span>•</span>
-            <span>🍀 Tình bạn: <strong>${social.friendshipTokens}/${FRIENDSHIP_CHEST_TOKEN_COST}</strong></span>
+            <span>🍀 <strong>${social.friendshipTokens}/${FRIENDSHIP_CHEST_TOKEN_COST}</strong></span>
           </div>
         </div>
       </div>
       <div class="visitor-dock-actions">
-        <button id="btnVisitorLike" type="button" class="brass-btn ${likedToday ? '' : 'gold-cta'}" ${likedToday ? 'disabled' : ''} title="Thả tim khen trang trại (1 lần/ngày/bạn — nhận +1 🍀 + 20G)">
-          ${likedToday ? '✓ Đã Thả Tim' : '❤️ Thả Tim (+1 🍀)'}
+        <button id="btnVisitorLike" type="button" class="brass-btn ${likedToday ? '' : 'gold-cta'}" ${likedToday ? 'disabled' : ''} title="Thả tim">
+          ${likedToday ? '✓ Đã Tim' : '❤️ +1🍀'}
         </button>
-        <button id="btnVisitorLocateGift" type="button" class="brass-btn ${mysteryClaimedToday ? '' : 'gold-cta'}" ${mysteryClaimedToday ? 'disabled' : ''} title="Đưa camera tới Giỏ Quà Bí Ẩn trên bản đồ vườn bạn (1 lần/ngày/bạn)">
-          ${mysteryClaimedToday ? '✓ Đã Mở Quà' : '🎁 Tìm Quà Bí Ẩn'}
+        <button id="btnVisitorLocateGift" type="button" class="brass-btn ${mysteryClaimedToday ? '' : 'gold-cta'}" ${mysteryClaimedToday ? 'disabled' : ''} title="Tìm Quà">
+          ${mysteryClaimedToday ? '✓ Đã Mở' : '🎁 Quà'}
         </button>
-        <button id="btnVisitorCoopBook" type="button" class="brass-btn ${coOpPendingCount > 0 ? 'gold-cta' : ''}" title="Đóng hộ kiện Đơn Cú hoặc Giải Cứu Màn Khó giúp ${escapeHtml(nb.name)}">
-          📦 Đơn Cú &amp; Giải Cứu ${coOpPendingCount > 0 ? `(${coOpPendingCount})` : ''}
+        <button id="btnVisitorCoopBook" type="button" class="brass-btn ${coOpPendingCount > 0 ? 'gold-cta' : ''}" title="Đơn Cú & Giải Cứu">
+          📦 Tương Trợ ${coOpPendingCount > 0 ? `(${coOpPendingCount})` : ''}
         </button>
-        <button id="btnVisitorNextFriend" type="button" class="brass-btn" title="Ghé thăm thung lũng của người bạn kế tiếp">
-          ⏭️ Bạn Kế
+        <button id="btnVisitorNextFriend" type="button" class="brass-btn" title="Bạn kế">
+          ⏭️ Kế
         </button>
-        <button id="btnVisitorReturnHome" type="button" class="brass-btn visitor-home-cta" title="Quay về Trang Trại Hang Sóc của bạn (Phím Esc)">
-          🏡 Về Vườn Nhà
+        <button id="btnVisitorReturnHome" type="button" class="brass-btn visitor-home-cta" title="Về nhà">
+          🏡 Về
         </button>
       </div>
     `;
@@ -7092,37 +6905,37 @@ export class GameHUD {
     const topStatsHtml = `
       <div class="nb-summary-ribbon">
         <div class="nb-stat-pill token">
-          <span>🍀 Huy Hiệu Tình Bạn:</span>
+          <span>🍀</span>
           <strong>${social.friendshipTokens}/${FRIENDSHIP_CHEST_TOKEN_COST}</strong>
           ${
             chestReady
-              ? `<button id="btnNbQuickOpenChest" type="button" class="brass-btn gold-cta nb-mini-cta">🎁 Mở Rương Ngay!</button>`
+              ? `<button id="btnNbQuickOpenChest" type="button" class="brass-btn gold-cta nb-mini-cta">🎁 Mở Rương</button>`
               : ''
           }
         </div>
         <div class="nb-stat-pill">
-          <span>⚔️ Giải cứu bạn: <strong>${rescuesGivenLeft}/${MAX_DAILY_MINIGAME_RESCUES}</strong></span>
+          <span>⚔️ <strong>${rescuesGivenLeft}/${MAX_DAILY_MINIGAME_RESCUES}</strong></span>
           <span>•</span>
-          <span>🆘 Nhờ bạn cứu: <strong>${rescuesReceivedLeft}/${MAX_DAILY_MINIGAME_RESCUES}</strong></span>
+          <span>🆘 <strong>${rescuesReceivedLeft}/${MAX_DAILY_MINIGAME_RESCUES}</strong></span>
           <span>•</span>
-          <span>🦉 Nhờ Đơn Cú: <strong>${owlHelpLeft}/${MAX_DAILY_OWL_HELP_REQUESTS}</strong></span>
+          <span>🦉 <strong>${owlHelpLeft}/${MAX_DAILY_OWL_HELP_REQUESTS}</strong></span>
         </div>
       </div>
     `;
 
     const tabsHtml = `
-      <div class="workshop-tabs" role="group" aria-label="Chuyên mục Sổ Hàng Xóm" style="margin:10px 0 12px;">
+      <div class="workshop-tabs" role="group" aria-label="Sổ Hàng Xóm" style="margin:10px 0 12px;">
         <button type="button" data-nbtab="friends" data-active="${this.activeNeighborTab === 'friends'}" aria-pressed="${this.activeNeighborTab === 'friends'}" class="brass-btn">
-          🏡 Hàng Xóm (${social.neighbors.length})
+          🏡 Bạn (${social.neighbors.length})
         </button>
         <button type="button" data-nbtab="chest" data-active="${this.activeNeighborTab === 'chest'}" aria-pressed="${this.activeNeighborTab === 'chest'}" class="brass-btn">
-          🎁 Rương Tình Bạn &amp; Kết Bạn ${chestReady || mySos?.rescuedAt ? '(!)' : ''}
+          🎁 Rương &amp; Mã ${chestReady || mySos?.rescuedAt ? '(!)' : ''}
         </button>
         <button type="button" data-nbtab="log" data-active="${this.activeNeighborTab === 'log'}" aria-pressed="${this.activeNeighborTab === 'log'}" class="brass-btn">
-          📜 Nhật Ký Cú (${social.activityLog.length})
+          📜 Nhật Ký (${social.activityLog.length})
         </button>
         <button id="btnNbOpenFriendsLeaderboard" type="button" class="brass-btn gold-cta">
-          🏆 Đua Top 6 Môn
+          🏆 BXH
         </button>
       </div>
     `;
@@ -7135,15 +6948,15 @@ export class GameHUD {
         const km = getMinigameKindLabelVi(mySos.kind);
         quickAlertBanners.push(`
           <div class="nb-alert-banner ready">
-            <span>🎉 <strong>${escapeHtml(mySos.rescuerEmoji ?? '🦉')} ${escapeHtml(mySos.rescuerName ?? 'Hàng xóm')}</strong> vừa vượt hộ <strong>${km.icon} ${escapeHtml(km.nameVi)} • Màn ${mySos.stage}</strong> giúp bạn!</span>
-            <button id="btnNbClaimMySos" type="button" class="brass-btn gold-cta nb-mini-cta">🎉 Nhận Qua Màn Ngay!</button>
+            <span>🎉 <strong>${escapeHtml(mySos.rescuerEmoji ?? '🦉')} ${escapeHtml(mySos.rescuerName ?? 'Bạn')}</strong> cứu <strong>${km.icon} Màn ${mySos.stage}</strong>!</span>
+            <button id="btnNbClaimMySos" type="button" class="brass-btn gold-cta nb-mini-cta">🎉 Nhận</button>
           </div>
         `);
       } else if (mySos) {
         const km = getMinigameKindLabelVi(mySos.kind);
         quickAlertBanners.push(`
           <div class="nb-alert-banner">
-            <span>🦉 Đang gọi hội bạn bè vào giải cứu <strong>${km.icon} ${escapeHtml(km.nameVi)} • Màn ${mySos.stage}</strong>...</span>
+            <span>🦉 Đang gọi cứu <strong>${km.icon} Màn ${mySos.stage}</strong>...</span>
           </div>
         `);
       }
@@ -7151,8 +6964,8 @@ export class GameHUD {
       if (social.homeLanternMarks.length > 0) {
         quickAlertBanners.push(`
           <div class="nb-alert-banner ready">
-            <span>🏮 Có <strong>${social.homeLanternMarks.length} Đèn Lồng Tương Trợ</strong> do hàng xóm để lại trên vườn Hang Sóc của bạn!</span>
-            <button id="btnNbClaimAllLanterns" type="button" class="brass-btn gold-cta nb-mini-cta">🏮 Thu Nhận Ngay (+${social.homeLanternMarks.length} 🍀)</button>
+            <span>🏮 <strong>${social.homeLanternMarks.length} Đèn Lồng</strong></span>
+            <button id="btnNbClaimAllLanterns" type="button" class="brass-btn gold-cta nb-mini-cta">🏮 Nhận (+${social.homeLanternMarks.length}🍀)</button>
           </div>
         `);
       }
@@ -7182,7 +6995,6 @@ export class GameHUD {
             nb.owlHelpCrates.length > 0
               ? `
                 <div class="nb-coop-section">
-                  <div class="nb-coop-label">📦 Kiện Đơn Cú Nhờ Đóng Phụ:</div>
                   <div class="nb-crate-list">
                     ${nb.owlHelpCrates
                       .map((crate) => {
@@ -7193,13 +7005,13 @@ export class GameHUD {
                           <div class="nb-crate-item ${crate.fulfilledByPlayerToday ? 'done' : ''}">
                             <img src="${meta.iconSrc}" alt="${escapeHtml(meta.name)}" class="nb-crate-icon" />
                             <div class="nb-crate-info">
-                              <div class="nb-crate-title">${crate.qty} ${escapeHtml(meta.name)} <span class="nb-crate-stock">(Kho: ${this.sim.state.sandboxMode ? '∞' : have}/${crate.qty})</span></div>
-                              <div class="nb-crate-rew">+${crate.rewardTokens} 🍀 • +${crate.rewardGalleons}G • +${crate.rewardXp} XP</div>
+                              <div class="nb-crate-title">${crate.qty} ${escapeHtml(meta.name)} <span class="nb-crate-stock">(${this.sim.state.sandboxMode ? '∞' : have}/${crate.qty})</span></div>
+                              <div class="nb-crate-rew">+${crate.rewardTokens}🍀 • +${crate.rewardGalleons}G</div>
                             </div>
                             ${
                               crate.fulfilledByPlayerToday
-                                ? `<span class="nb-done-pill">✓ Đã giúp</span>`
-                                : `<button type="button" class="brass-btn ${enough ? 'gold-cta' : ''} nb-mini-cta" data-nb-crate="${escapeHtml(nb.id)}|${escapeHtml(crate.id)}" ${!enough ? 'disabled' : ''}>📦 Đóng hộ</button>`
+                                ? `<span class="nb-done-pill">✓</span>`
+                                : `<button type="button" class="brass-btn ${enough ? 'gold-cta' : ''} nb-mini-cta" data-nb-crate="${escapeHtml(nb.id)}|${escapeHtml(crate.id)}" ${!enough ? 'disabled' : ''}>📦 Giúp</button>`
                             }
                           </div>
                         `;
@@ -7217,14 +7029,13 @@ export class GameHUD {
                   <div class="nb-sos-row">
                     <div class="nb-sos-info">
                       <div class="nb-sos-title">
-                        ⚔️ <strong>Giải Cứu Màn Khó (1 lần/ngày/bạn):</strong> ${sosMeta.icon} ${escapeHtml(sosMeta.nameVi)} • <strong>Màn ${sos.stage}</strong>
+                        ⚔️ ${sosMeta.icon} ${escapeHtml(sosMeta.nameVi)} • <strong>Màn ${sos.stage}</strong>
                       </div>
-                      <div class="nb-sos-quote">“${escapeHtml(sos.noteVi)}” • Thưởng: <strong>+3 🍀 +95G +45 XP</strong></div>
                     </div>
                     ${
                       alreadyRescuedThisFriend
-                        ? `<span class="nb-done-pill">✓ Đã giải cứu (1/1)</span>`
-                        : `<button type="button" class="brass-btn gold-cta nb-mini-cta" data-nb-rescue="${escapeHtml(nb.id)}" ${!rescueCheck.ok ? 'disabled' : ''} title="${escapeHtml(rescueCheck.reason ?? 'Vào chơi vượt hộ đúng màn khó này (0 tốn Tim!)')}">⚔️ Vào Giải Cứu (0/1)</button>`
+                        ? `<span class="nb-done-pill">✓ 1/1</span>`
+                        : `<button type="button" class="brass-btn gold-cta nb-mini-cta" data-nb-rescue="${escapeHtml(nb.id)}" ${!rescueCheck.ok ? 'disabled' : ''} title="${escapeHtml(rescueCheck.reason ?? 'Giải cứu')}">⚔️ Cứu</button>`
                     }
                   </div>
                 </div>
@@ -7238,23 +7049,22 @@ export class GameHUD {
                 <div class="nb-head-info">
                   <div class="nb-name-row">
                     <strong class="nb-friend-name">${escapeHtml(nb.name)}</strong>
-                    <span class="nb-badge-pill">Cấp ${nb.level}</span>
+                    <span class="nb-badge-pill">Lv.${nb.level}</span>
                     <span class="nb-badge-pill house">${houseLabelMap[nb.house]}</span>
-                    <span class="nb-code-tag">Mã: ${escapeHtml(nb.friendCode)}</span>
+                    <span class="nb-code-tag">${escapeHtml(nb.friendCode)}</span>
                   </div>
-                  <div class="nb-park-sub">🏡 ${escapeHtml(nb.parkName)} • <em>“${escapeHtml(nb.bioVi)}”</em></div>
                 </div>
               </div>
 
               <div class="nb-garden-pills">
                 <span class="nb-garden-pill ${nb.helpedMarksToday.length >= maxGardenHelps ? 'done' : ''}">
-                  💧 Chăm vườn: <strong>${nb.helpedMarksToday.length}/${maxGardenHelps}</strong>
+                  💧 <strong>${nb.helpedMarksToday.length}/${maxGardenHelps}</strong>
                 </span>
                 <span class="nb-garden-pill ${mysteryClaimedToday ? 'done' : ''}">
-                  🎁 Quà bí ẩn: <strong>${mysteryClaimedToday ? 'Đã mở' : 'Chưa mở (+1 🍀)'}</strong>
+                  🎁 <strong>${mysteryClaimedToday ? '✓' : '+1🍀'}</strong>
                 </span>
                 <span class="nb-garden-pill ${likedToday ? 'done' : ''}">
-                  ❤️ Thả tim: <strong>${likedToday ? 'Đã thả' : 'Chưa thả (+1 🍀)'}</strong>
+                  ❤️ <strong>${likedToday ? '✓' : '+1🍀'}</strong>
                 </span>
               </div>
 
@@ -7264,14 +7074,14 @@ export class GameHUD {
               <div class="nb-card-actions">
                 ${
                   isVisitingThis
-                    ? `<button type="button" id="btnNbExitCurrentVisit" class="brass-btn visitor-home-cta">🏡 Đang Thăm Vườn Này — Về Nhà</button>`
-                    : `<button type="button" class="brass-btn gold-cta" data-nb-visit="${escapeHtml(nb.id)}">🚂 Sang Thăm Vườn (72×72)</button>`
+                    ? `<button type="button" id="btnNbExitCurrentVisit" class="brass-btn visitor-home-cta">🏡 Về Nhà</button>`
+                    : `<button type="button" class="brass-btn gold-cta" data-nb-visit="${escapeHtml(nb.id)}">🚂 Thăm</button>`
                 }
                 <button type="button" class="brass-btn" data-nb-like="${escapeHtml(nb.id)}" ${likedToday ? 'disabled' : ''}>
-                  ${likedToday ? '✓ Đã Thả Tim Hôm Nay' : '❤️ Thả Tim (+1 🍀)'}
+                  ${likedToday ? '✓ Đã Tim' : '❤️ +1🍀'}
                 </button>
-                <button type="button" class="brass-btn nb-mini-cta" data-nb-remove="${escapeHtml(nb.id)}" title="Xoá người bạn này khỏi Sổ Hàng Xóm">
-                  ✕ Xoá bạn
+                <button type="button" class="brass-btn nb-mini-cta" data-nb-remove="${escapeHtml(nb.id)}" title="Xoá bạn">
+                  ✕
                 </button>
               </div>
             </article>
@@ -7281,27 +7091,24 @@ export class GameHUD {
 
       const emptyFriendsHtml = `
         <section class="nb-panel-card highlight">
-          <div class="nb-section-title">🤝 Sổ Hàng Xóm Dành Riêng Cho Người Chơi Thật</div>
-          <p class="nb-section-desc">
-            Hiện chưa có người bạn nào trong danh sách (không sử dụng NPC giả lập). Hãy gửi <strong>Mã Thung Lũng</strong> bên dưới cho bạn bè đang chơi thật hoặc nhập mã của bạn bè để kết giao, thăm vườn 72×72, tưới cây và giải cứu khảo thí!
-          </p>
+          <div class="nb-section-title">🤝 Kết Bạn</div>
           <div class="nb-my-code-box">
             <div>
-              <div style="font-size:11.5px;opacity:0.82;">Mã Thung Lũng của bạn:</div>
+              <div style="font-size:11.5px;opacity:0.82;">Mã của bạn:</div>
               <strong class="nb-my-code-val">${escapeHtml(social.playerFriendCode)}</strong>
             </div>
-            <button id="btnNbCopyCode" type="button" class="brass-btn nb-mini-cta">📋 Sao Chép Mã</button>
+            <button id="btnNbCopyCode" type="button" class="brass-btn nb-mini-cta">📋 Sao Chép</button>
           </div>
           <form id="frmAddNeighborCode" class="nb-add-friend-form">
             <div class="nb-form-field">
-              <label for="inpFriendCode">Nhập Mã Thung Lũng của người chơi thật</label>
-              <input id="inpFriendCode" name="friendCode" type="text" maxlength="20" placeholder="VD: HS-ABCD-12" autocomplete="off" required />
+              <label for="inpFriendCode">Mã bạn bè</label>
+              <input id="inpFriendCode" name="friendCode" type="text" maxlength="20" placeholder="HS-ABCD-12" autocomplete="off" required />
             </div>
             <div class="nb-form-field">
-              <label for="inpFriendName">Tên gợi nhớ (tuỳ chọn)</label>
-              <input id="inpFriendName" name="friendName" type="text" maxlength="28" placeholder="Tên người bạn (để trống sẽ lấy tên điền trang thật)" autocomplete="off" />
+              <label for="inpFriendName">Tên (tuỳ chọn)</label>
+              <input id="inpFriendName" name="friendName" type="text" maxlength="28" placeholder="Tên bạn" autocomplete="off" />
             </div>
-            <button id="btnSubmitAddFriend" type="submit" class="brass-btn gold-cta">🤝 Xác Thực &amp; Kết Bạn Ngay</button>
+            <button id="btnSubmitAddFriend" type="submit" class="brass-btn gold-cta">🤝 Kết Bạn</button>
           </form>
         </section>
       `;
@@ -7311,7 +7118,6 @@ export class GameHUD {
         ${social.neighbors.length > 0 ? `<div class="nb-friends-list">${cardsHtml}</div>` : emptyFriendsHtml}
       `;
     } else if (this.activeNeighborTab === 'chest') {
-      const selectedNote = getPresetNoteMeta(social.selectedPresetNoteId);
       const owlReqsHtml =
         social.playerOwlHelpRequests.length > 0
           ? social.playerOwlHelpRequests
@@ -7324,94 +7130,88 @@ export class GameHUD {
                       <div class="nb-crate-title">${r.qty} ${escapeHtml(meta.name)}</div>
                       <div class="nb-crate-rew">${
                         r.fulfilledAt
-                          ? `✓ Đã được ${escapeHtml(r.helperEmoji ?? '🦉')} ${escapeHtml(r.helperName ?? 'Hàng xóm')} đóng hộ!`
-                          : '🦉 Đang chờ Cú Đưa Thư gọi bạn bè đóng phụ...'
+                          ? `✓ ${escapeHtml(r.helperEmoji ?? '🦉')} ${escapeHtml(r.helperName ?? 'Bạn')}`
+                          : '🦉 Đang gọi...'
                       }</div>
                     </div>
                   </div>
                 `;
               })
               .join('')
-          : `<div style="font-size:12.5px;opacity:0.85;">Chưa treo biển kiện hàng nào hôm nay. Mở <strong>Đơn Hàng Cú</strong> và bấm <strong>“🤝 Nhờ bạn”</strong> ở món còn thiếu!</div>`;
+          : `<div style="font-size:12px;opacity:0.8;">Trống</div>`;
 
       bodyHtml = `
         <div class="nb-chest-grid">
           <section class="nb-panel-card highlight">
-            <div class="nb-section-title">🎁 Rương Quà Tình Bạn (${social.friendshipTokens}/${FRIENDSHIP_CHEST_TOKEN_COST} 🍀)</div>
-            <p class="nb-section-desc">
-              Gom đủ <strong>${FRIENDSHIP_CHEST_TOKEN_COST} 🍀 Huy Hiệu Tình Bạn</strong> bằng cách tưới ruộng, tiếp lửa lò bánh, mở quà bí ẩn, đóng hộ Đơn Cú và giải cứu khảo thí phép thuật cho hàng xóm!
-            </p>
+            <div class="nb-section-title">🎁 Rương (${social.friendshipTokens}/${FRIENDSHIP_CHEST_TOKEN_COST} 🍀)</div>
             <div class="quest-bar" style="height:12px;margin:8px 0;">
               <div class="quest-bar-fill" style="width:${chestPct}%"></div>
             </div>
             <div class="nb-chest-rewards">
-              <span class="owl-rew-pill gold">🌟 +2 Sao Phép Thuật</span>
-              <span class="owl-rew-pill plug">🔥 +1 Bùa Phượng Hoàng</span>
-              <span class="owl-rew-pill xp">🌱 +2 Hạt Giống Hiếm</span>
-              <span class="owl-rew-pill gold">🪙 +150G &amp; +40 XP</span>
+              <span class="owl-rew-pill gold">🌟 +2</span>
+              <span class="owl-rew-pill plug">🔥 +1</span>
+              <span class="owl-rew-pill xp">🌱 +2</span>
+              <span class="owl-rew-pill gold">🪙 +150G</span>
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;flex-wrap:wrap;">
-              <span style="font-size:12px;font-weight:700;">Đã mở: ${social.chestsOpened} rương</span>
+              <span style="font-size:12px;font-weight:700;">Đã mở: ${social.chestsOpened}</span>
               <button id="btnNbOpenFriendshipChest" type="button" class="brass-btn gold-cta" ${!chestReady ? 'disabled' : ''}>
-                🎁 Mở Rương Tình Bạn (${FRIENDSHIP_CHEST_TOKEN_COST} 🍀)
+                🎁 Mở Rương (${FRIENDSHIP_CHEST_TOKEN_COST} 🍀)
               </button>
             </div>
           </section>
 
           <section class="nb-panel-card">
-            <div class="nb-section-title">🆘 Cầu Viện Của Tôi Hôm Nay (Reset 00:00)</div>
+            <div class="nb-section-title">🆘 Cầu Viện</div>
             <div style="margin-bottom:10px;">
-              <div style="font-size:12.5px;font-weight:800;margin-bottom:4px;">1. Nhờ Bạn Qua Màn Khó (${rescuesReceivedLeft}/${MAX_DAILY_MINIGAME_RESCUES} lượt còn lại):</div>
               ${
                 mySos
                   ? `
                     <div class="nb-alert-banner ${mySos.rescuedAt ? 'ready' : ''}" style="margin:0;">
                       <span>${
                         mySos.rescuedAt
-                          ? `🎉 <strong>${escapeHtml(mySos.rescuerEmoji ?? '🦉')} ${escapeHtml(mySos.rescuerName ?? 'Hàng xóm')}</strong> đã giải cứu xong <strong>Màn ${mySos.stage}</strong>!`
-                          : `🦉 Đang gọi hàng xóm vượt hộ <strong>Màn ${mySos.stage}</strong>...`
+                          ? `🎉 <strong>${escapeHtml(mySos.rescuerEmoji ?? '🦉')} ${escapeHtml(mySos.rescuerName ?? 'Bạn')}</strong> cứu <strong>Màn ${mySos.stage}</strong>!`
+                          : `🦉 Đang gọi cứu <strong>Màn ${mySos.stage}</strong>...`
                       }</span>
                       ${
                         mySos.rescuedAt
-                          ? `<button id="btnNbClaimMySos" type="button" class="brass-btn gold-cta nb-mini-cta">🎉 Nhận Qua Màn!</button>`
+                          ? `<button id="btnNbClaimMySos" type="button" class="brass-btn gold-cta nb-mini-cta">🎉 Nhận</button>`
                           : ''
                       }
                     </div>
                   `
-                  : `<div style="font-size:12.5px;opacity:0.85;">Khi kẹt ở bất kỳ màn nào của <strong>Bùa Gặt Honeydukes, Ngũ Ấn Đạo Tặc, Ma Trận Bảo Bối, Cờ Phù Thủy, Nối Hình Sinh Vật</strong>, hãy bấm nút <strong>“🆘 Nhờ Bạn Qua Màn”</strong> ngay trong bàn chơi!</div>`
+                  : `<div style="font-size:12px;opacity:0.8;">⚔️ 🆘 ${rescuesReceivedLeft}/${MAX_DAILY_MINIGAME_RESCUES}</div>`
               }
             </div>
             <div>
-              <div style="font-size:12.5px;font-weight:800;margin-bottom:4px;">2. Kiện Đơn Cú Nhờ Bạn Đóng Phụ (${owlHelpLeft}/${MAX_DAILY_OWL_HELP_REQUESTS} lượt còn lại):</div>
+              <div style="font-size:12px;font-weight:800;margin-bottom:4px;">🦉 Đơn Cú (${owlHelpLeft}/${MAX_DAILY_OWL_HELP_REQUESTS}):</div>
               <div class="nb-crate-list">${owlReqsHtml}</div>
             </div>
           </section>
 
           <section class="nb-panel-card">
-            <div class="nb-section-title">🦉 Mã Thung Lũng &amp; Kết Giao Người Chơi Thật</div>
+            <div class="nb-section-title">🦉 Mã Kết Bạn</div>
             <div class="nb-my-code-box">
               <div>
-                <div style="font-size:11.5px;opacity:0.82;">Mã Thung Lũng Hang Sóc của bạn:</div>
                 <strong class="nb-my-code-val">${escapeHtml(social.playerFriendCode)}</strong>
               </div>
-              <button id="btnNbCopyCode" type="button" class="brass-btn nb-mini-cta">📋 Sao Chép Mã</button>
+              <button id="btnNbCopyCode" type="button" class="brass-btn nb-mini-cta">📋 Sao Chép</button>
             </div>
             <form id="frmAddNeighborCode" class="nb-add-friend-form">
               <div class="nb-form-field">
-                <label for="inpFriendCode">Mã Thung Lũng của người chơi thật</label>
-                <input id="inpFriendCode" name="friendCode" type="text" maxlength="20" placeholder="VD: HS-ABCD-12" autocomplete="off" required />
+                <label for="inpFriendCode">Mã bạn bè</label>
+                <input id="inpFriendCode" name="friendCode" type="text" maxlength="20" placeholder="HS-ABCD-12" autocomplete="off" required />
               </div>
               <div class="nb-form-field">
-                <label for="inpFriendName">Tên gợi nhớ (tuỳ chọn)</label>
-                <input id="inpFriendName" name="friendName" type="text" maxlength="28" placeholder="Tên người bạn (tuỳ chọn)" autocomplete="off" />
+                <label for="inpFriendName">Tên (tuỳ chọn)</label>
+                <input id="inpFriendName" name="friendName" type="text" maxlength="28" placeholder="Tên bạn" autocomplete="off" />
               </div>
-              <button id="btnSubmitAddFriend" type="submit" class="brass-btn gold-cta">🤝 Xác Thực &amp; Kết Bạn Ngay</button>
+              <button id="btnSubmitAddFriend" type="submit" class="brass-btn gold-cta">🤝 Kết Bạn</button>
             </form>
           </section>
 
           <section class="nb-panel-card">
-            <div class="nb-section-title">🏮 Lời Chúc Treo Đèn Lồng Khi Thăm Vườn</div>
-            <p class="nb-section-desc">Đang chọn: <strong>${selectedNote.emoji} “${escapeHtml(selectedNote.textVi)}”</strong></p>
+            <div class="nb-section-title">🏮 Lời Chúc</div>
             <div class="nb-preset-notes">
               ${NEIGHBOR_PRESET_NOTES.map((n) => {
                 const active = n.id === social.selectedPresetNoteId;
@@ -7442,7 +7242,7 @@ export class GameHUD {
                 `;
               })
               .join('')
-          : `<div class="nb-panel-card">Chưa có hoạt động tương trợ nào hôm nay. Hãy chia sẻ Mã Thung Lũng của bạn để kết bạn với người chơi thật nhé!</div>`;
+          : `<div class="nb-panel-card">Trống</div>`;
 
       bodyHtml = `<div class="nb-log-list">${logItemsHtml}</div>`;
     }
@@ -7594,7 +7394,7 @@ export class GameHUD {
 
       if (submitBtn) {
         submitBtn.disabled = true;
-        submitBtn.textContent = '🔍 Đang xác thực người chơi thật...';
+        submitBtn.textContent = '🔍 Đang tìm...';
       }
       await registerRealPlayerProfileOnline(
         this.sim.state as unknown as Record<string, unknown>
@@ -7602,7 +7402,7 @@ export class GameHUD {
       const lookup = await lookupRealPlayerByFriendCode(rawCode);
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.textContent = '🤝 Xác Thực & Kết Bạn Ngay';
+        submitBtn.textContent = '🤝 Kết Bạn';
       }
 
       if (!lookup.ok || !lookup.profile) {
@@ -7663,7 +7463,7 @@ export class GameHUD {
       if (!hasPlot) {
         return {
           el: this.root.querySelector('#btnOpenSeedSilo') as HTMLElement | null,
-          label: '👇 Đặt Thửa Đất tại đây',
+          label: '👇 Đặt ruộng',
         };
       }
       return { el: null, label: '' };
@@ -7677,11 +7477,11 @@ export class GameHUD {
         const roseCard =
           (this.root.querySelector('[data-seed-brush="english_rose"]:not([disabled])') as HTMLElement | null) ??
           (this.root.querySelector('[data-seed-brush]:not([disabled])') as HTMLElement | null);
-        return { el: roseCard, label: '🌸 Chọn hạt giống Hoa' };
+        return { el: roseCard, label: '🌸 Chọn Hoa' };
       }
       return {
         el: this.root.querySelector('#btnOpenSeedSilo') as HTMLElement | null,
-        label: '🌱 Mở Kho Hạt',
+        label: '🌱 Kho Hạt',
       };
     }
 
@@ -7704,11 +7504,11 @@ export class GameHUD {
         const sheepOrHen =
           (this.root.querySelector('[data-pasture-brush="ottery_sheep"]:not([disabled])') as HTMLElement | null) ??
           (this.root.querySelector('[data-pasture-brush="burrow_hen"]:not([disabled])') as HTMLElement | null);
-        return { el: sheepOrHen, label: '🐾 Chọn thú thả Đồng Cỏ' };
+        return { el: sheepOrHen, label: '🐾 Chọn thú' };
       }
       return {
         el: this.root.querySelector('#btnOpenPastureTray') as HTMLElement | null,
-        label: '🐾 Mở Chăn Thả',
+        label: '🐾 Chăn Thả',
       };
     }
 
@@ -7716,19 +7516,19 @@ export class GameHUD {
       if (this.seedTrayOpen) {
         return {
           el: this.root.querySelector('#btnSeedTrayOpenQuiz') as HTMLElement | null,
-          label: '🪄 Mở Học Viện Thần Chú 0G',
+          label: '🪄 Nhận 0G',
         };
       }
       return {
         el: this.root.querySelector('#btnTutorialPrimaryCta') as HTMLElement | null,
-        label: '🪄 Mở Học Viện Thần Chú',
+        label: '🪄 Thần Chú',
       };
     }
 
     if (step.id === 'earn_magic_star') {
       return {
         el: this.root.querySelector('#btnCornerPlayPuzzle') as HTMLElement | null,
-        label: '🍓 Chơi thắng 1 màn!',
+        label: '🍓 Chơi!',
       };
     }
 
@@ -7741,18 +7541,18 @@ export class GameHUD {
           (this.root.querySelector('[data-item-id="burrow_house_canon"]') as HTMLElement | null) ??
           (this.root.querySelector('[data-item-id="molly_apple_bakery"]') as HTMLElement | null);
         if (houseOrBakery) {
-          return { el: houseOrBakery, label: '✨ Chọn dựng 0 giây!' };
+          return { el: houseOrBakery, label: '✨ Chọn dựng!' };
         }
       }
       if (this.sim.getReadyOwlOrdersCount() > 0) {
         return {
           el: this.root.querySelector('#btnOpenQuests') as HTMLElement | null,
-          label: '🦉 Giao Đơn Cú đầu tiên!',
+          label: '🦉 Giao Đơn!',
         };
       }
       return {
         el: this.root.querySelector('#btnToggleBuildDock') as HTMLElement | null,
-        label: '🔨 Mở Xây Dựng',
+        label: '🔨 Xây Dựng',
       };
     }
 
@@ -7799,7 +7599,7 @@ export class GameHUD {
     spot.style.setProperty('--spot-h', `${Math.round(rect.height + pad * 2)}px`);
     spot.classList.toggle('pill-below', rect.top < 110);
     if (spotLbl) {
-      spotLbl.textContent = label || '👇 Bấm tại đây';
+      spotLbl.textContent = label || '👇 Bấm';
     }
     spot.classList.remove('hidden');
   }
@@ -7869,33 +7669,33 @@ export class GameHUD {
             <img src="/sprites/${step.pose}.png" alt="" class="tutorial-mini-avatar" />
             <div class="tutorial-mini-info">
               <h2 id="tutorialCoachTitle" class="tutorial-mini-title">${escapeHtml(step.title)}</h2>
-              <div class="tutorial-mini-hint">${escapeHtml(step.hintVi)}</div>
             </div>
-            <button id="btnTutorialExpand" type="button" data-tutorial-focus class="brass-btn gold-cta">Mở rộng</button>
+            <button id="btnTutorialExpand" type="button" data-tutorial-focus class="brass-btn gold-cta">▴ Mở</button>
             <button
               id="btnTutorialSkipMini"
               type="button"
               popovertarget="tutorialCoachCard"
               popovertargetaction="hide"
               class="brass-btn tutorial-skip-btn"
-            >Bỏ qua</button>
+              aria-label="Bỏ qua hướng dẫn"
+            >✕</button>
           </div>
         `;
       } else {
         const extraActionBtn =
           step.id === 'earn_magic_star'
-            ? `<button id="btnTutorialSecondaryCta" type="button" class="brass-btn">♟️ Sảnh 4 Môn</button>`
+            ? `<button id="btnTutorialSecondaryCta" type="button" class="brass-btn">♟️ 4 Môn</button>`
             : step.id === 'build_and_owl_order'
               ? `<button id="btnTutorialSecondaryCta" type="button" class="brass-btn">${
-                  deliverableOwlCount > 0 ? '🔨 Mở Xây Dựng' : '🦉 Xem Đơn Cú'
+                  deliverableOwlCount > 0 ? '🔨 Xây' : '🦉 Đơn Cú'
                 }</button>`
               : '';
 
         const primaryLabel =
           step.id === 'build_and_owl_order'
             ? deliverableOwlCount > 0
-              ? '🦉 Giao Đơn Cú Ngay!'
-              : '🔨 Mở Xây Dựng'
+              ? '🦉 Giao Đơn!'
+              : '🔨 Xây Dựng'
             : step.ctaLabel;
 
         card.innerHTML = `
@@ -7916,7 +7716,7 @@ export class GameHUD {
           <div class="tutorial-body-col">
             <div class="tutorial-top-row">
               <div class="tutorial-speaker-pill">
-                🥧 ${escapeHtml(step.speakerName)} • <span>${escapeHtml(step.speakerTitle)}</span>
+                🥧 ${escapeHtml(step.speakerName)}
               </div>
               <div class="tutorial-top-controls">
                 <button
@@ -7924,18 +7724,18 @@ export class GameHUD {
                   type="button"
                   class="tutorial-ghost-btn"
                   aria-label="Thu gọn bảng hướng dẫn"
-                >Thu gọn</button>
+                >▾</button>
                 <button
                   id="btnTutorialSkip"
                   type="button"
                   popovertarget="tutorialCoachCard"
                   popovertargetaction="hide"
                   class="tutorial-ghost-btn tutorial-skip-btn"
-                >Bỏ qua</button>
+                  aria-label="Bỏ qua hướng dẫn"
+                >✕</button>
               </div>
             </div>
             <h2 id="tutorialCoachTitle" class="tutorial-coach-title">${escapeHtml(step.title)}</h2>
-            <p class="tutorial-coach-dialogue">${escapeHtml(step.dialogue)}</p>
             <div class="tutorial-hint-strip">${escapeHtml(step.hintVi)}</div>
             <div class="tutorial-footer-row">
               <span class="tutorial-reward-pill">🎁 ${escapeHtml(step.rewardLabel)}</span>

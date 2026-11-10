@@ -10992,3 +10992,76 @@ body:has(.hud-shell-root.hud-compact-rolled) .legal-trigger-btn {
     flex-shrink: 0;
   }
 }
+
+/* ============================================================
+   7. Minimal-Text Icon-First UI Overhaul & Single-Line Overflow
+   ============================================================ */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.ts-park-name,
+.ts-card-label,
+.dock-cat-label,
+.build-item-name,
+.seed-card-name,
+.sq-crop-pill-name,
+.lb-podium-name,
+.lb-contender-name-line strong,
+.pa-stage-title,
+.pa-stage-sub {
+  min-inline-size: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Hide verbose secondary lore / instruction blocks across all modals */
+.m3-chapter-tag,
+.m3-action-hint,
+.m3-goal-name,
+.lb-cup-sub,
+.house-cup-quote,
+.seed-card-stock,
+.sq-price-label,
+.sq-price-note {
+  display: none !important;
+}
+
+/* Compact Goal Pills in Match-3: icon + count side-by-side */
+#match3Dialog .m3-goal-pill {
+  padding: 4px 8px;
+  gap: 6px;
+}
+
+#match3Dialog .m3-goal-meta {
+  display: flex;
+  align-items: center;
+}
+
+#match3Dialog .m3-goal-count {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+/* Compact close buttons in all modals */
+.modal-header .brass-btn[aria-label='Đóng'],
+.m3-inline-close-btn,
+.pa-inline-close-btn,
+.seed-tray-close,
+.FloatingBanner-close {
+  min-width: 34px;
+  padding: 5px 10px;
+  font-weight: 900;
+  line-height: 1;
+}
+
