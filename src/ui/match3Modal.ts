@@ -29,9 +29,9 @@ import {
 } from '../types/game';
 
 const VIRTUAL_W = 468;
-const BOARD_PAD = 14;
-const BOARD_PX = VIRTUAL_W - BOARD_PAD * 2; // 440
-const CELL_PX = BOARD_PX / MATCH3_BOARD_SIZE; // 55
+const BOARD_PAD = 8;
+const BOARD_PX = VIRTUAL_W - BOARD_PAD * 2; // 452
+const CELL_PX = BOARD_PX / MATCH3_BOARD_SIZE; // 56.5
 
 const GEM_SPRITE_KEYS: Record<GemColor, string> = {
   ruby: 'm3_farm_strawberry',
@@ -869,8 +869,8 @@ export class Match3ModalController {
           <button id="btnM3OpenLeaderboard" type="button" class="m3-res-chip minigame-lb-chip" title="Bảng Xếp Hạng Gác Xép Bùa Gặt Honeydukes — Hạng hiện tại của bạn: #${m3Rank}">
             🏆 <strong id="m3ModalRankText">Hạng #${m3Rank}</strong>
           </button>
-          <button id="btnM3SwitchPuzzleArcade" type="button" class="m3-res-chip" style="cursor:pointer;background:linear-gradient(180deg,#d97706,#92400e);color:#fffbeb;border-color:#fde68a;" title="Đổi sang Đại Sảnh Khảo Thí Hogwarts: Ngũ Ấn Đạo Tặc, Ma Trận Cửu Bảo Bối, Cờ Phù Thủy &amp; Khảm Đá Cổ Ngữ (Mỗi môn 777 Màn, không tốn Tim!)">
-            ♟️ <strong>Ngũ Ấn • Bảo Bối • Cờ Phù Thủy • Cổ Ngữ</strong>
+          <button id="btnM3SwitchPuzzleArcade" type="button" class="m3-res-chip" style="cursor:pointer;background:linear-gradient(180deg,#d97706,#92400e);color:#fffbeb;border-color:#fde68a;" title="Đổi sang Đại Sảnh Khảo Thí Hogwarts: Ngũ Ấn Đạo Tặc, Ma Trận Cửu Bảo Bối, Cờ Phù Thủy &amp; Nối Hình Sinh Vật (Mỗi môn 777 Màn, không tốn Tim!)">
+            ♟️ <strong class="m3-switch-lbl-full">Ngũ Ấn • Bảo Bối • Cờ Phù Thủy • Sinh Vật</strong><strong class="m3-switch-lbl-compact">4 Môn Khảo Thí</strong>
           </button>
           <form method="dialog" class="m3-inline-close-form">
             <button type="submit" class="brass-btn m3-inline-close-btn" title="Đóng Gác Xép Bùa Gặt Honeydukes (Esc)">✕ Đóng</button>
@@ -958,7 +958,7 @@ export class Match3ModalController {
           <h3 style="font-size:19px;font-weight:900;color:#451a03;">Đang Nghỉ Tay Uống Trà Tại Gác Xép!</h3>
           <p style="font-size:13px;max-width:460px;line-height:1.5;color:#78350f;">
             Tự động hồi <strong>+1 Tim</strong> sau <strong id="m3NoHeartsCountdown" style="color:#b45309;">${mm}:${ss}</strong>.
-            Bạn có thể sang Đại Sảnh Khảo Thí chơi Ngũ Ấn Đạo Tặc, Ma Trận Bảo Bối, Cờ Phù Thủy, Khảm Cổ Ngữ (nhận 🌟 Sao, không tốn Tim!) hoặc uống Bia Bơ hồi đầy Tim ngay!
+            Bạn có thể sang Đại Sảnh Khảo Thí chơi Ngũ Ấn Đạo Tặc, Ma Trận Bảo Bối, Cờ Phù Thủy, Nối Hình Sinh Vật (nhận 🌟 Sao, không tốn Tim!) hoặc uống Bia Bơ hồi đầy Tim ngay!
           </p>
           <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:6px;">
             <button id="btnM3RefillHeartsNow" type="button" class="brass-btn gold-cta" style="padding:9px 18px;font-size:13.5px;">
@@ -1258,7 +1258,6 @@ export class Match3ModalController {
               tabindex="0"
               aria-label="Bàn phép Gác Xép Bùa Gặt Honeydukes 8 nhân 8. Dùng chuột, cảm ứng vuốt hoặc phím mũi tên và Enter để ghép trái cây và mật ong."
             ></canvas>
-            ${overlayHtml}
           </div>
         </div>
 
@@ -1272,7 +1271,7 @@ export class Match3ModalController {
             <button
               id="btnM3PhoenixTalisman"
               type="button"
-              class="pa-tool-btn talisman"
+              class="pa-tool-btn talisman m3-talisman-btn"
               style="width:100%;margin-top:8px;padding:7px 8px;font-size:11.6px;justify-content:space-between;"
               ${talismanUsed || (!st.sandboxMode && talismanQty <= 0) ? 'disabled' : ''}
               title="Bùa Trợ Chiến Phượng Hoàng (Tối đa 1 lần/lượt thử màn): +5 Lượt, triệu hồi Chong Chóng + Hũ Mứt Nổ &amp; thanh tẩy chướng ngại!"
@@ -1304,6 +1303,7 @@ export class Match3ModalController {
           </div>
         </div>
       </div>
+      ${overlayHtml}
     `;
 
     this.bindStageDOMEvents(box);

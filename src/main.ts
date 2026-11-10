@@ -238,9 +238,12 @@ async function bootstrap(): Promise<void> {
     dlgParam === 'caro' ||
     dlgParam === 'sudoku' ||
     dlgParam === 'chess' ||
-    dlgParam === 'blocks'
+    dlgParam === 'blocks' ||
+    dlgParam === 'pikachu' ||
+    dlgParam === 'onet'
   ) {
-    const pmode = dlgParam === 'puzzle' ? params.get('pmode') : dlgParam;
+    const rawPmode = dlgParam === 'puzzle' ? params.get('pmode') : dlgParam;
+    const pmode = rawPmode === 'pikachu' || rawPmode === 'onet' ? 'blocks' : rawPmode;
     const validMode: PuzzleArcadeMode | undefined =
       pmode === 'caro' ||
       pmode === 'sudoku' ||

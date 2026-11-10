@@ -9,6 +9,7 @@ import {
   NeighborProfileState,
   QuizLanguageId,
 } from '../types/game';
+import { isNpcNeighborProfile } from './neighborSocial';
 
 export const ALL_LEADERBOARD_GAMES: ReadonlyArray<LeaderboardGameId> = [
   'match3',
@@ -86,15 +87,15 @@ export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMet
   },
   blocks: {
     id: 'blocks',
-    icon: '🧱',
-    spriteIcon: '/sprites/m3_piece_scroll.png',
-    shortVi: 'Khảm Cổ Ngữ',
-    titleVi: 'Khảm Đá Cổ Ngữ Runes 8×8',
-    cupTitleVi: 'Cúp Điêu Khắc Cổ Ngữ Bắc Âu (777 Màn)',
-    subtitleVi: 'Xếp hạng theo Màn Đỉnh, Điểm Nổ Runes & Kỷ Lục Hàng Phá',
+    icon: '🦄',
+    spriteIcon: '/sprites/beast_niffler.png',
+    shortVi: 'Nối Sinh Vật',
+    titleVi: 'Nối Hình Sinh Vật Huyền Bí',
+    cupTitleVi: 'Cúp Bảo Tồn Sinh Vật Huyền Bí (777 Màn Cổ Điển)',
+    subtitleVi: 'Xếp hạng theo Màn Đỉnh, Điểm Ghép Cặp & Kỷ Lục Chuỗi Combo',
     primaryColVi: 'Màn Đỉnh',
-    secondaryColVi: 'Điểm Cổ Ngữ',
-    detailColVi: 'Thắng & Hàng Nổ',
+    secondaryColVi: 'Điểm Linh Thú',
+    detailColVi: 'Thắng & Đỉnh Combo',
   },
   seedquiz: {
     id: 'seedquiz',
@@ -178,165 +179,6 @@ export interface PersonalDisciplineSummaryRow {
   detailDisplayVi: string;
   bestSessionScore: number;
   league: LeaderboardLeagueBadge;
-}
-
-interface WizardingRivalSeed {
-  id: string;
-  name: string;
-  titleVi: string;
-  parkName: string;
-  friendCode: string;
-  avatarEmoji: string;
-  portraitSprite?: string;
-  house: HouseName;
-  stages: Record<LeaderboardGameId, number>;
-  bonusScore: Record<LeaderboardGameId, number>;
-  streaks: Record<LeaderboardGameId, number>;
-  efficiency: Record<LeaderboardGameId, number>;
-}
-
-const WIZARDING_VALLEY_RIVALS: ReadonlyArray<WizardingRivalSeed> = [
-  {
-    id: 'rival_colin',
-    name: 'Colin Creevey',
-    titleVi: 'Nhiếp Ảnh Gia Tân Binh',
-    parkName: ' hiên Nắng Máy Ảnh Phép',
-    friendCode: 'HS-CLN1-11',
-    avatarEmoji: '📷',
-    house: 'Gryffindor',
-    stages: { match3: 1, caro: 1, sudoku: 1, chess: 1, blocks: 1, seedquiz: 1 },
-    bonusScore: { match3: 180, caro: 150, sudoku: 160, chess: 140, blocks: 170, seedquiz: 95 },
-    streaks: { match3: 1, caro: 1, sudoku: 1, chess: 1, blocks: 1, seedquiz: 2 },
-    efficiency: { match3: 980, caro: 21, sudoku: 3, chess: 26, blocks: 4, seedquiz: 0 },
-  },
-  {
-    id: 'rival_dean',
-    name: 'Dean Thomas',
-    titleVi: 'Họa Sĩ Ký Họa Thung Lũng',
-    parkName: 'Đồi Cỏ Màu Nước',
-    friendCode: 'HS-DEAN-18',
-    avatarEmoji: '🎨',
-    house: 'Gryffindor',
-    stages: { match3: 3, caro: 2, sudoku: 2, chess: 2, blocks: 4, seedquiz: 4 },
-    bonusScore: { match3: 420, caro: 310, sudoku: 290, chess: 300, blocks: 520, seedquiz: 240 },
-    streaks: { match3: 2, caro: 2, sudoku: 1, chess: 2, blocks: 3, seedquiz: 3 },
-    efficiency: { match3: 1650, caro: 18, sudoku: 2, chess: 22, blocks: 7, seedquiz: 1 },
-  },
-  {
-    id: 'rival_hanna',
-    name: 'Hannah Abbott',
-    titleVi: 'Chủ Quán Cái Vạc Lủng Tương Lai',
-    parkName: 'Vườn Hoa Cúc Hufflepuff',
-    friendCode: 'HS-HNAH-24',
-    avatarEmoji: '🌼',
-    house: 'Hufflepuff',
-    stages: { match3: 9, caro: 6, sudoku: 8, chess: 5, blocks: 10, seedquiz: 11 },
-    bonusScore: { match3: 860, caro: 540, sudoku: 720, chess: 480, blocks: 940, seedquiz: 510 },
-    streaks: { match3: 4, caro: 3, sudoku: 3, chess: 2, blocks: 4, seedquiz: 5 },
-    efficiency: { match3: 2800, caro: 16, sudoku: 2, chess: 20, blocks: 12, seedquiz: 3 },
-  },
-  {
-    id: 'rival_ginny',
-    name: 'Ginny Weasley',
-    titleVi: 'Truy Thủ Tia Chớp Hang Sóc',
-    parkName: 'Sân Quidditch Đồi Táo',
-    friendCode: 'HS-GINY-31',
-    avatarEmoji: '⚡',
-    portraitSprite: 'villager_ginny',
-    house: 'Gryffindor',
-    stages: { match3: 26, caro: 28, sudoku: 19, chess: 24, blocks: 22, seedquiz: 22 },
-    bonusScore: { match3: 2150, caro: 2340, sudoku: 1520, chess: 1980, blocks: 1890, seedquiz: 980 },
-    streaks: { match3: 6, caro: 7, sudoku: 4, chess: 5, blocks: 5, seedquiz: 7 },
-    efficiency: { match3: 4900, caro: 13, sudoku: 1, chess: 16, blocks: 19, seedquiz: 7 },
-  },
-  {
-    id: 'rival_cho',
-    name: 'Cho Chang',
-    titleVi: 'Tầm Thủ Tháp Ravenclaw',
-    parkName: 'Thung Lũng Hồ Thiên Nga',
-    friendCode: 'HS-CHOC-42',
-    avatarEmoji: '🦢',
-    house: 'Ravenclaw',
-    stages: { match3: 58, caro: 52, sudoku: 74, chess: 46, blocks: 64, seedquiz: 48 },
-    bonusScore: { match3: 4100, caro: 3820, sudoku: 5600, chess: 3450, blocks: 4680, seedquiz: 1920 },
-    streaks: { match3: 8, caro: 7, sudoku: 10, chess: 6, blocks: 8, seedquiz: 11 },
-    efficiency: { match3: 7200, caro: 12, sudoku: 0, chess: 15, blocks: 28, seedquiz: 16 },
-  },
-  {
-    id: 'rival_cedric',
-    name: 'Cedric Diggory',
-    titleVi: 'Quán Quân Tam Pháp Thuật',
-    parkName: 'Đồi Sồi Vàng Ottery',
-    friendCode: 'HS-CEDR-55',
-    avatarEmoji: '🏆',
-    house: 'Hufflepuff',
-    stages: { match3: 135, caro: 120, sudoku: 128, chess: 118, blocks: 142, seedquiz: 88 },
-    bonusScore: { match3: 8400, caro: 7600, sudoku: 8100, chess: 7900, blocks: 8900, seedquiz: 3400 },
-    streaks: { match3: 11, caro: 10, sudoku: 11, chess: 9, blocks: 12, seedquiz: 15 },
-    efficiency: { match3: 11800, caro: 10, sudoku: 0, chess: 12, blocks: 42, seedquiz: 32 },
-  },
-  {
-    id: 'rival_fleur',
-    name: 'Fleur Delacour',
-    titleVi: 'Sứ Giả Đa Ngữ Beauxbatons',
-    parkName: 'Vườn Oải Hương Ánh Bạc',
-    friendCode: 'HS-FLER-68',
-    avatarEmoji: '🦋',
-    house: 'Ravenclaw',
-    stages: { match3: 245, caro: 190, sudoku: 230, chess: 195, blocks: 215, seedquiz: 210 },
-    bonusScore: { match3: 14200, caro: 11200, sudoku: 13800, chess: 11900, blocks: 12600, seedquiz: 7600 },
-    streaks: { match3: 14, caro: 11, sudoku: 13, chess: 11, blocks: 12, seedquiz: 24 },
-    efficiency: { match3: 16400, caro: 10, sudoku: 0, chess: 11, blocks: 55, seedquiz: 74 },
-  },
-  {
-    id: 'rival_ron',
-    name: 'Ron Weasley',
-    titleVi: 'Kỵ Sĩ Cờ Phù Thủy Hang Sóc',
-    parkName: 'Gác Xép Chudley Cannons',
-    friendCode: 'HS-RONW-77',
-    avatarEmoji: '♟️',
-    portraitSprite: 'villager_ron',
-    house: 'Gryffindor',
-    stages: { match3: 310, caro: 340, sudoku: 210, chess: 520, blocks: 290, seedquiz: 115 },
-    bonusScore: { match3: 16800, caro: 18900, sudoku: 12400, chess: 31500, blocks: 15900, seedquiz: 4100 },
-    streaks: { match3: 13, caro: 15, sudoku: 9, chess: 21, blocks: 13, seedquiz: 12 },
-    efficiency: { match3: 19200, caro: 8, sudoku: 1, chess: 7, blocks: 64, seedquiz: 38 },
-  },
-  {
-    id: 'rival_bill',
-    name: 'Bill Weasley',
-    titleVi: 'Chuyên Gia Phá Nguyền Gringotts',
-    parkName: 'Ốc Đảo Cổ Ngữ Vỏ Sò',
-    friendCode: 'HS-BILL-89',
-    avatarEmoji: '🐉',
-    house: 'Gryffindor',
-    stages: { match3: 460, caro: 495, sudoku: 510, chess: 470, blocks: 680, seedquiz: 320 },
-    bonusScore: { match3: 24500, caro: 26800, sudoku: 27900, chess: 25400, blocks: 38400, seedquiz: 11400 },
-    streaks: { match3: 17, caro: 18, sudoku: 19, chess: 16, blocks: 26, seedquiz: 28 },
-    efficiency: { match3: 26500, caro: 7, sudoku: 0, chess: 8, blocks: 112, seedquiz: 118 },
-  },
-  {
-    id: 'rival_mcgonagall',
-    name: 'Giáo Sư M. McGonagall',
-    titleVi: 'Chủ Nhiệm Khảo Thí Biến Hình & Đại Sảnh',
-    parkName: 'Tháp Đá Cẩm Thạch Hogwarts',
-    friendCode: 'HS-MCGN-99',
-    avatarEmoji: '👑',
-    house: 'Gryffindor',
-    stages: { match3: 700, caro: 715, sudoku: 740, chess: 777, blocks: 735, seedquiz: 440 },
-    bonusScore: { match3: 36500, caro: 37800, sudoku: 39200, chess: 42500, blocks: 38900, seedquiz: 16200 },
-    streaks: { match3: 24, caro: 25, sudoku: 28, chess: 32, blocks: 27, seedquiz: 36 },
-    efficiency: { match3: 38000, caro: 6, sudoku: 0, chess: 5, blocks: 148, seedquiz: 168 },
-  },
-];
-
-function hashCodeStr(input: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return Math.abs(h);
 }
 
 export function getLeaderboardLeagueBadge(
@@ -589,7 +431,7 @@ function formatDetailDisplayVi(
     return `${totalWins} thắng • 🔥×${bestStreak}${eff}`;
   }
   if (gameId === 'blocks') {
-    const eff = efficiency && efficiency > 0 ? ` • 💥${efficiency} hàng` : '';
+    const eff = efficiency && efficiency > 0 ? ` • ⚡Combo ×${efficiency}` : '';
     return `${totalWins} thắng • 🔥×${bestStreak}${eff}`;
   }
   const bestRun = efficiency && efficiency > 0 ? ` • 🎯${efficiency.toLocaleString('vi-VN')}đ` : '';
@@ -598,63 +440,44 @@ function formatDetailDisplayVi(
 
 function buildNeighborLeaderboardEntry(
   neighbor: NeighborProfileState,
-  gameId: LeaderboardGameId
+  gameId: LeaderboardGameId,
+  cloudMatch?: CloudLeaderboardEntry
 ): Omit<LeaderboardRowEntry, 'rank'> {
-  const seed = hashCodeStr(`${neighbor.id}:${neighbor.friendCode}:${gameId}`);
-  const lv = Math.max(1, Math.min(100, neighbor.level || 1));
-
-  // Canon specialization multipliers so each Hogsmeade neighbor shines in their lore discipline!
-  let specialtyMult = 1.0;
-  if (neighbor.id === 'hermione_valley') {
-    if (gameId === 'sudoku' || gameId === 'seedquiz') specialtyMult = 1.65;
-    else if (gameId === 'chess') specialtyMult = 1.3;
-  } else if (neighbor.id === 'twins_valley') {
-    if (gameId === 'caro' || gameId === 'match3') specialtyMult = 1.55;
-    else if (gameId === 'blocks') specialtyMult = 1.25;
-  } else if (neighbor.id === 'luna_valley') {
-    if (gameId === 'blocks' || gameId === 'sudoku') specialtyMult = 1.45;
-    else if (gameId === 'seedquiz') specialtyMult = 1.25;
-  } else if (neighbor.id === 'neville_valley') {
-    if (gameId === 'match3' || gameId === 'seedquiz') specialtyMult = 1.35;
-  } else if (neighbor.id === 'hagrid_valley') {
-    specialtyMult = 0.72; // Warm welcoming neighbor benchmark!
+  if (cloudMatch) {
+    const pv = Math.max(0, Math.floor(cloudMatch.primaryValue || 0));
+    const rs = Math.max(0, Math.floor(cloudMatch.ratingScore || 0));
+    const tw = Math.max(0, Math.floor(cloudMatch.totalWins || 0));
+    const bs = Math.max(0, Math.floor(cloudMatch.bestStreak || 0));
+    return {
+      id: `friend:${neighbor.id}`,
+      name: neighbor.name,
+      titleVi: neighbor.titleVi || 'Người Chơi Thật • Hàng Xóm',
+      parkName: neighbor.parkName,
+      friendCode: neighbor.friendCode,
+      avatarEmoji: neighbor.avatarEmoji || cloudMatch.avatarEmoji || '🧙',
+      portraitSprite: neighbor.portraitSprite,
+      house: neighbor.house || cloudMatch.house || 'Gryffindor',
+      isPlayer: false,
+      isFriend: true,
+      isCloudPlayer: true,
+      neighborId: neighbor.id,
+      primaryValue: pv,
+      primaryDisplayVi: formatPrimaryDisplayVi(gameId, pv),
+      ratingScore: rs,
+      ratingDisplayVi: `${rs.toLocaleString('vi-VN')} đ`,
+      totalWins: tw,
+      bestStreak: bs,
+      detailDisplayVi:
+        cloudMatch.detailLabelVi || formatDetailDisplayVi(gameId, tw, bs),
+      league: getLeaderboardLeagueBadge(gameId, pv),
+    };
   }
 
-  let primaryValue = 1;
-  let totalWins = 1;
-  let bestStreak = 2 + (seed % 9);
-  let efficiency: number | undefined;
-  let ratingScore = 200;
-
-  if (gameId === 'seedquiz') {
-    primaryValue = Math.max(
-      2,
-      Math.min(480, Math.round((lv * 3.4 + (seed % 14)) * specialtyMult))
-    );
-    totalWins = primaryValue;
-    efficiency = Math.max(1, Math.round(primaryValue * 0.36));
-    ratingScore = primaryValue * 45 + lv * 32 + efficiency * 60 + bestStreak * 30;
-  } else {
-    primaryValue = Math.max(
-      2,
-      Math.min(
-        MAX_PUZZLE_TOWER_STAGE,
-        Math.round((lv * 4.8 + (seed % 17)) * specialtyMult)
-      )
-    );
-    totalWins = primaryValue + (seed % 12);
-    if (gameId === 'caro') efficiency = Math.max(7, 19 - Math.floor(lv / 8));
-    else if (gameId === 'chess') efficiency = Math.max(6, 22 - Math.floor(lv / 7));
-    else if (gameId === 'sudoku') efficiency = lv >= 20 ? 0 : 1;
-    else if (gameId === 'blocks') efficiency = 6 + Math.floor(primaryValue * 0.35);
-    else efficiency = 1100 + primaryValue * 88;
-    ratingScore = primaryValue * 155 + totalWins * 22 + bestStreak * 35 + (seed % 190);
-  }
-
+  // Người chơi thật trong danh bạ nhưng chưa có kỷ lục trực tuyến ở bộ môn này -> hiển thị 0 thật (không bịa điểm ảo)
   return {
     id: `friend:${neighbor.id}`,
     name: neighbor.name,
-    titleVi: neighbor.titleVi || 'Hàng Xóm Thung Lũng',
+    titleVi: neighbor.titleVi || 'Người Chơi Thật • Hàng Xóm',
     parkName: neighbor.parkName,
     friendCode: neighbor.friendCode,
     avatarEmoji: neighbor.avatarEmoji || '🧙',
@@ -663,52 +486,14 @@ function buildNeighborLeaderboardEntry(
     isPlayer: false,
     isFriend: true,
     neighborId: neighbor.id,
-    primaryValue,
-    primaryDisplayVi: formatPrimaryDisplayVi(gameId, primaryValue),
-    ratingScore,
-    ratingDisplayVi: `${ratingScore.toLocaleString('vi-VN')} đ`,
-    totalWins,
-    bestStreak,
-    detailDisplayVi: formatDetailDisplayVi(gameId, totalWins, bestStreak, efficiency),
-    league: getLeaderboardLeagueBadge(gameId, primaryValue),
-  };
-}
-
-function buildRivalLeaderboardEntry(
-  rival: WizardingRivalSeed,
-  gameId: LeaderboardGameId
-): Omit<LeaderboardRowEntry, 'rank'> {
-  const primaryValue = rival.stages[gameId];
-  const bestStreak = rival.streaks[gameId];
-  const efficiency = rival.efficiency[gameId];
-  const totalWins =
-    gameId === 'seedquiz'
-      ? primaryValue
-      : primaryValue + Math.max(1, Math.floor(primaryValue * 0.08));
-  const ratingScore =
-    gameId === 'seedquiz'
-      ? primaryValue * 45 + rival.bonusScore[gameId] + efficiency * 60 + bestStreak * 30
-      : primaryValue * 155 + rival.bonusScore[gameId] + totalWins * 20 + bestStreak * 35;
-
-  return {
-    id: rival.id,
-    name: rival.name,
-    titleVi: rival.titleVi,
-    parkName: rival.parkName.trim(),
-    friendCode: rival.friendCode,
-    avatarEmoji: rival.avatarEmoji,
-    portraitSprite: rival.portraitSprite,
-    house: rival.house,
-    isPlayer: false,
-    isFriend: false,
-    primaryValue,
-    primaryDisplayVi: formatPrimaryDisplayVi(gameId, primaryValue),
-    ratingScore,
-    ratingDisplayVi: `${ratingScore.toLocaleString('vi-VN')} đ`,
-    totalWins,
-    bestStreak,
-    detailDisplayVi: formatDetailDisplayVi(gameId, totalWins, bestStreak, efficiency),
-    league: getLeaderboardLeagueBadge(gameId, primaryValue),
+    primaryValue: 0,
+    primaryDisplayVi: formatPrimaryDisplayVi(gameId, 0),
+    ratingScore: 0,
+    ratingDisplayVi: '0 đ',
+    totalWins: 0,
+    bestStreak: 0,
+    detailDisplayVi: 'Chưa có kỷ lục môn này',
+    league: getLeaderboardLeagueBadge(gameId, 0),
   };
 }
 
@@ -773,46 +558,66 @@ export function buildMinigameLeaderboard(
   extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>
 ): LeaderboardStandingResult {
   const playerRaw = buildPlayerLeaderboardEntry(state, gameId);
-  const neighbors = state.neighborSocial?.neighbors ?? [];
-  const friendEntries = neighbors.map((n) => buildNeighborLeaderboardEntry(n, gameId));
+  const neighbors = (state.neighborSocial?.neighbors ?? []).filter(
+    (n) => !isNpcNeighborProfile(n)
+  );
+  const effectiveCloud = extraCloudEntries ?? cloudEntriesMemoryCache[gameId] ?? [];
+  const cloudByCode = new Map<string, CloudLeaderboardEntry>();
+  const cloudByUid = new Map<string, CloudLeaderboardEntry>();
+  for (const ce of effectiveCloud) {
+    if (!ce) continue;
+    if (ce.friendCode) cloudByCode.set(ce.friendCode.trim().toUpperCase(), ce);
+    if (ce.userId) cloudByUid.set(ce.userId, ce);
+  }
+  const friendCodeSet = new Set<string>(
+    neighbors.map((n) => n.friendCode.trim().toUpperCase())
+  );
+  const friendEntries = neighbors.map((n) => {
+    const cMatch =
+      (n.remoteUserId ? cloudByUid.get(n.remoteUserId) : undefined) ??
+      cloudByCode.get(n.friendCode.trim().toUpperCase());
+    return buildNeighborLeaderboardEntry(n, gameId, cMatch);
+  });
 
   const pool: Array<Omit<LeaderboardRowEntry, 'rank'>> = [playerRaw, ...friendEntries];
 
   if (scope === 'valley') {
-    for (const rival of WIZARDING_VALLEY_RIVALS) {
-      pool.push(buildRivalLeaderboardEntry(rival, gameId));
-    }
     const localUid = getClientLeaderboardUserId();
-    if (extraCloudEntries && extraCloudEntries.length > 0) {
-      for (const ce of extraCloudEntries) {
-        if (!ce || !ce.userId) continue;
-        if (ce.userId === localUid || ce.friendCode === playerRaw.friendCode) continue;
-        pool.push({
-          id: `cloud:${ce.userId}`,
-          name: ce.name || ce.parkName || 'Phù Thủy Đám Mây',
-          titleVi: 'Phù Thủy Trực Tuyến Toàn Cầu',
-          parkName: ce.parkName || 'Điền Trang Phép Thuật',
-          friendCode: ce.friendCode || 'HS-CLUD-00',
-          avatarEmoji: ce.avatarEmoji || '🌐',
-          house: ce.house || 'Gryffindor',
-          isPlayer: false,
-          isFriend: false,
-          isCloudPlayer: true,
-          primaryValue: Math.max(0, Math.floor(ce.primaryValue || 0)),
-          primaryDisplayVi: formatPrimaryDisplayVi(
-            gameId,
-            Math.max(0, Math.floor(ce.primaryValue || 0))
-          ),
-          ratingScore: Math.max(0, Math.floor(ce.ratingScore || 0)),
-          ratingDisplayVi: `${Math.max(0, Math.floor(ce.ratingScore || 0)).toLocaleString('vi-VN')} đ`,
-          totalWins: Math.max(0, Math.floor(ce.totalWins || 0)),
-          bestStreak: Math.max(0, Math.floor(ce.bestStreak || 0)),
-          detailDisplayVi:
-            ce.detailLabelVi ||
-            formatDetailDisplayVi(gameId, ce.totalWins || 0, ce.bestStreak || 0),
-          league: getLeaderboardLeagueBadge(gameId, Math.max(0, Math.floor(ce.primaryValue || 0))),
-        });
+    for (const ce of effectiveCloud) {
+      if (!ce || !ce.userId) continue;
+      const normCode = (ce.friendCode || '').trim().toUpperCase();
+      if (
+        ce.userId === localUid ||
+        normCode === playerRaw.friendCode.trim().toUpperCase() ||
+        friendCodeSet.has(normCode)
+      ) {
+        continue;
       }
+      pool.push({
+        id: `cloud:${ce.userId}`,
+        name: ce.name || ce.parkName || 'Người Chơi Trực Tuyến',
+        titleVi: 'Người Chơi Thật Trực Tuyến',
+        parkName: ce.parkName || 'Điền Trang Phép Thuật',
+        friendCode: ce.friendCode || 'HS-CLUD-00',
+        avatarEmoji: ce.avatarEmoji || '🌐',
+        house: ce.house || 'Gryffindor',
+        isPlayer: false,
+        isFriend: false,
+        isCloudPlayer: true,
+        primaryValue: Math.max(0, Math.floor(ce.primaryValue || 0)),
+        primaryDisplayVi: formatPrimaryDisplayVi(
+          gameId,
+          Math.max(0, Math.floor(ce.primaryValue || 0))
+        ),
+        ratingScore: Math.max(0, Math.floor(ce.ratingScore || 0)),
+        ratingDisplayVi: `${Math.max(0, Math.floor(ce.ratingScore || 0)).toLocaleString('vi-VN')} đ`,
+        totalWins: Math.max(0, Math.floor(ce.totalWins || 0)),
+        bestStreak: Math.max(0, Math.floor(ce.bestStreak || 0)),
+        detailDisplayVi:
+          ce.detailLabelVi ||
+          formatDetailDisplayVi(gameId, ce.totalWins || 0, ce.bestStreak || 0),
+        league: getLeaderboardLeagueBadge(gameId, Math.max(0, Math.floor(ce.primaryValue || 0))),
+      });
     }
   }
 
@@ -846,7 +651,7 @@ export function buildAllPersonalRecordsSummary(
   const lb = ensureMinigameLeaderboardState(state);
   return ALL_LEADERBOARD_GAMES.map((gid) => {
     const valley = buildMinigameLeaderboard(state, gid, 'valley', cloudCache?.[gid]);
-    const friends = buildMinigameLeaderboard(state, gid, 'friends');
+    const friends = buildMinigameLeaderboard(state, gid, 'friends', cloudCache?.[gid]);
     const rec = lb.records[gid];
     return {
       gameId: gid,
@@ -981,6 +786,19 @@ export function getCachedCloudLeaderboardEntries(
   gameId: LeaderboardGameId
 ): CloudLeaderboardEntry[] {
   return cloudEntriesMemoryCache[gameId] ?? [];
+}
+
+export function setCachedCloudLeaderboardEntries(
+  gameId: LeaderboardGameId,
+  entries: ReadonlyArray<CloudLeaderboardEntry>
+): void {
+  cloudEntriesMemoryCache[gameId] = [...entries];
+}
+
+export function clearCachedCloudLeaderboards(): void {
+  for (const gid of ALL_LEADERBOARD_GAMES) {
+    delete cloudEntriesMemoryCache[gid];
+  }
 }
 
 export function getAllCachedCloudLeaderboards(): Partial<

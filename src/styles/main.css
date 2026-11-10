@@ -74,6 +74,12 @@
   --minimap-canvas-bg: rgba(178, 224, 242, 0.86);
   --icon-drop-shadow: rgba(74, 44, 22, 0.3);
 
+  /* Cozy Scrollbar Tokens (>= 3:1 WCAG 1.4.11 non-text contrast on both parchment & wood) */
+  --hud-scrollbar-thumb-parchment: #8c4a14;
+  --hud-scrollbar-track-parchment: rgba(235, 211, 168, 0.78);
+  --hud-scrollbar-thumb-brass: #f5b301;
+  --hud-scrollbar-track-wood: rgba(46, 29, 16, 0.72);
+
   /* Style #5 Playrix Township 2026 Wizarding HUD Tokens */
   --ts-ink-contour: #3a2212;
   --ts-wood-track-top: #4d351f;
@@ -2105,16 +2111,26 @@ dialog::backdrop {
   object-fit: contain;
 }
 
+.m3-switch-lbl-compact {
+  display: none;
+}
+
 .m3-board-overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  border-radius: 22px;
-  background: radial-gradient(circle, rgba(15, 23, 42, 0.68) 0%, rgba(2, 6, 23, 0.86) 100%);
-  backdrop-filter: blur(4px);
+  z-index: 80;
+  background: var(--farm-parlor-overlay);
+  backdrop-filter: blur(5px);
   display: flex;
-  align-items: center;
+  align-items: safe center;
   justify-content: center;
-  padding: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding:
+    max(12px, env(safe-area-inset-top, 0px))
+    max(12px, env(safe-area-inset-right, 0px))
+    max(12px, env(safe-area-inset-bottom, 0px))
+    max(12px, env(safe-area-inset-left, 0px));
   animation: m3OverlayIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -2130,22 +2146,27 @@ dialog::backdrop {
 }
 
 .m3-overlay-card {
-  width: 100%;
-  max-width: 396px;
-  background: linear-gradient(180deg, #fffdf5 0%, #fef3c7 100%);
-  border: 4px solid #f59e0b;
+  width: min(100%, 404px);
+  max-width: 404px;
+  margin: auto;
+  background: linear-gradient(180deg, var(--farm-sheet-top) 0%, var(--farm-sheet-bot) 100%);
+  border: 4px solid var(--farm-brass-bright);
   border-radius: 22px;
   padding: 20px 18px;
   text-align: center;
-  color: #451a03;
+  color: var(--farm-ink-title);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 9px;
   box-shadow:
-    0 8px 0 #78350f,
-    0 22px 48px rgba(0, 0, 0, 0.7),
-    inset 0 2px 0 #ffffff;
+    0 8px 0 var(--farm-wood-dark),
+    0 22px 48px var(--farm-shadow-deep),
+    inset 0 2px 0 var(--ts-white);
+}
+
+.m3-overlay-card h3 {
+  text-wrap: balance;
 }
 
 .m3-victory-stars-row {
@@ -2171,6 +2192,7 @@ dialog::backdrop {
 .m3-reward-badges {
   display: flex;
   flex-wrap: wrap;
+  flex-wrap: balance;
   justify-content: center;
   gap: 6px;
   margin-top: 2px;
@@ -2264,23 +2286,42 @@ dialog::backdrop {
   }
 
   .m3-stage-heading strong {
-    font-size: 13.5px !important;
+    font-size: 13px !important;
+  }
+
+  .m3-switch-lbl-full {
+    display: none;
+  }
+
+  .m3-switch-lbl-compact {
+    display: inline;
+  }
+
+  .m3-resource-pills {
+    gap: 4px;
+    width: 100%;
+  }
+
+  .m3-inline-close-form {
+    margin-inline-start: auto;
   }
 
   .m3-res-chip {
-    padding: 2px 7px;
-    font-size: 11.5px;
+    padding: 2px 6px;
+    font-size: 11px;
   }
 
   .m3-main-grid {
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto auto;
     grid-template-areas:
       'hud'
       'board'
       'controls';
-    gap: 6px;
+    gap: 4px;
     align-items: stretch;
+    flex: 0 0 auto;
+    height: auto;
   }
 
   .m3-hud-panel {
@@ -2320,7 +2361,7 @@ dialog::backdrop {
   .m3-goals-list {
     width: 100%;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
     gap: 4px;
   }
 
@@ -2331,14 +2372,14 @@ dialog::backdrop {
   }
 
   .m3-goal-icon-well {
-    width: 26px;
-    height: 26px;
+    width: 24px;
+    height: 24px;
     border-radius: 7px;
   }
 
   .m3-goal-sprite {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
   }
 
   .m3-goal-name {
@@ -2346,38 +2387,74 @@ dialog::backdrop {
   }
 
   .m3-board-stage {
-    min-height: 220px;
+    container-type: inline-size;
+    height: auto;
+    min-height: 0;
+    flex: 0 0 auto;
   }
 
   .m3-canvas-wrap {
-    width: min(100%, calc(100dvh - 236px));
-    width: min(100cqw, calc(100cqh - 4px));
+    width: min(100%, 64dvh);
+    width: min(100cqi, 64dvh);
   }
 
   .m3-boosters-box {
-    padding: 5px 7px;
-    border-radius: 13px;
-  }
-
-  .m3-booster-btn {
-    flex-direction: column;
-    min-width: 0;
-    padding: 5px 3px 5px;
-    gap: 2px;
+    padding: 4px 6px;
     border-radius: 12px;
   }
 
+  .m3-booster-row {
+    gap: 5px;
+  }
+
+  .m3-booster-btn {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    min-width: 0;
+    padding: 4px 5px;
+    gap: 3px;
+    border-radius: 11px;
+  }
+
   .m3-booster-sprite {
-    width: 26px;
-    height: 26px;
+    width: 22px;
+    height: 22px;
   }
 
   .m3-booster-lbl {
-    font-size: 10.5px;
+    font-size: 10px;
+  }
+
+  .m3-talisman-btn {
+    margin-top: 5px !important;
+    padding: 5px 8px !important;
+    font-size: 11px !important;
   }
 
   .m3-controls-panel {
-    gap: 5px;
+    gap: 4px;
+  }
+
+  .m3-overlay-card {
+    padding: 15px 14px;
+    gap: 7px;
+    border-radius: 18px;
+  }
+
+  .m3-overlay-card h3 {
+    font-size: 17px !important;
+    line-height: 1.25;
+  }
+
+  .m3-victory-star-img {
+    width: 38px;
+    height: 38px;
+  }
+
+  .m3-victory-star-img.center {
+    width: 48px;
+    height: 48px;
   }
 }
 
@@ -2465,8 +2542,7 @@ dialog::backdrop {
     scrollbar-width: none;
   }
 
-  .hud-group-actions::-webkit-scrollbar,
-  .bottom-bar::-webkit-scrollbar {
+  .hud-group-actions::-webkit-scrollbar {
     display: none;
   }
 
@@ -2674,6 +2750,10 @@ dialog::backdrop {
 
 .pa-tab-name {
   white-space: nowrap;
+}
+
+.pa-tab-name-short {
+  display: none;
 }
 
 .pa-tab-badges {
@@ -3060,20 +3140,27 @@ dialog::backdrop {
 }
 
 .pa-victory-overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  z-index: 80;
   background: var(--farm-parlor-overlay);
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(5px);
   display: flex;
-  align-items: center;
+  align-items: safe center;
   justify-content: center;
-  padding: 12px;
-  z-index: 6;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding:
+    max(12px, env(safe-area-inset-top, 0px))
+    max(12px, env(safe-area-inset-right, 0px))
+    max(12px, env(safe-area-inset-bottom, 0px))
+    max(12px, env(safe-area-inset-left, 0px));
 }
 
 .pa-victory-card {
   max-width: 448px;
-  width: 100%;
+  width: min(100%, 448px);
+  margin: auto;
   background: linear-gradient(
     180deg,
     var(--farm-sheet-top) 0%,
@@ -3123,44 +3210,95 @@ dialog::backdrop {
 
 @media (max-width: 740px) {
   #puzzleArcadeDialog .pa-modal-inner {
-    padding: 6px 8px 8px;
+    padding:
+      max(4px, env(safe-area-inset-top, 0px))
+      max(4px, env(safe-area-inset-right, 0px))
+      max(5px, env(safe-area-inset-bottom, 0px))
+      max(4px, env(safe-area-inset-left, 0px));
     border-radius: 0;
+  }
+
+  #puzzleArcadeDialogContent,
+  .pa-layout-shell {
+    gap: 4px;
+    flex: 1 0 auto;
+    height: auto;
+    min-height: min-content;
+  }
+
+  .pa-side-dock {
+    gap: 4px;
+  }
+
+  .pa-top-bar {
+    padding: 4px 7px;
+    gap: 4px;
+    border-radius: 12px;
+  }
+
+  .pa-victory-card {
+    padding: 14px 14px;
+    gap: 7px;
+    border-radius: 18px;
+  }
+
+  .pa-victory-title {
+    font-size: 16.5px;
+    text-wrap: balance;
   }
 
   #puzzleArcadeDialog .modal-title {
     font-size: 14.5px;
   }
 
+  .pa-tab-name-full {
+    display: none;
+  }
+
+  .pa-tab-name-short {
+    display: inline;
+  }
+
   .pa-mode-tabs {
     width: 100%;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 5px;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 3px;
   }
 
   .pa-mode-tab {
-    padding: 5px 8px;
-    font-size: 11px;
+    flex-direction: column;
+    padding: 3px 2px;
+    font-size: 10px;
+    gap: 1px;
     min-width: 0;
     overflow: hidden;
-    justify-content: space-between;
+    justify-content: center;
+    border-radius: 9px;
   }
 
   .pa-mode-tab.switch-m3 {
-    grid-column: 1 / -1;
+    grid-column: auto;
     justify-content: center;
-    gap: 8px;
+    gap: 1px;
+  }
+
+  .pa-tab-lv {
+    font-size: 9px;
+    padding: 0 4px;
   }
 
   .pa-tab-name {
     min-width: 0;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .pa-currencies {
-    width: 100%;
-    justify-content: space-between;
+    flex: 1 1 auto;
+    gap: 4px;
+    justify-content: flex-start;
   }
 
   .pa-gallery-chip {
@@ -3168,32 +3306,90 @@ dialog::backdrop {
   }
 
   .pa-stage-banner {
-    padding: 5px 9px;
-    gap: 5px;
+    padding: 4px 8px;
+    gap: 4px;
     margin-bottom: 0;
+    border-radius: 11px;
+  }
+
+  .pa-stage-meta {
+    flex: 1 1 160px;
   }
 
   .pa-stage-title {
-    font-size: 12.5px;
+    font-size: 12px;
+    line-height: 1.2;
   }
 
   .pa-stage-sub {
-    font-size: 11px;
+    display: none;
   }
 
   .pa-reward-preview {
-    font-size: 10.5px;
-    padding: 3px 8px;
+    font-size: 10px;
+    padding: 2px 7px;
+  }
+
+  .pa-stage-viewport {
+    container-type: inline-size;
+    flex: 0 0 auto;
+    height: auto;
+    min-height: 0;
+  }
+
+  .pa-canvas-shell {
+    border-width: 2px;
+    border-radius: 14px;
+  }
+
+  .pa-canvas-shell[data-pa-board-mode='caro'] {
+    aspect-ratio: 1 / 1;
+    width: min(100%, 64dvh);
+    width: min(100cqi, 64dvh);
+  }
+
+  .pa-canvas-shell[data-pa-board-mode='caro'] #paBoardCanvas {
+    aspect-ratio: 1 / 1;
+  }
+
+  .pa-canvas-shell[data-pa-board-mode='chess'] {
+    aspect-ratio: 508 / 504;
+    width: min(100%, calc(64dvh * 508 / 504));
+    width: min(100cqi, calc(64dvh * 508 / 504));
+  }
+
+  .pa-canvas-shell[data-pa-board-mode='chess'] #paBoardCanvas {
+    aspect-ratio: 508 / 504;
+  }
+
+  .pa-canvas-shell[data-pa-board-mode='sudoku'] {
+    aspect-ratio: 500 / 636;
+    width: min(100%, calc(75dvh * 500 / 636));
+    width: min(100cqi, calc(75dvh * 500 / 636));
+  }
+
+  .pa-canvas-shell[data-pa-board-mode='sudoku'] #paBoardCanvas {
+    aspect-ratio: 500 / 636;
+  }
+
+  .pa-canvas-shell[data-pa-board-mode='blocks'] {
+    aspect-ratio: 504 / 616;
+    width: min(100%, calc(74dvh * 504 / 616));
+    width: min(100cqi, calc(74dvh * 504 / 616));
+  }
+
+  .pa-canvas-shell[data-pa-board-mode='blocks'] #paBoardCanvas {
+    aspect-ratio: 504 / 616;
   }
 
   .pa-controls-bar {
-    gap: 5px;
+    gap: 4px;
     margin-top: 0;
   }
 
   .pa-tool-btn {
-    padding: 5px 9px;
-    font-size: 11px;
+    padding: 4px 8px;
+    font-size: 10.8px;
     min-width: 0;
   }
 
@@ -5104,6 +5300,7 @@ dialog::backdrop {
   align-items: center;
   gap: 5px;
   flex-wrap: wrap;
+  flex-wrap: balance;
 }
 
 .seed-filter-pill {
@@ -5305,11 +5502,16 @@ dialog::backdrop {
   .pa-layout-shell {
     display: grid;
     grid-template-columns: 204px minmax(0, 1fr);
-    gap: 10px;
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'dock stage'
+      'controls stage';
+    gap: 8px 10px;
     align-items: stretch;
   }
 
   .pa-side-dock {
+    grid-area: dock;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -5318,6 +5520,10 @@ dialog::backdrop {
     overflow-y: auto;
     scrollbar-width: thin;
     padding-right: 2px;
+  }
+
+  .pa-layout-shell > .pa-stage-viewport {
+    grid-area: stage;
   }
 
   .pa-side-dock .pa-top-bar {
@@ -5329,7 +5535,7 @@ dialog::backdrop {
   }
 
   .pa-side-dock .pa-dock-head-row {
-    flex-direction: column-reverse;
+    flex-direction: column;
     align-items: stretch;
     gap: 5px;
   }
@@ -5411,26 +5617,26 @@ dialog::backdrop {
     border-radius: 10px;
   }
 
-  .pa-side-dock .pa-controls-bar {
+  .pa-layout-shell > .pa-controls-bar {
+    grid-area: controls;
     flex-direction: column;
     align-items: stretch;
     gap: 5px;
-    margin-top: auto;
   }
 
-  .pa-side-dock .pa-submode-switch {
+  .pa-layout-shell > .pa-controls-bar .pa-submode-switch {
     width: 100%;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .pa-side-dock .pa-mini-pill {
+  .pa-layout-shell > .pa-controls-bar .pa-mini-pill {
     padding: 5px 4px;
     font-size: 10.8px;
     text-align: center;
   }
 
-  .pa-side-dock .pa-tool-btn {
+  .pa-layout-shell > .pa-controls-bar .pa-tool-btn {
     width: 100%;
     padding: 6px 8px;
     font-size: 11.5px;
@@ -5460,28 +5666,10 @@ dialog::backdrop {
 
 @media (max-width: 979px) {
   .pa-side-dock {
-    display: contents;
-  }
-
-  .pa-top-bar {
-    order: 1;
-  }
-
-  .pa-stage-banner {
-    order: 2;
-  }
-
-  .pa-trial-strip,
-  .pa-alert-strip {
-    order: 3;
-  }
-
-  .pa-stage-viewport {
-    order: 4;
-  }
-
-  .pa-controls-bar {
-    order: 5;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex-shrink: 0;
   }
 }
 
@@ -5595,31 +5783,61 @@ dialog::backdrop {
 
 @media (max-width: 740px) {
   #match3Dialog .m3-modal-inner {
-    padding: 6px 8px 8px;
+    padding:
+      max(4px, env(safe-area-inset-top, 0px))
+      max(4px, env(safe-area-inset-right, 0px))
+      max(5px, env(safe-area-inset-bottom, 0px))
+      max(4px, env(safe-area-inset-left, 0px));
+  }
+
+  #match3DialogContent {
+    gap: 4px;
+    flex: 1 0 auto;
+    min-height: min-content;
+  }
+
+  #match3Dialog .m3-top-strip {
+    padding: 4px 7px;
+    border-width: 2px;
+    border-radius: 11px;
+  }
+
+  #match3Dialog .pa-trial-strip,
+  #puzzleArcadeDialog .pa-trial-strip {
+    padding: 3px 7px;
+    gap: 5px;
+    font-size: 10.5px;
+    border-radius: 9px;
+  }
+
+  .pa-trial-jump-btn {
+    padding: 3px 7px;
+    font-size: 10.5px;
   }
 
   #match3Dialog .m3-hud-panel,
   #match3Dialog .m3-controls-panel {
-    padding: 6px 8px;
-    border-radius: 14px;
+    padding: 4px 6px;
+    border-radius: 12px;
+    border-width: 2.5px;
   }
 
   #match3Dialog .m3-moves-crest {
-    width: 66px;
-    height: 66px;
-    flex: 0 0 66px;
+    width: 50px;
+    height: 50px;
+    flex: 0 0 50px;
     margin: 0;
-    border-width: 4px;
-    outline-width: 2px;
+    border-width: 3px;
+    outline-width: 1.5px;
   }
 
   #match3Dialog .m3-moves-num {
-    font-size: 24px;
-    -webkit-text-stroke: 1.5px var(--farm-wood-dark);
+    font-size: 19px;
+    -webkit-text-stroke: 1.2px var(--farm-wood-dark);
   }
 
   #match3Dialog .m3-moves-lbl {
-    font-size: 10.5px;
+    font-size: 9px;
   }
 }
 
@@ -7631,7 +7849,7 @@ body:has(.hud-shell-root.hud-building-focus) .legal-trigger-btn {
 
 .nb-friends-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
   gap: 12px;
 }
 
@@ -7867,7 +8085,7 @@ body:has(.hud-shell-root.hud-building-focus) .legal-trigger-btn {
 /* Tab 2: Friendship Chest, Add Friend & Preset Notes */
 .nb-chest-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
   gap: 12px;
 }
 
@@ -9513,13 +9731,16 @@ progress.ts-build-progress::-moz-progress-bar {
 }
 
 .lb-podium-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 10px;
-  align-items: end;
+  align-items: flex-end;
 }
 
 .lb-podium-card {
+  flex: 1 1 180px;
+  max-width: 280px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -9966,7 +10187,434 @@ progress.ts-build-progress::-moz-progress-bar {
     justify-content: space-between;
   }
 
-  .lb-podium-grid {
-    grid-template-columns: 1fr;
+  .lb-podium-card {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+}
+
+/* ==========================================================================
+   SCROLLABLE & COLLAPSIBLE HUD SYSTEM ("THANH CUỘN & CUỘN GỌN CÁC HUD")
+   - High-contrast custom scrollbars (WCAG 1.4.11 >= 3:1) + WebKit fallback
+   - Scroll-driven inline edge fades for horizontal HUD rails
+   - Zero-collision scrollable corner/utility/minigame HUD bars on mobile
+   - 1-tap HUD Roll-Up (.hud-compact-rolled) & Inspector Roll-Up
+   ========================================================================== */
+
+@property --hud-fade-start {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --hud-fade-end {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+/* 1. Parchment-surface scrollable HUD panels & drawers */
+.hud-floating-popover,
+.inspector-panel,
+#questTrackerBody,
+.build-drawer,
+.bottom-bar,
+.secondary-map-tools-bar,
+.seed-tray-scroll,
+.seed-filter-bar,
+.visitor-dock-bar,
+.workshop-tabs {
+  --scrollbar-thumb: var(--hud-scrollbar-thumb-parchment);
+  --scrollbar-track: var(--hud-scrollbar-track-parchment);
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* 2. Dark/floating HUD rails & minigame toolbars */
+.ts-corner-left,
+.ts-corner-right,
+.ts-utility-row,
+.m3-resource-pills,
+.m3-booster-row,
+.pa-currencies,
+.pa-mode-tabs,
+.pa-controls-bar,
+.lb-game-tabs,
+.sq-lang-tabs {
+  --scrollbar-thumb: var(--hud-scrollbar-thumb-brass);
+  --scrollbar-track: var(--hud-scrollbar-track-wood);
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* Legacy WebKit fallback guarded per modern-web-guidance */
+@supports not (scrollbar-color: auto) {
+  .hud-floating-popover::-webkit-scrollbar,
+  .inspector-panel::-webkit-scrollbar,
+  #questTrackerBody::-webkit-scrollbar,
+  .build-drawer::-webkit-scrollbar,
+  .bottom-bar::-webkit-scrollbar,
+  .secondary-map-tools-bar::-webkit-scrollbar,
+  .seed-tray-scroll::-webkit-scrollbar,
+  .seed-filter-bar::-webkit-scrollbar,
+  .visitor-dock-bar::-webkit-scrollbar,
+  .workshop-tabs::-webkit-scrollbar,
+  .ts-corner-left::-webkit-scrollbar,
+  .ts-corner-right::-webkit-scrollbar,
+  .ts-utility-row::-webkit-scrollbar,
+  .m3-resource-pills::-webkit-scrollbar,
+  .m3-booster-row::-webkit-scrollbar,
+  .pa-currencies::-webkit-scrollbar,
+  .pa-mode-tabs::-webkit-scrollbar,
+  .pa-controls-bar::-webkit-scrollbar,
+  .lb-game-tabs::-webkit-scrollbar,
+  .sq-lang-tabs::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+  }
+
+  .hud-floating-popover::-webkit-scrollbar-thumb,
+  .inspector-panel::-webkit-scrollbar-thumb,
+  #questTrackerBody::-webkit-scrollbar-thumb,
+  .build-drawer::-webkit-scrollbar-thumb,
+  .bottom-bar::-webkit-scrollbar-thumb,
+  .secondary-map-tools-bar::-webkit-scrollbar-thumb,
+  .seed-tray-scroll::-webkit-scrollbar-thumb,
+  .seed-filter-bar::-webkit-scrollbar-thumb,
+  .visitor-dock-bar::-webkit-scrollbar-thumb,
+  .workshop-tabs::-webkit-scrollbar-thumb,
+  .ts-corner-left::-webkit-scrollbar-thumb,
+  .ts-corner-right::-webkit-scrollbar-thumb,
+  .ts-utility-row::-webkit-scrollbar-thumb,
+  .m3-resource-pills::-webkit-scrollbar-thumb,
+  .m3-booster-row::-webkit-scrollbar-thumb,
+  .pa-currencies::-webkit-scrollbar-thumb,
+  .pa-mode-tabs::-webkit-scrollbar-thumb,
+  .pa-controls-bar::-webkit-scrollbar-thumb,
+  .lb-game-tabs::-webkit-scrollbar-thumb,
+  .sq-lang-tabs::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: var(--radius-pill);
+  }
+
+  .hud-floating-popover::-webkit-scrollbar-track,
+  .inspector-panel::-webkit-scrollbar-track,
+  #questTrackerBody::-webkit-scrollbar-track,
+  .build-drawer::-webkit-scrollbar-track,
+  .bottom-bar::-webkit-scrollbar-track,
+  .secondary-map-tools-bar::-webkit-scrollbar-track,
+  .seed-tray-scroll::-webkit-scrollbar-track,
+  .seed-filter-bar::-webkit-scrollbar-track,
+  .visitor-dock-bar::-webkit-scrollbar-track,
+  .workshop-tabs::-webkit-scrollbar-track,
+  .ts-corner-left::-webkit-scrollbar-track,
+  .ts-corner-right::-webkit-scrollbar-track,
+  .ts-utility-row::-webkit-scrollbar-track,
+  .m3-resource-pills::-webkit-scrollbar-track,
+  .m3-booster-row::-webkit-scrollbar-track,
+  .pa-currencies::-webkit-scrollbar-track,
+  .pa-mode-tabs::-webkit-scrollbar-track,
+  .pa-controls-bar::-webkit-scrollbar-track,
+  .lb-game-tabs::-webkit-scrollbar-track,
+  .sq-lang-tabs::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: var(--radius-pill);
+  }
+}
+
+/* 3. Scrollable Popovers, Quest Tracker & Secondary Map Tools Bar */
+.hud-floating-popover {
+  max-height: min(68dvh, 470px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+#questTrackerBody {
+  max-height: min(44dvh, 320px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+}
+
+.secondary-map-tools-bar {
+  flex-wrap: nowrap;
+  justify-content: safe center;
+  overflow-x: auto;
+  width: fit-content;
+  max-width: 100%;
+  margin-inline: auto;
+  border-radius: var(--radius-card);
+  -webkit-overflow-scrolling: touch;
+}
+
+.secondary-map-tools-bar .brass-btn {
+  flex-shrink: 0;
+}
+
+/* Scroll-driven inline edge fade hints on bounded horizontal HUD strips */
+@supports (animation-timeline: scroll()) {
+  .bottom-bar,
+  .secondary-map-tools-bar,
+  .seed-tray-scroll {
+    --hud-fade-size: 18px;
+    scroll-padding-inline: var(--hud-fade-size);
+    mask:
+      linear-gradient(black, black) no-clip subtract,
+      linear-gradient(to right, black, transparent) 0 0 / var(--hud-fade-start) 100% no-repeat no-clip,
+      linear-gradient(to right, transparent, black) 100% 0 / var(--hud-fade-end) 100% no-repeat no-clip;
+    animation: hudRevealFadeStart linear both, hudHideFadeEnd linear both;
+    animation-timeline: scroll(self inline);
+    animation-range: 0 var(--hud-fade-size), calc(100% - var(--hud-fade-size)) 100%;
+  }
+}
+
+@keyframes hudRevealFadeStart {
+  to {
+    --hud-fade-start: var(--hud-fade-size);
+  }
+}
+
+@keyframes hudHideFadeEnd {
+  from {
+    --hud-fade-end: var(--hud-fade-size);
+  }
+}
+
+/* 4. Inspector Roll-Up ("▾ Gọn" / "▴ Mở") */
+.inspector-panel.inspector-collapsed {
+  width: min(300px, 88dvw);
+  padding: 8px 11px;
+  overflow: hidden;
+}
+
+.inspector-panel.inspector-collapsed > :not(.inspector-header-bar) {
+  display: none !important;
+}
+
+.inspector-panel.inspector-collapsed .inspector-thumb {
+  width: 38px;
+  height: 38px;
+  padding: 3px;
+}
+
+/* 5. Round In-Game HUD Roll-Up Orb ("Nút Cuộn Tròn Ingame") & .hud-compact-rolled */
+.ts-blue-sq-btn.ts-hud-rollup-btn {
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 28%,
+    var(--ts-smiley-top) 0%,
+    var(--ts-smiley-mid) 62%,
+    var(--ts-smiley-bot) 100%
+  );
+  box-shadow:
+    0 3.5px 0 var(--ts-card-border),
+    0 5px 10px var(--ts-drop-shadow),
+    inset 0 2px 0 var(--ts-card-top);
+}
+
+.hud-round-orb-btn {
+  position: fixed;
+  right: max(14px, env(safe-area-inset-right, 0px));
+  bottom: calc(134px + max(10px, env(safe-area-inset-bottom, 0px)));
+  z-index: 32;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 0.14s ease, filter 0.14s ease;
+}
+
+.hud-round-orb-btn:hover {
+  transform: translateY(-2px) scale(1.04);
+  filter: brightness(1.05);
+}
+
+.hud-round-orb-btn:active {
+  transform: translateY(1px) scale(0.96);
+}
+
+.hud-round-orb-btn:focus-visible {
+  outline: 3px solid var(--focus-color);
+  outline-offset: 3px;
+  border-radius: 26px;
+}
+
+.hud-round-orb-disc {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 4px 0 var(--ts-ink-contour),
+    0 8px 18px var(--shadow-deep);
+}
+
+.hud-round-orb-btn[data-rolled='true'] .hud-round-orb-disc {
+  box-shadow:
+    0 0 0 3px var(--focus-color),
+    0 4px 0 var(--ts-ink-contour),
+    0 10px 22px var(--shadow-deep);
+}
+
+.hud-round-orb-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.hud-round-orb-tag {
+  margin-top: -5px;
+  padding: 1.5px 7px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, var(--ts-wood-track-top) 0%, var(--ts-wood-track-bot) 100%);
+  border: 1.5px solid var(--ts-rim-gold-top);
+  color: var(--ts-white);
+  font-family: 'Be Vietnam Pro', sans-serif;
+  font-size: 9.8px;
+  font-weight: 900;
+  line-height: 1.15;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px var(--ts-drop-shadow);
+}
+
+.hud-round-orb-btn[data-rolled='true'] .hud-round-orb-tag {
+  background: linear-gradient(180deg, var(--speed-active-top) 0%, var(--gold) 100%);
+  border-color: var(--ts-ink-contour);
+  color: var(--ts-ink-contour);
+}
+
+@media (max-width: 720px) {
+  .hud-round-orb-btn {
+    right: max(8px, env(safe-area-inset-right, 0px));
+    bottom: calc(96px + max(8px, env(safe-area-inset-bottom, 0px)));
+  }
+
+  .hud-round-orb-disc {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media ((max-width: 560px) and (max-height: 780px)), (orientation: portrait) {
+  .hud-round-orb-btn {
+    right: max(6px, env(safe-area-inset-right, 0px));
+    bottom: calc(74px + max(6px, env(safe-area-inset-bottom, 0px)));
+  }
+
+  .hud-round-orb-disc {
+    width: 44px;
+    height: 44px;
+  }
+
+  .hud-round-orb-tag {
+    font-size: 9px;
+    padding: 1px 6px;
+  }
+}
+
+.hud-shell-root.hud-compact-rolled .ts-top-hud {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-16px);
+}
+
+.hud-shell-root.hud-compact-rolled .ts-corner-left,
+.hud-shell-root.hud-compact-rolled .ts-corner-right,
+.hud-shell-root.hud-compact-rolled .quest-tracker,
+.hud-shell-root.hud-compact-rolled .minimap-wrap {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(16px);
+}
+
+body:has(.hud-shell-root.hud-compact-rolled) .legal-trigger-btn {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* 6. Mobile & Portrait Horizontal Scrollable HUD Rails (Zero Overlap) */
+@media (max-width: 860px), (orientation: portrait) {
+  .ts-utility-row {
+    max-width: calc(100dvw - 142px);
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 6px 6px 8px 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .ts-utility-row > * {
+    flex-shrink: 0;
+  }
+
+  .ts-corner-left {
+    max-width: calc(100dvw - 190px);
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-wrap: nowrap;
+    padding: 9px 6px 8px 3px;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .ts-corner-right {
+    max-width: 178px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-wrap: nowrap;
+    padding: 9px 4px 8px 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .ts-corner-left .ts-card-btn,
+  .ts-corner-right .ts-card-btn {
+    flex-shrink: 0;
+    scroll-snap-align: start;
+  }
+
+  .seed-filter-bar,
+  .seed-tray-actions {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: 100%;
+    padding-bottom: 3px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .seed-filter-bar > *,
+  .seed-tray-actions > * {
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 740px) {
+  .m3-resource-pills,
+  .pa-currencies,
+  .pa-controls-bar {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    max-width: 100%;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .m3-resource-pills > *,
+  .pa-currencies > *,
+  .pa-controls-bar > * {
+    flex-shrink: 0;
   }
 }

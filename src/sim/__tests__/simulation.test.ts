@@ -508,13 +508,27 @@ describe('ParkSimulation & Progression Tests', () => {
     });
   });
 
-  describe('(h) Tham quan vườn bạn bè, trợ giúp vườn, Đơn Cú & Giải Cứu Minigame 1 ngày/lần', () => {
-    it('Chế độ khách tham quan an toàn (Read-Only) và bảo toàn file lưu vườn nhà', () => {
+  describe('(h) Tham quan vườn bạn bè người chơi thật (0 NPC), trợ giúp vườn, Đơn Cú & Giải Cứu Minigame 1 ngày/lần', () => {
+    it('Mặc định không có NPC nào trong Sổ Hàng Xóm, chặn mã NPC và bảo toàn chế độ Read-Only khi thăm người chơi thật', () => {
       const sim = new ParkSimulation(createMockAudio());
+      expect(sim.ensureNeighborSocial().neighbors).toHaveLength(0);
+      expect(sim.addFriendByCode('HS-HAGRID-01', 'Hagrid').ok).toBe(false);
+
+      const added = sim.addVerifiedRealFriend({
+        userId: 'real_player_01',
+        friendCode: 'HS-REAL-01',
+        name: 'Minh Khang',
+        parkName: 'Điền Trang Minh Khang',
+        level: 16,
+        house: 'Ravenclaw',
+      });
+      expect(added.ok).toBe(true);
+      const friendId = added.neighbor!.id;
+
       const homeBuildingUids = sim.state.buildings.map((b) => b.uid);
       const homeParkName = sim.state.parkName;
 
-      const visitRes = sim.enterNeighborVisit('hagrid_valley');
+      const visitRes = sim.enterNeighborVisit(friendId);
       expect(visitRes.ok).toBe(true);
       expect(sim.isVisitingNeighbor).toBe(true);
       expect(sim.state.parkName).not.toBe(homeParkName);
@@ -554,8 +568,19 @@ describe('ParkSimulation & Progression Tests', () => {
 
     it('Đủ 4 hành động tương trợ vườn bạn (chăm ruộng/sân/xưởng, thả tim, quà bí ẩn, đóng hộ Đơn Cú) & nhận Đèn Lồng vườn nhà', () => {
       const sim = new ParkSimulation(createMockAudio());
+      const added = sim.addVerifiedRealFriend({
+        userId: 'real_player_02',
+        friendCode: 'HS-REAL-02',
+        name: 'Quốc Bảo',
+        parkName: 'Thung Lũng Quốc Bảo',
+        level: 20,
+        house: 'Gryffindor',
+      });
+      expect(added.ok).toBe(true);
+      const friend = added.neighbor!;
+
       sim.setNeighborPresetNote('sweet_bakery');
-      expect(sim.enterNeighborVisit('hagrid_valley').ok).toBe(true);
+      expect(sim.enterNeighborVisit(friend.id).ok).toBe(true);
 
       // 1. Chăm công trình cần giúp (ruộng / sân gà / vườn bí / lò bánh)
       const helpable = sim.state.buildings.find((b) => sim.getVisitedBuildingHelpStatus(b).canHelp);
@@ -577,16 +602,15 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(sim.claimVisitedNeighborMysteryGift().ok).toBe(false);
 
       // 4. Đóng hộ kiện hàng Đơn Cú của bạn bè
-      const hagrid = sim.ensureNeighborSocial().neighbors.find((n) => n.id === 'hagrid_valley')!;
-      const crate = hagrid.owlHelpCrates[0];
+      const crate = friend.owlHelpCrates[0];
       sim.addFarmItemToBarn(crate.itemId, crate.qty + 2);
       const tokensBeforeCrate = sim.ensureNeighborSocial().friendshipTokens;
-      const crateRes = sim.fulfillNeighborOwlCrate('hagrid_valley', crate.id);
+      const crateRes = sim.fulfillNeighborOwlCrate(friend.id, crate.id);
       expect(crateRes.ok).toBe(true);
       expect(sim.ensureNeighborSocial().friendshipTokens).toBe(
         tokensBeforeCrate + crate.rewardTokens
       );
-      expect(sim.fulfillNeighborOwlCrate('hagrid_valley', crate.id).ok).toBe(false);
+      expect(sim.fulfillNeighborOwlCrate(friend.id, crate.id).ok).toBe(false);
 
       // Quay về nhà và kiểm tra nhờ bạn đóng hộ Đơn Cú của chính người chơi (<= 3/ngày)
       sim.exitNeighborVisit(true);
@@ -638,9 +662,18 @@ describe('ParkSimulation & Progression Tests', () => {
       const sim = new ParkSimulation(createMockAudio());
       const social = sim.ensureNeighborSocial();
 
-      // Thêm người bạn thứ 6 qua Mã Thung Lũng
-      const addRes = sim.addFriendByCode('HS-GINNY-99', 'Ginny Weasley');
-      expect(addRes.ok).toBe(true);
+      // Thêm 6 người bạn thật qua Mã Thung Lũng
+      for (let idx = 1; idx <= 6; idx++) {
+        const res = sim.addVerifiedRealFriend({
+          userId: `real_u_${idx}`,
+          friendCode: `HS-FRND-0${idx}`,
+          name: `Người chơi ${idx}`,
+          parkName: `Thung Lũng ${idx}`,
+          level: 10 + idx * 3,
+          house: 'Hufflepuff',
+        });
+        expect(res.ok).toBe(true);
+      }
       expect(social.neighbors.length).toBe(6);
 
       // Giải cứu người bạn đầu tiên: lần 1 thành công, lần 2 trong cùng ngày bị chặn (1 lần/ngày/bạn)
@@ -688,6 +721,21 @@ describe('ParkSimulation & Progression Tests', () => {
       const sim = new ParkSimulation(createMockAudio());
       const social = sim.ensureNeighborSocial();
       sim.state.match3.currentLevel = 7;
+
+      // Chưa có bạn bè thật -> không thể gửi SOS ảo
+      expect(sim.requestPlayerMinigameSos('match3', 7).ok).toBe(false);
+
+      // Kết bạn với 1 người chơi thật trước khi gửi SOS
+      expect(
+        sim.addVerifiedRealFriend({
+          userId: 'real_helper_1',
+          friendCode: 'HS-HELP-01',
+          name: 'Lan Anh',
+          parkName: 'Vườn Hoa Lan Anh',
+          level: 25,
+          house: 'Ravenclaw',
+        }).ok
+      ).toBe(true);
 
       const sosReq = sim.requestPlayerMinigameSos('match3', 7);
       expect(sosReq.ok).toBe(true);

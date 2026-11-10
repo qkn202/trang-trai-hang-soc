@@ -119,6 +119,7 @@ import {
   TutorialStepId,
   ValleyVillagerEntity,
   ValleyVillagerId,
+  VerifiedRealPlayerProfile,
   WeatherForecastSlot,
   WeatherKind,
   ZoneId,
@@ -126,8 +127,8 @@ import {
 import { buildSampleCoasterLoop, TrackWaypoint, traceCoasterCircuit } from './coaster';
 import {
   buildNeighborValleySnapshot,
+  CANON_NPC_NEIGHBOR_IDS,
   classifyBuildingGardenHelpKind,
-  createDefaultCanonNeighbors,
   createFriendNeighborFromCode,
   createInitialNeighborSocialState,
   FRIENDSHIP_CHEST_TOKEN_COST,
@@ -135,6 +136,7 @@ import {
   getLocalCalendarResetKey,
   getMinigameKindLabelVi,
   getPresetNoteMeta,
+  isNpcNeighborProfile,
   MAX_DAILY_MINIGAME_RESCUES,
   MAX_DAILY_OWL_HELP_REQUESTS,
   MAX_HOME_LANTERN_MARKS,
@@ -802,22 +804,7 @@ export function createInitialGameState(): GameState {
     languageQuiz: createInitialLanguageQuizState(),
     tutorial: createInitialTutorialState(true),
     harvestFeast: createInitialHarvestFeastState(),
-    neighborSocial: (() => {
-      const soc = createInitialNeighborSocialState(now);
-      soc.homeLanternMarks = [
-        {
-          id: `hmark_welcome_${now}`,
-          buildingUid: 'burrow_plot_empty',
-          helperId: 'luna_valley',
-          helperName: 'Luna Lovegood',
-          helperEmoji: '🌼',
-          kind: 'water_crop',
-          noteVi: 'Chúc thung lũng bạn mùa màng bội thu, kho đầy ắp lúa vàng!',
-          createdAt: now,
-        },
-      ];
-      return soc;
-    })(),
+    neighborSocial: createInitialNeighborSocialState(now),
     suitcase: createInitialSuitcaseState(),
     match3: createInitialMatch3State(),
     puzzleArcade: createInitialPuzzleArcadeState(),
@@ -1237,12 +1224,13 @@ function migrateLoadedState(parsed: GameState): GameState {
         dailyOwlHelpRequestedCount: Math.round(
           clampFinite(rawSoc.dailyOwlHelpRequestedCount, 0, MAX_DAILY_OWL_HELP_REQUESTS, 0)
         ),
-        neighbors:
-          Array.isArray(rawSoc.neighbors) && rawSoc.neighbors.length > 0
-            ? rawSoc.neighbors
-            : createDefaultCanonNeighbors(getLocalCalendarResetKey()),
+        neighbors: Array.isArray(rawSoc.neighbors)
+          ? rawSoc.neighbors.filter((n) => !isNpcNeighborProfile(n))
+          : [],
         homeLanternMarks: Array.isArray(rawSoc.homeLanternMarks)
-          ? rawSoc.homeLanternMarks.slice(0, MAX_HOME_LANTERN_MARKS)
+          ? rawSoc.homeLanternMarks
+              .filter((m) => Boolean(m && !CANON_NPC_NEIGHBOR_IDS.has(m.helperId)))
+              .slice(0, MAX_HOME_LANTERN_MARKS)
           : [],
         playerMinigameSos: rawSoc.playerMinigameSos ?? null,
         playerOwlHelpRequests: Array.isArray(rawSoc.playerOwlHelpRequests)
@@ -2730,7 +2718,7 @@ export class ParkSimulation {
         if (!this.state.sandboxMode && (this.state.match3?.stars ?? 0) < starCost) {
           return {
             ok: false,
-            reason: `Cần ${starCost} 🌟 Sao Phép Thuật (Vượt Bùa Gặt Honeydukes, Ngũ Ấn Đạo Tặc, Ma Trận Bảo Bối, Cờ Phù Thủy hoặc Khảm Cổ Ngữ để nhận Sao!)`,
+            reason: `Cần ${starCost} 🌟 Sao Phép Thuật (Vượt Bùa Gặt Honeydukes, Ngũ Ấn Đạo Tặc, Ma Trận Bảo Bối, Cờ Phù Thủy hoặc Nối Hình Sinh Vật để nhận Sao!)`,
           };
         }
       } else if (!this.state.sandboxMode && this.state.galleons < item.cost) {
@@ -7047,6 +7035,22 @@ export class ParkSimulation {
     if (!this.state.neighborSocial) {
       this.state.neighborSocial = createInitialNeighborSocialState();
     }
+    if (Array.isArray(this.state.neighborSocial.neighbors)) {
+      const filtered = this.state.neighborSocial.neighbors.filter((n) => !isNpcNeighborProfile(n));
+      if (filtered.length !== this.state.neighborSocial.neighbors.length) {
+        this.state.neighborSocial.neighbors = filtered;
+      }
+    } else {
+      this.state.neighborSocial.neighbors = [];
+    }
+    if (Array.isArray(this.state.neighborSocial.homeLanternMarks)) {
+      const cleanMarks = this.state.neighborSocial.homeLanternMarks.filter(
+        (m) => Boolean(m && !CANON_NPC_NEIGHBOR_IDS.has(m.helperId))
+      );
+      if (cleanMarks.length !== this.state.neighborSocial.homeLanternMarks.length) {
+        this.state.neighborSocial.homeLanternMarks = cleanMarks;
+      }
+    }
     syncNeighborSocialDailyReset(this.state.neighborSocial);
     if (this.homeStateWhileVisiting) {
       this.homeStateWhileVisiting.neighborSocial = this.state.neighborSocial;
@@ -7181,20 +7185,39 @@ export class ParkSimulation {
 
   public addFriendByCode(
     rawCode: string,
-    customName?: string
+    customName?: string,
+    verifiedProfile?: VerifiedRealPlayerProfile
   ): { ok: boolean; msg: string; neighbor?: NeighborProfileState } {
     const social = this.ensureNeighborSocial();
-    const cleaned = rawCode.trim().toUpperCase().replace(/[^A-Z0-9-]/g, '');
+    const cleaned = (verifiedProfile?.friendCode || rawCode)
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9-]/g, '');
     if (cleaned.length < 4) {
-      return { ok: false, msg: 'Mã Thung Lũng cần ít nhất 4 ký tự (ví dụ: HS-GINNY-99)!' };
+      return { ok: false, msg: 'Mã Thung Lũng cần ít nhất 4 ký tự (ví dụ: HS-ABCD-12)!' };
     }
     if (cleaned === social.playerFriendCode.toUpperCase()) {
       return { ok: false, msg: 'Đây là Mã Thung Lũng của chính bạn rồi!' };
     }
+    if (
+      ['HS-HAGRID-01', 'HS-LUNA-02', 'HS-NEVILLE-03', 'HS-HERMIONE-04', 'HS-WEASLEY-05'].includes(
+        cleaned
+      )
+    ) {
+      return {
+        ok: false,
+        msg: 'Sổ Hàng Xóm chỉ kết nối với người chơi thật — không hỗ trợ thêm mã NPC!',
+      };
+    }
     const existing = social.neighbors.find(
-      (n) => n.friendCode.toUpperCase() === cleaned
+      (n) =>
+        n.friendCode.toUpperCase() === cleaned ||
+        (Boolean(verifiedProfile?.userId) && n.remoteUserId === verifiedProfile?.userId)
     );
     if (existing) {
+      if (verifiedProfile) {
+        this.syncVerifiedFriendSnapshot(verifiedProfile);
+      }
       return {
         ok: false,
         msg: `${existing.avatarEmoji} ${existing.name} (${existing.friendCode}) đã có trong Sổ Hàng Xóm rồi!`,
@@ -7205,7 +7228,7 @@ export class ParkSimulation {
     }
 
     const now = Date.now();
-    const created = createFriendNeighborFromCode(cleaned, customName, now);
+    const created = createFriendNeighborFromCode(cleaned, customName, now, verifiedProfile);
     social.neighbors.push(created);
     this.pushSocialActivity(
       created.avatarEmoji,
@@ -7218,6 +7241,59 @@ export class ParkSimulation {
     this.saveToStorage();
     this.onUiChange?.();
     return { ok: true, msg, neighbor: created };
+  }
+
+  public addVerifiedRealFriend(
+    profile: VerifiedRealPlayerProfile,
+    customName?: string
+  ): { ok: boolean; msg: string; neighbor?: NeighborProfileState } {
+    return this.addFriendByCode(profile.friendCode, customName, profile);
+  }
+
+  public syncVerifiedFriendSnapshot(profile: VerifiedRealPlayerProfile): boolean {
+    const social = this.ensureNeighborSocial();
+    const norm = profile.friendCode.trim().toUpperCase();
+    const nb = social.neighbors.find(
+      (n) =>
+        n.friendCode.toUpperCase() === norm ||
+        (Boolean(profile.userId) && n.remoteUserId === profile.userId)
+    );
+    if (!nb) return false;
+    nb.remoteUserId = profile.userId;
+    nb.isVerifiedPlayer = true;
+    nb.parkName = profile.parkName || nb.parkName;
+    nb.level = Math.max(1, Math.min(100, Math.floor(profile.level || nb.level)));
+    nb.house = profile.house || nb.house;
+    if (profile.avatarEmoji) nb.avatarEmoji = profile.avatarEmoji;
+    if (Array.isArray(profile.buildings) && profile.buildings.length > 0) {
+      nb.valleyBuildings = profile.buildings;
+    }
+    if (profile.tileOverrides) {
+      nb.valleyTileOverrides = profile.tileOverrides;
+    }
+    if (Array.isArray(profile.unlockedZones) && profile.unlockedZones.length > 0) {
+      nb.valleyUnlockedZones = profile.unlockedZones;
+    }
+    this.saveToStorage();
+    return true;
+  }
+
+  public removeNeighborFriend(neighborId: string): { ok: boolean; msg: string } {
+    const social = this.ensureNeighborSocial();
+    const idx = social.neighbors.findIndex((n) => n.id === neighborId);
+    if (idx === -1) {
+      return { ok: false, msg: 'Không tìm thấy người bạn này trong Sổ Hàng Xóm!' };
+    }
+    const removed = social.neighbors[idx];
+    if (this.activeVisitNeighborId === removed.id) {
+      this.exitNeighborVisit(true);
+    }
+    social.neighbors.splice(idx, 1);
+    const msg = `Đã xoá ${removed.name} (${removed.friendCode}) khỏi Sổ Hàng Xóm.`;
+    this.pushSocialActivity('📋', msg, Date.now());
+    this.saveToStorage();
+    this.onUiChange?.();
+    return { ok: true, msg };
   }
 
   public getVisitedBuildingHelpStatus(
@@ -7704,6 +7780,12 @@ export class ParkSimulation {
     reqIndex: number
   ): { ok: boolean; msg: string } {
     const social = this.ensureNeighborSocial();
+    if (social.neighbors.length === 0) {
+      return {
+        ok: false,
+        msg: 'Sổ Hàng Xóm chưa có người chơi nào! Hãy kết bạn với người chơi thật qua Mã Thung Lũng trước nhé.',
+      };
+    }
     const barn = this.ensureFarmBarn();
     const order = barn.owlOrders.find((o) => o.id === orderId);
     if (!order || !order.requirements[reqIndex]) {
@@ -7751,6 +7833,12 @@ export class ParkSimulation {
     stage: number
   ): { ok: boolean; msg: string } {
     const social = this.ensureNeighborSocial();
+    if (social.neighbors.length === 0) {
+      return {
+        ok: false,
+        msg: 'Sổ Hàng Xóm chưa có người chơi nào! Hãy kết bạn với người chơi thật qua Mã Thung Lũng trước nhé.',
+      };
+    }
     const cleanStage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.round(stage)));
 
     if (social.playerMinigameSos && !social.playerMinigameSos.claimed) {

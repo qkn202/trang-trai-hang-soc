@@ -1367,7 +1367,7 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
     speakerTitle: 'Bùa Gặt Honeydukes & Đại Sảnh Khảo Thí',
     title: 'Bước 5/6 • Khảo Thí Pháp Thuật Nhận Sao 🌟',
     dialogue:
-      'Để dựng Tổ Ấm Hang Sóc và Lò Bánh Táo (cũng như rút ngắn thời gian chờ xây công trình!), con cần Sao Phép Thuật 🌟 từ Gác Xép Bùa Gặt Honeydukes hoặc Đại Sảnh Khảo Thí (Ngũ Ấn Đạo Tặc, Ma Trận Bảo Bối, Cờ Phù Thủy, Khảm Cổ Ngữ). Thắng ngay 1 màn đầu tiên nhé!',
+      'Để dựng Tổ Ấm Hang Sóc và Lò Bánh Táo (cũng như rút ngắn thời gian chờ xây công trình!), con cần Sao Phép Thuật 🌟 từ Gác Xép Bùa Gặt Honeydukes hoặc Đại Sảnh Khảo Thí (Ngũ Ấn Đạo Tặc, Ma Trận Bảo Bối, Cờ Phù Thủy, Nối Hình Sinh Vật). Thắng ngay 1 màn đầu tiên nhé!',
     hintVi: '🍓 Bấm "▶️ Chơi Lên Cấp" góc phải (hoặc nút bên dưới) và chiến thắng 1 màn bất kỳ',
     ctaLabel: '🍓 Vượt Khảo Thí Nhận Sao',
     rewardLabel: '+2 🌟 Sao Phép Thuật • +50 🪙 Vàng • +25 ⭐',

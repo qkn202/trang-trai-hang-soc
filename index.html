@@ -78,11 +78,21 @@
             .catch(function () {});
           return;
         }
+        var hadInitialSw = Boolean(navigator.serviceWorker.controller);
+        var refreshingSw = false;
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          if (!hadInitialSw || refreshingSw) return;
+          refreshingSw = true;
+          window.location.reload();
+        });
         window.addEventListener('load', function () {
           try {
             navigator.serviceWorker
               .register('/sw.js')
               .then(function (reg) {
+                if (reg && typeof reg.update === 'function') {
+                  reg.update().catch(function () {});
+                }
                 console.log('Hang Soc SW registered, scope:', reg.scope);
               })
               .catch(function (err) {

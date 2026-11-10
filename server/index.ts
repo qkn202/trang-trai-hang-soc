@@ -40,24 +40,146 @@ export interface SavePayload {
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-User-Id, Accept',
+  'Access-Control-Allow-Headers': 'Content-Type, Content-Encoding, X-User-Id, Accept',
   'Access-Control-Max-Age': '86400',
 };
 
-function jsonResponse(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
+async function buildJsonResponse(
+  bodyText: string,
+  status = 200,
+  request?: Request
+): Promise<Response> {
+  const acceptEnc = request?.headers.get('Accept-Encoding') || '';
+  if (
+    bodyText.length >= 1024 &&
+    /\bgzip\b/i.test(acceptEnc) &&
+    typeof CompressionStream !== 'undefined'
+  ) {
+    const gzStream = new Blob([bodyText]).stream().pipeThrough(new CompressionStream('gzip'));
+    return new Response(gzStream, {
+      status,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Encoding': 'gzip',
+        Vary: 'Accept-Encoding',
+        ...CORS_HEADERS,
+      },
+    });
+  }
+  return new Response(bodyText, {
     status,
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json; charset=utf-8',
+      Vary: 'Accept-Encoding',
       ...CORS_HEADERS,
     },
   });
+}
+
+function jsonResponse(data: unknown, status = 200, request?: Request): Promise<Response> {
+  return buildJsonResponse(JSON.stringify(data), status, request);
+}
+
+async function parseRequestJson<T>(request: Request): Promise<T> {
+  const enc = (request.headers.get('Content-Encoding') || '').toLowerCase();
+  if (enc === 'gzip' && request.body && typeof DecompressionStream !== 'undefined') {
+    const decompressed = request.body.pipeThrough(new DecompressionStream('gzip'));
+    const text = await new Response(decompressed).text();
+    return JSON.parse(text) as T;
+  }
+  return (await request.json()) as T;
 }
 
 function sanitizeUserId(rawId: string | null): string {
   if (!rawId) return 'default_player';
   const clean = rawId.replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 64);
   return clean || 'default_player';
+}
+
+function sanitizeFriendCode(rawCode: unknown): string {
+  if (typeof rawCode !== 'string') return '';
+  return rawCode
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, '')
+    .slice(0, 18);
+}
+
+const BLOCKED_NPC_CODES = new Set([
+  'HS-HAGRID-01',
+  'HS-LUNA-02',
+  'HS-NEVILLE-03',
+  'HS-HERMIONE-04',
+  'HS-WEASLEY-05',
+]);
+
+interface StoredFriendDirectoryProfile {
+  userId: string;
+  friendCode: string;
+  name: string;
+  parkName: string;
+  level: number;
+  house: string;
+  avatarEmoji: string;
+  buildings?: unknown[];
+  tileOverrides?: Record<string, unknown>;
+  unlockedZones?: unknown[];
+  updatedAt: number;
+}
+
+function extractFriendProfileFromSave(
+  userId: string,
+  body: Record<string, unknown>
+): StoredFriendDirectoryProfile | null {
+  const soc =
+    body.neighborSocial && typeof body.neighborSocial === 'object'
+      ? (body.neighborSocial as Record<string, unknown>)
+      : null;
+  const friendCode = sanitizeFriendCode(soc?.playerFriendCode ?? body.friendCode);
+  if (friendCode.length < 4 || BLOCKED_NPC_CODES.has(friendCode)) return null;
+
+  const parkName = String(body.parkName || 'Trang Trại Hang Sóc').slice(0, 42);
+  const name = String(body.name || parkName).slice(0, 42);
+  const level = Math.max(1, Math.min(100, Math.floor(Number(body.level) || 1)));
+  const validHouses = new Set(['Gryffindor', 'Ravenclaw', 'Hufflepuff', 'Slytherin']);
+  let house = String(body.house || 'Gryffindor');
+  if (!validHouses.has(house) && body.housePoints && typeof body.housePoints === 'object') {
+    const hp = body.housePoints as Record<string, unknown>;
+    let bestH = 'Gryffindor';
+    let bestPts = -1;
+    for (const h of ['Gryffindor', 'Ravenclaw', 'Hufflepuff', 'Slytherin']) {
+      const v = Number(hp[h] || 0);
+      if (v > bestPts) {
+        bestPts = v;
+        bestH = h;
+      }
+    }
+    house = bestH;
+  }
+  if (!validHouses.has(house)) house = 'Gryffindor';
+  const avatarEmoji = String(body.avatarEmoji || '🧙‍♂️').slice(0, 8);
+  const buildings = Array.isArray(body.buildings) ? body.buildings.slice(0, 260) : undefined;
+  const tileOverrides =
+    body.tileOverrides && typeof body.tileOverrides === 'object'
+      ? (body.tileOverrides as Record<string, unknown>)
+      : undefined;
+  const unlockedZones = Array.isArray(body.unlockedZones)
+    ? body.unlockedZones.slice(0, 12)
+    : undefined;
+
+  return {
+    userId,
+    friendCode,
+    name,
+    parkName,
+    level,
+    house,
+    avatarEmoji,
+    buildings,
+    tileOverrides,
+    unlockedZones,
+    updatedAt: Date.now(),
+  };
 }
 
 export default {
@@ -88,25 +210,19 @@ export default {
 
           const rawSave = await env.SAVE_KV.get(kvKey, 'text');
           if (!rawSave) {
-            return jsonResponse({ error: 'Save not found', userId }, 404);
+            return jsonResponse({ error: 'Save not found', userId }, 404, request);
           }
 
-          return new Response(rawSave, {
-            status: 200,
-            headers: {
-              'Content-Type': 'application/json',
-              ...CORS_HEADERS,
-            },
-          });
+          return buildJsonResponse(rawSave, 200, request);
         }
 
         if (request.method === 'POST') {
           // Ghi nhận save mới từ máy người chơi
           if (!env.SAVE_KV) {
-            return jsonResponse({ error: 'SAVE_KV binding not configured' }, 500);
+            return jsonResponse({ error: 'SAVE_KV binding not configured' }, 500, request);
           }
 
-          const body = (await request.json()) as SavePayload;
+          const body = await parseRequestJson<SavePayload>(request);
 
           // Version guard: Bắt buộc phải có version hợp lệ
           if (!body || typeof body !== 'object' || typeof body.version !== 'number' || body.version <= 0) {
@@ -121,6 +237,19 @@ export default {
           await env.SAVE_KV.put(kvKey, JSON.stringify(body), {
             expirationTtl: 31536000,
           });
+
+          // Đồng thời ghi nhận Mã Thung Lũng của người chơi thật vào danh bạ bạn bè
+          const friendProfile = extractFriendProfileFromSave(
+            userId,
+            body as unknown as Record<string, unknown>
+          );
+          if (friendProfile) {
+            await env.SAVE_KV.put(
+              `friend:${friendProfile.friendCode}`,
+              JSON.stringify(friendProfile),
+              { expirationTtl: 31536000 }
+            );
+          }
 
           return jsonResponse({
             ok: true,
@@ -212,7 +341,7 @@ export default {
               entries = [];
             }
           }
-          return jsonResponse({ ok: true, gameId, entries });
+          return jsonResponse({ ok: true, gameId, entries }, 200, request);
         }
 
         if (request.method === 'POST') {
@@ -233,9 +362,9 @@ export default {
             };
           };
           try {
-            body = (await request.json()) as typeof body;
+            body = await parseRequestJson<typeof body>(request);
           } catch {
-            return jsonResponse({ error: 'Invalid JSON payload' }, 400);
+            return jsonResponse({ error: 'Invalid JSON payload' }, 400, request);
           }
           const rawGame = String(body?.gameId || 'match3');
           if (!VALID_GAMES.has(rawGame) || !body?.entry) {
@@ -326,13 +455,110 @@ export default {
             expirationTtl: 86400 * 180,
           });
 
-          return jsonResponse({ ok: true, gameId: rawGame, entries: topEntries });
+          const cleanLbCode = sanitizeFriendCode(sanitizedEntry.friendCode);
+          if (cleanLbCode.length >= 4 && !BLOCKED_NPC_CODES.has(cleanLbCode)) {
+            const existingFriendRaw = await env.SAVE_KV.get(`friend:${cleanLbCode}`, 'text');
+            if (!existingFriendRaw) {
+              const lbProfile: StoredFriendDirectoryProfile = {
+                userId,
+                friendCode: cleanLbCode,
+                name: sanitizedEntry.name,
+                parkName: sanitizedEntry.parkName,
+                level: Math.max(1, Math.min(100, Math.round(sanitizedEntry.primaryValue / 5) || 1)),
+                house: sanitizedEntry.house,
+                avatarEmoji: sanitizedEntry.avatarEmoji,
+                updatedAt: Date.now(),
+              };
+              await env.SAVE_KV.put(`friend:${cleanLbCode}`, JSON.stringify(lbProfile), {
+                expirationTtl: 86400 * 180,
+              });
+            }
+          }
+
+          return jsonResponse({ ok: true, gameId: rawGame, entries: topEntries }, 200, request);
         }
 
         return jsonResponse({ error: 'Method Not Allowed' }, 405);
       }
 
-      // 5. Default 404 cho các route không xác định
+      // 5. Route /api/friends/register & /api/friends/lookup — Danh bạ Người Chơi Thật
+      if (
+        pathname === '/api/friends/register' ||
+        pathname.endsWith('/api/friends/register')
+      ) {
+        if (request.method !== 'POST') {
+          return jsonResponse({ error: 'Method Not Allowed' }, 405, request);
+        }
+        if (!env.SAVE_KV) {
+          return jsonResponse({ error: 'SAVE_KV binding not configured' }, 500, request);
+        }
+        let body: Record<string, unknown>;
+        try {
+          body = await parseRequestJson<Record<string, unknown>>(request);
+        } catch {
+          return jsonResponse({ error: 'Invalid JSON payload' }, 400, request);
+        }
+        const rawUid =
+          request.headers.get('X-User-Id') ||
+          (typeof body.userId === 'string' ? body.userId : null);
+        const userId = sanitizeUserId(rawUid);
+        const profile = extractFriendProfileFromSave(userId, body);
+        if (!profile) {
+          return jsonResponse({ ok: false, error: 'Invalid friendCode' }, 400, request);
+        }
+        await env.SAVE_KV.put(`friend:${profile.friendCode}`, JSON.stringify(profile), {
+          expirationTtl: 31536000,
+        });
+        return jsonResponse(
+          { ok: true, friendCode: profile.friendCode, userId: profile.userId },
+          200,
+          request
+        );
+      }
+
+      if (
+        pathname === '/api/friends/lookup' ||
+        pathname.endsWith('/api/friends/lookup')
+      ) {
+        if (request.method !== 'GET') {
+          return jsonResponse({ error: 'Method Not Allowed' }, 405, request);
+        }
+        const code = sanitizeFriendCode(url.searchParams.get('code'));
+        if (code.length < 4 || BLOCKED_NPC_CODES.has(code)) {
+          return jsonResponse(
+            { ok: false, found: false, error: 'Mã Thung Lũng không hợp lệ!' },
+            404,
+            request
+          );
+        }
+        if (!env.SAVE_KV) {
+          return jsonResponse(
+            { ok: false, found: false, error: 'SAVE_KV binding not configured' },
+            503,
+            request
+          );
+        }
+        const rawFriend = await env.SAVE_KV.get(`friend:${code}`, 'text');
+        if (rawFriend) {
+          try {
+            const profile = JSON.parse(rawFriend) as StoredFriendDirectoryProfile;
+            return jsonResponse({ ok: true, found: true, profile }, 200, request);
+          } catch {
+            // Fall through
+          }
+        }
+        return jsonResponse(
+          {
+            ok: false,
+            found: false,
+            error: 'Không tìm thấy người chơi thật nào đăng ký Mã Thung Lũng này!',
+          },
+          404,
+          request
+        );
+      }
+
+      // 6. Default 404 cho các route không xác định
       return jsonResponse({ error: 'Route not found', path: pathname }, 404);
     } catch (err) {
       console.error('[Worker Error]', err);

@@ -3,6 +3,7 @@ import {
   fetchCloudLeaderboardEntries,
   LEADERBOARD_GAME_META,
   LeaderboardRowEntry,
+  submitPlayerCloudLeaderboardEntry,
 } from '../sim/minigameLeaderboard';
 import { ParkSimulation } from '../sim/simulation';
 import { HouseName, LeaderboardGameId, LeaderboardScope } from '../types/game';
@@ -111,11 +112,14 @@ export class LeaderboardModalController {
     }
 
     const targetGame = this.activeGameId;
-    void fetchCloudLeaderboardEntries(targetGame).then((cloudList) => {
-      if (dlg.open && cloudList.length > 0 && this.activeGameId === targetGame) {
-        this.render();
-      }
-    });
+    void submitPlayerCloudLeaderboardEntry(this.sim.state, targetGame)
+      .catch(() => {})
+      .then(() => fetchCloudLeaderboardEntries(targetGame))
+      .then((cloudList) => {
+        if (dlg.open && cloudList.length > 0 && this.activeGameId === targetGame) {
+          this.render();
+        }
+      });
   }
 
   public close(): void {
@@ -248,7 +252,11 @@ export class LeaderboardModalController {
 
     const chaseBannerText = nextRivalAbove
       ? `🎯 Đang bám sát <strong>#${nextRivalAbove.rank} ${escapeHtml(nextRivalAbove.name)}</strong> (${escapeHtml(nextRivalAbove.primaryDisplayVi)} • ${escapeHtml(nextRivalAbove.ratingDisplayVi)}) — Thắng thêm để vượt hạng!`
-      : `👑 Tuyệt đỉnh! Bạn đang giữ <strong>Ngôi Quán Quân #1</strong> bảng ${scope === 'friends' ? 'Bạn Bè & Hàng Xóm' : 'Toàn Thung Lũng'} bộ môn <strong>${escapeHtml(meta.shortVi)}</strong>!`;
+      : totalEntries <= 1
+        ? scope === 'friends'
+          ? `🤝 Chỉ hiển thị <strong>người chơi thật</strong> (0 NPC) — Hãy kết bạn qua Mã Thung Lũng để cùng đua Top bộ môn <strong>${escapeHtml(meta.shortVi)}</strong>!`
+          : `🌐 Chỉ hiển thị <strong>người chơi thật</strong> (0 NPC) — Kỷ lục của bạn đang giữ <strong>#1</strong> trực tuyến bộ môn <strong>${escapeHtml(meta.shortVi)}</strong>!`
+        : `👑 Tuyệt đỉnh! Bạn đang giữ <strong>Ngôi Quán Quân #1</strong> trước ${totalEntries - 1} người chơi thật khác ở bộ môn <strong>${escapeHtml(meta.shortVi)}</strong>!`;
 
     const podiumHtml = `
       <div class="lb-podium-grid" aria-label="Top 3 dẫn đầu">
@@ -441,11 +449,14 @@ export class LeaderboardModalController {
           this.activeScope = 'valley';
         }
         this.render();
-        void fetchCloudLeaderboardEntries(gid).then((cloud) => {
-          if (cloud.length > 0 && this.activeGameId === gid) {
-            this.render();
-          }
-        });
+        void submitPlayerCloudLeaderboardEntry(this.sim.state, gid)
+          .catch(() => {})
+          .then(() => fetchCloudLeaderboardEntries(gid))
+          .then((cloud) => {
+            if (cloud.length > 0 && this.activeGameId === gid) {
+              this.render();
+            }
+          });
       });
     });
 

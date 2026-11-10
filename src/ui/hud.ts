@@ -106,6 +106,10 @@ import {
   ZoneId,
 } from '../types/game';
 import { LeaderboardModalController } from './leaderboardModal';
+import {
+  lookupRealPlayerByFriendCode,
+  registerRealPlayerProfileOnline,
+} from './cloudSave';
 import type { Match3ModalController } from './match3Modal';
 import type { PuzzleArcadeModalController } from './puzzleArcadeModal';
 import { SeedQuizModalController } from './seedQuizModal';
@@ -175,6 +179,9 @@ export class GameHUD {
   private mapToolsExpanded = false;
   private buildSheetOpen = false;
   private minimapHudVisible = false;
+  private hudRolledUp = false;
+  private inspectorCollapsed = false;
+  private lastInspectedKey = '';
   private displayedGalleons = -1;
   private galleonRollRaf = 0;
   private activeWorkshopTab: 'barn' | 'brew' | 'cargo' | 'synergy' = 'barn';
@@ -420,6 +427,13 @@ export class GameHUD {
                 </svg>
                 <span id="badgeManageMenuDot" class="badge-dot hidden">!</span>
               </button>
+              <button id="btnToggleHudRollup" type="button" class="ts-blue-sq-btn ts-hud-rollup-btn" aria-pressed="false" aria-label="Cuộn gọn hoặc mở rộng các thanh HUD" title="Cuộn gọn các thanh HUD quanh màn hình để nhìn thoáng nông trại (Phím H)">
+                <svg viewBox="0 0 36 36" aria-hidden="true">
+                  <rect x="5.5" y="7" width="25" height="6.5" rx="3.2" fill="#ffd966" stroke="#3a2212" stroke-width="2.2"/>
+                  <path d="M8.5 13.5 H27.5 V24.5 C27.5 27.2 25.3 29.2 22.6 29.2 H13.4 C10.7 29.2 8.5 27.2 8.5 24.5 Z" fill="#fdf4dc" stroke="#3a2212" stroke-width="2.2" stroke-linejoin="round"/>
+                  <path id="svgHudRollupChevron" d="M13.5 23 L18 18.5 L22.5 23" fill="none" stroke="#92400e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
               <button id="btnHudMinigameHub" data-fly-target="stars" type="button" class="ts-minigame-hub-pill" title="Vượt Khảo Thí Pháp Thuật tăng trực tiếp Cấp Độ mở khóa bản vẽ nhà &amp; nhận x2 🌟 Sao ở Môn Đề Cử!">
                 <img src="/sprites/m3_icon_star.png" alt="" class="m3-inline-icon" />
                 <strong id="lblHudHubStars">3</strong>
@@ -521,7 +535,7 @@ export class GameHUD {
             <button id="btnOpenMatch3" type="button" class="brass-btn m3-play-cta" title="Gác Xép Bùa Gặt Honeydukes — 777 Màn (Phím J)">
               <img src="/sprites/m3_farm_pinwheel.png" alt="" class="m3-inline-icon" /> Bùa Gặt <span id="lblMatch3Lv">1/777</span>
             </button>
-            <button id="btnOpenPuzzleArcade" type="button" class="brass-btn pa-hud-cta" title="Đại Sảnh Khảo Thí Hogwarts: Ngũ Ấn Đạo Tặc, Ma Trận Cửu Bảo Bối, Cờ Phù Thủy &amp; Khảm Đá Cổ Ngữ — Mỗi môn 777 Màn (Phím K)">
+            <button id="btnOpenPuzzleArcade" type="button" class="brass-btn pa-hud-cta" title="Đại Sảnh Khảo Thí Hogwarts: Ngũ Ấn Đạo Tặc, Ma Trận Cửu Bảo Bối, Cờ Phù Thủy &amp; Nối Hình Sinh Vật Huyền Bí — Mỗi môn 777 Màn (Phím K)">
               <img src="/sprites/ui_icon_jigsaw.png" alt="" class="hud-3d-icon" /> Khảo Thí <span id="lblArcadeTowerLv">0/3108</span>
             </button>
             <button id="btnAccioAll" type="button" class="brass-btn gold-cta" title="Phép Accio gom toàn bộ nông sản, bánh & vàng">
@@ -559,6 +573,9 @@ export class GameHUD {
             </button>
             <button id="btnCycleHeatmap" type="button" class="brass-btn span-2" aria-pressed="false" title="Bật lớp màu Bản Đồ Nhiệt">
               🌡️ Bản Đồ Nhiệt
+            </button>
+            <button id="btnManageToggleHudRollup" type="button" class="brass-btn span-2" title="Cuộn gọn các thanh HUD quanh màn hình (Phím H)">
+              📜 Cuộn Gọn Các Thanh HUD (Phím H)
             </button>
             <button id="btnPhotoMode" type="button" class="brass-btn span-2" aria-label="Chế độ chụp ảnh (Phím P)" title="Ẩn giao diện để ngắm cảnh &amp; chụp ảnh (Phím P)">
               📷 Chế Độ Chụp Ảnh (Phím P)
@@ -625,6 +642,34 @@ export class GameHUD {
         <button id="btnSavePhotoPng" type="button" class="brass-btn gold-cta">💾 Tải Ảnh PNG</button>
         <button id="btnExitPhoto" type="button" class="brass-btn">Thoát (P)</button>
       </div>
+
+      <!-- ROUND IN-GAME HUD ROLL-UP ORB ("NÚT CUỘN TRÒN INGAME" — TAP TO ROLL/UNROLL ALL HUDS, DRAG TO REPOSITION) -->
+      <button
+        id="btnHudRoundOrb"
+        type="button"
+        class="hud-round-orb-btn"
+        aria-pressed="false"
+        aria-label="Nút cuộn tròn thu gọn hoặc mở rộng toàn bộ HUD"
+        title="Chạm để cuộn gọn / mở rộng toàn bộ HUD (Phím H) • Giữ kéo để dời vị trí nút"
+      >
+        <span class="hud-round-orb-disc" aria-hidden="true">
+          <svg viewBox="0 0 40 40" class="hud-round-orb-svg">
+            <defs>
+              <radialGradient id="hudOrbGold" cx="35%" cy="28%" r="72%">
+                <stop offset="0%" stop-color="#fff7c2"/>
+                <stop offset="52%" stop-color="#f6b922"/>
+                <stop offset="100%" stop-color="#b86508"/>
+              </radialGradient>
+            </defs>
+            <circle cx="20" cy="20" r="18" fill="url(#hudOrbGold)" stroke="#3a2212" stroke-width="2.6"/>
+            <circle cx="20" cy="20" r="13.8" fill="#fdf4dc" stroke="#92400e" stroke-width="1.6"/>
+            <rect x="11" y="10.5" width="18" height="4.6" rx="2.3" fill="#f59e0b" stroke="#3a2212" stroke-width="1.6"/>
+            <path d="M13 15.1 H27 V24.5 C27 26.7 25.2 28.5 23 28.5 H17 C14.8 28.5 13 26.7 13 24.5 Z" fill="#fffdf6" stroke="#3a2212" stroke-width="1.6" stroke-linejoin="round"/>
+            <path id="svgRoundOrbChevron" d="M16 23.2 L20 19.2 L24 23.2" fill="none" stroke="#92400e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span id="lblHudRoundOrbTag" class="hud-round-orb-tag">Thu HUD</span>
+      </button>
 
       <!-- TOAST STACK -->
       <div id="toastStack" class="owl-toast-stack" role="status" aria-live="polite" aria-atomic="false"></div>
@@ -1025,6 +1070,9 @@ export class GameHUD {
     this.closeHudPopovers();
     if (tab) this.activeNeighborTab = tab;
     if (focusNeighborId) this.focusedNeighborId = focusNeighborId;
+    registerRealPlayerProfileOnline(
+      this.sim.state as unknown as Record<string, unknown>
+    ).catch(() => {});
     this.renderNeighborDialog();
     const dlg = this.root.querySelector('#neighborDialog') as HTMLDialogElement | null;
     if (dlg && !dlg.open) {
@@ -1265,17 +1313,70 @@ export class GameHUD {
   public isBuildingFocusMode(): boolean {
     if (this.photoModeActive) return false;
     return (
-      Boolean(this.inspectSelection) ||
+      (Boolean(this.inspectSelection) && !this.inspectorCollapsed) ||
       (this.seedTrayOpen && Boolean(this.pendingSowPlotUid)) ||
       (this.pastureTrayOpen && Boolean(this.pendingStockPastureUid))
     );
+  }
+
+  public toggleHudRollup(force?: boolean): void {
+    this.hudRolledUp = force !== undefined ? force : !this.hudRolledUp;
+    if (this.hudRolledUp) {
+      this.closeHudPopovers();
+      this.collapseBuildDock();
+      this.closeSeedTray();
+      this.closePastureTray();
+    }
+    this.syncHudFocusVisibility();
   }
 
   public syncHudFocusVisibility(): void {
     const shell = this.root.querySelector('.hud-shell-root') as HTMLElement | null;
     if (!shell) return;
     const focused = this.isBuildingFocusMode();
+    const rolled = this.hudRolledUp && !this.photoModeActive && !focused;
     shell.classList.toggle('hud-building-focus', focused);
+    shell.classList.toggle('hud-compact-rolled', rolled);
+    const btnRoll = this.root.querySelector('#btnToggleHudRollup') as HTMLButtonElement | null;
+    if (btnRoll) {
+      btnRoll.setAttribute('aria-pressed', String(this.hudRolledUp));
+      btnRoll.dataset.active = String(this.hudRolledUp);
+      btnRoll.title = this.hudRolledUp
+        ? 'Mở rộng lại các thanh HUD quanh màn hình (Phím H)'
+        : 'Cuộn gọn các thanh HUD quanh màn hình để nhìn thoáng nông trại (Phím H)';
+    }
+    const chevron = this.root.querySelector('#svgHudRollupChevron') as SVGPathElement | null;
+    if (chevron) {
+      chevron.setAttribute(
+        'd',
+        this.hudRolledUp ? 'M13.5 19.5 L18 24 L22.5 19.5' : 'M13.5 23 L18 18.5 L22.5 23'
+      );
+    }
+    const btnManageRoll = this.root.querySelector(
+      '#btnManageToggleHudRollup'
+    ) as HTMLButtonElement | null;
+    if (btnManageRoll) {
+      btnManageRoll.textContent = this.hudRolledUp
+        ? '📜 Mở Rộng Lại Các Thanh HUD (Phím H)'
+        : '📜 Cuộn Gọn Các Thanh HUD (Phím H)';
+    }
+    const roundOrb = this.root.querySelector('#btnHudRoundOrb') as HTMLButtonElement | null;
+    if (roundOrb) {
+      roundOrb.classList.toggle('hidden', this.photoModeActive || focused);
+      roundOrb.setAttribute('aria-pressed', String(this.hudRolledUp));
+      roundOrb.dataset.rolled = String(this.hudRolledUp);
+    }
+    const orbLbl = this.root.querySelector('#lblHudRoundOrbTag');
+    if (orbLbl) {
+      orbLbl.textContent = this.hudRolledUp ? 'Mở HUD' : 'Thu HUD';
+    }
+    const orbChevron = this.root.querySelector('#svgRoundOrbChevron') as SVGPathElement | null;
+    if (orbChevron) {
+      orbChevron.setAttribute(
+        'd',
+        this.hudRolledUp ? 'M16 19.8 L20 23.8 L24 19.8' : 'M16 23.2 L20 19.2 L24 23.2'
+      );
+    }
     if (focused) {
       this.closeHudPopovers();
       this.collapseBuildDock();
@@ -1790,6 +1891,83 @@ export class GameHUD {
       this.toggleManagePopover();
     });
 
+    this.root.querySelector('#btnToggleHudRollup')?.addEventListener('click', () => {
+      this.toggleHudRollup();
+    });
+
+    this.root.querySelector('#btnManageToggleHudRollup')?.addEventListener('click', () => {
+      this.toggleHudRollup();
+    });
+
+    const roundOrbBtn = this.root.querySelector('#btnHudRoundOrb') as HTMLButtonElement | null;
+    if (roundOrbBtn) {
+      let orbDragId: number | null = null;
+      let orbStartX = 0;
+      let orbStartY = 0;
+      let orbOrigLeft = 0;
+      let orbOrigTop = 0;
+      let orbMoved = false;
+
+      roundOrbBtn.addEventListener('pointerdown', (ev) => {
+        if (ev.button !== 0 && ev.pointerType === 'mouse') return;
+        const rect = roundOrbBtn.getBoundingClientRect();
+        orbDragId = ev.pointerId;
+        orbStartX = ev.clientX;
+        orbStartY = ev.clientY;
+        orbOrigLeft = rect.left;
+        orbOrigTop = rect.top;
+        orbMoved = false;
+        try {
+          roundOrbBtn.setPointerCapture(ev.pointerId);
+        } catch {
+          // Ignore synthetic pointer events in headless tests
+        }
+      });
+
+      roundOrbBtn.addEventListener('pointermove', (ev) => {
+        if (orbDragId !== ev.pointerId) return;
+        const dx = ev.clientX - orbStartX;
+        const dy = ev.clientY - orbStartY;
+        if (!orbMoved && Math.hypot(dx, dy) > 7) {
+          orbMoved = true;
+        }
+        if (orbMoved) {
+          const w = roundOrbBtn.offsetWidth || 52;
+          const h = roundOrbBtn.offsetHeight || 62;
+          const nextLeft = Math.max(6, Math.min(window.innerWidth - w - 6, orbOrigLeft + dx));
+          const nextTop = Math.max(6, Math.min(window.innerHeight - h - 6, orbOrigTop + dy));
+          roundOrbBtn.style.left = `${Math.round(nextLeft)}px`;
+          roundOrbBtn.style.top = `${Math.round(nextTop)}px`;
+          roundOrbBtn.style.right = 'auto';
+          roundOrbBtn.style.bottom = 'auto';
+        }
+      });
+
+      const finishOrbPointer = (ev: PointerEvent) => {
+        if (orbDragId !== ev.pointerId) return;
+        orbDragId = null;
+        try {
+          if (roundOrbBtn.hasPointerCapture(ev.pointerId)) {
+            roundOrbBtn.releasePointerCapture(ev.pointerId);
+          }
+        } catch {
+          // Ignore
+        }
+      };
+
+      roundOrbBtn.addEventListener('pointerup', finishOrbPointer);
+      roundOrbBtn.addEventListener('pointercancel', finishOrbPointer);
+      roundOrbBtn.addEventListener('click', (ev) => {
+        if (orbMoved) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          orbMoved = false;
+          return;
+        }
+        this.toggleHudRollup();
+      });
+    }
+
     this.root.querySelector('#lblClock')?.addEventListener('click', (e) => {
       e.stopPropagation();
       this.toggleWeatherPopover();
@@ -2266,6 +2444,8 @@ export class GameHUD {
         this.openPuzzleArcadeDialog();
       } else if (e.key === 'l' || e.key === 'L') {
         this.openLeaderboardDialog();
+      } else if (e.key === 'h' || e.key === 'H') {
+        this.toggleHudRollup();
       } else if (e.key === 'p' || e.key === 'P') {
         this.togglePhotoMode();
       } else if (e.key === 'x' || e.key === 'X') {
@@ -3754,10 +3934,25 @@ export class GameHUD {
     this.syncContextualMapToolsBar();
     const panel = this.root.querySelector('#inspectorPanel') as HTMLElement;
     if (!this.inspectSelection) {
+      this.lastInspectedKey = '';
+      this.inspectorCollapsed = false;
       panel.classList.add('hidden');
+      panel.classList.remove('inspector-collapsed');
       this.syncHudFocusVisibility();
       return;
     }
+
+    const selKey =
+      this.inspectSelection.kind === 'building'
+        ? `b:${this.inspectSelection.uid}`
+        : this.inspectSelection.kind === 'staff'
+          ? `s:${this.inspectSelection.id}`
+          : `z:${this.inspectSelection.zoneId}`;
+    if (selKey !== this.lastInspectedKey) {
+      this.lastInspectedKey = selKey;
+      this.inspectorCollapsed = false;
+    }
+    panel.classList.toggle('inspector-collapsed', this.inspectorCollapsed);
 
     if (this.inspectSelection.kind === 'building') {
       const targetUid = this.inspectSelection.uid;
@@ -4162,10 +4357,10 @@ export class GameHUD {
       );
       this.syncHudFocusVisibility();
       panel.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">
-          <div style="display:flex;gap:10px;align-items:center;">
+        <div class="inspector-header-bar" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:${this.inspectorCollapsed ? '0' : '8px'};">
+          <div style="display:flex;gap:10px;align-items:center;min-width:0;">
             ${item.spriteKey ? `<img src="/sprites/${item.spriteKey}.png" alt="${escapeHtml(item.name)}" class="inspector-thumb" />` : ''}
-            <div>
+            <div style="min-width:0;">
               <div style="font-size:14px;font-weight:800;color:#45230c;">${escapeHtml(item.name)}</div>
               <div style="font-size:12.5px;color:#b45309;font-weight:800;">${'★'.repeat(b.stars)}${'☆'.repeat(5 - b.stars)}</div>
               <div style="font-size:12px;opacity:0.85;">${
@@ -4181,7 +4376,10 @@ export class GameHUD {
               }${isRide ? ` • Xếp hàng: ${queueCount}/${MAX_RIDE_QUEUE}` : ''}</div>
             </div>
           </div>
-          <button id="btnCloseInsp" type="button" class="brass-btn" aria-label="Đóng bảng chi tiết" style="padding:3px 8px;">✕</button>
+          <div style="display:flex;gap:4px;flex-shrink:0;">
+            <button id="btnToggleInspRollup" type="button" class="brass-btn" aria-expanded="${!this.inspectorCollapsed}" title="Cuộn gọn hoặc mở rộng bảng chi tiết" style="padding:3px 7px;font-size:11.5px;">${this.inspectorCollapsed ? '▴ Mở' : '▾ Gọn'}</button>
+            <button id="btnCloseInsp" type="button" class="brass-btn" aria-label="Đóng bảng chi tiết" style="padding:3px 8px;">✕</button>
+          </div>
         </div>
 
         ${farmlandHtml}
@@ -4505,6 +4703,10 @@ export class GameHUD {
         });
       }
 
+      panel.querySelector('#btnToggleInspRollup')?.addEventListener('click', () => {
+        this.inspectorCollapsed = !this.inspectorCollapsed;
+        this.renderInspector();
+      });
       panel.querySelector('#btnCloseInsp')?.addEventListener('click', () => {
         this.inspectSelection = null;
         this.renderInspector();
@@ -4692,12 +4894,15 @@ export class GameHUD {
       panel.classList.remove('inspector-wide-ws');
       this.syncHudFocusVisibility();
       panel.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div class="inspector-header-bar" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:${this.inspectorCollapsed ? '0' : '8px'};">
           <div>
             <div style="font-size:14.5px;font-weight:800;">🧙 ${escapeHtml(st.name)}</div>
             <div style="font-size:12px;font-weight:700;color:#92400e;">Nhân sự vận hành công viên</div>
           </div>
-          <button id="btnCloseInsp" type="button" class="brass-btn" aria-label="Đóng bảng chi tiết" style="padding:3px 8px;">✕</button>
+          <div style="display:flex;gap:4px;flex-shrink:0;">
+            <button id="btnToggleInspRollup" type="button" class="brass-btn" aria-expanded="${!this.inspectorCollapsed}" title="Cuộn gọn hoặc mở rộng bảng chi tiết" style="padding:3px 7px;font-size:11.5px;">${this.inspectorCollapsed ? '▴ Mở' : '▾ Gọn'}</button>
+            <button id="btnCloseInsp" type="button" class="brass-btn" aria-label="Đóng bảng chi tiết" style="padding:3px 8px;">✕</button>
+          </div>
         </div>
 
         <div class="quest-card-mini" style="font-size:12.5px;margin-bottom:8px;">
@@ -4719,6 +4924,10 @@ export class GameHUD {
         </button>
       `;
 
+      panel.querySelector('#btnToggleInspRollup')?.addEventListener('click', () => {
+        this.inspectorCollapsed = !this.inspectorCollapsed;
+        this.renderInspector();
+      });
       panel.querySelector('#btnCloseInsp')?.addEventListener('click', () => {
         this.inspectSelection = null;
         this.renderInspector();
@@ -4745,9 +4954,12 @@ export class GameHUD {
       panel.classList.remove('inspector-wide-ws');
       this.syncHudFocusVisibility();
       panel.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div class="inspector-header-bar" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:${this.inspectorCollapsed ? '0' : '8px'};">
           <div style="font-size:15px;font-weight:800;">🌫️ ${escapeHtml(z.name)}</div>
-          <button id="btnCloseInsp" type="button" class="brass-btn" aria-label="Đóng bảng chi tiết" style="padding:3px 8px;">✕</button>
+          <div style="display:flex;gap:4px;flex-shrink:0;">
+            <button id="btnToggleInspRollup" type="button" class="brass-btn" aria-expanded="${!this.inspectorCollapsed}" title="Cuộn gọn hoặc mở rộng bảng chi tiết" style="padding:3px 7px;font-size:11.5px;">${this.inspectorCollapsed ? '▴ Mở' : '▾ Gọn'}</button>
+            <button id="btnCloseInsp" type="button" class="brass-btn" aria-label="Đóng bảng chi tiết" style="padding:3px 8px;">✕</button>
+          </div>
         </div>
         <p style="font-size:12.5px;margin-bottom:8px;">${z.subtitle}</p>
         <div class="quest-card-mini" style="font-size:12px;margin-bottom:10px;">
@@ -4760,6 +4972,10 @@ export class GameHUD {
           🔓 Phá Phong Ấn (🌟 ${zStars} Sao)
         </button>
       `;
+      panel.querySelector('#btnToggleInspRollup')?.addEventListener('click', () => {
+        this.inspectorCollapsed = !this.inspectorCollapsed;
+        this.renderInspector();
+      });
       panel.querySelector('#btnCloseInsp')?.addEventListener('click', () => {
         this.inspectSelection = null;
         this.renderInspector();
@@ -7054,15 +7270,45 @@ export class GameHUD {
                 <button type="button" class="brass-btn" data-nb-like="${escapeHtml(nb.id)}" ${likedToday ? 'disabled' : ''}>
                   ${likedToday ? '✓ Đã Thả Tim Hôm Nay' : '❤️ Thả Tim (+1 🍀)'}
                 </button>
+                <button type="button" class="brass-btn nb-mini-cta" data-nb-remove="${escapeHtml(nb.id)}" title="Xoá người bạn này khỏi Sổ Hàng Xóm">
+                  ✕ Xoá bạn
+                </button>
               </div>
             </article>
           `;
         })
         .join('');
 
+      const emptyFriendsHtml = `
+        <section class="nb-panel-card highlight">
+          <div class="nb-section-title">🤝 Sổ Hàng Xóm Dành Riêng Cho Người Chơi Thật</div>
+          <p class="nb-section-desc">
+            Hiện chưa có người bạn nào trong danh sách (không sử dụng NPC giả lập). Hãy gửi <strong>Mã Thung Lũng</strong> bên dưới cho bạn bè đang chơi thật hoặc nhập mã của bạn bè để kết giao, thăm vườn 72×72, tưới cây và giải cứu khảo thí!
+          </p>
+          <div class="nb-my-code-box">
+            <div>
+              <div style="font-size:11.5px;opacity:0.82;">Mã Thung Lũng của bạn:</div>
+              <strong class="nb-my-code-val">${escapeHtml(social.playerFriendCode)}</strong>
+            </div>
+            <button id="btnNbCopyCode" type="button" class="brass-btn nb-mini-cta">📋 Sao Chép Mã</button>
+          </div>
+          <form id="frmAddNeighborCode" class="nb-add-friend-form">
+            <div class="nb-form-field">
+              <label for="inpFriendCode">Nhập Mã Thung Lũng của người chơi thật</label>
+              <input id="inpFriendCode" name="friendCode" type="text" maxlength="20" placeholder="VD: HS-ABCD-12" autocomplete="off" required />
+            </div>
+            <div class="nb-form-field">
+              <label for="inpFriendName">Tên gợi nhớ (tuỳ chọn)</label>
+              <input id="inpFriendName" name="friendName" type="text" maxlength="28" placeholder="Tên người bạn (để trống sẽ lấy tên điền trang thật)" autocomplete="off" />
+            </div>
+            <button id="btnSubmitAddFriend" type="submit" class="brass-btn gold-cta">🤝 Xác Thực &amp; Kết Bạn Ngay</button>
+          </form>
+        </section>
+      `;
+
       bodyHtml = `
         ${quickAlertBanners.join('')}
-        <div class="nb-friends-list">${cardsHtml}</div>
+        ${social.neighbors.length > 0 ? `<div class="nb-friends-list">${cardsHtml}</div>` : emptyFriendsHtml}
       `;
     } else if (this.activeNeighborTab === 'chest') {
       const selectedNote = getPresetNoteMeta(social.selectedPresetNoteId);
@@ -7132,7 +7378,7 @@ export class GameHUD {
                       }
                     </div>
                   `
-                  : `<div style="font-size:12.5px;opacity:0.85;">Khi kẹt ở bất kỳ màn nào của <strong>Bùa Gặt Honeydukes, Ngũ Ấn Đạo Tặc, Ma Trận Bảo Bối, Cờ Phù Thủy, Khảm Cổ Ngữ</strong>, hãy bấm nút <strong>“🆘 Nhờ Bạn Qua Màn”</strong> ngay trong bàn chơi!</div>`
+                  : `<div style="font-size:12.5px;opacity:0.85;">Khi kẹt ở bất kỳ màn nào của <strong>Bùa Gặt Honeydukes, Ngũ Ấn Đạo Tặc, Ma Trận Bảo Bối, Cờ Phù Thủy, Nối Hình Sinh Vật</strong>, hãy bấm nút <strong>“🆘 Nhờ Bạn Qua Màn”</strong> ngay trong bàn chơi!</div>`
               }
             </div>
             <div>
@@ -7142,7 +7388,7 @@ export class GameHUD {
           </section>
 
           <section class="nb-panel-card">
-            <div class="nb-section-title">🦉 Mã Thung Lũng &amp; Kết Giao Hàng Xóm</div>
+            <div class="nb-section-title">🦉 Mã Thung Lũng &amp; Kết Giao Người Chơi Thật</div>
             <div class="nb-my-code-box">
               <div>
                 <div style="font-size:11.5px;opacity:0.82;">Mã Thung Lũng Hang Sóc của bạn:</div>
@@ -7152,14 +7398,14 @@ export class GameHUD {
             </div>
             <form id="frmAddNeighborCode" class="nb-add-friend-form">
               <div class="nb-form-field">
-                <label for="inpFriendCode">Mã Thung Lũng người bạn (vd: HS-GINNY-99)</label>
-                <input id="inpFriendCode" name="friendCode" type="text" maxlength="20" placeholder="HS-GINNY-99" autocomplete="off" required />
+                <label for="inpFriendCode">Mã Thung Lũng của người chơi thật</label>
+                <input id="inpFriendCode" name="friendCode" type="text" maxlength="20" placeholder="VD: HS-ABCD-12" autocomplete="off" required />
               </div>
               <div class="nb-form-field">
                 <label for="inpFriendName">Tên gợi nhớ (tuỳ chọn)</label>
-                <input id="inpFriendName" name="friendName" type="text" maxlength="28" placeholder="Ginny Weasley" autocomplete="off" />
+                <input id="inpFriendName" name="friendName" type="text" maxlength="28" placeholder="Tên người bạn (tuỳ chọn)" autocomplete="off" />
               </div>
-              <button type="submit" class="brass-btn gold-cta">🤝 Kết Bạn Ngay</button>
+              <button id="btnSubmitAddFriend" type="submit" class="brass-btn gold-cta">🤝 Xác Thực &amp; Kết Bạn Ngay</button>
             </form>
           </section>
 
@@ -7196,7 +7442,7 @@ export class GameHUD {
                 `;
               })
               .join('')
-          : `<div class="nb-panel-card">Chưa có hoạt động tương trợ nào hôm nay. Hãy ghé thăm vườn Bác Hagrid hoặc Luna nhé!</div>`;
+          : `<div class="nb-panel-card">Chưa có hoạt động tương trợ nào hôm nay. Hãy chia sẻ Mã Thung Lũng của bạn để kết bạn với người chơi thật nhé!</div>`;
 
       bodyHtml = `<div class="nb-log-list">${logItemsHtml}</div>`;
     }
@@ -7306,8 +7552,22 @@ export class GameHUD {
       });
     });
 
+    box.querySelectorAll<HTMLButtonElement>('[data-nb-remove]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const nid = btn.dataset.nbRemove;
+        if (!nid) return;
+        const res = this.sim.removeNeighborFriend(nid);
+        this.showToast(res.msg, res.ok ? '📋' : '⚠️');
+        this.refreshAll();
+        this.renderNeighborDialog();
+      });
+    });
+
     box.querySelector('#btnNbCopyCode')?.addEventListener('click', () => {
       const code = this.sim.ensureNeighborSocial().playerFriendCode;
+      registerRealPlayerProfileOnline(
+        this.sim.state as unknown as Record<string, unknown>
+      ).catch(() => {});
       if (navigator.clipboard?.writeText) {
         navigator.clipboard
           .writeText(code)
@@ -7319,11 +7579,38 @@ export class GameHUD {
     });
 
     const addForm = box.querySelector('#frmAddNeighborCode') as HTMLFormElement | null;
-    addForm?.addEventListener('submit', (ev) => {
+    addForm?.addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const codeInp = box.querySelector('#inpFriendCode') as HTMLInputElement | null;
       const nameInp = box.querySelector('#inpFriendName') as HTMLInputElement | null;
-      const res = this.sim.addFriendByCode(codeInp?.value ?? '', nameInp?.value ?? '');
+      const submitBtn = box.querySelector('#btnSubmitAddFriend') as HTMLButtonElement | null;
+      const rawCode = (codeInp?.value ?? '').trim();
+      const customName = (nameInp?.value ?? '').trim();
+
+      if (rawCode.toUpperCase() === this.sim.ensureNeighborSocial().playerFriendCode.toUpperCase()) {
+        this.showToast('Đây là Mã Thung Lũng của chính bạn rồi!', '⚠️');
+        return;
+      }
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = '🔍 Đang xác thực người chơi thật...';
+      }
+      await registerRealPlayerProfileOnline(
+        this.sim.state as unknown as Record<string, unknown>
+      ).catch(() => {});
+      const lookup = await lookupRealPlayerByFriendCode(rawCode);
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '🤝 Xác Thực & Kết Bạn Ngay';
+      }
+
+      if (!lookup.ok || !lookup.profile) {
+        this.showToast(lookup.msg, '⚠️');
+        return;
+      }
+
+      const res = this.sim.addVerifiedRealFriend(lookup.profile, customName || undefined);
       if (!res.ok) {
         this.showToast(res.msg, '⚠️');
         return;

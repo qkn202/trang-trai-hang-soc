@@ -3,10 +3,174 @@
  * Thao tác trực tiếp trên localStorage key 'burrow_hogsmeade_777_v3' (không cần instance Sim)
  */
 
+import type { HouseName, VerifiedRealPlayerProfile } from '../types/game';
+
 export const SAVE_KEY = 'burrow_hogsmeade_777_v3';
 export const USER_ID_STORAGE_KEY = 'hangsoc_client_uid_v1';
 export const DEFAULT_SAVE_ENDPOINT = '/api/save';
+export const FRIEND_REGISTER_ENDPOINT = '/api/friends/register';
+export const FRIEND_LOOKUP_ENDPOINT = '/api/friends/lookup';
 export const DEFAULT_SYNC_INTERVAL_MS = 60_000;
+
+export function getOrCreateClientUserId(): string {
+  if (typeof localStorage === 'undefined') return 'anonymous_user';
+  try {
+    let uid = localStorage.getItem(USER_ID_STORAGE_KEY);
+    if (!uid) {
+      const rand = Math.random().toString(36).substring(2, 10);
+      uid = `hs_${Date.now().toString(36)}_${rand}`;
+      localStorage.setItem(USER_ID_STORAGE_KEY, uid);
+    }
+    return uid;
+  } catch {
+    return 'anonymous_user';
+  }
+}
+
+export async function registerRealPlayerProfileOnline(
+  stateOverride?: Record<string, unknown>
+): Promise<boolean> {
+  if (typeof window === 'undefined' || typeof fetch !== 'function') return false;
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return false;
+  try {
+    let parsed = stateOverride ?? null;
+    if (!parsed && typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (raw) {
+        parsed = JSON.parse(raw) as Record<string, unknown>;
+      }
+    }
+    if (!parsed || typeof parsed !== 'object') return false;
+    const soc =
+      parsed.neighborSocial && typeof parsed.neighborSocial === 'object'
+        ? (parsed.neighborSocial as Record<string, unknown>)
+        : null;
+    const friendCode = String(soc?.playerFriendCode ?? '')
+      .trim()
+      .toUpperCase();
+    if (friendCode.length < 4) return false;
+
+    const userId = getOrCreateClientUserId();
+    const payload = JSON.stringify({
+      userId,
+      friendCode,
+      parkName: parsed.parkName || 'Trang Trại Hang Sóc',
+      level: parsed.level || 1,
+      housePoints: parsed.housePoints,
+      buildings: Array.isArray(parsed.buildings) ? parsed.buildings.slice(0, 260) : undefined,
+      tileOverrides: parsed.tileOverrides,
+      unlockedZones: parsed.unlockedZones,
+    });
+    const gz = await tryGzipText(payload);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-User-Id': userId,
+    };
+    if (gz) headers['Content-Encoding'] = 'gzip';
+    const res = await fetch(FRIEND_REGISTER_ENDPOINT, {
+      method: 'POST',
+      headers,
+      body: gz ?? payload,
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function lookupRealPlayerByFriendCode(rawCode: string): Promise<{
+  ok: boolean;
+  msg: string;
+  profile?: VerifiedRealPlayerProfile;
+}> {
+  const cleaned = rawCode.trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 18);
+  if (cleaned.length < 4) {
+    return {
+      ok: false,
+      msg: 'Mã Thung Lũng cần ít nhất 4 ký tự (ví dụ: HS-ABCD-12)!',
+    };
+  }
+  if (
+    ['HS-HAGRID-01', 'HS-LUNA-02', 'HS-NEVILLE-03', 'HS-HERMIONE-04', 'HS-WEASLEY-05'].includes(
+      cleaned
+    )
+  ) {
+    return {
+      ok: false,
+      msg: 'Sổ Hàng Xóm chỉ cho phép thêm người chơi thật, không nhận mã NPC!',
+    };
+  }
+  if (typeof fetch !== 'function' || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+    return {
+      ok: false,
+      msg: 'Bạn đang ngoại tuyến — cần kết nối mạng để xác thực Mã Thung Lũng của người chơi thật!',
+    };
+  }
+
+  try {
+    const res = await fetch(`${FRIEND_LOOKUP_ENDPOINT}?code=${encodeURIComponent(cleaned)}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const ctype = (res.headers.get('content-type') || '').toLowerCase();
+    if (!ctype.includes('application/json')) {
+      return {
+        ok: false,
+        msg: 'Chưa kết nối được máy chủ Hàng Xóm Online (/api/friends/lookup) để xác thực người chơi thật!',
+      };
+    }
+    const data = (await res.json()) as {
+      ok?: boolean;
+      found?: boolean;
+      error?: string;
+      profile?: VerifiedRealPlayerProfile;
+    };
+    if (!res.ok || !data?.found || !data?.profile || !data.profile.friendCode) {
+      return {
+        ok: false,
+        msg:
+          data?.error ||
+          `Không tìm thấy người chơi thật nào có mã ${cleaned}! Nhờ bạn mở Sổ Hàng Xóm để đồng bộ mã trước nhé.`,
+      };
+    }
+    const ownUid = getOrCreateClientUserId();
+    if (data.profile.userId && data.profile.userId === ownUid) {
+      return {
+        ok: false,
+        msg: 'Đây là Mã Thung Lũng của chính tài khoản bạn!',
+      };
+    }
+    const validHouses = new Set<HouseName>(['Gryffindor', 'Ravenclaw', 'Hufflepuff', 'Slytherin']);
+    const house: HouseName = validHouses.has(data.profile.house)
+      ? data.profile.house
+      : 'Gryffindor';
+    return {
+      ok: true,
+      msg: 'Đã xác thực người chơi thật!',
+      profile: {
+        ...data.profile,
+        house,
+      },
+    };
+  } catch {
+    return {
+      ok: false,
+      msg: 'Không thể kết nối máy chủ để xác thực người chơi thật. Vui lòng thử lại!',
+    };
+  }
+}
+
+async function tryGzipText(text: string): Promise<ArrayBuffer | null> {
+  if (text.length < 1024 || typeof CompressionStream === 'undefined') {
+    return null;
+  }
+  try {
+    const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
+    return await new Response(stream).arrayBuffer();
+  } catch {
+    return null;
+  }
+}
 
 export interface SaveMetadataGuard {
   version: number;
@@ -152,13 +316,19 @@ export class CloudSave {
 
     try {
       const url = `${this.endpoint}?userId=${encodeURIComponent(userId)}`;
+      const jsonText = JSON.stringify(parsed);
+      const gzBuffer = await tryGzipText(jsonText);
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-User-Id': userId,
+      };
+      if (gzBuffer) {
+        headers['Content-Encoding'] = 'gzip';
+      }
       const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': userId,
-        },
-        body: JSON.stringify(parsed),
+        headers,
+        body: gzBuffer ?? jsonText,
       });
 
       if (!res.ok) {
@@ -312,10 +482,11 @@ export class CloudSave {
    * Khởi tạo CloudSave: thử download tiến trình mới nhất và khởi động chu kỳ đồng bộ
    */
   public init(): void {
-    // Thử đồng bộ ngay khi khởi động
+    // Thử đồng bộ ngay khi khởi động và đăng ký Mã Thung Lũng của người chơi thật
     this.downloadNow()
       .catch(() => {})
       .finally(() => {
+        registerRealPlayerProfileOnline().catch(() => {});
         this.startSyncLoop();
       });
 
@@ -324,7 +495,10 @@ export class CloudSave {
       window.addEventListener('online', () => {
         this.downloadNow()
           .catch(() => {})
-          .then(() => this.uploadNow().catch(() => {}));
+          .then(() => {
+            registerRealPlayerProfileOnline().catch(() => {});
+            return this.uploadNow().catch(() => {});
+          });
       });
     }
   }

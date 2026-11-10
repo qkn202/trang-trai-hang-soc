@@ -6,19 +6,18 @@ import type {
   ChessWorkerResponseMessage,
 } from '../sim/chessAi.worker';
 import {
-  BLOCK_BOARD_SIZE,
-  BlockColorKey,
   CARO_BOARD_SIZE,
   CaroGameEngine,
   CaroStone,
   ChessPiece,
   ChessPieceType,
   ChessSubMode,
+  CREATURE_ONET_SPECIES,
+  CreatureOnetEngine,
   JIGSAW_VIRTUAL_H,
   JIGSAW_VIRTUAL_W,
   LayeredTileCard,
-  PolyominoPiece,
-  RunicBlockPuzzleEngine,
+  OnetPoint,
   SudokuPuzzleEngine,
   TILE_MATCH_SYMBOLS,
   TILE_TRAY_CAPACITY,
@@ -358,16 +357,6 @@ const PORTRAIT_SPRITE_CROPS: Record<
   },
 };
 
-// Block Puzzle virtual layout (inside 692 x 504)
-const BLK_BOARD_X = 16;
-const BLK_BOARD_Y = 16;
-const BLK_CELL_PX = 59; // 8 * 59 = 472
-const BLK_BOARD_PX = BLOCK_BOARD_SIZE * BLK_CELL_PX;
-const BLK_TRAY_X = 504;
-const BLK_TRAY_Y = 16;
-const BLK_TRAY_W = 178;
-const BLK_TRAY_H = 472;
-
 // Tile Match 3D virtual layout (inside 680 x 440)
 const TILE_CARD_W = 60;
 const TILE_CARD_H = 70;
@@ -380,54 +369,6 @@ const TILE_TRAY_Y = 346;
 const TILE_TRAY_SLOT_W = 64;
 const TILE_TRAY_W = TILE_TRAY_CAPACITY * TILE_TRAY_SLOT_W + 24; // 472
 const TILE_TRAY_H = 78;
-
-const BLOCK_COLOR_PALETTE: Record<
-  BlockColorKey,
-  { fillTop: string; fillBot: string; rim: string; lip: string; spriteKey: string }
-> = {
-  ruby: {
-    fillTop: '#fb7185',
-    fillBot: '#be123c',
-    rim: '#ffe4e6',
-    lip: '#881337',
-    spriteKey: 'm3_gem_ruby',
-  },
-  sapphire: {
-    fillTop: '#38bdf8',
-    fillBot: '#0369a1',
-    rim: '#e0f2fe',
-    lip: '#0c4a6e',
-    spriteKey: 'm3_gem_sapphire',
-  },
-  emerald: {
-    fillTop: '#34d399',
-    fillBot: '#047857',
-    rim: '#d1fae5',
-    lip: '#064e3b',
-    spriteKey: 'm3_gem_emerald',
-  },
-  topaz: {
-    fillTop: '#facc15',
-    fillBot: '#b45309',
-    rim: '#fef9c3',
-    lip: '#78350f',
-    spriteKey: 'm3_gem_topaz',
-  },
-  amethyst: {
-    fillTop: '#c084fc',
-    fillBot: '#6d28d9',
-    rim: '#f3e8ff',
-    lip: '#4c1d95',
-    spriteKey: 'm3_gem_amethyst',
-  },
-  wood: {
-    fillTop: '#d97706',
-    fillBot: '#78350f',
-    rim: '#fde68a',
-    lip: '#451a03',
-    spriteKey: 'm3_obs_box_1',
-  },
-};
 
 interface ArcadeParticle {
   x: number;
@@ -516,15 +457,15 @@ export class PuzzleArcadeModalController {
   private greatHallBgImage: HTMLImageElement | null = null;
   private potionsSudokuBgImage: HTMLImageElement | null = null;
   private marauderCaroBgImage: HTMLImageElement | null = null;
+  private unicornLakeBgImage: HTMLImageElement | null = null;
 
   public mode: PuzzleArcadeMode = 'caro';
   public sudokuDisplayMode: SudokuDisplayMode = 'relic_num';
   public sudokuEngine: SudokuPuzzleEngine | null = null;
   public caroEngine: CaroGameEngine | null = null;
   public chessEngine: WizardChessEngine | null = null;
-  public blockEngine: RunicBlockPuzzleEngine | null = null;
+  public onetEngine: CreatureOnetEngine | null = null;
   public tileEngine: TileMatchZenEngine | null = null;
-  private blockForceSubMode?: 'tangram' | 'blast';
   private chessForceSubMode?: ChessSubMode;
   private aiThinkTimer = 0;
   private sudokuPadRects = new Map<number, { x: number; y: number; w: number; h: number }>();
@@ -582,11 +523,17 @@ export class PuzzleArcadeModalController {
   private pointerCurrPos: { vx: number; vy: number } = { vx: -999, vy: -999 };
   private hasDragged = false;
 
-  // Block Puzzle interaction
-  private draggingBlockUid: number | null = null;
-  private selectedBlockUid: number | null = null;
-  private draggingBlockOriginTangram: { r: number; c: number } | null = null;
-  private traySlotBounds = new Map<number, { x: number; y: number; w: number; h: number }>();
+  // Magical Creatures Onet Connect interaction & VFX
+  private onetHoverCell: OnetPoint | null = null;
+  private onetCursorCell: OnetPoint | null = null;
+  private onetBlockedFlash: { r: number; c: number; age: number; duration: number } | null = null;
+  private onetBeams: Array<{
+    points: Array<{ x: number; y: number }>;
+    accent: string;
+    age: number;
+    duration: number;
+  }> = [];
+  private onetWinRevealTimer = 0;
   private hoveredTileUid: number | null = null;
 
   constructor(
@@ -606,6 +553,14 @@ export class PuzzleArcadeModalController {
     this.preloadAssets();
 
     const dlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+      const mql = window.matchMedia('(max-width: 740px)');
+      mql.addEventListener?.('change', () => {
+        if (dlg?.open) {
+          this.renderDOM();
+        }
+      });
+    }
     dlg?.addEventListener('close', () => {
       dlg.returnValue = '';
       this.pendingChessWorkerReqId = null;
@@ -615,13 +570,17 @@ export class PuzzleArcadeModalController {
         this.caroWinRevealTimer = 0;
         this.checkAndClaimVictory();
       }
+      if (this.onetWinRevealTimer > 0 && !this.victoryClaimed) {
+        this.onetWinRevealTimer = 0;
+        this.checkAndClaimVictory();
+      }
       if (this.rescueContext) {
         this.rescueContext = null;
         this.rescueVictoryOutcome = null;
         this.sudokuEngine = null;
         this.caroEngine = null;
         this.chessEngine = null;
-        this.blockEngine = null;
+        this.onetEngine = null;
       }
       this.stopLoop();
       this.onParentRefresh();
@@ -630,6 +589,42 @@ export class PuzzleArcadeModalController {
     window.addEventListener('keydown', (e) => {
       const openDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
       if (!openDlg?.open || this.victoryClaimed) return;
+
+      if (this.mode === 'blocks' && this.onetEngine && this.onetEngine.status === 'playing') {
+        const oe = this.onetEngine;
+        if (e.key === 'h' || e.key === 'H') {
+          e.preventDefault();
+          (this.root.querySelector('#btnPaOnetHint') as HTMLButtonElement | null)?.click();
+          return;
+        }
+        if (e.key === 's' || e.key === 'S') {
+          e.preventDefault();
+          (this.root.querySelector('#btnPaOnetShuffle') as HTMLButtonElement | null)?.click();
+          return;
+        }
+        if (
+          e.key === 'ArrowUp' ||
+          e.key === 'ArrowDown' ||
+          e.key === 'ArrowLeft' ||
+          e.key === 'ArrowRight'
+        ) {
+          e.preventDefault();
+          const cur = this.onetCursorCell ?? oe.selected ?? { r: 0, c: 0 };
+          const dr = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
+          const dc = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
+          this.onetCursorCell = {
+            r: (cur.r + dr + oe.rows) % oe.rows,
+            c: (cur.c + dc + oe.cols) % oe.cols,
+          };
+          return;
+        }
+        if ((e.key === 'Enter' || e.key === ' ') && this.onetCursorCell) {
+          e.preventDefault();
+          this.handleOnetCellTap(this.onetCursorCell.r, this.onetCursorCell.c);
+          return;
+        }
+      }
+
       if (this.mode !== 'sudoku' || !this.sudokuEngine || this.sudokuEngine.status !== 'playing') {
         return;
       }
@@ -666,6 +661,29 @@ export class PuzzleArcadeModalController {
     });
   }
 
+  private isMobileBoardLayout(): boolean {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return false;
+    }
+    return window.matchMedia('(max-width: 740px)').matches;
+  }
+
+  private getVirtualCanvasSize(): { w: number; h: number } {
+    if (!this.isMobileBoardLayout()) {
+      return { w: PA_VIRTUAL_W, h: PA_VIRTUAL_H };
+    }
+    switch (this.mode) {
+      case 'caro':
+        return { w: 504, h: 504 };
+      case 'chess':
+        return { w: 508, h: 504 };
+      case 'sudoku':
+        return { w: 500, h: 636 };
+      case 'blocks':
+        return { w: 504, h: 616 };
+    }
+  }
+
   private cycleSudokuDisplayMode(): void {
     this.sudokuDisplayMode =
       this.sudokuDisplayMode === 'relic_num'
@@ -698,6 +716,11 @@ export class PuzzleArcadeModalController {
     marauderImg.src = '/paintings/marauder_caro_bg.jpg';
     this.marauderCaroBgImage = marauderImg;
 
+    const unicornLakeImg = new Image();
+    unicornLakeImg.decoding = 'async';
+    unicornLakeImg.src = '/paintings/p5_unicorn_lake.jpg';
+    this.unicornLakeBgImage = unicornLakeImg;
+
     for (const key of HP_CHESS_PIECE_KEYS) {
       const pImg = new Image();
       pImg.decoding = 'async';
@@ -722,7 +745,7 @@ export class PuzzleArcadeModalController {
     }
 
     const spriteKeys = new Set<string>([
-      ...Object.values(BLOCK_COLOR_PALETTE).map((v) => v.spriteKey),
+      ...CREATURE_ONET_SPECIES.map((s) => s.spriteKey),
       ...TILE_MATCH_SYMBOLS.map((s) => s.spriteKey),
       ...Object.values(PORTRAIT_SPRITE_CROPS)
         .map((v) => v.spriteKey)
@@ -808,8 +831,9 @@ export class PuzzleArcadeModalController {
   }
 
   public switchMode(nextMode: PuzzleArcadeMode): void {
-    if (this.caroWinRevealTimer > 0 && !this.victoryClaimed) {
+    if ((this.caroWinRevealTimer > 0 || this.onetWinRevealTimer > 0) && !this.victoryClaimed) {
       this.caroWinRevealTimer = 0;
+      this.onetWinRevealTimer = 0;
       this.checkAndClaimVictory();
     }
     this.mode = nextMode;
@@ -822,9 +846,11 @@ export class PuzzleArcadeModalController {
 
   private resetInteractionState(): void {
     this.activePointerId = null;
-    this.draggingBlockUid = null;
-    this.selectedBlockUid = null;
-    this.draggingBlockOriginTangram = null;
+    this.onetHoverCell = null;
+    this.onetCursorCell = null;
+    this.onetBlockedFlash = null;
+    this.onetBeams = [];
+    this.onetWinRevealTimer = 0;
     this.sudokuHoverCell = null;
     this.sudokuHoverPadDigit = null;
     this.caroHoverCell = null;
@@ -951,6 +977,9 @@ export class PuzzleArcadeModalController {
     if (this.mode === 'chess' && this.chessEngine) {
       return this.chessEngine.getTurningPointReview();
     }
+    if (this.mode === 'blocks' && this.onetEngine) {
+      return this.onetEngine.getTurningPointReview();
+    }
     return null;
   }
 
@@ -984,7 +1013,7 @@ export class PuzzleArcadeModalController {
     if (this.mode === 'sudoku') return this.sudokuEngine?.stage ?? pa.sudokuStage ?? 1;
     if (this.mode === 'caro') return this.caroEngine?.stage ?? pa.caroStage ?? 1;
     if (this.mode === 'chess') return this.chessEngine?.stage ?? pa.chessStage ?? 1;
-    return this.blockEngine?.stage ?? pa.blockStage ?? 1;
+    return this.onetEngine?.stage ?? pa.blockStage ?? 1;
   }
 
   private ensureEngineForMode(mode: PuzzleArcadeMode, forceRestart: boolean): void {
@@ -1031,11 +1060,11 @@ export class PuzzleArcadeModalController {
       const stage = rescueStage ?? pa.blockStage ?? 1;
       if (
         forceRestart ||
-        !this.blockEngine ||
-        this.blockEngine.stage !== stage ||
-        this.blockEngine.status === 'won'
+        !this.onetEngine ||
+        this.onetEngine.stage !== stage ||
+        this.onetEngine.status === 'won'
       ) {
-        this.blockEngine = new RunicBlockPuzzleEngine(stage, this.blockForceSubMode);
+        this.onetEngine = new CreatureOnetEngine(stage);
       }
     }
   }
@@ -1046,7 +1075,7 @@ export class PuzzleArcadeModalController {
       (this.mode === 'sudoku' && this.sudokuEngine?.status === 'won') ||
       (this.mode === 'caro' && this.caroEngine?.status === 'won') ||
       (this.mode === 'chess' && this.chessEngine?.status === 'won') ||
-      (this.mode === 'blocks' && this.blockEngine?.status === 'won');
+      (this.mode === 'blocks' && this.onetEngine?.status === 'won');
     if (!isWon) return;
 
     if (this.rescueContext && this.rescueContext.kind === this.mode) {
@@ -1102,14 +1131,14 @@ export class PuzzleArcadeModalController {
       this.spawnCelebrationConfetti();
       this.onParentRefresh();
       this.renderDOM();
-    } else if (this.mode === 'blocks' && this.blockEngine?.status === 'won') {
+    } else if (this.mode === 'blocks' && this.onetEngine?.status === 'won') {
       this.victoryClaimed = true;
       this.victorySummary = this.sim.completePuzzleArcadeVictory(
         'blocks',
-        this.blockEngine.reward,
+        this.onetEngine.reward,
         {
-          sessionScore: Math.max(1100, this.blockEngine.score),
-          efficiency: Math.max(1, this.blockEngine.linesCleared || this.blockEngine.pieces.length),
+          sessionScore: Math.max(1200, this.onetEngine.score),
+          efficiency: Math.max(1, this.onetEngine.maxCombo),
         }
       );
       this.spawnCelebrationConfetti();
@@ -1278,7 +1307,7 @@ export class PuzzleArcadeModalController {
           '<img src="/paintings/caro/phoenix_seal.png" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Bản Đồ Đạo Tặc Hogwarts • Trận Pháp Ngũ Ấn Phượng Hoàng';
       } else {
         modalTitle.innerHTML =
-          '<img src="/sprites/m3_piece_scroll.png" alt="" style="width:26px;height:26px;vertical-align:-6px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Lớp Cổ Ngữ Runes Hogwarts • Khảm Đá Cổ Ngữ Phép Thuật';
+          '<img src="/sprites/beast_niffler.png" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Lớp Chăm Sóc Sinh Vật Huyền Bí • Nối Hình Sinh Vật (777 Màn)';
       }
     }
 
@@ -1587,55 +1616,46 @@ export class PuzzleArcadeModalController {
           ${chessRev ? this.renderTurningPointCardHtml(chessRev) : ''}
         `;
       }
-    } else if (this.mode === 'blocks' && this.blockEngine) {
-      const be = this.blockEngine;
-      rewardSpec = be.reward;
-      const isTangram = be.subMode === 'tangram';
-      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${be.stage}/${MAX_MINIGAME_STAGE} • ${escapeHtml(be.title)} (${escapeHtml(be.difficultyLabel)})`;
-      if (isTangram) {
-        const placedCnt = be.pieces.filter((p) => Boolean(p.placedAt)).length;
-        stageSubtitle = `Kéo thả (hoặc chạm chọn) khối ngọc vào khuôn vàng • Nhấp khối trên bàn để nhấc lại (<strong id="paBlockProgress">${placedCnt}/${be.pieces.length}</strong> khối)`;
-      } else {
-        const obsNote =
-          be.obsidianRunesCount > 0
-            ? ` • <strong>🔮 ${be.obsidianRunesCount} Đá Hắc Diện ×2 lớp</strong>`
-            : '';
-        stageSubtitle = `Lấp đầy hàng ngang hoặc cột dọc 8×8 để kích nổ • Đã nổ: <strong id="paBlockProgress">${be.linesCleared}/${be.targetLines}</strong> hàng &amp; <strong>${be.runesCleared}/${be.totalRunes}</strong> ấn cổ ngữ${obsNote}`;
-      }
-      const canBlockAssist =
-        be.status !== 'won' && (st.sandboxMode || be.freeHelpsLeft + be.paidHelpsLeft > 0);
+    } else if (this.mode === 'blocks' && this.onetEngine) {
+      const oe = this.onetEngine;
+      rewardSpec = oe.reward;
+      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${oe.stage}/${MAX_MINIGAME_STAGE} • ${escapeHtml(oe.title)} (${escapeHtml(oe.difficultyLabel)})`;
+      stageSubtitle = `Nối 2 Sinh Vật giống nhau qua tối đa <strong>3 đoạn thẳng</strong> (cổ điển, không đếm giờ) • Đã ghép: <strong id="paOnetProgress">${oe.matchedPairs}/${oe.totalPairs}</strong> cặp • Chuỗi: <strong id="paOnetCombo">×${oe.combo}</strong>`;
+      const canHint =
+        oe.status === 'playing' && (st.sandboxMode || oe.freeHintsLeft + oe.paidHintsLeft > 0);
+      const canShuffle =
+        oe.status === 'playing' &&
+        (st.sandboxMode || oe.freeShufflesLeft + oe.paidShufflesLeft > 0);
       const canTalisman =
-        be.status !== 'won' && !be.talismanUsed && (st.sandboxMode || talismanQty > 0);
-      const assistCostLbl = st.sandboxMode
+        oe.status === 'playing' && !oe.talismanUsed && (st.sandboxMode || talismanQty > 0);
+      const hintCostLbl = st.sandboxMode
         ? '∞'
-        : be.freeHelpsLeft > 0
-          ? `Miễn phí (${be.freeHelpsLeft})`
-          : be.paidHelpsLeft > 0
-            ? `${be.assistGoldCost}G (${be.paidHelpsLeft})`
+        : oe.freeHintsLeft > 0
+          ? `Miễn phí (${oe.freeHintsLeft})`
+          : oe.paidHintsLeft > 0
+            ? `${oe.hintGoldCost}G (${oe.paidHintsLeft})`
+            : 'Hết lượt';
+      const shuffleCostLbl = st.sandboxMode
+        ? '∞'
+        : oe.freeShufflesLeft > 0
+          ? `Miễn phí (${oe.freeShufflesLeft})`
+          : oe.paidShufflesLeft > 0
+            ? `${oe.shuffleGoldCost}G (${oe.paidShufflesLeft})`
             : 'Hết lượt';
       controlsHtml = `
-        <div class="pa-submode-switch" role="group" aria-label="Kiểu chơi Khảm Đá Cổ Ngữ" title="${be.subModeLocked ? 'Từ Màn 11/777 thể thức màn được ấn định cố định theo Tháp Khảo Thí' : 'Chọn thể thức tập luyện (Màn 1–10)'}">
-          <button id="btnPaSubTangram" type="button" class="pa-mini-pill ${isTangram ? 'active' : ''}" ${be.subModeLocked && !isTangram ? 'disabled' : ''}>${be.subModeLocked && !isTangram ? '🔒 ' : '📐 '}Khuôn Ấn Cổ Ngữ</button>
-          <button id="btnPaSubBlast" type="button" class="pa-mini-pill ${!isTangram ? 'active' : ''}" ${be.subModeLocked && isTangram ? 'disabled' : ''}>${be.subModeLocked && isTangram ? '🔒 ' : '💥 '}Phá Trận 8×8</button>
-        </div>
-        <button id="btnPaBlockAssist" type="button" class="pa-tool-btn gold" ${!canBlockAssist ? 'disabled' : ''}>
-          ${isTangram ? '🪄 Lắp Đúng 1 Khối' : '⚡ Sét Dọn 4×4'} <span class="pa-cost-pill">${assistCostLbl}</span>
+        <button id="btnPaOnetHint" type="button" class="pa-tool-btn gold" ${!canHint ? 'disabled' : ''} title="Soi sáng 1 cặp Sinh Vật Huyền Bí nối được ngay (Phím H)">
+          🔍 Dò Cặp <span class="pa-cost-pill">${hintCostLbl}</span>
         </button>
-        <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="${isTangram ? 'Tối đa 1 lần/lượt thử: Khớp chuẩn 2 mảnh ngọc vào khuôn' : 'Tối đa 1 lần/lượt thử: Lửa Phượng Hoàng dọn vùng 6×6 trung tâm + nứt Ấn Cổ Ngữ'}">
-          🔥 Bùa Phượng Hoàng <span class="pa-cost-pill">${be.talismanUsed ? 'Đã dùng' : `×${talismanDisp}`}</span>
+        <button id="btnPaOnetShuffle" type="button" class="pa-tool-btn" ${!canShuffle ? 'disabled' : ''} title="Đảo vị trí các Sinh Vật còn lại trên bàn (Phím S) — Tự động đảo miễn phí khi hết nước đi!">
+          🔀 Đảo Đàn Thú <span class="pa-cost-pill">${shuffleCostLbl}</span>
+        </button>
+        <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="Tối đa 1 lần/lượt thử: Lửa Phượng Hoàng tự động ghép 3 cặp Sinh Vật & tặng thêm +1 Dò Cặp">
+          🔥 Bùa Phượng Hoàng <span class="pa-cost-pill">${oe.talismanUsed ? 'Đã dùng' : `×${talismanDisp}`}</span>
         </button>
         <button id="btnPaRestart" type="button" class="pa-tool-btn">
-          ${isTangram ? '🧹 Nhấc Về Khay' : '🔄 Chơi Lại Màn'}
+          🔄 Chơi Lại Màn
         </button>
       `;
-      if (be.status === 'stuck') {
-        statusBannerHtml += `
-          <div class="pa-alert-strip">
-            <span>⚠️ Hết chỗ đặt 3 khối hiện tại trên bàn 8×8! Dùng <strong>🔥 Bùa Phượng Hoàng</strong>, <strong>⚡ Sét Dọn 4×4</strong> hoặc <strong>🔄 Chơi Lại Màn</strong>!</span>
-            ${canTalisman ? `<button id="btnPaRescuePhoenixTalisman" type="button" class="pa-tool-btn talisman">🔥 Lửa Phượng Hoàng Dọn Bàn (×${talismanDisp})</button>` : ''}
-          </div>
-        `;
-      }
     }
 
     if (!this.rescueContext && !this.victorySummary) {
@@ -1652,6 +1672,7 @@ export class PuzzleArcadeModalController {
         `;
     }
 
+    let inspectReturnBarHtml = '';
     let victoryOverlayHtml = '';
     if (this.rescueContext && this.rescueVictoryOutcome) {
       const rv = this.rescueVictoryOutcome;
@@ -1689,7 +1710,7 @@ export class PuzzleArcadeModalController {
       const winReview = this.getActiveTurningPointReview();
 
       if (this.inspectingTurningPoint && winReview) {
-        victoryOverlayHtml = `
+        inspectReturnBarHtml = `
           <div class="pa-inspect-return-bar" role="region" aria-label="Đang soi Gương Chiếu Hậu Pháp Thuật">
             <span>🪞 <strong>Gương Chiếu Hậu Pháp Thuật:</strong> ${escapeHtml(winReview.summaryVi)}</span>
             <div class="pa-inspect-return-actions">
@@ -1822,19 +1843,19 @@ export class PuzzleArcadeModalController {
 
             <div class="pa-mode-tabs" role="tablist" aria-label="Chọn môn khảo thí phép thuật Hogwarts" ${this.rescueContext ? 'style="opacity:0.65;pointer-events:none;"' : ''}>
               <button type="button" role="tab" aria-selected="${this.mode === 'caro'}" data-pa-mode="caro" class="pa-mode-tab ${this.mode === 'caro' ? 'active' : ''}" title="Trận Pháp Ngũ Ấn Bản Đồ Đạo Tặc (777 Màn)">
-                <span class="pa-tab-name">🗺️ Ngũ Ấn Đạo Tặc</span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('caro')}</span>${trialBadgeFor('caro')}</span>
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🗺️ Ngũ Ấn Đạo Tặc</span><span class="pa-tab-name-short">🗺️ Ngũ Ấn</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('caro')}</span>${trialBadgeFor('caro')}</span>
               </button>
               <button type="button" role="tab" aria-selected="${this.mode === 'sudoku'}" data-pa-mode="sudoku" class="pa-mode-tab ${this.mode === 'sudoku' ? 'active' : ''}" title="Ma Trận Cửu Bảo Bối Hầm Độc Dược (777 Màn)">
-                <span class="pa-tab-name">🔮 Cửu Bảo Bối</span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('sudoku')}</span>${trialBadgeFor('sudoku')}</span>
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🔮 Cửu Bảo Bối</span><span class="pa-tab-name-short">🔮 Bảo Bối</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('sudoku')}</span>${trialBadgeFor('sudoku')}</span>
               </button>
               <button type="button" role="tab" aria-selected="${this.mode === 'chess'}" data-pa-mode="chess" class="pa-mode-tab ${this.mode === 'chess' ? 'active' : ''}" title="Cờ Phù Thủy Đại Sảnh Đường (777 Màn)">
-                <span class="pa-tab-name">🏰 Cờ Phù Thủy</span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('chess')}</span>${trialBadgeFor('chess')}</span>
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🏰 Cờ Phù Thủy</span><span class="pa-tab-name-short">🏰 Cờ Vua</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('chess')}</span>${trialBadgeFor('chess')}</span>
               </button>
-              <button type="button" role="tab" aria-selected="${this.mode === 'blocks'}" data-pa-mode="blocks" class="pa-mode-tab ${this.mode === 'blocks' ? 'active' : ''}" title="Khảm Đá Cổ Ngữ Runes (777 Màn)">
-                <span class="pa-tab-name">🧱 Khảm Cổ Ngữ</span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('blocks')}</span>${trialBadgeFor('blocks')}</span>
+              <button type="button" role="tab" aria-selected="${this.mode === 'blocks'}" data-pa-mode="blocks" class="pa-mode-tab ${this.mode === 'blocks' ? 'active' : ''}" title="Nối Hình Sinh Vật Huyền Bí Cổ Điển (777 Màn)">
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🦄 Nối Sinh Vật</span><span class="pa-tab-name-short">🦄 Nối Thú</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('blocks')}</span>${trialBadgeFor('blocks')}</span>
               </button>
               <button id="btnPaGoMatch3" type="button" class="pa-mode-tab switch-m3" title="Chuyển sang Gác Xép Bùa Gặt Honeydukes (777 Màn)">
-                <span class="pa-tab-name">🍓 Bùa Gặt Kẹo</span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('match3')}</span>${trialBadgeFor('match3')}</span>
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🍓 Bùa Gặt Kẹo</span><span class="pa-tab-name-short">🍓 Bùa Gặt</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('match3')}</span>${trialBadgeFor('match3')}</span>
               </button>
             </div>
           </div>
@@ -1857,18 +1878,19 @@ export class PuzzleArcadeModalController {
           </div>
 
           ${statusBannerHtml}
-
-          <div class="pa-controls-bar">
-            ${controlsHtml}
-          </div>
         </aside>
 
         <div class="pa-stage-viewport">
-          <div class="pa-canvas-shell">
+          <div class="pa-canvas-shell" data-pa-board-mode="${this.mode}">
             <canvas id="paBoardCanvas" width="${PA_VIRTUAL_W}" height="${PA_VIRTUAL_H}" aria-label="Bàn chơi Sảnh Bàn Cờ &amp; Cổ Ngữ Phép Thuật"></canvas>
-            ${victoryOverlayHtml}
+            ${inspectReturnBarHtml}
           </div>
         </div>
+
+        <div class="pa-controls-bar">
+          ${controlsHtml}
+        </div>
+        ${victoryOverlayHtml}
       </div>
     `;
 
@@ -1942,15 +1964,14 @@ export class PuzzleArcadeModalController {
           (!st.sandboxMode &&
             this.chessEngine.freeHintsLeft + this.chessEngine.paidAssistsLeft <= 0);
       }
-    } else if (this.mode === 'blocks' && this.blockEngine) {
-      const prog = box.querySelector('#paBlockProgress');
+    } else if (this.mode === 'blocks' && this.onetEngine) {
+      const prog = box.querySelector('#paOnetProgress');
       if (prog) {
-        if (this.blockEngine.subMode === 'tangram') {
-          const placed = this.blockEngine.pieces.filter((p) => Boolean(p.placedAt)).length;
-          prog.textContent = `${placed}/${this.blockEngine.pieces.length}`;
-        } else {
-          prog.textContent = `${this.blockEngine.linesCleared}/${this.blockEngine.targetLines}`;
-        }
+        prog.textContent = `${this.onetEngine.matchedPairs}/${this.onetEngine.totalPairs}`;
+      }
+      const comboEl = box.querySelector('#paOnetCombo');
+      if (comboEl) {
+        comboEl.textContent = `×${this.onetEngine.combo}`;
       }
     }
   }
@@ -2212,87 +2233,66 @@ export class PuzzleArcadeModalController {
     });
 
     box.querySelector('#btnPaRestart')?.addEventListener('click', () => {
-      if (
-        this.mode === 'blocks' &&
-        this.blockEngine &&
-        this.blockEngine.subMode === 'tangram' &&
-        this.blockEngine.status === 'playing'
-      ) {
-        // Lift all placed Tangram pieces back to tray cleanly
-        for (let r = 0; r < BLOCK_BOARD_SIZE; r++) {
-          for (let c = 0; c < BLOCK_BOARD_SIZE; c++) {
-            this.blockEngine.grid[r][c] = null;
-          }
-        }
-        for (const p of this.blockEngine.pieces) {
-          p.placedAt = null;
-        }
-        this.selectedBlockUid = null;
-        this.sim.audio.playClick();
-        this.updateLiveCountersOnly();
-        return;
-      }
       this.resetInteractionState();
       this.ensureEngineForMode(this.mode, true);
       this.sim.audio.playClick();
       this.renderDOM();
     });
 
-    // Block controls
-    box.querySelector('#btnPaSubTangram')?.addEventListener('click', () => {
-      if (this.blockEngine?.subMode === 'tangram') return;
-      if (this.blockEngine?.subModeLocked) {
-        this.showToast('🔒 Từ Màn 11/777 trở đi, thể thức mỗi màn được ấn định cố định!', '🧱');
+    // Magical Creatures Onet Connect controls
+    box.querySelector('#btnPaOnetHint')?.addEventListener('click', () => {
+      const oe = this.onetEngine;
+      if (!oe || oe.status !== 'playing') return;
+      if (!this.sim.state.sandboxMode && oe.freeHintsLeft <= 0 && oe.paidHintsLeft <= 0) {
+        this.showToast('Màn này đã dùng hết lượt Dò Cặp Sinh Vật!', '🔍');
         return;
       }
-      this.blockForceSubMode = 'tangram';
-      this.resetInteractionState();
-      this.ensureEngineForMode('blocks', true);
-      this.renderDOM();
-    });
-
-    box.querySelector('#btnPaSubBlast')?.addEventListener('click', () => {
-      if (this.blockEngine?.subMode === 'blast') return;
-      if (this.blockEngine?.subModeLocked) {
-        this.showToast('🔒 Từ Màn 11/777 trở đi, thể thức mỗi màn được ấn định cố định!', '🧱');
-        return;
-      }
-      this.blockForceSubMode = 'blast';
-      this.resetInteractionState();
-      this.ensureEngineForMode('blocks', true);
-      this.renderDOM();
-    });
-
-    box.querySelector('#btnPaBlockAssist')?.addEventListener('click', () => {
-      const be = this.blockEngine;
-      if (!be || be.status === 'won') return;
-      if (!this.sim.state.sandboxMode && be.freeHelpsLeft <= 0 && be.paidHelpsLeft <= 0) {
-        this.showToast('Màn này đã dùng hết lượt trợ giúp Cổ Ngữ!', '⚡');
-        return;
-      }
-      if (be.freeHelpsLeft > 0) {
-        be.freeHelpsLeft -= 1;
+      if (oe.freeHintsLeft > 0) {
+        oe.freeHintsLeft -= 1;
       } else {
-        const pay = this.sim.spendPuzzleHelperGold(be.assistGoldCost);
+        const pay = this.sim.spendPuzzleHelperGold(oe.hintGoldCost);
         if (!pay.ok) {
           this.showToast(pay.msg, '🪙');
           return;
         }
         if (!this.sim.state.sandboxMode) {
-          be.paidHelpsLeft = Math.max(0, be.paidHelpsLeft - 1);
+          oe.paidHintsLeft = Math.max(0, oe.paidHintsLeft - 1);
         }
       }
-      const res = be.useMagicAssist();
+      const res = oe.useHint();
       if (res.ok) {
-        this.drainBlockBlastVfx();
-        this.spawnBurst(BLK_BOARD_X + BLK_BOARD_PX * 0.5, BLK_BOARD_Y + BLK_BOARD_PX * 0.5, '#facc15', 22);
-        this.sim.audio.playPowerupBlast();
-        this.showToast(res.msg, '🪄');
-        if (res.won) {
-          this.checkAndClaimVictory();
-        } else {
-          this.renderDOM();
+        this.sim.audio.playClick();
+        this.showToast(res.msg, '🔍');
+        this.renderDOM();
+      }
+    });
+
+    box.querySelector('#btnPaOnetShuffle')?.addEventListener('click', () => {
+      const oe = this.onetEngine;
+      if (!oe || oe.status !== 'playing') return;
+      if (!this.sim.state.sandboxMode && oe.freeShufflesLeft <= 0 && oe.paidShufflesLeft <= 0) {
+        this.showToast('Màn này đã dùng hết lượt Đảo Đàn Thú chủ động!', '🔀');
+        return;
+      }
+      if (oe.freeShufflesLeft > 0) {
+        oe.freeShufflesLeft -= 1;
+      } else {
+        const pay = this.sim.spendPuzzleHelperGold(oe.shuffleGoldCost);
+        if (!pay.ok) {
+          this.showToast(pay.msg, '🪙');
+          return;
         }
+        if (!this.sim.state.sandboxMode) {
+          oe.paidShufflesLeft = Math.max(0, oe.paidShufflesLeft - 1);
+        }
+      }
+      const res = oe.useManualShuffle();
+      if (res.ok) {
+        const virt = this.getVirtualCanvasSize();
+        this.spawnBurst(virt.w * 0.38, virt.h * 0.5, '#fde047', 22);
+        this.sim.audio.playPowerupBlast();
+        this.showToast(res.msg, '🔀');
+        this.renderDOM();
       }
     });
 
@@ -2305,7 +2305,7 @@ export class PuzzleArcadeModalController {
             ? this.caroEngine?.talismanUsed
             : this.mode === 'chess'
               ? this.chessEngine?.talismanUsed
-              : this.blockEngine?.talismanUsed;
+              : this.onetEngine?.talismanUsed;
       if (activeUsed) {
         this.showToast('Mỗi lượt thử màn chỉ được triệu hồi tối đa 1 Bùa Phượng Hoàng!', '🔥');
         return;
@@ -2394,24 +2394,21 @@ export class PuzzleArcadeModalController {
         } else {
           this.renderDOM();
         }
-      } else if (this.mode === 'blocks' && this.blockEngine) {
-        const res = this.blockEngine.applyPhoenixTalisman();
+      } else if (this.mode === 'blocks' && this.onetEngine) {
+        const res = this.onetEngine.applyPhoenixTalisman();
         if (!res.ok) {
           this.sim.grantPhoenixTalisman(1);
           this.showToast(res.msg, '🔥');
           return;
         }
-        this.drainBlockBlastVfx();
-        this.spawnWeasleyFireworks(
-          BLK_BOARD_X + BLK_BOARD_PX * 0.5,
-          BLK_BOARD_Y + BLK_BOARD_PX * 0.5,
-          2
-        );
+        this.drainOnetMatchVfx();
+        const virt = this.getVirtualCanvasSize();
+        this.spawnWeasleyFireworks(virt.w * 0.38, virt.h * 0.5, 2);
         this.sim.audio.playPowerupBlast();
         this.showToast(res.msg, '🔥');
         this.onParentRefresh();
         if (res.won) {
-          this.checkAndClaimVictory();
+          this.onetWinRevealTimer = 0.28;
         } else {
           this.renderDOM();
         }
@@ -2468,8 +2465,9 @@ export class PuzzleArcadeModalController {
 
     const toVirtual = (ev: PointerEvent): { vx: number; vy: number } => {
       const rect = cvs.getBoundingClientRect();
-      const vx = ((ev.clientX - rect.left) / Math.max(1, rect.width)) * PA_VIRTUAL_W;
-      const vy = ((ev.clientY - rect.top) / Math.max(1, rect.height)) * PA_VIRTUAL_H;
+      const virt = this.getVirtualCanvasSize();
+      const vx = ((ev.clientX - rect.left) / Math.max(1, rect.width)) * virt.w;
+      const vy = ((ev.clientY - rect.top) / Math.max(1, rect.height)) * virt.h;
       return { vx, vy };
     };
 
@@ -2710,62 +2708,28 @@ export class PuzzleArcadeModalController {
       return;
     }
 
-    if (this.mode === 'blocks' && this.blockEngine) {
-      // 1. Check Tray slots first
-      for (const [uid, rect] of this.traySlotBounds.entries()) {
-        if (vx >= rect.x && vx <= rect.x + rect.w && vy >= rect.y && vy <= rect.y + rect.h) {
-          const piece = this.blockEngine.pieces.find((p) => p.uid === uid && !p.used && !p.placedAt);
-          if (piece) {
-            this.draggingBlockUid = piece.uid;
-            this.selectedBlockUid = piece.uid;
-            this.draggingBlockOriginTangram = null;
-            this.sim.audio.playClick();
-            return;
-          }
-        }
-      }
-
-      // 2. Check Board cells
+    if (this.mode === 'blocks' && this.onetEngine && this.onetEngine.status === 'playing') {
+      const m = this.computeOnetBoardMetrics(this.onetEngine);
       if (
-        vx >= BLK_BOARD_X &&
-        vx <= BLK_BOARD_X + BLK_BOARD_PX &&
-        vy >= BLK_BOARD_Y &&
-        vy <= BLK_BOARD_Y + BLK_BOARD_PX
+        vx >= m.originX &&
+        vx <= m.originX + m.boardW &&
+        vy >= m.originY &&
+        vy <= m.originY + m.boardH
       ) {
-        const c = Math.floor((vx - BLK_BOARD_X) / BLK_CELL_PX);
-        const r = Math.floor((vy - BLK_BOARD_Y) / BLK_CELL_PX);
-
-        // If user already click-selected a tray piece, try placing it at (r, c) centered!
-        if (this.selectedBlockUid !== null) {
-          const selPiece = this.blockEngine.pieces.find(
-            (p) => p.uid === this.selectedBlockUid && !p.used && !p.placedAt
-          );
-          if (selPiece) {
-            const anchor = this.computeBestBlockAnchor(selPiece, vx, vy);
-            if (this.blockEngine.canPlacePiece(selPiece.uid, anchor.r, anchor.c)) {
-              this.commitBlockPlacement(selPiece.uid, anchor.r, anchor.c);
-              return;
-            }
-          }
-        }
-
-        // In Tangram mode, allow picking up an already-placed block from the board!
-        if (this.blockEngine.subMode === 'tangram' && this.blockEngine.grid[r]?.[c] !== null) {
-          const prevPiece = this.blockEngine.pieces.find(
-            (p) =>
-              p.placedAt &&
-              p.cells.some(([dr, dc]) => p.placedAt!.r + dr === r && p.placedAt!.c + dc === c)
-          );
-          const prevOrigin = prevPiece?.placedAt ? { ...prevPiece.placedAt } : null;
-          const lifted = this.blockEngine.pickupTangramPieceAt(r, c);
-          if (lifted) {
-            this.draggingBlockUid = lifted.uid;
-            this.selectedBlockUid = lifted.uid;
-            this.draggingBlockOriginTangram = prevOrigin;
-            this.sim.audio.playClick();
-            this.updateLiveCountersOnly();
-          }
-        }
+        const dc = Math.min(
+          m.dispCols - 1,
+          Math.max(0, Math.floor((vx - m.originX) / m.cellPx))
+        );
+        const dr = Math.min(
+          m.dispRows - 1,
+          Math.max(0, Math.floor((vy - m.originY) / m.cellPx))
+        );
+        const r = m.transposed ? dc : dr;
+        const c = m.transposed ? dr : dc;
+        this.onetCursorCell = { r, c };
+        this.handleOnetCellTap(r, c);
+      } else {
+        this.onetEngine.selected = null;
       }
       return;
     }
@@ -2840,6 +2804,32 @@ export class PuzzleArcadeModalController {
       return;
     }
     this.caroHoverCell = null;
+
+    if (this.mode === 'blocks' && this.onetEngine && this.onetEngine.status === 'playing') {
+      const m = this.computeOnetBoardMetrics(this.onetEngine);
+      if (
+        vx >= m.originX &&
+        vx <= m.originX + m.boardW &&
+        vy >= m.originY &&
+        vy <= m.originY + m.boardH
+      ) {
+        const dc = Math.min(
+          m.dispCols - 1,
+          Math.max(0, Math.floor((vx - m.originX) / m.cellPx))
+        );
+        const dr = Math.min(
+          m.dispRows - 1,
+          Math.max(0, Math.floor((vy - m.originY) / m.cellPx))
+        );
+        const r = m.transposed ? dc : dr;
+        const c = m.transposed ? dr : dc;
+        this.onetHoverCell = this.onetEngine.grid[r]?.[c] ? { r, c } : null;
+      } else {
+        this.onetHoverCell = null;
+      }
+      return;
+    }
+    this.onetHoverCell = null;
   }
 
   private handlePointerUp(vx: number, vy: number): void {
@@ -2865,83 +2855,128 @@ export class PuzzleArcadeModalController {
       }
       return;
     }
+  }
 
-    if (this.mode === 'blocks' && this.blockEngine && this.draggingBlockUid !== null) {
-      const uid = this.draggingBlockUid;
-      this.draggingBlockUid = null;
-      const piece = this.blockEngine.pieces.find((p) => p.uid === uid);
-      if (piece && this.hasDragged) {
-        const anchor = this.computeBestBlockAnchor(piece, vx, vy);
-        if (this.blockEngine.canPlacePiece(uid, anchor.r, anchor.c)) {
-          this.commitBlockPlacement(uid, anchor.r, anchor.c);
-          return;
-        }
-        // Dropped outside valid cells: if lifted from Tangram board and dropped back outside tray, leave in tray cleanly!
-        this.draggingBlockOriginTangram = null;
+  private computeOnetBoardMetrics(engine: CreatureOnetEngine): {
+    frameX: number;
+    frameY: number;
+    frameW: number;
+    frameH: number;
+    originX: number;
+    originY: number;
+    cellPx: number;
+    boardW: number;
+    boardH: number;
+    dispRows: number;
+    dispCols: number;
+    transposed: boolean;
+  } {
+    const mobile = this.isMobileBoardLayout();
+    const virt = this.getVirtualCanvasSize();
+    // On portrait mobile, orient the longer axis (8..12) vertically so every creature card is huge!
+    const transposed = mobile && engine.cols > engine.rows;
+    const dispRows = transposed ? engine.cols : engine.rows;
+    const dispCols = transposed ? engine.rows : engine.cols;
+
+    const boxX = mobile ? 6 : 10;
+    const boxY = mobile ? 6 : 40;
+    const boxW = mobile ? virt.w - 12 : virt.w - 20;
+    const boxH = mobile ? virt.h - 12 : virt.h - 48;
+    const outerTrackMargin = 14;
+    const availW = boxW - outerTrackMargin * 2;
+    const availH = boxH - outerTrackMargin * 2;
+    const cellPx = Math.max(32, Math.floor(Math.min(availW / dispCols, availH / dispRows)));
+    const boardW = dispCols * cellPx;
+    const boardH = dispRows * cellPx;
+    const originX = Math.round(boxX + (boxW - boardW) * 0.5);
+    const originY = Math.round(boxY + (boxH - boardH) * 0.5);
+    return {
+      frameX: originX - outerTrackMargin,
+      frameY: originY - outerTrackMargin,
+      frameW: boardW + outerTrackMargin * 2,
+      frameH: boardH + outerTrackMargin * 2,
+      originX,
+      originY,
+      cellPx,
+      boardW,
+      boardH,
+      dispRows,
+      dispCols,
+      transposed,
+    };
+  }
+
+  private onetPointToPixel(
+    pt: OnetPoint,
+    _engine: CreatureOnetEngine,
+    m: ReturnType<PuzzleArcadeModalController['computeOnetBoardMetrics']>
+  ): { x: number; y: number } {
+    const dr = m.transposed ? pt.c : pt.r;
+    const dc = m.transposed ? pt.r : pt.c;
+    const px =
+      dc < 0
+        ? m.originX - 9
+        : dc >= m.dispCols
+          ? m.originX + m.boardW + 9
+          : m.originX + (dc + 0.5) * m.cellPx;
+    const py =
+      dr < 0
+        ? m.originY - 9
+        : dr >= m.dispRows
+          ? m.originY + m.boardH + 9
+          : m.originY + (dr + 0.5) * m.cellPx;
+    return { x: px, y: py };
+  }
+
+  private handleOnetCellTap(r: number, c: number): void {
+    if (!this.onetEngine || this.onetEngine.status !== 'playing') return;
+    const res = this.onetEngine.tapCell(r, c);
+    if (res.action === 'empty' || res.action === 'selected' || res.action === 'deselected' || res.action === 'switched') {
+      this.sim.audio.playClick();
+      return;
+    }
+    if (res.action === 'blocked') {
+      this.onetBlockedFlash = { r, c, age: 0, duration: 0.28 };
+      this.sim.audio.playClick();
+      this.updateLiveCountersOnly();
+      return;
+    }
+    if (res.action === 'matched') {
+      this.drainOnetMatchVfx();
+      const comboLv = Math.min(6, Math.max(1, this.onetEngine.combo));
+      this.sim.audio.playMatchPop(comboLv);
+      if (this.onetEngine.combo >= 4) {
+        this.hitStopTimer = 0.028;
+      }
+      if (res.autoShuffled && this.onetEngine.lastAutoShuffleNotice) {
+        this.showToast(this.onetEngine.lastAutoShuffleNotice, '🔀');
+      }
+      if (res.won) {
+        this.onetWinRevealTimer = 0.3;
+        this.updateLiveCountersOnly();
+      } else {
         this.updateLiveCountersOnly();
       }
     }
   }
 
-  private computeBestBlockAnchor(
-    piece: PolyominoPiece,
-    vx: number,
-    vy: number
-  ): { r: number; c: number } {
-    const maxR = Math.max(...piece.cells.map((x) => x[0]));
-    const maxC = Math.max(...piece.cells.map((x) => x[1]));
-    const centerDr = (maxR + 1) * 0.5;
-    const centerDc = (maxC + 1) * 0.5;
-    const floatC = (vx - BLK_BOARD_X) / BLK_CELL_PX - centerDc;
-    const floatR = (vy - BLK_BOARD_Y) / BLK_CELL_PX - centerDr;
-    return {
-      r: Math.round(floatR),
-      c: Math.round(floatC),
-    };
-  }
-
-  private commitBlockPlacement(uid: number, anchorR: number, anchorC: number): void {
-    if (!this.blockEngine) return;
-    const piece = this.blockEngine.pieces.find((p) => p.uid === uid);
-    const res = this.blockEngine.placePiece(uid, anchorR, anchorC);
-    if (!res.ok) return;
-
-    this.selectedBlockUid = null;
-    this.draggingBlockOriginTangram = null;
-
-    if (piece) {
-      for (const [dr, dc] of piece.cells) {
-        const cx = BLK_BOARD_X + (anchorC + dc + 0.5) * BLK_CELL_PX;
-        const cy = BLK_BOARD_Y + (anchorR + dr + 0.5) * BLK_CELL_PX;
-        this.spawnBurst(cx, cy, BLOCK_COLOR_PALETTE[piece.color].fillTop, 4);
-      }
-    }
-
-    if (res.linesBlasted > 0) {
-      this.hitStopTimer = 0.035;
-      this.drainBlockBlastVfx();
-      this.sim.audio.playCrateCrack();
-      this.sim.audio.playPowerupBlast();
-    } else {
-      this.sim.audio.playMatchPop(1);
-    }
-
-    if (res.won) {
-      this.checkAndClaimVictory();
-    } else if (this.blockEngine.status === 'stuck') {
-      this.renderDOM();
-    } else {
-      this.updateLiveCountersOnly();
-    }
-  }
-
-  private drainBlockBlastVfx(): void {
-    if (!this.blockEngine) return;
-    while (this.blockEngine.clearedCellsVfx.length > 0) {
-      const ev = this.blockEngine.clearedCellsVfx.shift()!;
-      const cx = BLK_BOARD_X + (ev.c + 0.5) * BLK_CELL_PX;
-      const cy = BLK_BOARD_Y + (ev.r + 0.5) * BLK_CELL_PX;
-      this.spawnBurst(cx, cy, BLOCK_COLOR_PALETTE[ev.color].fillTop, 7);
+  private drainOnetMatchVfx(): void {
+    if (!this.onetEngine) return;
+    const m = this.computeOnetBoardMetrics(this.onetEngine);
+    while (this.onetEngine.matchVfxQueue.length > 0) {
+      const ev = this.onetEngine.matchVfxQueue.shift()!;
+      const spDef = CreatureOnetEngine.getSpeciesDef(ev.speciesId);
+      const pts = ev.waypoints.map((wp) => this.onetPointToPixel(wp, this.onetEngine!, m));
+      this.onetBeams.push({
+        points: pts,
+        accent: spDef.accent,
+        age: 0,
+        duration: 0.32,
+      });
+      const pFrom = this.onetPointToPixel(ev.from, this.onetEngine, m);
+      const pTo = this.onetPointToPixel(ev.to, this.onetEngine, m);
+      this.spawnBurst(pFrom.x, pFrom.y, spDef.accent, 11);
+      this.spawnBurst(pTo.x, pTo.y, spDef.accent, 11);
     }
   }
 
@@ -3020,7 +3055,13 @@ export class PuzzleArcadeModalController {
     }
 
     if (!this.victoryClaimed) {
-      if (this.mode === 'caro' && this.caroWinRevealTimer > 0) {
+      if (this.mode === 'blocks' && this.onetWinRevealTimer > 0) {
+        this.onetWinRevealTimer -= dt;
+        if (this.onetWinRevealTimer <= 0) {
+          this.onetWinRevealTimer = 0;
+          this.checkAndClaimVictory();
+        }
+      } else if (this.mode === 'caro' && this.caroWinRevealTimer > 0) {
         this.caroWinRevealTimer -= dt;
         this.caroFireworkTimer -= dt;
         if (this.caroFireworkTimer <= 0) {
@@ -3094,6 +3135,21 @@ export class PuzzleArcadeModalController {
       this.chessShakeTimer = Math.max(0, this.chessShakeTimer - dt);
     }
 
+    if (this.onetBlockedFlash) {
+      this.onetBlockedFlash.age += dt;
+      if (this.onetBlockedFlash.age >= this.onetBlockedFlash.duration) {
+        this.onetBlockedFlash = null;
+      }
+    }
+
+    for (let i = this.onetBeams.length - 1; i >= 0; i--) {
+      const b = this.onetBeams[i];
+      b.age += dt;
+      if (b.age >= b.duration) {
+        this.onetBeams.splice(i, 1);
+      }
+    }
+
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.age += dt;
@@ -3133,10 +3189,11 @@ export class PuzzleArcadeModalController {
     const ctx = cvs.getContext('2d');
     if (!ctx) return;
 
+    const virt = this.getVirtualCanvasSize();
     ctx.save();
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.scale(targetW / PA_VIRTUAL_W, targetH / PA_VIRTUAL_H);
+    ctx.scale(targetW / virt.w, targetH / virt.h);
 
     if (this.mode === 'chess' && this.chessShakeTimer > 0) {
       const now = performance.now();
@@ -3146,13 +3203,13 @@ export class PuzzleArcadeModalController {
     }
 
     if (this.mode === 'chess') {
-      this.drawGreatHallChessBackdrop(ctx);
+      this.drawGreatHallChessBackdrop(ctx, virt.w, virt.h);
     } else if (this.mode === 'sudoku') {
-      this.drawPotionsSudokuBackdrop(ctx);
+      this.drawPotionsSudokuBackdrop(ctx, virt.w, virt.h);
     } else if (this.mode === 'caro') {
-      this.drawMarauderCaroBackdrop(ctx);
+      this.drawMarauderCaroBackdrop(ctx, virt.w, virt.h);
     } else {
-      this.drawParlorTabletopBackdrop(ctx);
+      this.drawUnicornSanctuaryBackdrop(ctx, virt.w, virt.h);
     }
 
     if (this.mode === 'sudoku' && this.sudokuEngine) {
@@ -3162,8 +3219,8 @@ export class PuzzleArcadeModalController {
     } else if (this.mode === 'chess' && this.chessEngine) {
       this.drawWizardChessScene(ctx, this.chessEngine);
       this.drawChessSpellBeams(ctx);
-    } else if (this.mode === 'blocks' && this.blockEngine) {
-      this.drawBlocksScene(ctx, this.blockEngine);
+    } else if (this.mode === 'blocks' && this.onetEngine) {
+      this.drawCreatureOnetScene(ctx, this.onetEngine);
     }
 
     this.drawParticles(ctx);
@@ -3171,337 +3228,316 @@ export class PuzzleArcadeModalController {
   }
 
   // --------------------------------------------------------------------------
-  // RENDERER: RUNIC BLOCK PUZZLE & TANGRAM BLUEPRINTS
+  // RENDERER: CLASSIC MAGICAL CREATURES ONET CONNECT ("NỐI HÌNH SINH VẬT HUYỀN BÍ")
   // --------------------------------------------------------------------------
 
-  private drawBlocksScene(ctx: CanvasRenderingContext2D, engine: RunicBlockPuzzleEngine): void {
-    // 1. Outer Board Frame
+  private drawUnicornSanctuaryBackdrop(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number
+  ): void {
     ctx.save();
-    drawRoundedRect(
-      ctx,
-      BLK_BOARD_X - 10,
-      BLK_BOARD_Y - 10,
-      BLK_BOARD_PX + 20,
-      BLK_BOARD_PX + 20,
-      16
-    );
-    const boardFrame = ctx.createLinearGradient(0, BLK_BOARD_Y - 10, 0, BLK_BOARD_Y + BLK_BOARD_PX + 10);
-    boardFrame.addColorStop(0, '#b45309');
-    boardFrame.addColorStop(0.5, '#78350f');
-    boardFrame.addColorStop(1, '#451a03');
-    ctx.fillStyle = boardFrame;
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    const img = this.unicornLakeBgImage;
+    if (img && img.complete && img.naturalWidth > 0) {
+      const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+      const dw = img.naturalWidth * scale;
+      const dh = img.naturalHeight * scale;
+      ctx.drawImage(img, (w - dw) * 0.5, (h - dh) * 0.5, dw, dh);
+      const scrim = ctx.createLinearGradient(0, 0, 0, h);
+      scrim.addColorStop(0, 'rgba(15, 36, 42, 0.52)');
+      scrim.addColorStop(0.5, 'rgba(20, 44, 38, 0.42)');
+      scrim.addColorStop(1, 'rgba(24, 18, 12, 0.62)');
+      ctx.fillStyle = scrim;
+      ctx.fillRect(0, 0, w, h);
+    } else {
+      this.drawParlorTabletopBackdrop(ctx, w, h);
+    }
+    ctx.restore();
+  }
+
+  private drawCreatureOnetScene(
+    ctx: CanvasRenderingContext2D,
+    engine: CreatureOnetEngine
+  ): void {
+    const mobile = this.isMobileBoardLayout();
+    const m = this.computeOnetBoardMetrics(engine);
+    const now = performance.now();
+
+    // 1. Carved Sanctuary Wood & Brass Outer Frame (includes outer border connection track)
+    ctx.save();
+    drawRoundedRect(ctx, m.frameX, m.frameY, m.frameW, m.frameH, 16);
+    const woodGrad = ctx.createLinearGradient(0, m.frameY, 0, m.frameY + m.frameH);
+    woodGrad.addColorStop(0, 'rgba(42, 24, 14, 0.9)');
+    woodGrad.addColorStop(0.5, 'rgba(28, 17, 10, 0.92)');
+    woodGrad.addColorStop(1, 'rgba(18, 11, 7, 0.94)');
+    ctx.fillStyle = woodGrad;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.52)';
     ctx.shadowBlur = 14;
-    ctx.shadowOffsetY = 5;
+    ctx.shadowOffsetY = 4;
     ctx.fill();
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.4;
     ctx.strokeStyle = '#fbbf24';
+    ctx.stroke();
+
+    // Subtle inner golden border showing the walkable outer path corridor
+    drawRoundedRect(ctx, m.originX - 4, m.originY - 4, m.boardW + 8, m.boardH + 8, 10);
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.25)';
+    ctx.lineWidth = 1.2;
     ctx.stroke();
     ctx.restore();
 
-    // Compute live ghost preview if dragging or hovering with selected piece
-    let ghostPiece: PolyominoPiece | undefined;
-    let ghostAnchor: { r: number; c: number } | null = null;
-    let ghostValid = false;
-    const previewUid = this.draggingBlockUid ?? this.selectedBlockUid;
-    if (previewUid !== null) {
-      const cand = engine.pieces.find((p) => p.uid === previewUid && !p.used && !p.placedAt);
-      if (
-        cand &&
-        this.pointerCurrPos.vx >= BLK_BOARD_X - 24 &&
-        this.pointerCurrPos.vx <= BLK_BOARD_X + BLK_BOARD_PX + 24 &&
-        this.pointerCurrPos.vy >= BLK_BOARD_Y - 24 &&
-        this.pointerCurrPos.vy <= BLK_BOARD_Y + BLK_BOARD_PX + 24
-      ) {
-        ghostPiece = cand;
-        ghostAnchor = this.computeBestBlockAnchor(
-          cand,
-          this.pointerCurrPos.vx,
-          this.pointerCurrPos.vy
-        );
-        ghostValid = engine.canPlaceCellsAt(cand.cells, ghostAnchor.r, ghostAnchor.c);
-      }
-    }
+    const activeRev =
+      this.inspectingTurningPoint && engine.status === 'won'
+        ? engine.getTurningPointReview()
+        : null;
 
-    // Predict full lines in Blast mode when ghostValid is true
-    const predictedRows = new Set<number>();
-    const predictedCols = new Set<number>();
-    if (engine.subMode === 'blast' && ghostValid && ghostPiece && ghostAnchor) {
-      const occupiedGhost = new Set(
-        ghostPiece.cells.map(([dr, dc]) => `${ghostAnchor!.r + dr},${ghostAnchor!.c + dc}`)
-      );
-      for (let r = 0; r < BLOCK_BOARD_SIZE; r++) {
-        let full = true;
-        for (let c = 0; c < BLOCK_BOARD_SIZE; c++) {
-          if (engine.grid[r][c] === null && !occupiedGhost.has(`${r},${c}`)) {
-            full = false;
-            break;
-          }
-        }
-        if (full) predictedRows.add(r);
-      }
-      for (let c = 0; c < BLOCK_BOARD_SIZE; c++) {
-        let full = true;
-        for (let r = 0; r < BLOCK_BOARD_SIZE; r++) {
-          if (engine.grid[r][c] === null && !occupiedGhost.has(`${r},${c}`)) {
-            full = false;
-            break;
-          }
-        }
-        if (full) predictedCols.add(c);
-      }
-    }
+    // 2. Creature Grid Cells (Static Classic Layout — cleared spaces stay open corridors)
+    for (let r = 0; r < engine.rows; r++) {
+      for (let c = 0; c < engine.cols; c++) {
+        const dr = m.transposed ? c : r;
+        const dc = m.transposed ? r : c;
+        const cx = m.originX + dc * m.cellPx;
+        const cy = m.originY + dr * m.cellPx;
+        const spId = engine.grid[r][c];
 
-    // 2. Draw 8x8 Grid Cells
-    for (let r = 0; r < BLOCK_BOARD_SIZE; r++) {
-      for (let c = 0; c < BLOCK_BOARD_SIZE; c++) {
-        const cx = BLK_BOARD_X + c * BLK_CELL_PX;
-        const cy = BLK_BOARD_Y + r * BLK_CELL_PX;
-        const insideMold = engine.moldMask[r][c];
-        const cellCol = engine.grid[r][c];
-
-        if (!insideMold) {
-          // Recessed warm carved walnut outside Tangram mold
-          ctx.fillStyle = '#381b0c';
-          ctx.fillRect(cx, cy, BLK_CELL_PX, BLK_CELL_PX);
-          ctx.strokeStyle = 'rgba(212, 150, 59, 0.22)';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(cx + 0.5, cy + 0.5, BLK_CELL_PX - 1, BLK_CELL_PX - 1);
+        if (!spId) {
+          // Soft subtle dot in empty corridor cell to help eye-track straight lines
+          ctx.fillStyle = 'rgba(254, 243, 199, 0.12)';
+          ctx.beginPath();
+          ctx.arc(cx + m.cellPx * 0.5, cy + m.cellPx * 0.5, 2.2, 0, Math.PI * 2);
+          ctx.fill();
           continue;
         }
 
-        // Active cell cushion
-        drawRoundedRect(ctx, cx + 1.5, cy + 1.5, BLK_CELL_PX - 3, BLK_CELL_PX - 3, 7);
-        if (engine.subMode === 'tangram') {
-          ctx.fillStyle = (r + c) % 2 === 0 ? '#fef3c7' : '#fde68a';
-          ctx.fill();
-          ctx.strokeStyle = 'rgba(180, 83, 9, 0.42)';
-          ctx.lineWidth = 1.2;
-          ctx.stroke();
-        } else {
-          ctx.fillStyle = (r + c) % 2 === 0 ? '#4a2511' : '#592e16';
-          ctx.fill();
-          ctx.strokeStyle = 'rgba(244, 198, 104, 0.22)';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-        }
+        const spDef = CreatureOnetEngine.getSpeciesDef(spId);
+        const isSel = Boolean(
+          engine.selected && engine.selected.r === r && engine.selected.c === c
+        );
+        const isHinted = Boolean(
+          engine.hintPair &&
+            ((engine.hintPair[0].r === r && engine.hintPair[0].c === c) ||
+              (engine.hintPair[1].r === r && engine.hintPair[1].c === c))
+        );
+        const isHov = Boolean(
+          (this.onetHoverCell && this.onetHoverCell.r === r && this.onetHoverCell.c === c) ||
+            (this.onetCursorCell && this.onetCursorCell.r === r && this.onetCursorCell.c === c)
+        );
+        const isBlocked =
+          this.onetBlockedFlash &&
+          this.onetBlockedFlash.r === r &&
+          this.onetBlockedFlash.c === c;
 
-        if (cellCol) {
-          const runeLayers = engine.runeLayers?.[r]?.[c] ?? (engine.runeMask[r][c] ? 1 : 0);
-          this.drawJewelBlockCell(
-            ctx,
-            cx,
-            cy,
-            BLK_CELL_PX,
-            cellCol,
-            runeLayers,
-            predictedRows.has(r) || predictedCols.has(c)
-          );
-        }
+        this.drawCreatureOnetCard(
+          ctx,
+          cx,
+          cy,
+          m.cellPx,
+          spDef,
+          isSel,
+          isHinted,
+          isHov,
+          Boolean(isBlocked),
+          now
+        );
       }
     }
 
-    // 3. Draw Ghost Placement Preview on Board
-    if (ghostPiece && ghostAnchor) {
+    // Highlight TurningPointReview cells when inspecting Gương Chiếu Hậu Pháp Thuật
+    if (activeRev) {
       ctx.save();
-      for (const [dr, dc] of ghostPiece.cells) {
-        const gr = ghostAnchor.r + dr;
-        const gc = ghostAnchor.c + dc;
-        if (gr < 0 || gr >= BLOCK_BOARD_SIZE || gc < 0 || gc >= BLOCK_BOARD_SIZE) continue;
-        const gx = BLK_BOARD_X + gc * BLK_CELL_PX;
-        const gy = BLK_BOARD_Y + gr * BLK_CELL_PX;
-        drawRoundedRect(ctx, gx + 2, gy + 2, BLK_CELL_PX - 4, BLK_CELL_PX - 4, 8);
-        ctx.fillStyle = ghostValid ? 'rgba(74, 222, 128, 0.42)' : 'rgba(248, 113, 113, 0.42)';
+      for (const hc of activeRev.highlightCells) {
+        const dr = m.transposed ? hc.c : hc.r;
+        const dc = m.transposed ? hc.r : hc.c;
+        const hx = m.originX + dc * m.cellPx;
+        const hy = m.originY + dr * m.cellPx;
+        drawRoundedRect(ctx, hx + 3, hy + 3, m.cellPx - 6, m.cellPx - 6, 10);
+        ctx.fillStyle = 'rgba(250, 204, 21, 0.24)';
         ctx.fill();
-        ctx.lineWidth = 2.2;
-        ctx.strokeStyle = ghostValid ? '#4ade80' : '#f87171';
+        ctx.lineWidth = 2.6;
+        ctx.strokeStyle = '#fde047';
         ctx.stroke();
       }
       ctx.restore();
     }
 
-    // 4. Right-hand Polyomino Dock
-    ctx.save();
-    drawRoundedRect(ctx, BLK_TRAY_X, BLK_TRAY_Y, BLK_TRAY_W, BLK_TRAY_H, 14);
-    ctx.fillStyle = 'rgba(58, 29, 12, 0.84)';
-    ctx.fill();
-    ctx.lineWidth = 2.2;
-    ctx.strokeStyle = '#f4c668';
-    ctx.stroke();
-    ctx.restore();
+    // 3. Hint Preview Polyline (if player used 🔍 Dò Cặp)
+    if (engine.hintPath && engine.hintPath.length >= 2) {
+      const hPts = engine.hintPath.map((wp) => this.onetPointToPixel(wp, engine, m));
+      const pulse = 0.55 + 0.35 * Math.sin(now * 0.008);
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.setLineDash([7, 6]);
+      ctx.lineDashOffset = -(now * 0.03);
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = `rgba(253, 224, 71, ${pulse.toFixed(2)})`;
+      ctx.beginPath();
+      ctx.moveTo(hPts[0].x, hPts[0].y);
+      for (let i = 1; i < hPts.length; i++) {
+        ctx.lineTo(hPts[i].x, hPts[i].y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
 
-    this.traySlotBounds.clear();
-    const trayPieces = engine.pieces.filter(
-      (p) => !p.used && !p.placedAt && p.uid !== this.draggingBlockUid
-    );
+    // 4. Active Patronus / Wand Lightning Match Beams (<= 3 segments)
+    for (const beam of this.onetBeams) {
+      if (beam.points.length < 2) continue;
+      const t = Math.min(1, beam.age / beam.duration);
+      const alpha = Math.max(0, 1 - t * t);
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
 
-    const cols = engine.subMode === 'tangram' ? 2 : 1;
-    const rows = Math.max(1, Math.ceil(engine.pieces.length / cols));
-    const slotW = (BLK_TRAY_W - 16) / cols;
-    const slotH = (BLK_TRAY_H - 20) / Math.min(rows, engine.subMode === 'tangram' ? 3 : 3);
+      // Outer magical aura
+      ctx.shadowColor = beam.accent;
+      ctx.shadowBlur = 14;
+      ctx.strokeStyle = beam.accent;
+      ctx.globalAlpha = alpha * 0.85;
+      ctx.lineWidth = 8.5 * (1 - t * 0.35);
+      ctx.beginPath();
+      ctx.moveTo(beam.points[0].x, beam.points[0].y);
+      for (let i = 1; i < beam.points.length; i++) {
+        ctx.lineTo(beam.points[i].x, beam.points[i].y);
+      }
+      ctx.stroke();
 
-    engine.pieces.forEach((p, idx) => {
-      if (p.used || p.placedAt || p.uid === this.draggingBlockUid) return;
-      const tc = idx % cols;
-      const tr = Math.floor(idx / cols);
-      const actualSlotH = (BLK_TRAY_H - 20) / Math.max(1, Math.ceil(engine.pieces.length / cols));
-      const sx = BLK_TRAY_X + 8 + tc * slotW;
-      const sy = BLK_TRAY_Y + 10 + tr * actualSlotH;
-      this.traySlotBounds.set(p.uid, { x: sx, y: sy, w: slotW, h: actualSlotH });
+      // Crisp bright golden-white core
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = '#fffbeb';
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = 3.4 * (1 - t * 0.3);
+      ctx.stroke();
 
-      const isSel = p.uid === this.selectedBlockUid;
-      if (isSel) {
-        drawRoundedRect(ctx, sx + 2, sy + 2, slotW - 4, actualSlotH - 4, 10);
-        ctx.fillStyle = 'rgba(250, 204, 21, 0.16)';
+      // Corner spark nodes
+      ctx.fillStyle = '#fef08a';
+      for (const pt of beam.points) {
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 4.5 * (1 - t * 0.4), 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = '#facc15';
-        ctx.lineWidth = 2;
-        ctx.stroke();
       }
+      ctx.restore();
+    }
 
-      const maxR = Math.max(...p.cells.map((x) => x[0])) + 1;
-      const maxC = Math.max(...p.cells.map((x) => x[1])) + 1;
-      const miniCell = Math.min(
-        30,
-        (slotW - 18) / Math.max(1, maxC),
-        (actualSlotH - 16) / Math.max(1, maxR)
+    // 5. Desktop Top Compact Menagerie Ribbon (lets the 48..108-tile Pikachu board use full 692px width!)
+    if (!mobile) {
+      ctx.save();
+      drawRoundedRect(ctx, m.frameX, 6, m.frameW, 26, 9);
+      ctx.fillStyle = 'rgba(42, 24, 14, 0.88)';
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(244, 198, 104, 0.65)';
+      ctx.stroke();
+
+      ctx.fillStyle = '#fef3c7';
+      ctx.font = '800 11.5px "Be Vietnam Pro", system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(
+        `🦄 Bàn ${engine.rows}×${engine.cols} (${engine.totalPairs * 2} ô • ${engine.speciesCount} loài)   •   Đã ghép: ${engine.matchedPairs}/${engine.totalPairs} cặp   •   ⚡ Combo ×${engine.combo} (Đỉnh ×${engine.maxCombo})   •   🎯 ${engine.score.toLocaleString('vi-VN')} đ`,
+        m.frameX + m.frameW * 0.5,
+        19
       );
-      const ox = sx + (slotW - maxC * miniCell) * 0.5;
-      const oy = sy + (actualSlotH - maxR * miniCell) * 0.5;
-
-      for (const [dr, dc] of p.cells) {
-        this.drawJewelBlockCell(
-          ctx,
-          ox + dc * miniCell,
-          oy + dr * miniCell,
-          miniCell,
-          p.color,
-          false,
-          false
-        );
-      }
-    });
-    void trayPieces;
-    void slotH;
-
-    // 5. Floating Dragged Polyomino under pointer
-    if (this.draggingBlockUid !== null) {
-      const dragP = engine.pieces.find((p) => p.uid === this.draggingBlockUid);
-      if (dragP) {
-        const maxR = Math.max(...dragP.cells.map((x) => x[0])) + 1;
-        const maxC = Math.max(...dragP.cells.map((x) => x[1])) + 1;
-        const ox = this.pointerCurrPos.vx - maxC * BLK_CELL_PX * 0.5;
-        const oy = this.pointerCurrPos.vy - maxR * BLK_CELL_PX * 0.5;
-        ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.55)';
-        ctx.shadowBlur = 14;
-        ctx.shadowOffsetY = 6;
-        for (const [dr, dc] of dragP.cells) {
-          this.drawJewelBlockCell(
-            ctx,
-            ox + dc * BLK_CELL_PX,
-            oy + dr * BLK_CELL_PX,
-            BLK_CELL_PX,
-            dragP.color,
-            false,
-            false
-          );
-        }
-        ctx.restore();
-      }
+      ctx.restore();
     }
   }
 
-  private drawJewelBlockCell(
+  private drawCreatureOnetCard(
     ctx: CanvasRenderingContext2D,
     x: number,
     y: number,
     size: number,
-    color: BlockColorKey,
-    hasRuneSeal: boolean | number,
-    willBlastGlow: boolean
+    spDef: (typeof CREATURE_ONET_SPECIES)[number],
+    isSelected: boolean,
+    isHinted: boolean,
+    isHovered: boolean,
+    isBlockedFlash: boolean,
+    nowMs: number
   ): void {
-    const runeLayers =
-      typeof hasRuneSeal === 'number' ? hasRuneSeal : hasRuneSeal ? 1 : 0;
-    const pal = BLOCK_COLOR_PALETTE[color];
-    const pad = Math.max(1.2, size * 0.04);
-    const bx = x + pad;
-    const by = y + pad;
+    const pad = Math.max(2, size * 0.048);
+    let bx = x + pad;
+    let by = y + pad;
     const bw = size - pad * 2;
     const bh = size - pad * 2;
-    const rad = Math.max(4, size * 0.16);
+    const rad = Math.max(6, size * 0.17);
+
+    if (isBlockedFlash) {
+      bx += Math.sin(nowMs * 0.06) * 3;
+    } else if (isSelected) {
+      by -= 2.2;
+    }
 
     ctx.save();
-    // 3D bottom lip
-    drawRoundedRect(ctx, bx, by + 2, bw, bh - 1, rad);
-    ctx.fillStyle = pal.lip;
+
+    // 3D tactile card lip
+    drawRoundedRect(ctx, bx, by + 2.5, bw, bh - 1, rad);
+    ctx.fillStyle = isSelected ? '#92400e' : spDef.border;
     ctx.fill();
 
-    // Main bevel body
-    drawRoundedRect(ctx, bx, by, bw, bh - Math.max(2, size * 0.08), rad);
-    const grad = ctx.createLinearGradient(bx, by, bx, by + bh);
-    grad.addColorStop(0, pal.fillTop);
-    grad.addColorStop(1, pal.fillBot);
-    ctx.fillStyle = grad;
+    // Pastel species-tinted parchment face
+    drawRoundedRect(ctx, bx, by, bw, bh - 2.2, rad);
+    const faceGrad = ctx.createLinearGradient(bx, by, bx, by + bh);
+    faceGrad.addColorStop(0, isSelected ? '#fffbeb' : spDef.bgTop);
+    faceGrad.addColorStop(1, isSelected ? '#fde68a' : spDef.bgBot);
+    ctx.fillStyle = faceGrad;
     ctx.fill();
 
-    ctx.lineWidth = Math.max(1, size * 0.04);
-    ctx.strokeStyle = willBlastGlow ? '#fef08a' : runeLayers >= 2 ? '#e879f9' : pal.rim;
+    // Border highlight (selected / hinted / hovered / normal)
+    ctx.lineWidth = isSelected || isHinted ? 2.8 : isHovered ? 2.1 : 1.5;
+    ctx.strokeStyle = isBlockedFlash
+      ? '#ef4444'
+      : isSelected
+        ? '#f59e0b'
+        : isHinted
+          ? '#eab308'
+          : isHovered
+            ? '#fde047'
+            : spDef.border;
     ctx.stroke();
 
-    // Glossy inner specular shine
-    drawRoundedRect(ctx, bx + bw * 0.12, by + bh * 0.09, bw * 0.76, bh * 0.26, rad * 0.6);
-    ctx.fillStyle = 'rgba(255,255,255,0.34)';
-    ctx.fill();
-
-    // Embedded 3D crystal sprite
-    const spr = this.getSpriteImage(pal.spriteKey);
-    if (spr && size >= 24) {
-      const iconSz = size * 0.58;
-      ctx.drawImage(spr, x + (size - iconSz) * 0.5, y + (size - iconSz) * 0.46, iconSz, iconSz);
-    }
-
-    if (runeLayers >= 2) {
-      // 2-Layer Obsidian Rune Seal (Đá Phong Ấn Hắc Diện ×2 — Stage >= 140)
-      drawRoundedRect(ctx, bx + 2, by + 2, bw - 4, bh - 4, Math.max(3, rad - 2));
-      ctx.fillStyle = 'rgba(46, 16, 101, 0.36)';
-      ctx.fill();
-      ctx.strokeStyle = '#c084fc';
+    if (isSelected || isHinted) {
+      drawRoundedRect(ctx, bx - 1.5, by - 1.5, bw + 3, bh + 0.5, rad + 1.5);
+      ctx.strokeStyle = isSelected
+        ? 'rgba(253, 224, 71, 0.92)'
+        : `rgba(250, 204, 21, ${(0.45 + 0.4 * Math.sin(nowMs * 0.009)).toFixed(2)})`;
       ctx.lineWidth = 2.2;
       ctx.stroke();
-
-      ctx.strokeStyle = '#fde047';
-      ctx.lineWidth = 1.8;
-      ctx.beginPath();
-      ctx.arc(x + size * 0.5, y + size * 0.5, size * 0.34, 0, Math.PI * 2);
-      ctx.stroke();
-
-      if (size >= 34) {
-        drawRoundedRect(ctx, x + size - 18, y + size - 15.5, 16, 13.5, 4);
-        ctx.fillStyle = '#3b0764';
-        ctx.fill();
-        ctx.lineWidth = 0.9;
-        ctx.strokeStyle = '#fde047';
-        ctx.stroke();
-        ctx.fillStyle = '#fef08a';
-        ctx.font = '900 9.5px "Be Vietnam Pro", system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('×2', x + size - 10, y + size - 8.2);
-      }
-    } else if (runeLayers === 1) {
-      ctx.strokeStyle = '#fde047';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(x + size * 0.5, y + size * 0.5, size * 0.34, 0, Math.PI * 2);
-      ctx.stroke();
     }
 
-    if (willBlastGlow) {
-      drawRoundedRect(ctx, bx, by, bw, bh, rad);
-      ctx.fillStyle = 'rgba(254, 240, 138, 0.36)';
+    // Crisp gloss top band
+    drawRoundedRect(ctx, bx + bw * 0.1, by + 2, bw * 0.8, bh * 0.22, rad * 0.5);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.48)';
+    ctx.fill();
+
+    // Magical Creature Sprite Art (fills ~80% of card cleanly!)
+    const spr = this.getSpriteImage(spDef.spriteKey);
+    if (spr) {
+      const iconBox = Math.min(bw, bh - 2) * 0.82;
+      const aspect = spr.naturalWidth / Math.max(1, spr.naturalHeight);
+      const dw = aspect >= 1 ? iconBox : iconBox * aspect;
+      const dh = aspect >= 1 ? iconBox / Math.max(0.2, aspect) : iconBox;
+      ctx.drawImage(
+        spr,
+        bx + (bw - dw) * 0.5,
+        by + (bh - 2 - dh) * 0.5,
+        dw,
+        dh
+      );
+    }
+
+    // Distinct corner star badge for awakened rare variants (Stage >= 500)
+    if (spDef.rareBadge && size >= 34) {
+      ctx.fillStyle = spDef.border;
+      ctx.beginPath();
+      ctx.arc(bx + bw - 7.5, by + 7.5, 5.5, 0, Math.PI * 2);
       ctx.fill();
+      ctx.fillStyle = '#fef08a';
+      ctx.font = '900 8.5px "Be Vietnam Pro", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('✦', bx + bw - 7.5, by + 7.8);
     }
+
     ctx.restore();
   }
 
@@ -3716,7 +3752,11 @@ export class PuzzleArcadeModalController {
   // SHARED CANON HANG SÓC × HOGWARTS TABLETOP & PARCHMENT CRAFTSMANSHIP
   // --------------------------------------------------------------------------
 
-  private drawParlorTabletopBackdrop(ctx: CanvasRenderingContext2D): void {
+  private drawParlorTabletopBackdrop(
+    ctx: CanvasRenderingContext2D,
+    virtW = PA_VIRTUAL_W,
+    virtH = PA_VIRTUAL_H
+  ): void {
     ctx.save();
     const bgImg = this.parlorBgImage;
     if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
@@ -3731,27 +3771,27 @@ export class PuzzleArcadeModalController {
         sh * 0.72,
         0,
         0,
-        PA_VIRTUAL_W,
-        PA_VIRTUAL_H
+        virtW,
+        virtH
       );
       // Warm sunlit honey-oak glaze so boards & cream parchment cards pop cleanly
-      const glaze = ctx.createLinearGradient(0, 0, 0, PA_VIRTUAL_H);
+      const glaze = ctx.createLinearGradient(0, 0, 0, virtH);
       glaze.addColorStop(0, 'rgba(92, 46, 18, 0.24)');
       glaze.addColorStop(0.5, 'rgba(72, 34, 12, 0.16)');
       glaze.addColorStop(1, 'rgba(54, 25, 9, 0.34)');
       ctx.fillStyle = glaze;
-      ctx.fillRect(0, 0, PA_VIRTUAL_W, PA_VIRTUAL_H);
+      ctx.fillRect(0, 0, virtW, virtH);
     } else {
-      const woodBg = ctx.createLinearGradient(0, 0, 0, PA_VIRTUAL_H);
+      const woodBg = ctx.createLinearGradient(0, 0, 0, virtH);
       woodBg.addColorStop(0, '#c88344');
       woodBg.addColorStop(0.5, '#a86432');
       woodBg.addColorStop(1, '#7c431d');
       ctx.fillStyle = woodBg;
-      ctx.fillRect(0, 0, PA_VIRTUAL_W, PA_VIRTUAL_H);
+      ctx.fillRect(0, 0, virtW, virtH);
     }
 
     // Subtle inlaid brass tabletop border & corner studs
-    drawRoundedRect(ctx, 6, 6, PA_VIRTUAL_W - 12, PA_VIRTUAL_H - 12, 14);
+    drawRoundedRect(ctx, 6, 6, virtW - 12, virtH - 12, 14);
     ctx.lineWidth = 1.4;
     ctx.strokeStyle = 'rgba(253, 230, 138, 0.32)';
     ctx.stroke();
@@ -3964,7 +4004,11 @@ export class PuzzleArcadeModalController {
   // RENDERER 4: PHÒNG ĐỘC DƯỢC & CỔ NGỮ HOGWARTS — SÁCH PHÉP DA RỒNG SUDOKU 9x9
   // --------------------------------------------------------------------------
 
-  private drawPotionsSudokuBackdrop(ctx: CanvasRenderingContext2D): void {
+  private drawPotionsSudokuBackdrop(
+    ctx: CanvasRenderingContext2D,
+    virtW = PA_VIRTUAL_W,
+    virtH = PA_VIRTUAL_H
+  ): void {
     ctx.save();
     const bg = this.potionsSudokuBgImage;
     if (bg && bg.complete && bg.naturalWidth > 0) {
@@ -3978,22 +4022,22 @@ export class PuzzleArcadeModalController {
         sh * 0.92,
         0,
         0,
-        PA_VIRTUAL_W,
-        PA_VIRTUAL_H
+        virtW,
+        virtH
       );
-      const glaze = ctx.createLinearGradient(0, 0, PA_VIRTUAL_W, PA_VIRTUAL_H);
+      const glaze = ctx.createLinearGradient(0, 0, virtW, virtH);
       glaze.addColorStop(0, 'rgba(10, 28, 24, 0.34)');
       glaze.addColorStop(0.5, 'rgba(28, 18, 12, 0.22)');
       glaze.addColorStop(1, 'rgba(16, 24, 34, 0.38)');
       ctx.fillStyle = glaze;
-      ctx.fillRect(0, 0, PA_VIRTUAL_W, PA_VIRTUAL_H);
+      ctx.fillRect(0, 0, virtW, virtH);
     } else {
-      const dungeonGrad = ctx.createLinearGradient(0, 0, PA_VIRTUAL_W, PA_VIRTUAL_H);
+      const dungeonGrad = ctx.createLinearGradient(0, 0, virtW, virtH);
       dungeonGrad.addColorStop(0, '#0f2922');
       dungeonGrad.addColorStop(0.5, '#2b1810');
       dungeonGrad.addColorStop(1, '#111827');
       ctx.fillStyle = dungeonGrad;
-      ctx.fillRect(0, 0, PA_VIRTUAL_W, PA_VIRTUAL_H);
+      ctx.fillRect(0, 0, virtW, virtH);
     }
 
     // Animated floating Felix Felicis golden rune motes & emerald potion bubbles along outer rim
@@ -4002,11 +4046,9 @@ export class PuzzleArcadeModalController {
       [8, 68, '#fde047', 0.0],
       [9, 224, '#34d399', 1.1],
       [8, 392, '#38bdf8', 2.3],
-      [SUDOKU_PAD_X - 7, 16, '#fde047', 0.7],
-      [SUDOKU_PAD_X - 7, PA_VIRTUAL_H - 16, '#34d399', 1.8],
-      [PA_VIRTUAL_W - 8, 92, '#fde047', 2.6],
-      [PA_VIRTUAL_W - 9, 256, '#34d399', 0.4],
-      [PA_VIRTUAL_W - 8, 418, '#f59e0b', 1.5],
+      [virtW - 8, 92, '#fde047', 2.6],
+      [virtW - 9, 256, '#34d399', 0.4],
+      [virtW - 8, 418, '#f59e0b', 1.5],
     ];
     for (const [mx, my, col, phase] of alchMotes) {
       const fy = my + Math.sin(now * 2.1 + phase) * 4.5;
@@ -4022,7 +4064,7 @@ export class PuzzleArcadeModalController {
       ctx.fill();
     }
 
-    drawRoundedRect(ctx, 5, 5, PA_VIRTUAL_W - 10, PA_VIRTUAL_H - 10, 14);
+    drawRoundedRect(ctx, 5, 5, virtW - 10, virtH - 10, 14);
     ctx.lineWidth = 1.4;
     ctx.strokeStyle = 'rgba(253, 230, 138, 0.36)';
     ctx.stroke();
@@ -4432,7 +4474,111 @@ export class PuzzleArcadeModalController {
     }
     ctx.restore();
 
-    // 4. Right Grimoire Page: Relic Lore Spotlight + 3x3 Sculpted HP Relic Pad + Erase Seal
+    // 4. Relic Pad: Full-width 2x5 bottom bar on Mobile Portrait, Right Grimoire Page on Desktop
+    if (this.isMobileBoardLayout()) {
+      this.sudokuPadRects.clear();
+      const rem = engine.getRemainingDigitCounts();
+      const padTrayX = 12;
+      const padTrayY = 496;
+      const padTrayW = 476;
+      const padTrayH = 130;
+      ctx.save();
+      drawRoundedRect(ctx, padTrayX, padTrayY, padTrayW, padTrayH, 13);
+      ctx.fillStyle = 'rgba(42, 22, 10, 0.88)';
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#f4c668';
+      ctx.stroke();
+
+      const cols = 5;
+      const gapX = 5;
+      const gapY = 6;
+      const btnW = (padTrayW - 16 - gapX * (cols - 1)) / cols; // ~88
+      const btnH = 55;
+      const startX = padTrayX + 8;
+      const startY = padTrayY + 7;
+
+      for (let d = 1; d <= 9; d++) {
+        const pr = Math.floor((d - 1) / cols);
+        const pc = (d - 1) % cols;
+        const bx = startX + pc * (btnW + gapX);
+        const by = startY + pr * (btnH + gapY);
+        this.sudokuPadRects.set(d, { x: bx, y: by, w: btnW, h: btnH });
+
+        const done = rem[d] === 0;
+        const activeDigit = selVal === d || this.sudokuHoverPadDigit === d;
+
+        drawRoundedRect(ctx, bx, by + 2.5, btnW, btnH - 2, 10);
+        ctx.fillStyle = done ? '#64748b' : activeDigit ? '#7c2d12' : '#6e391c';
+        ctx.fill();
+
+        drawRoundedRect(ctx, bx, by, btnW, btnH - 2.5, 10);
+        const bGrad = ctx.createLinearGradient(0, by, 0, by + btnH);
+        if (done) {
+          bGrad.addColorStop(0, '#ecfdf5');
+          bGrad.addColorStop(1, '#d1fae5');
+        } else if (activeDigit) {
+          bGrad.addColorStop(0, '#fde047');
+          bGrad.addColorStop(0.55, '#f59e0b');
+          bGrad.addColorStop(1, '#d97706');
+        } else {
+          bGrad.addColorStop(0, '#fffdf6');
+          bGrad.addColorStop(0.6, '#faeccb');
+          bGrad.addColorStop(1, '#e8ca8c');
+        }
+        ctx.fillStyle = bGrad;
+        ctx.fill();
+        ctx.lineWidth = activeDigit ? 2.2 : 1.4;
+        ctx.strokeStyle = done ? '#10b981' : activeDigit ? '#78350f' : '#9d6f3a';
+        ctx.stroke();
+
+        const relicImg = this.getSudokuRelicImage(d);
+        if (relicImg) {
+          ctx.save();
+          ctx.globalAlpha = done ? 0.48 : 1;
+          ctx.drawImage(relicImg, bx + 5, by + 8, 34, 34);
+          ctx.restore();
+        }
+        ctx.fillStyle = done ? '#047857' : activeDigit ? '#3b1706' : '#4a240d';
+        ctx.font = '900 20px "Playfair Display", Georgia, serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(d), bx + (relicImg ? btnW * 0.72 : btnW * 0.5), by + 21);
+
+        ctx.fillStyle = done ? '#047857' : activeDigit ? '#451a03' : '#78350f';
+        ctx.font = '800 10px "Be Vietnam Pro", system-ui, sans-serif';
+        ctx.fillText(done ? '✓ Đủ' : `Còn ${rem[d]}`, bx + btnW * 0.68, by + 40);
+      }
+
+      // Slot 10 (row 1, col 4): Erase + Mistakes button
+      const ex = startX + 4 * (btnW + gapX);
+      const ey = startY + (btnH + gapY);
+      this.sudokuEraseRect = { x: ex, y: ey, w: btnW, h: btnH };
+      drawRoundedRect(ctx, ex, ey + 2.5, btnW, btnH - 2, 10);
+      ctx.fillStyle = '#4c0519';
+      ctx.fill();
+      drawRoundedRect(ctx, ex, ey, btnW, btnH - 2.5, 10);
+      const eraseGrad = ctx.createLinearGradient(0, ey, 0, ey + btnH);
+      eraseGrad.addColorStop(0, '#e11d48');
+      eraseGrad.addColorStop(1, '#9f1239');
+      ctx.fillStyle = eraseGrad;
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#fde68a';
+      ctx.stroke();
+
+      ctx.fillStyle = '#fffbeb';
+      ctx.font = '900 12.5px "Be Vietnam Pro", system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🧹 Xoá Ô', ex + btnW * 0.5, ey + 19, btnW - 8);
+      ctx.font = '800 10px "Be Vietnam Pro", system-ui, sans-serif';
+      ctx.fillText(`Sai ${engine.mistakesCount}/${engine.maxMistakes}`, ex + btnW * 0.5, ey + 38, btnW - 8);
+      ctx.restore();
+      return;
+    }
+
+    // 4b. Desktop Right Grimoire Page: Relic Lore Spotlight + 3x3 Sculpted HP Relic Pad + Erase Seal
     this.drawParchmentSidePanel(
       ctx,
       SUDOKU_PAD_X,
@@ -4592,7 +4738,11 @@ export class PuzzleArcadeModalController {
   // RENDERER 5: PHÒNG SINH HOẠT CHUNG & BẢN ĐỒ ĐẠO TẶC — CỜ CARO 13x13
   // --------------------------------------------------------------------------
 
-  private drawMarauderCaroBackdrop(ctx: CanvasRenderingContext2D): void {
+  private drawMarauderCaroBackdrop(
+    ctx: CanvasRenderingContext2D,
+    virtW = PA_VIRTUAL_W,
+    virtH = PA_VIRTUAL_H
+  ): void {
     ctx.save();
     const bg = this.marauderCaroBgImage;
     if (bg && bg.complete && bg.naturalWidth > 0) {
@@ -4606,22 +4756,22 @@ export class PuzzleArcadeModalController {
         sh * 0.92,
         0,
         0,
-        PA_VIRTUAL_W,
-        PA_VIRTUAL_H
+        virtW,
+        virtH
       );
-      const scrim = ctx.createLinearGradient(0, 0, PA_VIRTUAL_W, PA_VIRTUAL_H);
+      const scrim = ctx.createLinearGradient(0, 0, virtW, virtH);
       scrim.addColorStop(0, 'rgba(54, 14, 12, 0.24)');
       scrim.addColorStop(0.5, 'rgba(38, 16, 10, 0.16)');
       scrim.addColorStop(1, 'rgba(28, 12, 8, 0.32)');
       ctx.fillStyle = scrim;
-      ctx.fillRect(0, 0, PA_VIRTUAL_W, PA_VIRTUAL_H);
+      ctx.fillRect(0, 0, virtW, virtH);
     } else {
-      const warmGrad = ctx.createLinearGradient(0, 0, PA_VIRTUAL_W, PA_VIRTUAL_H);
+      const warmGrad = ctx.createLinearGradient(0, 0, virtW, virtH);
       warmGrad.addColorStop(0, '#5c1916');
       warmGrad.addColorStop(0.5, '#451a0e');
       warmGrad.addColorStop(1, '#291008');
       ctx.fillStyle = warmGrad;
-      ctx.fillRect(0, 0, PA_VIRTUAL_W, PA_VIRTUAL_H);
+      ctx.fillRect(0, 0, virtW, virtH);
     }
 
     // Animated Gryffindor hearth firelight pulse & rising golden embers on left rim
@@ -4632,7 +4782,7 @@ export class PuzzleArcadeModalController {
     hearth.addColorStop(0.5, `rgba(249, 115, 22, ${(0.14 * flicker).toFixed(3)})`);
     hearth.addColorStop(1, 'rgba(185, 28, 28, 0)');
     ctx.fillStyle = hearth;
-    ctx.fillRect(0, 0, 220, PA_VIRTUAL_H);
+    ctx.fillRect(0, 0, 220, virtH);
 
     for (let i = 0; i < 6; i++) {
       const prog = (now * 0.28 + i * 0.17) % 1;
@@ -4645,7 +4795,7 @@ export class PuzzleArcadeModalController {
       ctx.fill();
     }
 
-    drawRoundedRect(ctx, 5, 5, PA_VIRTUAL_W - 10, PA_VIRTUAL_H - 10, 14);
+    drawRoundedRect(ctx, 5, 5, virtW - 10, virtH - 10, 14);
     ctx.lineWidth = 1.4;
     ctx.strokeStyle = 'rgba(253, 230, 138, 0.36)';
     ctx.stroke();
@@ -5066,7 +5216,8 @@ export class PuzzleArcadeModalController {
     }
     ctx.restore();
 
-    // 6. Right-hand Order of the Phoenix vs Death Eater Duel Scroll Panel
+    // 6. Right-hand Order of the Phoenix vs Death Eater Duel Scroll Panel (Desktop only — Mobile gives 100% width to the 13x13 board!)
+    if (this.isMobileBoardLayout()) return;
     this.drawParchmentSidePanel(
       ctx,
       CARO_SIDE_X,
@@ -5304,7 +5455,11 @@ export class PuzzleArcadeModalController {
   // RENDERER 6: CỜ PHÙ THỦY ĐẠI SẢNH ĐƯỜNG HOGWARTS 8x8 (HARRY POTTER CHIBI 2.5D)
   // --------------------------------------------------------------------------
 
-  private drawGreatHallChessBackdrop(ctx: CanvasRenderingContext2D): void {
+  private drawGreatHallChessBackdrop(
+    ctx: CanvasRenderingContext2D,
+    virtW = PA_VIRTUAL_W,
+    virtH = PA_VIRTUAL_H
+  ): void {
     ctx.save();
     const bg = this.greatHallBgImage;
     if (bg && bg.complete && bg.naturalWidth > 0) {
@@ -5318,22 +5473,22 @@ export class PuzzleArcadeModalController {
         sh * 0.92,
         0,
         0,
-        PA_VIRTUAL_W,
-        PA_VIRTUAL_H
+        virtW,
+        virtH
       );
-      const scrim = ctx.createLinearGradient(0, 0, PA_VIRTUAL_W, PA_VIRTUAL_H);
+      const scrim = ctx.createLinearGradient(0, 0, virtW, virtH);
       scrim.addColorStop(0, 'rgba(38, 16, 12, 0.34)');
       scrim.addColorStop(0.5, 'rgba(20, 14, 24, 0.24)');
       scrim.addColorStop(1, 'rgba(10, 26, 22, 0.38)');
       ctx.fillStyle = scrim;
-      ctx.fillRect(0, 0, PA_VIRTUAL_W, PA_VIRTUAL_H);
+      ctx.fillRect(0, 0, virtW, virtH);
     } else {
-      const hallGrad = ctx.createLinearGradient(0, 0, PA_VIRTUAL_W, PA_VIRTUAL_H);
+      const hallGrad = ctx.createLinearGradient(0, 0, virtW, virtH);
       hallGrad.addColorStop(0, '#3b1518');
       hallGrad.addColorStop(0.5, '#1e1b2e');
       hallGrad.addColorStop(1, '#0f2924');
       ctx.fillStyle = hallGrad;
-      ctx.fillRect(0, 0, PA_VIRTUAL_W, PA_VIRTUAL_H);
+      ctx.fillRect(0, 0, virtW, virtH);
     }
 
     // Subtle animated Great Hall floating candles & enchanted ceiling starlight along outer rim
@@ -5342,11 +5497,9 @@ export class PuzzleArcadeModalController {
       [8, 64, 0.0],
       [9, 198, 1.3],
       [8, 354, 2.4],
-      [CHESS_SIDE_X - 6, 44, 0.8],
-      [CHESS_SIDE_X - 6, PA_VIRTUAL_H - 44, 1.9],
-      [PA_VIRTUAL_W - 7, 78, 2.7],
-      [PA_VIRTUAL_W - 8, 248, 0.5],
-      [PA_VIRTUAL_W - 7, 418, 1.6],
+      [virtW - 7, 78, 2.7],
+      [virtW - 8, 248, 0.5],
+      [virtW - 7, 418, 1.6],
     ];
     for (const [bx, by, phase] of candleAnchors) {
       const cy = by + Math.sin(now * 1.9 + phase) * 3.5;
@@ -5369,7 +5522,7 @@ export class PuzzleArcadeModalController {
     }
 
     // Gilded Hogwarts Great Hall inner border
-    drawRoundedRect(ctx, 5, 5, PA_VIRTUAL_W - 10, PA_VIRTUAL_H - 10, 14);
+    drawRoundedRect(ctx, 5, 5, virtW - 10, virtH - 10, 14);
     ctx.lineWidth = 1.4;
     ctx.strokeStyle = 'rgba(253, 230, 138, 0.38)';
     ctx.stroke();
@@ -5795,7 +5948,8 @@ export class PuzzleArcadeModalController {
     }
     ctx.restore();
 
-    // 4. Right-hand Hogwarts Great Hall Strategy Scroll & Harry Potter Character Spotlight
+    // 4. Right-hand Hogwarts Great Hall Strategy Scroll (Desktop only — Mobile gives 100% width to the 8x8 board!)
+    if (this.isMobileBoardLayout()) return;
     this.drawParchmentSidePanel(
       ctx,
       CHESS_SIDE_X,

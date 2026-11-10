@@ -56,9 +56,9 @@ const FEATURED_DISCIPLINE_ROTATION: ReadonlyArray<{
   },
   {
     kind: 'blocks',
-    icon: '🧱',
-    shortVi: 'Khảm Đá Cổ Ngữ',
-    descVi: 'Khai mở hàng đá phép hoặc lắp khuôn Khảm Đá Cổ Ngữ (777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
+    icon: '🦄',
+    shortVi: 'Nối Hình Sinh Vật',
+    descVi: 'Ghép đôi các Sinh Vật Huyền Bí bằng đường nối tối đa 3 đoạn thẳng (777 màn cổ điển) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
   },
 ];
 

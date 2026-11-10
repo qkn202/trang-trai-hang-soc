@@ -747,8 +747,25 @@ export interface NeighborHelpedBuildingMark {
   helpedAt: number;
 }
 
+export interface VerifiedRealPlayerProfile {
+  userId: string;
+  friendCode: string;
+  name: string;
+  parkName: string;
+  level: number;
+  house: HouseName;
+  avatarEmoji?: string;
+  bioVi?: string;
+  buildings?: PlacedBuilding[];
+  tileOverrides?: Record<string, TileOverrideData>;
+  unlockedZones?: ZoneId[];
+  updatedAt?: number;
+}
+
 export interface NeighborProfileState {
   id: string;
+  remoteUserId?: string;
+  isVerifiedPlayer?: boolean;
   friendCode: string;
   name: string;
   titleVi: string;
@@ -760,6 +777,9 @@ export interface NeighborProfileState {
   likesCount: number;
   isCanonPreset?: boolean;
   bioVi: string;
+  valleyBuildings?: PlacedBuilding[];
+  valleyTileOverrides?: Record<string, TileOverrideData>;
+  valleyUnlockedZones?: ZoneId[];
   // Daily interactive states on this neighbor's farm (reset at 00:00 local)
   helpedMarksToday: NeighborHelpedBuildingMark[];
   owlHelpCrates: NeighborOwlHelpCrate[];
