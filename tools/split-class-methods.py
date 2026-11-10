@@ -1,50 +1,19 @@
 #!/usr/bin/env python3
 """
-Tách method của ParkSimulation sang module domain theo pattern delegation.
-
-Cơ chế
--------
-  Method gốc trong class  ->  hàm độc lập trong module domain, nhận `sim: ParkSimulation`
-  Thân hàm: `this.` -> `sim.`
-  Gọi chéo TRONG cùng nhóm: `sim.X(...)` -> `prefixX(sim, ...)` (gọi thẳng hàm domain)
-  Gọi tới method của NHÓM KHÁC: giữ `sim.X(...)` => X phải là public của class
-  Class giữ delegator 1 dòng, giữ NGUYÊN VĂN chữ ký gốc (kể cả return type nhiều dòng)
+Tách method của một class lớn sang module domain theo pattern delegation.
 
 Cách dùng
 ---------
-  python3 tools/split-class-methods.py <module_path> <module_name> <prefix> <m1,m2,...>
-
-  <module_path>  ví dụ src/sim/simulationCreatures.ts
-  <module_name>  ví dụ simulationCreatures  (khớp tên file, dùng để import)
-  <prefix>       ví dụ creatures            (tiền tố tên hàm: creaturesGroomCreature)
-  <m1,m2,...>    danh sách tên method cần tách, phân cách bằng dấu phẩy
-
-Ghi chú an toàn
---------------
-  - KHÔNG cần chạy 2 lần. Script tự phát hiện private method/field bị module khác gọi
-    và tự đổi thành public trong cùng lần ghi.
-  - Xử lý chính xác tham số kiểu object literal (`sessionMetrics?: { ... }`)
-    và kiểu trả về object nhiều dòng (`: {\n ...\n }`).
-  - Luôn kiểm tra sau khi tách: npx tsc --noEmit && npx vitest run && npm run build
+  python3 tools/split-class-methods.py [--src <src_file>] [--class <ClassName>] [--param <paramName>] \
+    <module_path> <module_name> <prefix> <m1,m2,...>
 """
-import glob
+import os
 import re
 import sys
 
-SRC = "src/sim/simulation.ts"
-
-
-# ---------------------------------------------------------------- parsing
-
 
 def scan_method(lines, start, cls_end):
-    """Từ dòng bắt đầu method `start`, trả về (body_open_line, body_open_col, end_line).
-
-    Bước 1: Đóng cặp ngoặc đơn `(...)` của danh sách tham số (bỏ qua mọi `{...}` bên trong tham số).
-    Bước 2: Sau dấu `)` đóng tham số, quét các khối `{...}` ở mức top-level.
-            Khối `{...}` của kiểu trả về luôn có token tiếp theo trên cùng dòng (vd `} {` hoặc `} | null {`).
-            Khối `{...}` của THÂN method kết thúc bằng `}` ở cuối dòng (`rest == ""`).
-    """
+    """Từ dòng bắt đầu method `start`, trả về (body_open_line, body_open_col, end_line)."""
     col = lines[start].index("(")
     p_depth = 0
     j = start
@@ -173,28 +142,42 @@ def param_names(params):
     return names
 
 
-# ---------------------------------------------------------------- main
-
-
 def main():
-    if len(sys.argv) < 5:
-        raise SystemExit(__doc__)
-    module_path, module_name, prefix = sys.argv[1], sys.argv[2], sys.argv[3]
-    names = sys.argv[4].split(",")
+    args = sys.argv[1:]
+    src_path = "src/sim/simulation.ts"
+    class_name = "ParkSimulation"
+    param_name = "sim"
+    while args and args[0].startswith("--"):
+        flag = args.pop(0)
+        if flag == "--src":
+            src_path = args.pop(0)
+        elif flag == "--class":
+            class_name = args.pop(0)
+        elif flag == "--param":
+            param_name = args.pop(0)
+        else:
+            raise SystemExit(f"Unknown flag: {flag}")
 
-    src = open(SRC).read()
+    if len(args) < 4:
+        raise SystemExit(__doc__)
+    module_path, module_name, prefix = args[0], args[1], args[2]
+    names = args[3].split(",")
+
+    src_dir = os.path.dirname(src_path)
+    src_base = os.path.splitext(os.path.basename(src_path))[0]
+
+    src = open(src_path).read()
     lines = src.split("\n")
 
-    cls = next(i for i, l in enumerate(lines) if l.startswith("export class ParkSimulation"))
+    cls = next(i for i, l in enumerate(lines) if l.startswith(f"export class {class_name}"))
     end = max(i for i, l in enumerate(lines) if l == "}")
 
     methods = parse_methods(lines, cls, end)
     by_name = {m[0]: m for m in methods}
     missing = [n for n in names if n not in by_name]
     if missing:
-        sys.exit(f"ERROR: không tìm thấy method trong class: {missing}")
+        sys.exit(f"ERROR: không tìm thấy method trong class {class_name}: {missing}")
 
-    # ---------------------------------------------------------- thu thập
     extracted = []
     for n in names:
         _, vis, s, e = by_name[n]
@@ -204,7 +187,6 @@ def main():
             body.pop()
         extracted.append((n, vis, sig_lines, body))
 
-    # ------------------------------------------- gọi chéo trong cùng nhóm
     moved = set(names)
     need_public = set()
     for n, vis, sig_lines, body in extracted:
@@ -222,14 +204,13 @@ def main():
         r = line
         for m in moved_calls:
             fn = prefix + m[0].upper() + m[1:]
-            r = re.sub(r"\bsim\." + re.escape(m) + r"\(\)", fn + "(sim)", r)
-            r = re.sub(r"\bsim\." + re.escape(m) + r"\(", fn + "(sim, ", r)
+            r = re.sub(r"\b" + re.escape(param_name) + r"\." + re.escape(m) + r"\(\)", fn + f"({param_name})", r)
+            r = re.sub(r"\b" + re.escape(param_name) + r"\." + re.escape(m) + r"\(", fn + f"({param_name}, ", r)
         return r
 
-    # ------------------------------------------------------- ghi module
     mod = [
-        f"// Tách tự động từ {SRC} (P0.2 — tách god file theo domain).",
-        "// Pattern delegation: hàm nhận `sim` để giữ nguyên state, không đổi hành vi gameplay.",
+        f"// Tách tự động từ {src_path} (P0 — tách god file theo domain).",
+        f"// Pattern delegation: hàm nhận `{param_name}` để giữ nguyên state, không đổi hành vi.",
         "",
     ]
 
@@ -249,26 +230,25 @@ def main():
                 mod.append(l)
             else:
                 in_block = False
-    mod.append("import type { ParkSimulation } from './simulation';")
+    mod.append(f"import type {{ {class_name} }} from './{src_base}';")
     mod.append("")
 
     for n, vis, sig_lines, body in extracted:
         v, fname, params, ret = split_params_and_ret("\n".join(sig_lines))
         if n in need_public:
             v = "public"
-        new_params = "sim: ParkSimulation" + (", " + params if params.strip() else "")
+        new_params = f"{param_name}: {class_name}" + (", " + params if params.strip() else "")
         sig = f"export function {prefix}{fname[0].upper()}{fname[1:]}({new_params})"
         if ret:
             sig += f": {ret}"
         mod.append(sig + " {")
         for bl in body:
-            mod.append(redirect_calls(re.sub(r"\bthis\.", "sim.", bl)))
+            mod.append(redirect_calls(re.sub(r"\bthis\.", f"{param_name}.", bl)))
         mod.append("}")
         mod.append("")
 
     open(module_path, "w").write("\n".join(mod).rstrip() + "\n")
 
-    # ------------------------------------------- viết lại class (delegator)
     new_lines = []
     spans = {n: (s, e) for n, _, s, e in methods}
     body_info = {n: find_body_open(lines, s, e) for n, _, s, e in methods}
@@ -296,15 +276,14 @@ def main():
 
     out = "\n".join(lines[: cls + 1] + new_lines + lines[end:])
 
-    # ------------------------------- auto-public: private bị module khác gọi
     all_mod_contents = "\n".join(
-        open(f).read()
-        for f in glob.glob("src/sim/simulation*.ts")
-        if f != SRC and f.endswith(".ts")
+        open(os.path.join(src_dir, fn)).read()
+        for fn in os.listdir(src_dir)
+        if fn.endswith(".ts") and os.path.join(src_dir, fn) != src_path
     )
     priv_names = [n for n, vis, _, _ in methods if vis == "private"]
     for pn in priv_names:
-        if re.search(r"\bsim\." + re.escape(pn) + r"\s*\(", all_mod_contents):
+        if re.search(r"\b" + re.escape(param_name) + r"\." + re.escape(pn) + r"\s*\(", all_mod_contents):
             out = re.sub(
                 r"^(  )private (" + re.escape(pn) + r"\()", r"\1public \2", out, flags=re.M
             )
@@ -314,7 +293,7 @@ def main():
         fn_field = m_field.group(1)
         if fn_field in priv_names:
             continue
-        if re.search(r"\bsim\." + re.escape(fn_field) + r"\b", all_mod_contents):
+        if re.search(r"\b" + re.escape(param_name) + r"\." + re.escape(fn_field) + r"\b", all_mod_contents):
             out = re.sub(
                 r"^(  )private (" + re.escape(fn_field) + r"\b)",
                 r"\1public \2",
@@ -323,16 +302,15 @@ def main():
             )
             print(f"  auto-public field: {fn_field}")
 
-    # ------------------------------------------------- import cho class
     import_line = (
         "import {\n"
         + "".join(f"  {prefix}{n[0].upper()}{n[1:]},\n" for n in names)
         + f"}} from './{module_name}';"
     )
-    anchor = "export class ParkSimulation {"
+    anchor = f"export class {class_name} {{"
     idx = out.index(anchor)
     out = out[:idx] + import_line + "\n\n" + out[idx:]
-    open(SRC, "w").write(out)
+    open(src_path, "w").write(out)
 
     print(
         f"OK: {module_path} — tách {replaced} method, class còn "
