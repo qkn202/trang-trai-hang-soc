@@ -228,6 +228,28 @@ export {
 export { FARM_HARVEST_CHEST_XP } from './simulationData';
 export type { ValleyVillagerProfile } from './simulationData';
 
+import {
+  farmEnsureFarmBarn,
+  farmGetBarnTotalUsed,
+  farmGetFarmItemCount,
+  farmAddFarmItemToBarn,
+  farmConsumeFarmItemFromBarn,
+  farmUpgradeFarmBarn,
+  farmSellFarmItemFromBarn,
+  farmEnsureLanguageQuiz,
+  farmGetSeedCount,
+  farmAddCropSeeds,
+  farmBuyCropSeedWithGold,
+  farmCompleteSeedLanguageQuizAttempt,
+  farmPlantCropOnPlot,
+  farmWaterCropPlot,
+  farmHarvestCropPlot,
+  farmStockAnimalOnPasture,
+  farmFeedAnimalPasture,
+  farmHarvestAnimalPasture,
+  farmClearAnimalFromPasture,
+} from './simulationFarm';
+
 export class ParkSimulation {
   public state: GameState;
   public grid: TileCell[][] = [];
@@ -5069,586 +5091,56 @@ export class ParkSimulation {
 
   // ==================== HỆ THỐNG NÔNG TRẠI HANG SÓC (CANON PLAYRIX TOWNSHIP FARM LOOP) ====================
 
-  public ensureFarmBarn(): FarmBarnState {
-    if (!this.state.farmBarn) {
-      this.state.farmBarn = createInitialFarmBarnState();
-    }
-    return this.state.farmBarn;
-  }
+  public ensureFarmBarn(): FarmBarnState { return farmEnsureFarmBarn(this); }
 
-  public getBarnTotalUsed(): number {
-    const barn = this.ensureFarmBarn();
-    const cropSum = Object.values(barn.crops).reduce((a, b) => a + (b || 0), 0);
-    const goodSum = Object.values(barn.goods).reduce((a, b) => a + (b || 0), 0);
-    return cropSum + goodSum;
-  }
+  public getBarnTotalUsed(): number { return farmGetBarnTotalUsed(this); }
 
-  public getFarmItemCount(itemId: FarmItemId): number {
-    const barn = this.ensureFarmBarn();
-    if (itemId in FARM_CROPS) {
-      return barn.crops[itemId as FarmCropId] ?? 0;
-    }
-    return barn.goods[itemId as FarmGoodId] ?? 0;
-  }
+  public getFarmItemCount(itemId: FarmItemId): number { return farmGetFarmItemCount(this, itemId); }
 
-  public addFarmItemToBarn(itemId: FarmItemId, qty: number): number {
-    if (qty <= 0) return 0;
-    const barn = this.ensureFarmBarn();
-    const used = this.getBarnTotalUsed();
-    const space = Math.max(0, barn.capacity - used);
-    const actual = Math.min(qty, Math.max(1, space)); // Always allow at least 1 if barn just hit cap, or clamp cleanly
-    const safeAdd = space <= 0 ? 0 : actual;
-    if (safeAdd <= 0) {
-      return 0;
-    }
-    if (itemId in FARM_CROPS) {
-      const cid = itemId as FarmCropId;
-      barn.crops[cid] = (barn.crops[cid] ?? 0) + safeAdd;
-    } else {
-      const gid = itemId as FarmGoodId;
-      barn.goods[gid] = (barn.goods[gid] ?? 0) + safeAdd;
-    }
-    return safeAdd;
-  }
+  public addFarmItemToBarn(itemId: FarmItemId, qty: number): number { return farmAddFarmItemToBarn(this, itemId, qty); }
 
-  private consumeFarmItemFromBarn(itemId: FarmItemId, qty: number): void {
-    const barn = this.ensureFarmBarn();
-    if (itemId in FARM_CROPS) {
-      const cid = itemId as FarmCropId;
-      barn.crops[cid] = Math.max(0, (barn.crops[cid] ?? 0) - qty);
-    } else {
-      const gid = itemId as FarmGoodId;
-      barn.goods[gid] = Math.max(0, (barn.goods[gid] ?? 0) - qty);
-    }
-  }
+  private consumeFarmItemFromBarn(itemId: FarmItemId, qty: number): void { return farmConsumeFarmItemFromBarn(this, itemId, qty); }
 
-  public upgradeFarmBarn(): { ok: boolean; msg: string } {
-    const barn = this.ensureFarmBarn();
-    const tier = Math.max(1, Math.round((barn.capacity - 40) / 20));
-    const goldCost = 160 + tier * 90;
-    const plugCost = 1;
-    const curPlugs = barn.goods.muggle_plug_kit ?? 0;
+  public upgradeFarmBarn(): { ok: boolean; msg: string } { return farmUpgradeFarmBarn(this); }
 
-    if (!this.state.sandboxMode) {
-      if (curPlugs < plugCost && this.state.galleons < goldCost + 120) {
-        return {
-          ok: false,
-          msg: `Cần ${plugCost} 🔌 Bộ Phích Cắm Muggle (từ Chòi Ông Arthur / Đơn Cú) & ${goldCost}G để nới rộng Kho!`,
-        };
-      }
-      if (curPlugs >= plugCost) {
-        if (this.state.galleons < goldCost) {
-          return { ok: false, msg: `Cần ${goldCost} Galleon để nâng cấp Kho Nông Sản (+20 ô)!` };
-        }
-        barn.goods.muggle_plug_kit = Math.max(0, curPlugs - plugCost);
-        this.state.galleons -= goldCost;
-      } else {
-        this.state.galleons -= goldCost + 120;
-      }
-    }
+  public sellFarmItemFromBarn(itemId: FarmItemId, qty = 1): { ok: boolean; msg: string } { return farmSellFarmItemFromBarn(this, itemId, qty); }
 
-    barn.capacity += 20;
-    this.addXp(45);
-    this.audio.playLevelUp();
-    const msg = `🏡 Kho Nông Sản Hang Sóc đã mở rộng lên ${barn.capacity} ô chứa (+45 ⭐)!`;
-    this.onToast?.(msg, '🏡');
-    this.saveToStorage();
-    this.onUiChange?.();
-    return { ok: true, msg };
-  }
+  public ensureLanguageQuiz(): LanguageQuizState { return farmEnsureLanguageQuiz(this); }
 
-  public sellFarmItemFromBarn(itemId: FarmItemId, qty = 1): { ok: boolean; msg: string } {
-    const have = this.getFarmItemCount(itemId);
-    const take = Math.min(have, Math.max(1, qty));
-    if (take <= 0) {
-      return { ok: false, msg: 'Không còn mặt hàng này trong Kho Nông Sản!' };
-    }
-    const meta = getFarmItemMeta(itemId);
-    this.consumeFarmItemFromBarn(itemId, take);
-    const gold = meta.sellValue * take;
-    const xp = Math.max(2, Math.round(meta.sellValue * 0.25 * take));
-    this.state.galleons += gold;
-    this.state.finance.shopRevenue += gold;
-    this.addXp(xp);
-    this.audio.playHarvestBubble();
-    const msg = `🪙 Đã bán ${take} ${meta.emoji} ${meta.name} thu về +${gold}G & +${xp} ⭐!`;
-    this.onToast?.(msg, meta.emoji);
-    this.saveToStorage();
-    this.onUiChange?.();
-    return { ok: true, msg };
-  }
+  public getSeedCount(cropId: FarmCropId): number { return farmGetSeedCount(this, cropId); }
 
-  public ensureLanguageQuiz(): LanguageQuizState {
-    if (!this.state.languageQuiz) {
-      this.state.languageQuiz = createInitialLanguageQuizState();
-    }
-    return this.state.languageQuiz;
-  }
-
-  public getSeedCount(cropId: FarmCropId): number {
-    const barn = this.ensureFarmBarn();
-    if (!barn.seeds) barn.seeds = {};
-    return Math.max(0, Math.floor(barn.seeds[cropId] ?? 0));
-  }
-
-  public addCropSeeds(cropId: FarmCropId, qty: number): number {
-    const barn = this.ensureFarmBarn();
-    if (!barn.seeds) barn.seeds = {};
-    const add = Math.max(0, Math.floor(qty));
-    barn.seeds[cropId] = Math.max(0, (barn.seeds[cropId] ?? 0) + add);
-    return barn.seeds[cropId] ?? 0;
-  }
+  public addCropSeeds(cropId: FarmCropId, qty: number): number { return farmAddCropSeeds(this, cropId, qty); }
 
   public buyCropSeedWithGold(
     cropId: FarmCropId,
     qty = 1
-  ): { ok: boolean; msg: string; newSeedCount: number } {
-    const crop = FARM_CROPS[cropId];
-    if (!this.state.sandboxMode && this.state.level < crop.unlockLevel) {
-      return {
-        ok: false,
-        msg: `${crop.emoji} ${crop.name} mở khóa ở Cấp ${crop.unlockLevel}!`,
-        newSeedCount: this.getSeedCount(cropId),
-      };
-    }
-    const count = Math.max(1, Math.min(20, Math.floor(qty)));
-    const totalCost = crop.seedCost * count;
-    if (this.state.galleons < totalCost) {
-      return {
-        ok: false,
-        msg: `Cần ${totalCost.toLocaleString('vi-VN')}G để mua ${count} hạt ${crop.name} — hãy niệm Thần Chú Đa Ngữ (0G) để nhận ngay 1–2 hạt miễn phí!`,
-        newSeedCount: this.getSeedCount(cropId),
-      };
-    }
-
-    this.state.galleons -= totalCost;
-    this.state.finance.constructionSpent += totalCost;
-    const newSeedCount = this.addCropSeeds(cropId, count);
-    this.audio.playHarvestBubble();
-    this.advanceTutorialStep('seed_quiz_or_buy');
-    const msg = `🪙 Đã mua ${count} hạt giống ${crop.emoji} ${crop.name} (-${totalCost.toLocaleString('vi-VN')}G • Túi có: ${newSeedCount} hạt)!`;
-    this.saveToStorage();
-    this.onUiChange?.();
-    return { ok: true, msg, newSeedCount };
-  }
+  ): { ok: boolean; msg: string; newSeedCount: number } { return farmBuyCropSeedWithGold(this, cropId, qty); }
 
   public completeSeedLanguageQuizAttempt(
     cropId: FarmCropId,
     challenge: ActiveQuizChallenge,
     correct: boolean
-  ): QuizAttemptOutcome & { newSeedCount: number; cropName: string } {
-    const quiz = this.ensureLanguageQuiz();
-    const crop = FARM_CROPS[cropId];
-    const outcome = recordQuizAttempt(quiz, challenge, correct);
-    let newSeedCount = this.getSeedCount(cropId);
-    if (outcome.seedsAwarded > 0) {
-      newSeedCount = this.addCropSeeds(cropId, outcome.seedsAwarded);
-    }
-    if (outcome.xpAwarded > 0) {
-      this.addXp(outcome.xpAwarded);
-    }
-
-    let phoenixTalismanAwarded = 0;
-    let buildReduction: BuildReductionResult | undefined;
-    const leaderboardRankUp: LeaderboardRankChange | undefined = undefined;
-    let talismanProgress = Math.max(0, Math.min(7, Math.floor(this.state.quizTalismanProgress ?? 0)));
-    if (correct) {
-      const nextProg = talismanProgress + 1;
-      if (nextProg >= 8) {
-        talismanProgress = 0;
-        this.state.quizTalismanProgress = 0;
-        phoenixTalismanAwarded = this.grantPhoenixTalisman(1);
-      } else {
-        talismanProgress = nextProg;
-        this.state.quizTalismanProgress = nextProg;
-      }
-      const quizReduceSec =
-        (challenge.tier === 'advanced' ? 1200 : challenge.tier === 'intermediate' ? 900 : 600) +
-        (outcome.newStreak >= 3 ? 300 : 0) +
-        (challenge.isReview ? 300 : 0);
-      buildReduction = this.applyConstructionReductionFromGameplay(
-        quizReduceSec,
-        'Học Viện Thần Chú'
-      );
-      this.addHarvestFeastPoints(challenge.tier === 'advanced' ? 12 : 9);
-      if (outcome.tierAutoPromoted || phoenixTalismanAwarded > 0) {
-        this.audio.playLevelUp();
-      } else {
-        this.audio.playMatchPop(outcome.seedsAwarded);
-      }
-      this.advanceTutorialStep('seed_quiz_or_buy');
-    } else {
-      this.audio.playClick();
-    }
-    this.saveToStorage();
-    this.onUiChange?.();
-    return {
-      ...outcome,
-      phoenixTalismanAwarded,
-      talismanProgress,
-      buildReduction,
-      leaderboardRankUp,
-      newSeedCount,
-      cropName: crop.name,
-    };
-  }
+  ): QuizAttemptOutcome & { newSeedCount: number; cropName: string } { return farmCompleteSeedLanguageQuizAttempt(this, cropId, challenge, correct); }
 
   public plantCropOnPlot(
     uid: string,
     cropId: FarmCropId
-  ): { ok: boolean; needSeedAcquire?: boolean; msg: string } {
-    if (this.isVisitingNeighbor) {
-      return { ok: false, msg: 'Chế độ Khách Tham Quan — không thể gieo hạt trên ruộng của bạn bè!' };
-    }
-    const b = this.state.buildings.find((x) => x.uid === uid);
-    if (!b) return { ok: false, msg: 'Không tìm thấy thửa đất canh tác!' };
-    const item = getCatalogItem(b.itemId);
-    if (!item?.isFarmlandPlot) return { ok: false, msg: 'Công trình này không phải thửa đất canh tác!' };
-    if (b.cropId) {
-      return { ok: false, msg: 'Thửa đất đã có hạt giống đang mọc!' };
-    }
+  ): { ok: boolean; needSeedAcquire?: boolean; msg: string } { return farmPlantCropOnPlot(this, uid, cropId); }
 
-    const crop = FARM_CROPS[cropId];
-    if (!this.state.sandboxMode && this.state.level < crop.unlockLevel) {
-      return { ok: false, msg: `${crop.emoji} ${crop.name} mở khóa ở Cấp ${crop.unlockLevel}!` };
-    }
+  public waterCropPlot(uid: string): { ok: boolean; msg: string } { return farmWaterCropPlot(this, uid); }
 
-    const haveSeeds = this.getSeedCount(cropId);
-    if (haveSeeds <= 0) {
-      return {
-        ok: false,
-        needSeedAcquire: true,
-        msg: `Túi chưa có hạt giống ${crop.emoji} ${crop.name} — hãy chọn Mua Vàng (${crop.seedCost.toLocaleString('vi-VN')}G/hạt) hoặc Niệm Thần Chú Đa Ngữ (0G)!`,
-      };
-    }
-
-    const barn = this.ensureFarmBarn();
-    if (!barn.seeds) barn.seeds = {};
-    const leftSeeds = Math.max(0, haveSeeds - 1);
-    barn.seeds[cropId] = leftSeeds;
-
-    const now = Date.now();
-    const growMs = this.state.sandboxMode ? 4000 : crop.growSec * 1000;
-    b.cropId = cropId;
-    b.cropPlantedAt = now;
-    b.cropReadyAt = now + growMs;
-    b.cropWateredBoost = false;
-    b.readyBubbles = 0;
-    b.storedGalleons = 0;
-    b.storedXp = 0;
-
-    this.audio.playPlace();
-    this.onBuildingTactile?.(b.uid);
-    this.spawnFloatingText(
-      b.gx + item.width * 0.5,
-      b.gy + item.height * 0.5,
-      `🌱 Gieo ${crop.emoji} ${crop.name} (còn ${leftSeeds} hạt)!`,
-      '#86efac'
-    );
-    this.advanceTutorialStep('sow_and_merge_plot');
-    this.saveToStorage();
-    this.onUiChange?.();
-    return {
-      ok: true,
-      msg: `🌱 Đã gieo 1 hạt ${crop.emoji} ${crop.name} (Túi còn ${leftSeeds} hạt • ${formatDurationCompactVi(crop.growSec)} chín)!`,
-    };
-  }
-
-  public waterCropPlot(uid: string): { ok: boolean; msg: string } {
-    if (this.isVisitingNeighbor) {
-      return this.helpVisitedNeighborBuilding(uid);
-    }
-    const b = this.state.buildings.find((x) => x.uid === uid);
-    if (!b || !b.cropId || !b.cropReadyAt) {
-      return { ok: false, msg: 'Thửa ruộng chưa gieo hạt giống!' };
-    }
-    const now = Date.now();
-    if (now >= b.cropReadyAt) {
-      return { ok: false, msg: 'Nông sản đã chín vàng — hãy bấm Liềm Vàng để gặt ngay!' };
-    }
-    if (b.cropWateredBoost) {
-      return { ok: false, msg: 'Luống cây này đã được tưới đẫm nước mát rồi!' };
-    }
-    const leftMs = b.cropReadyAt - now;
-    const savedMs = Math.max(3000, Math.round(leftMs * 0.3));
-    b.cropReadyAt = Math.max(now + 1000, b.cropReadyAt - savedMs);
-    b.cropWateredBoost = true;
-    this.addXp(4);
-    if (typeof this.audio.playWaterSplash === 'function') {
-      this.audio.playWaterSplash();
-    } else {
-      this.audio.playSpell();
-    }
-    this.onBuildingTactile?.(b.uid);
-    this.spawnFloatingText(b.gx + 1, b.gy + 1, '💧 Aguamenti! Chín nhanh +30%!', '#38bdf8');
-    this.saveToStorage();
-    this.onUiChange?.();
-    return { ok: true, msg: '💧 Đã tưới nước suối mát — cây lớn nhanh hơn 30% (+4 ⭐)!' };
-  }
-
-  public harvestCropPlot(uid: string): { ok: boolean; msg: string } {
-    if (this.isVisitingNeighbor) {
-      return { ok: false, msg: 'Chế độ Khách Tham Quan — không thể thu hoạch nông sản của bạn bè!' };
-    }
-    const b = this.state.buildings.find((x) => x.uid === uid);
-    if (!b || !b.cropId || !b.cropReadyAt) {
-      return { ok: false, msg: 'Thửa ruộng đang trống — hãy chọn hạt giống để gieo nhé!' };
-    }
-    const now = Date.now();
-    if (now < b.cropReadyAt) {
-      const left = Math.ceil((b.cropReadyAt - now) / 1000);
-      return { ok: false, msg: `Cây đang lớn xanh tốt (${left}s nữa chín)!` };
-    }
-
-    const item = getCatalogItem(b.itemId);
-    const crop = FARM_CROPS[b.cropId];
-    const yieldQty = crop.yieldQty + (b.stars >= 3 ? 1 : 0);
-    const added = this.addFarmItemToBarn(crop.id, yieldQty);
-    const gold = crop.sellValue;
-    const xp = crop.xp;
-
-    // Clear plot to freshly-tilled dark loam ready for Seed Picker!
-    b.cropId = undefined;
-    b.cropPlantedAt = undefined;
-    b.cropReadyAt = undefined;
-    b.cropWateredBoost = false;
-    b.readyBubbles = 0;
-    b.storedGalleons = 0;
-    b.storedXp = 0;
-
-    this.state.galleons += gold;
-    this.state.finance.harvestRevenue += gold;
-    this.state.stats.totalGalleonsHarvested += gold;
-    this.addXp(xp);
-    this.addHarvestFeastPoints(crop.isFlowerCrop ? 7 : 5);
-    this.recordQuestProgress('harvest_galleons', undefined, gold);
-
-    this.audio.playHarvestBubble();
-    const cx = b.gx + (item ? item.width * 0.5 : 1);
-    const cy = b.gy + (item ? item.height * 0.5 : 1);
-    this.onRewardFly?.('galleons', gold, cx, cy);
-    this.spawnFloatingText(
-      cx,
-      cy,
-      added > 0
-        ? `🌾 +${added} ${crop.emoji}  +${gold} 🪙  +${xp} ⭐`
-        : `🏡 Kho đầy! Bán thẳng +${gold + 10} 🪙  +${xp} ⭐`,
-      '#fde047'
-    );
-    if (added === 0) {
-      this.state.galleons += 10;
-    }
-    this.advanceTutorialStep('harvest_wheat');
-    this.saveToStorage();
-    this.onUiChange?.();
-    return {
-      ok: true,
-      msg:
-        added > 0
-          ? `🌾 Đã gặt +${added} ${crop.emoji} ${crop.name} cất vào Kho Nông Sản (+${gold}G, +${xp} ⭐)!`
-          : `🏡 Kho Nông Sản đã đầy — bán trực tiếp thu +${gold + 10}G!`,
-    };
-  }
+  public harvestCropPlot(uid: string): { ok: boolean; msg: string } { return farmHarvestCropPlot(this, uid); }
 
   public stockAnimalOnPasture(
     uid: string,
     animalId: PastureAnimalId
-  ): { ok: boolean; msg: string } {
-    if (this.isVisitingNeighbor) {
-      return { ok: false, msg: 'Chế độ Khách Tham Quan — không thể thả thú trên đồng cỏ bạn bè!' };
-    }
-    const b = this.state.buildings.find((x) => x.uid === uid);
-    if (!b) return { ok: false, msg: 'Không tìm thấy ô Đồng Cỏ Chăn Thả!' };
-    const item = getCatalogItem(b.itemId);
-    if (!item?.isAnimalPasturePlot) {
-      return { ok: false, msg: 'Công trình này không phải Đồng Cỏ Chăn Thả!' };
-    }
-    if (b.pastureAnimalId) {
-      const cur = PASTURE_ANIMALS[b.pastureAnimalId];
-      return {
-        ok: false,
-        msg: `Ô đồng cỏ này đang nuôi ${cur?.emoji ?? '🐾'} ${cur?.name ?? 'vật nuôi'} rồi!`,
-      };
-    }
+  ): { ok: boolean; msg: string } { return farmStockAnimalOnPasture(this, uid, animalId); }
 
-    const animal = PASTURE_ANIMALS[animalId];
-    if (!animal) return { ok: false, msg: 'Loài thú không hợp lệ!' };
-    if (!this.state.sandboxMode && this.state.level < animal.unlockLevel) {
-      return {
-        ok: false,
-        msg: `${animal.emoji} ${animal.name} mở khóa ở Cấp ${animal.unlockLevel}!`,
-      };
-    }
-    if (!this.state.sandboxMode && this.state.galleons < animal.cost) {
-      return {
-        ok: false,
-        msg: `Cần ${animal.cost.toLocaleString('vi-VN')} 🪙 Vàng để thả ${animal.emoji} ${animal.name} vào đồng cỏ!`,
-      };
-    }
+  public feedAnimalPasture(uid: string): { ok: boolean; msg: string } { return farmFeedAnimalPasture(this, uid); }
 
-    if (!this.state.sandboxMode) {
-      this.state.galleons -= animal.cost;
-    }
+  public harvestAnimalPasture(uid: string): { ok: boolean; msg: string } { return farmHarvestAnimalPasture(this, uid); }
 
-    const now = Date.now();
-    const cycleMs = this.state.sandboxMode ? 5000 : animal.cycleSec * 1000;
-    b.pastureAnimalId = animalId;
-    b.pastureStockedAt = now;
-    b.pastureReadyAt = now + cycleMs;
-    b.pastureFedBoost = false;
-    b.readyBubbles = 0;
-    b.storedGalleons = 0;
-    b.storedXp = 0;
-
-    this.audio.playPlace();
-    this.onBuildingTactile?.(b.uid);
-    this.spawnFloatingText(
-      b.gx + item.width * 0.5,
-      b.gy + item.height * 0.5,
-      `🐾 Thả ${animal.emoji} ${animal.name}!`,
-      '#86efac'
-    );
-    this.advanceTutorialStep('pasture_harvest_and_stock');
-    this.saveToStorage();
-    this.onUiChange?.();
-    return {
-      ok: true,
-      msg: `🐾 Đã thả ${animal.emoji} ${animal.name} vào Đồng Cỏ Chăn Thả (${formatDurationCompactVi(animal.cycleSec)}/mẻ)!`,
-    };
-  }
-
-  public feedAnimalPasture(uid: string): { ok: boolean; msg: string } {
-    if (this.isVisitingNeighbor) {
-      return this.helpVisitedNeighborBuilding(uid);
-    }
-    const b = this.state.buildings.find((x) => x.uid === uid);
-    if (!b || !b.pastureAnimalId || !b.pastureReadyAt) {
-      return { ok: false, msg: 'Đồng cỏ đang trống — hãy chọn thú để thả vào nhé!' };
-    }
-    const now = Date.now();
-    if (now >= b.pastureReadyAt) {
-      return { ok: false, msg: 'Sản vật đồng cỏ đã sẵn sàng — hãy bấm thu hoạch ngay!' };
-    }
-    if (b.pastureFedBoost) {
-      return { ok: false, msg: 'Đàn thú trên đồng cỏ này đã được cho ăn no nê rồi!' };
-    }
-    const leftMs = b.pastureReadyAt - now;
-    const savedMs = Math.max(3000, Math.round(leftMs * 0.35));
-    b.pastureReadyAt = Math.max(now + 1000, b.pastureReadyAt - savedMs);
-    b.pastureFedBoost = true;
-    this.addXp(5);
-    this.audio.playSpell();
-    this.onBuildingTactile?.(b.uid);
-    this.spawnFloatingText(b.gx + 1, b.gy + 1, '🌾 Cỏ Mật! Nhanh +35%!', '#86efac');
-    this.saveToStorage();
-    this.onUiChange?.();
-    return {
-      ok: true,
-      msg: '🌾 Đã cho đàn thú ăn cỏ ba lá mật — thu hoạch nhanh hơn 35% (+5 ⭐)!',
-    };
-  }
-
-  public harvestAnimalPasture(uid: string): { ok: boolean; msg: string } {
-    if (this.isVisitingNeighbor) {
-      return { ok: false, msg: 'Chế độ Khách Tham Quan — không thể thu hoạch đồng cỏ của bạn bè!' };
-    }
-    const b = this.state.buildings.find((x) => x.uid === uid);
-    if (!b || !b.pastureAnimalId || !b.pastureReadyAt) {
-      return { ok: false, msg: 'Đồng cỏ đang trống — hãy chọn thú để thả vào nhé!' };
-    }
-    const now = Date.now();
-    if (now < b.pastureReadyAt) {
-      const left = Math.ceil((b.pastureReadyAt - now) / 1000);
-      return { ok: false, msg: `Đàn thú đang thong thả gặm cỏ (${left}s nữa thu hoạch)!` };
-    }
-
-    const item = getCatalogItem(b.itemId);
-    const animal = PASTURE_ANIMALS[b.pastureAnimalId];
-    const goodMeta = FARM_GOODS[animal.goodId];
-    const yieldQty = animal.yieldQty + (b.stars >= 3 ? 1 : 0);
-    const added = this.addFarmItemToBarn(animal.goodId, yieldQty);
-    const gold = animal.sellValue;
-    const xp = animal.xp;
-
-    // Automatically restart the next grazing cycle so the animal stays happily on the pasture!
-    const nextCycleMs = this.state.sandboxMode ? 5000 : animal.cycleSec * 1000;
-    b.pastureStockedAt = now;
-    b.pastureReadyAt = now + nextCycleMs;
-    b.pastureFedBoost = false;
-    b.readyBubbles = 0;
-    b.storedGalleons = 0;
-    b.storedXp = 0;
-
-    this.state.galleons += gold;
-    this.state.finance.harvestRevenue += gold;
-    this.state.stats.totalGalleonsHarvested += gold;
-    this.addXp(xp);
-    this.addHarvestFeastPoints(6);
-    this.recordQuestProgress('harvest_galleons', undefined, gold);
-
-    this.audio.playHarvestBubble();
-    const cx = b.gx + (item ? item.width * 0.5 : 1);
-    const cy = b.gy + (item ? item.height * 0.5 : 1);
-    this.onRewardFly?.('galleons', gold, cx, cy);
-    this.spawnFloatingText(
-      cx,
-      cy,
-      added > 0
-        ? `🐾 +${added} ${goodMeta.emoji}  +${gold} 🪙  +${xp} ⭐`
-        : `🏡 Kho đầy! Bán thẳng +${gold + 12} 🪙  +${xp} ⭐`,
-      '#fde047'
-    );
-    if (added === 0) {
-      this.state.galleons += 12;
-    }
-    if (this.isTutorialActive() && this.state.tutorial?.stepId === 'pasture_harvest_and_stock') {
-      this.state.tutorial.pastureHarvestedInStep3 = true;
-      const hasEmptyPasture = this.state.buildings.some(
-        (x) => getCatalogItem(x.itemId)?.isAnimalPasturePlot && !x.pastureAnimalId
-      );
-      if (!hasEmptyPasture) {
-        this.advanceTutorialStep('pasture_harvest_and_stock');
-      }
-    }
-    this.saveToStorage();
-    this.onUiChange?.();
-    return {
-      ok: true,
-      msg:
-        added > 0
-          ? `🐾 Thu hoạch +${added} ${goodMeta.emoji} ${goodMeta.name} từ ${animal.name} (+${gold}G, +${xp} ⭐)!`
-          : `🏡 Kho Nông Sản đã đầy — bán trực tiếp sản vật thu +${gold + 12}G!`,
-    };
-  }
-
-  public clearAnimalFromPasture(uid: string): { ok: boolean; msg: string } {
-    if (this.isVisitingNeighbor) {
-      return { ok: false, msg: 'Chế độ Khách Tham Quan — không thể đổi thú trên đồng cỏ bạn bè!' };
-    }
-    const b = this.state.buildings.find((x) => x.uid === uid);
-    if (!b || !b.pastureAnimalId) {
-      return { ok: false, msg: 'Đồng cỏ đang trống sẵn rồi!' };
-    }
-    const animal = PASTURE_ANIMALS[b.pastureAnimalId];
-    const refund = Math.round((animal?.cost ?? 0) * 0.5);
-    b.pastureAnimalId = null;
-    b.pastureStockedAt = undefined;
-    b.pastureReadyAt = undefined;
-    b.pastureFedBoost = false;
-    b.readyBubbles = 0;
-    b.storedGalleons = 0;
-    b.storedXp = 0;
-    if (!this.state.sandboxMode && refund > 0) {
-      this.state.galleons += refund;
-    }
-    this.audio.playClick();
-    this.saveToStorage();
-    this.onUiChange?.();
-    return {
-      ok: true,
-      msg: `🐾 Đã đưa ${animal?.emoji ?? '🐾'} ${animal?.name ?? 'thú'} về chuồng nghỉ${refund > 0 ? ` (hoàn +${refund}G)` : ''} — có thể chọn thú mới!`,
-    };
-  }
+  public clearAnimalFromPasture(uid: string): { ok: boolean; msg: string } { return farmClearAnimalFromPasture(this, uid); }
 
   public getWorkshopRecipesForBuilding(item: CatalogItem): FarmWorkshopRecipe[] {
     if (!item.workshopGroupId) return [];
