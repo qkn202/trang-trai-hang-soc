@@ -9534,6 +9534,391 @@ progress.ts-build-progress::-moz-progress-bar {
 }
 
 /* ============================================================
+   Kid-Friendly Visual & Audio Language Quiz Games (2.5D Cards, Bubbles & Tiles)
+   ============================================================ */
+.sq-codex-pic {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 3px var(--icon-drop-shadow));
+}
+
+.sq-kid-hero-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, var(--surface-chip-top), var(--surface-chip-bot));
+  border: 2.5px solid var(--border-brass);
+  box-shadow:
+    0 4px 0 var(--shadow-chip),
+    inset 0 2px 0 var(--border-cream);
+}
+
+.sq-kid-pic-frame {
+  width: 82px;
+  height: 82px;
+  border-radius: 16px;
+  background: var(--surface-panel-solid);
+  border: 2px solid var(--gold-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: inset 0 2px 6px var(--shadow-chip);
+}
+
+.sq-kid-hero-img {
+  width: 70px;
+  height: 70px;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 5px var(--icon-drop-shadow));
+}
+
+.sq-kid-audio-orb {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 3px solid var(--gold-deep);
+  background: linear-gradient(180deg, var(--speed-active-top), var(--speed-active-bot));
+  box-shadow: 0 4px 0 var(--brand-strong);
+  font-size: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.14s ease;
+}
+
+.sq-kid-audio-orb.small {
+  width: 48px;
+  height: 48px;
+  font-size: 21px;
+}
+
+.sq-kid-audio-orb:hover {
+  transform: scale(1.07);
+}
+
+.sq-kid-audio-orb:active {
+  transform: translateY(2px) scale(0.97);
+}
+
+.sq-kid-hero-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sq-kid-word-giant,
+.sq-kid-meaning-giant {
+  font-family: 'Playfair Display', 'Playfair Display Fallback', Georgia, serif;
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--farm-ink-title);
+  line-height: 1.18;
+}
+
+.sq-kid-ph-pill {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--quest-accent-bg);
+  border: 1px solid var(--border-brass-soft);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--brand-strong);
+}
+
+.sq-kid-hint-tag {
+  padding: 5px 11px;
+  border-radius: var(--radius-pill);
+  background: var(--farm-green-soft-bg);
+  border: 1.5px solid var(--farm-green-soft-border);
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--farm-green-text);
+  white-space: nowrap;
+}
+
+.sq-kid-flashcard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sq-choice-btn.sq-kid-flashcard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  padding: 12px 10px;
+  border-radius: 16px;
+  min-height: 126px;
+  background: linear-gradient(180deg, var(--surface-chip-top), var(--surface-chip-bot));
+  border: 2.5px solid var(--border-brass);
+  box-shadow: 0 4px 0 var(--shadow-chip);
+  transition: transform 0.14s ease, border-color 0.14s ease;
+}
+
+.sq-choice-btn.sq-kid-flashcard:hover:not(:disabled) {
+  transform: translateY(-3px) scale(1.015);
+  border-color: var(--gold-deep);
+  background: var(--surface-chip-hover);
+}
+
+.sq-kid-card-art {
+  width: 68px;
+  height: 68px;
+  border-radius: 14px;
+  background: var(--surface-panel-solid);
+  border: 1.5px solid var(--border-brass-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sq-kid-card-img {
+  width: 58px;
+  height: 58px;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 4px var(--icon-drop-shadow));
+}
+
+.sq-kid-card-caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.sq-kid-card-caption .sq-choice-main {
+  font-size: 15.5px;
+  font-weight: 900;
+  color: var(--farm-ink-title);
+}
+
+/* Bubble Pop Arena */
+@keyframes sqBubbleFloat {
+  0%,
+  100% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-7px) scale(1.025);
+  }
+}
+
+.sq-bubble-arena {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+  border-radius: 20px;
+  background: radial-gradient(circle at 50% 30%, var(--minimap-canvas-bg), var(--surface-parchment-2));
+  border: 2.5px solid var(--sky-deep);
+  box-shadow: inset 0 3px 10px var(--shadow-chip);
+}
+
+.sq-bubble-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 124px;
+  padding: 12px 10px;
+  border-radius: 999px;
+  border: 3px solid var(--ts-star-fill-top);
+  background: radial-gradient(circle at 32% 28%, var(--border-cream) 0%, var(--minimap-canvas-bg) 58%, var(--ts-lvl-bar-top) 100%);
+  box-shadow:
+    0 6px 14px var(--shadow-chip),
+    inset 0 4px 8px var(--border-cream);
+  cursor: pointer;
+  animation: sqBubbleFloat 2.8s ease-in-out infinite;
+  transition: transform 0.14s ease, border-color 0.14s ease;
+}
+
+.sq-bubble-btn.bubble-slot-1 {
+  animation-delay: 0.4s;
+}
+.sq-bubble-btn.bubble-slot-2 {
+  animation-delay: 0.85s;
+}
+.sq-bubble-btn.bubble-slot-3 {
+  animation-delay: 1.25s;
+}
+
+.sq-bubble-btn:hover:not(:disabled) {
+  transform: scale(1.05);
+  border-color: var(--gold);
+}
+
+.sq-bubble-btn.is-correct {
+  background: linear-gradient(180deg, var(--ts-gem-top), var(--ts-gem-mid));
+  border-color: var(--ts-gem-bot);
+  animation: none;
+}
+
+.sq-bubble-btn.is-wrong {
+  background: linear-gradient(180deg, var(--pa-err-crimson), var(--berry));
+  border-color: var(--berry-deep);
+  animation: none;
+}
+
+.sq-bubble-img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px var(--icon-drop-shadow));
+}
+
+.sq-bubble-word {
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--ink);
+}
+
+.sq-bubble-ph {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--ink-soft);
+}
+
+/* Kid Candy Word Tiles */
+.sq-kid-tile-slots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 64px;
+  padding: 12px;
+  border-radius: 16px;
+}
+
+.sq-kid-slot-empty {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  border: 2.5px dashed var(--border-brass);
+  background: var(--surface-parchment);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--ink-soft);
+}
+
+.sq-word-chip.sq-kid-slot-filled,
+.sq-word-chip.sq-kid-tile {
+  min-width: 48px;
+  min-height: 48px;
+  padding: 8px 14px;
+  border-radius: 13px;
+  font-size: 18px;
+  font-weight: 900;
+  box-shadow: 0 4px 0 var(--shadow-chip);
+}
+
+.sq-kid-tile-bank {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+/* Picture-Word Pairs */
+.sq-pair-btn.sq-kid-pair-word,
+.sq-pair-btn.sq-kid-pair-pic {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 62px;
+  padding: 8px 12px;
+  border-radius: 14px;
+}
+
+.sq-pair-audio-tag {
+  font-size: 18px;
+}
+
+.sq-pair-pic-img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 3px var(--icon-drop-shadow));
+}
+
+/* Compact Kid Result Card */
+.sq-kid-explain-card {
+  padding: 12px 14px;
+  border-radius: 16px;
+}
+
+.sq-kid-result-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.sq-kid-result-img {
+  width: 58px;
+  height: 58px;
+  object-fit: contain;
+  flex-shrink: 0;
+  filter: drop-shadow(0 3px 5px var(--icon-drop-shadow));
+}
+
+.sq-kid-result-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sq-kid-result-word {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  font-size: 15px;
+  color: var(--farm-ink-title);
+}
+
+@media (max-width: 560px) {
+  .sq-kid-hero-card {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+  .sq-kid-pic-frame {
+    width: 64px;
+    height: 64px;
+  }
+  .sq-kid-hero-img {
+    width: 54px;
+    height: 54px;
+  }
+  .sq-kid-word-giant,
+  .sq-kid-meaning-giant {
+    font-size: 19px;
+  }
+}
+
+/* ============================================================
    Per-Mini-Game Leaderboards (6 Wizarding Disciplines)
    Token-pure Playrix Township × Hogwarts Cup Hall of Fame
    ============================================================ */

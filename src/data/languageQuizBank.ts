@@ -141,12 +141,12 @@ export const QUIZ_LANGUAGES: Record<QuizLanguageId, QuizLanguageMeta> = {
 };
 
 export const QUIZ_FORMAT_LABELS: Record<'all' | QuizFormatKind, { icon: string; labelVi: string }> = {
-  all: { icon: '🪄', labelVi: 'Ngũ Phép Tổng Hợp' },
-  vocab_context: { icon: '🎧', labelVi: 'Thính Âm Chân Ngôn' },
-  grammar_cloze: { icon: '📜', labelVi: 'Khắc Chú Khuyết Tự' },
-  dialogue_reply: { icon: '🦉', labelVi: 'Đối Đáp Pháp Sư' },
-  sentence_builder: { icon: '✨', labelVi: 'Kết Ấn Thành Câu' },
-  match_pairs: { icon: '🔮', labelVi: 'Giao Cảm Tam Ấn' },
+  all: { icon: '🎲', labelVi: 'Tất Cả Trò' },
+  vocab_context: { icon: '🖼️', labelVi: 'Chạm Hình' },
+  grammar_cloze: { icon: '🔊', labelVi: 'Nhìn Tranh' },
+  dialogue_reply: { icon: '🫧', labelVi: 'Đập Bóng' },
+  sentence_builder: { icon: '🧩', labelVi: 'Ghép Chữ' },
+  match_pairs: { icon: '🃏', labelVi: 'Nối Tranh' },
 };
 
 export const CURRICULUM_CHAPTERS: CurriculumChapterMeta[] = [

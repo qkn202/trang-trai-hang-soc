@@ -213,14 +213,23 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
           expect(ch.lang).toBe(lang);
           expect(ch.format).toBe(fmt);
           expect(ch.promptVi.length).toBeGreaterThan(3);
+          expect(ch.heroSpriteSrc).toMatch(/^\/sprites\/.+\.png$/);
+          expect(ch.visualGameKind).toBeDefined();
           if (fmt === 'sentence_builder') {
+            expect(ch.visualGameKind).toBe('word_tiles');
             expect(ch.shuffledTokens?.length).toBeGreaterThanOrEqual(2);
             expect(ch.expectedSentenceTokens?.length).toBeGreaterThanOrEqual(2);
           } else if (fmt === 'match_pairs') {
+            expect(ch.visualGameKind).toBe('pic_pairs');
             expect(ch.leftCards?.length).toBeGreaterThanOrEqual(3);
             expect(ch.rightCards?.length).toBeGreaterThanOrEqual(3);
+            expect(ch.leftCards?.[0]?.spriteSrc).toMatch(/^\/sprites\/.+\.png$/);
+            expect(ch.rightCards?.[0]?.spriteSrc).toMatch(/^\/sprites\/.+\.png$/);
           } else {
+            expect(['pic_flashcard', 'word_flashcard', 'bubble_pop']).toContain(ch.visualGameKind);
             expect(ch.choices?.length).toBe(4);
+            expect(ch.choiceSprites?.length).toBe(4);
+            expect(new Set(ch.choiceSprites).size).toBe(4);
             expect(ch.correctIndex).toBeGreaterThanOrEqual(0);
             expect(ch.correctIndex).toBeLessThan(4);
           }

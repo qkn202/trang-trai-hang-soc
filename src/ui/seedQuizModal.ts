@@ -16,8 +16,10 @@ import {
 import {
   ActiveQuizChallenge,
   computeTargetBand,
+  formatShortKidMeaningVi,
   generateNextQuizChallenge,
   getProfileSrsSummary,
+  getQuizVisualCardMeta,
   QuizAttemptOutcome,
   setProfileTier,
   speakQuizText,
@@ -194,13 +196,9 @@ export class SeedQuizModalController {
     }
 
     if (autoSpeakIfEnabled && quiz.autoSpeak && this.challenge) {
-      // Only auto-speak when stem does not give away a cloze answer directly, or speak prompt cleanly
-      const textToRead =
-        this.challenge.format === 'vocab_context' || this.challenge.format === 'dialogue_reply'
-          ? this.challenge.ttsPromptText
-          : '';
+      const textToRead = this.challenge.ttsPromptText || this.challenge.fullSentence;
       if (textToRead) {
-        speakQuizText(textToRead, this.challenge.lang, 0.95);
+        speakQuizText(textToRead, this.challenge.lang, 0.94);
       }
     }
   }
@@ -716,6 +714,7 @@ export class SeedQuizModalController {
     const rowsHtml = filtered
       .map((entry) => {
         const { box, due } = this.getLexiconEntrySrsInfo(profile, entry.id);
+        const vis = getQuizVisualCardMeta(entry.meaningVi, entry.word, entry.id);
         let badgeCls = 'is-unseen';
         let badgeText = `✨ Quyển ${entry.levelBand}`;
         if (box >= 5) {
@@ -728,31 +727,20 @@ export class SeedQuizModalController {
         return `
           <article class="sq-codex-row" role="listitem">
             <div class="sq-codex-tts">
+              <img src="${vis.spriteSrc}" alt="" class="sq-codex-pic" />
               <button
                 type="button"
                 class="sq-vocab-speak"
                 data-sq-codex-word="${escapeHtml(entry.id)}"
                 title="Nghe phát âm từ ${escapeHtml(entry.word)}"
               >🔊</button>
-              <button
-                type="button"
-                class="sq-vocab-speak sq-codex-speak-ex"
-                data-sq-codex-ex="${escapeHtml(entry.id)}"
-                title="Nghe đọc cả câu mẫu"
-              >🗣️</button>
             </div>
             <div class="sq-codex-body">
               <div class="sq-codex-head">
                 <strong class="sq-codex-word">${escapeHtml(entry.word)}</strong>
                 <span class="sq-vocab-ph">[${escapeHtml(entry.phonetic)}]</span>
-                <span class="sq-vocab-pos">(${escapeHtml(entry.posVi)})</span>
-                <span class="sq-codex-meaning">— ${escapeHtml(entry.meaningVi)}</span>
+                <span class="sq-codex-meaning">— ${escapeHtml(vis.shortVi)}</span>
               </div>
-              <div class="sq-codex-example">
-                <span class="sq-codex-ex-native">“${escapeHtml(entry.exampleSentence)}”</span>
-                <span class="sq-codex-ex-vi">(${escapeHtml(entry.exampleVi)})</span>
-              </div>
-              <div class="sq-codex-note">💡 ${escapeHtml(entry.grammarNoteVi)}</div>
             </div>
             <div class="sq-codex-srs ${badgeCls}">${badgeText}</div>
           </article>
@@ -792,17 +780,62 @@ export class SeedQuizModalController {
     const fmtMeta = QUIZ_FORMAT_LABELS[ch.format];
     const crop = FARM_CROPS[this.targetCropId];
     const isAnswered = this.answeredOutcome !== null;
+    const gameKind =
+      ch.visualGameKind ??
+      (ch.format === 'vocab_context'
+        ? 'pic_flashcard'
+        : ch.format === 'dialogue_reply'
+          ? 'bubble_pop'
+          : ch.format === 'sentence_builder'
+            ? 'word_tiles'
+            : ch.format === 'match_pairs'
+              ? 'pic_pairs'
+              : 'word_flashcard');
+
+    const heroSprite = ch.heroSpriteSrc ?? '/sprites/ui_icon_seed_sack.png';
+    const heroWord = ch.heroWord ?? ch.stemText;
+    const heroPh = ch.heroPhonetic ?? ch.stemPhonetic ?? '';
+    const heroShortVi = ch.heroShortVi ?? formatShortKidMeaningVi(ch.translationVi);
+
+    let heroBannerHtml = '';
+    if (gameKind === 'pic_flashcard') {
+      heroBannerHtml = `
+        <div class="sq-kid-hero-card is-audio-word">
+          <button id="btnSqHeroAudio" type="button" class="sq-kid-audio-orb" title="Chạm để nghe phát âm">
+            🔊
+          </button>
+          <div class="sq-kid-hero-text">
+            <div class="sq-kid-word-giant">${escapeHtml(heroWord)}</div>
+            ${heroPh ? `<div class="sq-kid-ph-pill">[${escapeHtml(heroPh)}]</div>` : ''}
+          </div>
+          <span class="sq-kid-hint-tag">🖼️ Chạm tranh đúng!</span>
+        </div>
+      `;
+    } else if (gameKind !== 'pic_pairs') {
+      heroBannerHtml = `
+        <div class="sq-kid-hero-card is-picture-clue">
+          <div class="sq-kid-pic-frame">
+            <img src="${heroSprite}" alt="${escapeHtml(heroShortVi)}" class="sq-kid-hero-img" />
+          </div>
+          <div class="sq-kid-hero-text">
+            <div class="sq-kid-meaning-giant">${escapeHtml(heroShortVi)}</div>
+            ${heroPh ? `<div class="sq-kid-ph-pill">🔊 [${escapeHtml(heroPh)}]</div>` : ''}
+          </div>
+          <button id="btnSqHeroAudio" type="button" class="sq-kid-audio-orb small" title="Nghe phát âm gợi ý">
+            🔊
+          </button>
+        </div>
+      `;
+    }
 
     let interactiveHtml = '';
-    if (
-      ch.format === 'grammar_cloze' ||
-      ch.format === 'dialogue_reply' ||
-      ch.format === 'vocab_context'
-    ) {
+    if (gameKind === 'pic_flashcard' || gameKind === 'word_flashcard') {
       const choices = ch.choices ?? [];
       const phs = ch.choicePhonetics ?? [];
+      const sprites = ch.choiceSprites ?? [];
+      const subs = ch.choiceSubtitles ?? [];
       interactiveHtml = `
-        <div class="sq-choice-grid">
+        <div class="sq-choice-grid sq-kid-flashcard-grid">
           ${choices
             .map((cText, idx) => {
               let stateCls = '';
@@ -811,19 +844,60 @@ export class SeedQuizModalController {
                 else if (idx === this.selectedChoiceIdx) stateCls = 'is-wrong';
                 else stateCls = 'is-dimmed';
               }
-              const letter = String.fromCharCode(65 + idx);
+              const spSrc = sprites[idx] ?? heroSprite;
+              const subTxt = subs[idx] ?? '';
               return `
                 <button
                   type="button"
-                  class="sq-choice-btn ${stateCls}"
+                  class="sq-choice-btn sq-kid-flashcard ${gameKind === 'pic_flashcard' ? 'is-pic-mode' : 'is-word-mode'} ${stateCls}"
                   data-sq-choice="${idx}"
                   ${isAnswered ? 'disabled' : ''}
                 >
-                  <span class="sq-choice-key">${letter}</span>
-                  <span class="sq-choice-body">
+                  <div class="sq-kid-card-art">
+                    <img src="${spSrc}" alt="" class="sq-kid-card-img" />
+                  </div>
+                  <div class="sq-kid-card-caption">
                     <span class="sq-choice-main">${escapeHtml(cText)}</span>
-                    ${phs[idx] ? `<small class="sq-choice-ph">${escapeHtml(phs[idx])}</small>` : ''}
-                  </span>
+                    ${
+                      gameKind === 'word_flashcard' && phs[idx]
+                        ? `<small class="sq-choice-ph">[${escapeHtml(phs[idx])}]</small>`
+                        : isAnswered && subTxt
+                          ? `<small class="sq-choice-ph">${escapeHtml(subTxt)}</small>`
+                          : ''
+                    }
+                  </div>
+                </button>
+              `;
+            })
+            .join('')}
+        </div>
+      `;
+    } else if (gameKind === 'bubble_pop') {
+      const choices = ch.choices ?? [];
+      const phs = ch.choicePhonetics ?? [];
+      const sprites = ch.choiceSprites ?? [];
+      interactiveHtml = `
+        <div class="sq-bubble-arena">
+          ${choices
+            .map((cText, idx) => {
+              let stateCls = '';
+              if (isAnswered) {
+                if (idx === ch.correctIndex) stateCls = 'is-correct is-popped';
+                else if (idx === this.selectedChoiceIdx) stateCls = 'is-wrong is-popped';
+                else stateCls = 'is-dimmed';
+              }
+              const spSrc = sprites[idx] ?? heroSprite;
+              return `
+                <button
+                  type="button"
+                  class="sq-bubble-btn bubble-slot-${idx % 4} ${stateCls}"
+                  data-sq-choice="${idx}"
+                  ${isAnswered ? 'disabled' : ''}
+                >
+                  <span class="sq-bubble-shine"></span>
+                  <img src="${spSrc}" alt="" class="sq-bubble-img" />
+                  <span class="sq-bubble-word">${escapeHtml(cText)}</span>
+                  ${phs[idx] ? `<small class="sq-bubble-ph">[${escapeHtml(phs[idx])}]</small>` : ''}
                 </button>
               `;
             })
@@ -832,22 +906,26 @@ export class SeedQuizModalController {
       `;
     } else if (ch.format === 'sentence_builder') {
       const tokens = ch.shuffledTokens ?? [];
+      const expected = ch.expectedSentenceTokens ?? [];
       const placedSet = new Set(this.placedTokenIndices);
-      const placedChips = this.placedTokenIndices
-        .map((tIdx, pos) => {
-          const tok = tokens.find((t) => t.idx === tIdx);
-          if (!tok) return '';
-          return `
-            <button
-              type="button"
-              class="sq-word-chip placed"
-              data-sq-unplace="${pos}"
-              ${isAnswered ? 'disabled' : ''}
-              title="Nhấp để bỏ từ này xuống khay"
-            >
-              ${escapeHtml(tok.text)}
-            </button>
-          `;
+      const slotBoxes = expected
+        .map((_, slotIdx) => {
+          const placedTIdx = this.placedTokenIndices[slotIdx];
+          const tok = placedTIdx !== undefined ? tokens.find((t) => t.idx === placedTIdx) : undefined;
+          if (tok) {
+            return `
+              <button
+                type="button"
+                class="sq-word-chip placed sq-kid-slot-filled"
+                data-sq-unplace="${slotIdx}"
+                ${isAnswered ? 'disabled' : ''}
+                title="Bấm để bỏ mảnh chữ này xuống"
+              >
+                ${escapeHtml(tok.text)}
+              </button>
+            `;
+          }
+          return `<span class="sq-kid-slot-empty">?</span>`;
         })
         .join('');
 
@@ -857,7 +935,7 @@ export class SeedQuizModalController {
           return `
             <button
               type="button"
-              class="sq-word-chip bank ${used ? 'used' : ''}"
+              class="sq-word-chip bank sq-kid-tile ${used ? 'used' : ''}"
               data-sq-place="${tok.idx}"
               ${used || isAnswered ? 'disabled' : ''}
             >
@@ -868,23 +946,23 @@ export class SeedQuizModalController {
         .join('');
 
       interactiveHtml = `
-        <div class="sq-sentence-builder">
-          <div class="sq-sentence-slots ${this.placedTokenIndices.length > 0 ? 'has-words' : ''}">
-            ${
-              placedChips ||
-              `<span class="sq-sentence-placeholder">👆 Nhấp chọn từng thẻ từ bên dưới theo đúng trật tự ngữ pháp...</span>`
-            }
+        <div class="sq-sentence-builder sq-kid-tile-builder">
+          <div class="sq-sentence-slots sq-kid-tile-slots ${this.placedTokenIndices.length > 0 ? 'has-words' : ''}">
+            ${slotBoxes}
           </div>
-          <div class="sq-word-bank">${bankChips}</div>
+          <div class="sq-word-bank sq-kid-tile-bank">${bankChips}</div>
           ${
             !isAnswered
               ? `
                 <div class="sq-sentence-actions">
+                  <button id="btnSqHintTile" type="button" class="brass-btn" title="Gợi ý 1 mảnh chữ">
+                    💡 Gợi ý chữ
+                  </button>
                   <button id="btnSqResetSentence" type="button" class="brass-btn" ${this.placedTokenIndices.length === 0 ? 'disabled' : ''}>
                     ↺ Xếp lại
                   </button>
                   <button id="btnSqCheckSentence" type="button" class="brass-btn gold-cta" ${this.placedTokenIndices.length === 0 ? 'disabled' : ''}>
-                    ✨ Kiểm Tra Câu Đã Ghép
+                    ✨ Kiểm Tra
                   </button>
                 </div>
               `
@@ -896,9 +974,9 @@ export class SeedQuizModalController {
       const lefts = ch.leftCards ?? [];
       const rights = ch.rightCards ?? [];
       interactiveHtml = `
-        <div class="sq-pairs-wrap">
+        <div class="sq-pairs-wrap sq-kid-pairs-wrap">
           <div class="sq-pairs-col">
-            <div class="sq-pairs-col-title">${langMeta.flag} Chú ngữ (${escapeHtml(langMeta.academyVi)})</div>
+            <div class="sq-pairs-col-title">${langMeta.flag} 🔊 Thẻ Từ</div>
             ${lefts
               .map((card) => {
                 const matched = this.matchedPairIds.has(card.pairId);
@@ -906,31 +984,37 @@ export class SeedQuizModalController {
                 return `
                   <button
                     type="button"
-                    class="sq-pair-btn sq-pair-left ${matched ? 'matched' : ''} ${selected ? 'selected' : ''}"
+                    class="sq-pair-btn sq-pair-left sq-kid-pair-word ${matched ? 'matched' : ''} ${selected ? 'selected' : ''}"
                     data-sq-left-pair="${escapeHtml(card.pairId)}"
                     ${matched || isAnswered ? 'disabled' : ''}
                   >
+                    <span class="sq-pair-audio-tag">🔊</span>
                     <span class="sq-pair-word">${escapeHtml(card.word)}</span>
-                    <small class="sq-pair-ph">${escapeHtml(card.phonetic)}</small>
+                    <small class="sq-pair-ph">[${escapeHtml(card.phonetic)}]</small>
                   </button>
                 `;
               })
               .join('')}
           </div>
           <div class="sq-pairs-col">
-            <div class="sq-pairs-col-title">🇻🇳 Nghĩa tiếng Việt</div>
+            <div class="sq-pairs-col-title">🖼️ Thẻ Tranh 2.5D</div>
             ${rights
               .map((card) => {
                 const matched = this.matchedPairIds.has(card.pairId);
                 const wrongFlash = this.flashWrongPairKey === card.pairId;
+                const spSrc =
+                  card.spriteSrc ??
+                  getQuizVisualCardMeta(card.meaningVi, card.word, card.pairId).spriteSrc;
+                const shortLbl = card.shortVi ?? formatShortKidMeaningVi(card.meaningVi);
                 return `
                   <button
                     type="button"
-                    class="sq-pair-btn sq-pair-right ${matched ? 'matched' : ''} ${wrongFlash ? 'wrong-flash' : ''}"
+                    class="sq-pair-btn sq-pair-right sq-kid-pair-pic ${matched ? 'matched' : ''} ${wrongFlash ? 'wrong-flash' : ''}"
                     data-sq-right-pair="${escapeHtml(card.pairId)}"
                     ${matched || isAnswered ? 'disabled' : ''}
                   >
-                    <span class="sq-pair-meaning">${escapeHtml(card.meaningVi)}</span>
+                    <img src="${spSrc}" alt="" class="sq-pair-pic-img" />
+                    <span class="sq-pair-meaning">${escapeHtml(shortLbl)}</span>
                   </button>
                 `;
               })
@@ -945,17 +1029,14 @@ export class SeedQuizModalController {
       : '';
 
     return `
-      <div class="sq-stage-card">
+      <div class="sq-stage-card sq-kid-stage-card">
         <div class="sq-stage-meta-row">
           <div class="sq-stage-badges">
-            <span class="sq-badge sq-badge-chapter">${escapeHtml(ch.chapterTitleVi)}</span>
             <span class="sq-badge sq-badge-format">${fmtMeta.icon} ${escapeHtml(fmtMeta.labelVi)}</span>
             ${
               ch.isReview
-                ? `<span class="sq-badge sq-badge-review">🔄 SRS ${ch.srsBox ?? 1}/5 (+2 ${crop.emoji})</span>`
-                : ch.srsBox
-                  ? `<span class="sq-badge sq-badge-reward">📦 ${ch.srsBox}/5 • +1–2 ${crop.emoji}</span>`
-                  : `<span class="sq-badge sq-badge-reward">🎁 +1–2 ${crop.emoji}</span>`
+                ? `<span class="sq-badge sq-badge-review">🔄 Ôn (${ch.srsBox ?? 1}/5) • +2 ${crop.emoji}</span>`
+                : `<span class="sq-badge sq-badge-reward">🎁 +1–2 ${crop.emoji}</span>`
             }
           </div>
           <div class="sq-tts-btns">
@@ -973,17 +1054,7 @@ export class SeedQuizModalController {
           </div>
         </div>
 
-        <div class="sq-prompt-vi">${escapeHtml(ch.promptVi)}</div>
-
-        <div class="sq-stem-box">
-          <div class="sq-stem-main">${escapeHtml(ch.stemText)}</div>
-          ${
-            ch.stemPhonetic
-              ? `<div class="sq-stem-phonetic"><span>${escapeHtml(langMeta.phoneticLabel)}:</span> ${escapeHtml(ch.stemPhonetic)}</div>`
-              : ''
-          }
-        </div>
-
+        ${heroBannerHtml}
         ${interactiveHtml}
         ${explanationHtml}
       </div>
@@ -994,81 +1065,40 @@ export class SeedQuizModalController {
     ch: ActiveQuizChallenge,
     outcome: QuizAttemptOutcome & { newSeedCount: number; cropName: string }
   ): string {
-    const langMeta = QUIZ_LANGUAGES[ch.lang];
     const seedCount = this.sim.getSeedCount(this.targetCropId);
-    const vocabRows = ch.vocabNotes
-      .map(
-        (v, idx) => `
-          <div class="sq-vocab-item">
-            <button
-              type="button"
-              class="sq-vocab-speak"
-              data-sq-speak-word="${idx}"
-              title="Nghe ${escapeHtml(v.word)}"
-            >🔊</button>
-            <div class="sq-vocab-text">
-              <strong>${escapeHtml(v.word)}</strong>
-              <span class="sq-vocab-ph">[${escapeHtml(v.phonetic)}]</span>
-              <span class="sq-vocab-pos">(${escapeHtml(v.posVi)})</span>
-              <span class="sq-vocab-meaning">— ${escapeHtml(v.meaningVi)}</span>
-            </div>
-          </div>
-        `
-      )
-      .join('');
+    const heroSprite = ch.heroSpriteSrc ?? '/sprites/ui_icon_seed_sack.png';
+    const heroWord = ch.heroWord ?? ch.fullSentence;
+    const heroPh = ch.heroPhonetic ?? ch.fullPhonetic;
+    const heroShortVi = ch.heroShortVi ?? formatShortKidMeaningVi(ch.translationVi);
 
     return `
-      <div class="sq-explain-card ${outcome.correct ? 'is-pass' : 'is-review'}">
-        <div class="sq-explain-banner">
-          <div class="sq-explain-status">
-            ${
-              outcome.correct
-                ? `🎉 <strong>Đúng!</strong> +${outcome.seedsAwarded} 🌱 ${escapeHtml(outcome.cropName)} • +${outcome.xpAwarded} ⭐ XP${outcome.newSrsBox ? ` • 📦 ${outcome.newSrsBox}/5` : ''}`
-                : `💡 <strong>Chưa đúng</strong> (+${outcome.xpAwarded} ⭐ XP • 📦 1/5)`
-            }
+      <div class="sq-explain-card sq-kid-explain-card ${outcome.correct ? 'is-pass' : 'is-review'}">
+        <div class="sq-kid-result-row">
+          <img src="${heroSprite}" alt="" class="sq-kid-result-img" />
+          <div class="sq-kid-result-info">
+            <div class="sq-explain-status">
+              ${
+                outcome.correct
+                  ? `🎉 <strong>Giỏi lắm!</strong> +${outcome.seedsAwarded} 🌱 ${escapeHtml(outcome.cropName)} • +${outcome.xpAwarded} ⭐`
+                  : `💡 <strong>Thử nhớ từ này nhé!</strong> (+${outcome.xpAwarded} ⭐)`
+              }
+            </div>
+            <div class="sq-kid-result-word">
+              <strong>${escapeHtml(heroWord)}</strong>
+              <span class="sq-vocab-ph">[${escapeHtml(heroPh)}]</span>
+              <span>= 🇻🇳 <strong>${escapeHtml(heroShortVi)}</strong></span>
+            </div>
             ${
               outcome.buildReduction && outcome.buildReduction.reducedSec > 0
                 ? `<div class="sq-promo-callout">🔨 -${formatDurationCompactVi(outcome.buildReduction.reducedSec)} (${escapeHtml(outcome.buildReduction.targetName ?? 'công trình')})</div>`
                 : ''
             }
-            ${
-              outcome.phoenixTalismanAwarded
-                ? `<div class="sq-promo-callout">🔥 +${outcome.phoenixTalismanAwarded} Bùa Phượng Hoàng</div>`
-                : ''
-            }
-            ${
-              outcome.tierAutoPromoted
-                ? `<div class="sq-promo-callout">🏆 Thăng bậc ${escapeHtml(langMeta.tierLabels[outcome.tierAutoPromoted])}!</div>`
-                : ''
-            }
           </div>
           <div class="sq-explain-tts">
-            <button id="btnSqSpeakFull" type="button" class="brass-btn sq-tts-btn">🔊 Đọc</button>
-            <button id="btnSqSpeakFullSlow" type="button" class="brass-btn sq-tts-btn">🐢 Chậm</button>
+            <button id="btnSqSpeakFull" type="button" class="brass-btn sq-tts-btn">🔊</button>
+            <button id="btnSqSpeakFullSlow" type="button" class="brass-btn sq-tts-btn">🐢</button>
           </div>
         </div>
-
-        <div class="sq-full-sentence-box">
-          <div class="sq-full-native">${escapeHtml(ch.fullSentence)}</div>
-          <div class="sq-full-ph">${escapeHtml(langMeta.phoneticLabel)}: ${escapeHtml(ch.fullPhonetic)}</div>
-          <div class="sq-full-vi">🇻🇳 <strong>${escapeHtml(ch.translationVi)}</strong></div>
-        </div>
-
-        <div class="sq-grammar-box">
-          <div class="sq-grammar-title">📘 ${escapeHtml(ch.grammarTitleVi)}</div>
-          <p class="sq-grammar-desc">${escapeHtml(ch.grammarExplainVi)}</p>
-        </div>
-
-        ${
-          vocabRows
-            ? `
-              <div class="sq-vocab-box">
-                <div class="sq-vocab-title">📗 Từ vựng:</div>
-                <div class="sq-vocab-list">${vocabRows}</div>
-              </div>
-            `
-            : ''
-        }
 
         <div class="sq-explain-actions">
           ${
@@ -1081,7 +1111,7 @@ export class SeedQuizModalController {
               : ''
           }
           <button id="btnSqNextQuestion" type="button" class="brass-btn gold-cta">
-            ➡️ Câu Tiếp (+1–2 🌱)
+            ➡️ Chơi Tiếp (+1–2 🌱)
           </button>
         </div>
       </div>
@@ -1238,6 +1268,10 @@ export class SeedQuizModalController {
     });
 
     // TTS buttons
+    container.querySelector('#btnSqHeroAudio')?.addEventListener('click', () => {
+      if (!this.challenge) return;
+      speakQuizText(this.challenge.ttsPromptText || this.challenge.fullSentence, this.challenge.lang, 0.94);
+    });
     container.querySelector('#btnSqSpeakNormal')?.addEventListener('click', () => {
       if (!this.challenge) return;
       const txt = this.answeredOutcome ? this.challenge.fullSentence : this.challenge.ttsPromptText;
@@ -1275,30 +1309,58 @@ export class SeedQuizModalController {
       this.loadNextQuestion(true);
     });
 
-    // Multiple-choice click (grammar_cloze, dialogue_reply, vocab_context)
+    // Multiple-choice click (pic_flashcard, word_flashcard, bubble_pop)
     container.querySelectorAll<HTMLButtonElement>('[data-sq-choice]').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (!this.challenge || this.answeredOutcome) return;
         const idx = Number(btn.dataset.sqChoice ?? -1);
         this.selectedChoiceIdx = idx;
         const isCorrect = idx === (this.challenge.correctIndex ?? 0);
+        if (isCorrect) {
+          this.sim.audio.playMatchPop(2);
+        } else {
+          this.sim.audio.playClick();
+        }
         this.submitAttempt(isCorrect);
       });
     });
 
-    // Sentence builder interactions
+    // Word Tiles / Sentence builder interactions
+    const checkWordTilesIfComplete = () => {
+      if (!this.challenge || this.answeredOutcome) return false;
+      const expected = this.challenge.expectedSentenceTokens ?? [];
+      const tokens = this.challenge.shuffledTokens ?? [];
+      if (this.placedTokenIndices.length < expected.length) return false;
+      const placedTexts = this.placedTokenIndices.map(
+        (tIdx) => tokens.find((t) => t.idx === tIdx)?.text ?? ''
+      );
+      const isExact =
+        placedTexts.length === expected.length &&
+        placedTexts.every((txt, i) => txt === expected[i]);
+      if (isExact) {
+        this.sim.audio.playMatchPop(2);
+      } else {
+        this.sim.audio.playClick();
+      }
+      this.submitAttempt(isExact);
+      return true;
+    };
+
     container.querySelectorAll<HTMLButtonElement>('[data-sq-place]').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (!this.challenge || this.answeredOutcome) return;
         const tIdx = Number(btn.dataset.sqPlace ?? -1);
         if (tIdx >= 0 && !this.placedTokenIndices.includes(tIdx)) {
           this.placedTokenIndices.push(tIdx);
+          this.sim.audio.playMatchPop(1);
           const tok = this.challenge.shuffledTokens?.find((t) => t.idx === tIdx);
           const quiz = this.sim.ensureLanguageQuiz();
           if (tok && quiz.autoSpeak) {
             speakQuizText(tok.text, this.challenge.lang, 0.95);
           }
-          this.render();
+          if (!checkWordTilesIfComplete()) {
+            this.render();
+          }
         }
       });
     });
@@ -1309,14 +1371,43 @@ export class SeedQuizModalController {
         const pos = Number(btn.dataset.sqUnplace ?? -1);
         if (pos >= 0 && pos < this.placedTokenIndices.length) {
           this.placedTokenIndices.splice(pos, 1);
+          this.sim.audio.playClick();
           this.render();
         }
       });
     });
 
+    container.querySelector('#btnSqHintTile')?.addEventListener('click', () => {
+      if (!this.challenge || this.answeredOutcome) return;
+      const expected = this.challenge.expectedSentenceTokens ?? [];
+      const tokens = this.challenge.shuffledTokens ?? [];
+      // Remove any wrong trailing tiles first
+      while (this.placedTokenIndices.length > 0) {
+        const lastSlot = this.placedTokenIndices.length - 1;
+        const lastTok = tokens.find((t) => t.idx === this.placedTokenIndices[lastSlot]);
+        if (lastTok?.text === expected[lastSlot]) break;
+        this.placedTokenIndices.pop();
+      }
+      const nextSlot = this.placedTokenIndices.length;
+      if (nextSlot < expected.length) {
+        const wantText = expected[nextSlot];
+        const candidate = tokens.find(
+          (t) => t.text === wantText && !this.placedTokenIndices.includes(t.idx)
+        );
+        if (candidate) {
+          this.placedTokenIndices.push(candidate.idx);
+          this.sim.audio.playMatchPop(1);
+          if (!checkWordTilesIfComplete()) {
+            this.render();
+          }
+        }
+      }
+    });
+
     container.querySelector('#btnSqResetSentence')?.addEventListener('click', () => {
       if (this.answeredOutcome) return;
       this.placedTokenIndices = [];
+      this.sim.audio.playClick();
       this.render();
     });
 
@@ -1341,6 +1432,7 @@ export class SeedQuizModalController {
         if (!pid || this.matchedPairIds.has(pid)) return;
         this.selectedLeftPairId = pid;
         this.flashWrongPairKey = null;
+        this.sim.audio.playClick();
         const card = this.challenge.leftCards?.find((c) => c.pairId === pid);
         const quiz = this.sim.ensureLanguageQuiz();
         if (card && quiz.autoSpeak) {
@@ -1356,13 +1448,14 @@ export class SeedQuizModalController {
         const rightPid = btn.dataset.sqRightPair ?? '';
         if (!rightPid || this.matchedPairIds.has(rightPid)) return;
         if (!this.selectedLeftPairId) {
-          this.onToast('👆 Hãy nhấp chọn 1 thẻ Từ ngoại ngữ ở cột bên trái trước nhé!', '🪄');
+          this.onToast('👆 Hãy chạm chọn 1 thẻ Từ bên trái trước rồi chạm Tranh 2.5D tương ứng nhé!', '🪄');
           return;
         }
         if (this.selectedLeftPairId === rightPid) {
           this.matchedPairIds.add(rightPid);
           this.selectedLeftPairId = null;
           this.flashWrongPairKey = null;
+          this.sim.audio.playMatchPop(2);
           const totalPairs = this.challenge.leftCards?.length ?? 3;
           if (this.matchedPairIds.size >= totalPairs) {
             this.submitAttempt(this.pairMistakes <= 1);
@@ -1372,6 +1465,7 @@ export class SeedQuizModalController {
         } else {
           this.pairMistakes += 1;
           this.flashWrongPairKey = rightPid;
+          this.sim.audio.playClick();
           this.render();
         }
       });
