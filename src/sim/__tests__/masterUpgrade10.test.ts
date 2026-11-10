@@ -231,7 +231,7 @@ describe('Master Upgrade 10/10 Suite (Đợt 1, Đợt 2 & Đợt 3)', () => {
       const sim = new ParkSimulation(createMockAudio());
       sim.state.level = 30;
       sim.state.unlockedZones = ZONES.map((z) => z.id);
-      sim.state.match3.stars = 100;
+      sim.state.match3.stars = 1000;
       sim.state.galleons = 50_000;
 
       const item = getCatalogItem('burrow_cider_apiary')!;

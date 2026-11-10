@@ -309,60 +309,60 @@ export function createInitialMatch3State(): Match3ProgressionState {
   };
 }
 
-// ==================== 200+ HOUR MARATHON STAR ECONOMY (7,150 🌟 TOTAL ESTATE) ====================
+// ==================== GEOMETRIC STAR ECONOMY (1 -> 2 -> 4 -> 8 -> 16 -> 32...) ====================
 
 const ITEM_STAR_COST_BY_ID: Record<string, number> = {
-  // Chapter 1 (Lv.1..6 — 90 🌟)
-  burrow_house_canon: 3,
-  molly_apple_bakery: 5,
-  butterbeer_cart: 7,
-  burrow_chicken_coop: 11,
+  // Cấp số nhân ×2 từ 1 🌟 (trần 512..1024 🌟)
+  burrow_house_canon: 1,
+  molly_apple_bakery: 2,
+  butterbeer_cart: 4,
+  burrow_chicken_coop: 8,
   burrow_self_knitting_loom: 16,
-  burrow_pumpkin_gnomes: 20,
-  burrow_owl_post: 28,
-  // Chapter 2 (Lv.7..21 — 741 🌟)
-  arthur_ford_shed: 36,
-  burrow_reed_pond_mill: 44,
-  burrow_apple_orchard: 54,
-  niffler_den: 65,
-  burrow_cider_apiary: 78,
-  burrow_puffskein_pasture: 92,
-  burrow_honeydukes_canon: 110,
-  hogsmeade_stone_bridge: 124,
-  halloween_arch: 138,
-  // Chapter 3 (Lv.24..44 — 1,493 🌟)
-  burrow_windmill_canon: 155,
-  burrow_broomsticks_canon: 175,
-  burrow_greenhouse_canon: 195,
-  floo_fireplace_gate: 212,
-  hagrid_bowtruckle: 232,
-  burrow_feast_marquee: 252,
-  eeylops_owl_emporium: 272,
-  // Chapter 4 (Lv.48..70 — 2,072 🌟)
-  hagrid_pumpkin_hut: 292,
-  whomping_willow: 310,
-  owlery_elf_hut: 330,
-  hogsmeade_harvest_fountain: 355,
-  hippogriff_glade: 380,
-  black_lake_boats: 405,
-  // Chapter 5 (Lv.75..96 — 1,878 🌟)
-  thestral_grove: 405,
-  unicorn_glade: 431,
-  phoenix_perch: 465,
-  dragon_lair: 577,
+  burrow_pumpkin_gnomes: 32,
+  burrow_owl_post: 64,
+  // Chapter 2
+  arthur_ford_shed: 128,
+  burrow_reed_pond_mill: 256,
+  burrow_apple_orchard: 512,
+  niffler_den: 512,
+  burrow_cider_apiary: 512,
+  burrow_puffskein_pasture: 512,
+  burrow_honeydukes_canon: 512,
+  hogsmeade_stone_bridge: 512,
+  halloween_arch: 512,
+  // Chapter 3
+  burrow_windmill_canon: 512,
+  burrow_broomsticks_canon: 512,
+  burrow_greenhouse_canon: 512,
+  floo_fireplace_gate: 512,
+  hagrid_bowtruckle: 512,
+  burrow_feast_marquee: 512,
+  eeylops_owl_emporium: 512,
+  // Chapter 4
+  hagrid_pumpkin_hut: 1024,
+  whomping_willow: 1024,
+  owlery_elf_hut: 1024,
+  hogsmeade_harvest_fountain: 1024,
+  hippogriff_glade: 1024,
+  black_lake_boats: 1024,
+  // Chapter 5
+  thestral_grove: 1024,
+  unicorn_glade: 1024,
+  phoenix_perch: 1024,
+  dragon_lair: 1024,
 };
 
 const ZONE_STAR_COST_BY_ID: Record<ZoneId, number> = {
   ga_hogsmeade: 0,
   hem_xeo: 0,
-  bia_rung_cam: 12,
-  ho_den: 28,
-  lang_tuyet: 50,
-  vuon_thao_duoc: 78,
-  ham_gringotts: 110,
-  san_quidditch: 148,
-  thung_lung_rong: 195,
-  lau_dai_hogwarts: 255,
+  bia_rung_cam: 1,
+  ho_den: 2,
+  lang_tuyet: 4,
+  vuon_thao_duoc: 8,
+  ham_gringotts: 16,
+  san_quidditch: 32,
+  thung_lung_rong: 64,
+  lau_dai_hogwarts: 128,
 };
 
 export function getItemPuzzleStarCost(item: CatalogItem): number {
@@ -392,16 +392,15 @@ export function getItemPuzzleStarCost(item: CatalogItem): number {
     return explicitCost;
   }
   if (item.unlockLevel <= 3) return 8;
-  if (item.unlockLevel <= 12) return 45;
-  if (item.unlockLevel <= 30) return 150;
-  if (item.unlockLevel <= 60) return 300;
-  return 440;
+  if (item.unlockLevel <= 12) return 64;
+  if (item.unlockLevel <= 30) return 256;
+  if (item.unlockLevel <= 60) return 512;
+  return 1024;
 }
 
-export function getUpgradePuzzleStarCost(currentStars: number, item?: CatalogItem): number {
-  const baseStars = item ? Math.max(3, getItemPuzzleStarCost(item)) : 20;
-  const tierFactor = currentStars >= 4 ? 0.08 : currentStars >= 3 ? 0.06 : 0.04;
-  return Math.max(currentStars >= 3 ? 4 : 2, Math.min(28, Math.round(baseStars * tierFactor)));
+export function getUpgradePuzzleStarCost(currentStars: number, _item?: CatalogItem): number {
+  const exp = Math.max(0, Math.min(4, Math.floor(currentStars) - 1));
+  return Math.pow(2, exp); // 1 -> 2 -> 4 -> 8 -> 16
 }
 
 export function getZonePuzzleStarCost(zone: ZoneDef): number {
@@ -410,10 +409,10 @@ export function getZonePuzzleStarCost(zone: ZoneDef): number {
     return explicit;
   }
   if (zone.unlockLevel <= 1) return 0;
-  if (zone.unlockLevel <= 8) return 28;
-  if (zone.unlockLevel <= 25) return 78;
-  if (zone.unlockLevel <= 50) return 148;
-  return 255;
+  if (zone.unlockLevel <= 8) return 2;
+  if (zone.unlockLevel <= 25) return 8;
+  if (zone.unlockLevel <= 50) return 32;
+  return 128;
 }
 
 export function getWinStreakGifts(winStreak: number): SpecialKind[] {

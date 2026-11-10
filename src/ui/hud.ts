@@ -3025,7 +3025,7 @@ export class GameHUD {
                 }
               </span>
               <span class="seed-card-meta">
-                ⏱️${animal.cycleSec}s • +${animal.sellValue}G
+                ⏱️${formatDurationCompactVi(animal.cycleSec)} • +${animal.sellValue}G
               </span>
               <span class="seed-card-stock">
                 ${prodMeta ? `+${animal.yieldQty} ${escapeHtml(prodMeta.name)}` : ''}
@@ -4125,7 +4125,7 @@ export class GameHUD {
                       <div class="ws-recipe-ings">
                         ${lockedRec ? `🔒 Lv.${rec.unlockLevel}` : reqFormula}
                       </div>
-                      <div class="ws-recipe-time">⏱️ ${rec.craftSec}s</div>
+                      <div class="ws-recipe-time">⏱️ ${formatDurationCompactVi(rec.craftSec)}</div>
                     </button>
                   `;
                 })
@@ -4135,8 +4135,6 @@ export class GameHUD {
               const activeLeftSec = activeSlot
                 ? Math.max(0, Math.ceil((activeSlot.endsAt - now) / 1000))
                 : 0;
-              const mm = String(Math.floor(activeLeftSec / 60)).padStart(2, '0');
-              const ss = String(activeLeftSec % 60).padStart(2, '0');
               const activeMeta = activeSlot ? FARM_GOODS[activeSlot.goodId] : null;
 
               const queuedSlotsHtml = Array.from({ length: Math.max(1, maxSlots - 1) }, (_, idx) => {
@@ -4185,7 +4183,7 @@ export class GameHUD {
                       <div class="ws-oven-caption">
                         ${
                           activeSlot
-                            ? `<strong>${mm}:${ss}</strong>`
+                            ? `<strong>${formatDurationCountdownVi(activeLeftSec)}</strong>`
                             : `<strong>Trống</strong>`
                         }
                       </div>
@@ -4223,7 +4221,7 @@ export class GameHUD {
                         <span class="seed-card-seed-badge ${lockedAnimal ? 'no-seed' : 'has-seed'}">
                           ${lockedAnimal ? `🔒 Lv.${animal.unlockLevel}` : `🪙 ${animal.cost}G`}
                         </span>
-                        <span class="seed-card-meta">⏱️${animal.cycleSec}s • +${animal.sellValue}G</span>
+                        <span class="seed-card-meta">⏱️${formatDurationCompactVi(animal.cycleSec)} • +${animal.sellValue}G</span>
                         <span class="seed-card-stock">${prodMeta ? `+${animal.yieldQty} ${escapeHtml(prodMeta.name)}` : 'Sản vật'}</span>
                       </button>
                     `;
@@ -4429,7 +4427,7 @@ export class GameHUD {
                   const cycLeft = Math.max(1, Math.ceil(effCycle - (rawEl % effCycle)));
                   return `
                     <div class="quest-card-mini" style="margin-bottom:8px;font-size:12px;">
-                      <div><strong id="lblBuildingProdVal">+${prod.galleons}🪙 +${prod.xp}⭐</strong> / ${item.cycleSec}s</div>
+                      <div><strong id="lblBuildingProdVal">+${prod.galleons}🪙 +${prod.xp}⭐</strong> / ${formatDurationCompactVi(item.cycleSec)}</div>
                       ${
                         item.cycleSec > 0 && !item.isFarmlandPlot && !item.isAnimalPasturePlot
                           ? `<div style="margin-top:3px;">⏱️ <strong>${formatDurationCountdownVi(cycLeft)}</strong> • Kho: <strong>${b.storedGalleons}🪙</strong></div>`
@@ -6329,7 +6327,7 @@ export class GameHUD {
                 </div>
                 <progress max="${bondReq}" value="${bondProgressVal}" aria-label="Điểm gắn kết sinh vật"></progress>
                 <div style="font-size:12px;margin-top:5px;color:#5c2d0c;">
-                  🍬 ${escapeHtml(profile.favoriteTreat)} • <strong>+${prod.galleons.toLocaleString('vi-VN')}🪙 / ${item.cycleSec}s</strong>
+                  🍬 ${escapeHtml(profile.favoriteTreat)} • <strong>+${prod.galleons.toLocaleString('vi-VN')}🪙 / ${formatDurationCompactVi(item.cycleSec)}</strong>
                 </div>
               </div>
 

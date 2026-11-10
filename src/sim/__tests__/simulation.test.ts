@@ -438,32 +438,32 @@ describe('ParkSimulation & Progression Tests', () => {
       m3.stars = 100;
       m3.totalStarsEarned = 100;
 
-      expect(sim.getEffectiveItemStarCost(chickenItem)).toBe(11);
-      expect(sim.getEffectiveItemStarCost(pumpkinItem)).toBe(20);
+      expect(sim.getEffectiveItemStarCost(chickenItem)).toBe(8);
+      expect(sim.getEffectiveItemStarCost(pumpkinItem)).toBe(32);
 
-      // Đặt Sân Đàn Gà Mái đầu tiên: trừ 11 Sao, 0 Galleon
+      // Đặt Sân Đàn Gà Mái đầu tiên: trừ 8 Sao, 0 Galleon
       expect(sim.placeItem(chickenItem, 0, 12, 0)).toBe(true);
-      expect(m3.stars).toBe(89);
+      expect(m3.stars).toBe(92);
       expect(sim.state.galleons).toBe(2000);
       expect(sim.getEffectiveItemStarCost(chickenItem)).toBe(0);
 
       // Đặt Sân Đàn Gà Mái thứ hai sát cạnh để ghép rào: trừ 0 Sao, 130 Galleon
       expect(sim.placeItem(chickenItem, 0, 14, 0)).toBe(true);
-      expect(m3.stars).toBe(89);
+      expect(m3.stars).toBe(92);
       expect(sim.state.galleons).toBe(2000 - chickenItem.cost);
 
       // Xoá bớt ô thứ hai: hoàn Galleon (65%), không nhân bản Sao Phép Thuật
       expect(sim.removeAtTile(0, 14)).toBe(true);
-      expect(m3.stars).toBe(89);
+      expect(m3.stars).toBe(92);
 
       // Đặt Vườn Bí Ngô đầu tiên & thứ hai sát cạnh
       expect(sim.placeItem(pumpkinItem, 2, 12, 0)).toBe(true);
-      expect(m3.stars).toBe(69);
+      expect(m3.stars).toBe(60);
       expect(sim.getEffectiveItemStarCost(pumpkinItem)).toBe(0);
 
       const goldBeforeSecondPumpkin = sim.state.galleons;
       expect(sim.placeItem(pumpkinItem, 4, 12, 0)).toBe(true);
-      expect(m3.stars).toBe(69);
+      expect(m3.stars).toBe(60);
       expect(sim.state.galleons).toBe(goldBeforeSecondPumpkin - pumpkinItem.cost);
     });
   });
@@ -930,8 +930,8 @@ describe('ParkSimulation & Progression Tests', () => {
     });
   });
 
-  describe('(k) Thời gian chờ riêng biệt (tối đa 3 ngày) & giảm giờ xây bằng Minigame / Quiz Ngoại Ngữ (sàn 1 tiếng)', () => {
-    it('Toàn bộ 33 công trình xây dựng và 22 hạt giống/hoa có thời gian chờ khác nhau 100%, tăng dần theo cấp độ và đạt tối đa 3 ngày (259.200s)', () => {
+  describe('(k) Tiến trình cấp số nhân ×2 (Sao mở khóa, giờ chờ xây dựng từ 1 phút, giờ hoàn thành công việc từ 30 phút tới tối đa 3 ngày)', () => {
+    it('Số sao mở khóa, thời gian xây 33 công trình (từ 60s ×2) và thời gian công việc (22 hạt giống, 8 thú chăn thả, 22 công thức từ 1.800s ×2) tăng theo cấp số nhân tới trần 3 ngày (259.200s)', () => {
       const plotItem = getCatalogItem('farmland_plot')!;
       const pastureItem = getCatalogItem('burrow_animal_pasture')!;
       const flowerGardenItem = getCatalogItem('burrow_flower_garden')!;
@@ -939,16 +939,33 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(pastureItem.buildDurationSec).toBe(0);
       expect(flowerGardenItem.buildDurationSec).toBe(0);
 
-      // 1. Kiểm tra 33 công trình có buildDurationSec > 0
+      // 0. Kiểm tra số Sao mở khóa công trình tăng theo cấp số nhân ×2: 1 -> 2 -> 4 -> 8 -> 16 -> 32 -> 64 -> 128 -> 256 -> 512 -> 1024
+      expect(getItemPuzzleStarCost(getCatalogItem('burrow_house_canon')!)).toBe(1);
+      expect(getItemPuzzleStarCost(getCatalogItem('molly_apple_bakery')!)).toBe(2);
+      expect(getItemPuzzleStarCost(getCatalogItem('butterbeer_cart')!)).toBe(4);
+      expect(getItemPuzzleStarCost(getCatalogItem('burrow_chicken_coop')!)).toBe(8);
+      expect(getItemPuzzleStarCost(getCatalogItem('burrow_self_knitting_loom')!)).toBe(16);
+      expect(getItemPuzzleStarCost(getCatalogItem('burrow_pumpkin_gnomes')!)).toBe(32);
+      expect(getItemPuzzleStarCost(getCatalogItem('burrow_owl_post')!)).toBe(64);
+      expect(getItemPuzzleStarCost(getCatalogItem('arthur_ford_shed')!)).toBe(128);
+      expect(getItemPuzzleStarCost(getCatalogItem('burrow_reed_pond_mill')!)).toBe(256);
+      expect(getItemPuzzleStarCost(getCatalogItem('burrow_apple_orchard')!)).toBe(512);
+      expect(getItemPuzzleStarCost(getCatalogItem('dragon_lair')!)).toBe(1024);
+
+      // 1. Kiểm tra 33 công trình có buildDurationSec > 0 theo cấp số nhân từ 60s (1 phút) ×2 tới 259.200s (3 ngày)
       const constructibleItems = CATALOG.filter((it) => it.buildDurationSec > 0).sort(
         (a, b) => a.unlockLevel - b.unlockLevel || a.buildDurationSec - b.buildDurationSec
       );
       expect(constructibleItems).toHaveLength(33);
-      const uniqueBuildDurations = new Set(constructibleItems.map((it) => it.buildDurationSec));
-      expect(uniqueBuildDurations.size).toBe(33);
+      expect(constructibleItems[0].buildDurationSec).toBe(60);
+      expect(constructibleItems[1].buildDurationSec).toBe(120);
+      expect(constructibleItems[2].buildDurationSec).toBe(240);
+      expect(constructibleItems[3].buildDurationSec).toBe(480);
+      expect(constructibleItems[4].buildDurationSec).toBe(960);
+      expect(constructibleItems[5].buildDurationSec).toBe(1920);
 
       for (let i = 1; i < constructibleItems.length; i++) {
-        expect(constructibleItems[i].buildDurationSec).toBeGreaterThan(
+        expect(constructibleItems[i].buildDurationSec).toBeGreaterThanOrEqual(
           constructibleItems[i - 1].buildDurationSec
         );
       }
@@ -958,21 +975,43 @@ describe('ParkSimulation & Progression Tests', () => {
       );
       expect(formatDurationCompactVi(MAX_WAIT_DURATION_SECONDS)).toBe('3 ngày');
 
-      // 2. Kiểm tra 22 hạt giống & hoa trong FARM_CROPS
+      // 2. Kiểm tra 22 hạt giống & hoa trong FARM_CROPS bắt đầu từ 30 phút (1.800s) ×2 tới 3 ngày (259.200s)
       const cropsSorted = Object.values(FARM_CROPS).sort(
         (a, b) => a.unlockLevel - b.unlockLevel || a.growSec - b.growSec
       );
       expect(cropsSorted).toHaveLength(22);
-      const uniqueGrowSecs = new Set(cropsSorted.map((c) => c.growSec));
-      expect(uniqueGrowSecs.size).toBe(22);
+      expect(cropsSorted[0].growSec).toBe(1800);
+      expect(cropsSorted[1].growSec).toBe(3600);
+      expect(cropsSorted[2].growSec).toBe(7200);
+      expect(cropsSorted[3].growSec).toBe(14400);
+      expect(cropsSorted[4].growSec).toBe(28800);
+      expect(cropsSorted[5].growSec).toBe(57600);
+      expect(cropsSorted[6].growSec).toBe(115200);
+      expect(cropsSorted[7].growSec).toBe(230400);
 
       for (let i = 1; i < cropsSorted.length; i++) {
-        expect(cropsSorted[i].growSec).toBeGreaterThan(cropsSorted[i - 1].growSec);
+        expect(cropsSorted[i].growSec).toBeGreaterThanOrEqual(cropsSorted[i - 1].growSec);
       }
       expect(cropsSorted[cropsSorted.length - 1].id).toBe('phoenix_fireflower');
       expect(cropsSorted[cropsSorted.length - 1].growSec).toBe(MAX_WAIT_DURATION_SECONDS);
 
-      // 3. Không có công thức xưởng nào mở khóa trước hạt giống nguyên liệu của nó
+      // 3. Kiểm tra 8 thú chăn thả bắt đầu từ 30 phút (1.800s) ×2
+      const animalsSorted = Object.values(PASTURE_ANIMALS).sort(
+        (a, b) => a.unlockLevel - b.unlockLevel || a.cycleSec - b.cycleSec
+      );
+      expect(animalsSorted).toHaveLength(8);
+      for (let i = 0; i < animalsSorted.length; i++) {
+        expect(animalsSorted[i].cycleSec).toBe(1800 * Math.pow(2, i));
+      }
+
+      // 4. Kiểm tra 22 công thức xưởng bắt đầu từ 30 phút (1.800s) ×2 và không mở khóa trước nguyên liệu
+      const recipesSorted = [...FARM_WORKSHOP_RECIPES].sort(
+        (a, b) => a.unlockLevel - b.unlockLevel || a.craftSec - b.craftSec
+      );
+      expect(recipesSorted[0].craftSec).toBe(1800);
+      expect(recipesSorted[1].craftSec).toBe(3600);
+      expect(recipesSorted[2].craftSec).toBe(7200);
+      expect(recipesSorted[3].craftSec).toBe(14400);
       for (const rcp of Object.values(FARM_WORKSHOP_RECIPES)) {
         for (const inp of rcp.inputs) {
           const cropMeta = FARM_CROPS[inp.itemId as keyof typeof FARM_CROPS];
@@ -987,21 +1026,21 @@ describe('ParkSimulation & Progression Tests', () => {
       const sim = new ParkSimulation(createMockAudio());
       sim.state.level = 100;
       sim.state.unlockedZones = ZONES.map((z) => z.id);
-      sim.state.match3.stars = 500;
+      sim.state.match3.stars = 5000;
       sim.state.galleons = 500_000;
       sim.state.timeSand = 20;
 
-      // Đặt công trình 2 giờ (burrow_cider_apiary = 7500s = 2g 5p) và công trình thứ hai (burrow_broomsticks_canon = 32400s = 9 giờ)
-      const clockTower = getCatalogItem('burrow_cider_apiary')!;
-      const wheezes = getCatalogItem('burrow_broomsticks_canon')!;
-      expect(clockTower.buildDurationSec).toBe(7500);
-      expect(wheezes.buildDurationSec).toBe(32400);
+      // Đặt công trình bậc 7 (arthur_ford_shed = 7680s = 2g 8p) và công trình tiếp theo (burrow_reed_pond_mill = 15360s = 4g 16p)
+      const clockTower = getCatalogItem('arthur_ford_shed')!;
+      const wheezes = getCatalogItem('burrow_reed_pond_mill')!;
+      expect(clockTower.buildDurationSec).toBe(7680);
+      expect(wheezes.buildDurationSec).toBe(15360);
 
       expect(sim.placeItem(clockTower, 22, 20, 0)).toBe(true);
       expect(sim.placeItem(wheezes, 26, 20, 0)).toBe(true);
 
-      const placedTower = sim.state.buildings.find((b) => b.itemId === 'burrow_cider_apiary')!;
-      const placedWheezes = sim.state.buildings.find((b) => b.itemId === 'burrow_broomsticks_canon')!;
+      const placedTower = sim.state.buildings.find((b) => b.itemId === 'arthur_ford_shed')!;
+      const placedWheezes = sim.state.buildings.find((b) => b.itemId === 'burrow_reed_pond_mill')!;
       expect(placedTower).toBeDefined();
       expect(placedWheezes).toBeDefined();
 
@@ -1043,13 +1082,13 @@ describe('ParkSimulation & Progression Tests', () => {
       );
       expect(quizOut.buildReduction?.reducedSec).toBe(1200);
 
-      // 4. Giảm liên tiếp qua thắng Giải Đố: burrow_clock_tower chạm đúng sàn 1 tiếng (3.600s) và phần dư tự động tràn sang weasley_wizard_wheezes!
+      // 4. Giảm liên tiếp qua thắng Giải Đố: arthur_ford_shed chạm đúng sàn 1 tiếng (3.600s) và phần dư tự động tràn sang burrow_reed_pond_mill!
       sim.applyConstructionReductionFromGameplay(3600, 'Giải Đố Test');
       const nowAfter = Date.now();
       const towerRemainSec = Math.round((placedTower.constructEndsAt - nowAfter) / 1000);
       expect(towerRemainSec).toBeGreaterThanOrEqual(MIN_LONG_BUILD_FLOOR_SECONDS - 2);
       expect(towerRemainSec).toBeLessThanOrEqual(MIN_LONG_BUILD_FLOOR_SECONDS + 2);
-      // Phần dư đã tự động giảm cho công trình thứ hai (weasley_wizard_wheezes)
+      // Phần dư đã tự động giảm cho công trình thứ hai (burrow_reed_pond_mill)
       expect(placedWheezes.buildReducedSec ?? 0).toBeGreaterThan(0);
 
       // 5. Khi tất cả công trình đang xây đều đã chạm sàn 1 tiếng -> reducedSec = 0 & allActiveAtFloor = true

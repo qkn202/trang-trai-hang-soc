@@ -6709,7 +6709,7 @@ export class ParkSimulation {
     this.onUiChange?.();
     return {
       ok: true,
-      msg: `🐾 Đã thả ${animal.emoji} ${animal.name} vào Đồng Cỏ Chăn Thả (${animal.cycleSec}s/mẻ)!`,
+      msg: `🐾 Đã thả ${animal.emoji} ${animal.name} vào Đồng Cỏ Chăn Thả (${formatDurationCompactVi(animal.cycleSec)}/mẻ)!`,
     };
   }
 
