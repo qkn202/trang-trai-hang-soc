@@ -7,18 +7,26 @@ import {
   MinigameLeaderboardState,
   MinigamePersonalRecord,
   NeighborProfileState,
-  QuizLanguageId,
 } from '../types/game';
 import { isNpcNeighborProfile } from './neighborSocial';
 
-export const ALL_LEADERBOARD_GAMES: ReadonlyArray<LeaderboardGameId> = [
+export const SCORED_LEADERBOARD_GAMES: ReadonlyArray<LeaderboardGameId> = [
   'match3',
-  'caro',
   'sudoku',
-  'chess',
   'blocks',
-  'seedquiz',
 ];
+
+export const ALL_LEADERBOARD_GAMES: ReadonlyArray<LeaderboardGameId> = SCORED_LEADERBOARD_GAMES;
+
+export function isScoredLeaderboardGame(
+  gameId: string
+): gameId is 'match3' | 'sudoku' | 'blocks' {
+  return gameId === 'match3' || gameId === 'sudoku' || gameId === 'blocks';
+}
+
+export function normalizeScoredLeaderboardGame(gameId?: string): LeaderboardGameId {
+  return gameId && isScoredLeaderboardGame(gameId) ? gameId : 'match3';
+}
 
 export const MAX_PUZZLE_TOWER_STAGE = 777;
 const CLIENT_UID_STORAGE_KEY = 'hangsoc_client_uid_v1';
@@ -326,58 +334,22 @@ export function getLeaderboardLeagueBadge(
   return { tierId: 'bronze', icon: '🥉', labelVi: 'Tân Binh Đồng' };
 }
 
-function summarizeQuizState(state: GameState): {
-  totalCorrect: number;
-  combinedMastery: number;
-  maxStreak: number;
-  masteredBox5Words: number;
-  totalSeedsEarned: number;
-} {
-  const q = state.languageQuiz;
-  if (!q?.profiles) {
-    return {
-      totalCorrect: 0,
-      combinedMastery: 0,
-      maxStreak: 0,
-      masteredBox5Words: 0,
-      totalSeedsEarned: 0,
-    };
-  }
-  const langs: QuizLanguageId[] = ['en', 'ko', 'zh', 'es', 'ja'];
-  let totalCorrect = 0;
-  let combinedMastery = 0;
-  let maxStreak = 0;
-  let masteredBox5Words = 0;
-  let totalSeedsEarned = 0;
-
-  for (const lid of langs) {
-    const p = q.profiles[lid];
-    if (!p) continue;
-    totalCorrect += Math.max(0, Math.floor(p.totalCorrect ?? 0));
-    combinedMastery += Math.max(0, Math.floor(p.masteryScore ?? 0));
-    maxStreak = Math.max(maxStreak, Math.max(0, Math.floor(p.streak ?? 0)));
-    totalSeedsEarned += Math.max(0, Math.floor(p.seedsEarned ?? 0));
-    const boxes = p.srsBoxes ?? {};
-    for (const rec of Object.values(boxes)) {
-      if (rec && rec.box >= 5) {
-        masteredBox5Words += 1;
-      }
-    }
-  }
-
-  return {
-    totalCorrect,
-    combinedMastery,
-    maxStreak,
-    masteredBox5Words,
-    totalSeedsEarned,
-  };
-}
-
 function deriveBaseRecordFromState(
   state: GameState,
   gameId: LeaderboardGameId
 ): MinigamePersonalRecord {
+  if (!isScoredLeaderboardGame(gameId)) {
+    return {
+      bestStage: 0,
+      highScore: 0,
+      bestSessionScore: 0,
+      totalWins: 0,
+      bestStreak: 0,
+      bestEfficiency: undefined,
+      updatedAt: 0,
+    };
+  }
+
   const m3 = state.match3;
   const pa = state.puzzleArcade;
   const sharedStreak = Math.max(0, Math.floor(m3?.winStreak ?? 0));
@@ -403,36 +375,10 @@ function deriveBaseRecordFromState(
     };
   }
 
-  if (gameId === 'seedquiz') {
-    const qs = summarizeQuizState(state);
-    const rating =
-      qs.totalCorrect * 45 +
-      qs.combinedMastery * 18 +
-      qs.masteredBox5Words * 60 +
-      qs.maxStreak * 30;
-    return {
-      bestStage: qs.totalCorrect,
-      highScore: rating,
-      bestSessionScore: qs.combinedMastery,
-      totalWins: qs.totalCorrect,
-      bestStreak: qs.maxStreak,
-      bestEfficiency: qs.masteredBox5Words,
-      updatedAt: 0,
-    };
-  }
-
-  const stageMap: Record<'caro' | 'sudoku' | 'chess' | 'blocks', number> = {
-    caro: Math.max(
-      0,
-      Math.min(MAX_PUZZLE_TOWER_STAGE, pa?.caroCleared ?? Math.max(0, (pa?.caroStage ?? 1) - 1))
-    ),
+  const stageMap: Record<'sudoku' | 'blocks', number> = {
     sudoku: Math.max(
       0,
       Math.min(MAX_PUZZLE_TOWER_STAGE, pa?.sudokuCleared ?? Math.max(0, (pa?.sudokuStage ?? 1) - 1))
-    ),
-    chess: Math.max(
-      0,
-      Math.min(MAX_PUZZLE_TOWER_STAGE, pa?.chessCleared ?? Math.max(0, (pa?.chessStage ?? 1) - 1))
     ),
     blocks: Math.max(
       0,
@@ -467,7 +413,7 @@ export function ensureMinigameLeaderboardState(state: GameState): MinigameLeader
     };
   }
 
-  for (const gid of ALL_LEADERBOARD_GAMES) {
+  for (const gid of SCORED_LEADERBOARD_GAMES) {
     const base = deriveBaseRecordFromState(state, gid);
     const cur = state.minigameLeaderboard.records[gid];
     if (!cur) {
@@ -478,10 +424,20 @@ export function ensureMinigameLeaderboardState(state: GameState): MinigameLeader
       cur.bestStreak = Math.max(cur.bestStreak ?? 0, base.bestStreak);
       cur.highScore = Math.max(cur.highScore ?? 0, base.highScore);
       cur.bestSessionScore = Math.max(cur.bestSessionScore ?? 0, base.bestSessionScore);
-      if (gid === 'seedquiz') {
-        cur.bestEfficiency = Math.max(cur.bestEfficiency ?? 0, base.bestEfficiency ?? 0);
-      }
     }
+  }
+
+  // Các game không tính điểm (Caro, Cờ Phù Thủy, Học Viện Thần Chú) luôn giữ 0 điểm trên BXH
+  for (const unscoredGid of ['caro', 'chess', 'seedquiz'] as const) {
+    state.minigameLeaderboard.records[unscoredGid] = {
+      bestStage: 0,
+      highScore: 0,
+      bestSessionScore: 0,
+      totalWins: 0,
+      bestStreak: 0,
+      bestEfficiency: undefined,
+      updatedAt: 0,
+    };
   }
 
   return state.minigameLeaderboard;
@@ -761,11 +717,12 @@ export function buildHouseCupStandings(
 
 export function buildMinigameLeaderboard(
   state: GameState,
-  gameId: LeaderboardGameId,
+  rawGameId: LeaderboardGameId,
   scope: Exclude<LeaderboardScope, 'personal'> = 'valley',
   extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>,
   houseFilter: 'all' | HouseName = 'all'
 ): LeaderboardStandingResult {
+  const gameId = normalizeScoredLeaderboardGame(rawGameId);
   const playerRaw = buildPlayerLeaderboardEntry(state, gameId);
   const neighbors = (state.neighborSocial?.neighbors ?? []).filter(
     (n) => !isNpcNeighborProfile(n)
@@ -906,6 +863,21 @@ export function recordMinigameSessionResult(
   gameId: LeaderboardGameId,
   input: MinigameSessionMetricInput = {}
 ): LeaderboardRankChange {
+  // Chỉ tính điểm xếp hạng & Cúp 4 Nhà ở 3 game: Match-3, Sudoku và Pikachu (blocks)
+  if (!isScoredLeaderboardGame(gameId)) {
+    const playerHouse = getPlayerHogwartsHouse(state);
+    return {
+      gameId,
+      previousRank: 1,
+      newRank: 1,
+      rankUpBy: 0,
+      totalEntries: 1,
+      housePointsAwarded: 0,
+      playerHouse,
+      houseRank: 1,
+    };
+  }
+
   const previousRankFromSnapshot =
     input.previousRankOverride && input.previousRankOverride > 0
       ? input.previousRankOverride
@@ -934,49 +906,32 @@ export function recordMinigameSessionResult(
 
   if (input.efficiency !== undefined && Number.isFinite(input.efficiency)) {
     const eff = Math.max(0, Math.round(input.efficiency));
-    if (gameId === 'caro' || gameId === 'chess' || gameId === 'sudoku') {
-      // Lower moves / fewer mistakes is better!
+    if (gameId === 'sudoku') {
+      // Lower mistakes is better!
       if (rec.bestEfficiency === undefined || eff < rec.bestEfficiency) {
         rec.bestEfficiency = eff;
       }
     } else {
-      // Higher lines / score / mastered words is better!
+      // Higher combo / score is better!
       rec.bestEfficiency = Math.max(rec.bestEfficiency ?? 0, eff);
     }
-  } else if (gameId === 'seedquiz' && baseAfter.bestEfficiency !== undefined) {
-    rec.bestEfficiency = Math.max(rec.bestEfficiency ?? 0, baseAfter.bestEfficiency);
   }
 
-  // Recompute authoritative composite rating score so winning replays or higher session scores always progresses!
-  let computedRating = baseAfter.highScore;
-  if (gameId === 'seedquiz') {
-    computedRating = Math.max(
-      computedRating,
-      rec.bestStage * 45 +
-        rec.bestSessionScore * 18 +
-        (rec.bestEfficiency ?? 0) * 60 +
-        rec.bestStreak * 30
-    );
-  } else {
-    const effBonus =
-      gameId === 'caro' || gameId === 'chess'
-        ? rec.bestEfficiency
-          ? Math.max(0, (30 - rec.bestEfficiency) * 18)
-          : 0
-        : gameId === 'sudoku'
-          ? rec.bestEfficiency !== undefined
-            ? Math.max(0, (5 - rec.bestEfficiency) * 90)
-            : 0
-          : Math.round((rec.bestEfficiency ?? 0) * 0.25);
-    computedRating = Math.max(
-      computedRating,
-      rec.bestStage * 155 +
-        rec.totalWins * 28 +
-        rec.bestStreak * 40 +
-        Math.round(rec.bestSessionScore * 0.18) +
-        effBonus
-    );
-  }
+  // Recompute authoritative composite rating score for the 3 scored games (match3, sudoku, blocks)
+  const effBonus =
+    gameId === 'sudoku'
+      ? rec.bestEfficiency !== undefined
+        ? Math.max(0, (5 - rec.bestEfficiency) * 90)
+        : 0
+      : Math.round((rec.bestEfficiency ?? 0) * 0.25);
+  const computedRating = Math.max(
+    baseAfter.highScore,
+    rec.bestStage * 155 +
+      rec.totalWins * 28 +
+      rec.bestStreak * 40 +
+      Math.round(rec.bestSessionScore * 0.18) +
+      effBonus
+  );
   rec.highScore = Math.max(rec.highScore + (sessionScore > 0 ? 15 : 8), computedRating);
   rec.updatedAt = input.nowMs ?? Date.now();
 
@@ -989,10 +944,7 @@ export function recordMinigameSessionResult(
       Hufflepuff: 0,
     };
   }
-  const housePointsAwarded =
-    gameId === 'seedquiz'
-      ? 10 + Math.min(15, Math.floor(rec.bestStreak * 2))
-      : 20 + Math.min(30, Math.floor(rec.bestStage * 0.25));
+  const housePointsAwarded = 20 + Math.min(30, Math.floor(rec.bestStage * 0.25));
   state.housePoints[playerHouse] = Math.max(
     0,
     Math.floor(state.housePoints[playerHouse] ?? 0) + housePointsAwarded
@@ -1042,7 +994,7 @@ export function setCachedCloudLeaderboardEntries(
 }
 
 export function clearCachedCloudLeaderboards(): void {
-  for (const gid of ALL_LEADERBOARD_GAMES) {
+  for (const gid of ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'seedquiz'] as const) {
     delete cloudEntriesMemoryCache[gid];
   }
 }
@@ -1057,6 +1009,9 @@ export async function fetchCloudLeaderboardEntries(
   gameId: LeaderboardGameId,
   endpoint = '/api/leaderboard'
 ): Promise<CloudLeaderboardEntry[]> {
+  if (!isScoredLeaderboardGame(gameId)) {
+    return [];
+  }
   if (typeof window === 'undefined' || typeof fetch === 'undefined') {
     return cloudEntriesMemoryCache[gameId] ?? [];
   }
@@ -1086,6 +1041,7 @@ export async function submitPlayerCloudLeaderboardEntry(
   gameId: LeaderboardGameId,
   endpoint = '/api/leaderboard'
 ): Promise<void> {
+  if (!isScoredLeaderboardGame(gameId)) return;
   if (typeof window === 'undefined' || typeof fetch === 'undefined') return;
   // Avoid noisy network calls in Vitest / headless JSDOM
   if (typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent || '')) return;

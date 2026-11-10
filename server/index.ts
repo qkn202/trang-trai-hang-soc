@@ -314,15 +314,12 @@ export default {
         });
       }
 
-      // 4. Route /api/leaderboard — Per-Minigame Cloud Leaderboard (GET / POST)
+      // 4. Route /api/leaderboard — Per-Minigame Cloud Leaderboard (GET / POST) — Chỉ tính 3 môn: Match-3, Sudoku, Pikachu
       if (pathname === '/api/leaderboard' || pathname.endsWith('/api/leaderboard')) {
         const VALID_GAMES = new Set([
           'match3',
-          'caro',
           'sudoku',
-          'chess',
           'blocks',
-          'seedquiz',
         ]);
 
         if (request.method === 'GET') {

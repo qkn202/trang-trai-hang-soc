@@ -7,7 +7,9 @@ import {
   buildMinigameLeaderboard,
   clearCachedCloudLeaderboards,
   HOGWARTS_HOUSE_META,
+  isScoredLeaderboardGame,
   LEADERBOARD_GAME_META,
+  SCORED_LEADERBOARD_GAMES,
   setCachedCloudLeaderboardEntries,
 } from '../minigameLeaderboard';
 import { CREATURE_ONET_SPECIES, CreatureOnetEngine } from '../puzzleArcadeEngine';
@@ -22,22 +24,22 @@ const mockLocalStorage = {
 };
 vi.stubGlobal('localStorage', mockLocalStorage);
 
-describe('Per-Mini-Game Leaderboards (6 Wizarding Disciplines — Real Players Only)', () => {
+describe('Per-Mini-Game Leaderboards (3 Scored Games: Match-3, Sudoku & Pikachu — Real Players Only)', () => {
   beforeEach(() => {
     storageMap.clear();
     clearCachedCloudLeaderboards();
   });
 
-  it('contains zero NPCs by default across all 6 mini-games (player only until real players/friends sync)', () => {
+  it('contains zero NPCs by default across the 3 scored mini-games (Match-3, Sudoku, Pikachu)', () => {
     const sim = new ParkSimulation(new MagicalAudio());
-    expect(ALL_LEADERBOARD_GAMES).toEqual([
-      'match3',
-      'caro',
-      'sudoku',
-      'chess',
-      'blocks',
-      'seedquiz',
-    ]);
+    expect(SCORED_LEADERBOARD_GAMES).toEqual(['match3', 'sudoku', 'blocks']);
+    expect(ALL_LEADERBOARD_GAMES).toEqual(['match3', 'sudoku', 'blocks']);
+    expect(isScoredLeaderboardGame('match3')).toBe(true);
+    expect(isScoredLeaderboardGame('sudoku')).toBe(true);
+    expect(isScoredLeaderboardGame('blocks')).toBe(true);
+    expect(isScoredLeaderboardGame('caro')).toBe(false);
+    expect(isScoredLeaderboardGame('chess')).toBe(false);
+    expect(isScoredLeaderboardGame('seedquiz')).toBe(false);
 
     for (const gid of ALL_LEADERBOARD_GAMES) {
       expect(LEADERBOARD_GAME_META[gid]).toBeDefined();
@@ -53,10 +55,10 @@ describe('Per-Mini-Game Leaderboards (6 Wizarding Disciplines — Real Players O
     }
   });
 
-  it('tracks independent victories, climbs ranks past real online players, and preserves other disciplines', () => {
+  it('tracks independent victories on the 3 scored games (Match-3, Sudoku, Pikachu) while keeping Caro, Chess, and SeedQuiz unscored', () => {
     const sim = new ParkSimulation(new MagicalAudio());
 
-    // Seed real online players on Match-3 & Chess leaderboards
+    // Seed real online players on Match-3 & Sudoku leaderboards
     setCachedCloudLeaderboardEntries('match3', [
       {
         userId: 'real_user_m3_1',
@@ -88,13 +90,13 @@ describe('Per-Mini-Game Leaderboards (6 Wizarding Disciplines — Real Players O
       },
     ]);
 
-    setCachedCloudLeaderboardEntries('chess', [
+    setCachedCloudLeaderboardEntries('sudoku', [
       {
-        userId: 'real_user_chess_1',
+        userId: 'real_user_sudoku_1',
         name: 'Quốc Bảo',
-        parkName: 'Tháp Cờ Đá',
+        parkName: 'Tháp Cổ Ngữ',
         friendCode: 'HS-QBAO-33',
-        avatarEmoji: '♟️',
+        avatarEmoji: '🔮',
         house: 'Gryffindor',
         primaryValue: 2,
         ratingScore: 360,
@@ -105,10 +107,10 @@ describe('Per-Mini-Game Leaderboards (6 Wizarding Disciplines — Real Players O
       },
     ]);
 
-    const initialChessRank = sim.getPlayerMinigameRank('chess', 'valley');
-    const initialCaroRank = sim.getPlayerMinigameRank('caro', 'valley');
-    expect(initialChessRank).toBe(2);
-    expect(initialCaroRank).toBe(1);
+    const initialSudokuRank = sim.getPlayerMinigameRank('sudoku', 'valley');
+    const initialBlocksRank = sim.getPlayerMinigameRank('blocks', 'valley');
+    expect(initialSudokuRank).toBe(2);
+    expect(initialBlocksRank).toBe(1);
 
     // Clear Stage 1 & Stage 2 of Match-3 -> overtakes real online players!
     const m3Win1 = sim.completeMatch3LevelVictory(12, { sessionScore: 2450 });
@@ -119,79 +121,62 @@ describe('Per-Mini-Game Leaderboards (6 Wizarding Disciplines — Real Players O
     const m3Win2 = sim.completeMatch3LevelVictory(18, { sessionScore: 3100 });
     expect(m3Win2.leaderboardRankUp!.newRank).toBe(1);
 
-    // Unplayed disciplines remain untouched at stage 0
-    expect(sim.getPlayerMinigameRank('chess', 'valley')).toBe(initialChessRank);
-    expect(sim.getPlayerMinigameRank('caro', 'valley')).toBe(initialCaroRank);
+    // Unplayed scored disciplines remain untouched at stage 0
+    expect(sim.getPlayerMinigameRank('sudoku', 'valley')).toBe(initialSudokuRank);
+    expect(sim.getPlayerMinigameRank('blocks', 'valley')).toBe(initialBlocksRank);
 
-    // Win Chess Stage 1..3 with fast checkmate efficiency (6 moves)
-    let lastChessRank = initialChessRank;
+    // Win Sudoku Stage 1..3 with 0 mistakes -> climbs to #1 on Sudoku leaderboard!
+    let lastSudokuRank = initialSudokuRank;
     for (let s = 0; s < 3; s++) {
-      const cw = sim.completePuzzleArcadeVictory(
-        'chess',
-        { stars: 2, sand: 1, gold: 120, xp: 40 },
-        { sessionScore: 2850, efficiency: 6 }
+      const sw = sim.completePuzzleArcadeVictory(
+        'sudoku',
+        { stars: 2, sand: 1, gold: 110, xp: 35 },
+        { sessionScore: 2600, efficiency: 0 }
       );
-      expect(cw.leaderboardRankUp).toBeDefined();
-      lastChessRank = cw.leaderboardRankUp!.newRank;
+      expect(sw.leaderboardRankUp).toBeDefined();
+      expect(sw.leaderboardRankUp!.gameId).toBe('sudoku');
+      lastSudokuRank = sw.leaderboardRankUp!.newRank;
     }
-    expect(lastChessRank).toBe(1);
-    expect(sim.ensureMinigameLeaderboard().records.chess.bestEfficiency).toBe(6);
-
-    // Win Sudoku with 0 mistakes
-    const sw = sim.completePuzzleArcadeVictory(
-      'sudoku',
-      { stars: 2, sand: 1, gold: 110, xp: 35 },
-      { sessionScore: 2600, efficiency: 0 }
-    );
-    expect(sw.leaderboardRankUp?.gameId).toBe('sudoku');
+    expect(lastSudokuRank).toBe(1);
     expect(sim.ensureMinigameLeaderboard().records.sudoku.bestEfficiency).toBe(0);
-  });
 
-  it('updates Học Viện Thần Chú Đa Ngữ (seedquiz) leaderboard past real online scholars', () => {
-    const sim = new ParkSimulation(new MagicalAudio());
-    setCachedCloudLeaderboardEntries('seedquiz', [
-      {
-        userId: 'real_quiz_scholar',
-        name: 'Thu Hà',
-        parkName: 'Vườn Cổ Ngữ',
-        friendCode: 'HS-THHA-44',
-        avatarEmoji: '🦉',
-        house: 'Ravenclaw',
-        primaryValue: 3,
-        ratingScore: 150,
-        totalWins: 3,
-        bestStreak: 3,
-        detailLabelVi: '📦 0 từ Hộp 5 • 🔥×3',
-        updatedAt: Date.now(),
-      },
-    ]);
+    // Verify unscored games (Caro, Chess, SeedQuiz) do NOT award leaderboard points or House Cup points!
+    const houseBeforeUnscored = { ...sim.state.housePoints };
+    const caroWin = sim.completePuzzleArcadeVictory(
+      'caro',
+      { stars: 2, sand: 1, gold: 100, xp: 30 },
+      { sessionScore: 2500, efficiency: 9 }
+    );
+    expect(caroWin.leaderboardRankUp).toBeUndefined();
+    expect(sim.ensureMinigameLeaderboard().records.caro.highScore).toBe(0);
+
+    const chessWin = sim.completePuzzleArcadeVictory(
+      'chess',
+      { stars: 2, sand: 1, gold: 120, xp: 40 },
+      { sessionScore: 2850, efficiency: 6 }
+    );
+    expect(chessWin.leaderboardRankUp).toBeUndefined();
+    expect(sim.ensureMinigameLeaderboard().records.chess.highScore).toBe(0);
 
     const quiz = sim.ensureLanguageQuiz();
-    const startRank = sim.getPlayerMinigameRank('seedquiz', 'valley');
-    expect(startRank).toBe(2);
+    const ch = generateNextQuizChallenge(quiz, sim.state.level);
+    const quizRes = sim.completeSeedLanguageQuizAttempt('ottery_wheat', ch, true);
+    expect(quizRes.leaderboardRankUp).toBeUndefined();
+    expect(sim.ensureMinigameLeaderboard().records.seedquiz.highScore).toBe(0);
 
-    for (let i = 0; i < 5; i++) {
-      const ch = generateNextQuizChallenge(quiz, sim.state.level);
-      const res = sim.completeSeedLanguageQuizAttempt('ottery_wheat', ch, true);
-      expect(res.leaderboardRankUp).toBeDefined();
-      expect(res.leaderboardRankUp!.gameId).toBe('seedquiz');
-    }
-
-    const afterRank = sim.getPlayerMinigameRank('seedquiz', 'valley');
-    expect(afterRank).toBe(1);
-    expect(sim.ensureMinigameLeaderboard().records.seedquiz.bestStage).toBe(5);
+    expect(sim.state.housePoints).toEqual(houseBeforeUnscored);
   });
 
-  it('shows honest 0 for unplayed friends, merges real cloud friend scores, and deduplicates valley entries', () => {
+  it('shows honest 0 for unplayed friends, merges real cloud friend scores, and deduplicates valley entries across the 3 scored games', () => {
     const sim = new ParkSimulation(new MagicalAudio());
-    const beforeFriends = sim.getMinigameLeaderboard('caro', 'friends');
+    const beforeFriends = sim.getMinigameLeaderboard('sudoku', 'friends');
     expect(beforeFriends.totalEntries).toBe(1);
 
     const addRes = sim.addFriendByCode('HS-VKRM-88', 'Viktor Krum');
     expect(addRes.ok).toBe(true);
 
     // Without cloud record yet -> honest 0 score (no fake NPC/hash score)
-    const afterFriendsNoCloud = sim.getMinigameLeaderboard('caro', 'friends');
+    const afterFriendsNoCloud = sim.getMinigameLeaderboard('sudoku', 'friends');
     expect(afterFriendsNoCloud.totalEntries).toBe(2);
     const friendRow0 = afterFriendsNoCloud.entries.find((e) => e.friendCode === 'HS-VKRM-88');
     expect(friendRow0).toBeDefined();
@@ -199,7 +184,7 @@ describe('Per-Mini-Game Leaderboards (6 Wizarding Disciplines — Real Players O
     expect(friendRow0!.ratingScore).toBe(0);
 
     // Once real cloud record syncs for HS-VKRM-88 -> friends & valley both show real score without duplicating!
-    setCachedCloudLeaderboardEntries('caro', [
+    setCachedCloudLeaderboardEntries('sudoku', [
       {
         userId: 'vkrm_real_uid',
         name: 'Viktor Krum',
@@ -216,18 +201,18 @@ describe('Per-Mini-Game Leaderboards (6 Wizarding Disciplines — Real Players O
       },
     ]);
 
-    const afterFriendsSynced = sim.getMinigameLeaderboard('caro', 'friends');
+    const afterFriendsSynced = sim.getMinigameLeaderboard('sudoku', 'friends');
     const friendRowSynced = afterFriendsSynced.entries.find((e) => e.friendCode === 'HS-VKRM-88');
     expect(friendRowSynced!.primaryValue).toBe(42);
     expect(friendRowSynced!.ratingScore).toBe(7850);
 
-    const valleySynced = sim.getMinigameLeaderboard('caro', 'valley');
+    const valleySynced = sim.getMinigameLeaderboard('sudoku', 'valley');
     expect(valleySynced.entries.filter((e) => e.friendCode === 'HS-VKRM-88').length).toBe(1);
 
     const summaries = sim.getAllPersonalLeaderboardSummaries();
-    expect(summaries).toHaveLength(6);
+    expect(summaries).toHaveLength(3);
     const ids = summaries.map((s) => s.gameId);
-    expect(ids).toEqual(['match3', 'caro', 'sudoku', 'chess', 'blocks', 'seedquiz']);
+    expect(ids).toEqual(['match3', 'sudoku', 'blocks']);
 
     // Verify cloud merge deduplicates player's own friendCode while adding external cloud players
     const ownCode = sim.ensureNeighborSocial().playerFriendCode;

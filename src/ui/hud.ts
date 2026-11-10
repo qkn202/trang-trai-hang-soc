@@ -280,7 +280,7 @@ export class GameHUD {
         );
       }
     );
-    this.seedQuizModal.onOpenLeaderboard = () => this.openLeaderboardDialog('seedquiz');
+    this.seedQuizModal.onOpenLeaderboard = () => this.openLeaderboardDialog('match3');
     this.leaderboardModal = new LeaderboardModalController(this.root, this.sim);
     this.leaderboardModal.onJumpToGame = (gid) => {
       const m3Dlg = this.root.querySelector('#match3Dialog') as HTMLDialogElement | null;
@@ -547,7 +547,7 @@ export class GameHUD {
             <button id="btnManageOpenFeast" type="button" class="brass-btn gold-cta" title="Đại Tiệc Mùa Gặt Hang Sóc — Tích điểm 🍁 mở 30 nấc quà lớn của Bà Molly">
               🍁 Tiệc Mùa Gặt <span id="badgeManageFeastCount" class="badge-dot hidden">0</span>
             </button>
-            <button id="btnOpenLeaderboard" type="button" class="brass-btn gold-cta" title="Bảng Xếp Hạng Riêng Cho Từng Mini Game (6 Môn Khảo Thí &amp; Thần Chú)">
+            <button id="btnOpenLeaderboard" type="button" class="brass-btn gold-cta" title="Bảng Xếp Hạng &amp; Cúp 4 Nhà Hogwarts (3 Môn Tính Điểm: Match-3, Sudoku &amp; Pikachu)">
               🏆 Bảng Xếp Hạng
             </button>
             <button id="btnOpenSuitcase" type="button" class="brass-btn" title="Vali Bảo Tồn Sinh Vật Huyền Bí (Phím B)">

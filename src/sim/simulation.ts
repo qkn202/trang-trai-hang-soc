@@ -151,7 +151,9 @@ import {
   getCachedCloudLeaderboardEntries,
   getPlayerHogwartsHouse,
   HOGWARTS_HOUSE_META,
+  isScoredLeaderboardGame,
   LeaderboardStandingResult,
+  normalizeScoredLeaderboardGame,
   PersonalDisciplineSummaryRow,
   recordMinigameSessionResult,
   rollSortingHatHouse,
@@ -5787,7 +5789,7 @@ export class ParkSimulation {
     );
     this.saveToStorage();
     this.onUiChange?.();
-    if (activeGameId) {
+    if (activeGameId && isScoredLeaderboardGame(activeGameId)) {
       void submitPlayerCloudLeaderboardEntry(this.state, activeGameId);
     }
     return chosen;
@@ -5804,7 +5806,7 @@ export class ParkSimulation {
     );
     this.saveToStorage();
     this.onUiChange?.();
-    if (activeGameId) {
+    if (activeGameId && isScoredLeaderboardGame(activeGameId)) {
       void submitPlayerCloudLeaderboardEntry(this.state, activeGameId);
     }
     return chosen;
@@ -5816,11 +5818,12 @@ export class ParkSimulation {
     houseFilter: 'all' | HouseName = 'all'
   ): LeaderboardStandingResult {
     this.ensureNeighborSocial();
+    const scoredGameId = normalizeScoredLeaderboardGame(gameId);
     return buildMinigameLeaderboard(
       this.state,
-      gameId,
+      scoredGameId,
       scope,
-      getCachedCloudLeaderboardEntries(gameId),
+      getCachedCloudLeaderboardEntries(scoredGameId),
       houseFilter
     );
   }
@@ -6097,7 +6100,8 @@ export class ParkSimulation {
     buildReduction?: BuildReductionResult;
     leaderboardRankUp?: LeaderboardRankChange;
   } {
-    const prevLbRank = this.getPlayerMinigameRank(mode, 'valley');
+    const isScoredMode = isScoredLeaderboardGame(mode);
+    const prevLbRank = isScoredMode ? this.getPlayerMinigameRank(mode, 'valley') : 0;
     const pa = this.state.puzzleArcade;
     const m3 = this.state.match3;
 
@@ -6200,18 +6204,21 @@ export class ParkSimulation {
       'Đại Sảnh Khảo Thí'
     );
 
-    const sessionPts = Math.max(
-      950 + playedStage * 80,
-      Math.round(sessionMetrics?.sessionScore ?? 0)
-    );
-    const leaderboardRankUp = recordMinigameSessionResult(this.state, mode, {
-      clearedStage: newCleared,
-      sessionScore: sessionPts,
-      efficiency: sessionMetrics?.efficiency,
-      streak: m3.winStreak,
-      previousRankOverride: prevLbRank,
-    });
-    void submitPlayerCloudLeaderboardEntry(this.state, mode);
+    let leaderboardRankUp: LeaderboardRankChange | undefined;
+    if (isScoredMode) {
+      const sessionPts = Math.max(
+        950 + playedStage * 80,
+        Math.round(sessionMetrics?.sessionScore ?? 0)
+      );
+      leaderboardRankUp = recordMinigameSessionResult(this.state, mode, {
+        clearedStage: newCleared,
+        sessionScore: sessionPts,
+        efficiency: sessionMetrics?.efficiency,
+        streak: m3.winStreak,
+        previousRankOverride: prevLbRank,
+      });
+      void submitPlayerCloudLeaderboardEntry(this.state, mode);
+    }
 
     this.audio.playLevelUp();
     if (starsEarned > 0) this.onRewardFly?.('stars', starsEarned);
@@ -6426,7 +6433,6 @@ export class ParkSimulation {
     challenge: ActiveQuizChallenge,
     correct: boolean
   ): QuizAttemptOutcome & { newSeedCount: number; cropName: string } {
-    const prevLbRank = correct ? this.getPlayerMinigameRank('seedquiz', 'valley') : 0;
     const quiz = this.ensureLanguageQuiz();
     const crop = FARM_CROPS[cropId];
     const outcome = recordQuizAttempt(quiz, challenge, correct);
@@ -6440,7 +6446,7 @@ export class ParkSimulation {
 
     let phoenixTalismanAwarded = 0;
     let buildReduction: BuildReductionResult | undefined;
-    let leaderboardRankUp: LeaderboardRankChange | undefined;
+    const leaderboardRankUp: LeaderboardRankChange | undefined = undefined;
     let talismanProgress = Math.max(0, Math.min(7, Math.floor(this.state.quizTalismanProgress ?? 0)));
     if (correct) {
       const nextProg = talismanProgress + 1;
@@ -6461,11 +6467,6 @@ export class ParkSimulation {
         'Học Viện Thần Chú'
       );
       this.addHarvestFeastPoints(challenge.tier === 'advanced' ? 12 : 9);
-      leaderboardRankUp = recordMinigameSessionResult(this.state, 'seedquiz', {
-        streak: outcome.newStreak,
-        previousRankOverride: prevLbRank,
-      });
-      void submitPlayerCloudLeaderboardEntry(this.state, 'seedquiz');
       if (outcome.tierAutoPromoted || phoenixTalismanAwarded > 0) {
         this.audio.playLevelUp();
       } else {

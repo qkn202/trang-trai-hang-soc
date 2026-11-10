@@ -6,6 +6,7 @@ import {
   HouseCupStanding,
   LEADERBOARD_GAME_META,
   LeaderboardRowEntry,
+  normalizeScoredLeaderboardGame,
   submitPlayerCloudLeaderboardEntry,
 } from '../sim/minigameLeaderboard';
 import { ParkSimulation } from '../sim/simulation';
@@ -103,8 +104,10 @@ export class LeaderboardModalController {
     scope?: LeaderboardScope,
     houseFilter?: 'all' | HouseName
   ): void {
-    if (gameId && ALL_LEADERBOARD_GAMES.includes(gameId)) {
-      this.activeGameId = gameId;
+    if (gameId) {
+      this.activeGameId = normalizeScoredLeaderboardGame(gameId);
+    } else if (!ALL_LEADERBOARD_GAMES.includes(this.activeGameId)) {
+      this.activeGameId = 'match3';
     }
     if (scope === 'valley' || scope === 'friends' || scope === 'personal') {
       this.activeScope = scope;
@@ -232,7 +235,7 @@ export class LeaderboardModalController {
         <div class="house-cup-header-bar">
           <div class="house-cup-heading-copy">
             <h3 class="house-cup-heading">🏆 Cúp 4 Nhà Hogwarts — Đồng Hồ Cát Đá Quý Đại Sảnh Đường</h3>
-            <p class="house-cup-quote">${escapeHtml(playerHouseMeta.quoteVi)}</p>
+            <p class="house-cup-quote">${escapeHtml(playerHouseMeta.quoteVi)} • <strong>Chỉ tính điểm ở 3 môn: 🍓 Match-3, 🔮 Sudoku &amp; 🦄 Pikachu</strong></p>
           </div>
           <div class="lb-sorting-hat-box">
             <div class="lb-sorting-hat-label">
@@ -327,7 +330,7 @@ export class LeaderboardModalController {
             data-lb-scope="personal"
             class="lb-scope-pill ${this.activeScope === 'personal' ? 'active' : ''}"
           >
-            📜 Kỷ Lục Cả 6 Môn
+            📜 Kỷ Lục 3 Môn Tính Điểm
           </button>
         </div>
 
@@ -579,8 +582,8 @@ export class LeaderboardModalController {
       <div class="lb-cup-banner">
         <img src="/sprites/m3_icon_star.png" alt="" class="lb-cup-icon" />
         <div class="lb-cup-copy">
-          <div class="lb-cup-title">📜 Hồ Sơ Kỷ Lục Cá Nhân Toàn Bộ 6 Mini Game</div>
-          <div class="lb-cup-sub">Tổng hợp thứ hạng Toàn Thung Lũng, thứ hạng Bạn Bè và kỷ lục hiệu suất của bạn ở cả 6 bộ môn khảo thí &amp; thần chú Hogwarts.</div>
+          <div class="lb-cup-title">📜 Hồ Sơ Kỷ Lục Cá Nhân — 3 Bộ Môn Tính Điểm</div>
+          <div class="lb-cup-sub">Chỉ tính điểm xếp hạng &amp; Cúp 4 Nhà Hogwarts ở 3 bộ môn: 🍓 Bùa Gặt (Match-3), 🔮 Cửu Bảo Bối (Sudoku) và 🦄 Nối Sinh Vật (Pikachu). Các môn còn lại không tính điểm.</div>
         </div>
       </div>
 
@@ -590,11 +593,11 @@ export class LeaderboardModalController {
           style="--label-2: 'Thứ Hạng'; --label-3: 'Mốc Đỉnh'; --label-4: 'Điểm Phép'; --label-5: 'Thành Tích &amp; Chơi';"
         >
           <caption id="lbPersonalTableCaption" class="lb-table-caption">
-            Bảng tổng hợp kỷ lục cá nhân trên 6 bộ môn mini game tại Trang Trại Hang Sóc
+            Bảng tổng hợp kỷ lục cá nhân trên 3 bộ môn tính điểm (Match-3, Sudoku, Pikachu) tại Trang Trại Hang Sóc
           </caption>
           <thead>
             <tr>
-              <th scope="col">Bộ Môn Khảo Thí &amp; Thần Chú</th>
+              <th scope="col">Bộ Môn Tính Điểm</th>
               <th scope="col">Thứ Hạng</th>
               <th scope="col">Mốc Đỉnh</th>
               <th scope="col">Điểm Phép</th>

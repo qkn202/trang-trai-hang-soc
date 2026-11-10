@@ -288,7 +288,6 @@ export class SeedQuizModalController {
         : 100;
     const srsSummary = getProfileSrsSummary(profile);
     const poolStats = getLanguagePoolStats(activeLang);
-    const sqRank = this.sim.getPlayerMinigameRank('seedquiz', 'valley');
     const talismanCount = Math.max(0, Math.floor(this.sim.state.phoenixTalismans ?? 0));
     const talismanProg = Math.max(0, Math.floor(this.sim.state.quizTalismanProgress ?? 0)) % 8;
 
@@ -565,9 +564,9 @@ export class SeedQuizModalController {
                 id="btnSqOpenLeaderboard"
                 type="button"
                 class="sq-view-tab minigame-lb-chip"
-                title="Mở Bảng Xếp Hạng Học Viện Thần Chú Đa Ngữ Hogwarts — Hạng hiện tại: #${sqRank}"
+                title="Mở Bảng Xếp Hạng &amp; Cúp 4 Nhà Hogwarts (Chỉ tính điểm ở 3 môn: Match-3, Sudoku &amp; Pikachu)"
               >
-                🏆 Bảng Xếp Hạng (#${sqRank})
+                🏆 BXH 3 Môn Giải Đố
               </button>
             </div>
 

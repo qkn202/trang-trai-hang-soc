@@ -1317,7 +1317,8 @@ export class PuzzleArcadeModalController {
     const reqTrial = this.sim.getRequiredLevelTrial();
     const winsProg = this.sim.getWinsProgressForCurrentLevel();
     const curInfo = this.sim.getDisciplineStageInfo(this.mode);
-    const activeModeRank = this.sim.getPlayerMinigameRank(this.mode, 'valley');
+    const isScoredMode = this.mode === 'sudoku' || this.mode === 'blocks';
+    const activeModeRank = isScoredMode ? this.sim.getPlayerMinigameRank(this.mode, 'valley') : 0;
     const nextCap = Math.min(100, st.level + 1);
     const isFeaturedModeNow = Boolean(
       !curInfo.isMaxed &&
@@ -1779,7 +1780,7 @@ export class PuzzleArcadeModalController {
                   ${vs.isMasterReplay || curInfo.isMaxed ? `👑 Đấu Lại Đỉnh 777/777` : `▶️ Sang Màn ${vs.nextStage}/${MAX_MINIGAME_STAGE}`}
                 </button>
                 <button id="btnPaVictoryLeaderboard" type="button" class="brass-btn" style="padding:9px 14px;font-size:13px;">
-                  🏆 Bảng Xếp Hạng (#${activeModeRank})
+                  ${isScoredMode ? `🏆 Bảng Xếp Hạng (#${activeModeRank})` : '🏆 BXH 3 Môn Tính Điểm'}
                 </button>
                 <button id="btnPaBackToPark" type="button" class="brass-btn" style="padding:9px 14px;font-size:13px;">
                   🏗️ Về Xây Điền Trang (${st.sandboxMode ? '∞' : st.match3.stars} 🌟)
@@ -1831,9 +1832,9 @@ export class PuzzleArcadeModalController {
                   <span>🔥</span>
                   <strong id="paTalismanText">${talismanDisp}</strong>
                 </span>
-                <button id="btnPaOpenLeaderboard" type="button" class="m3-res-chip minigame-lb-chip" title="Mở Bảng Xếp Hạng riêng cho môn đang chọn — Hạng hiện tại của bạn: #${activeModeRank}">
+                <button id="btnPaOpenLeaderboard" type="button" class="m3-res-chip minigame-lb-chip" title="${isScoredMode ? `Mở Bảng Xếp Hạng riêng cho môn đang chọn — Hạng hiện tại của bạn: #${activeModeRank}` : 'Chỉ tính điểm xếp hạng ở 3 môn: Match-3, Sudoku & Pikachu (môn hiện tại không tính điểm)'}">
                   <span>🏆</span>
-                  <strong id="paRankText">Hạng #${activeModeRank}</strong>
+                  <strong id="paRankText">${isScoredMode ? `Hạng #${activeModeRank}` : 'BXH 3 Môn'}</strong>
                 </button>
                 ${
                   streakCount > 0
