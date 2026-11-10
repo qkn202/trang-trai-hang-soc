@@ -1308,3 +1308,33 @@ export class ParkSimulation {
 
   public startNextHarvestFeastCycle(): { ok: boolean; msg: string } { return questsStartNextHarvestFeastCycle(this); }
 }
+
+export {
+  ACHIEVEMENT_REGISTRY,
+  answerVillagerDialogue,
+  buildSaveSlotMeta,
+  claimAchievementReward,
+  claimDailyRetentionReward,
+  CURRENT_SAVE_SCHEMA_VERSION,
+  DAY_1_TO_7_REWARDS,
+  ensureRetentionState,
+  evaluateAchievements,
+  exportSavePayload,
+  getAchievementCodexSummary,
+  getNpcScheduleForPeriod,
+  importSavePayload,
+  loadFromNamedSlot,
+  resolveCloudSaveConflict,
+  saveToNamedSlot,
+  STORY_CUTSCENE_CHAPTERS,
+} from './retentionAndNarrative';
+export type {
+  AchievementCategory,
+  AchievementDef,
+  CloudConflictPolicy,
+  NpcScheduleSlot,
+  RetentionNarrativeState,
+  SaveSlotId,
+  SaveSlotMetadata,
+  StoryCutsceneChapter,
+} from './retentionAndNarrative';
