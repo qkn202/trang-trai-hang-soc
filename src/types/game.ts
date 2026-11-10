@@ -366,6 +366,7 @@ export interface PlacedBuilding {
   pastureFedBoost?: boolean;
   workshopQueue?: WorkshopQueueSlot[];
   readyFarmGoods?: FarmGoodId[];
+  harvestCycleCount?: number; // Số lần đã thu hoạch / hoàn thành chu kỳ kinh tế (lần đầu = 1h, các lần sau nhân 2^n)
 }
 
 export interface BuildReductionResult {
@@ -618,6 +619,7 @@ export interface SupplyChainState {
   cargoTrainIndex: number;
   cargoCrates: ExpressCargoCrate[];
   lastHerbPlotHarvestAt: number;
+  brewCompletedCount?: number; // Số mẻ nấu đã hoàn thành (lần đầu = 1h, các lần sau tăng theo cấp số nhân)
 }
 
 export interface ActiveVipVisit {
@@ -853,7 +855,9 @@ export interface NeighborSocialState {
   dailyRescuesReceivedCount: number; // Max 5 rescues received/day
   dailyLikedNeighborIds: string[]; // 1 like/friend/day
   dailyMysteryClaimedIds: string[]; // 1 mystery basket/friend/day
-  dailyOwlHelpRequestedCount: number; // Max 3 owl crate help calls/day
+  dailyOwlHelpRequestedCount: number; // Max 5 owl crate help calls/day
+  dailyGardenHelpsCount?: number; // Max 5 garden helps/day across all friends
+  dailyHomeLanternsClaimedCount?: number; // Max 5 home lantern helps received/claimed per day
   neighbors: NeighborProfileState[];
   homeLanternMarks: HomeOwlLanternMark[];
   playerMinigameSos: PlayerMinigameSosState | null;

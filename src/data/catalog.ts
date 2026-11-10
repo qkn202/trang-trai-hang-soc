@@ -2127,6 +2127,30 @@ export const CATALOG: CatalogItem[] = [
 export const TIME_SAND_SKIP_SECONDS = 300; // 1 Cát Xoay Thời Gian dùng cho lò bánh / thám hiểm / ấp trứng biến thể
 export const MAX_WAIT_DURATION_SECONDS = 3 * 24 * 3600; // Trần tối đa 3 ngày (259.200s = 72 giờ)
 export const MIN_LONG_BUILD_FLOOR_SECONDS = 3600; // Sàn tối thiểu 1 tiếng (3.600s) để tự hoàn thành với công trình >= 1 tiếng
+export const FIRST_ECONOMIC_CYCLE_SEC = 3600; // Ở lần thu hoạch đầu tiên, mặc định hoàn thành trong 1 tiếng đồng hồ (3.600s)
+export const MINIGAME_CLEAR_REDUCTION_SEC = 600; // Mỗi lần chơi mini-game qua màn giảm 10 phút (600s)
+
+/**
+ * Thời gian hoạt động kinh tế (trừ mini-game):
+ * - Ở lần thu hoạch đầu tiên (completedCount <= 0): mặc định hoàn thành trong 1 tiếng đồng hồ (3.600s).
+ * - Các lần thu hoạch tiếp theo (completedCount = 1, 2, 3, ...): tăng theo cấp số nhân ×2 (2g, 4g, 8g, 16g...).
+ */
+export function computeEconomicCycleSeconds(
+  completedCount = 0,
+  baseSec = FIRST_ECONOMIC_CYCLE_SEC
+): number {
+  const step = Math.max(0, Math.min(20, Math.floor(completedCount)));
+  const startSec = baseSec > 0 ? baseSec : FIRST_ECONOMIC_CYCLE_SEC;
+  return Math.max(60, Math.round(startSec * Math.pow(2, step)));
+}
+
+export function getBuildingEffectiveCycleSec(
+  b: { harvestCycleCount?: number } | null | undefined,
+  item: Pick<CatalogItem, 'cycleSec'> | null | undefined
+): number {
+  if (!item || item.cycleSec <= 0) return 0;
+  return computeEconomicCycleSeconds(b?.harvestCycleCount ?? 0, item.cycleSec);
+}
 
 /**
  * Mức thời gian còn lại tối thiểu mà người chơi có thể rút ngắn công trình đang xây
@@ -2220,9 +2244,21 @@ export function formatDurationCountdownVi(totalSec: number): string {
   return `${mins}p ${String(remSec).padStart(2, '0')}s`;
 }
 
-// Đồng bộ thời gian xây dựng và giảm 5 lần thu nhập công trình (hướng tới chơi Mini-game là chính)
+// Đồng bộ thời gian hoạt động kinh tế (lần thu hoạch đầu mặc định 1 tiếng = 3.600s) & giảm 5 lần thu nhập công trình
+for (const crop of Object.values(FARM_CROPS)) {
+  crop.growSec = FIRST_ECONOMIC_CYCLE_SEC;
+}
+for (const animal of Object.values(PASTURE_ANIMALS)) {
+  animal.cycleSec = FIRST_ECONOMIC_CYCLE_SEC;
+}
+for (const recipe of FARM_WORKSHOP_RECIPES) {
+  recipe.craftSec = FIRST_ECONOMIC_CYCLE_SEC;
+}
 for (const item of CATALOG) {
   item.buildDurationSec = computeRealTimeBuildSeconds(item);
+  if (item.cycleSec > 0) {
+    item.cycleSec = FIRST_ECONOMIC_CYCLE_SEC;
+  }
   if (item.baseIncome > 0) {
     item.baseIncome = Math.max(1, Math.round(item.baseIncome / 5));
   }

@@ -1,12 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CATALOG,
+  computeEconomicCycleSeconds,
   FARM_CROPS,
   FARM_GOODS,
   FARM_WORKSHOP_RECIPES,
+  FIRST_ECONOMIC_CYCLE_SEC,
   formatDurationCompactVi,
   getCatalogItem,
   MAX_WAIT_DURATION_SECONDS,
+  MINIGAME_CLEAR_REDUCTION_SEC,
   MIN_LONG_BUILD_FLOOR_SECONDS,
   PASTURE_ANIMALS,
 } from '../../data/catalog';
@@ -24,8 +27,10 @@ import { BUILD_HUD_CATEGORIES } from '../../ui/hud';
 import { MagicalAudio } from '../../engine/audio';
 import {
   FRIENDSHIP_CHEST_TOKEN_COST,
+  MAX_DAILY_FRIEND_HELPS,
   MAX_DAILY_MINIGAME_RESCUES,
   MAX_DAILY_OWL_HELP_REQUESTS,
+  MAX_HOME_LANTERN_MARKS,
   syncNeighborSocialDailyReset,
 } from '../neighborSocial';
 import { ParkSimulation } from '../simulation';
@@ -655,7 +660,9 @@ describe('ParkSimulation & Progression Tests', () => {
       const tokensBeforeLantern = sim.ensureNeighborSocial().friendshipTokens;
       expect(sim.claimHomeLanternMark('lantern_test_1').ok).toBe(true);
       expect(sim.ensureNeighborSocial().friendshipTokens).toBe(tokensBeforeLantern + 1);
-      expect(MAX_DAILY_OWL_HELP_REQUESTS).toBe(3);
+      expect(MAX_DAILY_OWL_HELP_REQUESTS).toBe(5);
+      expect(MAX_DAILY_FRIEND_HELPS).toBe(5);
+      expect(MAX_HOME_LANTERN_MARKS).toBe(5);
     });
 
     it('Giải cứu Minigame khóa chặt 1 lần/ngày/bạn, trần 5 lần/ngày và reset đúng 00:00 ngày mới', () => {
@@ -975,44 +982,27 @@ describe('ParkSimulation & Progression Tests', () => {
       );
       expect(formatDurationCompactVi(MAX_WAIT_DURATION_SECONDS)).toBe('3 ngày');
 
-      // 2. Kiểm tra 22 hạt giống & hoa trong FARM_CROPS bắt đầu từ 30 phút (1.800s) ×2 tới 3 ngày (259.200s)
-      const cropsSorted = Object.values(FARM_CROPS).sort(
-        (a, b) => a.unlockLevel - b.unlockLevel || a.growSec - b.growSec
-      );
+      // 2. Kiểm tra hoạt động kinh tế (22 hạt giống, 8 thú chăn thả, 22 công thức xưởng) mặc định 1 tiếng (3.600s) ở lần thu hoạch đầu và nhân 2 ở các lần tiếp theo
+      const cropsSorted = Object.values(FARM_CROPS);
       expect(cropsSorted).toHaveLength(22);
-      expect(cropsSorted[0].growSec).toBe(1800);
-      expect(cropsSorted[1].growSec).toBe(3600);
-      expect(cropsSorted[2].growSec).toBe(7200);
-      expect(cropsSorted[3].growSec).toBe(14400);
-      expect(cropsSorted[4].growSec).toBe(28800);
-      expect(cropsSorted[5].growSec).toBe(57600);
-      expect(cropsSorted[6].growSec).toBe(115200);
-      expect(cropsSorted[7].growSec).toBe(230400);
-
-      for (let i = 1; i < cropsSorted.length; i++) {
-        expect(cropsSorted[i].growSec).toBeGreaterThanOrEqual(cropsSorted[i - 1].growSec);
+      for (const crop of cropsSorted) {
+        expect(crop.growSec).toBe(FIRST_ECONOMIC_CYCLE_SEC);
       }
-      expect(cropsSorted[cropsSorted.length - 1].id).toBe('phoenix_fireflower');
-      expect(cropsSorted[cropsSorted.length - 1].growSec).toBe(MAX_WAIT_DURATION_SECONDS);
+      expect(computeEconomicCycleSeconds(0)).toBe(3600);
+      expect(computeEconomicCycleSeconds(1)).toBe(7200);
+      expect(computeEconomicCycleSeconds(2)).toBe(14400);
+      expect(computeEconomicCycleSeconds(3)).toBe(28800);
 
-      // 3. Kiểm tra 8 thú chăn thả bắt đầu từ 30 phút (1.800s) ×2
-      const animalsSorted = Object.values(PASTURE_ANIMALS).sort(
-        (a, b) => a.unlockLevel - b.unlockLevel || a.cycleSec - b.cycleSec
-      );
+      // 3. Kiểm tra 8 thú chăn thả mặc định 1 tiếng (3.600s) ở lần thu hoạch đầu
+      const animalsSorted = Object.values(PASTURE_ANIMALS);
       expect(animalsSorted).toHaveLength(8);
-      for (let i = 0; i < animalsSorted.length; i++) {
-        expect(animalsSorted[i].cycleSec).toBe(1800 * Math.pow(2, i));
+      for (const animal of animalsSorted) {
+        expect(animal.cycleSec).toBe(FIRST_ECONOMIC_CYCLE_SEC);
       }
 
-      // 4. Kiểm tra 22 công thức xưởng bắt đầu từ 30 phút (1.800s) ×2 và không mở khóa trước nguyên liệu
-      const recipesSorted = [...FARM_WORKSHOP_RECIPES].sort(
-        (a, b) => a.unlockLevel - b.unlockLevel || a.craftSec - b.craftSec
-      );
-      expect(recipesSorted[0].craftSec).toBe(1800);
-      expect(recipesSorted[1].craftSec).toBe(3600);
-      expect(recipesSorted[2].craftSec).toBe(7200);
-      expect(recipesSorted[3].craftSec).toBe(14400);
+      // 4. Kiểm tra 22 công thức xưởng mặc định 1 tiếng (3.600s) ở lần đầu và không mở khóa trước nguyên liệu
       for (const rcp of Object.values(FARM_WORKSHOP_RECIPES)) {
+        expect(rcp.craftSec).toBe(FIRST_ECONOMIC_CYCLE_SEC);
         for (const inp of rcp.inputs) {
           const cropMeta = FARM_CROPS[inp.itemId as keyof typeof FARM_CROPS];
           if (cropMeta) {
@@ -1022,7 +1012,7 @@ describe('ParkSimulation & Progression Tests', () => {
       }
     });
 
-    it('Khoá Cát Xoay Thời Gian khi chơi thường; thắng Minigame & Quiz Ngoại Ngữ tự động giảm giờ xây nhưng giữ sàn tối thiểu 1 tiếng (3.600s) để tự hoàn thành', () => {
+    it('Khoá Cát Xoay Thời Gian khi chơi thường; mỗi lần qua màn Minigame & Quiz giảm 10 phút (600s) cho cả xây dựng lẫn hoạt động kinh tế', () => {
       const sim = new ParkSimulation(createMockAudio());
       sim.state.level = 100;
       sim.state.unlockedZones = ZONES.map((z) => z.id);
@@ -1044,18 +1034,35 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(placedTower).toBeDefined();
       expect(placedWheezes).toBeDefined();
 
+      // Kiểm tra ruộng canh tác: lần thu hoạch đầu 1 tiếng (3.600s), lần 2 là 2 tiếng (7.200s), qua màn minigame giảm 10 phút (600s)
+      const emptyPlot = sim.state.buildings.find((b) => b.uid === 'burrow_plot_empty')!;
+      sim.addCropSeeds('ottery_wheat', 5);
+      expect(sim.plantCropOnPlot(emptyPlot.uid, 'ottery_wheat').ok).toBe(true);
+      const firstGrowSec = Math.round((emptyPlot.cropReadyAt! - emptyPlot.cropPlantedAt!) / 1000);
+      expect(firstGrowSec).toBe(3600);
+
       // 1. Cát Xoay Thời Gian bị khóa cho xây dựng công trình ở chế độ thường (!sandboxMode)
       const endBeforeSand = placedTower.constructEndsAt;
       expect(sim.speedUpWithTimeSand(placedTower.uid, true)).toBe(false);
       expect(placedTower.constructEndsAt).toBe(endBeforeSand);
 
-      // 2. Thắng 1 màn Match-3 (Màn 1 -> giảm 1800s = 30p, hoặc +900s nếu trúng Môn Đề Cử)
+      // 2. Thắng 1 màn Match-3 -> giảm đúng 10 phút (600s) cho cả công trình đang xây và cây đang trồng!
+      const cropReadyBeforeM3 = emptyPlot.cropReadyAt!;
       const m3Res = sim.completeMatch3LevelVictory(0);
       expect(m3Res.buildReduction).toBeDefined();
-      expect(m3Res.buildReduction!.reducedSec).toBeGreaterThanOrEqual(1800);
-      expect(placedTower.buildReducedSec).toBe(m3Res.buildReduction!.reducedSec);
+      expect(m3Res.buildReduction!.reducedSec).toBe(MINIGAME_CLEAR_REDUCTION_SEC);
+      expect(placedTower.buildReducedSec).toBe(600);
+      expect(Math.round((cropReadyBeforeM3 - emptyPlot.cropReadyAt!) / 1000)).toBe(600);
 
-      // 3. Trả lời đúng 1 câu Quiz Ngoại Ngữ (Cao cấp = -1200s = -20 phút)
+      // Thu hoạch lần 1 -> gieo lần 2 tăng theo cấp số nhân lên 2 tiếng (7.200s)
+      emptyPlot.cropReadyAt = Date.now() - 1000;
+      expect(sim.harvestCropPlot(emptyPlot.uid).ok).toBe(true);
+      expect(emptyPlot.harvestCycleCount).toBe(1);
+      expect(sim.plantCropOnPlot(emptyPlot.uid, 'ottery_wheat').ok).toBe(true);
+      const secondGrowSec = Math.round((emptyPlot.cropReadyAt! - emptyPlot.cropPlantedAt!) / 1000);
+      expect(secondGrowSec).toBe(7200);
+
+      // 3. Trả lời đúng 1 câu Quiz Ngoại Ngữ -> giảm 10 phút (600s)
       const quizOut = sim.completeSeedLanguageQuizAttempt(
         'ottery_wheat',
         {
@@ -1080,7 +1087,7 @@ describe('ParkSimulation & Progression Tests', () => {
         },
         true
       );
-      expect(quizOut.buildReduction?.reducedSec).toBe(1200);
+      expect(quizOut.buildReduction?.reducedSec).toBe(MINIGAME_CLEAR_REDUCTION_SEC);
 
       // 4. Giảm liên tiếp qua thắng Giải Đố: arthur_ford_shed chạm đúng sàn 1 tiếng (3.600s) và phần dư tự động tràn sang burrow_reed_pond_mill!
       sim.applyConstructionReductionFromGameplay(3600, 'Giải Đố Test');
@@ -1091,7 +1098,9 @@ describe('ParkSimulation & Progression Tests', () => {
       // Phần dư đã tự động giảm cho công trình thứ hai (burrow_reed_pond_mill)
       expect(placedWheezes.buildReducedSec ?? 0).toBeGreaterThan(0);
 
-      // 5. Khi tất cả công trình đang xây đều đã chạm sàn 1 tiếng -> reducedSec = 0 & allActiveAtFloor = true
+      // 5. Khi tất cả công trình đang xây đều đã chạm sàn 1 tiếng và không còn hoạt động kinh tế chờ -> reducedSec = 0 & allActiveAtFloor = true
+      emptyPlot.cropReadyAt = Date.now() - 1000;
+      sim.harvestCropPlot(emptyPlot.uid);
       sim.applyConstructionReductionFromGameplay(50_000, 'Chạm Sàn Hết');
       const atFloorRes = sim.applyConstructionReductionFromGameplay(1800, 'Đã Chạm Sàn');
       expect(atFloorRes.reducedSec).toBe(0);

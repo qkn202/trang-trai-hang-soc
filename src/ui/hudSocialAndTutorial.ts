@@ -280,8 +280,11 @@ export function socialUiRenderVisitorDockBar(hud: GameHUD): void {
     }
 
     const social = hud.sim.ensureNeighborSocial();
-    const helpsDone = nb.helpedMarksToday.length;
-    const maxGardenHelps = 6;
+    const helpsDone = Math.max(
+      social.dailyGardenHelpsCount ?? 0,
+      nb.helpedMarksToday.length
+    );
+    const maxGardenHelps = 5;
     const likedToday = social.dailyLikedNeighborIds.includes(nb.id);
     const mysteryClaimedToday = social.dailyMysteryClaimedIds.includes(nb.id);
     const openCrates = nb.owlHelpCrates.filter((c) => !c.fulfilledByPlayerToday).length;
@@ -466,7 +469,7 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
         .map((nb) => {
           const isVisitingThis = visitingNb?.id === nb.id;
           const isFocused = hud.focusedNeighborId === nb.id;
-          const maxGardenHelps = 6;
+          const maxGardenHelps = 5;
           const likedToday = social.dailyLikedNeighborIds.includes(nb.id);
           const mysteryClaimedToday = social.dailyMysteryClaimedIds.includes(nb.id);
           const rescueCheck = hud.sim.canRescueNeighborMinigame(nb.id);

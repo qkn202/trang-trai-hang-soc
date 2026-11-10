@@ -3,6 +3,7 @@ import {
   FARM_CROPS,
   FARM_GOODS,
   formatDurationCountdownVi,
+  getBuildingEffectiveCycleSec,
   getCatalogItem,
   PASTURE_ANIMALS,
 } from '../data/catalog';
@@ -228,7 +229,7 @@ export function resolveBuildingInWorldTimerInfo(
   }
 
   const festSpeed = activeFestival === 'quidditch_cup' ? 0.85 : 1.0;
-  const effectiveCycle = Math.max(1, item.cycleSec * festSpeed);
+  const effectiveCycle = Math.max(1, getBuildingEffectiveCycleSec(b, item) * festSpeed);
   const rawElapsed = Math.max(0, (now - (b.lastTickAt || now)) / 1000);
   const elapsedSec = rawElapsed >= effectiveCycle ? rawElapsed % effectiveCycle : rawElapsed;
   const remainSec = Math.max(1, Math.ceil(effectiveCycle - elapsedSec));

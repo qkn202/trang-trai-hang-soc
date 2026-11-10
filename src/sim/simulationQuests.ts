@@ -2,6 +2,7 @@
 // Pattern delegation: hàm nhận `sim` để giữ nguyên state, không đổi hành vi gameplay.
 
 import {
+  computeEconomicCycleSeconds,
   computeRealTimeBuildSeconds,
   FARM_CROPS,
   FARM_GOODS,
@@ -301,6 +302,8 @@ export function questsHarvestBuildingBubble(sim: ParkSimulation, uid: string): b
     b.storedGalleons = 0;
     b.storedXp = 0;
     b.readyBubbles = 0;
+    b.harvestCycleCount = (b.harvestCycleCount ?? 0) + 1;
+    b.lastTickAt = Date.now();
 
     let goodsLabel = '';
     if (b.readyFarmGoods && b.readyFarmGoods.length > 0) {
@@ -860,9 +863,11 @@ export function questsEnqueueWorkshopRecipe(sim: ParkSimulation, uid: string, re
 
     const now = Date.now();
     const starSpeed = Math.max(0.65, 1 - (b.stars - 1) * 0.08);
+    const slotOrder = (b.harvestCycleCount ?? 0) + (b.readyFarmGoods?.length ?? 0) + curQueue.length;
+    const baseCraftSec = computeEconomicCycleSeconds(slotOrder, recipe.craftSec);
     const durMs = sim.state.sandboxMode
       ? 3000
-      : Math.max(5000, Math.round(recipe.craftSec * starSpeed * 1000));
+      : Math.max(5000, Math.round(baseCraftSec * starSpeed * 1000));
     const startAt = curQueue.length > 0 ? Math.max(now, curQueue[curQueue.length - 1].endsAt) : now;
     const nextSlot = {
       goodId: recipe.goodId,
@@ -1045,7 +1050,7 @@ export function questsGetBrewDurationSec(sim: ParkSimulation, recipe: CraftRecip
       (b) => getCatalogItem(b.itemId)?.isWorkshopBrewery && Date.now() >= b.constructEndsAt
     );
     const hasSynergy = sim.activeSynergies.activeIds.has('combo_herb_brewery');
-    let sec = recipe.brewSec;
+    let sec = computeEconomicCycleSeconds(sim.state.supply?.brewCompletedCount ?? 0, recipe.brewSec);
     if (hasWorkshop) sec *= 0.55;
     if (hasSynergy) sec *= 0.78;
     return Math.max(4, Math.round(sec));

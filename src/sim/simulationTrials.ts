@@ -11,6 +11,7 @@ import {
   getCatalogItem,
   getFarmItemMeta,
   getMinRemainingBuildFloorSec,
+  MINIGAME_CLEAR_REDUCTION_SEC,
   PASTURE_ANIMALS,
   TIME_SAND_SKIP_SECONDS,
 } from '../data/catalog';
@@ -645,10 +646,7 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
       sim.launchFireworksShow(playedStage === MAX_MINIGAME_STAGE ? 18 : 10);
     }
 
-    const rawReduceSec = isFirstClear
-      ? (def.difficulty === 'boss' ? 3600 : def.difficulty === 'hard' ? 2700 : 1800) +
-        (featuredBonusApplied ? 900 : 0)
-      : 1200;
+    const rawReduceSec = MINIGAME_CLEAR_REDUCTION_SEC;
     const buildReduction = sim.applyConstructionReductionFromGameplay(
       rawReduceSec,
       'Bùa Gặt Honeydukes'
@@ -903,10 +901,7 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
       sim.launchFireworksShow(18);
     }
 
-    const rawReduceSec = isFirstClear
-      ? (playedStage % 10 === 0 ? 3600 : playedStage % 5 === 0 ? 2700 : 1800) +
-        (featuredBonusApplied ? 900 : 0)
-      : 1200;
+    const rawReduceSec = MINIGAME_CLEAR_REDUCTION_SEC;
     const buildReduction = sim.applyConstructionReductionFromGameplay(
       rawReduceSec,
       'Đại Sảnh Khảo Thí'

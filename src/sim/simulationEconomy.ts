@@ -8,6 +8,7 @@ import {
   FARM_WORKSHOP_RECIPES,
   FarmWorkshopRecipe,
   formatDurationCompactVi,
+  getBuildingEffectiveCycleSec,
   getCatalogItem,
   getFarmItemMeta,
   getMinRemainingBuildFloorSec,
@@ -365,8 +366,56 @@ export function economyApplyConstructionReductionFromGameplay(sim: ParkSimulatio
     preferredUid?: string
   ): BuildReductionResult {
     const budgetSec = Math.max(0, Math.round(rawReduceSec));
-    const targetBuildings = (sim.homeStateWhileVisiting ?? sim.state).buildings;
+    const targetState = sim.homeStateWhileVisiting ?? sim.state;
+    const targetBuildings = targetState.buildings;
     const now = Date.now();
+    const budgetMs = budgetSec * 1000;
+
+    // Rút ngắn thời gian các hoạt động kinh tế đang chạy (cây trồng, chăn thả, lò chế biến, vạc phép, chu kỳ thu hoạch)
+    let anyEcoReduced = false;
+    if (budgetMs > 0) {
+      for (const b of targetBuildings) {
+        const item = getCatalogItem(b.itemId);
+        if (!item) continue;
+        if (b.cropId && b.cropReadyAt && now < b.cropReadyAt) {
+          b.cropReadyAt = Math.max(now, b.cropReadyAt - budgetMs);
+          anyEcoReduced = true;
+        }
+        if (b.pastureAnimalId && b.pastureReadyAt && now < b.pastureReadyAt) {
+          b.pastureReadyAt = Math.max(now, b.pastureReadyAt - budgetMs);
+          anyEcoReduced = true;
+        }
+        if (b.workshopQueue && b.workshopQueue.length > 0) {
+          for (const slot of b.workshopQueue) {
+            slot.startedAt = Math.max(0, slot.startedAt - budgetMs);
+            slot.endsAt = Math.max(now, slot.endsAt - budgetMs);
+          }
+          anyEcoReduced = true;
+        }
+        if (
+          now >= b.constructEndsAt &&
+          item.cycleSec > 0 &&
+          item.baseIncome > 0 &&
+          !item.isFarmlandPlot &&
+          !item.isAnimalPasturePlot &&
+          item.id !== 'burrow_honeydukes_canon'
+        ) {
+          b.lastTickAt = (b.lastTickAt || now) - budgetMs;
+          anyEcoReduced = true;
+        }
+      }
+      if (targetState.supply?.activeBrew && now < targetState.supply.activeBrew.endsAt) {
+        targetState.supply.activeBrew.endsAt = Math.max(
+          now,
+          targetState.supply.activeBrew.endsAt - budgetMs
+        );
+        anyEcoReduced = true;
+      }
+      if (anyEcoReduced && !sim.isVisitingNeighbor) {
+        economyTickProductionToTimestamp(sim, now, true);
+      }
+    }
+
     const actives = targetBuildings
       .filter((x) => now < x.constructEndsAt)
       .sort((a, b) => {
@@ -378,7 +427,7 @@ export function economyApplyConstructionReductionFromGameplay(sim: ParkSimulatio
       });
 
     if (actives.length === 0 || budgetSec <= 0) {
-      return { reducedSec: 0, activeCount: actives.length };
+      return { reducedSec: anyEcoReduced ? budgetSec : 0, activeCount: actives.length };
     }
 
     let remainingMs = budgetSec * 1000;
@@ -584,6 +633,7 @@ export function economyTickProductionToTimestamp(sim: ParkSimulation, now: numbe
       const rec = CRAFT_RECIPES.find((r) => r.id === activeBrew.goodId);
       sim.state.supply.goods[activeBrew.goodId] =
         (sim.state.supply.goods[activeBrew.goodId] ?? 0) + 1;
+      sim.state.supply.brewCompletedCount = (sim.state.supply.brewCompletedCount ?? 0) + 1;
       sim.state.supply.activeBrew = null;
       if (rec && !silent) {
         sim.audio.playHarvestBubble();
@@ -726,7 +776,7 @@ export function economyTickProductionToTimestamp(sim: ParkSimulation, now: numbe
       const maxCap = item.maxStorageCycles + (b.stars - 1) * 3;
       const elapsedSec = (now - b.lastTickAt) / 1000;
       const festSpeed = sim.getActiveFestival() === 'quidditch_cup' ? 0.85 : 1.0;
-      const effectiveCycle = item.cycleSec * festSpeed;
+      const effectiveCycle = getBuildingEffectiveCycleSec(b, item) * festSpeed;
 
       if (elapsedSec >= effectiveCycle) {
         const cycles = Math.floor(elapsedSec / effectiveCycle);

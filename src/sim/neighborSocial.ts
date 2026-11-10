@@ -18,8 +18,9 @@ import {
   ZoneId,
 } from '../types/game';
 
+export const MAX_DAILY_FRIEND_HELPS = 5;
 export const MAX_DAILY_MINIGAME_RESCUES = 5;
-export const MAX_DAILY_OWL_HELP_REQUESTS = 3;
+export const MAX_DAILY_OWL_HELP_REQUESTS = 5;
 export const FRIENDSHIP_CHEST_TOKEN_COST = 10;
 export const MAX_HOME_LANTERN_MARKS = 5;
 
@@ -268,6 +269,8 @@ export function createInitialNeighborSocialState(nowMs = Date.now()): NeighborSo
     dailyLikedNeighborIds: [],
     dailyMysteryClaimedIds: [],
     dailyOwlHelpRequestedCount: 0,
+    dailyGardenHelpsCount: 0,
+    dailyHomeLanternsClaimedCount: 0,
     neighbors: [],
     homeLanternMarks: [],
     playerMinigameSos: null,
@@ -301,6 +304,8 @@ export function syncNeighborSocialDailyReset(
   social.dailyLikedNeighborIds = [];
   social.dailyMysteryClaimedIds = [];
   social.dailyOwlHelpRequestedCount = 0;
+  social.dailyGardenHelpsCount = 0;
+  social.dailyHomeLanternsClaimedCount = 0;
 
   const kinds: MinigameTrialKind[] = ['match3', 'sudoku', 'caro', 'chess', 'blocks'];
   social.neighbors = social.neighbors.map((nb, idx) => {
@@ -626,7 +631,14 @@ export function pickSimulatedHomeLanternMark(
   nowMs = Date.now()
 ): HomeOwlLanternMark | null {
   if (social.neighbors.length === 0) return null;
-  if (social.homeLanternMarks.length >= MAX_HOME_LANTERN_MARKS) return null;
+  const totalHomeHelpsToday =
+    Math.max(0, social.dailyHomeLanternsClaimedCount ?? 0) + social.homeLanternMarks.length;
+  if (
+    social.homeLanternMarks.length >= MAX_HOME_LANTERN_MARKS ||
+    totalHomeHelpsToday >= MAX_HOME_LANTERN_MARKS
+  ) {
+    return null;
+  }
 
   const markedSet = new Set(social.homeLanternMarks.map((m) => m.buildingUid));
   const candidates: Array<{ b: PlacedBuilding; kind: NeighborGardenHelpKind }> = [];

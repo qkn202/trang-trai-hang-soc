@@ -11,6 +11,7 @@ import {
   getCatalogItem,
   getFarmItemMeta,
   getMinRemainingBuildFloorSec,
+  MINIGAME_CLEAR_REDUCTION_SEC,
   PASTURE_ANIMALS,
   TIME_SAND_SKIP_SECONDS,
 } from '../data/catalog';
@@ -140,6 +141,7 @@ import {
   getMinigameKindLabelVi,
   getPresetNoteMeta,
   isNpcNeighborProfile,
+  MAX_DAILY_FRIEND_HELPS,
   MAX_DAILY_MINIGAME_RESCUES,
   MAX_DAILY_OWL_HELP_REQUESTS,
   MAX_HOME_LANTERN_MARKS,
@@ -409,6 +411,9 @@ export function socialAddFriendByCode(sim: ParkSimulation,
 
     const now = Date.now();
     const created = createFriendNeighborFromCode(cleaned, customName, now, verifiedProfile);
+    if (social.dailyRescuesGivenIds.includes(created.id) && created.minigameSos) {
+      created.minigameSos.rescuedToday = true;
+    }
     social.neighbors.push(created);
     socialPushSocialActivity(sim, 
       created.avatarEmoji,
@@ -484,11 +489,22 @@ export function socialGetVisitedBuildingHelpStatus(sim: ParkSimulation,
     kind: NeighborGardenHelpKind | null;
     existingMark?: NeighborProfileState['helpedMarksToday'][number];
   } {
+    const social = socialEnsureNeighborSocial(sim);
     const nb = socialGetActiveVisitingNeighbor(sim);
     if (!nb) return { canHelp: false, kind: null };
     const existingMark = nb.helpedMarksToday.find((m) => m.buildingUid === b.uid);
     if (existingMark) {
       return { canHelp: false, kind: existingMark.kind, existingMark };
+    }
+    const totalGardenHelpsToday = Math.max(
+      social.dailyGardenHelpsCount ?? 0,
+      social.neighbors.reduce((s, n) => s + n.helpedMarksToday.length, 0)
+    );
+    if (
+      totalGardenHelpsToday >= MAX_DAILY_FRIEND_HELPS ||
+      nb.helpedMarksToday.length >= MAX_DAILY_FRIEND_HELPS
+    ) {
+      return { canHelp: false, kind: null };
     }
     const item = getCatalogItem(b.itemId);
     const kind = classifyBuildingGardenHelpKind(item, b, now);
@@ -509,10 +525,17 @@ export function socialHelpVisitedNeighborBuilding(sim: ParkSimulation, buildingU
     if (nb.helpedMarksToday.some((m) => m.buildingUid === b.uid)) {
       return { ok: false, msg: 'Bạn đã để lại Dấu Ấn Cú Đưa Thư trên công trình này hôm nay rồi!' };
     }
-    if (nb.helpedMarksToday.length >= 6) {
+    const totalGardenHelpsToday = Math.max(
+      social.dailyGardenHelpsCount ?? 0,
+      social.neighbors.reduce((s, n) => s + n.helpedMarksToday.length, 0)
+    );
+    if (
+      totalGardenHelpsToday >= MAX_DAILY_FRIEND_HELPS ||
+      nb.helpedMarksToday.length >= MAX_DAILY_FRIEND_HELPS
+    ) {
       return {
         ok: false,
-        msg: `Hôm nay bạn đã chăm giúp tối đa 6/6 điểm tại vườn của ${nb.name} rồi!`,
+        msg: `Hôm nay bạn đã dùng hết ${MAX_DAILY_FRIEND_HELPS}/${MAX_DAILY_FRIEND_HELPS} lượt hỗ trợ vườn bạn bè (chỉ reset khi qua ngày mới 00:00)!`,
       };
     }
 
@@ -525,6 +548,7 @@ export function socialHelpVisitedNeighborBuilding(sim: ParkSimulation, buildingU
 
     const meta = getGardenHelpMetaVi(kind);
     const note = getPresetNoteMeta(social.selectedPresetNoteId);
+    social.dailyGardenHelpsCount = totalGardenHelpsToday + 1;
     nb.helpedMarksToday.push({
       buildingUid: b.uid,
       kind,
@@ -782,7 +806,10 @@ export function socialCompleteNeighborMinigameRescue(sim: ParkSimulation, ctx: M
     sim.state.galleons += goldEarned;
     sim.state.finance.harvestRevenue += goldEarned;
     sim.addXp(xpEarned);
-    const buildReduction = sim.applyConstructionReductionFromGameplay(1800, 'Giải Cứu Bạn Bè');
+    const buildReduction = sim.applyConstructionReductionFromGameplay(
+      MINIGAME_CLEAR_REDUCTION_SEC,
+      'Giải Cứu Bạn Bè'
+    );
     const buildMsg =
       buildReduction.reducedSec > 0
         ? ` • 🔨 -${formatDurationCompactVi(buildReduction.reducedSec)} xây ${buildReduction.targetName ?? 'công trình'}`
@@ -894,6 +921,12 @@ export function socialClaimHomeLanternMark(sim: ParkSimulation, markIdOrBuilding
       return { ok: false, msg: 'Hãy quay về vườn nhà Hang Sóc để nhận quà Cú Đưa Thư nhé!' };
     }
     const social = socialEnsureNeighborSocial(sim);
+    if ((social.dailyHomeLanternsClaimedCount ?? 0) >= MAX_HOME_LANTERN_MARKS) {
+      return {
+        ok: false,
+        msg: `Hôm nay bạn đã nhận đủ ${MAX_HOME_LANTERN_MARKS}/${MAX_HOME_LANTERN_MARKS} lượt bạn bè hỗ trợ vườn nhà (chỉ reset khi qua ngày mới 00:00)!`,
+      };
+    }
     const idx = social.homeLanternMarks.findIndex(
       (m) => m.id === markIdOrBuildingUid || m.buildingUid === markIdOrBuildingUid
     );
@@ -904,6 +937,7 @@ export function socialClaimHomeLanternMark(sim: ParkSimulation, markIdOrBuilding
     const now = Date.now();
     const mark = social.homeLanternMarks[idx];
     social.homeLanternMarks.splice(idx, 1);
+    social.dailyHomeLanternsClaimedCount = (social.dailyHomeLanternsClaimedCount ?? 0) + 1;
 
     const b = sim.state.buildings.find((x) => x.uid === mark.buildingUid);
     const item = b ? getCatalogItem(b.itemId) : undefined;
@@ -1198,8 +1232,14 @@ export function socialTickNeighborSocialBackground(sim: ParkSimulation, now = Da
       }
     }
 
-    // 3. Thỉnh thoảng bạn bè ghé thăm vườn nhà để lại Dấu Ấn Đèn Lồng Cú (tối đa 3 đèn tự động)
-    if (!sim.isVisitingNeighbor && social.homeLanternMarks.length < 3) {
+    // 3. Thỉnh thoảng bạn bè ghé thăm vườn nhà để lại Dấu Ấn Đèn Lồng Cú (tối đa 5 lần/ngày, không reset trước ngày mới)
+    const totalHomeLanternsToday =
+      Math.max(0, social.dailyHomeLanternsClaimedCount ?? 0) + social.homeLanternMarks.length;
+    if (
+      !sim.isVisitingNeighbor &&
+      social.homeLanternMarks.length < 3 &&
+      totalHomeLanternsToday < MAX_HOME_LANTERN_MARKS
+    ) {
       const youngestMarkAt = social.homeLanternMarks.reduce(
         (mx, m) => Math.max(mx, m.createdAt),
         0

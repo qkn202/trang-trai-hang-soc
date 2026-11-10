@@ -3,6 +3,7 @@
 
 
 import {
+  computeEconomicCycleSeconds,
   computeRealTimeBuildSeconds,
   FARM_CROPS,
   FARM_GOODS,
@@ -12,6 +13,7 @@ import {
   getCatalogItem,
   getFarmItemMeta,
   getMinRemainingBuildFloorSec,
+  MINIGAME_CLEAR_REDUCTION_SEC,
   PASTURE_ANIMALS,
   TIME_SAND_SKIP_SECONDS,
 } from '../data/catalog';
@@ -424,10 +426,7 @@ export function farmCompleteSeedLanguageQuizAttempt(sim: ParkSimulation,
         talismanProgress = nextProg;
         sim.state.quizTalismanProgress = nextProg;
       }
-      const quizReduceSec =
-        (challenge.tier === 'advanced' ? 1200 : challenge.tier === 'intermediate' ? 900 : 600) +
-        (outcome.newStreak >= 3 ? 300 : 0) +
-        (challenge.isReview ? 300 : 0);
+      const quizReduceSec = MINIGAME_CLEAR_REDUCTION_SEC;
       buildReduction = sim.applyConstructionReductionFromGameplay(
         quizReduceSec,
         'Học Viện Thần Chú'
@@ -490,7 +489,8 @@ export function farmPlantCropOnPlot(sim: ParkSimulation,
     barn.seeds[cropId] = leftSeeds;
 
     const now = Date.now();
-    const growMs = sim.state.sandboxMode ? 4000 : crop.growSec * 1000;
+    const effectiveGrowSec = computeEconomicCycleSeconds(b.harvestCycleCount ?? 0, crop.growSec);
+    const growMs = sim.state.sandboxMode ? 4000 : effectiveGrowSec * 1000;
     b.cropId = cropId;
     b.cropPlantedAt = now;
     b.cropReadyAt = now + growMs;
@@ -512,7 +512,7 @@ export function farmPlantCropOnPlot(sim: ParkSimulation,
     sim.onUiChange?.();
     return {
       ok: true,
-      msg: `🌱 Đã gieo 1 hạt ${crop.emoji} ${crop.name} (Túi còn ${leftSeeds} hạt • ${formatDurationCompactVi(crop.growSec)} chín)!`,
+      msg: `🌱 Đã gieo 1 hạt ${crop.emoji} ${crop.name} (Túi còn ${leftSeeds} hạt • ${formatDurationCompactVi(effectiveGrowSec)} chín)!`,
     };
 }
 
@@ -570,6 +570,7 @@ export function farmHarvestCropPlot(sim: ParkSimulation, uid: string): { ok: boo
     const xp = crop.xp;
 
     // Clear plot to freshly-tilled dark loam ready for Seed Picker!
+    b.harvestCycleCount = (b.harvestCycleCount ?? 0) + 1;
     b.cropId = undefined;
     b.cropPlantedAt = undefined;
     b.cropReadyAt = undefined;
@@ -653,7 +654,8 @@ export function farmStockAnimalOnPasture(sim: ParkSimulation,
     }
 
     const now = Date.now();
-    const cycleMs = sim.state.sandboxMode ? 5000 : animal.cycleSec * 1000;
+    const effectiveCycleSec = computeEconomicCycleSeconds(b.harvestCycleCount ?? 0, animal.cycleSec);
+    const cycleMs = sim.state.sandboxMode ? 5000 : effectiveCycleSec * 1000;
     b.pastureAnimalId = animalId;
     b.pastureStockedAt = now;
     b.pastureReadyAt = now + cycleMs;
@@ -675,7 +677,7 @@ export function farmStockAnimalOnPasture(sim: ParkSimulation,
     sim.onUiChange?.();
     return {
       ok: true,
-      msg: `🐾 Đã thả ${animal.emoji} ${animal.name} vào Đồng Cỏ Chăn Thả (${formatDurationCompactVi(animal.cycleSec)}/mẻ)!`,
+      msg: `🐾 Đã thả ${animal.emoji} ${animal.name} vào Đồng Cỏ Chăn Thả (${formatDurationCompactVi(effectiveCycleSec)}/mẻ)!`,
     };
 }
 
@@ -733,7 +735,9 @@ export function farmHarvestAnimalPasture(sim: ParkSimulation, uid: string): { ok
     const xp = animal.xp;
 
     // Automatically restart the next grazing cycle so the animal stays happily on the pasture!
-    const nextCycleMs = sim.state.sandboxMode ? 5000 : animal.cycleSec * 1000;
+    b.harvestCycleCount = (b.harvestCycleCount ?? 0) + 1;
+    const nextCycleSec = computeEconomicCycleSeconds(b.harvestCycleCount, animal.cycleSec);
+    const nextCycleMs = sim.state.sandboxMode ? 5000 : nextCycleSec * 1000;
     b.pastureStockedAt = now;
     b.pastureReadyAt = now + nextCycleMs;
     b.pastureFedBoost = false;

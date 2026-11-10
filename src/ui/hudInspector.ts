@@ -7,6 +7,7 @@ import {
   FARM_GOODS,
   formatDurationCompactVi,
   formatDurationCountdownVi,
+  getBuildingEffectiveCycleSec,
   getCatalogItem,
   getFarmItemIconSrc,
   getFarmItemMeta,
@@ -667,12 +668,13 @@ export function inspectorRenderInspector(hud: GameHUD): void {
               ? (() => {
                   const festSpeed =
                     hud.sim.getActiveFestival() === 'quidditch_cup' ? 0.85 : 1.0;
-                  const effCycle = Math.max(1, item.cycleSec * festSpeed);
+                  const baseCycle = getBuildingEffectiveCycleSec(b, item);
+                  const effCycle = Math.max(1, baseCycle * festSpeed);
                   const rawEl = Math.max(0, (now - (b.lastTickAt || now)) / 1000);
                   const cycLeft = Math.max(1, Math.ceil(effCycle - (rawEl % effCycle)));
                   return `
                     <div class="quest-card-mini" style="margin-bottom:8px;font-size:12px;">
-                      <div><strong id="lblBuildingProdVal">+${prod.galleons}🪙 +${prod.xp}⭐</strong> / ${formatDurationCompactVi(item.cycleSec)}</div>
+                      <div><strong id="lblBuildingProdVal">+${prod.galleons}🪙 +${prod.xp}⭐</strong> / ${formatDurationCompactVi(baseCycle)}</div>
                       ${
                         item.cycleSec > 0 && !item.isFarmlandPlot && !item.isAnimalPasturePlot
                           ? `<div style="margin-top:3px;">⏱️ <strong>${formatDurationCountdownVi(cycLeft)}</strong> • Kho: <strong>${b.storedGalleons}🪙</strong></div>`

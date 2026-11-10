@@ -137,6 +137,7 @@ import {
   getMinigameKindLabelVi,
   getPresetNoteMeta,
   isNpcNeighborProfile,
+  MAX_DAILY_FRIEND_HELPS,
   MAX_DAILY_MINIGAME_RESCUES,
   MAX_DAILY_OWL_HELP_REQUESTS,
   MAX_HOME_LANTERN_MARKS,
@@ -757,6 +758,7 @@ export function createInitialGameState(): GameState {
       cropPlantedAt: now - 35_000,
       cropReadyAt: now - 2_000,
       cropWateredBoost: false,
+      harvestCycleCount: -1,
     },
     {
       ...mkBuilding('burrow_plot_empty', 'farmland_plot', 19, 25),
@@ -769,6 +771,7 @@ export function createInitialGameState(): GameState {
       pastureStockedAt: now - 32_000,
       pastureReadyAt: now - 2_000,
       pastureFedBoost: false,
+      harvestCycleCount: -1,
     },
     {
       ...mkBuilding('burrow_pasture_empty', 'burrow_animal_pasture', 14, 25),
@@ -1025,6 +1028,10 @@ export function migrateLoadedState(parsed: GameState): GameState {
         !isHoneydukesLauncher && Array.isArray(b.readyFarmGoods)
           ? b.readyFarmGoods.filter((g): g is FarmGoodId => typeof g === 'string' && g in FARM_GOODS).slice(0, 12)
           : undefined,
+      harvestCycleCount:
+        typeof b.harvestCycleCount === 'number' && Number.isFinite(b.harvestCycleCount)
+          ? Math.max(-1, Math.min(50, Math.round(b.harvestCycleCount)))
+          : undefined,
     });
   }
 
@@ -1230,6 +1237,12 @@ export function migrateLoadedState(parsed: GameState): GameState {
           : [],
         dailyOwlHelpRequestedCount: Math.round(
           clampFinite(rawSoc.dailyOwlHelpRequestedCount, 0, MAX_DAILY_OWL_HELP_REQUESTS, 0)
+        ),
+        dailyGardenHelpsCount: Math.round(
+          clampFinite(rawSoc.dailyGardenHelpsCount, 0, MAX_DAILY_FRIEND_HELPS, 0)
+        ),
+        dailyHomeLanternsClaimedCount: Math.round(
+          clampFinite(rawSoc.dailyHomeLanternsClaimedCount, 0, MAX_HOME_LANTERN_MARKS, 0)
         ),
         neighbors: Array.isArray(rawSoc.neighbors)
           ? rawSoc.neighbors.filter((n) => !isNpcNeighborProfile(n))
