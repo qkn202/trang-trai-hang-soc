@@ -276,7 +276,7 @@ export function createCargoCrates(level: number, trainIndex: number): ExpressCar
   return [0, 1, 2].map((slot) => {
     const goodId = goodsOrder[(trainIndex + slot) % goodsOrder.length];
     const qty = slot === 2 && level >= 20 ? 2 : 1;
-    const baseG = Math.round((130 + level * 26 + Math.pow(level, 1.35) * 4.5) * qty);
+    const baseG = Math.max(1, Math.round(((130 + level * 26 + Math.pow(level, 1.35) * 4.5) * qty) / 5));
     const baseXp = Math.round((85 + level * 19 + Math.pow(level, 1.36) * 3.8) * qty);
     return {
       id: `crate_${trainIndex}_${slot}`,

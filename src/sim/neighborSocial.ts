@@ -98,7 +98,7 @@ export function getGardenHelpMetaVi(kind: NeighborGardenHelpKind): {
         icon: '💧',
         actionVi: 'Tưới Nước Chăm Ruộng',
         badgeVi: '💧 Tưới ruộng',
-        goldReward: 25,
+        goldReward: 5,
         xpReward: 12,
       };
     case 'tend_yard':
@@ -106,7 +106,7 @@ export function getGardenHelpMetaVi(kind: NeighborGardenHelpKind): {
         icon: '🌾',
         actionVi: 'Chăm Sân Thú & Vườn',
         badgeVi: '🌾 Chăm vườn',
-        goldReward: 28,
+        goldReward: 6,
         xpReward: 14,
       };
     case 'stoke_workshop':
@@ -114,7 +114,7 @@ export function getGardenHelpMetaVi(kind: NeighborGardenHelpKind): {
         icon: '🔥',
         actionVi: 'Tiếp Lửa Xưởng Chế Biến',
         badgeVi: '🔥 Tiếp lửa',
-        goldReward: 32,
+        goldReward: 6,
         xpReward: 16,
       };
   }
@@ -167,16 +167,16 @@ const OWL_CRATE_POOL: ReadonlyArray<{
   rewardGalleons: number;
   rewardXp: number;
 }> = [
-  { itemId: 'ottery_wheat', qty: 3, rewardGalleons: 55, rewardXp: 20 },
-  { itemId: 'honey_carrot', qty: 2, rewardGalleons: 60, rewardXp: 22 },
-  { itemId: 'garden_pumpkin', qty: 2, rewardGalleons: 68, rewardXp: 24 },
-  { itemId: 'golden_corn', qty: 2, rewardGalleons: 64, rewardXp: 22 },
-  { itemId: 'ruby_strawberry', qty: 2, rewardGalleons: 75, rewardXp: 26 },
-  { itemId: 'cinnamon_apple_pie', qty: 1, rewardGalleons: 95, rewardXp: 32 },
-  { itemId: 'fine_wheat_flour', qty: 1, rewardGalleons: 78, rewardXp: 25 },
-  { itemId: 'farm_egg_wool', qty: 1, rewardGalleons: 82, rewardXp: 28 },
-  { itemId: 'blossom_honey_jar', qty: 1, rewardGalleons: 92, rewardXp: 30 },
-  { itemId: 'frothy_butterbeer', qty: 1, rewardGalleons: 105, rewardXp: 35 },
+  { itemId: 'ottery_wheat', qty: 3, rewardGalleons: 11, rewardXp: 20 },
+  { itemId: 'honey_carrot', qty: 2, rewardGalleons: 12, rewardXp: 22 },
+  { itemId: 'garden_pumpkin', qty: 2, rewardGalleons: 14, rewardXp: 24 },
+  { itemId: 'golden_corn', qty: 2, rewardGalleons: 13, rewardXp: 22 },
+  { itemId: 'ruby_strawberry', qty: 2, rewardGalleons: 15, rewardXp: 26 },
+  { itemId: 'cinnamon_apple_pie', qty: 1, rewardGalleons: 19, rewardXp: 32 },
+  { itemId: 'fine_wheat_flour', qty: 1, rewardGalleons: 16, rewardXp: 25 },
+  { itemId: 'farm_egg_wool', qty: 1, rewardGalleons: 16, rewardXp: 28 },
+  { itemId: 'blossom_honey_jar', qty: 1, rewardGalleons: 18, rewardXp: 30 },
+  { itemId: 'frothy_butterbeer', qty: 1, rewardGalleons: 21, rewardXp: 35 },
 ];
 
 const SOS_NOTES_BY_KIND: Record<MinigameTrialKind, string> = {

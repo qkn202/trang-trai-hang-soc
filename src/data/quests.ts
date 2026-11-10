@@ -1038,41 +1038,52 @@ export const STORY_QUESTS: Omit<QuestDef, 'progress' | 'completed' | 'claimed'>[
   },
 ];
 
+// Giảm 5 lần phần thưởng Vàng Galleon (và mốc thu hoạch Vàng) cho các nhiệm vụ không phải mini game
+for (const q of STORY_QUESTS) {
+  if (q.objectiveType !== 'win_minigame') {
+    q.rewardGalleons = Math.max(1, Math.round(q.rewardGalleons / 5));
+  }
+  if (q.objectiveType === 'harvest_galleons') {
+    q.targetAmount = Math.max(10, Math.round(q.targetAmount / 5));
+    q.title = q.title.replace(/\d+([.,]\d+)?(?=\s*(Vàng|Galleon))/i, String(q.targetAmount));
+  }
+}
+
 /**
  * 30 Bậc Phần Thưởng "Đại Tiệc Mùa Gặt Hang Sóc" (100% Action-Driven, 0% Clock Exploit,
  * 0 extra 🌟 Stars để bảo toàn tuyệt đối trần kinh tế 7.150 🌟 trong 200+ giờ chơi).
  */
 export const HARVEST_FEAST_TIERS: HarvestFeastTierDef[] = [
-  { tier: 1, pointsRequired: 30, titleVi: 'Rổ Hạt Hoa Hồng Anh', icon: '🌹', rewardSeedCropId: 'english_rose', rewardSeedQty: 3, rewardGalleons: 60 },
-  { tier: 2, pointsRequired: 70, titleVi: 'Túi Đồng Vàng Khai Vụ', icon: '🪙', rewardGalleons: 110, rewardXp: 35 },
+  { tier: 1, pointsRequired: 30, titleVi: 'Rổ Hạt Hoa Hồng Anh', icon: '🌹', rewardSeedCropId: 'english_rose', rewardSeedQty: 3, rewardGalleons: 12 },
+  { tier: 2, pointsRequired: 70, titleVi: 'Túi Đồng Vàng Khai Vụ', icon: '🪙', rewardGalleons: 22, rewardXp: 35 },
   { tier: 3, pointsRequired: 120, titleVi: 'Bánh Táo Quế Nóng Hổi', icon: '🥧', rewardGoodId: 'cinnamon_apple_pie', rewardGoodQty: 2, rewardTimeSand: 1 },
-  { tier: 4, pointsRequired: 180, titleVi: 'Hạt Tulip Cầu Vồng', icon: '🌷', rewardSeedCropId: 'rainbow_tulip', rewardSeedQty: 3, rewardGalleons: 130 },
-  { tier: 5, pointsRequired: 250, titleVi: 'Phích Cắm Muggle Mở Kho', icon: '🔌', rewardMugglePlug: 1, rewardGalleons: 160 },
+  { tier: 4, pointsRequired: 180, titleVi: 'Hạt Tulip Cầu Vồng', icon: '🌷', rewardSeedCropId: 'rainbow_tulip', rewardSeedQty: 3, rewardGalleons: 26 },
+  { tier: 5, pointsRequired: 250, titleVi: 'Phích Cắm Muggle Mở Kho', icon: '🔌', rewardMugglePlug: 1, rewardGalleons: 32 },
   { tier: 6, pointsRequired: 330, titleVi: 'Cát Xoay Thời Gian Xưởng Nghề', icon: '⏳', rewardTimeSand: 2, rewardXp: 55 },
-  { tier: 7, pointsRequired: 420, titleVi: 'Hạt Chuông Xanh Rừng Sương', icon: '🔔', rewardSeedCropId: 'forest_bluebell', rewardSeedQty: 3, rewardGalleons: 180 },
-  { tier: 8, pointsRequired: 520, titleVi: 'Rượu Táo Mật Thung Lũng', icon: '🍎', rewardGoodId: 'honey_apple_cider', rewardGoodQty: 2, rewardGalleons: 210 },
-  { tier: 9, pointsRequired: 630, titleVi: 'Túi Vàng Mùa Thu', icon: '💰', rewardGalleons: 260, rewardTimeSand: 2 },
-  { tier: 10, pointsRequired: 750, titleVi: 'Phích Cắm Đôi Mở Rộng Kho Đỏ', icon: '🔌', rewardMugglePlug: 2, rewardGalleons: 280 },
+  { tier: 7, pointsRequired: 420, titleVi: 'Hạt Chuông Xanh Rừng Sương', icon: '🔔', rewardSeedCropId: 'forest_bluebell', rewardSeedQty: 3, rewardGalleons: 36 },
+  { tier: 8, pointsRequired: 520, titleVi: 'Rượu Táo Mật Thung Lũng', icon: '🍎', rewardGoodId: 'honey_apple_cider', rewardGoodQty: 2, rewardGalleons: 42 },
+  { tier: 9, pointsRequired: 630, titleVi: 'Túi Vàng Mùa Thu', icon: '💰', rewardGalleons: 52, rewardTimeSand: 2 },
+  { tier: 10, pointsRequired: 750, titleVi: 'Phích Cắm Đôi Mở Rộng Kho Đỏ', icon: '🔌', rewardMugglePlug: 2, rewardGalleons: 56 },
   { tier: 11, pointsRequired: 880, titleVi: 'Hạt Củ Mandrake Non', icon: '🌱', rewardSeedCropId: 'baby_mandrake', rewardSeedQty: 3, rewardXp: 80 },
-  { tier: 12, pointsRequired: 1020, titleVi: 'Bó Hoa Tặng Tiệc Mùa Gặt', icon: '💐', rewardGoodId: 'floral_bouquet_gift', rewardGoodQty: 2, rewardGalleons: 310 },
-  { tier: 13, pointsRequired: 1170, titleVi: 'Đồng Hồ Cát Tinh Anh', icon: '⏳', rewardTimeSand: 3, rewardGalleons: 320 },
+  { tier: 12, pointsRequired: 1020, titleVi: 'Bó Hoa Tặng Tiệc Mùa Gặt', icon: '💐', rewardGoodId: 'floral_bouquet_gift', rewardGoodQty: 2, rewardGalleons: 62 },
+  { tier: 13, pointsRequired: 1170, titleVi: 'Đồng Hồ Cát Tinh Anh', icon: '⏳', rewardTimeSand: 3, rewardGalleons: 64 },
   { tier: 14, pointsRequired: 1330, titleVi: 'Hạt Mẫu Đơn Hồng Phấn', icon: '🌸', rewardSeedCropId: 'blush_peony', rewardSeedQty: 3, rewardXp: 95 },
-  { tier: 15, pointsRequired: 1500, titleVi: 'Bùa Phượng Hoàng Giữa Mùa', icon: '🔥', rewardPhoenixTalisman: 1, rewardGalleons: 400 },
-  { tier: 16, pointsRequired: 1680, titleVi: 'Vại Bia Bơ Quán Ba Cây Chổi', icon: '🍺', rewardGoodId: 'frothy_butterbeer', rewardGoodQty: 2, rewardGalleons: 360 },
+  { tier: 15, pointsRequired: 1500, titleVi: 'Bùa Phượng Hoàng Giữa Mùa', icon: '🔥', rewardPhoenixTalisman: 1, rewardGalleons: 80 },
+  { tier: 16, pointsRequired: 1680, titleVi: 'Vại Bia Bơ Quán Ba Cây Chổi', icon: '🍺', rewardGoodId: 'frothy_butterbeer', rewardGoodQty: 2, rewardGalleons: 72 },
   { tier: 17, pointsRequired: 1870, titleVi: 'Hạt Hoa Oải Hương Khô', icon: '💜', rewardSeedCropId: 'dried_lavender', rewardSeedQty: 4, rewardTimeSand: 2 },
-  { tier: 18, pointsRequired: 2070, titleVi: 'Bộ Đôi Phích Cắm Ông Arthur', icon: '🔌', rewardMugglePlug: 2, rewardGalleons: 420 },
+  { tier: 18, pointsRequired: 2070, titleVi: 'Bộ Đôi Phích Cắm Ông Arthur', icon: '🔌', rewardMugglePlug: 2, rewardGalleons: 84 },
   { tier: 19, pointsRequired: 2280, titleVi: 'Kẹo Ếch Sô-cô-la Honeydukes', icon: '🐸', rewardGoodId: 'choc_frog_sweet', rewardGoodQty: 2, rewardXp: 120 },
-  { tier: 20, pointsRequired: 2500, titleVi: 'Rương Vàng Đêm Lửa Trại', icon: '🏆', rewardGalleons: 550, rewardTimeSand: 3 },
-  { tier: 21, pointsRequired: 2730, titleVi: 'Hạt Hướng Dương Bờ Giậu', icon: '🌻', rewardSeedCropId: 'hedge_sunflower', rewardSeedQty: 4, rewardGalleons: 460 },
+  { tier: 20, pointsRequired: 2500, titleVi: 'Rương Vàng Đêm Lửa Trại', icon: '🏆', rewardGalleons: 110, rewardTimeSand: 3 },
+  { tier: 21, pointsRequired: 2730, titleVi: 'Hạt Hướng Dương Bờ Giậu', icon: '🌻', rewardSeedCropId: 'hedge_sunflower', rewardSeedQty: 4, rewardGalleons: 92 },
   { tier: 22, pointsRequired: 2970, titleVi: 'Áo Len Đan Chữ W Ấm Áp', icon: '🧶', rewardGoodId: 'weasley_sweater_w', rewardGoodQty: 2, rewardXp: 140 },
   { tier: 23, pointsRequired: 3220, titleVi: 'Hạt Nấm Phát Sáng Rừng Sâu', icon: '🍄', rewardSeedCropId: 'glow_mushroom', rewardSeedQty: 4, rewardTimeSand: 3 },
-  { tier: 24, pointsRequired: 3480, titleVi: 'Tinh Dầu Thảo Dược Bà Sprout', icon: '🧪', rewardGoodId: 'sprout_growth_elixir', rewardGoodQty: 2, rewardGalleons: 520 },
-  { tier: 25, pointsRequired: 3750, titleVi: 'Ba Phích Cắm Đại Mở Kho', icon: '🔌', rewardMugglePlug: 3, rewardGalleons: 600 },
+  { tier: 24, pointsRequired: 3480, titleVi: 'Tinh Dầu Thảo Dược Bà Sprout', icon: '🧪', rewardGoodId: 'sprout_growth_elixir', rewardGoodQty: 2, rewardGalleons: 104 },
+  { tier: 25, pointsRequired: 3750, titleVi: 'Ba Phích Cắm Đại Mở Kho', icon: '🔌', rewardMugglePlug: 3, rewardGalleons: 120 },
   { tier: 26, pointsRequired: 4030, titleVi: 'Hạt Hoa Ánh Trăng Huyền Ảo', icon: '🌙', rewardSeedCropId: 'moonlight_flower', rewardSeedQty: 4, rewardXp: 170 },
   { tier: 27, pointsRequired: 4320, titleVi: 'Hũ Mật Ong Hoa Ngàn Hương', icon: '🍯', rewardGoodId: 'blossom_honey_jar', rewardGoodQty: 2, rewardTimeSand: 4 },
-  { tier: 28, pointsRequired: 4620, titleVi: 'Hạt Hoa Lửa Phượng Hoàng', icon: '🌺', rewardSeedCropId: 'phoenix_fireflower', rewardSeedQty: 4, rewardGalleons: 720 },
-  { tier: 29, pointsRequired: 4940, titleVi: 'Ngân Khố Mùa Gặt Hoàng Kim', icon: '👑', rewardGalleons: 950, rewardTimeSand: 5, rewardXp: 220 },
-  { tier: 30, pointsRequired: 5300, titleVi: 'Đại Lễ Tiệc Vàng & Bùa Fawkes', icon: '🔥', rewardPhoenixTalisman: 1, rewardMugglePlug: 3, rewardGalleons: 1200 },
+  { tier: 28, pointsRequired: 4620, titleVi: 'Hạt Hoa Lửa Phượng Hoàng', icon: '🌺', rewardSeedCropId: 'phoenix_fireflower', rewardSeedQty: 4, rewardGalleons: 144 },
+  { tier: 29, pointsRequired: 4940, titleVi: 'Ngân Khố Mùa Gặt Hoàng Kim', icon: '👑', rewardGalleons: 190, rewardTimeSand: 5, rewardXp: 220 },
+  { tier: 30, pointsRequired: 5300, titleVi: 'Đại Lễ Tiệc Vàng & Bùa Fawkes', icon: '🔥', rewardPhoenixTalisman: 1, rewardMugglePlug: 3, rewardGalleons: 240 },
 ];
 
 const OWL_GIVERS = [
@@ -1087,6 +1098,7 @@ export function createOwlOrderQuest(level: number, seedIdx: number): QuestDef {
   const giver = OWL_GIVERS[seedIdx % OWL_GIVERS.length];
   const scale = Math.max(1, Math.floor(1 + level * 0.45));
   const rewardG = Math.round(45 + level * 22 + Math.pow(level, 1.35) * 4);
+  const farmRewardG = Math.max(1, Math.round(rewardG / 5));
   const rewardXp = Math.round(28 + level * 15 + Math.pow(level, 1.38) * 3.5);
   const templateIdx = seedIdx % 5;
 
@@ -1138,7 +1150,7 @@ export function createOwlOrderQuest(level: number, seedIdx: number): QuestDef {
   }
 
   if (templateIdx === 0) {
-    const amt = Math.round(60 + scale * 35);
+    const amt = Math.max(5, Math.round((60 + scale * 35) / 5));
     return {
       id: `owl_${Date.now()}_${seedIdx}`,
       kind: 'owl_order',
@@ -1150,7 +1162,7 @@ export function createOwlOrderQuest(level: number, seedIdx: number): QuestDef {
       objectiveType: 'harvest_galleons',
       targetAmount: amt,
       progress: 0,
-      rewardGalleons: rewardG,
+      rewardGalleons: farmRewardG,
       rewardXp,
       rewardTimeSand: seedIdx % 3 === 0 ? 1 : 0,
       completed: false,
@@ -1170,7 +1182,7 @@ export function createOwlOrderQuest(level: number, seedIdx: number): QuestDef {
       objectiveType: 'serve_butterbeer',
       targetAmount: amt,
       progress: 0,
-      rewardGalleons: rewardG,
+      rewardGalleons: farmRewardG,
       rewardXp,
       rewardTimeSand: 0,
       completed: false,
@@ -1190,7 +1202,7 @@ export function createOwlOrderQuest(level: number, seedIdx: number): QuestDef {
       objectiveType: 'feed_creatures',
       targetAmount: amt,
       progress: 0,
-      rewardGalleons: Math.round(rewardG * 1.15),
+      rewardGalleons: Math.max(1, Math.round(farmRewardG * 1.15)),
       rewardXp: Math.round(rewardXp * 1.15),
       rewardTimeSand: 1,
       completed: false,
@@ -1208,7 +1220,7 @@ export function createOwlOrderQuest(level: number, seedIdx: number): QuestDef {
     objectiveType: 'upgrade_star',
     targetAmount: 1,
     progress: 0,
-    rewardGalleons: Math.round(rewardG * 1.25),
+    rewardGalleons: Math.max(1, Math.round(farmRewardG * 1.25)),
     rewardXp: Math.round(rewardXp * 1.3),
     rewardTimeSand: 1,
     completed: false,
@@ -1217,8 +1229,10 @@ export function createOwlOrderQuest(level: number, seedIdx: number): QuestDef {
 }
 
 export function createDailyQuests(level: number, dateKey: string): QuestDef[] {
-  const baseG = Math.round(90 + level * 35);
+  const minigameBaseG = Math.round(90 + level * 35);
+  const baseG = Math.max(1, Math.round(minigameBaseG / 5));
   const baseXp = Math.round(65 + level * 28);
+  const harvestTarget = Math.max(10, Math.round((150 + level * 45) / 5));
   return [
     {
       id: `daily_${dateKey}_1`,
@@ -1226,10 +1240,10 @@ export function createDailyQuests(level: number, dateKey: string): QuestDef[] {
       giverName: 'Đồng Hồ Gia Đình Bà Molly',
       giverTitle: 'Việc Nhà Hàng Ngày (Làm mới 00:00)',
       giverEmoji: '🕰️',
-      title: `Thu hoạch mùa màng đạt ${Math.round(150 + level * 45)} Galleon`,
+      title: `Thu hoạch mùa màng đạt ${harvestTarget} Galleon`,
       dialogue: 'Chúc con một buổi sáng nắng ấm bội thu tại Trang Trại Hang Sóc!',
       objectiveType: 'harvest_galleons',
-      targetAmount: Math.round(150 + level * 45),
+      targetAmount: harvestTarget,
       progress: 0,
       rewardGalleons: baseG,
       rewardXp: baseXp,
@@ -1248,7 +1262,7 @@ export function createDailyQuests(level: number, dateKey: string): QuestDef[] {
       objectiveType: 'place_paths',
       targetAmount: 4,
       progress: 0,
-      rewardGalleons: Math.round(baseG * 0.85),
+      rewardGalleons: Math.max(1, Math.round(baseG * 0.85)),
       rewardXp: Math.round(baseXp * 0.95),
       rewardTimeSand: 1,
       completed: false,
@@ -1282,7 +1296,7 @@ export function createDailyQuests(level: number, dateKey: string): QuestDef[] {
       objectiveType: 'win_minigame',
       targetAmount: 2,
       progress: 0,
-      rewardGalleons: Math.round(baseG * 1.25),
+      rewardGalleons: Math.round(minigameBaseG * 1.25),
       rewardXp: Math.round(baseXp * 1.25),
       rewardTimeSand: 2,
       completed: false,
@@ -1303,8 +1317,8 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
       'Chào mừng con về Trang Trại Hang Sóc! Thửa Lúa Mì đầu mùa bên suối đã chín vàng óng rồi kìa — con hãy nhấp vào ô Lúa Mì để thu hoạch mẻ nông sản đầu tiên cất vào Kho Đỏ nhé!',
     hintVi: '👆 Nhấp vào Thửa Đất Lúa Mì có bong bóng thu hoạch trên bản đồ',
     ctaLabel: '🌾 Đưa tới ruộng Lúa',
-    rewardLabel: '+35 🪙 Vàng • +2 🌹 Hạt Hoa Hồng • +15 ⭐',
-    rewardGalleons: 35,
+    rewardLabel: '+7 🪙 Vàng • +2 🌹 Hạt Hoa Hồng • +15 ⭐',
+    rewardGalleons: 7,
     rewardXp: 15,
     rewardSeedCropId: 'english_rose',
     rewardSeedQty: 2,
@@ -1320,8 +1334,8 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
       'Mát tay lắm! Bác vừa tặng con hạt giống Hoa Hồng Đỏ Anh Quốc. Hãy mở Kho Hạt để gieo hoa lên Thửa Đất trống sát cạnh nhé — các Thửa Đất đặt cạnh nhau sẽ tự mở thông bờ gỗ thành cánh đồng lớn!',
     hintVi: '🌱 Mở Kho Hạt → chọn Hoa Hồng (hoặc hạt bất kỳ) → nhấp vào Thửa Đất trống',
     ctaLabel: '🌱 Mở Kho Hạt Hoa',
-    rewardLabel: '+45 🪙 Vàng • +2 🌼 Hạt Cúc Họa Mi • +15 ⭐',
-    rewardGalleons: 45,
+    rewardLabel: '+9 🪙 Vàng • +2 🌼 Hạt Cúc Họa Mi • +15 ⭐',
+    rewardGalleons: 9,
     rewardXp: 15,
     rewardSeedCropId: 'meadow_daisy',
     rewardSeedQty: 2,
@@ -1337,8 +1351,8 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
       'Nhìn sang bãi cỏ ba lá bên trái kìa! Đàn gà mái đã đẻ trứng đầy ổ — con hãy thu hoạch trứng rồi mở Chăn Thả để thả thêm Cừu Lông Xù (hoặc Gà Mái) vào ô Đồng Cỏ trống nối liền rào gỗ nhé!',
     hintVi: '🐾 Thu hoạch trứng trên Đồng Cỏ → bấm Chăn Thả → thả thú vào ô Đồng Cỏ trống',
     ctaLabel: '🐾 Chăm Đồng Cỏ',
-    rewardLabel: '+60 🪙 Vàng • +1 🥛 Sữa Kem & Lông Cừu • +20 ⭐',
-    rewardGalleons: 60,
+    rewardLabel: '+12 🪙 Vàng • +1 🥛 Sữa Kem & Lông Cừu • +20 ⭐',
+    rewardGalleons: 12,
     rewardXp: 20,
     rewardGoodId: 'creamy_dairy_milk',
     rewardGoodQty: 1,
@@ -1354,8 +1368,8 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
       'Bí quyết của Hang Sóc đây: mỗi khi cần hạt giống hoa hay nông sản, con có thể niệm nhanh 1 câu Thần Chú Đa Ngữ (Anh, Hàn, Trung, Tây Ban Nha, Nhật) để nhận hạt 0 Vàng, hoặc mua nhanh bằng Vàng!',
     hintVi: '🪄 Mở Học Viện Thần Chú trả lời đúng 1 câu lấy hạt 0G (hoặc mua nhanh 1 mẻ hạt bằng Vàng)',
     ctaLabel: '🪄 Mở Học Viện Thần Chú 0G',
-    rewardLabel: '+40 🪙 Vàng • +1 ⏳ Cát Thời Gian • +20 ⭐',
-    rewardGalleons: 40,
+    rewardLabel: '+8 🪙 Vàng • +1 ⏳ Cát Thời Gian • +20 ⭐',
+    rewardGalleons: 8,
     rewardXp: 20,
     rewardTimeSand: 1,
   },
@@ -1386,8 +1400,8 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
       'Tuyệt vời quá! Con đã có Sao Phép Thuật 🌟 và nông sản đầu mùa trong Kho Đỏ — giờ hãy mở Xây Dựng để dựng Nhà Hang Sóc / Lò Bánh, hoặc mở Đơn Hàng Cú 🦉 gửi chuyến quà đầu tiên cho bạn bè nhé!',
     hintVi: '🔨 Dựng 1 công trình trong Xây Dựng HOẶC 🦉 Giao 1 Đơn Hàng Cú để tốt nghiệp!',
     ctaLabel: '🔨 Xây Dựng / 🦉 Đơn Cú',
-    rewardLabel: '🎁 Tốt Nghiệp: +150 🪙 • +2 🌟 Sao • +1 🔥 Bùa Phượng Hoàng',
-    rewardGalleons: 150,
+    rewardLabel: '🎁 Tốt Nghiệp: +30 🪙 • +2 🌟 Sao • +1 🔥 Bùa Phượng Hoàng',
+    rewardGalleons: 30,
     rewardXp: 50,
     rewardStars: 2,
     rewardTalismans: 1,

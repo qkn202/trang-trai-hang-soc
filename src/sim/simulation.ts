@@ -354,7 +354,7 @@ export function createCanonFarmOwlOrder(level: number, seed: number): FarmOwlOrd
     const meta = r.itemId in FARM_GOODS ? FARM_GOODS[r.itemId as FarmGoodId] : FARM_CROPS[r.itemId as FarmCropId];
     return acc + meta.xp * r.qty;
   }, 0);
-  const rewardGalleons = Math.round(baseValue * 1.55 + level * 6);
+  const rewardGalleons = Math.max(1, Math.round(baseValue * 1.55 + Math.round((level * 6) / 5)));
   const rewardXp = Math.round(baseXp * 1.6 + level * 4);
   const isFeastMarquee = seed % 3 === 2;
 
@@ -440,7 +440,7 @@ export function createInitialFarmBarnState(): FarmBarnState {
           { itemId: 'ottery_wheat', qty: 2 },
           { itemId: 'farm_egg_wool', qty: 1 },
         ],
-        rewardGalleons: 165,
+        rewardGalleons: 33,
         rewardXp: 70,
         rewardMugglePlug: 1,
       },
@@ -457,7 +457,7 @@ export function createInitialFarmBarnState(): FarmBarnState {
           { itemId: 'honey_carrot', qty: 2 },
           { itemId: 'garden_pumpkin', qty: 2 },
         ],
-        rewardGalleons: 150,
+        rewardGalleons: 30,
         rewardXp: 65,
       },
       {
@@ -472,7 +472,7 @@ export function createInitialFarmBarnState(): FarmBarnState {
           { itemId: 'pumpkin_pie', qty: 2 },
           { itemId: 'ottery_wheat', qty: 2 },
         ],
-        rewardGalleons: 220,
+        rewardGalleons: 44,
         rewardXp: 90,
       },
       {
@@ -487,7 +487,7 @@ export function createInitialFarmBarnState(): FarmBarnState {
           { itemId: 'cinnamon_apple_pie', qty: 2 },
           { itemId: 'honey_carrot', qty: 2 },
         ],
-        rewardGalleons: 260,
+        rewardGalleons: 52,
         rewardXp: 110,
         rewardMugglePlug: 1,
         isFeastMarquee: true,
@@ -3163,7 +3163,7 @@ export class ParkSimulation {
     const entries = Object.entries(this.state.housePoints) as Array<[HouseName, number]>;
     entries.sort((a, b) => b[1] - a[1]);
     const winner = entries[0][0];
-    const rewardGold = 180 + this.state.houseCupMilestoneTier * 140;
+    const rewardGold = Math.max(1, Math.round((180 + this.state.houseCupMilestoneTier * 140) / 5));
     const rewardXp = 90 + this.state.houseCupMilestoneTier * 65;
 
     this.state.galleons += rewardGold;
@@ -3576,7 +3576,7 @@ export class ParkSimulation {
       home.durability = 95;
     }
 
-    const reward = esc.stolenCoins + 25;
+    const reward = esc.stolenCoins + 5;
     this.state.galleons += reward;
     this.addXp(22);
     this.state.stats.nifflersCaught++;
@@ -3626,7 +3626,7 @@ export class ParkSimulation {
       gy: pathSpot.gy,
       vx: 0.8,
       vy: 0.6,
-      stolenCoins: 12,
+      stolenCoins: 2,
     });
 
     this.audio.playCheekyAlert();
@@ -3864,7 +3864,7 @@ export class ParkSimulation {
     const nextTier = Math.floor(Math.max(0, this.state.xp) / FARM_HARVEST_CHEST_XP);
     const chestsEarned = nextTier - prevTier;
     if (chestsEarned > 0 && !this.state.sandboxMode && !this.isHeadmasterPreview) {
-      const bonusGold = chestsEarned * 65;
+      const bonusGold = chestsEarned * 13;
       const bonusSand = chestsEarned;
       this.state.galleons += bonusGold;
       this.state.finance.harvestRevenue += bonusGold;
@@ -4354,7 +4354,7 @@ export class ParkSimulation {
         Math.max(now, this.state.supply.felixBoostEndsAt || 0) + 240_000;
       msg = '✨ Phúc Lạc Dược phát huy: +35% Sao XP toàn trang trại trong 4 phút!';
     } else if (goodId === 'golden_choc_box') {
-      const gold = Math.round(180 + this.state.level * 35);
+      const gold = Math.max(1, Math.round((180 + this.state.level * 35) / 5));
       this.state.galleons += gold;
       this.state.finance.shopRevenue += gold;
       this.addXp(65);
@@ -4392,7 +4392,7 @@ export class ParkSimulation {
 
     const allDone = this.state.supply.cargoCrates.every((c) => c.fulfilled);
     if (allDone) {
-      const bonusG = Math.round(240 + this.state.level * 40);
+      const bonusG = Math.max(1, Math.round((240 + this.state.level * 40) / 5));
       const bonusXp = Math.round(160 + this.state.level * 25);
       this.state.galleons += bonusG;
       this.state.timeSand += 2;
@@ -4886,7 +4886,7 @@ export class ParkSimulation {
     let giftSuffix = '';
     if (Math.random() < 0.35) {
       if (Math.random() < 0.5) {
-        const giftGold = Math.round(25 + this.state.level * 1.2);
+        const giftGold = Math.max(1, Math.round((25 + this.state.level * 1.2) / 5));
         this.state.galleons += giftGold;
         this.state.finance.harvestRevenue += giftGold;
         giftSuffix = ` Nó dụi đầu tặng lại bạn +${giftGold}🪙 lấp lánh!`;
@@ -7454,16 +7454,16 @@ export class ParkSimulation {
     social.dailyLikedNeighborIds.push(nb.id);
     nb.likesCount += 1;
     social.friendshipTokens += 1;
-    this.state.galleons += 20;
-    this.state.finance.harvestRevenue += 20;
+    this.state.galleons += 4;
+    this.state.finance.harvestRevenue += 4;
     this.addXp(10);
 
     this.audio.playMatchPop(1);
     if (this.isVisitingNeighbor && this.activeVisitNeighborId === nb.id) {
-      this.spawnFloatingText(15, 19, '❤️ Tuyệt đẹp! +20G +1 🍀', '#fb7185');
+      this.spawnFloatingText(15, 19, '❤️ Tuyệt đẹp! +4G +1 🍀', '#fb7185');
     }
-    this.pushSocialActivity('❤️', `Thả tim khen "${nb.parkName}" của ${nb.name} (+1 🍀, +20G)`, now);
-    const msg = `❤️ Đã gửi tim khen ngợi "${nb.parkName}"! Nhận +1 🍀 Huy Hiệu Tình Bạn, +20G & +10 XP!`;
+    this.pushSocialActivity('❤️', `Thả tim khen "${nb.parkName}" của ${nb.name} (+1 🍀, +4G)`, now);
+    const msg = `❤️ Đã gửi tim khen ngợi "${nb.parkName}"! Nhận +1 🍀 Huy Hiệu Tình Bạn, +4G & +10 XP!`;
     this.onToast?.(msg, '❤️');
     this.saveToStorage();
     this.onUiChange?.();
@@ -7493,7 +7493,7 @@ export class ParkSimulation {
 
     const now = Date.now();
     social.dailyMysteryClaimedIds.push(nb.id);
-    const gold = 48;
+    const gold = 10;
     const xp = 18;
     this.state.galleons += gold;
     this.state.finance.harvestRevenue += gold;
@@ -7696,7 +7696,7 @@ export class ParkSimulation {
     social.chestsOpened += 1;
 
     const starsEarned = 2;
-    const goldEarned = 150;
+    const goldEarned = 30;
     const xpEarned = 40;
     this.state.match3.stars += starsEarned;
     this.state.match3.totalStarsEarned += starsEarned;
@@ -7797,22 +7797,22 @@ export class ParkSimulation {
       this.spawnFloatingText(
         b.gx + item.width * 0.5,
         b.gy + item.height * 0.5,
-        `🏮 ${mark.helperEmoji} +22G +1 🍀`,
+        `🏮 ${mark.helperEmoji} +4G +1 🍀`,
         '#fde047'
       );
     }
 
-    this.state.galleons += 22;
-    this.state.finance.harvestRevenue += 22;
+    this.state.galleons += 4;
+    this.state.finance.harvestRevenue += 4;
     social.friendshipTokens += 1;
     this.addXp(12);
     this.tickProductionToTimestamp(now, true);
 
     this.audio.playHarvestBubble();
-    const msg = `🏮 ${mark.helperEmoji} ${mark.helperName} nhắn: "${mark.noteVi}"${effectTag} (+1 🍀, +22G, +12 XP)`;
+    const msg = `🏮 ${mark.helperEmoji} ${mark.helperName} nhắn: "${mark.noteVi}"${effectTag} (+1 🍀, +4G, +12 XP)`;
     this.pushSocialActivity(
       '🏮',
-      `Nhận Dấu Ấn Cú Đưa Thư từ ${mark.helperName}${effectTag} (+1 🍀, +22G)`,
+      `Nhận Dấu Ấn Cú Đưa Thư từ ${mark.helperName}${effectTag} (+1 🍀, +4G)`,
       now
     );
     this.onToast?.(msg, '🏮');
@@ -8572,7 +8572,7 @@ export class ParkSimulation {
     if (canReward) {
       this.villagerGreetCooldown.set(id, now + 45_000);
       v.greetCooldownSec = 45;
-      bonusGalleons = 8;
+      bonusGalleons = 2;
       this.state.galleons += bonusGalleons;
       this.state.finance.harvestRevenue += bonusGalleons;
       this.addXp(4);
@@ -8610,8 +8610,8 @@ export class ParkSimulation {
 
     target.awaitingUnveil = undefined;
     const bonusGalleons = Math.max(
-      30,
-      Math.round((item.baseIncome || 24) * 1.6 + Math.max(1, item.unlockLevel) * 4)
+      6,
+      Math.round((item.baseIncome || 5) * 1.6 + Math.max(1, item.unlockLevel) * 0.8)
     );
     const bonusXp = Math.max(15, Math.round(Math.max(8, item.xpPerCollect) * 1.6));
     const feastPoints = 25;

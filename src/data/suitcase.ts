@@ -200,7 +200,7 @@ export const SUITCASE_EXPEDITIONS: SuitcaseExpeditionDef[] = [
     minParkLevel: 4,
     durationSec: 60,
     description: 'Thú cưng luồn qua hốc cây cổ thụ tìm Lá Mandrake tươi và Bí Ngô Ngọt mang về Xưởng Ủ Phép.',
-    baseGold: 95,
+    baseGold: 19,
     baseXp: 55,
     guaranteedIngredients: [
       { id: 'mandrake_leaf', qty: 2 },
@@ -215,7 +215,7 @@ export const SUITCASE_EXPEDITIONS: SuitcaseExpeditionDef[] = [
     minParkLevel: 18,
     durationSec: 90,
     description: 'Thu thập Bụi Ánh Sao rơi trên mặt hồ phẳng lặng và Hạt Ca-cao Phép quý hiếm.',
-    baseGold: 240,
+    baseGold: 48,
     baseXp: 135,
     guaranteedIngredients: [
       { id: 'starlight_dust', qty: 2 },
@@ -230,7 +230,7 @@ export const SUITCASE_EXPEDITIONS: SuitcaseExpeditionDef[] = [
     minParkLevel: 35,
     durationSec: 120,
     description: 'Chuyến thám hiểm xa mang về rương Vàng Galleon cổ đại, Bụi Ánh Sao và Hạt Ca-cao Phép quý hiếm!',
-    baseGold: 560,
+    baseGold: 112,
     baseXp: 290,
     guaranteedIngredients: [
       { id: 'starlight_dust', qty: 3 },

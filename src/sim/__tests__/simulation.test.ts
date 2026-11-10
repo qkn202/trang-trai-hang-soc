@@ -170,10 +170,10 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(sim.state.xp).toBe(199);
       expect(sim.state.galleons).toBe(initialGold);
 
-      // Cộng thêm 2 XP -> 201 XP: chạm mốc 200, thưởng 1 rương (+65G + 1 Cát)
+      // Cộng thêm 2 XP -> 201 XP: chạm mốc 200, thưởng 1 rương (+13G + 1 Cát)
       sim.addXp(2);
       expect(sim.state.xp).toBe(201);
-      expect(sim.state.galleons).toBe(initialGold + 65);
+      expect(sim.state.galleons).toBe(initialGold + 13);
       expect(sim.state.timeSand).toBe(initialSand + 1);
     });
   });
