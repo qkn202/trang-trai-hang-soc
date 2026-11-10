@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { pickBgmMood } from '../audio';
+import {
+  AudioCeilingController,
+  computeSpatialCue,
+  getFanfareSequence,
+  pickBgmMood,
+  softClipGain,
+} from '../audio';
 
 describe('Adaptive BGM Mood Engine (pickBgmMood)', () => {
   describe('Festival Priority Overrides', () => {
@@ -157,6 +163,76 @@ describe('Adaptive BGM Mood Engine (pickBgmMood)', () => {
 
     it('selects day for sunny day (WeatherKind canonical sunny)', () => {
       expect(pickBgmMood('day', 'sunny', false)).toBe('day');
+    });
+  });
+
+  describe('P2 — Audio Ceiling (5-Bus Mixer, Soft Limiter, Modal Ducking, 3-Stem Intensity, Spatial Cue)', () => {
+    it('prevents clipping above headroom via softClipGain', () => {
+      expect(softClipGain(0)).toBe(0);
+      expect(softClipGain(-1)).toBe(0);
+      expect(softClipGain(0.5)).toBeCloseTo(0.5);
+      expect(softClipGain(2.5, 0.94)).toBeLessThanOrEqual(0.94);
+      expect(softClipGain(10.0, 0.94)).toBeLessThanOrEqual(0.94);
+    });
+
+    it('ducks music and ambience smoothly when modal opens and restores when modal closes', () => {
+      const ctrl = new AudioCeilingController();
+      const baseMusic = ctrl.getEffectiveBusGain('music');
+      const baseAmb = ctrl.getEffectiveBusGain('ambience');
+      const baseSfx = ctrl.getEffectiveBusGain('sfx');
+
+      ctrl.setModalDucking(true);
+      expect(ctrl.isModalDucked()).toBe(true);
+      for (let i = 0; i < 10; i++) ctrl.tick(0.05);
+
+      const duckedMusic = ctrl.getEffectiveBusGain('music');
+      const duckedAmb = ctrl.getEffectiveBusGain('ambience');
+      expect(duckedMusic).toBeLessThan(baseMusic * 0.5);
+      expect(duckedAmb).toBeLessThan(baseAmb * 0.6);
+      // SFX is not ducked by modal
+      expect(ctrl.getEffectiveBusGain('sfx')).toBeCloseTo(baseSfx);
+
+      // Restore modal ducking
+      ctrl.setModalDucking(false);
+      expect(ctrl.isModalDucked()).toBe(false);
+      for (let i = 0; i < 10; i++) ctrl.tick(0.05);
+      expect(ctrl.getEffectiveBusGain('music')).toBeCloseTo(baseMusic, 2);
+      expect(ctrl.getEffectiveBusGain('ambience')).toBeCloseTo(baseAmb, 2);
+    });
+
+    it('transitions 3-stem intensity smoothly on pulse and decays back to baseline without clipping', () => {
+      const ctrl = new AudioCeilingController();
+      expect(ctrl.getStems().intensity).toBe(0);
+
+      ctrl.triggerIntensityPulse(0.6);
+      ctrl.tick(0.2);
+      const midIntensity = ctrl.getStems().intensity;
+      expect(midIntensity).toBeGreaterThan(0.2);
+      expect(ctrl.getEffectiveBusGain('music')).toBeLessThanOrEqual(0.94);
+
+      // Natural decay over several seconds
+      for (let i = 0; i < 40; i++) ctrl.tick(0.2);
+      expect(ctrl.getStems().intensity).toBe(0);
+    });
+
+    it('computes bounded stereo pan [-0.75..0.75] and distance attenuation for spatial cues', () => {
+      const leftCue = computeSpatialCue(50, 300, 1000, 600, 1.0);
+      const centerCue = computeSpatialCue(500, 300, 1000, 600, 1.0);
+      const rightCue = computeSpatialCue(950, 300, 1000, 600, 1.0);
+
+      expect(leftCue.pan).toBeLessThan(0);
+      expect(leftCue.pan).toBeGreaterThanOrEqual(-0.75);
+      expect(centerCue.pan).toBe(0);
+      expect(rightCue.pan).toBeGreaterThan(0);
+      expect(rightCue.pan).toBeLessThanOrEqual(0.75);
+      expect(centerCue.gainMul).toBeGreaterThan(leftCue.gainMul);
+    });
+
+    it('returns non-empty polyphonic fanfare sequences for win, harvest_combo, build_complete, unveil_ribbon', () => {
+      expect(getFanfareSequence('win').length).toBeGreaterThanOrEqual(4);
+      expect(getFanfareSequence('harvest_combo').length).toBeGreaterThanOrEqual(3);
+      expect(getFanfareSequence('build_complete').length).toBeGreaterThanOrEqual(4);
+      expect(getFanfareSequence('unveil_ribbon').length).toBeGreaterThanOrEqual(4);
     });
   });
 });

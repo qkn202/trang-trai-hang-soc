@@ -1,8 +1,17 @@
 import { WeatherKind } from '../types/game';
 import { BgmMood, BgmWeather, pickBgmMood, TimeOfDay } from './bgmMood';
+import {
+  AudioBusName,
+  AudioBusVolumes,
+  AudioCeilingController,
+  computeSpatialCue,
+  FanfareKind,
+  getFanfareSequence,
+  softClipGain,
+} from './audioCeiling';
 
-export { pickBgmMood };
-export type { BgmMood, BgmWeather, TimeOfDay };
+export { AudioCeilingController, computeSpatialCue, getFanfareSequence, pickBgmMood, softClipGain };
+export type { AudioBusName, AudioBusVolumes, BgmMood, BgmWeather, FanfareKind, TimeOfDay };
 
 // Procedural Symphonic Music Box (Celesta & Harp) Fallback Melodies & Basses for 5 Moods
 const DAY_MELODY = [
@@ -162,6 +171,7 @@ export class MagicalAudio {
   private ctx: AudioContext | null = null;
   public enabled = true; // SFX enabled
   public bgmEnabled = true; // Cozy Symphonic Celesta BGM enabled
+  public readonly ceiling = new AudioCeilingController();
   private unlocked = false;
   private streakCount = 0;
   private lastStreakTime = 0;
@@ -351,7 +361,8 @@ export class MagicalAudio {
       }
 
       if (slot.audio) {
-        const effectiveVol = Math.max(0, Math.min(1, slot.gain * this.bgmMasterVolume));
+        const musicBus = this.ceiling.getEffectiveBusGain('music');
+        const effectiveVol = Math.max(0, Math.min(1, slot.gain * this.bgmMasterVolume * musicBus));
         slot.audio.volume = effectiveVol;
 
         // "track nào idle thì pause ở 0"
@@ -506,6 +517,34 @@ export class MagicalAudio {
    * Maps current world environment to one of 5 adaptive BGM moods, executes 1.2s crossfading
    * between dual <audio> slots, and manages fallback procedural synthesis and spatial soundscape.
    */
+  public setModalDucking(active: boolean): void {
+    this.ceiling.setModalDucking(active);
+  }
+
+  public setBusVolume(bus: AudioBusName, value: number): void {
+    this.ceiling.setBusVolume(bus, value);
+  }
+
+  public playSpatialSfx(
+    cue: 'water' | 'creature' | 'workshop',
+    screenX: number,
+    screenY: number,
+    viewW: number,
+    viewH: number,
+    zoom = 1
+  ): void {
+    if (!this.enabled) return;
+    const spatial = computeSpatialCue(screenX, screenY, viewW, viewH, zoom);
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx') * spatial.gainMul;
+    if (cue === 'water') {
+      this.playTone(587.33, 0.14, 'sine', 0.045 * sfxGain, 0);
+    } else if (cue === 'creature') {
+      this.playTone(783.99, 0.16, 'triangle', 0.05 * sfxGain, 0);
+    } else {
+      this.playTone(440.0, 0.18, 'triangle', 0.048 * sfxGain, 0);
+    }
+  }
+
   public updateSoundscape(
     dt: number,
     isNight: boolean,
@@ -515,6 +554,7 @@ export class MagicalAudio {
     isFestival = false,
     timeOfDay?: 'dawn' | 'day' | 'dusk' | 'night'
   ): void {
+    this.ceiling.tick(dt);
     if (!this.unlocked) return;
 
     const rainTarget =
@@ -607,6 +647,7 @@ export class MagicalAudio {
   }
 
   public playHarvestBubble(): void {
+    this.ceiling.triggerIntensityPulse(0.12);
     if (!this.enabled) return;
     const nowMs = performance.now();
     if (nowMs - this.lastStreakTime < 900) {
