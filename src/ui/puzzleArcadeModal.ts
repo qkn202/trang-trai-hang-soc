@@ -625,21 +625,37 @@ export class PuzzleArcadeModalController {
         }
       }
 
-      if (this.mode !== 'sudoku' || !this.sudokuEngine || this.sudokuEngine.status !== 'playing') {
+      if (
+        this.mode !== 'sudoku' ||
+        !this.sudokuEngine ||
+        (this.sudokuEngine.status !== 'playing' && this.sudokuEngine.status !== 'lost')
+      ) {
         return;
       }
-      if (e.key >= '1' && e.key <= '9') {
+      if (e.key >= '1' && e.key <= '9' && this.sudokuEngine.status === 'playing') {
         e.preventDefault();
         this.applySudokuDigit(Number(e.key));
-      } else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') {
+      } else if (
+        e.key === 'Backspace' ||
+        e.key === 'Delete' ||
+        e.code === 'Backspace' ||
+        e.code === 'Delete' ||
+        e.key === '0' ||
+        e.code === 'Digit0' ||
+        e.code === 'Numpad0' ||
+        e.key === 'd' ||
+        e.key === 'D' ||
+        e.key === 'x' ||
+        e.key === 'X'
+      ) {
         e.preventDefault();
-        if (this.sudokuEngine.clearSelectedCell()) {
-          this.sim.audio.playClick();
-          this.updateLiveCountersOnly();
-        }
-      } else if (e.key === 'n' || e.key === 'N') {
+        this.triggerSudokuClearAction(false);
+      } else if ((e.key === 'n' || e.key === 'N') && this.sudokuEngine.status === 'playing') {
         e.preventDefault();
         this.sudokuEngine.pencilMode = !this.sudokuEngine.pencilMode;
+        if (this.sudokuEngine.pencilMode) {
+          this.sudokuEngine.eraseMode = false;
+        }
         this.sim.audio.playClick();
         this.renderDOM();
       } else if (e.key === 'h' || e.key === 'H') {
@@ -1463,8 +1479,8 @@ export class PuzzleArcadeModalController {
         <button id="btnPaSudokuPencil" type="button" class="pa-tool-btn ${se.pencilMode ? 'active' : ''}" ${se.status !== 'playing' ? 'disabled' : ''}>
           🪶 Nháp: <strong>${se.pencilMode ? 'Bật' : 'Tắt'}</strong>
         </button>
-        <button id="btnPaSudokuClear" type="button" class="pa-tool-btn" ${se.status !== 'playing' ? 'disabled' : ''}>
-          🧹 Xóa
+        <button id="btnPaSudokuClear" type="button" class="pa-tool-btn ${se.eraseMode ? 'active' : ''}" ${se.status !== 'playing' && se.status !== 'lost' ? 'disabled' : ''} title="Xoá ô đang chọn hoặc bật Chổi Xoá (Del / Backspace)">
+          🧹 ${se.eraseMode ? 'Xoá: <strong>Bật</strong>' : 'Xóa'}
         </button>
         <button id="btnPaSudokuHint" type="button" class="pa-tool-btn gold" ${!canSudokuHint ? 'disabled' : ''}>
           💡 Gợi Ý <span class="pa-cost-pill">${hintCostLbl}</span>
@@ -2016,16 +2032,15 @@ export class PuzzleArcadeModalController {
     box.querySelector('#btnPaSudokuPencil')?.addEventListener('click', () => {
       if (!this.sudokuEngine) return;
       this.sudokuEngine.pencilMode = !this.sudokuEngine.pencilMode;
+      if (this.sudokuEngine.pencilMode) {
+        this.sudokuEngine.eraseMode = false;
+      }
       this.sim.audio.playClick();
       this.renderDOM();
     });
 
     box.querySelector('#btnPaSudokuClear')?.addEventListener('click', () => {
-      if (!this.sudokuEngine) return;
-      if (this.sudokuEngine.clearSelectedCell()) {
-        this.sim.audio.playClick();
-        this.updateLiveCountersOnly();
-      }
+      this.triggerSudokuClearAction(true);
     });
 
     box.querySelector('#btnPaSudokuHint')?.addEventListener('click', () => {
@@ -2564,12 +2579,46 @@ export class PuzzleArcadeModalController {
       this.checkAndClaimVictory();
     } else if (res.lost) {
       this.showToast(
-        `📕 Quá giới hạn sai (${this.sudokuEngine.mistakesCount}/${this.sudokuEngine.maxMistakes}) — Bấm Trang Sách Mới để giải lại!`,
+        `📕 Quá giới hạn sai (${this.sudokuEngine.mistakesCount}/${this.sudokuEngine.maxMistakes}) — Bấm 🧹 Xoá Ô để sửa hoặc Trang Sách Mới!`,
         '📕'
       );
       this.renderDOM();
     } else {
       this.updateLiveCountersOnly();
+    }
+  }
+
+  private triggerSudokuClearAction(fromButton = false): void {
+    const se = this.sudokuEngine;
+    if (!se || (se.status !== 'playing' && se.status !== 'lost')) return;
+    const wasLost = se.status === 'lost';
+    const wasEraseMode = se.eraseMode;
+    if (se.clearSelectedCell()) {
+      se.eraseMode = false;
+      if (se.selected) {
+        const cx = SUDOKU_BOARD_X + (se.selected.c + 0.5) * SUDOKU_CELL_PX;
+        const cy = SUDOKU_BOARD_Y + (se.selected.r + 0.5) * SUDOKU_CELL_PX;
+        this.spawnBurst(cx, cy, '#fda4af', 12);
+      }
+      this.sim.audio.playClick();
+      if (wasLost || wasEraseMode) {
+        this.renderDOM();
+      } else {
+        this.updateLiveCountersOnly();
+      }
+      return;
+    }
+
+    if (fromButton) {
+      se.eraseMode = !se.eraseMode;
+      if (se.eraseMode) {
+        se.pencilMode = false;
+        this.showToast('🧹 Đã bật Chổi Xoá — chạm vào ô bạn đã điền trên bàn để xoá!', '🧹');
+      }
+      this.sim.audio.playClick();
+      this.renderDOM();
+    } else {
+      this.sim.audio.playClick();
     }
   }
 
@@ -2617,6 +2666,18 @@ export class PuzzleArcadeModalController {
 
   private handlePointerDown(vx: number, vy: number): void {
     if (this.mode === 'sudoku' && this.sudokuEngine) {
+      const se = this.sudokuEngine;
+      if (
+        this.sudokuEraseRect &&
+        vx >= this.sudokuEraseRect.x &&
+        vx <= this.sudokuEraseRect.x + this.sudokuEraseRect.w &&
+        vy >= this.sudokuEraseRect.y &&
+        vy <= this.sudokuEraseRect.y + this.sudokuEraseRect.h
+      ) {
+        this.triggerSudokuClearAction(true);
+        return;
+      }
+
       if (
         vx >= SUDOKU_BOARD_X &&
         vx <= SUDOKU_BOARD_X + SUDOKU_BOARD_PX &&
@@ -2625,7 +2686,25 @@ export class PuzzleArcadeModalController {
       ) {
         const c = Math.min(8, Math.max(0, Math.floor((vx - SUDOKU_BOARD_X) / SUDOKU_CELL_PX)));
         const r = Math.min(8, Math.max(0, Math.floor((vy - SUDOKU_BOARD_Y) / SUDOKU_CELL_PX)));
-        this.sudokuEngine.selected = { r, c };
+        const isSameSelected = se.selected?.r === r && se.selected?.c === c;
+        if (se.eraseMode || (isSameSelected && se.isWrongCell(r, c))) {
+          const wasLost = se.status === 'lost';
+          const wasErase = se.eraseMode;
+          if (se.clearCellAt(r, c)) {
+            se.eraseMode = false;
+            const cx = SUDOKU_BOARD_X + (c + 0.5) * SUDOKU_CELL_PX;
+            const cy = SUDOKU_BOARD_Y + (r + 0.5) * SUDOKU_CELL_PX;
+            this.spawnBurst(cx, cy, '#fda4af', 12);
+            this.sim.audio.playClick();
+            if (wasLost || wasErase) {
+              this.renderDOM();
+            } else {
+              this.updateLiveCountersOnly();
+            }
+            return;
+          }
+        }
+        se.selected = { r, c };
         this.sim.audio.playClick();
         return;
       }
@@ -2635,20 +2714,6 @@ export class PuzzleArcadeModalController {
           this.applySudokuDigit(digit);
           return;
         }
-      }
-
-      if (
-        this.sudokuEraseRect &&
-        vx >= this.sudokuEraseRect.x &&
-        vx <= this.sudokuEraseRect.x + this.sudokuEraseRect.w &&
-        vy >= this.sudokuEraseRect.y &&
-        vy <= this.sudokuEraseRect.y + this.sudokuEraseRect.h
-      ) {
-        if (this.sudokuEngine.clearSelectedCell()) {
-          this.sim.audio.playClick();
-          this.updateLiveCountersOnly();
-        }
-        return;
       }
       return;
     }
@@ -4553,19 +4618,19 @@ export class PuzzleArcadeModalController {
       ctx.fill();
       drawRoundedRect(ctx, ex, ey, btnW, btnH - 2.5, 10);
       const eraseGrad = ctx.createLinearGradient(0, ey, 0, ey + btnH);
-      eraseGrad.addColorStop(0, '#e11d48');
-      eraseGrad.addColorStop(1, '#9f1239');
+      eraseGrad.addColorStop(0, engine.eraseMode ? '#f59e0b' : '#e11d48');
+      eraseGrad.addColorStop(1, engine.eraseMode ? '#b45309' : '#9f1239');
       ctx.fillStyle = eraseGrad;
       ctx.fill();
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = '#fde68a';
+      ctx.lineWidth = engine.eraseMode ? 2.4 : 1.5;
+      ctx.strokeStyle = engine.eraseMode ? '#fffbeb' : '#fde68a';
       ctx.stroke();
 
       ctx.fillStyle = '#fffbeb';
       ctx.font = '900 12.5px "Be Vietnam Pro", system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('🧹 Xoá Ô', ex + btnW * 0.5, ey + 19, btnW - 8);
+      ctx.fillText(engine.eraseMode ? '🧹 Đang Xoá' : '🧹 Xoá Ô', ex + btnW * 0.5, ey + 19, btnW - 8);
       ctx.font = '800 10px "Be Vietnam Pro", system-ui, sans-serif';
       ctx.fillText(`Sai ${engine.mistakesCount}/${engine.maxMistakes}`, ex + btnW * 0.5, ey + 38, btnW - 8);
       ctx.restore();
@@ -4707,12 +4772,12 @@ export class PuzzleArcadeModalController {
     ctx.fill();
     drawRoundedRect(ctx, ex, ey, ew, eh - 2.5, 10);
     const eraseGrad = ctx.createLinearGradient(0, ey, 0, ey + eh);
-    eraseGrad.addColorStop(0, '#e11d48');
-    eraseGrad.addColorStop(1, '#9f1239');
+    eraseGrad.addColorStop(0, engine.eraseMode ? '#f59e0b' : '#e11d48');
+    eraseGrad.addColorStop(1, engine.eraseMode ? '#b45309' : '#9f1239');
     ctx.fillStyle = eraseGrad;
     ctx.fill();
-    ctx.lineWidth = 1.4;
-    ctx.strokeStyle = '#fde68a';
+    ctx.lineWidth = engine.eraseMode ? 2.2 : 1.4;
+    ctx.strokeStyle = engine.eraseMode ? '#fffbeb' : '#fde68a';
     ctx.stroke();
 
     ctx.fillStyle = '#fffbeb';
@@ -4720,7 +4785,9 @@ export class PuzzleArcadeModalController {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(
-      `🧹 Xoá Ô (Del) • Sai: ${engine.mistakesCount}/${engine.maxMistakes}`,
+      engine.eraseMode
+        ? `🧹 Đang Bật Xoá Ô • Chạm ô để xoá`
+        : `🧹 Xoá Ô (Del) • Sai: ${engine.mistakesCount}/${engine.maxMistakes}`,
       ex + ew * 0.5,
       ey + (eh - 2) * 0.52,
       ew - 12

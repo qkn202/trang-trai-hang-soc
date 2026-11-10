@@ -324,6 +324,46 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
       expect(testedParityConflict).toBe(true);
     });
 
+    it('Sudoku Xoá Ô (Del) hoạt động khi đang chọn ô điền, khi lỡ bấm sang ô đề bài/ô trống hoặc khi vừa chạm ngưỡng sai', () => {
+      const se = new SudokuPuzzleEngine(20);
+      const blank = se.selected!;
+      expect(blank).toBeTruthy();
+      const correctDigit = se.solution[blank.r][blank.c];
+      const wrongDigit = (correctDigit % 9) + 1;
+
+      // 1. Điền số rồi bấm Xoá ngay tại ô đó
+      se.inputDigit(correctDigit);
+      expect(se.grid[blank.r][blank.c]).toBe(correctDigit);
+      expect(se.clearSelectedCell()).toBe(true);
+      expect(se.grid[blank.r][blank.c]).toBe(0);
+
+      // 2. Điền sai rồi bấm sang một ô gốc đề bài (given), bấm Xoá vẫn tự tìm và xoá ô sai vừa nhập
+      se.selected = { ...blank };
+      se.inputDigit(wrongDigit);
+      expect(se.grid[blank.r][blank.c]).toBe(wrongDigit);
+      outerGiven: for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (se.given[r][c]) {
+            se.selected = { r, c };
+            break outerGiven;
+          }
+        }
+      }
+      expect(se.clearSelectedCell()).toBe(true);
+      expect(se.grid[blank.r][blank.c]).toBe(0);
+      expect(se.selected).toEqual(blank);
+
+      // 3. Khi chạm ngưỡng sai (status === 'lost'), nút Xoá Ô vẫn xoá được ô sai và mở khoá tiếp tục chơi
+      se.mistakesCount = se.maxMistakes - 1;
+      se.selected = { ...blank };
+      const lostRes = se.inputDigit(wrongDigit);
+      expect(lostRes.lost).toBe(true);
+      expect(se.status).toBe('lost');
+      expect(se.clearSelectedCell()).toBe(true);
+      expect(se.grid[blank.r][blank.c]).toBe(0);
+      expect(se.status).toBe('playing');
+    });
+
     it('Match-3 Tổ Sáp Mật Ong (level >= 160): sinh sáp đối xứng, 0% soft-lock khi dọn sạch sáp trên bàn', () => {
       let honeyLevel = 160;
       for (let lv = 160; lv <= 175; lv++) {

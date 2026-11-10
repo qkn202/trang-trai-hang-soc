@@ -1648,6 +1648,8 @@ export class SudokuPuzzleEngine {
   /** Bitmask (1 << d) for pencil notes 1..9 per cell */
   public notes: number[][] = [];
   public pencilMode = false;
+  public eraseMode = false;
+  public editHistory: Array<{ r: number; c: number }> = [];
   public selected: { r: number; c: number } | null = null;
   public freeHintsLeft: number;
   public paidHintsLeft: number;
@@ -1930,6 +1932,11 @@ export class SudokuPuzzleEngine {
     return true;
   }
 
+  private recordCellEdit(r: number, c: number): void {
+    this.editHistory = this.editHistory.filter((item) => item.r !== r || item.c !== c);
+    this.editHistory.push({ r, c });
+  }
+
   public inputDigit(digit: number): {
     changed: boolean;
     conflict: boolean;
@@ -1939,6 +1946,7 @@ export class SudokuPuzzleEngine {
     if (this.status !== 'playing' || digit < 1 || digit > 9 || !this.selected) {
       return { changed: false, conflict: false, lost: this.status === 'lost', won: false };
     }
+    this.eraseMode = false;
     const { r, c } = this.selected;
     if (this.given[r][c]) {
       return { changed: false, conflict: false, lost: false, won: false };
@@ -1949,16 +1957,23 @@ export class SudokuPuzzleEngine {
         this.grid[r][c] = 0;
       }
       this.notes[r][c] ^= 1 << digit;
+      if (this.notes[r][c] !== 0) {
+        this.recordCellEdit(r, c);
+      } else {
+        this.editHistory = this.editHistory.filter((item) => item.r !== r || item.c !== c);
+      }
       return { changed: true, conflict: false, lost: false, won: false };
     }
 
     if (this.grid[r][c] === digit) {
       this.grid[r][c] = 0;
+      this.editHistory = this.editHistory.filter((item) => item.r !== r || item.c !== c);
       return { changed: true, conflict: false, lost: false, won: false };
     }
 
     this.grid[r][c] = digit;
     this.notes[r][c] = 0;
+    this.recordCellEdit(r, c);
     const conflict = digit !== this.solution[r][c] || this.hasConflict(r, c);
     if (conflict) {
       this.mistakesCount += 1;
@@ -1977,14 +1992,58 @@ export class SudokuPuzzleEngine {
     return { changed: true, conflict, lost: false, won: false };
   }
 
-  public clearSelectedCell(): boolean {
-    if (this.status !== 'playing' || !this.selected) return false;
-    const { r, c } = this.selected;
-    if (this.given[r][c]) return false;
+  public clearCellAt(r: number, c: number): boolean {
+    if (this.status !== 'playing' && this.status !== 'lost') return false;
+    if (r < 0 || r >= 9 || c < 0 || c >= 9) return false;
+    if (this.given[r]?.[c]) return false;
     if (this.grid[r][c] === 0 && this.notes[r][c] === 0) return false;
     this.grid[r][c] = 0;
     this.notes[r][c] = 0;
+    this.selected = { r, c };
+    this.editHistory = this.editHistory.filter((item) => item.r !== r || item.c !== c);
+    if (this.status === 'lost') {
+      this.status = 'playing';
+      this.mistakesCount = Math.max(0, Math.min(this.mistakesCount, this.maxMistakes - 1));
+    }
     return true;
+  }
+
+  public clearSelectedCell(): boolean {
+    if (this.status !== 'playing' && this.status !== 'lost') return false;
+    if (this.selected && this.clearCellAt(this.selected.r, this.selected.c)) {
+      return true;
+    }
+    // 1. Prioritize clearing the most recently edited wrong cell
+    for (let i = this.editHistory.length - 1; i >= 0; i--) {
+      const { r, c } = this.editHistory[i];
+      if (this.isWrongCell(r, c) && this.clearCellAt(r, c)) {
+        return true;
+      }
+    }
+    // 2. Any wrong cell on the board
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (this.isWrongCell(r, c) && this.clearCellAt(r, c)) {
+          return true;
+        }
+      }
+    }
+    // 3. Most recently user-edited cell in editHistory
+    for (let i = this.editHistory.length - 1; i >= 0; i--) {
+      const { r, c } = this.editHistory[i];
+      if (this.clearCellAt(r, c)) {
+        return true;
+      }
+    }
+    // 4. Fallback scan for any user-entered cell on the board
+    for (let r = 8; r >= 0; r--) {
+      for (let c = 8; c >= 0; c--) {
+        if (!this.given[r][c] && (this.grid[r][c] !== 0 || this.notes[r][c] !== 0)) {
+          return this.clearCellAt(r, c);
+        }
+      }
+    }
+    return false;
   }
 
   public useMagicHint(): {
