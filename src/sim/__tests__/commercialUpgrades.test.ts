@@ -454,5 +454,69 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
       expect(seenFens.size).toBe(tacticalStagesCount);
       expect(matchStartingFens.size).toBeGreaterThanOrEqual(12);
     });
+
+    it('Match-3 chuẩn Candy Crush Saga: khóa chạm nổ tại chỗ, kẹo bọc nổ 3×3 hai lần (Double Blast) & Sugar Crush cuối màn', () => {
+      const def = getMatch3LevelDef(1);
+      const eng = new Match3BoardEngine(def);
+
+      // 1. Không cho phép chạm kích nổ tại chỗ (tryTapCellSpecial luôn trả về acted = false)
+      const startMoves = eng.movesLeft;
+      eng.grid[3][3].piece = {
+        id: 9991,
+        kind: 'gem',
+        color: 'ruby',
+        special: 'rocket_h',
+        visR: 3,
+        visC: 3,
+        scale: 1,
+      };
+      const tapRes = eng.tryTapCellSpecial(3, 3);
+      expect(tapRes.acted).toBe(false);
+      expect(eng.movesLeft).toBe(startMoves);
+
+      // 2. Kẹo Bọc (bomb) nổ 3×3 hai lần liên tiếp: phá được lớp băng 2 tầng xung quanh chỉ trong 1 lượt ghép cùng màu!
+      for (let r = 0; r < MATCH3_BOARD_SIZE; r++) {
+        for (let c = 0; c < MATCH3_BOARD_SIZE; c++) {
+          eng.grid[r][c].hole = false;
+          eng.grid[r][c].box = 0;
+          eng.grid[r][c].web = false;
+          eng.grid[r][c].honey = false;
+          eng.grid[r][c].ice = 0;
+          eng.grid[r][c].piece = {
+            id: 1000 + r * 8 + c,
+            kind: 'gem',
+            color: (r + c) % 2 === 0 ? 'sapphire' : 'emerald',
+            special: 'none',
+            visR: r,
+            visC: c,
+            scale: 1,
+          };
+        }
+      }
+      // Đặt Kẹo Bọc màu ruby ở (4, 2), ghép với 2 viên ruby ở (4, 0) và (4, 1) thông qua tráo (4, 2) <-> (4, 3)
+      eng.grid[4][0].piece!.color = 'ruby';
+      eng.grid[4][1].piece!.color = 'ruby';
+      eng.grid[4][2].piece!.color = 'topaz';
+      eng.grid[4][3].piece!.color = 'ruby';
+      eng.grid[4][3].piece!.special = 'bomb';
+      // Đặt băng 2 lớp ở ô (5, 2) ngay dưới vị trí nổ (4, 2) -> nổ lần 1 giảm ice 2->1, nổ lần 2 giảm ice 1->0!
+      eng.grid[5][2].ice = 2;
+
+      const swapBomb = eng.trySwap(4, 2, 4, 3);
+      expect(swapBomb.valid).toBe(true);
+      expect(eng.grid[5][2].ice).toBe(0);
+
+      // 3. Sugar Crush cuối màn: chuyển toàn bộ lượt dư thành Kẹo Sọc & cộng thưởng
+      eng.movesLeft = 6;
+      for (const g of eng.goals) {
+        g.current = g.target;
+      }
+      const hammerSugar = eng.useBooster('reparo_hammer', 2, 2);
+      expect(hammerSugar.ok).toBe(true);
+      expect(eng.status).toBe('won');
+      expect(eng.leftoverMovesConverted).toBe(6);
+      expect(eng.movesLeft).toBe(0);
+      expect(eng.bonusCoinsFromLeftoverMoves).toBe(60);
+    });
   });
 });

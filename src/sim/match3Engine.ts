@@ -15,6 +15,8 @@ export interface Match3Piece {
   kind: 'gem' | 'scroll';
   color: GemColor;
   special: SpecialKind;
+  bombPrimed?: boolean;
+  secondBlastRadius?: number;
   // Visual interpolation coordinates (in grid units 0..7) for 60fps Canvas rendering
   visR: number;
   visC: number;
@@ -74,6 +76,7 @@ export class Match3BoardEngine {
   public status: Match3SessionStatus = 'playing';
   public lastComboChain = 0;
   public bonusCoinsFromLeftoverMoves = 0;
+  public leftoverMovesConverted = 0;
   public talismanUsed = false;
   public vfxQueue: Match3VfxEvent[] = [];
 
@@ -81,6 +84,7 @@ export class Match3BoardEngine {
   private scrollsSpawned = 0;
   private scrollsOnBoard = 0;
   private honeyClearedThisTurn = 0;
+  private sugarCrushTriggered = false;
 
   constructor(levelDef: Match3LevelDef, winStreak = 0) {
     this.levelDef = levelDef;
@@ -333,34 +337,12 @@ export class Match3BoardEngine {
     return this.goals.every((g) => g.current >= g.target);
   }
 
-  // ==================== TAP POWER-UP IN PLACE (ROYAL MATCH STYLE) ====================
+  // ==================== CLASSIC CANDY CRUSH: NO TAP-IN-PLACE DETONATION ====================
 
-  public tryTapCellSpecial(r: number, c: number): { acted: boolean; comboCount: number } {
-    if (this.status !== 'playing' || this.movesLeft <= 0) {
-      return { acted: false, comboCount: 0 };
-    }
-    if (!this.canInteractCell(r, c)) return { acted: false, comboCount: 0 };
-    const p = this.grid[r][c].piece!;
-    if (p.kind !== 'gem' || p.special === 'none') {
-      return { acted: false, comboCount: 0 };
-    }
-
-    this.honeyClearedThisTurn = 0;
-    this.movesLeft -= 1;
-    if (p.special === 'snitch') {
-      const targetColor = this.pickBestColorForSnitch();
-      this.grid[r][c].piece = null;
-      this.damageUnderlayIce(r, c);
-      this.triggerSnitchColorZap(r, c, targetColor);
-    } else {
-      const toDetonate = new Set<string>([`${r},${c}`]);
-      this.resolveExplosionSet(toDetonate, new Set());
-    }
-
-    const comboCount = 1 + this.runGravityAndCascadeLoop();
-    this.maybeSpreadHoneyAfterTurn();
-    this.finalizeTurnState(comboCount);
-    return { acted: true, comboCount };
+  public tryTapCellSpecial(_r: number, _c: number): { acted: boolean; comboCount: number } {
+    // Classic Candy Crush rule: Special Candies only detonate when matched 3+ by color,
+    // swapped with another Special Candy, or zapped by a Color Bomb / chain explosion.
+    return { acted: false, comboCount: 0 };
   }
 
   // ==================== SWAP TWO ADJACENT CELLS ====================
@@ -426,11 +408,15 @@ export class Match3BoardEngine {
       return { valid: true, comboCount };
     }
 
-    // 3. Standard Match Check
-    const matchInfo = this.detectMatches([
-      [r2, c2],
-      [r1, c1],
-    ]);
+    // 3. Standard Match Check (Candy Crush: pass swap direction so Match-4 spawns striped candy along swap axis)
+    const swapDir: 'h' | 'v' = r1 === r2 ? 'h' : 'v';
+    const matchInfo = this.detectMatches(
+      [
+        [r2, c2],
+        [r1, c1],
+      ],
+      swapDir
+    );
 
     if (matchInfo.matchedKeys.size === 0) {
       // Revert invalid swap — costs 0 moves!
@@ -687,15 +673,34 @@ export class Match3BoardEngine {
       return;
     }
 
-    // 2. Snitch + Rocket/Bomb => Transform all gems of best color into Rockets/Bombs and detonate!
+    // 2. Snitch + Rocket/Bomb => Transform all gems of the partner special's color into Rockets/Bombs and detonate!
     if (s1 === 'snitch' || s2 === 'snitch') {
-      const other = s1 === 'snitch' ? s2 : s1;
-      const targetColor = this.pickBestColorForSnitch();
+      const otherPiece = s1 === 'snitch' ? pAt2 : pAt1;
+      const other = otherPiece.special;
+      const hasPartnerColorOnBoard = this.grid.some((row) =>
+        row.some(
+          (c) =>
+            c.piece?.kind === 'gem' &&
+            c.piece.special !== 'snitch' &&
+            c.piece.color === otherPiece.color
+        )
+      );
+      const targetColor = hasPartnerColorOnBoard ? otherPiece.color : this.pickBestColorForSnitch();
       const transformed = new Set<string>();
+      if (!this.grid[r2][c2].hole && this.grid[r2][c2].box === 0) {
+        const originSpecial: SpecialKind =
+          other === 'bomb' ? 'bomb' : other === 'rocket_v' ? 'rocket_v' : 'rocket_h';
+        this.grid[r2][c2].piece = this.makePiece(r2, c2, 'gem', targetColor, originSpecial, r2);
+        transformed.add(`${r2},${c2}`);
+      }
       for (let r = 0; r < MATCH3_BOARD_SIZE; r++) {
         for (let c = 0; c < MATCH3_BOARD_SIZE; c++) {
           const cell = this.grid[r][c];
-          if (cell.piece?.kind === 'gem' && cell.piece.color === targetColor) {
+          if (
+            cell.piece?.kind === 'gem' &&
+            cell.piece.special !== 'snitch' &&
+            cell.piece.color === targetColor
+          ) {
             this.pushVfx({ kind: 'lightning', fromR: r2, fromC: c2, toR: r, toC: c });
             cell.piece.special =
               other === 'bomb' ? 'bomb' : (r + c) % 2 === 0 ? 'rocket_h' : 'rocket_v';
@@ -708,7 +713,7 @@ export class Match3BoardEngine {
       return;
     }
 
-    // 3. Bomb + Bomb => Mega 5x5 blast!
+    // 3. Bomb + Bomb => Double Mega 5x5 blast (1st 5x5 now, then gravity drop, then 2nd 5x5)!
     if (s1 === 'bomb' && s2 === 'bomb') {
       this.pushVfx({ kind: 'shockwave', r: r2, c: c2, radius: 3.2 });
       const area = new Set<string>();
@@ -722,6 +727,13 @@ export class Match3BoardEngine {
         }
       }
       this.resolveExplosionSet(area, new Set());
+      if (!this.grid[r2][c2].hole && this.grid[r2][c2].box === 0) {
+        const primed = this.makePiece(r2, c2, 'gem', pAt1.color, 'bomb', r2);
+        primed.bombPrimed = true;
+        primed.secondBlastRadius = 2;
+        primed.scale = 1.45;
+        this.grid[r2][c2].piece = primed;
+      }
       this.score += 550;
       return;
     }
@@ -813,7 +825,10 @@ export class Match3BoardEngine {
 
   // ==================== MATCH DETECTION & POWER-UP SPAWNING ====================
 
-  private detectMatches(preferredAnchors: Array<[number, number]> = []): {
+  private detectMatches(
+    preferredAnchors: Array<[number, number]> = [],
+    swapDir?: 'h' | 'v'
+  ): {
     matchedKeys: Set<string>;
     spawns: Array<{ r: number; c: number; color: GemColor; special: SpecialKind }>;
   } {
@@ -829,7 +844,13 @@ export class Match3BoardEngine {
       let c = 0;
       while (c < MATCH3_BOARD_SIZE) {
         const p = this.grid[r][c].piece;
-        if (!p || p.kind !== 'gem' || p.special === 'snitch' || this.grid[r][c].box > 0) {
+        if (
+          !p ||
+          p.kind !== 'gem' ||
+          p.special === 'snitch' ||
+          p.bombPrimed ||
+          this.grid[r][c].box > 0
+        ) {
           c++;
           continue;
         }
@@ -839,6 +860,7 @@ export class Match3BoardEngine {
           this.grid[r][end].box === 0 &&
           this.grid[r][end].piece?.kind === 'gem' &&
           this.grid[r][end].piece!.special !== 'snitch' &&
+          !this.grid[r][end].piece!.bombPrimed &&
           this.grid[r][end].piece!.color === p.color
         ) {
           end++;
@@ -857,7 +879,13 @@ export class Match3BoardEngine {
       let r = 0;
       while (r < MATCH3_BOARD_SIZE) {
         const p = this.grid[r][c].piece;
-        if (!p || p.kind !== 'gem' || p.special === 'snitch' || this.grid[r][c].box > 0) {
+        if (
+          !p ||
+          p.kind !== 'gem' ||
+          p.special === 'snitch' ||
+          p.bombPrimed ||
+          this.grid[r][c].box > 0
+        ) {
           r++;
           continue;
         }
@@ -867,6 +895,7 @@ export class Match3BoardEngine {
           this.grid[end][c].box === 0 &&
           this.grid[end][c].piece?.kind === 'gem' &&
           this.grid[end][c].piece!.special !== 'snitch' &&
+          !this.grid[end][c].piece!.bombPrimed &&
           this.grid[end][c].piece!.color === p.color
         ) {
           end++;
@@ -920,7 +949,11 @@ export class Match3BoardEngine {
         specialToSpawn = 'bomb';
       } else if (maxSingleRun === 4) {
         const run4 = compRuns.find((rn) => rn.cells.length === 4)!;
-        specialToSpawn = run4.dir === 'h' ? 'rocket_v' : 'rocket_h';
+        if (swapDir) {
+          specialToSpawn = swapDir === 'h' ? 'rocket_h' : 'rocket_v';
+        } else {
+          specialToSpawn = run4.dir === 'h' ? 'rocket_v' : 'rocket_h';
+        }
       }
 
       if (specialToSpawn !== 'none') {
@@ -1131,6 +1164,9 @@ export class Match3BoardEngine {
       }
       return;
     }
+    if (p.bombPrimed) {
+      return;
+    }
 
     // Count gem toward color goal & pop VFX
     const countsGemGoal = p.special !== 'snitch' && this.hasUnfinishedGoal('gem', p.color);
@@ -1147,11 +1183,18 @@ export class Match3BoardEngine {
       goalKind: countsGemGoal ? 'gem' : undefined,
     });
 
-    // Remove piece (or replace with newly formed power-up)
+    // Remove piece (or replace with newly formed power-up, or keep primed Wrapped Bomb for 2nd 3x3 blast!)
     const oldSpecial = p.special;
+    const oldColor = p.color;
     if (spawnReplacement) {
       cell.piece = this.makePiece(r, c, 'gem', spawnReplacement.color, spawnReplacement.special, r);
       cell.piece.scale = 1.3;
+    } else if (oldSpecial === 'bomb') {
+      const primed = this.makePiece(r, c, 'gem', oldColor, 'bomb', r);
+      primed.bombPrimed = true;
+      primed.secondBlastRadius = 1;
+      primed.scale = 1.38;
+      cell.piece = primed;
     } else {
       cell.piece = null;
     }
@@ -1189,7 +1232,69 @@ export class Match3BoardEngine {
     }
   }
 
+  private detonatePrimedBombs(): boolean {
+    const primedList: Array<{ r: number; c: number; radius: number; color: GemColor }> = [];
+    for (let r = 0; r < MATCH3_BOARD_SIZE; r++) {
+      for (let c = 0; c < MATCH3_BOARD_SIZE; c++) {
+        const p = this.grid[r][c].piece;
+        if (p?.kind === 'gem' && p.bombPrimed) {
+          primedList.push({
+            r,
+            c,
+            radius: p.secondBlastRadius ?? 1,
+            color: p.color,
+          });
+          this.grid[r][c].piece = null;
+        }
+      }
+    }
+    if (primedList.length === 0) return false;
+
+    const targets = new Set<string>();
+    for (const pb of primedList) {
+      this.pushVfx({
+        kind: 'shockwave',
+        r: pb.r,
+        c: pb.c,
+        radius: pb.radius === 2 ? 3.2 : 2.1,
+      });
+      this.pushVfx({
+        kind: 'pop',
+        r: pb.r,
+        c: pb.c,
+        color: GEM_META[pb.color]?.fillPrimary ?? '#fb7185',
+        subkind: 'gem',
+        gemColor: pb.color,
+      });
+      this.score += pb.radius === 2 ? 300 : 120;
+      for (let dr = -pb.radius; dr <= pb.radius; dr++) {
+        for (let dc = -pb.radius; dc <= pb.radius; dc++) {
+          const nr = pb.r + dr;
+          const nc = pb.c + dc;
+          if (nr >= 0 && nr < MATCH3_BOARD_SIZE && nc >= 0 && nc < MATCH3_BOARD_SIZE) {
+            targets.add(`${nr},${nc}`);
+          }
+        }
+      }
+    }
+    this.resolveExplosionSet(targets, new Set());
+    return true;
+  }
+
   // ==================== GRAVITY (VERTICAL + DIAGONAL SLIDE), SCROLL EXIT & CASCADES ====================
+
+  private isColumnShadowedAbove(r: number, c: number): boolean {
+    let spawnRow = 0;
+    while (spawnRow < MATCH3_BOARD_SIZE && this.grid[spawnRow][c].hole) spawnRow++;
+    if (r <= spawnRow) return true;
+    for (let rr = r - 1; rr >= spawnRow; rr--) {
+      const cur = this.grid[rr][c];
+      if (cur.hole || cur.box > 0 || cur.web) return true;
+      if (cur.piece !== null) return false;
+      if (rr === spawnRow) return false;
+    }
+    return true;
+  }
 
   private applyGravityAndRefill(): void {
     let moved = true;
@@ -1262,9 +1367,8 @@ export class Match3BoardEngine {
             continue;
           }
 
-          // If directly above is blocked (box/web/hole), allow diagonal slide from top-left or top-right!
-          const blockedAbove = above.hole || above.box > 0 || above.web;
-          if (blockedAbove) {
+          // Candy Crush Diagonal Slide: if column above is shadowed by a blocker (hole/box/web), slide diagonally!
+          if (this.isColumnShadowedAbove(r, c)) {
             for (const dc of [-1, 1]) {
               const diag = this.grid[r - 1][c + dc];
               if (diag && !diag.hole && diag.box === 0 && !diag.web && diag.piece) {
@@ -1322,6 +1426,10 @@ export class Match3BoardEngine {
     let cascades = 0;
     while (cascades < 18) {
       this.applyGravityAndRefill();
+      if (this.detonatePrimedBombs()) {
+        cascades++;
+        continue;
+      }
       const matchInfo = this.detectMatches();
       if (matchInfo.matchedKeys.size === 0) break;
       cascades++;
@@ -1330,13 +1438,98 @@ export class Match3BoardEngine {
     return cascades;
   }
 
+  private triggerSugarCrushFinale(): void {
+    if (this.sugarCrushTriggered) return;
+    this.sugarCrushTriggered = true;
+
+    this.pushVfx({
+      kind: 'text',
+      r: 3.5,
+      c: 3.5,
+      text: '🍬 SUGAR CRUSH!',
+      color: '#fde047',
+    });
+
+    // 1. Detonate any existing Special Candies remaining on the board
+    const detonateRemainingSpecials = () => {
+      const remainingSpecials = new Set<string>();
+      for (let r = 0; r < MATCH3_BOARD_SIZE; r++) {
+        for (let c = 0; c < MATCH3_BOARD_SIZE; c++) {
+          const cell = this.grid[r][c];
+          if (!cell.hole && cell.box === 0 && !cell.web && cell.piece?.kind === 'gem') {
+            if (cell.piece.special === 'snitch') {
+              const col = this.pickBestColorForSnitch();
+              cell.piece = null;
+              this.damageUnderlayIce(r, c);
+              this.triggerSnitchColorZap(r, c, col);
+            } else if (cell.piece.special !== 'none') {
+              remainingSpecials.add(`${r},${c}`);
+            }
+          }
+        }
+      }
+      if (remainingSpecials.size > 0) {
+        this.resolveExplosionSet(remainingSpecials, new Set());
+        this.runGravityAndCascadeLoop();
+      }
+    };
+
+    detonateRemainingSpecials();
+
+    // 2. Convert leftover moves into Striped Candies (rocket_h / rocket_v) and detonate them!
+    const leftover = Math.max(0, this.movesLeft);
+    this.leftoverMovesConverted = leftover;
+    this.bonusCoinsFromLeftoverMoves = leftover * 10;
+    this.score += leftover * 250;
+    this.movesLeft = 0;
+
+    if (leftover > 0) {
+      const plainCells: Match3Cell[] = [];
+      for (let r = 0; r < MATCH3_BOARD_SIZE; r++) {
+        for (let c = 0; c < MATCH3_BOARD_SIZE; c++) {
+          const cell = this.grid[r][c];
+          if (
+            !cell.hole &&
+            cell.box === 0 &&
+            !cell.web &&
+            cell.piece?.kind === 'gem' &&
+            cell.piece.special === 'none'
+          ) {
+            plainCells.push(cell);
+          }
+        }
+      }
+
+      for (let i = plainCells.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [plainCells[i], plainCells[j]] = [plainCells[j], plainCells[i]];
+      }
+
+      const spawnCount = Math.min(leftover, 12, plainCells.length);
+      const sugarRockets = new Set<string>();
+      for (let i = 0; i < spawnCount; i++) {
+        const target = plainCells[i];
+        if (target.piece) {
+          target.piece.special = i % 2 === 0 ? 'rocket_h' : 'rocket_v';
+          target.piece.scale = 1.35;
+          sugarRockets.add(`${target.r},${target.c}`);
+        }
+      }
+
+      if (sugarRockets.size > 0) {
+        this.resolveExplosionSet(sugarRockets, new Set());
+        this.runGravityAndCascadeLoop();
+      }
+      detonateRemainingSpecials();
+    }
+  }
+
   private finalizeTurnState(comboCount: number): void {
     this.lastComboChain = comboCount;
     this.syncHoneyGoalProgress();
     if (this.areAllGoalsComplete()) {
+      this.triggerSugarCrushFinale();
       this.status = 'won';
-      this.bonusCoinsFromLeftoverMoves = this.movesLeft * 8;
-      this.score += this.movesLeft * 100;
       return;
     }
     if (this.movesLeft <= 0) {
@@ -1349,7 +1542,7 @@ export class Match3BoardEngine {
   // ==================== HINT FINDER & AUTO-SHUFFLE ====================
 
   public findBestHintMove(): { r1: number; c1: number; r2: number; c2: number } | null {
-    // 1. Check for any adjacent swap that forms a match or special combo
+    // Classic Candy Crush: only adjacent swaps that form a 3+ match, double special combo, or Snitch zap
     for (let r = 0; r < MATCH3_BOARD_SIZE; r++) {
       for (let c = 0; c < MATCH3_BOARD_SIZE; c++) {
         if (!this.canInteractCell(r, c)) continue;
@@ -1384,18 +1577,6 @@ export class Match3BoardEngine {
       }
     }
 
-    // 2. Or any tappable special on the board!
-    for (let r = 0; r < MATCH3_BOARD_SIZE; r++) {
-      for (let c = 0; c < MATCH3_BOARD_SIZE; c++) {
-        if (
-          this.canInteractCell(r, c) &&
-          this.grid[r][c].piece?.kind === 'gem' &&
-          this.grid[r][c].piece!.special !== 'none'
-        ) {
-          return { r1: r, c1: c, r2: r, c2: c };
-        }
-      }
-    }
     return null;
   }
 
@@ -1438,9 +1619,21 @@ export class Match3BoardEngine {
       }
     }
 
-    // Guarantee at least 1 valid move if board is super tight
+    // Guarantee at least 1 valid swap if board is super tight: imbue a Color Bomb (Snitch) on a cell with an adjacent neighbor
     if (!this.findBestHintMove() && slots.length >= 1) {
-      slots[0].piece!.special = 'rocket_h';
+      const slotWithNeighbor =
+        slots.find((s) =>
+          [
+            [0, 1],
+            [0, -1],
+            [1, 0],
+            [-1, 0],
+          ].some(([dr, dc]) => this.canInteractCell(s.r + dr, s.c + dc))
+        ) ?? slots[0];
+      if (slotWithNeighbor?.piece) {
+        slotWithNeighbor.piece.special = 'snitch';
+        slotWithNeighbor.piece.scale = 1.3;
+      }
     } else if (grantBonusRocket) {
       const normalSlot = slots.find((s) => s.piece && s.piece.special === 'none');
       if (normalSlot?.piece) {

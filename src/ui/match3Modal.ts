@@ -798,7 +798,7 @@ export class Match3ModalController {
     if (this.selectedCell) {
       const cell = this.engine.grid[this.selectedCell.r]?.[this.selectedCell.c];
       if (cell?.piece?.kind === 'gem' && cell.piece.special !== 'none') {
-        return `<span style="color:#fde68a;font-weight:800;">⚡ Chạm để kích nổ</span>`;
+        return `<span style="color:#fde68a;font-weight:800;">🍬 Ghép cùng màu / Kẹo đặc biệt</span>`;
       }
     }
     return `<span>💡 Ghép 3–5 ô</span>`;
@@ -1591,20 +1591,8 @@ export class Match3ModalController {
     }
 
     if (this.selectedCell.r === r && this.selectedCell.c === c) {
-      const piece = this.engine.grid[r][c].piece;
-      if (piece?.kind === 'gem' && piece.special !== 'none') {
-        this.selectedCell = null;
-        const wasFreeBefore = this.movesMadeThisAttempt === 0;
-        const res = this.engine.tryTapCellSpecial(r, c);
-        if (res.acted) {
-          this.movesMadeThisAttempt += 1;
-          if (wasFreeBefore) this.refreshRestartButtonLabel();
-          this.syncPostTurnState(res.comboCount, true);
-        }
-      } else {
-        this.selectedCell = null;
-        this.updateSideCountersOnly();
-      }
+      this.selectedCell = null;
+      this.updateSideCountersOnly();
       return;
     }
 
@@ -2319,47 +2307,136 @@ export class Match3ModalController {
     }
 
     if (piece.special === 'bomb') {
-      const pulse = 1 + 0.055 * Math.sin(timeSec * 7 + piece.id);
-      const aura = ctx.createRadialGradient(0, 0, 2, 0, 0, cellPx * 0.46);
-      aura.addColorStop(0, 'rgba(251, 113, 133, 0.65)');
-      aura.addColorStop(1, 'rgba(225, 29, 72, 0)');
+      const meta = GEM_META[piece.color];
+      const isPrimed = Boolean(piece.bombPrimed);
+      const pulse = isPrimed
+        ? 1 + 0.14 * Math.sin(timeSec * 22 + piece.id)
+        : 1 + 0.055 * Math.sin(timeSec * 7 + piece.id);
+      const aura = ctx.createRadialGradient(0, 0, 2, 0, 0, cellPx * 0.48);
+      aura.addColorStop(0, isPrimed ? 'rgba(254, 240, 138, 0.92)' : meta.glow);
+      aura.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = aura;
       ctx.beginPath();
-      ctx.arc(0, 0, cellPx * 0.46, 0, Math.PI * 2);
+      ctx.arc(0, 0, cellPx * 0.48, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.scale(pulse, pulse);
-      const bombImg = this.getSprite('m3_farm_jam_bomb');
-      const sz = cellPx * 0.94;
-      if (bombImg) {
-        ctx.drawImage(bombImg, -sz * 0.5, -sz * 0.52, sz, sz);
+
+      // Candy Crush Colored Translucent Wrapper Pouch around the fruit
+      const wrapSz = cellPx * 0.84;
+      const halfW = wrapSz * 0.5;
+      ctx.save();
+      ctx.globalAlpha = isPrimed ? 0.92 : 0.78;
+      const wrapGrad = ctx.createLinearGradient(-halfW, -halfW, halfW, halfW);
+      wrapGrad.addColorStop(0, meta.fillLight);
+      wrapGrad.addColorStop(0.55, meta.fillPrimary);
+      wrapGrad.addColorStop(1, meta.stroke);
+      ctx.fillStyle = wrapGrad;
+      this.roundRect(ctx, -halfW, -halfW, wrapSz, wrapSz, 11);
+      ctx.fill();
+
+      ctx.lineWidth = isPrimed ? 3 : 2.2;
+      ctx.strokeStyle = isPrimed ? '#fef08a' : '#ffffff';
+      this.roundRect(ctx, -halfW, -halfW, wrapSz, wrapSz, 11);
+      ctx.stroke();
+
+      ctx.lineWidth = 1.3;
+      ctx.strokeStyle = meta.fillPrimary;
+      this.roundRect(ctx, -halfW + 2.5, -halfW + 2.5, wrapSz - 5, wrapSz - 5, 8.5);
+      ctx.stroke();
+      ctx.restore();
+
+      // Base colored fruit inside the wrapper
+      const gemImg = this.getSprite(GEM_SPRITE_KEYS[piece.color]);
+      const fruitSz = cellPx * 0.76;
+      if (gemImg) {
+        ctx.drawImage(gemImg, -fruitSz * 0.5, -fruitSz * 0.5, fruitSz, fruitSz);
       }
+
+      // Corner Jam-Bomb emblem & fuse sparkle
+      const bombImg = this.getSprite('m3_farm_jam_bomb');
+      const badgeSz = cellPx * 0.42;
+      if (bombImg) {
+        ctx.drawImage(bombImg, halfW - badgeSz * 0.78, halfW - badgeSz * 0.82, badgeSz, badgeSz);
+      }
+      this.drawTinySparkleStar(
+        ctx,
+        -halfW * 0.68,
+        -halfW * 0.68,
+        isPrimed ? 5.4 : 4.2,
+        timeSec * (isPrimed ? 12 : 6),
+        '#fef08a'
+      );
       ctx.restore();
       return;
     }
 
     if (piece.special === 'rocket_h' || piece.special === 'rocket_v') {
       const isHoriz = piece.special === 'rocket_h';
-      const pulse = 1 + 0.05 * Math.sin(timeSec * 8 + piece.id);
-      const aura = ctx.createRadialGradient(0, 0, 2, 0, 0, cellPx * 0.45);
-      aura.addColorStop(0, isHoriz ? 'rgba(251, 146, 60, 0.55)' : 'rgba(56, 189, 248, 0.55)');
-      aura.addColorStop(1, 'rgba(251, 146, 60, 0)');
+      const meta = GEM_META[piece.color];
+      const pulse = 1 + 0.055 * Math.sin(timeSec * 8 + piece.id);
+      const aura = ctx.createRadialGradient(0, 0, 2, 0, 0, cellPx * 0.47);
+      aura.addColorStop(0, meta.glow);
+      aura.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = aura;
       ctx.beginPath();
-      ctx.arc(0, 0, cellPx * 0.45, 0, Math.PI * 2);
+      ctx.arc(0, 0, cellPx * 0.47, 0, Math.PI * 2);
       ctx.fill();
 
-      if (!isHoriz) ctx.rotate(Math.PI / 2);
       ctx.scale(pulse, pulse);
+
+      // Rocket tips peeking behind the fruit along the stripe axis
+      ctx.save();
+      if (!isHoriz) ctx.rotate(Math.PI / 2);
+      ctx.globalAlpha = 0.72;
       const rocketImg = this.getSprite('m3_sp_rocket_h');
-      const sz = cellPx * 0.96;
+      const rSz = cellPx * 1.02;
       if (rocketImg) {
-        ctx.drawImage(rocketImg, -sz * 0.5, -sz * 0.5, sz, sz);
+        ctx.drawImage(rocketImg, -rSz * 0.5, -rSz * 0.5, rSz, rSz);
       }
-      // Animated fuse sparks at both rocket tips
+      ctx.restore();
+
+      // Base colored fruit sprite so player clearly sees its color
+      const gemImg = this.getSprite(GEM_SPRITE_KEYS[piece.color]);
+      const sz = cellPx * 0.86;
+      if (gemImg) {
+        ctx.drawImage(gemImg, -sz * 0.5, -sz * 0.5, sz, sz);
+      } else {
+        ctx.fillStyle = meta.fillPrimary;
+        ctx.beginPath();
+        ctx.arc(0, 0, sz * 0.42, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Candy Crush Striped Candy overlay bands across the fruit
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(0, 0, sz * 0.39, 0, Math.PI * 2);
+      ctx.clip();
+      if (!isHoriz) ctx.rotate(Math.PI / 2);
+      for (const offset of [-sz * 0.21, 0, sz * 0.21]) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fillRect(-sz * 0.45, offset - 2.6, sz * 0.9, 5.2);
+        ctx.fillStyle = meta.fillPrimary;
+        ctx.fillRect(-sz * 0.45, offset - 1.1, sz * 0.9, 2.2);
+      }
+      ctx.restore();
+
+      // Glowing color ring + animated fuse sparks at both rocket tips
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(0, 0, sz * 0.4, 0, Math.PI * 2);
+      ctx.stroke();
+
       const tipJitter = Math.sin(timeSec * 22 + piece.id) * 1.8;
-      this.drawTinySparkleStar(ctx, sz * 0.46, tipJitter, 4.2, timeSec * 7, '#fde047');
-      this.drawTinySparkleStar(ctx, -sz * 0.46, -tipJitter, 4.2, timeSec * 7 + 1.5, '#fde047');
+      if (isHoriz) {
+        this.drawTinySparkleStar(ctx, cellPx * 0.44, tipJitter, 4.4, timeSec * 7, '#fde047');
+        this.drawTinySparkleStar(ctx, -cellPx * 0.44, -tipJitter, 4.4, timeSec * 7 + 1.5, '#fde047');
+      } else {
+        this.drawTinySparkleStar(ctx, tipJitter, cellPx * 0.44, 4.4, timeSec * 7, '#fde047');
+        this.drawTinySparkleStar(ctx, -tipJitter, -cellPx * 0.44, 4.4, timeSec * 7 + 1.5, '#fde047');
+      }
       ctx.restore();
       return;
     }
