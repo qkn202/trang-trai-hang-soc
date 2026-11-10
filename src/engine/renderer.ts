@@ -147,11 +147,16 @@ import {
   entitiesDrawDayNightLightLayer,
   entitiesRenderMinimap,
 } from './renderEntitiesAndWeather';
+import {
+  PresentationCeilingController,
+  resolveSeasonFromDayCount,
+} from './presentationCeiling';
 
 export class IsometricRenderer {
   public canvas: HTMLCanvasElement;
   public ctx: CanvasRenderingContext2D;
   public sprites: SpriteRegistry;
+  public presentation = new PresentationCeilingController();
   public dpr = 1;
   public hotspots: ScreenHotspot[] = [];
   public particles: Array<{ x: number; y: number; r: number; vy: number; vx: number; hue: string }> = [];
@@ -312,6 +317,7 @@ export class IsometricRenderer {
       this.harvestBloom = { x: cx, y: cy, startedAt: Date.now() };
       if (!this.reducedMotion) {
         this.juiceFx.emitConfetti(cx, cy, 14, ['✨', '🌾', '⭐']);
+        this.presentation.particlePool.spawnBurst('harvest_sparkle', cx, cy, 10, this.reducedMotion);
       }
     } else if (kind === 'levelup') {
       this.juiceFx.addFlash('#fde047', 0.32, 450);
@@ -504,6 +510,8 @@ export class IsometricRenderer {
 
     // 1. Sky Backdrop (Time-of-day + Weather tint + Sun/Moon + Rainbow + Drifting Clouds)
     this.drawSkyBackdrop(viewW, viewH, period, weather);
+    const season = resolveSeasonFromDayCount(sim.state.level ?? 1, this.presentation.seasonOverride);
+    this.presentation.drawParallaxHorizonLayer(ctx, cam, viewW, viewH, period, season);
 
     const hw = TILE_W * 0.5 * cam.zoom;
     const hh = TILE_H * 0.5 * cam.zoom;
@@ -725,6 +733,16 @@ export class IsometricRenderer {
     if (isNightLike) {
       this.drawNightCandlelightPass(sim, cam, viewW, viewH, now, period === 'night');
     }
+    this.presentation.drawDynamicNightAndWetPass(
+      ctx,
+      sim,
+      cam,
+      viewW,
+      viewH,
+      now,
+      period,
+      weather.kind
+    );
 
     // 4. Ghost Build / Move / Pincer / Bulldozer Preview snapped to Grid!
     if (
@@ -926,6 +944,19 @@ export class IsometricRenderer {
     // 10. Post-FX Juice: Harvest Warm Bloom & Day/Night Atmospheric Light Layer
     this.drawHarvestBloom(now, cam.zoom);
     this.drawDayNightLightLayer(viewW, viewH, period);
+    this.presentation.drawPostFxAndForegroundCeiling(
+      ctx,
+      sim,
+      cam,
+      viewW,
+      viewH,
+      now,
+      period,
+      weather.kind,
+      festival !== 'none',
+      this.reducedMotion,
+      Math.hypot(shake.x, shake.y)
+    );
 
     if (hasWorldShake) {
       ctx.restore();
