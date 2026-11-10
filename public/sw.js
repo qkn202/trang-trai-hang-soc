@@ -9,7 +9,7 @@
  * - Vite Dev / HMR (/src/*, /@*, /node_modules/*): Always bypass SW (network-only)
  */
 
-const CACHE_VERSION = 'v13';
+const CACHE_VERSION = 'v14';
 const SHELL_CACHE = `hangsoc-shell-${CACHE_VERSION}`;
 const STATIC_CACHE = `hangsoc-static-${CACHE_VERSION}`;
 const ASSETS_CACHE = `hangsoc-assets-${CACHE_VERSION}`;
@@ -104,7 +104,7 @@ self.addEventListener('fetch', (event) => {
 
   if (isNavigation) {
     event.respondWith(
-      fetch(request)
+      fetch(request, { cache: 'no-cache' })
         .then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             const clone = networkResponse.clone();

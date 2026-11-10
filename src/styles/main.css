@@ -791,9 +791,19 @@ progress {
   border-radius: 12px;
   padding: 9px 10px;
   margin-top: 8px;
+  color: var(--ink);
   box-shadow:
     0 3px 0 rgba(122, 86, 56, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.quest-card-mini .brass-btn {
+  white-space: normal;
+  text-align: center;
+  line-height: 1.25;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  height: auto;
 }
 
 .quest-bar {
@@ -7381,18 +7391,26 @@ dialog::backdrop {
   }
 
   .ts-utility-row {
-    gap: 4px;
+    gap: 3px;
+    max-width: calc(100dvw - 124px);
+    flex-wrap: nowrap;
   }
 
   .ts-blue-sq-btn {
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
   }
 
   .ts-minigame-hub-pill {
     height: 26px;
     padding: 2px 6px;
-    font-size: 10px;
+    font-size: 9.5px;
+    gap: 3px;
+    max-width: clamp(92px, calc(100dvw - 230px), 150px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   /* 2. TOP-RIGHT CLUSTER */
@@ -7444,87 +7462,95 @@ dialog::backdrop {
     display: none !important;
   }
 
-  /* 4. BOTTOM-LEFT CLUSTER: co về 1 hàng, chữ nhỏ hơn */
+  /* 4. BOTTOM-LEFT CLUSTER: co về 1 hàng gọn vừa khít 5 nút, không cắt nửa nút */
   .ts-corner-left {
     display: flex;
     flex-direction: row;
     align-items: flex-end;
-    gap: 4px;
+    gap: 3px;
     left: max(6px, env(safe-area-inset-left));
     bottom: max(6px, env(safe-area-inset-bottom));
   }
 
   .ts-corner-left .ts-card-btn {
-    width: 54px;
-    height: 58px;
-    padding: 4px 2px 3px;
-    border-radius: 12px;
+    width: clamp(38px, 10.6dvw, 50px);
+    height: 52px;
+    padding: 3px 2px 2px;
+    border-radius: 11px;
   }
 
   .ts-corner-left .ts-card-art {
-    width: 26px;
-    height: 26px;
+    width: 24px;
+    height: 24px;
   }
 
   .ts-corner-left .ts-card-label {
-    font-size: 8px;
-    letter-spacing: -0.4px;
+    font-size: 7.5px;
+    letter-spacing: -0.3px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .ts-corner-left .ts-red-badge {
-    min-width: 18px;
-    height: 18px;
+    min-width: 16px;
+    height: 16px;
     padding: 0 3px;
-    font-size: 9px;
+    font-size: 8.5px;
     top: -5px;
-    right: -4px;
+    right: -3px;
   }
 
-  /* 5. BOTTOM-RIGHT CLUSTER: co về 1 hàng, chữ nhỏ hơn */
+  /* 5. BOTTOM-RIGHT CLUSTER: co về 1 hàng gọn vừa khít 3 nút cùng đáy với cụm trái */
   .ts-corner-right {
     display: flex;
     flex-direction: row;
     align-items: flex-end;
-    gap: 4px;
+    gap: 3px;
     right: max(6px, env(safe-area-inset-right));
     bottom: max(6px, env(safe-area-inset-bottom));
   }
 
   .ts-corner-right .ts-card-btn {
-    width: 54px;
-    height: 58px;
-    padding: 4px 2px 3px;
-    border-radius: 12px;
+    width: clamp(38px, 10.6dvw, 50px);
+    height: 52px;
+    padding: 3px 2px 2px;
+    border-radius: 11px;
   }
 
   .ts-corner-right .ts-card-art {
-    width: 26px;
-    height: 26px;
+    width: 24px;
+    height: 24px;
   }
 
   .ts-corner-right .ts-card-label {
-    font-size: 8px;
-    letter-spacing: -0.4px;
+    font-size: 7.5px;
+    letter-spacing: -0.3px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .ts-corner-right .ts-red-badge {
-    min-width: 18px;
-    height: 18px;
+    min-width: 16px;
+    height: 16px;
     padding: 0 3px;
-    font-size: 9px;
+    font-size: 8.5px;
     top: -5px;
-    right: -4px;
+    right: -3px;
   }
 
   .ts-corner-right .ts-bonus-x2-badge {
-    height: 16px;
-    font-size: 8px;
+    height: 14px;
+    font-size: 7.5px;
     padding: 0 3px;
+    top: -6px;
+    right: -2px;
   }
 
   /* Install Prompt adjusted position for portrait */
   .ips-install-btn {
-    bottom: calc(66px + max(6px, env(safe-area-inset-bottom)));
+    bottom: calc(62px + max(6px, env(safe-area-inset-bottom)));
     font-size: 11px;
     padding: 6px 12px;
   }
@@ -11304,15 +11330,13 @@ body:has(.hud-shell-root.hud-compact-rolled) .legal-trigger-btn {
   pointer-events: none;
 }
 
-/* 6. Mobile & Portrait Horizontal Scrollable HUD Rails (Zero Overlap) */
+/* 6. Mobile & Portrait Compact HUD Rails (Zero Overlap & Zero Half-Clipped Cards) */
 @media (max-width: 860px), (orientation: portrait) {
   .ts-utility-row {
-    max-width: calc(100dvw - 142px);
+    max-width: calc(100dvw - 124px);
     flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 6px 6px 8px 4px;
-    -webkit-overflow-scrolling: touch;
+    overflow: visible;
+    padding: 2px 2px 4px 0;
   }
 
   .ts-utility-row > * {
@@ -11320,28 +11344,47 @@ body:has(.hud-shell-root.hud-compact-rolled) .legal-trigger-btn {
   }
 
   .ts-corner-left {
-    max-width: calc(100dvw - 190px);
-    overflow-x: auto;
-    overflow-y: hidden;
+    max-width: none;
+    overflow: visible;
     flex-wrap: nowrap;
-    padding: 9px 6px 8px 3px;
-    scroll-snap-type: x proximity;
-    -webkit-overflow-scrolling: touch;
+    gap: 3px;
+    padding: 0;
+    left: max(6px, env(safe-area-inset-left));
+    bottom: max(6px, env(safe-area-inset-bottom));
   }
 
   .ts-corner-right {
-    max-width: 178px;
-    overflow-x: auto;
-    overflow-y: hidden;
+    max-width: none;
+    overflow: visible;
     flex-wrap: nowrap;
-    padding: 9px 4px 8px 4px;
-    -webkit-overflow-scrolling: touch;
+    gap: 3px;
+    padding: 0;
+    right: max(6px, env(safe-area-inset-right));
+    bottom: max(6px, env(safe-area-inset-bottom));
   }
 
   .ts-corner-left .ts-card-btn,
   .ts-corner-right .ts-card-btn {
     flex-shrink: 0;
-    scroll-snap-align: start;
+    width: clamp(38px, 10.6dvw, 50px);
+    height: 52px;
+    padding: 3px 2px 2px;
+    border-radius: 11px;
+  }
+
+  .ts-corner-left .ts-card-art,
+  .ts-corner-right .ts-card-art {
+    width: 24px;
+    height: 24px;
+  }
+
+  .ts-corner-left .ts-card-label,
+  .ts-corner-right .ts-card-label {
+    font-size: 7.5px;
+    letter-spacing: -0.3px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .seed-filter-bar,

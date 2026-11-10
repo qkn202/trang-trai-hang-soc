@@ -595,13 +595,14 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
     const renderCard = (q: NonNullable<typeof story>, tag: string, isStory = false) => {
       const pct = Math.min(100, Math.round((q.progress / Math.max(1, q.targetAmount)) * 100));
       return `
-        <div class="quest-card-mini" style="padding:12px;">
-          <div style="display:flex;justify-content:space-between;gap:8px;">
-            <span style="font-size:13.5px;font-weight:800;">${escapeHtml(q.giverEmoji)} ${escapeHtml(q.title)}</span>
-            <span style="font-size:12px;font-weight:700;color:#92400e;">${escapeHtml(tag)}</span>
+        <div class="quest-card-mini" style="padding:12px;color:var(--ink);">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+            <span style="font-size:13.5px;font-weight:800;color:var(--ink);">${escapeHtml(q.giverEmoji)} ${escapeHtml(q.title)}</span>
+            <span style="font-size:12px;font-weight:700;color:var(--brand-strong);white-space:nowrap;flex-shrink:0;">${escapeHtml(tag)}</span>
           </div>
+          ${isStory && q.dialogue ? `<div style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.35;">${escapeHtml(q.dialogue)}</div>` : ''}
           <div class="quest-bar"><div class="quest-bar-fill" style="width:${pct}%"></div></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;font-weight:700;">
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;font-weight:700;color:var(--ink);">
             <span>${Math.min(q.progress, q.targetAmount)}/${q.targetAmount}</span>
             <span>🪙${q.rewardGalleons} • ⭐${q.rewardXp} ${q.rewardTimeSand > 0 ? `• ⏳${q.rewardTimeSand}` : ''}</span>
           </div>
