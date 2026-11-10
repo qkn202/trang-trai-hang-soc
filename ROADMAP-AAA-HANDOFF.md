@@ -26,15 +26,20 @@
 | `b5799f2` | P0.2d–g: hoàn tất tách `simulation.ts` (`8842 → 1310` dòng) sang `simulationCreatures.ts`, `simulationTrials.ts`, `simulationQuests.ts`, `simulationSocial.ts`, `simulationVillagers.ts`, `simulationLifecycle.ts` (mọi file `< 1500` LOC). |
 | `b5463c4` | P0.5: hoàn tất tách `puzzleArcadeEngine.ts` (`5719 → 8` dòng barrel) sang `puzzleShared.ts`, `blocksEngine.ts`, `sudokuEngine.ts`, `caroEngine.ts`, `chessPresets.ts`, `chessEngine.ts`, `onetEngine.ts` (mọi file `< 1500` LOC). |
 | `dfcebd2` | P0.4: hoàn tất tách `renderer.ts` (`6313 → 1307` dòng) sang `rendererShared.ts`, `renderTerrain.ts`, `renderWater.ts`, `renderBuildings.ts`, `renderCropsAndTimers.ts`, `renderEntitiesAndWeather.ts` (mọi file `< 1500` LOC). |
+| `a36a5b4` | P0.3: hoàn tất tách `hud.ts` (`7870 → 753` dòng) sang `hudShared.ts`, `hudShell.ts`, `hudHeaderAndDock.ts`, `hudInspector.ts`, `hudFarmAndWorkshop.ts`, `hudQuestsAndSettings.ts`, `hudSuitcase.ts`, `hudSocialAndTutorial.ts` (mọi file `< 1500` LOC). |
+| `930a0db` | P1: Presentation ceiling Canvas 2D (`presentationCeiling.ts`: chu kỳ 4 mùa 60 ngày, `ParticlePoolManager` 320 slot 0-alloc, parallax 3 lớp, đèn cửa sổ động ban đêm, bề mặt ướt sau mưa, depth fog & LUT màu). |
+| `49eaa46` | P2: Audio ceiling (`audioCeiling.ts`: 5-bus mixer, soft limiter chống clipping, modal ducking mượt 0.35s, 3-stem intensity & spatial stereo pan). |
+| `e9a839b` | P3: Retention & narrative (`retentionAndNarrative.ts`: 52 thành tựu `ach_01..ach_52`, 3 save slots + autosave, import/export tương thích ngược, lịch trình NPC 4 buổi, hội thoại phân nhánh, 3 chương cutscene & vòng lặp Ngày 1–7). |
+| `bc03732` | P4: Platform & accessibility (`platformAndA11y.ts`: Gamepad API + radial menu 8 hướng, 4 chế độ hỗ trợ sắc giác kèm ký hiệu/hoa văn, font scale 100/125/150%, tương phản cao, 4 thanh âm lượng & kiểm tra vùng chạm `>= 44px`). |
 
-### Trạng thái P0 — Foundation (ĐÃ HOÀN TẤT 100%)
+### Trạng thái Toàn Bộ Roadmap P0 → P5 (ĐÃ HOÀN TẤT 100%)
 
-- Cả 4 god files (`simulation.ts`, `hud.ts`, `renderer.ts`, `puzzleArcadeEngine.ts`) và toàn bộ 28 module domain được tách đều đạt **`< 1500` LOC/file**.
+- Cả 4 god files (`simulation.ts`, `hud.ts`, `renderer.ts`, `puzzleArcadeEngine.ts`) và toàn bộ các module domain đều đạt **`< 1500` LOC/file**.
+- Toàn bộ 6 giai đoạn **`P0` → `P1` → `P2` → `P3` → `P4` → `P5`** đã hoàn thiện kèm bộ kiểm thử tự động.
 - `npx tsc --noEmit`: exit `0`.
-- `npx vitest run`: `116/116` tests xanh.
-- `npm run build`: exit `0`.
-- `node tools/validate-sprites.mjs`: `172/172` sprite hợp lệ.
-- Sẵn sàng bước vào **P1 — Presentation ceiling Canvas 2D**.
+- `npx vitest run`: **`135/135` tests xanh (`13/13` test files)**.
+- `npm run build`: exit `0` (bundle tách chunk + nén gzip/brotli).
+- `node tools/validate-sprites.mjs`: **`172/172` sprite hợp lệ**.
 
 ## 2. Quy tắc an toàn bắt buộc
 

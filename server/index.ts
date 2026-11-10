@@ -182,6 +182,22 @@ function extractFriendProfileFromSave(
   };
 }
 
+const workerRateMap = new Map<string, number[]>();
+
+function checkWorkerRateLimit(key: string, maxRequests = 30, windowMs = 60_000): boolean {
+  const now = Date.now();
+  const cutoff = now - windowMs;
+  const prev = workerRateMap.get(key) ?? [];
+  const active = prev.filter((t) => t > cutoff);
+  if (active.length >= maxRequests) {
+    workerRateMap.set(key, active);
+    return false;
+  }
+  active.push(now);
+  workerRateMap.set(key, active);
+  return true;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -200,6 +216,9 @@ export default {
       if (pathname === '/api/save' || pathname.endsWith('/api/save')) {
         const rawUserId = request.headers.get('X-User-Id') || url.searchParams.get('userId');
         const userId = sanitizeUserId(rawUserId);
+        if (!checkWorkerRateLimit(`save:${userId}`, 30, 60_000)) {
+          return jsonResponse({ error: 'Rate limit exceeded' }, 429, request);
+        }
         const kvKey = `save:${userId}`;
 
         if (request.method === 'GET') {
