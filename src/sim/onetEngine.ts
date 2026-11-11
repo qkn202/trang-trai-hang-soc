@@ -1,28 +1,43 @@
 // Tách tự động từ src/sim/puzzleArcadeEngine.ts (P0.5 — tách puzzle engine theo môn).
+import { SavedOnetSession } from '../types/game';
 import {
   MAX_MINIGAME_STAGE,
   MilestoneBossMeta,
   PuzzleRewardSpec,
   TurningPointReview,
-  WizardingPortraitKey,
   getMilestoneBossMeta,
   getMinigameDifficultyTier,
   getStageStarReward,
-  isArcadeSubModeLocked,
   mulberry32,
-} from "./puzzleShared";
+} from './puzzleShared';
 
 // ============================================================================
-// 5. CLASSIC MAGICAL CREATURES ONET CONNECT ("NỐI HÌNH SINH VẬT HUYỀN BÍ" — 777 STAGES)
-//    - Pure Classic Pikachu / Onet rules: connect matching Magical Creatures
-//      with <= 3 straight segments (<= 2 90° turns), including 1-cell outer border.
-//    - Relaxed untimed play (no countdown timer), static grid (zero sliding tiles).
+// 5. CLASSIC PIKACHU 2003 ONET CONNECT ("PIKACHU CỔ ĐIỂN HANG SÓC" — 777 STAGES)
+//    - Authentic Pikachu PC 2003 (Kawai) rules & geometry:
+//      * 9 × 16 = 144 tiles (72 pairs) across 36 distinct Hang Sóc icons (4 each).
+//      * Connect matching tiles with <= 3 straight orthogonal segments (<= 2 90° turns),
+//        including the 1-cell walkable outer border [-1..rows] × [-1..cols].
+//      * Classic 9 rotating shift/gravity modes across stages 1..777:
+//        1: Static, 2: Down, 3: Up, 4: Left, 5: Right,
+//        6: Converge Horizontal, 7: Split Horizontal, 8: Converge Vertical, 9: Split Vertical.
+//      * Untimed relaxed play (no countdown bar) + Classic Lives/Shuffle counter (❤️ = 10).
 // ============================================================================
 
 export interface OnetPoint {
   r: number;
   c: number;
 }
+
+export type OnetShiftMode =
+  | 'none'
+  | 'down'
+  | 'up'
+  | 'left'
+  | 'right'
+  | 'center_h'
+  | 'split_h'
+  | 'center_v'
+  | 'split_v';
 
 export interface OnetSpeciesDef {
   id: string;
@@ -35,230 +50,88 @@ export interface OnetSpeciesDef {
   rareBadge?: boolean;
 }
 
+const CLASSIC_IVORY_TOP = '#fdfaf0';
+const CLASSIC_IVORY_BOT = '#f3ead3';
+const CLASSIC_BEVEL_BORDER = '#8c7248';
+const CLASSIC_RED_ACCENT = '#ef4444';
+
+function definePikachuSpecies(
+  id: string,
+  nameVi: string,
+  spriteKey: string
+): OnetSpeciesDef {
+  return {
+    id,
+    nameVi,
+    spriteKey,
+    bgTop: CLASSIC_IVORY_TOP,
+    bgBot: CLASSIC_IVORY_BOT,
+    border: CLASSIC_BEVEL_BORDER,
+    accent: CLASSIC_RED_ACCENT,
+  };
+}
+
+/**
+ * 36 distinct Hang Sóc creatures, wizarding artifacts & harvest icons (zero duplicate poses).
+ * On a 9 × 16 = 144 board, each of the 36 icons appears exactly 4 times (2 pairs).
+ */
 export const CREATURE_ONET_SPECIES: readonly OnetSpeciesDef[] = [
-  {
-    id: 'niffler',
-    nameVi: 'Đào Mỏ Niffler',
-    spriteKey: 'beast_niffler',
-    bgTop: '#fef9c3',
-    bgBot: '#fde68a',
-    border: '#d97706',
-    accent: '#f59e0b',
-  },
-  {
-    id: 'phoenix',
-    nameVi: 'Phượng Hoàng Fawkes',
-    spriteKey: 'beast_phoenix',
-    bgTop: '#fee2e2',
-    bgBot: '#fecaca',
-    border: '#dc2626',
-    accent: '#ef4444',
-  },
-  {
-    id: 'unicorn',
-    nameVi: 'Kỳ Lân Bạc',
-    spriteKey: 'beast_unicorn',
-    bgTop: '#e0f2fe',
-    bgBot: '#bae6fd',
-    border: '#0284c7',
-    accent: '#38bdf8',
-  },
-  {
-    id: 'hippogriff',
-    nameVi: 'Bằng Mã Buckbeak',
-    spriteKey: 'beast_hippogriff',
-    bgTop: '#f1f5f9',
-    bgBot: '#cbd5e1',
-    border: '#475569',
-    accent: '#94a3b8',
-  },
-  {
-    id: 'dragon',
-    nameVi: 'Rồng Gringotts',
-    spriteKey: 'beast_dragon',
-    bgTop: '#ffedd5',
-    bgBot: '#fed7aa',
-    border: '#ea580c',
-    accent: '#fb923c',
-  },
-  {
-    id: 'thestral',
-    nameVi: 'Vong Mã Thestral',
-    spriteKey: 'beast_thestral',
-    bgTop: '#f3e8ff',
-    bgBot: '#e9d5ff',
-    border: '#7e22ce',
-    accent: '#a855f7',
-  },
-  {
-    id: 'puffskein',
-    nameVi: 'Bông Xù Puffskein',
-    spriteKey: 'beast_puffskein',
-    bgTop: '#fce7f3',
-    bgBot: '#fbcfe8',
-    border: '#db2777',
-    accent: '#f472b6',
-  },
-  {
-    id: 'bowtruckle',
-    nameVi: 'Tinh Cây Bowtruckle',
-    spriteKey: 'hagrid_bowtruckle',
-    bgTop: '#dcfce7',
-    bgBot: '#bbf7d0',
-    border: '#16a34a',
-    accent: '#4ade80',
-  },
-  {
-    id: 'owl',
-    nameVi: 'Cú Tuyết Đưa Thư',
-    spriteKey: 'ui_icon_owl_orders',
-    bgTop: '#fffbeb',
-    bgBot: '#fef08a',
-    border: '#ca8a04',
-    accent: '#eab308',
-  },
-  {
-    id: 'choc_frog',
-    nameVi: 'Ếch Phép Nhảy Nhót',
-    spriteKey: 'ui_icon_frog_choc',
-    bgTop: '#ede9fe',
-    bgBot: '#ddd6fe',
-    border: '#5b21b6',
-    accent: '#8b5cf6',
-  },
-  {
-    id: 'mandrake',
-    nameVi: 'Nhân Sâm Mandrake',
-    spriteKey: 'ui_icon_crop_baby_mandrake',
-    bgTop: '#ecfccb',
-    bgBot: '#d9f99d',
-    border: '#65a30d',
-    accent: '#84cc16',
-  },
-  {
-    id: 'gnome',
-    nameVi: 'Thần Lùn Vườn',
-    spriteKey: 'guest_ron_gnome',
-    bgTop: '#fef3c7',
-    bgBot: '#fcd34d',
-    border: '#92400e',
-    accent: '#d97706',
-  },
-  {
-    id: 'sheep',
-    nameVi: 'Cừu Mây Hang Sóc',
-    spriteKey: 'beast_sheep',
-    bgTop: '#fafaf9',
-    bgBot: '#e7e5e4',
-    border: '#78716c',
-    accent: '#a8a29e',
-  },
-  {
-    id: 'cow',
-    nameVi: 'Bò Sữa Đồng Ottery',
-    spriteKey: 'beast_cow',
-    bgTop: '#fae8ff',
-    bgBot: '#f5d0fe',
-    border: '#a21caf',
-    accent: '#e879f9',
-  },
-  {
-    id: 'hen',
-    nameVi: 'Gà Mái Đẻ Trứng Vàng',
-    spriteKey: 'beast_hen',
-    bgTop: '#ffe4e6',
-    bgBot: '#fecdd3',
-    border: '#e11d48',
-    accent: '#fb7185',
-  },
-  {
-    id: 'phoenix_soar',
-    nameVi: 'Phượng Hoàng Tung Cánh',
-    spriteKey: 'beast_phoenix_soar',
-    bgTop: '#fef08a',
-    bgBot: '#fdba74',
-    border: '#b91c1c',
-    accent: '#f97316',
-    rareBadge: true,
-  },
-  {
-    id: 'dragon_roar',
-    nameVi: 'Rồng Lửa Gầm Vang',
-    spriteKey: 'beast_dragon_roar',
-    bgTop: '#fecaca',
-    bgBot: '#fca5a5',
-    border: '#991b1b',
-    accent: '#dc2626',
-    rareBadge: true,
-  },
-  {
-    id: 'unicorn_prance',
-    nameVi: 'Kỳ Lân Ánh Sao',
-    spriteKey: 'beast_unicorn_prance',
-    bgTop: '#cffafe',
-    bgBot: '#a5f3fc',
-    border: '#0e7490',
-    accent: '#06b6d4',
-    rareBadge: true,
-  },
-  {
-    id: 'hippogriff_bow',
-    nameVi: 'Bằng Mã Cúi Chào',
-    spriteKey: 'beast_hippogriff_bow',
-    bgTop: '#e2e8f0',
-    bgBot: '#94a3b8',
-    border: '#1e293b',
-    accent: '#64748b',
-    rareBadge: true,
-  },
-  {
-    id: 'thestral_wings',
-    nameVi: 'Vong Mã Sải Cánh',
-    spriteKey: 'beast_thestral_wings',
-    bgTop: '#ede9fe',
-    bgBot: '#c4b5fd',
-    border: '#4c1d95',
-    accent: '#7c3aed',
-    rareBadge: true,
-  },
-  {
-    id: 'niffler_play',
-    nameVi: 'Niffler Ôm Kho Báu',
-    spriteKey: 'beast_niffler_play',
-    bgTop: '#fef08a',
-    bgBot: '#facc15',
-    border: '#854d0e',
-    accent: '#ca8a04',
-    rareBadge: true,
-  },
-  {
-    id: 'puffskein_bounce',
-    nameVi: 'Puffskein Tung Tăng',
-    spriteKey: 'beast_puffskein_bounce',
-    bgTop: '#fbcfe8',
-    bgBot: '#f9a8d4',
-    border: '#9d174d',
-    accent: '#ec4899',
-    rareBadge: true,
-  },
-  {
-    id: 'creature_crest',
-    nameVi: 'Ấn Linh Thú Rừng Cấm',
-    spriteKey: 'ui_icon_creature',
-    bgTop: '#d1fae5',
-    bgBot: '#6ee7b7',
-    border: '#065f46',
-    accent: '#10b981',
-  },
-  {
-    id: 'pasture_bell',
-    nameVi: 'Chuông Vàng Gọi Thú',
-    spriteKey: 'ui_icon_pasture_bell',
-    bgTop: '#ffedd5',
-    bgBot: '#fdba74',
-    border: '#9a3412',
-    accent: '#f97316',
-  },
+  // 1–12: Magical & Farm Creatures (12)
+  definePikachuSpecies('niffler', 'Đào Mỏ Niffler', 'beast_niffler'),
+  definePikachuSpecies('phoenix', 'Phượng Hoàng Fawkes', 'beast_phoenix'),
+  definePikachuSpecies('unicorn', 'Kỳ Lân Ánh Bạc', 'beast_unicorn'),
+  definePikachuSpecies('hippogriff', 'Bằng Mã Buckbeak', 'beast_hippogriff'),
+  definePikachuSpecies('dragon', 'Rồng Lửa Gringotts', 'beast_dragon'),
+  definePikachuSpecies('thestral', 'Vong Mã Thestral', 'beast_thestral'),
+  definePikachuSpecies('puffskein', 'Bông Xù Puffskein', 'beast_puffskein'),
+  definePikachuSpecies('bowtruckle', 'Tinh Cây Bowtruckle', 'hagrid_bowtruckle'),
+  definePikachuSpecies('sheep', 'Cừu Mây Hang Sóc', 'beast_sheep'),
+  definePikachuSpecies('cow', 'Bò Sữa Đồng Ottery', 'beast_cow'),
+  definePikachuSpecies('hen', 'Gà Mái Trứng Vàng', 'beast_hen'),
+  definePikachuSpecies('gnome', 'Thần Lùn Vườn', 'guest_ron_gnome'),
+
+  // 13–24: Iconic Wizarding & Burrow Specialties (12)
+  definePikachuSpecies('owl', 'Cú Tuyết Đưa Thư', 'ui_icon_owl_orders'),
+  definePikachuSpecies('choc_frog', 'Ếch Sô-cô-la', 'ui_icon_frog_choc'),
+  definePikachuSpecies('snitch', 'Trái Snitch Vàng', 'm3_sp_snitch'),
+  definePikachuSpecies('apple_pie', 'Bánh Táo Bà Molly', 'ui_icon_pie_ready'),
+  definePikachuSpecies('butterbeer', 'Bia Bơ Sủi Bọt', 'ui_icon_butterbeer'),
+  definePikachuSpecies('honey_jar', 'Hũ Mật Ong Rừng', 'ui_icon_honey_jar'),
+  definePikachuSpecies('herb_elixir', 'Độc Dược Thảo Mộc', 'ui_icon_herb_elixir'),
+  definePikachuSpecies('sweater', 'Áo Len Chữ W', 'ui_icon_sweater_ready'),
+  definePikachuSpecies('egg_basket', 'Giỏ Trứng Trang Trại', 'ui_icon_egg_basket'),
+  definePikachuSpecies('watering_can', 'Bình Tưới Phép', 'ui_icon_watering_can'),
+  definePikachuSpecies('suitcase', 'Vali Sinh Vật Newt', 'ui_icon_suitcase'),
+  definePikachuSpecies('pasture_bell', 'Chuông Vàng Đồng Cỏ', 'ui_icon_pasture_bell'),
+
+  // 25–36: Harvest Crops, Fruits & Magical Flowers (12)
+  definePikachuSpecies('mandrake', 'Nhân Sâm Mandrake', 'ui_icon_crop_baby_mandrake'),
+  definePikachuSpecies('glow_mushroom', 'Nấm Đèn Đom Đóm', 'ui_icon_crop_glow_mushroom'),
+  definePikachuSpecies('pumpkin', 'Bí Ngô Khổng Lồ', 'ui_icon_crop_garden_pumpkin'),
+  definePikachuSpecies('strawberry', 'Dâu Tây Hồng Ngọc', 'ui_icon_crop_ruby_strawberry'),
+  definePikachuSpecies('burrow_apple', 'Táo Đỏ Hang Sóc', 'ui_icon_crop_burrow_apple'),
+  definePikachuSpecies('blueberry', 'Việt Quất Sương Mai', 'ui_icon_crop_dew_blueberry'),
+  definePikachuSpecies('golden_corn', 'Bắp Vàng Mùa Gặt', 'ui_icon_crop_golden_corn'),
+  definePikachuSpecies('honey_carrot', 'Cà Rốt Mật Ngọt', 'ui_icon_crop_honey_carrot'),
+  definePikachuSpecies('english_rose', 'Hoa Hồng Nước Anh', 'ui_icon_crop_english_rose'),
+  definePikachuSpecies('sunflower', 'Hoa Hướng Dương', 'ui_icon_crop_hedge_sunflower'),
+  definePikachuSpecies('lavender', 'Oải Hương Tím', 'ui_icon_crop_dried_lavender'),
+  definePikachuSpecies('moonlight_flower', 'Hoa Ánh Trăng', 'ui_icon_crop_moonlight_flower'),
+];
+
+const CLASSIC_SHIFT_CYCLE: ReadonlyArray<{
+  mode: OnetShiftMode;
+  badgeVi: string;
+}> = [
+  { mode: 'none', badgeVi: '⏹️ Đứng Yên' },
+  { mode: 'down', badgeVi: '⬇️ Rơi Xuống' },
+  { mode: 'up', badgeVi: '⬆️ Dồn Lên' },
+  { mode: 'left', badgeVi: '⬅️ Dồn Trái' },
+  { mode: 'right', badgeVi: '➡️ Dồn Phải' },
+  { mode: 'center_h', badgeVi: '➡️⬅️ Gom Tâm Ngang' },
+  { mode: 'split_h', badgeVi: '⬅️➡️ Tách Hai Biên' },
+  { mode: 'center_v', badgeVi: '⬇️⬆️ Gom Tâm Dọc' },
+  { mode: 'split_v', badgeVi: '⬆️⬇️ Tách Đỉnh Đáy' },
 ];
 
 const ONET_CHAPTER_LOCATIONS_VI: readonly string[] = [
@@ -283,12 +156,26 @@ export interface OnetMatchVfxEvent {
   combo: number;
 }
 
+export interface OnetSlideVfxEvent {
+  speciesId: string;
+  fromR: number;
+  fromC: number;
+  toR: number;
+  toC: number;
+}
+
 export class CreatureOnetEngine {
+  public static readonly CLASSIC_ROWS = 9;
+  public static readonly CLASSIC_COLS = 16;
+  public static readonly INITIAL_LIVES = 10;
+
   public readonly stage: number;
   public readonly rows: number;
   public readonly cols: number;
   public readonly speciesCount: number;
   public readonly totalPairs: number;
+  public readonly shiftMode: OnetShiftMode;
+  public readonly shiftBadgeVi: string;
   public readonly difficultyLabel: string;
   public readonly milestoneBoss: MilestoneBossMeta | null;
   public readonly title: string;
@@ -296,7 +183,7 @@ export class CreatureOnetEngine {
   public readonly hintGoldCost: number;
   public readonly shuffleGoldCost: number;
 
-  /** Static grid [r][c]: speciesId string or null if cleared (tiles NEVER slide/move) */
+  /** Classic 9 × 16 grid [r][c]: speciesId string or null if cleared */
   public grid: (string | null)[][] = [];
   public selected: OnetPoint | null = null;
   public hintPair: [OnetPoint, OnetPoint] | null = null;
@@ -310,14 +197,16 @@ export class CreatureOnetEngine {
   public autoShufflesCount = 0;
   public lastAutoShuffleNotice = '';
 
+  /** Classic Pikachu Lives / Shuffle counter (❤️ starts at 10) */
+  public lives: number;
   public freeHintsLeft: number;
   public paidHintsLeft: number;
-  public freeShufflesLeft: number;
   public paidShufflesLeft: number;
   public talismanUsed = false;
-  public status: 'playing' | 'won' = 'playing';
+  public status: 'playing' | 'won' | 'lost' = 'playing';
 
   public matchVfxQueue: OnetMatchVfxEvent[] = [];
+  public slideVfxQueue: OnetSlideVfxEvent[] = [];
   private bestTurnPlay: {
     ply: number;
     speciesNameVi: string;
@@ -339,63 +228,28 @@ export class CreatureOnetEngine {
       ? `👑 Đại Trùm Mốc ${this.stage}`
       : `${tier.badgeEmoji} ${tier.label}`;
 
-    // Progressive Classic Pikachu board dimensions (48 -> 108 tiles, rows * cols is ALWAYS even!)
-    if (this.milestoneBoss && this.stage >= 100) {
-      this.rows = 9;
-      this.cols = 12; // 108 tiles = 54 pairs
-    } else if (this.stage <= 15) {
-      this.rows = 6;
-      this.cols = 8; // 48 tiles = 24 pairs (right from Stage 1!)
-    } else if (this.stage <= 60) {
-      this.rows = 8;
-      this.cols = 8; // 64 tiles = 32 pairs
-    } else if (this.stage <= 180) {
-      this.rows = 8;
-      this.cols = 9; // 72 tiles = 36 pairs
-    } else if (this.stage <= 420) {
-      this.rows = 8;
-      this.cols = 10; // 80 tiles = 40 pairs
-    } else if (this.stage <= 620) {
-      this.rows = 9;
-      this.cols = 10; // 90 tiles = 45 pairs
-    } else {
-      this.rows = 9;
-      this.cols = 12; // 108 tiles = 54 pairs
-    }
-
+    // Authentic Classic Pikachu 2003 board: 9 rows × 16 cols = 144 tiles (72 pairs, 36 icons × 4)
+    this.rows = CreatureOnetEngine.CLASSIC_ROWS;
+    this.cols = CreatureOnetEngine.CLASSIC_COLS;
     this.totalPairs = Math.floor((this.rows * this.cols) / 2);
+    this.speciesCount = CREATURE_ONET_SPECIES.length; // 36
 
-    // Progressive species variety (10 -> 24 distinct Magical Creatures)
-    const maxSpeciesPool = this.stage >= 350 ? CREATURE_ONET_SPECIES.length : 17;
-    const rawSpecies =
-      this.stage <= 15
-        ? 10
-        : this.stage <= 60
-          ? 12 + Math.floor((this.stage - 16) / 22)
-          : this.stage <= 180
-            ? 14 + Math.floor((this.stage - 61) / 60)
-            : this.stage <= 420
-              ? 16 + Math.floor((this.stage - 181) / 80)
-              : this.stage <= 620
-                ? 19 + Math.floor((this.stage - 421) / 70)
-                : 22 + Math.floor((this.stage - 621) / 78);
-    this.speciesCount = Math.max(
-      10,
-      Math.min(maxSpeciesPool, this.totalPairs, this.milestoneBoss ? rawSpecies + 2 : rawSpecies)
-    );
+    const shiftSpec = CLASSIC_SHIFT_CYCLE[(this.stage - 1) % CLASSIC_SHIFT_CYCLE.length];
+    this.shiftMode = shiftSpec.mode;
+    this.shiftBadgeVi = shiftSpec.badgeVi;
 
     const locName =
       ONET_CHAPTER_LOCATIONS_VI[
-        Math.floor((this.stage - 1) / 10) % ONET_CHAPTER_LOCATIONS_VI.length
+        Math.floor((this.stage - 1) / 9) % ONET_CHAPTER_LOCATIONS_VI.length
       ];
     this.title = this.milestoneBoss
       ? `👑 ${this.milestoneBoss.bossTitleVi} • ${locName}`
       : locName;
 
+    this.lives = CreatureOnetEngine.INITIAL_LIVES;
     this.freeHintsLeft = this.stage <= 25 ? 3 : this.stage <= 140 ? 2 : 1;
-    this.paidHintsLeft = 2;
-    this.freeShufflesLeft = this.stage <= 40 ? 2 : 1;
-    this.paidShufflesLeft = 2;
+    this.paidHintsLeft = 3;
+    this.paidShufflesLeft = 3;
     this.hintGoldCost = Math.min(190, 45 + Math.floor(this.stage / 7));
     this.shuffleGoldCost = Math.min(210, 55 + Math.floor(this.stage / 7));
 
@@ -410,8 +264,8 @@ export class CreatureOnetEngine {
           : this.milestoneBoss || this.stage % 10 === 0
             ? 2
             : 1,
-      gold: Math.round(75 + effectiveCap * 3.8 + stars * 18),
-      xp: Math.round(55 + effectiveCap * 2.8 + stars * 12),
+      gold: Math.round(85 + effectiveCap * 3.8 + stars * 18),
+      xp: Math.round(60 + effectiveCap * 2.8 + stars * 12),
       isMasterpiece:
         Boolean(this.milestoneBoss) ||
         this.stage % 10 === 0 ||
@@ -421,18 +275,24 @@ export class CreatureOnetEngine {
     this.populateInitialBoard();
   }
 
+  /** Alias kept for compatibility with helper UI counters */
+  public get freeShufflesLeft(): number {
+    return this.lives;
+  }
+
+  public set freeShufflesLeft(val: number) {
+    this.lives = Math.max(0, Math.floor(val));
+  }
+
   public get remainingPairs(): number {
     return Math.max(0, this.totalPairs - this.matchedPairs);
   }
 
   public static getSpeciesDef(id: string): OnetSpeciesDef {
-    return (
-      CREATURE_ONET_SPECIES.find((s) => s.id === id) ?? CREATURE_ONET_SPECIES[0]
-    );
+    return CREATURE_ONET_SPECIES.find((s) => s.id === id) ?? CREATURE_ONET_SPECIES[0];
   }
 
   private populateInitialBoard(): void {
-    // Select species pool deterministically for this stage
     const pool = CREATURE_ONET_SPECIES.slice(0, this.speciesCount);
     const deck: string[] = [];
     for (let p = 0; p < this.totalPairs; p++) {
@@ -452,13 +312,13 @@ export class CreatureOnetEngine {
       Array.from({ length: this.cols }, (_, c) => deck[r * this.cols + c])
     );
 
-    // Higher stages scatter adjacent identical pairs further apart to reward L/U/Z pathfinding
+    // Higher stages scatter adjacent identical pairs slightly to reward 2- and 3-segment paths
     const antiClumpProb =
-      this.stage <= 20
+      this.stage <= 9
         ? 0
-        : Math.min(0.86, 0.22 + ((this.stage - 20) / 757) * 0.64);
+        : Math.min(0.75, 0.18 + ((this.stage - 9) / 768) * 0.57);
     if (antiClumpProb > 0) {
-      const passes = this.stage >= 300 ? 3 : 2;
+      const passes = this.stage >= 300 ? 2 : 1;
       for (let pass = 0; pass < passes; pass++) {
         for (let r = 0; r < this.rows; r++) {
           for (let c = 0; c < this.cols; c++) {
@@ -480,8 +340,178 @@ export class CreatureOnetEngine {
       }
     }
 
-    // Guarantee at least 1 valid connection right from the start
-    this.ensurePlayableOrAutoShuffle(true);
+    // Guarantee at least 1 valid connection right from start without costing a life
+    if (!this.findAnyValidPair()) {
+      this.shuffleRemainingTilesInPlace();
+    }
+  }
+
+  /**
+   * Applies the active Classic Pikachu 2003 shift/gravity law after tiles are cleared,
+   * recording smooth tile transitions in `slideVfxQueue`.
+   */
+  public applyStageShift(): OnetSlideVfxEvent[] {
+    if (this.shiftMode === 'none') return [];
+
+    const slides: OnetSlideVfxEvent[] = [];
+
+    const compactColSegment = (
+      c: number,
+      rStart: number,
+      rEnd: number,
+      towardBottom: boolean
+    ) => {
+      const items: Array<{ sp: string; origR: number }> = [];
+      for (let r = rStart; r <= rEnd; r++) {
+        const sp = this.grid[r][c];
+        if (sp) items.push({ sp, origR: r });
+        this.grid[r][c] = null;
+      }
+      if (towardBottom) {
+        let writeR = rEnd;
+        for (let i = items.length - 1; i >= 0; i--) {
+          const it = items[i];
+          this.grid[writeR][c] = it.sp;
+          if (it.origR !== writeR) {
+            slides.push({
+              speciesId: it.sp,
+              fromR: it.origR,
+              fromC: c,
+              toR: writeR,
+              toC: c,
+            });
+          }
+          writeR -= 1;
+        }
+      } else {
+        let writeR = rStart;
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          this.grid[writeR][c] = it.sp;
+          if (it.origR !== writeR) {
+            slides.push({
+              speciesId: it.sp,
+              fromR: it.origR,
+              fromC: c,
+              toR: writeR,
+              toC: c,
+            });
+          }
+          writeR += 1;
+        }
+      }
+    };
+
+    const compactRowSegment = (
+      r: number,
+      cStart: number,
+      cEnd: number,
+      towardRight: boolean
+    ) => {
+      const items: Array<{ sp: string; origC: number }> = [];
+      for (let c = cStart; c <= cEnd; c++) {
+        const sp = this.grid[r][c];
+        if (sp) items.push({ sp, origC: c });
+        this.grid[r][c] = null;
+      }
+      if (towardRight) {
+        let writeC = cEnd;
+        for (let i = items.length - 1; i >= 0; i--) {
+          const it = items[i];
+          this.grid[r][writeC] = it.sp;
+          if (it.origC !== writeC) {
+            slides.push({
+              speciesId: it.sp,
+              fromR: r,
+              fromC: it.origC,
+              toR: r,
+              toC: writeC,
+            });
+          }
+          writeC -= 1;
+        }
+      } else {
+        let writeC = cStart;
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          this.grid[r][writeC] = it.sp;
+          if (it.origC !== writeC) {
+            slides.push({
+              speciesId: it.sp,
+              fromR: r,
+              fromC: it.origC,
+              toR: r,
+              toC: writeC,
+            });
+          }
+          writeC += 1;
+        }
+      }
+    };
+
+    switch (this.shiftMode) {
+      case 'down':
+        for (let c = 0; c < this.cols; c++) {
+          compactColSegment(c, 0, this.rows - 1, true);
+        }
+        break;
+      case 'up':
+        for (let c = 0; c < this.cols; c++) {
+          compactColSegment(c, 0, this.rows - 1, false);
+        }
+        break;
+      case 'left':
+        for (let r = 0; r < this.rows; r++) {
+          compactRowSegment(r, 0, this.cols - 1, false);
+        }
+        break;
+      case 'right':
+        for (let r = 0; r < this.rows; r++) {
+          compactRowSegment(r, 0, this.cols - 1, true);
+        }
+        break;
+      case 'center_h': {
+        const midLeftEnd = Math.floor(this.cols / 2) - 1;
+        const midRightStart = Math.floor(this.cols / 2);
+        for (let r = 0; r < this.rows; r++) {
+          if (midLeftEnd >= 0) compactRowSegment(r, 0, midLeftEnd, true);
+          if (midRightStart < this.cols) compactRowSegment(r, midRightStart, this.cols - 1, false);
+        }
+        break;
+      }
+      case 'split_h': {
+        const midLeftEnd = Math.floor(this.cols / 2) - 1;
+        const midRightStart = Math.floor(this.cols / 2);
+        for (let r = 0; r < this.rows; r++) {
+          if (midLeftEnd >= 0) compactRowSegment(r, 0, midLeftEnd, false);
+          if (midRightStart < this.cols) compactRowSegment(r, midRightStart, this.cols - 1, true);
+        }
+        break;
+      }
+      case 'center_v': {
+        const midTopEnd = Math.floor(this.rows / 2);
+        const midBotStart = midTopEnd + 1;
+        for (let c = 0; c < this.cols; c++) {
+          compactColSegment(c, 0, midTopEnd, true);
+          if (midBotStart < this.rows) compactColSegment(c, midBotStart, this.rows - 1, false);
+        }
+        break;
+      }
+      case 'split_v': {
+        const midTopEnd = Math.floor(this.rows / 2) - 1;
+        const midBotStart = Math.floor(this.rows / 2);
+        for (let c = 0; c < this.cols; c++) {
+          if (midTopEnd >= 0) compactColSegment(c, 0, midTopEnd, false);
+          if (midBotStart < this.rows) compactColSegment(c, midBotStart, this.rows - 1, true);
+        }
+        break;
+      }
+    }
+
+    if (slides.length > 0) {
+      this.slideVfxQueue.push(...slides);
+    }
+    return slides;
   }
 
   /**
@@ -557,7 +587,6 @@ export class CreatureOnetEngine {
       }
 
       for (let nd = 0; nd < 4; nd++) {
-        // Never reverse 180 degrees
         if ((nd ^ 1) === cur.d) continue;
         const nextTurns = nd === cur.d ? cur.turns : cur.turns + 1;
         if (nextTurns > 2) continue;
@@ -579,7 +608,6 @@ export class CreatureOnetEngine {
 
     if (bestTargetKey < 0 || bestTargetDir < 0) return null;
 
-    // Reconstruct cell-by-cell path from b back to a
     const revPoints: OnetPoint[] = [];
     let cr = b.r;
     let cc = b.c;
@@ -597,7 +625,6 @@ export class CreatureOnetEngine {
     revPoints.push({ r: a.r, c: a.c });
     revPoints.reverse();
 
-    // Compress collinear points into clean corner waypoints (2..4 points)
     const waypoints: OnetPoint[] = [revPoints[0]];
     for (let i = 1; i < revPoints.length - 1; i++) {
       const prev = waypoints[waypoints.length - 1];
@@ -669,7 +696,7 @@ export class CreatureOnetEngine {
   }
 
   /**
-   * Shuffles remaining occupied creature tiles IN PLACE (empty spaces never move).
+   * Shuffles remaining occupied tiles IN PLACE (preserving the shifted silhouette).
    * Guarantees at least 1 valid connection whenever >= 1 pair remains.
    */
   public shuffleRemainingTilesInPlace(): boolean {
@@ -705,7 +732,6 @@ export class CreatureOnetEngine {
       }
     }
 
-    // Deterministic fallback: place two matching tiles on two positions that share an outer-edge / adjacent link
     const bySp = new Map<string, number[]>();
     values.forEach((v, idx) => {
       const arr = bySp.get(v) ?? [];
@@ -715,15 +741,12 @@ export class CreatureOnetEngine {
     const dupEntry = [...bySp.entries()].find(([, idxs]) => idxs.length >= 2);
     if (dupEntry) {
       const targetSp = dupEntry[0];
-      // Clear grid temporarily to find two coords connectable on current occupancy
       for (let idx = 0; idx < coords.length; idx++) {
         this.grid[coords[idx].r][coords[idx].c] = values[idx];
       }
       outer: for (let i = 0; i < coords.length; i++) {
         for (let j = i + 1; j < coords.length; j++) {
           const origI = this.grid[coords[i].r][coords[i].c]!;
-          const origJ = this.grid[coords[j].r][coords[j].c]!;
-          // Swap targetSp into i and j to test connectivity
           const kIdx = coords.findIndex(
             (pt, k) => k !== i && k !== j && this.grid[pt.r][pt.c] === targetSp
           );
@@ -746,27 +769,39 @@ export class CreatureOnetEngine {
           ) {
             break outer;
           }
-          // Restore values for next pair check
           for (let idx = 0; idx < coords.length; idx++) {
             this.grid[coords[idx].r][coords[idx].c] = values[idx];
           }
-          void origJ;
         }
       }
     }
     return Boolean(this.findAnyValidPair());
   }
 
-  private ensurePlayableOrAutoShuffle(silent = false): boolean {
-    if (this.remainingPairs <= 0) return false;
-    if (this.findAnyValidPair()) return false;
-    this.shuffleRemainingTilesInPlace();
-    if (!silent) {
+  /**
+   * Checks whether at least 1 valid pair remains; if deadlocked:
+   * - If `lives > 0`, spends 1 ❤️ life and shuffles remaining tiles in place.
+   * - If `lives <= 0`, transitions board `status` to `'lost'`.
+   */
+  private resolveDeadlockWithClassicLives(): {
+    autoShuffled: boolean;
+    lost: boolean;
+  } {
+    if (this.remainingPairs <= 0) return { autoShuffled: false, lost: false };
+    if (this.findAnyValidPair()) return { autoShuffled: false, lost: false };
+
+    if (this.lives > 0) {
+      this.lives -= 1;
+      this.shuffleRemainingTilesInPlace();
       this.autoShufflesCount += 1;
-      this.lastAutoShuffleNotice =
-        '✨ Hết đường nối trực tiếp — Đàn sinh vật vừa tự đổi vị trí miễn phí để mở đường mới!';
+      this.lastAutoShuffleNotice = `🔀 Hết nước đi — Tự dùng 1 ❤️ đổi vị trí bàn cờ (còn ${this.lives} ❤️)!`;
+      return { autoShuffled: true, lost: false };
     }
-    return true;
+
+    this.status = 'lost';
+    this.lastAutoShuffleNotice =
+      '💔 Đã hết lượt đổi vị trí (0 ❤️) và không còn cặp nối hợp lệ!';
+    return { autoShuffled: false, lost: true };
   }
 
   public tapCell(
@@ -777,6 +812,7 @@ export class CreatureOnetEngine {
     matchedSpeciesId?: string;
     waypoints?: OnetPoint[];
     autoShuffled?: boolean;
+    lost?: boolean;
     won?: boolean;
   } {
     if (this.status !== 'playing') return { action: 'empty' };
@@ -814,7 +850,6 @@ export class CreatureOnetEngine {
       return { action: 'switched' };
     }
 
-    // Same species: verify <= 3-segment path!
     const waypoints = this.findConnectionPath(prev, { r, c });
     if (!waypoints) {
       this.combo = 0;
@@ -822,7 +857,7 @@ export class CreatureOnetEngine {
       return { action: 'blocked' };
     }
 
-    // Valid match! Clear both tiles statically (no gravity/sliding!)
+    // Valid match! Clear both tiles, emit red lightning beam, then apply stage shift law!
     this.grid[prev.r][prev.c] = null;
     this.grid[r][c] = null;
     this.selected = null;
@@ -872,16 +907,21 @@ export class CreatureOnetEngine {
         matchedSpeciesId: clickedSp,
         waypoints,
         autoShuffled: false,
+        lost: false,
         won: true,
       };
     }
 
-    const autoShuffled = this.ensurePlayableOrAutoShuffle(false);
+    // Apply classic 9-mode Pikachu gravity/sliding!
+    this.applyStageShift();
+
+    const dl = this.resolveDeadlockWithClassicLives();
     return {
       action: 'matched',
       matchedSpeciesId: clickedSp,
       waypoints,
-      autoShuffled,
+      autoShuffled: dl.autoShuffled,
+      lost: dl.lost,
       won: false,
     };
   }
@@ -893,38 +933,55 @@ export class CreatureOnetEngine {
     msg: string;
   } {
     if (this.status !== 'playing') {
-      return { ok: false, pair: null, path: null, msg: 'Màn chơi đã hoàn thành!' };
+      return { ok: false, pair: null, path: null, msg: 'Ván chơi không ở trạng thái đang mở!' };
     }
-    let found = this.findAnyValidPair();
+    const found = this.findAnyValidPair();
     if (!found) {
-      this.shuffleRemainingTilesInPlace();
-      found = this.findAnyValidPair();
-    }
-    if (!found) {
-      return { ok: false, pair: null, path: null, msg: 'Không tìm thấy cặp sinh vật nào!' };
+      return { ok: false, pair: null, path: null, msg: 'Không còn cặp nối trực tiếp — hãy Đổi Bàn!' };
     }
     this.hintPair = [found.a, found.b];
     this.hintPath = found.path;
     this.selected = { ...found.a };
     const sp = this.grid[found.a.r][found.a.c];
-    const spName = sp ? CreatureOnetEngine.getSpeciesDef(sp).nameVi : 'Sinh Vật Huyền Bí';
+    const spName = sp ? CreatureOnetEngine.getSpeciesDef(sp).nameVi : 'Hình';
     return {
       ok: true,
       pair: this.hintPair,
       path: this.hintPath,
-      msg: `🔍 Đã soi thấy cặp ${spName} nối được trong ${found.path.length - 1} đoạn!`,
+      msg: `🔍 Soi thấy cặp ${spName} nối được trong ${found.path.length - 1} đoạn!`,
     };
   }
 
-  public useManualShuffle(): { ok: boolean; msg: string } {
-    if (this.status !== 'playing') {
+  public useManualShuffle(free = false): { ok: boolean; msg: string } {
+    if (this.status === 'won') {
       return { ok: false, msg: 'Màn chơi đã hoàn thành!' };
+    }
+    if (!free) {
+      if (this.lives <= 0) {
+        return { ok: false, msg: 'Đã hết lượt đổi bàn (0 ❤️)!' };
+      }
+      this.lives -= 1;
+    }
+    if (this.status === 'lost') {
+      this.status = 'playing';
     }
     const ok = this.shuffleRemainingTilesInPlace();
     return {
       ok,
-      msg: '🔀 Đã đảo vị trí đàn Sinh Vật Huyền Bí để mở thêm đường nối mới!',
+      msg: free
+        ? `🔀 Đã đổi vị trí bàn cờ miễn phí (còn ${this.lives} ❤️)!`
+        : `🔀 Đã dùng 1 ❤️ đổi vị trí bàn cờ (còn ${this.lives} ❤️)!`,
     };
+  }
+
+  public reviveWithExtraLives(extraLives = 2): void {
+    this.lives += Math.max(1, Math.floor(extraLives));
+    if (this.status === 'lost') {
+      this.status = 'playing';
+    }
+    if (this.remainingPairs > 0 && !this.findAnyValidPair()) {
+      this.shuffleRemainingTilesInPlace();
+    }
   }
 
   public applyPhoenixTalisman(): {
@@ -933,7 +990,7 @@ export class CreatureOnetEngine {
     won: boolean;
     msg: string;
   } {
-    if (this.status !== 'playing' || this.talismanUsed) {
+    if ((this.status !== 'playing' && this.status !== 'lost') || this.talismanUsed) {
       return {
         ok: false,
         clearedPairs: 0,
@@ -942,6 +999,7 @@ export class CreatureOnetEngine {
       };
     }
     this.talismanUsed = true;
+    this.status = 'playing';
     this.selected = null;
     this.hintPair = null;
     this.hintPath = null;
@@ -949,7 +1007,6 @@ export class CreatureOnetEngine {
     let clearedPairs = 0;
     const targetClear = Math.min(3, this.remainingPairs);
     for (let k = 0; k < targetClear; k++) {
-      // Clear any matching pair (even blocked ones!) with golden Phoenix fire!
       let pairFound: [OnetPoint, OnetPoint, string] | null = null;
       const valid = this.findAnyValidPair();
       if (valid) {
@@ -988,6 +1045,7 @@ export class CreatureOnetEngine {
         segments: Math.max(1, path.length - 1),
         combo: this.combo,
       });
+      this.applyStageShift();
     }
 
     if (this.matchedPairs >= this.totalPairs) {
@@ -997,17 +1055,20 @@ export class CreatureOnetEngine {
         ok: true,
         clearedPairs,
         won: true,
-        msg: `🔥 Lửa Phượng Hoàng Fawkes kết nối ${clearedPairs} cặp Sinh Vật & hoàn tất màn chơi!`,
+        msg: `🔥 Lửa Phượng Hoàng Fawkes kết nối ${clearedPairs} cặp & hoàn tất màn chơi!`,
       };
     }
 
-    this.ensurePlayableOrAutoShuffle(true);
+    this.lives += 2;
     this.freeHintsLeft += 1;
+    if (!this.findAnyValidPair()) {
+      this.shuffleRemainingTilesInPlace();
+    }
     return {
       ok: true,
       clearedPairs,
       won: false,
-      msg: `🔥 Phượng Hoàng Fawkes đã ghép gọn ${clearedPairs} cặp Sinh Vật & tặng thêm +1 🔍 Dò Cặp!`,
+      msg: `🔥 Phượng Hoàng Fawkes đã ghép ${clearedPairs} cặp, tặng +2 ❤️ Đổi Bàn & +1 🔍 Dò Cặp!`,
     };
   }
 
@@ -1032,5 +1093,124 @@ export class CreatureOnetEngine {
       ],
     };
   }
-}
 
+  public exportSession(extra?: {
+    companionCharge?: number;
+    snackPieUsed?: boolean;
+  }): SavedOnetSession | null {
+    if (this.status === 'won') return null;
+    return {
+      stage: this.stage,
+      rows: this.rows,
+      cols: this.cols,
+      grid: this.grid.map((row) => [...row]),
+      selected: this.selected ? { r: this.selected.r, c: this.selected.c } : null,
+      hintPair: this.hintPair
+        ? [
+            { r: this.hintPair[0].r, c: this.hintPair[0].c },
+            { r: this.hintPair[1].r, c: this.hintPair[1].c },
+          ]
+        : null,
+      hintPath: this.hintPath ? this.hintPath.map((pt) => ({ r: pt.r, c: pt.c })) : null,
+      matchedPairs: this.matchedPairs,
+      combo: this.combo,
+      maxCombo: this.maxCombo,
+      score: this.score,
+      movesAttempted: this.movesAttempted,
+      autoShufflesCount: this.autoShufflesCount,
+      lives: this.lives,
+      freeHintsLeft: this.freeHintsLeft,
+      paidHintsLeft: this.paidHintsLeft,
+      paidShufflesLeft: this.paidShufflesLeft,
+      talismanUsed: this.talismanUsed,
+      status: this.status,
+      companionCharge: extra?.companionCharge,
+      snackPieUsed: extra?.snackPieUsed,
+      savedAt: Date.now(),
+    };
+  }
+
+  public restoreSession(snap: SavedOnetSession | null | undefined): boolean {
+    if (!snap || snap.stage !== this.stage || snap.rows !== this.rows || snap.cols !== this.cols) {
+      return false;
+    }
+    if (snap.status !== 'playing' && snap.status !== 'lost') return false;
+    if (!Array.isArray(snap.grid) || snap.grid.length !== this.rows) return false;
+
+    const validSpecies = new Set(CREATURE_ONET_SPECIES.map((s) => s.id));
+    let remainingTiles = 0;
+    const nextGrid: Array<Array<string | null>> = [];
+    for (let r = 0; r < this.rows; r++) {
+      const row = snap.grid[r];
+      if (!Array.isArray(row) || row.length !== this.cols) return false;
+      const nextRow: Array<string | null> = [];
+      for (let c = 0; c < this.cols; c++) {
+        const val = row[c];
+        if (val === null || val === undefined) {
+          nextRow.push(null);
+        } else if (typeof val === 'string' && validSpecies.has(val)) {
+          nextRow.push(val);
+          remainingTiles++;
+        } else {
+          return false;
+        }
+      }
+      nextGrid.push(nextRow);
+    }
+
+    if (remainingTiles < 2 || remainingTiles % 2 !== 0) return false;
+    const expectedMatched = this.totalPairs - remainingTiles / 2;
+    if (expectedMatched < 0 || expectedMatched >= this.totalPairs) return false;
+
+    const validCell = (pt: { r: number; c: number } | null | undefined): OnetPoint | null =>
+      pt &&
+      Number.isInteger(pt.r) &&
+      pt.r >= 0 &&
+      pt.r < this.rows &&
+      Number.isInteger(pt.c) &&
+      pt.c >= 0 &&
+      pt.c < this.cols
+        ? { r: pt.r, c: pt.c }
+        : null;
+
+    this.grid = nextGrid;
+    const sel = validCell(snap.selected);
+    this.selected = sel && this.grid[sel.r]?.[sel.c] ? sel : null;
+    const hp0 = Array.isArray(snap.hintPair) ? validCell(snap.hintPair[0]) : null;
+    const hp1 = Array.isArray(snap.hintPair) ? validCell(snap.hintPair[1]) : null;
+    this.hintPair =
+      hp0 && hp1 && this.grid[hp0.r]?.[hp0.c] && this.grid[hp1.r]?.[hp1.c] ? [hp0, hp1] : null;
+    this.hintPath =
+      this.hintPair && Array.isArray(snap.hintPath)
+        ? snap.hintPath
+            .filter(
+              (pt) =>
+                pt &&
+                Number.isInteger(pt.r) &&
+                pt.r >= -1 &&
+                pt.r <= this.rows &&
+                Number.isInteger(pt.c) &&
+                pt.c >= -1 &&
+                pt.c <= this.cols
+            )
+            .map((pt) => ({ r: pt.r, c: pt.c }))
+        : null;
+    this.matchedPairs = expectedMatched;
+    this.combo = Math.max(0, Math.min(200, Math.floor(snap.combo || 0)));
+    this.maxCombo = Math.max(this.combo, Math.min(200, Math.floor(snap.maxCombo || 0)));
+    this.score = Math.max(0, Math.floor(snap.score || 0));
+    this.movesAttempted = Math.max(0, Math.floor(snap.movesAttempted || 0));
+    this.autoShufflesCount = Math.max(0, Math.floor(snap.autoShufflesCount || 0));
+    this.lives = Math.max(0, Math.min(30, Math.floor(snap.lives ?? CreatureOnetEngine.INITIAL_LIVES)));
+    this.freeHintsLeft = Math.max(0, Math.min(15, Math.floor(snap.freeHintsLeft ?? 0)));
+    this.paidHintsLeft = Math.max(0, Math.min(15, Math.floor(snap.paidHintsLeft ?? 0)));
+    this.paidShufflesLeft = Math.max(0, Math.min(15, Math.floor(snap.paidShufflesLeft ?? 0)));
+    this.talismanUsed = Boolean(snap.talismanUsed);
+    this.status = snap.status;
+    this.matchVfxQueue = [];
+    this.slideVfxQueue = [];
+    this.lastAutoShuffleNotice = '';
+    this.bestTurnPlay = null;
+    return true;
+  }
+}

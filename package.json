@@ -6,9 +6,18 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "package:gzip": "npm run build && node tools/package-gzip.mjs",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "functions:install": "npm --prefix functions install",
+    "functions:build": "npm --prefix functions run build",
+    "emulators": "npx -y firebase-tools@latest emulators:start",
+    "provision:hpvn": "npx -y firebase-tools@latest firestore:databases:create burrow-game --location=asia-southeast1 --project hpvnn && npx -y firebase-tools@latest hosting:sites:create hpvnn-burrow --project hpvnn",
+    "deploy:hpvn": "npm run build && npm run functions:build && npx -y firebase-tools@latest deploy --only firestore:burrow-game,functions:burrow-game,hosting:burrow --project hpvnn",
+    "deploy:hosting": "npm run build && npx -y firebase-tools@latest deploy --only hosting:burrow --project hpvnn",
+    "deploy:functions": "npm run functions:build && npx -y firebase-tools@latest deploy --only functions:burrow-game --project hpvnn",
+    "deploy:rules": "npx -y firebase-tools@latest deploy --only firestore:burrow-game --project hpvnn"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

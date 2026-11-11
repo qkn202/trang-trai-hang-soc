@@ -149,15 +149,13 @@ export class Analytics {
         this.handleGameTick(e);
       });
 
-      // 6. Nghe sự kiện 'gamesave:uploaded' từ CloudSave
+      // 6. Nghe sự kiện 'gamesave:uploaded' từ CloudSave (đơn điểm duy nhất khi chạy trên trình duyệt)
       window.addEventListener('gamesave:uploaded', (e: Event) => {
         const custom = e as CustomEvent<Record<string, unknown>>;
         this.track('save_uploaded', custom.detail || {});
       });
-    }
-
-    // 7. Gắn trực tiếp callback vào CloudSave nếu được truyền vào
-    if (cloudSave) {
+    } else if (cloudSave) {
+      // 7. Chỉ gắn callback trực tiếp khi chạy ở môi trường headless không có `window`
       const prevCallback = cloudSave.onUploadSuccess;
       cloudSave.onUploadSuccess = (detail) => {
         if (prevCallback) {

@@ -1,101 +1,22 @@
-// Tách tự động từ src/sim/puzzleArcadeEngine.ts (P0.5 — tách puzzle engine theo môn).
+// Classic 9×9 Sudoku Engine (Unique-Solution Symmetric Generator, Multi-Step Undo, Notes & Timer)
+import { SavedSudokuSession } from '../types/game';
 import {
   MAX_MINIGAME_STAGE,
   MilestoneBossMeta,
   PuzzleRewardSpec,
-  TurningPointReview,
-  WizardingPortraitKey,
   getMilestoneBossMeta,
-  getMinigameDifficultyTier,
   getStageStarReward,
-  isArcadeSubModeLocked,
   mulberry32,
-} from "./puzzleShared";
+} from './puzzleShared';
 
 // ============================================================================
-// 4. SUDOKU CỔ NGỮ 9x9 (SEEDED UNIQUE-SOLUTION GENERATOR & PENCIL NOTES)
+// CLASSIC SUDOKU 9×9 (STANDARD ROWS, COLUMNS & 3×3 BOXES — UNIQUE SOLUTION)
 // ============================================================================
 
-const SUDOKU_X_SEEDS: ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>> = [
-  [
-    [1, 2, 3, 4, 5, 6, 7, 8, 9],
-    [4, 5, 6, 7, 8, 9, 1, 2, 3],
-    [7, 8, 9, 1, 2, 3, 4, 5, 6],
-    [2, 1, 4, 3, 6, 5, 8, 9, 7],
-    [3, 6, 8, 9, 7, 2, 5, 1, 4],
-    [5, 9, 7, 8, 1, 4, 6, 3, 2],
-    [9, 4, 1, 6, 3, 8, 2, 7, 5],
-    [8, 3, 2, 5, 4, 7, 9, 6, 1],
-    [6, 7, 5, 2, 9, 1, 3, 4, 8],
-  ],
-  [
-    [1, 4, 7, 2, 5, 8, 3, 6, 9],
-    [2, 3, 5, 1, 6, 9, 4, 7, 8],
-    [6, 8, 9, 3, 4, 7, 1, 2, 5],
-    [3, 1, 2, 4, 7, 5, 8, 9, 6],
-    [5, 6, 4, 9, 8, 3, 7, 1, 2],
-    [7, 9, 8, 6, 1, 2, 5, 4, 3],
-    [9, 7, 3, 5, 2, 1, 6, 8, 4],
-    [8, 2, 6, 7, 3, 4, 9, 5, 1],
-    [4, 5, 1, 8, 9, 6, 2, 3, 7],
-  ],
-  [
-    [1, 5, 9, 2, 6, 7, 3, 4, 8],
-    [2, 3, 4, 1, 5, 8, 6, 7, 9],
-    [6, 7, 8, 3, 4, 9, 1, 2, 5],
-    [3, 1, 2, 4, 7, 5, 8, 9, 6],
-    [5, 4, 6, 8, 9, 1, 7, 3, 2],
-    [8, 9, 7, 6, 3, 2, 4, 5, 1],
-    [9, 8, 3, 7, 2, 6, 5, 1, 4],
-    [7, 2, 1, 5, 8, 4, 9, 6, 3],
-    [4, 6, 5, 9, 1, 3, 2, 8, 7],
-  ],
-  [
-    [1, 6, 8, 3, 5, 7, 2, 9, 4],
-    [2, 3, 4, 1, 6, 9, 5, 7, 8],
-    [5, 7, 9, 2, 4, 8, 1, 3, 6],
-    [3, 1, 2, 4, 7, 5, 6, 8, 9],
-    [4, 9, 7, 6, 8, 1, 3, 5, 2],
-    [8, 5, 6, 9, 3, 2, 4, 1, 7],
-    [9, 8, 3, 5, 2, 6, 7, 4, 1],
-    [7, 2, 5, 8, 1, 4, 9, 6, 3],
-    [6, 4, 1, 7, 9, 3, 8, 2, 5],
-  ],
-];
-
-function transformSudokuD4(
-  seed: ReadonlyArray<ReadonlyArray<number>>,
-  sym: number,
-  digitPerm: ReadonlyArray<number>
-): number[][] {
-  const rot = sym & 3;
-  const flip = (sym & 4) !== 0;
-  return Array.from({ length: 9 }, (_, r) =>
-    Array.from({ length: 9 }, (__, c) => {
-      const fc = flip ? 8 - c : c;
-      let sr = r;
-      let sc = fc;
-      if (rot === 1) {
-        sr = fc;
-        sc = 8 - r;
-      } else if (rot === 2) {
-        sr = 8 - r;
-        sc = 8 - fc;
-      } else if (rot === 3) {
-        sr = 8 - fc;
-        sc = r;
-      }
-      return digitPerm[seed[sr][sc] - 1];
-    })
-  );
-}
-
-function countSudokuSolutions(grid: number[][], limit = 2, diagonalRule = false): number {
+function countSudokuSolutions(grid: number[][], limit = 2): number {
   const rowMask = new Int32Array(9);
   const colMask = new Int32Array(9);
   const boxMask = new Int32Array(9);
-  let diagMainMask = 0;
-  let diagAntiMask = 0;
   const work = grid.map((row) => row.slice());
 
   for (let r = 0; r < 9; r++) {
@@ -106,12 +27,6 @@ function countSudokuSolutions(grid: number[][], limit = 2, diagonalRule = false)
         const b = Math.floor(r / 3) * 3 + Math.floor(c / 3);
         if ((rowMask[r] & bit) !== 0 || (colMask[c] & bit) !== 0 || (boxMask[b] & bit) !== 0) {
           return 0;
-        }
-        if (diagonalRule) {
-          if (r === c && (diagMainMask & bit) !== 0) return 0;
-          if (r + c === 8 && (diagAntiMask & bit) !== 0) return 0;
-          if (r === c) diagMainMask |= bit;
-          if (r + c === 8) diagAntiMask |= bit;
         }
         rowMask[r] |= bit;
         colMask[c] |= bit;
@@ -134,11 +49,7 @@ function countSudokuSolutions(grid: number[][], limit = 2, diagonalRule = false)
       for (let c = 0; c < 9; c++) {
         if (work[r][c] !== 0) continue;
         const b = Math.floor(r / 3) * 3 + Math.floor(c / 3);
-        let used = rowMask[r] | colMask[c] | boxMask[b];
-        if (diagonalRule) {
-          if (r === c) used |= diagMainMask;
-          if (r + c === 8) used |= diagAntiMask;
-        }
+        const used = rowMask[r] | colMask[c] | boxMask[b];
         const avail = 0x3fe & ~used;
         if (avail === 0) return;
 
@@ -165,8 +76,6 @@ function countSudokuSolutions(grid: number[][], limit = 2, diagonalRule = false)
     }
 
     const b = Math.floor(bestR / 3) * 3 + Math.floor(bestC / 3);
-    const onMain = diagonalRule && bestR === bestC;
-    const onAnti = diagonalRule && bestR + bestC === 8;
     for (let d = 1; d <= 9; d++) {
       const bit = 1 << d;
       if ((bestAvail & bit) === 0) continue;
@@ -174,8 +83,6 @@ function countSudokuSolutions(grid: number[][], limit = 2, diagonalRule = false)
       rowMask[bestR] |= bit;
       colMask[bestC] |= bit;
       boxMask[b] |= bit;
-      if (onMain) diagMainMask |= bit;
-      if (onAnti) diagAntiMask |= bit;
 
       dfs();
 
@@ -183,8 +90,6 @@ function countSudokuSolutions(grid: number[][], limit = 2, diagonalRule = false)
       rowMask[bestR] &= ~bit;
       colMask[bestC] &= ~bit;
       boxMask[b] &= ~bit;
-      if (onMain) diagMainMask &= ~bit;
-      if (onAnti) diagAntiMask &= ~bit;
       if (solutions >= limit) return;
     }
   };
@@ -201,29 +106,41 @@ function shuffleWithRng<T>(arr: T[], rng: () => number): T[] {
   return arr;
 }
 
+export interface SudokuUndoSnapshot {
+  grid: number[][];
+  notes: number[][];
+  selected: { r: number; c: number } | null;
+}
+
 export class SudokuPuzzleEngine {
   public readonly stage: number;
+  public readonly classicDifficultyVi: string;
   public readonly difficultyLabel: string;
   public readonly milestoneBoss: MilestoneBossMeta | null;
   public readonly reward: PuzzleRewardSpec;
   public maxMistakes: number;
   public readonly hintGoldCost: number;
-  /** Sudoku Đường Chéo (Sudoku-X): both main 9-cell diagonals must contain 1..9 uniquely (stage >= 120, even, or boss >= 100) */
-  public readonly diagonalRule: boolean;
-  /** Ấn Chẵn/Lẻ Cổ Ngữ: watermarked blank cells enforce odd (1) or even (2) digits (stage >= 240, stage % 3 === 1, or boss >= 300) */
-  public readonly parityRule: boolean;
-  /** 0 = normal, 1 = odd rune (◇), 2 = even rune (◯) */
+  /** Pure Classic 9×9 Sudoku — no non-classic diagonal or odd/even rules */
+  public readonly diagonalRule = false;
+  public readonly parityRule = false;
   public parityMask: (0 | 1 | 2)[][] = [];
   public talismanUsed = false;
   public solution: number[][] = [];
+  /** Original pre-filled black clue cells */
+  public initialGiven: boolean[][] = [];
+  /** Locked cells (original clues + revealed hints) */
   public given: boolean[][] = [];
   public grid: number[][] = [];
-  /** Bitmask (1 << d) for pencil notes 1..9 per cell */
+  /** Bitmask (1 << d) for classic 3×3 pencil notes 1..9 per cell */
   public notes: number[][] = [];
   public pencilMode = false;
   public eraseMode = false;
   public editHistory: Array<{ r: number; c: number }> = [];
+  public undoStack: SudokuUndoSnapshot[] = [];
   public selected: { r: number; c: number } | null = null;
+  /** Highlighted digit (1..9) across the board & notes */
+  public highlightDigit = 0;
+  public elapsedSec = 0;
   public freeHintsLeft: number;
   public paidHintsLeft: number;
   public mistakesCount = 0;
@@ -231,39 +148,42 @@ export class SudokuPuzzleEngine {
 
   constructor(stage: number) {
     this.stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(stage)));
-    const tier = getMinigameDifficultyTier(this.stage);
     this.milestoneBoss = getMilestoneBossMeta(this.stage);
-    this.difficultyLabel = this.milestoneBoss
-      ? `👑 Đại Trùm Mốc ${this.stage}`
-      : `${tier.badgeEmoji} ${tier.label}`;
-    this.maxMistakes = this.stage <= 15 ? 5 : 3;
-    this.freeHintsLeft = this.stage <= 15 ? 1 : 0;
-    this.paidHintsLeft = this.stage <= 80 ? 2 : 1;
-    this.hintGoldCost = Math.min(260, 85 + Math.floor(this.stage / 6));
-    this.diagonalRule =
-      (this.stage >= 120 && this.stage % 2 === 0) || Boolean(this.milestoneBoss && this.stage >= 100);
-    this.parityRule =
-      (this.stage >= 240 && this.stage % 3 === 1) || Boolean(this.milestoneBoss && this.stage >= 300);
 
     let targetBlanks = 32;
-    if (this.stage <= 15) {
-      targetBlanks = 31 + Math.floor((this.stage - 1) / 4); // 31..34
-    } else if (this.stage <= 60) {
-      targetBlanks = 36 + Math.floor((this.stage - 16) / 10); // 36..40
-    } else if (this.stage <= 150) {
-      targetBlanks = 41 + Math.floor((this.stage - 61) / 18); // 41..45
-    } else if (this.stage <= 300) {
-      targetBlanks = 46 + Math.floor((this.stage - 151) / 35); // 46..50
-    } else if (this.stage <= 500) {
-      targetBlanks = 51 + Math.floor((this.stage - 301) / 70); // 51..53
-    } else if (this.stage <= 680) {
-      targetBlanks = 54 + Math.floor((this.stage - 501) / 100); // 54..55
+    if (this.stage <= 25) {
+      this.classicDifficultyVi = 'Dễ';
+      targetBlanks = 31 + Math.floor((this.stage - 1) / 6); // 31..35
+    } else if (this.stage <= 90) {
+      this.classicDifficultyVi = 'Trung Bình';
+      targetBlanks = 37 + Math.floor((this.stage - 26) / 16); // 37..41
+    } else if (this.stage <= 220) {
+      this.classicDifficultyVi = 'Khó';
+      targetBlanks = 43 + Math.floor((this.stage - 91) / 32); // 43..47
+    } else if (this.stage <= 420) {
+      this.classicDifficultyVi = 'Chuyên Gia';
+      targetBlanks = 48 + Math.floor((this.stage - 221) / 50); // 48..52
+    } else if (this.stage <= 620) {
+      this.classicDifficultyVi = 'Bậc Thầy';
+      targetBlanks = 53 + Math.floor((this.stage - 421) / 90); // 53..55
     } else {
-      targetBlanks = this.stage >= 740 ? 57 : 56; // 24..25 givens — Grandmaster unique board
+      this.classicDifficultyVi = 'Cực Khó';
+      targetBlanks = this.stage >= 720 ? 57 : 56; // 24..25 givens
     }
 
+    this.difficultyLabel = this.milestoneBoss
+      ? `👑 Mốc ${this.stage} • ${this.classicDifficultyVi}`
+      : this.classicDifficultyVi;
+
+    // Standard Classic Sudoku 3-mistakes limit & 1+ free hint
+    this.maxMistakes = 3;
+    this.freeHintsLeft = this.stage <= 25 ? 2 : 1;
+    this.paidHintsLeft = 2;
+    this.hintGoldCost = Math.min(240, 80 + Math.floor(this.stage / 6));
+
     const stars = getStageStarReward(this.stage);
-    const effectiveCap = Math.min(this.stage, 260) + Math.floor(Math.max(0, this.stage - 260) * 0.35);
+    const effectiveCap =
+      Math.min(this.stage, 260) + Math.floor(Math.max(0, this.stage - 260) * 0.35);
     this.reward = {
       stars,
       sand: this.stage === MAX_MINIGAME_STAGE ? 5 : this.stage % 10 === 0 ? 2 : 1,
@@ -277,43 +197,36 @@ export class SudokuPuzzleEngine {
 
   private generateUniqueBoard(targetBlanks: number): void {
     const rng = mulberry32(this.stage * 104729 + 7919);
-
     const digitPerm = shuffleWithRng([1, 2, 3, 4, 5, 6, 7, 8, 9], rng);
 
-    if (this.diagonalRule) {
-      const seed = SUDOKU_X_SEEDS[this.stage % SUDOKU_X_SEEDS.length];
-      const sym = Math.floor(rng() * 8);
-      this.solution = transformSudokuD4(seed, sym, digitPerm);
-    } else {
-      const bandOrder = shuffleWithRng([0, 1, 2], rng);
-      const stackOrder = shuffleWithRng([0, 1, 2], rng);
+    const bandOrder = shuffleWithRng([0, 1, 2], rng);
+    const stackOrder = shuffleWithRng([0, 1, 2], rng);
 
-      const rowOrder: number[] = [];
-      for (const band of bandOrder) {
-        const within = shuffleWithRng([0, 1, 2], rng);
-        for (const dr of within) rowOrder.push(band * 3 + dr);
-      }
-
-      const colOrder: number[] = [];
-      for (const stack of stackOrder) {
-        const within = shuffleWithRng([0, 1, 2], rng);
-        for (const dc of within) colOrder.push(stack * 3 + dc);
-      }
-
-      const transpose = rng() < 0.5;
-      this.solution = Array.from({ length: 9 }, (_, r) =>
-        Array.from({ length: 9 }, (__, c) => {
-          const rr = transpose ? colOrder[c] : rowOrder[r];
-          const cc = transpose ? rowOrder[r] : colOrder[c];
-          const baseIdx = (rr * 3 + Math.floor(rr / 3) + cc) % 9;
-          return digitPerm[baseIdx];
-        })
-      );
+    const rowOrder: number[] = [];
+    for (const band of bandOrder) {
+      const within = shuffleWithRng([0, 1, 2], rng);
+      for (const dr of within) rowOrder.push(band * 3 + dr);
     }
+
+    const colOrder: number[] = [];
+    for (const stack of stackOrder) {
+      const within = shuffleWithRng([0, 1, 2], rng);
+      for (const dc of within) colOrder.push(stack * 3 + dc);
+    }
+
+    const transpose = rng() < 0.5;
+    this.solution = Array.from({ length: 9 }, (_, r) =>
+      Array.from({ length: 9 }, (__, c) => {
+        const rr = transpose ? colOrder[c] : rowOrder[r];
+        const cc = transpose ? rowOrder[r] : colOrder[c];
+        const baseIdx = (rr * 3 + Math.floor(rr / 3) + cc) % 9;
+        return digitPerm[baseIdx];
+      })
+    );
 
     const puzzle = this.solution.map((row) => row.slice());
 
-    // Pass 1: symmetric cell pairs so the Sudoku board looks balanced & classic
+    // Pass 1: rotational 180° symmetric cell pairs for authentic classic newspaper/app Sudoku balance
     const pairs: Array<Array<[number, number]>> = [];
     for (let idx = 0; idx <= 40; idx++) {
       const r1 = Math.floor(idx / 9);
@@ -338,7 +251,7 @@ export class SudokuPuzzleEngine {
       const saved = pair.map(([r, c]) => puzzle[r][c]);
       for (const [r, c] of pair) puzzle[r][c] = 0;
 
-      if (countSudokuSolutions(puzzle, 2, this.diagonalRule) === 1) {
+      if (countSudokuSolutions(puzzle, 2) === 1) {
         blanks += pair.length;
       } else {
         pair.forEach(([r, c], i) => {
@@ -362,7 +275,7 @@ export class SudokuPuzzleEngine {
         singleChecks++;
         const saved = puzzle[r][c];
         puzzle[r][c] = 0;
-        if (countSudokuSolutions(puzzle, 2, this.diagonalRule) === 1) {
+        if (countSudokuSolutions(puzzle, 2) === 1) {
           blanks += 1;
         } else {
           puzzle[r][c] = saved;
@@ -371,24 +284,13 @@ export class SudokuPuzzleEngine {
     }
 
     this.grid = puzzle.map((row) => row.slice());
+    this.initialGiven = puzzle.map((row) => row.map((v) => v !== 0));
     this.given = puzzle.map((row) => row.map((v) => v !== 0));
     this.notes = Array.from({ length: 9 }, () => Array<number>(9).fill(0));
     this.parityMask = Array.from({ length: 9 }, () => Array<0 | 1 | 2>(9).fill(0));
-
-    if (this.parityRule) {
-      const blankCoords: Array<[number, number]> = [];
-      for (let r = 0; r < 9; r++) {
-        for (let c = 0; c < 9; c++) {
-          if (!this.given[r][c]) blankCoords.push([r, c]);
-        }
-      }
-      shuffleWithRng(blankCoords, rng);
-      const parityCount = Math.min(blankCoords.length, 10 + (this.stage % 5)); // 10..14 clean runes
-      for (let i = 0; i < parityCount; i++) {
-        const [r, c] = blankCoords[i];
-        this.parityMask[r][c] = this.solution[r][c] % 2 === 0 ? 2 : 1;
-      }
-    }
+    this.undoStack = [];
+    this.editHistory = [];
+    this.elapsedSec = 0;
 
     // Select first blank cell by default for immediate keyboard/pad play
     outer: for (let r = 0; r < 9; r++) {
@@ -399,6 +301,25 @@ export class SudokuPuzzleEngine {
         }
       }
     }
+    this.highlightDigit = 0;
+  }
+
+  public tickTimer(dt: number): boolean {
+    if (this.status !== 'playing' || dt <= 0) return false;
+    const prevWhole = Math.floor(this.elapsedSec);
+    this.elapsedSec += dt;
+    return Math.floor(this.elapsedSec) !== prevWhole;
+  }
+
+  public formatElapsedTime(): string {
+    const total = Math.max(0, Math.floor(this.elapsedSec));
+    const hrs = Math.floor(total / 3600);
+    const mins = Math.floor((total % 3600) / 60);
+    const secs = total % 60;
+    if (hrs > 0) {
+      return `${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   }
 
   public get filledCount(): number {
@@ -409,6 +330,50 @@ export class SudokuPuzzleEngine {
       }
     }
     return cnt;
+  }
+
+  public get canUndo(): boolean {
+    return this.undoStack.length > 0 && (this.status === 'playing' || this.status === 'lost');
+  }
+
+  private pushUndoSnapshot(): void {
+    this.undoStack.push({
+      grid: this.grid.map((row) => row.slice()),
+      notes: this.notes.map((row) => row.slice()),
+      selected: this.selected ? { ...this.selected } : null,
+    });
+    if (this.undoStack.length > 120) {
+      this.undoStack.shift();
+    }
+  }
+
+  public undo(): boolean {
+    if (!this.canUndo) return false;
+    const snap = this.undoStack.pop()!;
+    this.grid = snap.grid.map((row) => row.slice());
+    this.notes = snap.notes.map((row) => row.slice());
+    this.selected = snap.selected ? { ...snap.selected } : this.selected;
+    this.eraseMode = false;
+
+    this.editHistory = this.editHistory.filter(
+      ({ r, c }) => !this.given[r][c] && (this.grid[r][c] !== 0 || this.notes[r][c] !== 0)
+    );
+
+    if (this.status === 'lost') {
+      this.status = 'playing';
+      this.mistakesCount = Math.max(0, Math.min(this.mistakesCount, this.maxMistakes - 1));
+    }
+
+    const selVal = this.selected ? this.grid[this.selected.r]?.[this.selected.c] ?? 0 : 0;
+    this.highlightDigit = selVal > 0 ? selVal : 0;
+    return true;
+  }
+
+  public selectCell(r: number, c: number): void {
+    if (r < 0 || r >= 9 || c < 0 || c >= 9) return;
+    this.selected = { r, c };
+    const val = this.grid[r][c];
+    this.highlightDigit = val >= 1 && val <= 9 ? val : 0;
   }
 
   public isWrongCell(r: number, c: number): boolean {
@@ -434,21 +399,6 @@ export class SudokuPuzzleEngine {
         if ((nr !== r || nc !== c) && this.grid[nr][nc] === val) return true;
       }
     }
-    if (this.diagonalRule) {
-      if (r === c) {
-        for (let i = 0; i < 9; i++) {
-          if (i !== r && this.grid[i][i] === val) return true;
-        }
-      }
-      if (r + c === 8) {
-        for (let i = 0; i < 9; i++) {
-          if (i !== r && this.grid[i][8 - i] === val) return true;
-        }
-      }
-    }
-    const pm = this.parityMask[r]?.[c] ?? 0;
-    if (pm === 1 && val % 2 === 0) return true;
-    if (pm === 2 && val % 2 !== 0) return true;
     return false;
   }
 
@@ -465,10 +415,9 @@ export class SudokuPuzzleEngine {
 
   public moveSelection(dr: number, dc: number): void {
     const cur = this.selected ?? { r: 4, c: 4 };
-    this.selected = {
-      r: (cur.r + dr + 9) % 9,
-      c: (cur.c + dc + 9) % 9,
-    };
+    const nr = (cur.r + dr + 9) % 9;
+    const nc = (cur.c + dc + 9) % 9;
+    this.selectCell(nr, nc);
   }
 
   private prunePeerNotes(r: number, c: number, digit: number): void {
@@ -482,14 +431,6 @@ export class SudokuPuzzleEngine {
     for (let dr = 0; dr < 3; dr++) {
       for (let dc = 0; dc < 3; dc++) {
         this.notes[br + dr][bc + dc] &= ~bit;
-      }
-    }
-    if (this.diagonalRule) {
-      if (r === c) {
-        for (let i = 0; i < 9; i++) this.notes[i][i] &= ~bit;
-      }
-      if (r + c === 8) {
-        for (let i = 0; i < 9; i++) this.notes[i][8 - i] &= ~bit;
       }
     }
   }
@@ -516,16 +457,30 @@ export class SudokuPuzzleEngine {
     lost: boolean;
     won: boolean;
   } {
-    if (this.status !== 'playing' || digit < 1 || digit > 9 || !this.selected) {
+    if (this.status !== 'playing' || digit < 1 || digit > 9) {
       return { changed: false, conflict: false, lost: this.status === 'lost', won: false };
     }
     this.eraseMode = false;
+
+    if (!this.selected) {
+      this.highlightDigit = this.highlightDigit === digit ? 0 : digit;
+      return { changed: false, conflict: false, lost: false, won: false };
+    }
+
     const { r, c } = this.selected;
     if (this.given[r][c]) {
+      // Tapping a number on the pad while viewing a locked/clue cell highlights all instances of that digit
+      this.highlightDigit = digit;
       return { changed: false, conflict: false, lost: false, won: false };
     }
 
     if (this.pencilMode) {
+      // Protect already-valid filled digits from accidental overwrite when Notes mode is ON
+      if (this.grid[r][c] !== 0 && !this.isWrongCell(r, c)) {
+        this.highlightDigit = digit;
+        return { changed: false, conflict: false, lost: false, won: false };
+      }
+      this.pushUndoSnapshot();
       if (this.grid[r][c] !== 0) {
         this.grid[r][c] = 0;
       }
@@ -535,17 +490,22 @@ export class SudokuPuzzleEngine {
       } else {
         this.editHistory = this.editHistory.filter((item) => item.r !== r || item.c !== c);
       }
+      this.highlightDigit = (this.notes[r][c] & (1 << digit)) !== 0 ? digit : 0;
       return { changed: true, conflict: false, lost: false, won: false };
     }
 
+    this.pushUndoSnapshot();
+
     if (this.grid[r][c] === digit) {
       this.grid[r][c] = 0;
+      this.highlightDigit = 0;
       this.editHistory = this.editHistory.filter((item) => item.r !== r || item.c !== c);
       return { changed: true, conflict: false, lost: false, won: false };
     }
 
     this.grid[r][c] = digit;
     this.notes[r][c] = 0;
+    this.highlightDigit = digit;
     this.recordCellEdit(r, c);
     const conflict = digit !== this.solution[r][c] || this.hasConflict(r, c);
     if (conflict) {
@@ -570,9 +530,11 @@ export class SudokuPuzzleEngine {
     if (r < 0 || r >= 9 || c < 0 || c >= 9) return false;
     if (this.given[r]?.[c]) return false;
     if (this.grid[r][c] === 0 && this.notes[r][c] === 0) return false;
+    this.pushUndoSnapshot();
     this.grid[r][c] = 0;
     this.notes[r][c] = 0;
     this.selected = { r, c };
+    this.highlightDigit = 0;
     this.editHistory = this.editHistory.filter((item) => item.r !== r || item.c !== c);
     if (this.status === 'lost') {
       this.status = 'playing';
@@ -641,7 +603,11 @@ export class SudokuPuzzleEngine {
     } else {
       for (let r = 0; r < 9 && !target; r++) {
         for (let c = 0; c < 9; c++) {
-          if (!this.given[r][c] && this.grid[r][c] !== 0 && this.grid[r][c] !== this.solution[r][c]) {
+          if (
+            !this.given[r][c] &&
+            this.grid[r][c] !== 0 &&
+            this.grid[r][c] !== this.solution[r][c]
+          ) {
             target = { r, c };
             break;
           }
@@ -667,6 +633,7 @@ export class SudokuPuzzleEngine {
     this.notes[target.r][target.c] = 0;
     this.prunePeerNotes(target.r, target.c, ans);
     this.selected = { ...target };
+    this.highlightDigit = ans;
 
     if (this.checkSolved()) {
       this.status = 'won';
@@ -721,6 +688,7 @@ export class SudokuPuzzleEngine {
       this.notes[cell.r][cell.c] = 0;
       this.prunePeerNotes(cell.r, cell.c, ans);
       this.selected = { r: cell.r, c: cell.c };
+      this.highlightDigit = ans;
       revealed++;
     }
 
@@ -732,8 +700,165 @@ export class SudokuPuzzleEngine {
       ok: true,
       revealed,
       won: this.status === 'won',
-      msg: `🔥 Bùa Phượng Hoàng: Khai mở ${revealed} ô cổ ngữ chuẩn xác & cộng +2 khiên chống sai!`,
+      msg: `🔥 Bùa Phượng Hoàng: Điền đúng ${revealed} ô & cộng +2 lượt chống sai!`,
     };
   }
-}
 
+  public exportSession(extra?: {
+    companionCharge?: number;
+    snackPieUsed?: boolean;
+  }): SavedSudokuSession | null {
+    if (this.status !== 'playing' && this.status !== 'lost') {
+      return null;
+    }
+    return {
+      stage: this.stage,
+      solution: this.solution.map((row) => row.slice()),
+      initialGiven: this.initialGiven.map((row) => row.slice()),
+      given: this.given.map((row) => row.slice()),
+      grid: this.grid.map((row) => row.slice()),
+      notes: this.notes.map((row) => row.slice()),
+      mistakesCount: this.mistakesCount,
+      maxMistakes: this.maxMistakes,
+      freeHintsLeft: this.freeHintsLeft,
+      paidHintsLeft: this.paidHintsLeft,
+      talismanUsed: this.talismanUsed,
+      pencilMode: this.pencilMode,
+      eraseMode: this.eraseMode,
+      selected: this.selected ? { ...this.selected } : null,
+      highlightDigit: this.highlightDigit,
+      elapsedSec: Math.max(0, this.elapsedSec),
+      status: this.status,
+      editHistory: this.editHistory.slice(-81).map((pt) => ({ ...pt })),
+      undoStack: this.undoStack.slice(-60).map((u) => ({
+        grid: u.grid.map((row) => row.slice()),
+        notes: u.notes.map((row) => row.slice()),
+        selected: u.selected ? { ...u.selected } : null,
+      })),
+      companionCharge: Math.max(0, Math.round(extra?.companionCharge ?? 0)),
+      snackPieUsed: Boolean(extra?.snackPieUsed),
+      savedAt: Date.now(),
+    };
+  }
+
+  public restoreSession(snap: SavedSudokuSession | null | undefined): boolean {
+    if (!snap || snap.stage !== this.stage) return false;
+    if (snap.status !== 'playing' && snap.status !== 'lost') return false;
+    if (
+      !Array.isArray(snap.solution) ||
+      snap.solution.length !== 9 ||
+      !Array.isArray(snap.initialGiven) ||
+      snap.initialGiven.length !== 9 ||
+      !Array.isArray(snap.given) ||
+      snap.given.length !== 9 ||
+      !Array.isArray(snap.grid) ||
+      snap.grid.length !== 9 ||
+      !Array.isArray(snap.notes) ||
+      snap.notes.length !== 9
+    ) {
+      return false;
+    }
+
+    let alreadySolved = true;
+    for (let r = 0; r < 9; r++) {
+      if (
+        !Array.isArray(snap.solution[r]) ||
+        snap.solution[r].length !== 9 ||
+        !Array.isArray(snap.initialGiven[r]) ||
+        snap.initialGiven[r].length !== 9 ||
+        !Array.isArray(snap.given[r]) ||
+        snap.given[r].length !== 9 ||
+        !Array.isArray(snap.grid[r]) ||
+        snap.grid[r].length !== 9 ||
+        !Array.isArray(snap.notes[r]) ||
+        snap.notes[r].length !== 9
+      ) {
+        return false;
+      }
+      for (let c = 0; c < 9; c++) {
+        const sol = snap.solution[r][c];
+        const gv = snap.grid[r][c];
+        const nv = snap.notes[r][c];
+        if (typeof sol !== 'number' || sol < 1 || sol > 9) return false;
+        if (typeof gv !== 'number' || gv < 0 || gv > 9) return false;
+        if (typeof nv !== 'number' || nv < 0 || nv > 0x3fe) return false;
+        if ((snap.initialGiven[r][c] || snap.given[r][c]) && gv !== sol) {
+          return false;
+        }
+        if (gv !== sol) {
+          alreadySolved = false;
+        }
+      }
+    }
+    if (alreadySolved) return false;
+
+    this.solution = snap.solution.map((row) => row.slice());
+    this.initialGiven = snap.initialGiven.map((row) => row.map(Boolean));
+    this.given = snap.given.map((row) => row.map(Boolean));
+    this.grid = snap.grid.map((row) => row.slice());
+    this.notes = snap.notes.map((row) => row.map((v) => v & 0x3fe));
+    this.maxMistakes = Math.max(3, Math.min(12, Math.round(snap.maxMistakes || 3)));
+    this.mistakesCount = Math.max(0, Math.min(this.maxMistakes + 3, Math.round(snap.mistakesCount || 0)));
+    this.freeHintsLeft = Math.max(0, Math.round(snap.freeHintsLeft ?? 0));
+    this.paidHintsLeft = Math.max(0, Math.round(snap.paidHintsLeft ?? 0));
+    this.talismanUsed = Boolean(snap.talismanUsed);
+    this.pencilMode = Boolean(snap.pencilMode);
+    this.eraseMode = Boolean(snap.eraseMode);
+    this.selected =
+      snap.selected &&
+      snap.selected.r >= 0 &&
+      snap.selected.r < 9 &&
+      snap.selected.c >= 0 &&
+      snap.selected.c < 9
+        ? { r: Math.round(snap.selected.r), c: Math.round(snap.selected.c) }
+        : null;
+    this.highlightDigit =
+      typeof snap.highlightDigit === 'number' &&
+      snap.highlightDigit >= 0 &&
+      snap.highlightDigit <= 9
+        ? Math.round(snap.highlightDigit)
+        : 0;
+    this.elapsedSec = Math.max(0, Number.isFinite(snap.elapsedSec) ? snap.elapsedSec : 0);
+    this.status = snap.status;
+    this.editHistory = Array.isArray(snap.editHistory)
+      ? snap.editHistory
+          .filter(
+            (pt) =>
+              pt &&
+              typeof pt.r === 'number' &&
+              typeof pt.c === 'number' &&
+              pt.r >= 0 &&
+              pt.r < 9 &&
+              pt.c >= 0 &&
+              pt.c < 9
+          )
+          .slice(-81)
+          .map((pt) => ({ r: Math.round(pt.r), c: Math.round(pt.c) }))
+      : [];
+    this.undoStack = Array.isArray(snap.undoStack)
+      ? snap.undoStack
+          .filter(
+            (u) =>
+              u &&
+              Array.isArray(u.grid) &&
+              u.grid.length === 9 &&
+              Array.isArray(u.notes) &&
+              u.notes.length === 9
+          )
+          .slice(-60)
+          .map((u) => ({
+            grid: u.grid.map((row) => row.slice()),
+            notes: u.notes.map((row) => row.slice()),
+            selected:
+              u.selected &&
+              u.selected.r >= 0 &&
+              u.selected.r < 9 &&
+              u.selected.c >= 0 &&
+              u.selected.c < 9
+                ? { r: Math.round(u.selected.r), c: Math.round(u.selected.c) }
+                : null,
+          }))
+      : [];
+    return true;
+  }
+}

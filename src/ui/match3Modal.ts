@@ -1,26 +1,38 @@
 import { formatDurationCompactVi } from '../data/catalog';
 import {
+  CANDY_ASSET_REV,
+  CANDY_HOGWARTS_TOTAL_CHAPTERS,
+  CANDY_OBSTACLE_ICONS,
+  CANDY_TILE_TYPES,
+  CandyHogwartsLevel,
+  getCandyChapterForLevel,
+  getCandyLevelById,
+  getCandySeasonByLevel,
+  toCandyHouseId,
+} from '../data/candyHogwartsLevels';
+import {
   EXTRA_MOVES_COUNT,
-  GEM_META,
-  GemColor,
   getExtraMovesGoldCost,
-  getMatch3LevelDef,
   getMilestoneBossMeta,
-  getMinigameDifficultyTier,
-  getWinStreakGifts,
-  MATCH3_BOARD_SIZE,
   MATCH3_BOOSTERS,
-  Match3GoalDef,
-  Match3LevelDef,
   MAX_MATCH3_HEARTS,
   MAX_MINIGAME_STAGE,
   REFILL_HEARTS_GOLD_COST,
 } from '../data/match3Levels';
 import { SpriteRegistry } from '../engine/spriteLoader';
-import { Match3BoardEngine, Match3Cell, Match3Piece } from '../sim/match3Engine';
+import {
+  CandyAudioAdapter,
+  CandyBossRuntimeState,
+  CandyGameEndPayload,
+  CandyHogwartsEngine,
+  CandyHudStateSnapshot,
+  CandyObjectiveProgress,
+} from '../sim/candyHogwartsEngine';
 import { MAX_DAILY_MINIGAME_RESCUES } from '../sim/neighborSocial';
 import { ParkSimulation } from '../sim/simulation';
 import {
+  ACTIVE_MINIGAME_RESUME_KEY,
+  ActiveMinigameResumeRecord,
   BuildReductionResult,
   LeaderboardRankChange,
   Match3BoosterId,
@@ -29,77 +41,31 @@ import {
 } from '../types/game';
 
 const VIRTUAL_W = 468;
-const BOARD_PAD = 8;
-const BOARD_PX = VIRTUAL_W - BOARD_PAD * 2; // 452
-const CELL_PX = BOARD_PX / MATCH3_BOARD_SIZE; // 56.5
 
-const GEM_SPRITE_KEYS: Record<GemColor, string> = {
-  ruby: 'm3_farm_strawberry',
-  sapphire: 'm3_farm_blueberry',
-  emerald: 'm3_farm_pear',
-  topaz: 'm3_farm_pumpkin',
-  amethyst: 'm3_farm_plum',
-  candy_pink: 'm3_farm_honey',
+const BOOSTER_MEDIA: Record<
+  Match3BoosterId,
+  {
+    engineKind: 'hammer' | 'swap' | 'shuffle';
+    webp: string;
+    png: string;
+  }
+> = {
+  reparo_hammer: {
+    engineKind: 'hammer',
+    webp: `/paintings/candy-hogwarts/booster-lollipop.webp?v=${CANDY_ASSET_REV}`,
+    png: `/paintings/candy-hogwarts/booster-lollipop.png?v=${CANDY_ASSET_REV}`,
+  },
+  row_col_cannon: {
+    engineKind: 'swap',
+    webp: `/paintings/candy-hogwarts/booster-swap.webp?v=${CANDY_ASSET_REV}`,
+    png: `/paintings/candy-hogwarts/booster-swap.png?v=${CANDY_ASSET_REV}`,
+  },
+  alohomora_shuffle: {
+    engineKind: 'shuffle',
+    webp: `/paintings/candy-hogwarts/booster-shuffle.webp?v=${CANDY_ASSET_REV}`,
+    png: `/paintings/candy-hogwarts/booster-shuffle.png?v=${CANDY_ASSET_REV}`,
+  },
 };
-
-const BOOSTER_SPRITE_KEYS: Record<Match3BoosterId, string> = {
-  reparo_hammer: 'm3_boost_hammer',
-  row_col_cannon: 'm3_boost_cannon',
-  alohomora_shuffle: 'm3_boost_shuffle',
-};
-
-interface ActiveCanvasVfx {
-  kind: 'ring' | 'beam_row' | 'beam_col' | 'shockwave' | 'lightning' | 'text';
-  age: number;
-  duration: number;
-  r?: number;
-  c?: number;
-  toR?: number;
-  toC?: number;
-  radius?: number;
-  color?: string;
-  text?: string;
-  seed: number;
-}
-
-interface ActiveParticle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  gravity: number;
-  rot: number;
-  vRot: number;
-  size: number;
-  age: number;
-  duration: number;
-  color: string;
-  accent: string;
-  shape: 'shard' | 'spark' | 'ice' | 'wood';
-}
-
-interface ActiveFlyingGoal {
-  spriteKey?: string;
-  color: string;
-  startX: number;
-  startY: number;
-  ctrlX: number;
-  ctrlY: number;
-  endX: number;
-  endY: number;
-  age: number;
-  duration: number;
-  goalIdx: number;
-}
-
-interface InvalidSwapShake {
-  r1: number;
-  c1: number;
-  r2: number;
-  c2: number;
-  age: number;
-  duration: number;
-}
 
 function escapeHtml(val: unknown): string {
   return String(val ?? '')
@@ -110,61 +76,211 @@ function escapeHtml(val: unknown): string {
     .replace(/'/g, '&#39;');
 }
 
-const COBWEB_GOAL_SVG = `
-  <svg viewBox="0 0 40 40" width="30" height="30" aria-hidden="true" style="filter:drop-shadow(0 2px 2px rgba(15,23,42,0.32));">
-    <circle cx="20" cy="20" r="17" fill="#334155" stroke="#1e293b" stroke-width="2.5"/>
-    <g stroke="#f8fafc" stroke-width="1.8" stroke-linecap="round" fill="none">
-      <line x1="20" y1="4" x2="20" y2="36"/><line x1="4" y1="20" x2="36" y2="20"/>
-      <line x1="8.5" y1="8.5" x2="31.5" x2="31.5" y2="31.5"/><line x1="31.5" y1="8.5" x2="8.5" y2="31.5"/>
-      <polygon points="20,12 25.6,14.4 28,20 25.6,25.6 20,28 14.4,25.6 12,20 14.4,14.4"/>
-      <polygon points="20,7 29.2,10.8 33,20 29.2,29.2 20,33 10.8,29.2 7,20 10.8,10.8"/>
-    </g>
-    <circle cx="20" cy="20" r="2.6" fill="#bae6fd"/>
-  </svg>
-`;
+function formatCompactScore(val: number): string {
+  if (val >= 10000) {
+    return `${(val / 1000).toFixed(val % 1000 === 0 ? 0 : 1).replace('.', ',')}k`;
+  }
+  return val.toLocaleString('vi-VN');
+}
 
-const HONEYCOMB_GOAL_SVG = `
-  <svg viewBox="0 0 40 40" width="30" height="30" aria-hidden="true" style="filter:drop-shadow(0 2px 2px rgba(120,53,15,0.38));">
-    <polygon points="20,4 28,8.5 28,17.5 20,22 12,17.5 12,8.5" fill="#fbbf24" stroke="#92400e" stroke-width="2.2"/>
-    <polygon points="12.5,18 20.5,22.5 20.5,31.5 12.5,36 4.5,31.5 4.5,22.5" fill="#f59e0b" stroke="#92400e" stroke-width="2.2"/>
-    <polygon points="27.5,18 35.5,22.5 35.5,31.5 27.5,36 19.5,31.5 19.5,22.5" fill="#fcd34d" stroke="#92400e" stroke-width="2.2"/>
-    <circle cx="17.5" cy="10.5" r="2.1" fill="#fef9c3"/>
-  </svg>
-`;
+function pictureSpriteHtml(webp: string, png: string, className: string): string {
+  return `<picture><source srcset="${webp}" type="image/webp" /><img src="${png}" alt="" class="${className}" /></picture>`;
+}
 
-function describeGoal(g: Match3GoalDef): {
-  emoji: string;
-  spriteKey?: string;
+function describeCandyObjective(g: CandyObjectiveProgress): {
+  visualHtml: string;
   label: string;
   accent: string;
+  countText: string;
 } {
-  if (g.kind === 'gem' && g.color) {
-    const meta = GEM_META[g.color];
+  if (g.type === 'collect') {
+    const tile = CANDY_TILE_TYPES[g.tileId ?? 0] ?? CANDY_TILE_TYPES[0];
     return {
-      emoji: meta.emoji,
-      spriteKey: GEM_SPRITE_KEYS[g.color],
-      label: meta.name,
-      accent: meta.fillPrimary,
+      visualHtml: pictureSpriteHtml(tile.webp, tile.png, 'm3-goal-sprite'),
+      label: tile.shortName,
+      accent: tile.color,
+      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
     };
   }
-  if (g.kind === 'ice') {
-    return { emoji: '🧊', spriteKey: 'm3_obs_ice', label: 'Băng Giá', accent: '#0284c7' };
+  if (g.type === 'special_order') {
+    if (g.specialKind === 'color_bomb') {
+      return {
+        visualHtml: pictureSpriteHtml(
+          `/paintings/candy-hogwarts/candy-colorbomb.webp?v=${CANDY_ASSET_REV}`,
+          `/paintings/candy-hogwarts/candy-colorbomb.png?v=${CANDY_ASSET_REV}`,
+          'm3-goal-sprite'
+        ),
+        label: g.label || 'Kẹo Nấm Truffle',
+        accent: '#b45309',
+        countText: g.completed ? '✓' : `${g.current}/${g.target ?? 1}`,
+      };
+    }
+    if (g.specialKind === 'wrapped') {
+      return {
+        visualHtml: pictureSpriteHtml(
+          `/paintings/candy-hogwarts/candy-0-wrapped.webp?v=${CANDY_ASSET_REV}`,
+          `/paintings/candy-hogwarts/candy-0-wrapped.png?v=${CANDY_ASSET_REV}`,
+          'm3-goal-sprite'
+        ),
+        label: g.label || 'Kẹo Gói Nổ',
+        accent: '#f97316',
+        countText: g.completed ? '✓' : `${g.current}/${g.target ?? 1}`,
+      };
+    }
+    if (g.specialKind === 'striped') {
+      return {
+        visualHtml: pictureSpriteHtml(
+          `/paintings/candy-hogwarts/candy-3-sh.webp?v=${CANDY_ASSET_REV}`,
+          `/paintings/candy-hogwarts/candy-3-sh.png?v=${CANDY_ASSET_REV}`,
+          'm3-goal-sprite'
+        ),
+        label: g.label || 'Kẹo Sọc Kem',
+        accent: '#0ea5e9',
+        countText: g.completed ? '✓' : `${g.current}/${g.target ?? 1}`,
+      };
+    }
+    return {
+      visualHtml: CANDY_OBSTACLE_ICONS.special_seeker,
+      label: g.label || 'Cánh Vàng Snitch',
+      accent: '#eab308',
+      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 1}`,
+    };
   }
-  if (g.kind === 'box') {
-    return { emoji: '🧺', spriteKey: 'm3_farm_crate', label: 'Thùng Gỗ', accent: '#d97706' };
+  if (g.type === 'boss') {
+    return {
+      visualHtml: CANDY_OBSTACLE_ICONS.boss,
+      label: 'Hạ Đại Trùm',
+      accent: '#9333ea',
+      countText: g.completed ? '✓' : `${g.remaining.toLocaleString('vi-VN')} HP`,
+    };
   }
-  if (g.kind === 'web') {
-    return { emoji: '🕸️', label: 'Tơ Nhện', accent: '#64748b' };
+  if (g.type === 'horcrux') {
+    return {
+      visualHtml: CANDY_OBSTACLE_ICONS.horcrux,
+      label: 'Linh Giá',
+      accent: '#a855f7',
+      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+    };
   }
-  if (g.kind === 'honey') {
-    return { emoji: '🍯', label: 'Sáp Ong', accent: '#f59e0b' };
+  if (g.type === 'fiendfyre') {
+    return {
+      visualHtml: CANDY_OBSTACLE_ICONS.fiendfyre,
+      label: 'Lửa Địa Ngục',
+      accent: '#ea580c',
+      countText: g.completed ? '✓' : `Còn ${g.remaining}`,
+    };
+  }
+  if (g.type === 'decree') {
+    return {
+      visualHtml: CANDY_OBSTACLE_ICONS.decree,
+      label: 'Bia Sắc Lệnh',
+      accent: '#ec4899',
+      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+    };
+  }
+  if (g.type === 'dementor') {
+    return {
+      visualHtml: CANDY_OBSTACLE_ICONS.dementor,
+      label: 'Giám Ngục',
+      accent: '#38bdf8',
+      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+    };
+  }
+  if (g.type === 'petrify') {
+    return {
+      visualHtml: CANDY_OBSTACLE_ICONS.petrify,
+      label: 'Hoá Đá Tử Xà',
+      accent: '#10b981',
+      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+    };
+  }
+  if (g.type === 'cauldron') {
+    return {
+      visualHtml: CANDY_OBSTACLE_ICONS.cauldron,
+      label: 'Vạc Độc Dược',
+      accent: '#10b981',
+      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+    };
+  }
+  if (g.type === 'key_lock') {
+    return {
+      visualHtml: CANDY_OBSTACLE_ICONS.key_lock,
+      label: 'Khoá Gringotts',
+      accent: '#d97706',
+      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+    };
+  }
+  if (g.type === 'ingredient') {
+    return {
+      visualHtml: CANDY_OBSTACLE_ICONS.ingredient,
+      label: 'Đá Phù Thủy',
+      accent: '#dc2626',
+      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+    };
+  }
+  if (g.type === 'chocolate') {
+    return {
+      visualHtml: CANDY_OBSTACLE_ICONS.chocolate,
+      label: 'Sô-cô-la Lan',
+      accent: '#92400e',
+      countText: g.completed ? '✓' : `Còn ${g.remaining}`,
+    };
+  }
+  if (g.type === 'frosting') {
+    return {
+      visualHtml: CANDY_OBSTACLE_ICONS.frosting,
+      label: 'Bánh Quế Kem',
+      accent: '#d97706',
+      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+    };
+  }
+  if (g.type === 'ice') {
+    return {
+      visualHtml: CANDY_OBSTACLE_ICONS.ice,
+      label: 'Băng Đường',
+      accent: '#0284c7',
+      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+    };
+  }
+  if (g.type === 'jelly') {
+    return {
+      visualHtml: CANDY_OBSTACLE_ICONS.jelly,
+      label: 'Mứt Dâu Phép',
+      accent: '#be185d',
+      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+    };
   }
   return {
-    emoji: '📜',
-    spriteKey: 'm3_piece_scroll',
-    label: 'Thư Cú',
-    accent: '#eab308',
+    visualHtml: CANDY_OBSTACLE_ICONS.score,
+    label: 'Điểm Phép',
+    accent: '#f59e0b',
+    countText: g.completed
+      ? '✓'
+      : `${formatCompactScore(g.current)}/${formatCompactScore(g.target ?? 0)}`,
   };
+}
+
+function formatDifficultyMeta(lv: CandyHogwartsLevel): {
+  pillClass: 'normal' | 'hard' | 'boss';
+  icon: string;
+  label: string;
+} {
+  if (lv.difficultyTier === 'finale') {
+    return { pillClass: 'boss', icon: '👑', label: `Đại Kết Năm ${lv.seasonId}` };
+  }
+  if (lv.difficultyTier === 'boss') {
+    return { pillClass: 'boss', icon: '👑', label: 'Trùm 2 Pha' };
+  }
+  if (lv.difficultyTier === 'exam') {
+    return { pillClass: 'hard', icon: '🎓', label: 'Khảo Hạch Năm' };
+  }
+  if (lv.difficultyTier === 'nightmare') {
+    return { pillClass: 'hard', icon: '💀', label: 'Ác Mộng' };
+  }
+  if (lv.difficultyTier === 'hard') {
+    return { pillClass: 'hard', icon: '🔮', label: 'Khó' };
+  }
+  return { pillClass: 'normal', icon: '🍬', label: 'Thường' };
 }
 
 export class Match3ModalController {
@@ -174,10 +290,9 @@ export class Match3ModalController {
   private showToast: (msg: string, icon?: string) => void;
   public onSwitchToPuzzleArcade?: (mode?: PuzzleArcadeMode) => void;
   public onOpenLeaderboard?: () => void;
-  private sprites?: SpriteRegistry;
-  private localImages = new Map<string, HTMLImageElement>();
+  public sprites?: SpriteRegistry;
 
-  public engine: Match3BoardEngine | null = null;
+  public engine: CandyHogwartsEngine | null = null;
   public rescueContext: MinigameRescueContext | null = null;
   private rescueVictoryOutcome: {
     tokensEarned: number;
@@ -201,30 +316,11 @@ export class Match3ModalController {
     buildReduction?: BuildReductionResult;
     leaderboardRankUp?: LeaderboardRankChange;
   } | null = null;
+  private lastGameEndPayload: CandyGameEndPayload | null = null;
 
-  private selectedCell: { r: number; c: number } | null = null;
-  private cursorCell: { r: number; c: number } = { r: 3, c: 3 };
-  private hoverCell: { r: number; c: number } | null = null;
-  private activeBoosterTargetMode: Match3BoosterId | null = null;
-
-  private dragStart: {
-    pointerId: number;
-    r: number;
-    c: number;
-    clientX: number;
-    clientY: number;
-    swapped: boolean;
-  } | null = null;
-
-  private activeVfx: ActiveCanvasVfx[] = [];
-  private particles: ActiveParticle[] = [];
-  private flyingGoals: ActiveFlyingGoal[] = [];
-  private prevGoalCounts: number[] = [];
-  private invalidShake: InvalidSwapShake | null = null;
-  private hitStopTimer = 0;
-  private idleSeconds = 0;
-  private rafId: number | null = null;
-  private lastFrameTs = 0;
+  private prevObjectiveRemaining: number[] = [];
+  private companionCharge = 0;
+  private snackPieUsedThisAttempt = false;
 
   constructor(
     root: HTMLElement,
@@ -242,35 +338,139 @@ export class Match3ModalController {
     const dlg = this.getDialog();
     if (dlg) {
       dlg.addEventListener('close', () => {
+        const _returnAction = dlg.returnValue;
+        void _returnAction;
         dlg.returnValue = '';
-        this.stopLoop();
-        this.activeBoosterTargetMode = null;
-        this.dragStart = null;
+        this.clearLiveAnnouncement();
+        this.engine?.cancelBoosterMode();
+        this.engine?.stopLoop();
         if (this.rescueContext) {
           this.rescueContext = null;
           this.rescueVictoryOutcome = null;
+          this.engine?.destroy();
           this.engine = null;
+        } else {
+          this.persistMatch3Session(true);
+        }
+        if (typeof document === 'undefined' || !document.hidden) {
+          this.clearActiveModalResumeMarker();
         }
         this.onParentRefresh();
       });
     }
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          this.flushMatch3AndModalBeforeHide();
+        } else if (this.isOpen() && this.engine?.level) {
+          if (this.engine.status === 'playing') {
+            this.engine.startLoop();
+          }
+          this.renderDOM();
+        }
+      });
+    }
+
+    if (typeof window !== 'undefined') {
+      const flushOnHide = () => {
+        this.flushMatch3AndModalBeforeHide();
+      };
+      window.addEventListener('pagehide', flushOnHide);
+      window.addEventListener('beforeunload', flushOnHide);
+      window.addEventListener('hangsoc:before-sw-reload', flushOnHide);
+      window.addEventListener('pageshow', () => {
+        if (this.isOpen() && this.engine?.level) {
+          if (this.engine.status === 'playing') {
+            this.engine.startLoop();
+          }
+          this.renderDOM();
+        }
+      });
+    }
   }
 
-  private getSprite(key?: string): HTMLImageElement | undefined {
-    if (!key) return undefined;
-    // Raw painterly art: the match-3 gem icons are drawn at small size and
-    // look best untouched.
-    const fromReg = this.sprites?.getRaw(key);
-    if (fromReg && fromReg.complete && fromReg.naturalWidth > 0) {
-      return fromReg;
+  private persistActiveModalResumeMarker(): void {
+    if (typeof localStorage === 'undefined' || this.rescueContext || this.victoryClaimed) return;
+    try {
+      const rec: ActiveMinigameResumeRecord = {
+        dialog: 'match3',
+        mode: 'match3',
+        stage: this.engine?.level?.id ?? this.sim.state.match3.currentLevel,
+        savedAt: Date.now(),
+      };
+      localStorage.setItem(ACTIVE_MINIGAME_RESUME_KEY, JSON.stringify(rec));
+    } catch {
+      // Ignore storage quota errors
     }
-    let cached = this.localImages.get(key);
-    if (!cached) {
-      cached = new Image();
-      cached.src = `/sprites/${key}.png`;
-      this.localImages.set(key, cached);
+  }
+
+  private clearActiveModalResumeMarker(): void {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.removeItem(ACTIVE_MINIGAME_RESUME_KEY);
+    } catch {
+      // Ignore storage errors
     }
-    return cached.complete && cached.naturalWidth > 0 ? cached : undefined;
+  }
+
+  private persistMatch3Session(saveToDisk = true): void {
+    if (this.rescueContext) return;
+    const m3 = this.sim.state.match3;
+    if (!this.engine || !this.engine.level || this.engine.level.id !== m3.currentLevel) return;
+    if (this.engine.status === 'won' || this.victoryClaimed) {
+      if (m3.activeSession) {
+        m3.activeSession = null;
+        if (saveToDisk) this.sim.saveToStorage();
+      }
+      return;
+    }
+    if (this.engine.busy) return;
+    const snap = this.engine.exportSession({
+      movesMadeThisAttempt: this.movesMadeThisAttempt,
+      companionCharge: this.companionCharge,
+      snackPieUsed: this.snackPieUsedThisAttempt,
+    });
+    if (!snap) return;
+    m3.activeSession = snap;
+    if (saveToDisk) {
+      this.sim.saveToStorage();
+    }
+  }
+
+  private flushMatch3AndModalBeforeHide(): void {
+    if (!this.rescueContext) {
+      this.persistMatch3Session(true);
+    }
+    if (this.isOpen() && !this.rescueContext && !this.victoryClaimed) {
+      this.persistActiveModalResumeMarker();
+    }
+  }
+
+  private buildAudioAdapter(): CandyAudioAdapter {
+    return {
+      onSelect: () => this.sim.audio.playClick(),
+      onSwap: () => this.sim.audio.playPlace(),
+      onInvalid: () => this.sim.audio.playCheekyAlert(),
+      onMatch: (comboStep) => this.sim.audio.playMatchPop(comboStep),
+      onBeam: () => this.sim.audio.playPowerupBlast(),
+      onBomb: () => this.sim.audio.playPowerupBlast(),
+      onColorBomb: () => this.sim.audio.playTalismanBlast(),
+      onSeeker: () => this.sim.audio.playSpell(),
+      onIceBreak: () => this.sim.audio.playCrateCrack(),
+      onKeyUnlock: () => this.sim.audio.playCardFound(),
+      onPortal: () => this.sim.audio.playSpell(),
+      onConveyor: () => this.sim.audio.playClick(),
+      onChocolateSpread: () => this.sim.audio.playCheekyAlert(),
+      onMazeShift: () => this.sim.audio.playSpell(),
+      onPatronus: () => this.sim.audio.playTalismanBlast(),
+      onSortingHat: () => this.sim.audio.playCardFound(),
+      onBossHex: () => this.sim.audio.playCheekyAlert(),
+      onBossEnrage: () => this.sim.audio.playTalismanBlast(),
+      onHorcruxShatter: () => this.sim.audio.playTalismanBlast(),
+      onVictory: () => this.sim.audio.playLevelUp(),
+      onDefeat: () => this.sim.audio.playCheekyAlert(),
+    };
   }
 
   private getDialog(): HTMLDialogElement | null {
@@ -281,18 +481,36 @@ export class Match3ModalController {
     return Boolean(this.getDialog()?.open);
   }
 
+  private announceInDialog(message: string): void {
+    if (!this.isOpen()) return;
+    const region = this.root.querySelector('#m3LiveAnnouncer') as HTMLElement | null;
+    if (!region) return;
+    region.textContent = '';
+    requestAnimationFrame(() => {
+      if (this.isOpen() && region.isConnected) {
+        region.textContent = message;
+      }
+    });
+  }
+
+  private clearLiveAnnouncement(): void {
+    const region = this.root.querySelector('#m3LiveAnnouncer') as HTMLElement | null;
+    if (region) {
+      region.textContent = '';
+    }
+  }
+
   public resetSession(): void {
-    this.stopLoop();
+    this.clearLiveAnnouncement();
+    this.engine?.destroy();
     this.engine = null;
     this.movesMadeThisAttempt = 0;
+    this.companionCharge = 0;
+    this.snackPieUsedThisAttempt = false;
     this.victoryClaimed = false;
     this.victorySummary = null;
-    this.activeBoosterTargetMode = null;
-    this.selectedCell = null;
-    this.activeVfx = [];
-    this.particles = [];
-    this.flyingGoals = [];
-    this.prevGoalCounts = [];
+    this.lastGameEndPayload = null;
+    this.prevObjectiveRemaining = [];
     const dlg = this.getDialog();
     if (dlg?.open) dlg.close();
   }
@@ -303,27 +521,45 @@ export class Match3ModalController {
 
     this.rescueContext = null;
     this.rescueVictoryOutcome = null;
+    this.sim.setLastPlayedMinigame('match3');
     this.sim.tickMatch3Hearts(Date.now());
     if (typeof overrideLevel === 'number' && Number.isFinite(overrideLevel) && overrideLevel >= 1) {
-      this.sim.state.match3.currentLevel = Math.floor(overrideLevel);
+      const maxAllowed =
+        this.sim.state.sandboxMode || this.sim.isHeadmasterPreview
+          ? MAX_MINIGAME_STAGE
+          : Math.min(MAX_MINIGAME_STAGE, (this.sim.state.match3.maxClearedLevel ?? 0) + 1);
+      const clampedLv = Math.min(maxAllowed, Math.floor(overrideLevel));
+      if (clampedLv !== this.sim.state.match3.currentLevel) {
+        this.sim.state.match3.activeSession = null;
+      }
+      this.sim.state.match3.currentLevel = clampedLv;
+      this.engine?.destroy();
       this.engine = null;
     }
 
     const targetLv = this.sim.state.match3.currentLevel;
+    const hasSavedForTarget = this.sim.state.match3.activeSession?.levelId === targetLv;
     if (
       !this.engine ||
-      this.engine.levelDef.level !== targetLv ||
-      this.engine.status === 'won'
+      this.engine.level?.id !== targetLv ||
+      this.engine.status === 'won' ||
+      this.engine.busy
     ) {
-      this.startFreshStage(targetLv);
+      this.startFreshStage(targetLv, hasSavedForTarget, true);
+    } else {
+      const syncedHouse = toCandyHouseId(this.sim.getPlayerHouse());
+      this.engine.setHouse(syncedHouse);
+      this.engine.startLoop();
     }
 
     this.lastSeenSosRescuedAt = this.sim.ensureNeighborSocial().playerMinigameSos?.rescuedAt ?? 0;
-    this.renderDOM();
     if (!dlg.open) {
       dlg.showModal();
     }
-    this.startLoop();
+    this.persistMatch3Session(true);
+    this.persistActiveModalResumeMarker();
+    this.renderDOM();
+    this.onParentRefresh();
   }
 
   public openRescue(ctx: MinigameRescueContext): void {
@@ -334,14 +570,15 @@ export class Match3ModalController {
       this.showToast(check.reason ?? 'Không thể giải cứu màn này lúc này!', '🦉');
       return;
     }
+    this.clearActiveModalResumeMarker();
     this.rescueContext = { ...ctx };
     this.rescueVictoryOutcome = null;
-    this.startFreshStage(ctx.stage, true);
-    this.renderDOM();
+    this.startFreshStage(ctx.stage, true, false);
     if (!dlg.open) {
       dlg.showModal();
     }
-    this.startLoop();
+    this.renderDOM();
+    this.onParentRefresh();
   }
 
   public tickLiveHeaderTimer(): void {
@@ -361,7 +598,6 @@ export class Match3ModalController {
       heartBadge.textContent = this.formatHeartsLabel();
     }
 
-    // If player was on No-Hearts screen and a heart just regenerated automatically, start the stage!
     if (!this.engine && (this.sim.state.sandboxMode || m3.hearts > 0)) {
       this.startFreshStage(m3.currentLevel);
       this.renderDOM();
@@ -389,277 +625,155 @@ export class Match3ModalController {
     return `${m3.hearts}/${MAX_MATCH3_HEARTS} (${mm}:${ss})`;
   }
 
-  private startFreshStage(levelNum: number, bypassHeartCheck = false): void {
+  private ensureEngineInstance(): CandyHogwartsEngine {
+    if (this.engine) return this.engine;
+    this.engine = new CandyHogwartsEngine(null, {
+      audio: this.buildAudioAdapter(),
+      onToast: (msg, icon) => this.showToast(msg, icon ?? '🍬'),
+      onBoosterConsumed: (boosterKind) => {
+        const simId: Match3BoosterId =
+          boosterKind === 'hammer'
+            ? 'reparo_hammer'
+            : boosterKind === 'swap'
+              ? 'row_col_cannon'
+              : 'alohomora_shuffle';
+        const pay = this.sim.spendOrBuyMatch3Booster(simId);
+        if (!pay.ok) {
+          this.showToast(pay.msg, '🪙');
+          return false;
+        }
+        this.onParentRefresh();
+        return true;
+      },
+      onPlayerMoveCommitted: (movesUsed) => {
+        const wasZero = this.movesMadeThisAttempt === 0;
+        this.movesMadeThisAttempt = movesUsed;
+        const comp = this.sim.getActiveMinigameCompanion();
+        this.companionCharge = Math.min(comp.chargeEveryMoves, this.companionCharge + 1);
+        if (wasZero) {
+          this.refreshRestartButtonLabel();
+        }
+        this.syncHudSnapshot(this.engine?.getHudSnapshot() ?? null);
+      },
+      onBossEnraged: (boss: CandyBossRuntimeState) => {
+        this.showToast(
+          `${boss.emoji} ${boss.name} nổi cơn CUỒNG NỘ PHA 2 — niệm ${boss.hexName} dồn dập!`,
+          '🔥'
+        );
+        this.announceInDialog(
+          `Cảnh báo: ${boss.name} bước vào Cuồng Nộ Pha 2!`
+        );
+      },
+      onStateChange: (snapshot) => {
+        this.syncHudSnapshot(snapshot);
+      },
+      onSettled: () => {
+        this.persistMatch3Session(true);
+      },
+      onGameEnd: (payload) => {
+        this.handleEngineGameEnd(payload);
+      },
+    });
+    return this.engine;
+  }
+
+  private startFreshStage(
+    levelNum: number,
+    bypassHeartCheck = false,
+    allowRestore = false
+  ): void {
+    if (!allowRestore && !this.rescueContext && this.sim.state.match3.activeSession) {
+      this.sim.state.match3.activeSession = null;
+    }
+
     if (!bypassHeartCheck && !this.rescueContext) {
       const check = this.sim.canStartMatch3Level();
       if (!check.ok) {
+        this.engine?.destroy();
         this.engine = null;
         this.movesMadeThisAttempt = 0;
         this.victoryClaimed = false;
         this.victorySummary = null;
-        this.activeBoosterTargetMode = null;
-        this.selectedCell = null;
+        this.lastGameEndPayload = null;
         return;
       }
     }
 
-    const def: Match3LevelDef = getMatch3LevelDef(levelNum);
-    this.engine = new Match3BoardEngine(def, this.sim.state.match3.winStreak);
+    const levelData = getCandyLevelById(levelNum);
+    const houseId = toCandyHouseId(this.sim.getPlayerHouse());
+    const eng = this.ensureEngineInstance();
+
     this.movesMadeThisAttempt = 0;
+    this.companionCharge = 0;
+    this.snackPieUsedThisAttempt = false;
     this.victoryClaimed = false;
     this.victorySummary = null;
-    this.activeBoosterTargetMode = null;
-    this.selectedCell = null;
-    this.activeVfx = [];
-    this.particles = [];
-    this.flyingGoals = [];
-    this.prevGoalCounts = this.engine.goals.map((g) => g.current);
-    this.invalidShake = null;
-    this.idleSeconds = 0;
-  }
+    this.lastGameEndPayload = null;
+    this.prevObjectiveRemaining = [];
 
-  private startLoop(): void {
-    if (this.rafId !== null) return;
-    this.lastFrameTs = performance.now();
-    const step = (now: number) => {
-      if (!this.isOpen()) {
-        this.rafId = null;
-        return;
-      }
-      const dt = Math.min(0.05, Math.max(0.001, (now - this.lastFrameTs) / 1000));
-      this.lastFrameTs = now;
-      this.updateAndDrawCanvas(dt, now / 1000);
-      this.rafId = window.requestAnimationFrame(step);
-    };
-    this.rafId = window.requestAnimationFrame(step);
-  }
-
-  private stopLoop(): void {
-    if (this.rafId !== null) {
-      window.cancelAnimationFrame(this.rafId);
-      this.rafId = null;
-    }
-  }
-
-  private spawnPopParticles(
-    r: number,
-    c: number,
-    color: string,
-    subkind?: 'gem' | 'ice' | 'box' | 'web' | 'scroll' | 'honey'
-  ): void {
-    if (this.particles.length > 160) return;
-    const cx = BOARD_PAD + (c + 0.5) * CELL_PX;
-    const cy = BOARD_PAD + (r + 0.5) * CELL_PX;
-
-    const count = subkind === 'scroll' ? 10 : 8;
-    for (let i = 0; i < count; i++) {
-      const ang = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.45;
-      const spd = 65 + Math.random() * 95;
-      const shape: ActiveParticle['shape'] =
-        subkind === 'ice'
-          ? 'ice'
-          : subkind === 'box'
-            ? 'wood'
-            : i % 3 === 0
-              ? 'spark'
-              : 'shard';
-      this.particles.push({
-        x: cx + (Math.random() - 0.5) * 8,
-        y: cy + (Math.random() - 0.5) * 8,
-        vx: Math.cos(ang) * spd,
-        vy: Math.sin(ang) * spd - (shape === 'spark' ? 20 : 42),
-        gravity: shape === 'spark' ? 40 : 280,
-        rot: Math.random() * Math.PI * 2,
-        vRot: (Math.random() - 0.5) * 11,
-        size: shape === 'spark' ? 5.5 + Math.random() * 3.5 : 4.5 + Math.random() * 4,
-        age: 0,
-        duration: 0.38 + Math.random() * 0.2,
-        color:
-          subkind === 'ice'
-            ? '#7dd3fc'
-            : subkind === 'box'
-              ? '#d97706'
-              : subkind === 'web'
-                ? '#f1f5f9'
-                : color,
-        accent:
-          subkind === 'ice'
-            ? '#ffffff'
-            : subkind === 'box'
-              ? '#fde68a'
-              : '#ffffff',
-        shape,
-      });
-    }
-  }
-
-  private spawnFlyingGoalSprite(
-    r: number,
-    c: number,
-    goalKind: Match3GoalDef['kind'],
-    gemColor?: GemColor,
-    color = '#fde047'
-  ): void {
-    if (!this.engine) return;
-    const goalIdx = this.engine.goals.findIndex(
-      (g) => g.kind === goalKind && (goalKind !== 'gem' || g.color === gemColor)
-    );
-    if (goalIdx < 0) return;
-
-    const spriteKey =
-      goalKind === 'gem' && gemColor
-        ? GEM_SPRITE_KEYS[gemColor]
-        : goalKind === 'ice'
-          ? 'm3_obs_ice'
-          : goalKind === 'box'
-            ? 'm3_farm_crate'
-            : goalKind === 'scroll'
-              ? 'm3_piece_scroll'
-              : undefined;
-
-    // Spawn a real cross-modal DOM flyer inside #match3Dialog so collectibles fly OUT of the board right onto the Goal Tray!
-    const dlg = this.getDialog();
-    const canvas = this.root.querySelector('#match3Canvas') as HTMLCanvasElement | null;
-    const targetWell = this.root.querySelector(
-      `[data-m3-goal-idx="${goalIdx}"] .m3-goal-icon-well`
-    ) as HTMLElement | null;
-
-    if (dlg && canvas && targetWell && spriteKey && dlg.querySelectorAll('.m3-dom-flyer').length < 14) {
-      const cRect = canvas.getBoundingClientRect();
-      const wRect = targetWell.getBoundingClientRect();
-      if (cRect.width > 40 && wRect.width > 10) {
-        const sx = cRect.left + (cRect.width * (BOARD_PAD + (c + 0.5) * CELL_PX)) / VIRTUAL_W;
-        const sy = cRect.top + (cRect.height * (BOARD_PAD + (r + 0.5) * CELL_PX)) / VIRTUAL_W;
-        const ex = wRect.left + wRect.width * 0.5;
-        const ey = wRect.top + wRect.height * 0.5;
-        const mx = (sx + ex) * 0.5 + (Math.random() - 0.5) * 44;
-        const my = Math.min(sy, ey) - (46 + Math.random() * 34);
-
-        const flyer = document.createElement('div');
-        flyer.className = 'm3-dom-flyer';
-        const img = document.createElement('img');
-        img.src = `/sprites/${spriteKey}.png`;
-        img.alt = '';
-        flyer.appendChild(img);
-        dlg.appendChild(flyer);
-
-        const dur = 460 + Math.round(Math.random() * 90);
-        if (typeof flyer.animate === 'function') {
-          const anim = flyer.animate(
-            [
-              { transform: `translate(${sx}px, ${sy}px) scale(0.85)`, opacity: 1, offset: 0 },
-              { transform: `translate(${mx}px, ${my}px) scale(1.28)`, opacity: 1, offset: 0.45 },
-              { transform: `translate(${ex}px, ${ey}px) scale(0.75)`, opacity: 0.92, offset: 1 },
-            ],
-            { duration: dur, easing: 'cubic-bezier(0.22, 0.82, 0.28, 1)', fill: 'forwards' }
-          );
-          anim.onfinish = () => {
-            flyer.remove();
-            this.pulseGoalPill(goalIdx);
-          };
-          return;
-        }
-        flyer.remove();
-      }
-    }
-
-    if (this.flyingGoals.length > 24) return;
-    const startX = BOARD_PAD + (c + 0.5) * CELL_PX;
-    const startY = BOARD_PAD + (r + 0.5) * CELL_PX;
-    const isMobileStack = window.innerWidth <= 740;
-    const endX = isMobileStack ? 120 + goalIdx * 95 : 8;
-    const endY = isMobileStack ? 6 : 86 + goalIdx * 52;
-
-    this.flyingGoals.push({
-      spriteKey,
-      color,
-      startX,
-      startY,
-      ctrlX: (startX + endX) * 0.5 + (Math.random() - 0.5) * 60,
-      ctrlY: Math.min(startY, endY) - (55 + Math.random() * 35),
-      endX,
-      endY,
-      age: 0,
-      duration: 0.48 + Math.random() * 0.1,
-      goalIdx,
+    eng.loadLevel(levelData, {
+      house: houseId,
+      winStreak: this.sim.state.match3.winStreak,
     });
+
+    const saved =
+      allowRestore && !this.rescueContext && this.sim.state.match3.activeSession?.levelId === levelNum
+        ? this.sim.state.match3.activeSession
+        : null;
+    if (saved && eng.restoreSession(saved)) {
+      this.movesMadeThisAttempt = Math.max(
+        0,
+        Math.round(saved.movesMadeThisAttempt ?? eng.movesUsed)
+      );
+      this.companionCharge = Math.max(0, Math.round(saved.companionCharge ?? 0));
+      this.snackPieUsedThisAttempt = Boolean(saved.snackPieUsed);
+    }
+
+    const snap = eng.getHudSnapshot();
+    if (snap) {
+      this.prevObjectiveRemaining = snap.objectives.map((o) => o.remaining);
+    }
+    if (!this.rescueContext) {
+      this.persistMatch3Session(true);
+    }
   }
 
-  private drainEngineVfx(): void {
-    if (!this.engine) return;
-    let crackedObstacle = false;
-    while (this.engine.vfxQueue.length > 0) {
-      const ev = this.engine.vfxQueue.shift()!;
-      if (ev.kind === 'pop') {
-        if (ev.subkind === 'box' || ev.subkind === 'ice') {
-          crackedObstacle = true;
+  private handleEngineGameEnd(payload: CandyGameEndPayload): void {
+    this.lastGameEndPayload = payload;
+    if (payload.won) {
+      if (!this.victoryClaimed) {
+        this.victoryClaimed = true;
+        if (this.rescueContext) {
+          const out = this.sim.completeNeighborMinigameRescue(this.rescueContext);
+          this.rescueVictoryOutcome = {
+            tokensEarned: out.tokensEarned,
+            goldEarned: out.goldEarned,
+            xpEarned: out.xpEarned,
+            buildReduction: out.buildReduction,
+          };
+        } else {
+          this.sim.state.match3.activeSession = null;
+          this.clearActiveModalResumeMarker();
+          this.victorySummary = this.sim.completeMatch3LevelVictory(
+            payload.bonusCoinsFromLeftoverMoves,
+            { sessionScore: payload.score }
+          );
         }
-        this.activeVfx.push({
-          kind: 'ring',
-          r: ev.r,
-          c: ev.c,
-          color: ev.color,
-          age: 0,
-          duration: 0.3,
-          seed: Math.random() * Math.PI * 2,
-        });
-        this.spawnPopParticles(ev.r, ev.c, ev.color, ev.subkind);
-        if (ev.goalKind) {
-          this.spawnFlyingGoalSprite(ev.r, ev.c, ev.goalKind, ev.gemColor, ev.color);
-        }
-      } else if (ev.kind === 'beam_row') {
-        this.activeVfx.push({
-          kind: 'beam_row',
-          r: ev.r,
-          age: 0,
-          duration: 0.4,
-          seed: Math.random() * 10,
-        });
-      } else if (ev.kind === 'beam_col') {
-        this.activeVfx.push({
-          kind: 'beam_col',
-          c: ev.c,
-          age: 0,
-          duration: 0.4,
-          seed: Math.random() * 10,
-        });
-      } else if (ev.kind === 'shockwave') {
-        this.activeVfx.push({
-          kind: 'shockwave',
-          r: ev.r,
-          c: ev.c,
-          radius: ev.radius,
-          age: 0,
-          duration: 0.46,
-          seed: 0,
-        });
-      } else if (ev.kind === 'lightning') {
-        this.activeVfx.push({
-          kind: 'lightning',
-          r: ev.fromR,
-          c: ev.fromC,
-          toR: ev.toR,
-          toC: ev.toC,
-          age: 0,
-          duration: 0.46,
-          seed: Math.random() * 100,
-        });
-      } else if (ev.kind === 'text') {
-        this.activeVfx.push({
-          kind: 'text',
-          r: ev.r,
-          c: ev.c,
-          text: ev.text,
-          color: ev.color,
-          age: 0,
-          duration: 1.15,
-          seed: 0,
-        });
+        this.onParentRefresh();
       }
+      this.announceInDialog(`Chiến thắng màn ${payload.levelId}! Đạt ${payload.stars} sao.`);
+      this.mountOverlayOnly();
+      this.syncHudSnapshot(this.engine?.getHudSnapshot() ?? null);
+      return;
     }
-    if (crackedObstacle) {
-      this.sim.audio.playCrateCrack();
-    }
+
+    this.announceInDialog(
+      payload.failReason === 'bomb'
+        ? 'Bom Hắc Ám đã phát nổ! Chọn Bùa Phượng Hoàng hoặc cộng thêm lượt để gỡ ngòi.'
+        : 'Hết lượt đi! Chọn tiếp sức hoặc thử lại màn.'
+    );
+    this.mountOverlayOnly();
+    this.syncHudSnapshot(this.engine?.getHudSnapshot() ?? null);
   }
 
   private pulseGoalPill(goalIdx: number): void {
@@ -670,61 +784,60 @@ export class Match3ModalController {
     pill.classList.add('bump');
   }
 
-  private syncPostTurnState(comboCount: number, isPowerBlast = false): void {
-    if (!this.engine) return;
-    this.drainEngineVfx();
-    this.idleSeconds = 0;
-
-    if (isPowerBlast || comboCount >= 3) {
-      this.hitStopTimer = 0.035;
-      this.sim.audio.playPowerupBlast();
-    } else {
-      this.sim.audio.playMatchPop(comboCount);
+  private refreshRestartButtonLabel(): void {
+    const btn = this.root.querySelector('#btnM3RestartStage') as HTMLButtonElement | null;
+    if (btn) {
+      btn.textContent = this.rescueContext
+        ? '🔄 Ván Mới'
+        : this.movesMadeThisAttempt === 0
+          ? '🔄 Ván Mới'
+          : '🔄 Lại (-1❤️)';
     }
-
-    if (this.engine.status === 'won' && !this.victoryClaimed) {
-      this.victoryClaimed = true;
-      if (this.rescueContext) {
-        const out = this.sim.completeNeighborMinigameRescue(this.rescueContext);
-        this.rescueVictoryOutcome = {
-          tokensEarned: out.tokensEarned,
-          goldEarned: out.goldEarned,
-          xpEarned: out.xpEarned,
-          buildReduction: out.buildReduction,
-        };
-      } else {
-        this.victorySummary = this.sim.completeMatch3LevelVictory(
-          this.engine.bonusCoinsFromLeftoverMoves,
-          { sessionScore: this.engine.score }
-        );
-      }
-      this.onParentRefresh();
-      this.renderDOM();
-      return;
-    }
-
-    if (this.engine.status === 'out_of_moves') {
-      this.renderDOM();
-      return;
-    }
-
-    this.updateSideCountersOnly();
   }
 
-  private updateSideCountersOnly(): void {
+  private buildActionHintHtml(snap: CandyHudStateSnapshot | null): string {
+    if (!snap) return '';
+    if (snap.activeBooster === 'hammer') {
+      return `<span class="m3-hint-accent">🍭 <strong>Búa Kẹo Đũa Phép</strong>: Chạm 1 ô để đập vỡ ngay!</span>`;
+    }
+    if (snap.activeBooster === 'swap') {
+      return snap.swapFirstCell
+        ? `<span class="m3-hint-accent">🪄 <strong>Đổi Kẹo</strong>: Chọn ô kề bên thứ 2 để tráo tự do!</span>`
+        : `<span class="m3-hint-accent">🪄 <strong>Đổi Kẹo</strong>: Chọn viên kẹo thứ 1</span>`;
+    }
+    if (snap.level.seasonId === 7) {
+      return `<span>💀 Linh Giá Khiên Hồn: Phá khiên bằng Kẹo Phép hoặc Búa Kẹo!</span>`;
+    }
+    return `<span>✨ Ghép 4 tạo Kẹo Sọc • Vuông 2×2 tạo Cánh Vàng Snitch</span>`;
+  }
+
+  private syncHudSnapshot(snap: CandyHudStateSnapshot | null): void {
     const box = this.root.querySelector('#match3DialogContent') as HTMLElement | null;
-    if (!box || !this.engine) return;
+    if (!box || !snap) return;
 
     const st = this.sim.state;
     const movesEl = box.querySelector('#m3MovesLeftVal') as HTMLElement | null;
     if (movesEl) {
-      movesEl.textContent = String(this.engine.movesLeft);
-      movesEl.classList.toggle('low-moves', this.engine.movesLeft <= 5);
+      movesEl.textContent = String(snap.movesLeft);
+      movesEl.classList.toggle('low-moves', snap.movesLeft <= 5);
     }
 
     const scoreEl = box.querySelector('#m3ScoreVal') as HTMLElement | null;
     if (scoreEl) {
-      scoreEl.textContent = this.engine.score.toLocaleString('vi-VN');
+      scoreEl.textContent = snap.score.toLocaleString('vi-VN');
+    }
+
+    const s3 = Math.max(1, snap.level.stars[2] || 1);
+    const starPct = Math.min(100, Math.round((snap.score / s3) * 100));
+    const starFill = box.querySelector('#m3StarFillBar') as HTMLElement | null;
+    if (starFill) {
+      starFill.style.width = `${starPct}%`;
+    }
+    for (let idx = 1; idx <= 3; idx++) {
+      const starMark = box.querySelector(`#m3StarMark${idx}`) as HTMLElement | null;
+      if (starMark) {
+        starMark.classList.toggle('earned', snap.starsEarned >= idx);
+      }
     }
 
     const goldEl = box.querySelector('#m3ModalGoldText') as HTMLElement | null;
@@ -737,6 +850,11 @@ export class Match3ModalController {
       starsEl.textContent = st.sandboxMode ? '∞' : String(st.match3.stars);
     }
 
+    const heartsEl = box.querySelector('#m3ModalHeartsText') as HTMLElement | null;
+    if (heartsEl) {
+      heartsEl.textContent = this.formatHeartsLabel();
+    }
+
     const talismanQty = this.sim.getPhoenixTalismanCount();
     const talismanEl = box.querySelector('#m3ModalTalismanText') as HTMLElement | null;
     if (talismanEl) {
@@ -745,32 +863,97 @@ export class Match3ModalController {
 
     const talismanBtn = box.querySelector('#btnM3PhoenixTalisman') as HTMLButtonElement | null;
     if (talismanBtn) {
-      const used = this.engine.talismanUsed;
-      talismanBtn.disabled = used || (!st.sandboxMode && talismanQty <= 0);
-      talismanBtn.innerHTML = used
-        ? '<span>🔥 Bùa Phượng Hoàng</span><span class="pa-cost-pill">✓</span>'
-        : `<span>🔥 Bùa Phượng Hoàng</span><span class="pa-cost-pill">${st.sandboxMode ? '∞' : `×${talismanQty}`}</span>`;
+      const talismanDaily = this.sim.getPhoenixTalismanDailyStatus();
+      const talismanLocked = snap.talismanUsed || talismanDaily.usedByGame.match3 === true;
+      talismanBtn.disabled =
+        talismanLocked || snap.status === 'won' || (!st.sandboxMode && talismanQty <= 0);
+      talismanBtn.title = talismanLocked
+        ? `Bùa Phượng Hoàng — Đã dùng 1/1 lượt hôm nay ở môn này (${talismanDaily.usedCount}/${talismanDaily.maxDaily} môn hôm nay, mở lại sau 00:00)`
+        : `Bùa Phượng Hoàng — Tối đa 1 lần/môn/ngày (Đã dùng ${talismanDaily.usedCount}/${talismanDaily.maxDaily} môn hôm nay)`;
+      talismanBtn.innerHTML = talismanLocked
+        ? '<span>🔥 Bùa</span><span class="pa-cost-pill">✓ 1/1</span>'
+        : `<span>🔥 Bùa</span><span class="pa-cost-pill">${st.sandboxMode ? '∞' : `×${talismanQty}`}</span>`;
     }
 
+    // Live 2-Phase Boss HP strip
+    if (snap.bossState) {
+      const bs = snap.bossState;
+      const bossHpPct = bs.maxHp > 0 ? Math.max(0, Math.min(100, Math.round((bs.hp / bs.maxHp) * 100))) : 0;
+      const bossStrip = box.querySelector('#m3BossLiveStrip') as HTMLElement | null;
+      if (bossStrip) {
+        bossStrip.dataset.enraged = String(bs.enraged && !bs.defeated);
+        bossStrip.dataset.defeated = String(bs.defeated);
+      }
+      const bossFill = box.querySelector('#m3BossHpFill') as HTMLElement | null;
+      if (bossFill) {
+        bossFill.style.width = `${bossHpPct}%`;
+      }
+      const bossHpText = box.querySelector('#m3BossHpText') as HTMLElement | null;
+      if (bossHpText) {
+        bossHpText.textContent = bs.defeated
+          ? '✓ ĐÃ HẠ GỤC'
+          : `${bs.hp.toLocaleString('vi-VN')} / ${bs.maxHp.toLocaleString('vi-VN')} HP`;
+      }
+      const bossPhaseBadge = box.querySelector('#m3BossPhaseBadge') as HTMLElement | null;
+      if (bossPhaseBadge) {
+        bossPhaseBadge.textContent = bs.defeated
+          ? '✓ Toàn Thắng'
+          : bs.enraged
+            ? '🔥 CUỒNG NỘ PHA 2'
+            : 'Pha 1';
+      }
+      const bossHexText = box.querySelector('#m3BossHexText') as HTMLElement | null;
+      if (bossHexText) {
+        bossHexText.textContent = bs.defeated
+          ? '✓ Bùa tan biến'
+          : `⚡ ${bs.hexName} (${bs.turnsUntilHex} lượt)`;
+      }
+    }
+
+    // Action Hint Bar
     const hintBanner = box.querySelector('#m3ActionHintBar') as HTMLElement | null;
     if (hintBanner) {
-      hintBanner.innerHTML = this.buildActionHintHtml();
+      hintBanner.innerHTML = this.buildActionHintHtml(snap);
     }
 
-    // Update goal cards & trigger pulse when count increased
-    this.engine.goals.forEach((g, idx) => {
+    // Companion button
+    const compBtn = box.querySelector('#btnM3TriggerCompanion') as HTMLButtonElement | null;
+    if (compBtn) {
+      const comp = this.sim.getActiveMinigameCompanion();
+      const compReady = this.companionCharge >= comp.chargeEveryMoves;
+      compBtn.dataset.ready = String(compReady);
+      compBtn.disabled = !compReady || snap.status === 'won';
+      const chargeLbl = compBtn.querySelector('[data-m3-comp-charge]');
+      if (chargeLbl) {
+        chargeLbl.textContent = compReady
+          ? '⚡'
+          : `${this.companionCharge}/${comp.chargeEveryMoves}`;
+      }
+      const meterFill = compBtn.querySelector('[data-m3-comp-meter]') as HTMLElement | null;
+      if (meterFill) {
+        const pct = Math.min(
+          100,
+          Math.round((this.companionCharge / Math.max(1, comp.chargeEveryMoves)) * 100)
+        );
+        meterFill.style.width = `${pct}%`;
+      }
+    }
+
+    // Update goal cards & pulse when progress advances
+    snap.objectives.forEach((g, idx) => {
       const pill = box.querySelector(`[data-m3-goal-idx="${idx}"]`) as HTMLElement | null;
       if (!pill) return;
-      const done = g.current >= g.target;
-      pill.classList.toggle('done', done);
+      const meta = describeCandyObjective(g);
+      pill.classList.toggle('done', g.completed);
       const countSpan = pill.querySelector('.m3-goal-count') as HTMLElement | null;
       if (countSpan) {
-        countSpan.textContent = done ? '✓' : `${g.current}/${g.target}`;
+        countSpan.textContent = meta.countText;
       }
-      if ((this.prevGoalCounts[idx] ?? 0) < g.current) {
+      const prevRem = this.prevObjectiveRemaining[idx];
+      if (prevRem !== undefined && g.remaining < prevRem) {
         this.pulseGoalPill(idx);
       }
-      this.prevGoalCounts[idx] = g.current;
+      this.prevObjectiveRemaining[idx] = g.remaining;
     });
 
     // Update booster buttons
@@ -778,7 +961,8 @@ export class Match3ModalController {
       const btn = box.querySelector(`[data-m3-booster="${bDef.id}"]`) as HTMLButtonElement | null;
       if (!btn) return;
       const qty = st.match3.boosters[bDef.id] ?? 0;
-      const armed = this.activeBoosterTargetMode === bDef.id;
+      const media = BOOSTER_MEDIA[bDef.id];
+      const armed = snap.activeBooster === media.engineKind;
       btn.setAttribute('data-active', String(armed));
       btn.setAttribute('aria-pressed', String(armed));
       const badge = btn.querySelector('.m3-booster-qty') as HTMLElement | null;
@@ -789,261 +973,14 @@ export class Match3ModalController {
     });
   }
 
-  private buildActionHintHtml(): string {
+  private renderOverlayHtml(lv: CandyHogwartsLevel): string {
     if (!this.engine) return '';
-    if (this.activeBoosterTargetMode) {
-      const def = MATCH3_BOOSTERS.find((b) => b.id === this.activeBoosterTargetMode);
-      return `<span style="color:#fde047;font-weight:800;">🎯 <strong>${escapeHtml(def?.shortLabel ?? '')}</strong>: Chạm 1 ô</span>`;
-    }
-    if (this.selectedCell) {
-      const cell = this.engine.grid[this.selectedCell.r]?.[this.selectedCell.c];
-      if (cell?.piece?.kind === 'gem' && cell.piece.special !== 'none') {
-        return `<span style="color:#fde68a;font-weight:800;">🍬 Ghép cùng màu / Kẹo đặc biệt</span>`;
-      }
-    }
-    return `<span>💡 Ghép 3–5 ô</span>`;
-  }
-
-  public renderDOM(): void {
-    const box = this.root.querySelector('#match3DialogContent') as HTMLElement | null;
-    if (!box) return;
-
     const st = this.sim.state;
     const m3 = st.match3;
-    const lvDef = this.engine?.levelDef ?? getMatch3LevelDef(m3.currentLevel);
-    const m3Info = this.sim.getDisciplineStageInfo('match3');
     const m3Rank = this.sim.getPlayerMinigameRank('match3', 'valley');
-    const tierMeta = getMinigameDifficultyTier(lvDef.level);
-    const extraMovesCost = getExtraMovesGoldCost(lvDef.level);
-
-    const starMini = `<img src="/sprites/m3_icon_star.png" alt="" style="width:14px;height:14px;vertical-align:-2px;" /><span class="m3-sr-only">🌟</span>`;
-    const rewardPart = m3Info.isMaxed ? `👑` : `+${lvDef.starReward} ${starMini}`;
-    const diffBadge =
-      lvDef.difficulty === 'boss'
-        ? `<span class="m3-diff-pill boss">🎃 ${escapeHtml(tierMeta.label)} • ${rewardPart}</span>`
-        : lvDef.difficulty === 'hard'
-          ? `<span class="m3-diff-pill hard">🔥 ${escapeHtml(tierMeta.label)} • ${rewardPart}</span>`
-          : `<span class="m3-diff-pill normal">🌻 ${escapeHtml(tierMeta.label)} • ${rewardPart}</span>`;
-
-    const streakLabel =
-      m3.winStreak === 0 ? '' : `🔥 ×${m3.winStreak}`;
-
-    const topStripHtml = `
-      <div class="m3-top-strip ${lvDef.difficulty}">
-        <div class="m3-stage-heading">
-          <span class="m3-chapter-tag">Chương ${lvDef.chapterIndex + 1}/78</span>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <strong style="font-size:15.5px;color:#ffffff;text-shadow:0 2px 4px rgba(0,0,0,0.45);">${m3Info.isMaxed ? '👑 ' : ''}Màn ${lvDef.level}/${MAX_MINIGAME_STAGE}</strong>
-            ${diffBadge}
-            ${streakLabel ? `<span class="m3-streak-line" style="font-size:11.5px;color:#fef9c3;font-weight:700;">${streakLabel}</span>` : ''}
-          </div>
-        </div>
-
-        <div class="m3-resource-pills">
-          <span class="m3-res-chip" title="Sao Phép Thuật">
-            <img src="/sprites/m3_icon_star.png" alt="Sao" class="m3-res-icon" />
-            <strong id="m3ModalStarsText">${st.sandboxMode ? '∞' : m3.stars}</strong>
-          </span>
-          <span class="m3-res-chip" title="Tim giải đố">
-            <img src="/sprites/m3_icon_heart.png" alt="Tim" class="m3-res-icon" />
-            <strong id="m3ModalHeartsText">${this.formatHeartsLabel()}</strong>
-          </span>
-          <span class="m3-res-chip" title="Vàng Galleon">
-            <span class="g-coin" style="width:18px;height:18px;font-size:11px;">G</span>
-            <strong id="m3ModalGoldText">${st.sandboxMode ? '∞' : st.galleons.toLocaleString('vi-VN')}</strong>
-          </span>
-          <span class="m3-res-chip" title="Bùa Phượng Hoàng">
-            🔥 <strong id="m3ModalTalismanText">${st.sandboxMode ? '∞' : this.sim.getPhoenixTalismanCount()}</strong>
-          </span>
-          <button id="btnM3OpenLeaderboard" type="button" class="m3-res-chip minigame-lb-chip" title="Bảng Xếp Hạng (#${m3Rank})">
-            🏆 <strong id="m3ModalRankText">#${m3Rank}</strong>
-          </button>
-          <button id="btnM3SwitchPuzzleArcade" type="button" class="m3-res-chip" style="cursor:pointer;background:linear-gradient(180deg,#d97706,#92400e);color:#fffbeb;border-color:#fde68a;" title="Đổi sang Đại Sảnh Khảo Thí Hogwarts">
-            ♟️ <strong class="m3-switch-lbl-full">4 Môn</strong><strong class="m3-switch-lbl-compact">4 Môn</strong>
-          </button>
-          <form method="dialog" class="m3-inline-close-form">
-            <button type="submit" class="brass-btn m3-inline-close-btn" title="Đóng (Esc)" aria-label="Đóng">✕</button>
-          </form>
-        </div>
-      </div>
-      ${(() => {
-        const bossMeta = getMilestoneBossMeta(lvDef.level);
-        if (!bossMeta) return '';
-        return `<div class="pa-boss-strip">
-          <span class="pa-boss-crown">👑 TRÙM MỐC ${lvDef.level}</span>
-          <span class="pa-boss-text"><strong>${escapeHtml(bossMeta.bossGuardianVi)}</strong> • <em>${escapeHtml(bossMeta.mechanicTagVi)}</em></span>
-        </div>`;
-      })()}
-      ${(() => {
-        if (this.rescueContext) {
-          return `<div class="pa-trial-strip urgent">
-            <span>⚔️ <strong>CỨU MÀN ${this.rescueContext.stage}</strong> (${escapeHtml(this.rescueContext.neighborEmoji)} <strong>${escapeHtml(this.rescueContext.neighborName)}</strong>) • <strong>+3 🍀 + 95G</strong></span>
-          </div>`;
-        }
-        const social = this.sim.ensureNeighborSocial();
-        const mySos = social.playerMinigameSos;
-        let sosStrip = '';
-        if (mySos && !mySos.claimed && mySos.kind === 'match3' && mySos.stage === lvDef.level) {
-          if (mySos.rescuedAt) {
-            sosStrip = `<div class="pa-trial-strip done">
-              <span>🎉 <strong>${escapeHtml(mySos.rescuerEmoji ?? '🦉')} ${escapeHtml(mySos.rescuerName ?? 'Hàng xóm')}</strong> đã cứu Màn ${mySos.stage}!</span>
-              <button type="button" id="btnM3ClaimSosRescue" class="brass-btn gold-cta pa-trial-jump-btn">🎉 Qua Màn</button>
-            </div>`;
-          } else {
-            sosStrip = `<div class="pa-trial-strip">
-              <span>🦉 Đang gọi cứu viện <strong>Màn ${mySos.stage}</strong>...</span>
-            </div>`;
-          }
-        }
-        const req = this.sim.getRequiredLevelTrial();
-        const wp = this.sim.getWinsProgressForCurrentLevel();
-        if (!req || st.sandboxMode || this.sim.isHeadmasterPreview) return sosStrip;
-        const nextCap = Math.min(100, st.level + 1);
-        if (this.victorySummary) {
-          return `${sosStrip}<div class="pa-trial-strip done">
-            <span>🎉 <strong>Lv.${st.level} (${wp.current}/${wp.required})</strong> • Đề cử: <strong>${req.icon} ${req.shortVi}</strong></span>
-            ${
-              req.kind !== 'match3'
-                ? `<button type="button" class="brass-btn gold-cta pa-trial-jump-btn" data-m3-jump-arcade="${req.kind}">${req.icon} ${req.shortVi} →</button>`
-                : ''
-            }
-          </div>`;
-        }
-        if (m3Info.isMaxed) {
-          return `${sosStrip}<div class="pa-trial-strip done">
-            <span>👑 <strong>777/777</strong> • Đề cử: <strong>${req.icon} ${req.shortVi}</strong></span>
-            ${
-              req.kind !== 'match3'
-                ? `<button type="button" class="brass-btn gold-cta pa-trial-jump-btn" data-m3-jump-arcade="${req.kind}">${req.icon} ${req.shortVi} →</button>`
-                : ''
-            }
-          </div>`;
-        }
-        if (req.kind === 'match3') {
-          return `${sosStrip}<div class="pa-trial-strip urgent">
-            <span>🔥 <strong>ĐỀ CỬ:</strong> +${lvDef.starReward} 🌟 + ⏳ Cát • Lv.${st.level}→${nextCap} (${wp.current}/${wp.required})</span>
-          </div>`;
-        }
-        return `${sosStrip}<div class="pa-trial-strip">
-          <span>🎯 +${lvDef.starReward} 🌟 (${wp.current}/${wp.required}) • Đề cử: <strong>${req.icon} ${req.shortVi}</strong></span>
-          <button type="button" class="brass-btn gold-cta pa-trial-jump-btn" data-m3-jump-arcade="${req.kind}">
-            ${req.icon} ${req.shortVi} →
-          </button>
-        </div>`;
-      })()}
-    `;
-
-    // Case 1: Out of Hearts (cannot start level yet)
-    if (!this.engine) {
-      const leftSec = Math.max(0, Math.ceil((m3.nextHeartAt - Date.now()) / 1000));
-      const mm = Math.floor(leftSec / 60);
-      const ss = String(leftSec % 60).padStart(2, '0');
-      const butterbeerQty = st.supply.goods.aged_butterbeer ?? 0;
-
-      box.innerHTML = `
-        ${topStripHtml}
-        <div class="m3-empty-hearts-card">
-          <img src="/sprites/m3_icon_heart.png" alt="Tim" style="width:64px;height:64px;object-fit:contain;filter:grayscale(0.25) drop-shadow(0 6px 10px rgba(0,0,0,0.3));" />
-          <h3 style="font-size:19px;font-weight:900;color:#451a03;">Hết Tim!</h3>
-          <p style="font-size:13px;max-width:460px;line-height:1.5;color:#78350f;">
-            <strong>+1 ❤️</strong> sau <strong id="m3NoHeartsCountdown" style="color:#b45309;">${mm}:${ss}</strong>
-          </p>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:6px;">
-            <button id="btnM3RefillHeartsNow" type="button" class="brass-btn gold-cta" style="padding:9px 18px;font-size:13.5px;">
-              ${
-                butterbeerQty > 0
-                  ? `🍻 Hồi 5 ❤️ (×${butterbeerQty})`
-                  : `❤️ Hồi 5/5 (🪙 ${REFILL_HEARTS_GOLD_COST}G)`
-              }
-            </button>
-            <button id="btnM3EmptyGoArcade" type="button" class="brass-btn pa-hud-cta" style="padding:9px 15px;font-size:13px;">
-              ♟️ 4 Môn Khảo Thí
-            </button>
-            <button id="btnM3BackToPark" type="button" class="brass-btn" style="padding:9px 15px;font-size:13px;">
-              🏡 Về Vườn
-            </button>
-          </div>
-        </div>
-      `;
-
-      box.querySelector('#btnM3SwitchPuzzleArcade')?.addEventListener('click', () => {
-        this.getDialog()?.close();
-        this.onSwitchToPuzzleArcade?.();
-      });
-      box.querySelector('#btnM3OpenLeaderboard')?.addEventListener('click', () => {
-        this.sim.audio.playClick();
-        this.onOpenLeaderboard?.();
-      });
-      box.querySelector('#btnM3EmptyGoArcade')?.addEventListener('click', () => {
-        this.getDialog()?.close();
-        this.onSwitchToPuzzleArcade?.();
-      });
-      box.querySelectorAll('[data-m3-jump-arcade]').forEach((el) => {
-        el.addEventListener('click', () => {
-          const target = (el as HTMLElement).dataset.m3JumpArcade as PuzzleArcadeMode | undefined;
-          this.getDialog()?.close();
-          this.onSwitchToPuzzleArcade?.(target);
-        });
-      });
-
-      box.querySelector('#btnM3RefillHeartsNow')?.addEventListener('click', () => {
-        const res = this.sim.refillMatch3Hearts();
-        this.showToast(res.msg, res.ok ? '❤️' : '🪙');
-        if (res.ok) {
-          this.startFreshStage(this.sim.state.match3.currentLevel);
-          this.renderDOM();
-        }
-      });
-      box.querySelector('#btnM3BackToPark')?.addEventListener('click', () => {
-        this.getDialog()?.close();
-      });
-      return;
-    }
-
-    // Case 2: Active Board (Playing, Out-of-Moves Rescue, or Victory Overlay)
     const talismanQty = this.sim.getPhoenixTalismanCount();
-    const talismanUsed = this.engine.talismanUsed;
-    const goalsHtml = this.engine.goals
-      .map((g, idx) => {
-        const meta = describeGoal(g);
-        const done = g.current >= g.target;
-        const iconVisual = meta.spriteKey
-          ? `<img src="/sprites/${meta.spriteKey}.png" alt="${meta.emoji}" class="m3-goal-sprite" /><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);">${meta.emoji}</span>`
-          : g.kind === 'honey'
-            ? `${HONEYCOMB_GOAL_SVG}<span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);">${meta.emoji}</span>`
-            : `${COBWEB_GOAL_SVG}<span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);">${meta.emoji}</span>`;
-        return `
-          <div class="m3-goal-pill ${done ? 'done' : ''}" data-m3-goal-idx="${idx}" style="border-left: 5px solid ${meta.accent};" title="${escapeHtml(meta.label)}">
-            <div class="m3-goal-icon-well" style="position:relative;">${iconVisual}</div>
-            <div class="m3-goal-meta">
-              <div class="m3-goal-name">${escapeHtml(meta.label)}</div>
-              <div class="m3-goal-count">${done ? '✓' : `${g.current}/${g.target}`}</div>
-            </div>
-          </div>
-        `;
-      })
-      .join('');
-
-    const boostersHtml = MATCH3_BOOSTERS.map((bDef) => {
-      const qty = m3.boosters[bDef.id] ?? 0;
-      const armed = this.activeBoosterTargetMode === bDef.id;
-      const spriteKey = BOOSTER_SPRITE_KEYS[bDef.id];
-      const isBuy = !st.sandboxMode && qty <= 0;
-      return `
-        <button
-          type="button"
-          class="brass-btn m3-booster-btn"
-          data-m3-booster="${bDef.id}"
-          data-active="${armed}"
-          aria-pressed="${armed}"
-          title="${escapeHtml(bDef.description)}"
-        >
-          <img src="/sprites/${spriteKey}.png" alt="${escapeHtml(bDef.shortLabel)}" class="m3-booster-sprite" />
-          <span class="m3-booster-lbl">${escapeHtml(bDef.shortLabel)}</span>
-          <span class="m3-booster-qty ${isBuy ? 'buy' : ''}">${st.sandboxMode ? '∞' : qty > 0 ? `×${qty}` : `🪙${bDef.goldCost}`}</span>
-        </button>
-      `;
-    }).join('');
+    const talismanUsed = this.engine.talismanUsed || this.sim.isPhoenixTalismanUsedToday('match3');
+    const extraMovesCost = getExtraMovesGoldCost(lv.id);
 
     const socialState = this.sim.ensureNeighborSocial();
     const mySosMatch3 =
@@ -1051,7 +988,7 @@ export class Match3ModalController {
       socialState.playerMinigameSos &&
       !socialState.playerMinigameSos.claimed &&
       socialState.playerMinigameSos.kind === 'match3' &&
-      socialState.playerMinigameSos.stage === lvDef.level
+      socialState.playerMinigameSos.stage === lv.id
         ? socialState.playerMinigameSos
         : null;
     const rescuesReceivedLeft = Math.max(
@@ -1059,10 +996,9 @@ export class Match3ModalController {
       MAX_DAILY_MINIGAME_RESCUES - socialState.dailyRescuesReceivedCount
     );
 
-    let overlayHtml = '';
     if (this.engine.status === 'won' && this.rescueContext && this.rescueVictoryOutcome) {
       const rv = this.rescueVictoryOutcome;
-      overlayHtml = `
+      return `
         <div class="m3-board-overlay" role="region" aria-label="Giải cứu thành công">
           <div class="m3-overlay-card victory">
             <div style="font-size:38px;line-height:1;">🏆🍀</div>
@@ -1087,66 +1023,40 @@ export class Match3ModalController {
           </div>
         </div>
       `;
-    } else if (this.engine.status === 'won' && this.victorySummary) {
+    }
+
+    if (this.engine.status === 'won' && this.victorySummary) {
       const vs = this.victorySummary;
-      const bonusBoosterDef = vs.boosterReward
-        ? MATCH3_BOOSTERS.find((b) => b.id === vs.boosterReward)
-        : undefined;
-      const starDisplayCount = Math.max(1, Math.min(6, vs.starsEarned || 1));
-      const starIconsHtml = Array.from({ length: starDisplayCount }, (_, idx) => {
-        const isCenter = starDisplayCount === 3 && idx === 1;
-        return `<img src="/sprites/m3_icon_star.png" alt="Sao" class="m3-victory-star-img ${isCenter ? 'center' : ''}" />`;
+      const boardStars = Math.max(1, Math.min(3, this.lastGameEndPayload?.stars ?? 3));
+      const starIconsHtml = Array.from({ length: boardStars }, (_, idx) => {
+        const isCenter = boardStars === 3 && idx === 1;
+        return `<img src="/sprites/m3_icon_star.png" alt="" class="m3-victory-star-img ${isCenter ? 'center' : ''}" />`;
       }).join('');
 
-      overlayHtml = `
+      return `
         <div class="m3-board-overlay" role="region" aria-label="Chiến thắng màn giải đố">
           <div class="m3-overlay-card victory">
             <div class="m3-victory-stars-row">${starIconsHtml}</div>
             <h3 style="font-size:20px;font-weight:900;color:#451a03;">${
               vs.isMasterReplay
-                ? `👑 777/777!`
-                : lvDef.level >= MAX_MINIGAME_STAGE
-                  ? `👑 ĐỈNH 777/777!`
-                  : `🎉 Thắng Màn ${lvDef.level}/${MAX_MINIGAME_STAGE}!`
+                ? `👑 777/777 — ${escapeHtml(lv.title)}!`
+                : lv.id >= MAX_MINIGAME_STAGE
+                  ? `👑 ĐẠI THẮNG VOLDEMORT 777/777!`
+                  : `🎉 Thắng Màn ${lv.id}/${MAX_MINIGAME_STAGE}!`
             }</h3>
             <div class="m3-reward-badges">
               ${
                 vs.starsEarned > 0
                   ? `<span class="m3-reward-chip star">
                       <img src="/sprites/m3_icon_star.png" alt="" class="m3-inline-icon" />
-                      +${vs.starsEarned} 🌟${vs.featuredBonusApplied ? ' 🔥' : ''}
+                      +${vs.starsEarned} 🌟
                     </span>`
-                  : `<span class="m3-reward-chip">👑 777/777</span>`
-              }
-              <span class="m3-reward-chip">+${vs.goldEarned} 🪙</span>
-              <span class="m3-reward-chip">+${vs.xpEarned} ⭐ XP</span>
-              ${vs.sandEarned > 0 ? `<span class="m3-reward-chip">+${vs.sandEarned} ⏳</span>` : ''}
-              ${
-                vs.buildReduction && vs.buildReduction.reducedSec > 0
-                  ? `<span class="m3-reward-chip">🔨 -${formatDurationCompactVi(vs.buildReduction.reducedSec)}</span>`
-                  : ''
-              }
-              ${
-                bonusBoosterDef
-                  ? `<span class="m3-reward-chip"><img src="/sprites/${BOOSTER_SPRITE_KEYS[bonusBoosterDef.id]}.png" alt="" class="m3-inline-icon" /> +1 ${escapeHtml(bonusBoosterDef.shortLabel)}</span>`
-                  : ''
-              }
-              ${
-                vs.leaderboardRankUp
-                  ? vs.leaderboardRankUp.rankUpBy > 0
-                    ? `<span class="lb-rankup-badge">🏆 #${vs.leaderboardRankUp.newRank} (🔼+${vs.leaderboardRankUp.rankUpBy})</span>`
-                    : `<span class="m3-reward-chip">🏆 #${vs.leaderboardRankUp.newRank}</span>`
-                  : ''
-              }
-              ${
-                vs.leaderboardRankUp?.housePointsAwarded && vs.leaderboardRankUp.playerHouse
-                  ? `<span class="m3-reward-chip">⏳ +${vs.leaderboardRankUp.housePointsAwarded}đ ${escapeHtml(vs.leaderboardRankUp.playerHouse)}</span>`
-                  : ''
+                  : `<span class="m3-reward-chip star">👑 777/777</span>`
               }
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:100%;margin-top:6px;">
               <button id="btnM3NextLevel" type="button" class="brass-btn gold-cta" style="flex:1;min-width:140px;padding:9px 14px;font-size:13.5px;">
-                ${vs.isMasterReplay || lvDef.level >= MAX_MINIGAME_STAGE ? `👑 Chơi Lại` : `▶️ Màn ${vs.nextLevel}`}
+                ${vs.isMasterReplay || lv.id >= MAX_MINIGAME_STAGE ? `👑 Chơi Lại` : `▶️ Màn ${vs.nextLevel}`}
               </button>
               <button id="btnM3VictoryLeaderboard" type="button" class="brass-btn" style="flex:0.85;min-width:110px;padding:9px 12px;font-size:13px;">
                 🏆 #${m3Rank}
@@ -1158,18 +1068,32 @@ export class Match3ModalController {
           </div>
         </div>
       `;
-    } else if (this.engine.status === 'out_of_moves') {
+    }
+
+    if (this.engine.status === 'out_of_moves') {
       const canRescueTalisman = !talismanUsed && (st.sandboxMode || talismanQty > 0);
-      overlayHtml = `
-        <div class="m3-board-overlay" role="region" aria-label="Hết lượt đi">
+      const isBombFail = this.engine.failReason === 'bomb';
+      return `
+        <div class="m3-board-overlay" role="region" aria-label="${isBombFail ? 'Bom Hắc Ám phát nổ' : 'Hết lượt đi'}">
           <div class="m3-overlay-card rescue">
-            <img src="/sprites/m3_farm_pinwheel.png" alt="" style="width:58px;height:58px;object-fit:contain;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.35));" />
-            <h3 style="font-size:19px;font-weight:900;color:#451a03;">Hết Lượt!</h3>
+            <div class="m3-rescue-hero-icon">
+              ${pictureSpriteHtml(`/paintings/candy-hogwarts/booster-extramoves.webp?v=${CANDY_ASSET_REV}`, `/paintings/candy-hogwarts/booster-extramoves.png?v=${CANDY_ASSET_REV}`, 'm3-rescue-booster-img')}
+            </div>
+            <h3 style="font-size:19px;font-weight:900;color:#451a03;">
+              ${isBombFail ? '💣 Bom Hắc Ám Phát Nổ!' : 'Hết Lượt Phép Thuật!'}
+            </h3>
+            <p style="font-size:12.4px;color:#78350f;max-width:360px;line-height:1.42;margin:0;">
+              ${
+                isBombFail
+                  ? 'Ngòi nổ chạm 0! Tiếp sức ngay sẽ tự động lùi thêm nhịp đếm Bom trên bàn cờ.'
+                  : 'Chỉ còn vài bước nữa là phá giải màn kẹo phép — tiếp sức ngay để giữ chuỗi thắng!'
+              }
+            </p>
             <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:100%;margin-top:6px;">
               ${
                 canRescueTalisman
                   ? `<button id="btnM3RescuePhoenixTalisman" type="button" class="brass-btn pa-tool-btn talisman" style="flex:1.4;min-width:170px;padding:9px 14px;">
-                      🔥 Bùa (+5 Lượt • ${st.sandboxMode ? '∞' : `×${talismanQty}`})
+                      🔥 Bùa (+5 Lượt &amp; Gỡ Bom • ${st.sandboxMode ? '∞' : `×${talismanQty}`})
                     </button>`
                   : ''
               }
@@ -1196,226 +1120,458 @@ export class Match3ModalController {
       `;
     }
 
+    return '';
+  }
+
+  private mountOverlayOnly(): void {
+    const box = this.root.querySelector('#match3DialogContent') as HTMLElement | null;
+    const mount = box?.querySelector('#m3OverlayMount') as HTMLElement | null;
+    const lv = this.engine?.level;
+    if (!box || !mount || !lv) {
+      this.renderDOM();
+      return;
+    }
+    mount.innerHTML = this.renderOverlayHtml(lv);
+    this.bindOverlayEvents(box);
+  }
+
+  public renderDOM(): void {
+    const box = this.root.querySelector('#match3DialogContent') as HTMLElement | null;
+    if (!box) return;
+
+    const st = this.sim.state;
+    const m3 = st.match3;
+    const lv = this.engine?.level ?? getCandyLevelById(m3.currentLevel);
+    const season = getCandySeasonByLevel(lv.id);
+    const chapter = getCandyChapterForLevel(lv.id);
+    const m3Info = this.sim.getDisciplineStageInfo('match3');
+    const m3Rank = this.sim.getPlayerMinigameRank('match3', 'valley');
+    const diffMeta = formatDifficultyMeta(lv);
+
+    const bossState = this.engine?.buildBossRuntimeState() ?? null;
+    const milestoneMeta = getMilestoneBossMeta(lv.id);
+    const reqTrial = this.sim.getRequiredLevelTrial();
+
+    const trialBadgeFor = (kind: PuzzleArcadeMode | 'match3'): string => {
+      if (!reqTrial || st.sandboxMode || this.sim.isHeadmasterPreview) return '';
+      if (reqTrial.kind !== kind) return '';
+      return `<span class="pa-tab-trial" title="Môn Đề Cử">🔥</span>`;
+    };
+
+    const fmtTabLv = (kind: PuzzleArcadeMode | 'match3'): string => {
+      const inf = this.sim.getDisciplineStageInfo(kind);
+      return inf.isMaxed ? `👑777` : `${inf.currentStage}/777`;
+    };
+
+    const stageHeadline = `${m3Info.isMaxed ? '👑 ' : ''}Màn ${lv.id}/${MAX_MINIGAME_STAGE} • ${diffMeta.icon} ${escapeHtml(lv.title)}`;
+    const stageSubtitle =
+      milestoneMeta && !bossState
+        ? `👑 ${escapeHtml(milestoneMeta.bossGuardianVi)} • ${escapeHtml(milestoneMeta.mechanicTagVi)}`
+        : `${escapeHtml(season.signatureIcon)} ${escapeHtml(season.yearLabel)} • Chương ${chapter.globalChapterId}/${CANDY_HOGWARTS_TOTAL_CHAPTERS}`;
+
+    const topStripHtml = `
+      <div class="pa-top-bar">
+        <div class="pa-dock-head-row">
+          <div class="pa-currencies">
+            <span class="m3-res-chip" title="Sao Phép Thuật">
+              <img src="/sprites/m3_icon_star.png" alt="Sao" class="m3-res-icon" />
+              <strong id="m3ModalStarsText">${st.sandboxMode ? '∞' : m3.stars}</strong>
+            </span>
+            <span class="m3-res-chip" title="Tim giải đố">
+              <img src="/sprites/m3_icon_heart.png" alt="Tim" class="m3-res-icon" />
+              <strong id="m3ModalHeartsText">${this.formatHeartsLabel()}</strong>
+            </span>
+            <span class="m3-res-chip" title="Vàng Galleon">
+              <span class="g-coin" style="width:17px;height:17px;font-size:10.5px;">G</span>
+              <strong id="m3ModalGoldText">${st.sandboxMode ? '∞' : st.galleons.toLocaleString('vi-VN')}</strong>
+            </span>
+            <span class="m3-res-chip" title="Bùa Phượng Hoàng">
+              <span>🔥</span>
+              <strong id="m3ModalTalismanText">${st.sandboxMode ? '∞' : this.sim.getPhoenixTalismanCount()}</strong>
+            </span>
+            <button id="btnM3OpenLeaderboard" type="button" class="m3-res-chip minigame-lb-chip" title="Bảng Xếp Hạng (#${m3Rank})">
+              <span>🏆</span>
+              <strong id="m3ModalRankText">#${m3Rank}</strong>
+            </button>
+          </div>
+          <form method="dialog" class="pa-inline-close-form">
+            <button type="submit" value="close" class="brass-btn pa-inline-close-btn" title="Đóng (Esc)" aria-label="Đóng">✕</button>
+          </form>
+        </div>
+
+        <div class="pa-mode-tabs" role="tablist" aria-label="Chọn môn khảo thí phép thuật Hogwarts" ${this.rescueContext ? 'style="opacity:0.65;pointer-events:none;"' : ''}>
+          <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="caro" class="pa-mode-tab" title="Ngũ Ấn Đạo Tặc">
+            <span class="pa-tab-name"><span class="pa-tab-name-full">🗺️ Ngũ Ấn Đạo Tặc</span><span class="pa-tab-name-short">🗺️ Ngũ Ấn</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('caro')}</span>${trialBadgeFor('caro')}</span>
+          </button>
+          <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="sudoku" class="pa-mode-tab" title="Số Học Huyền Bí">
+            <span class="pa-tab-name"><span class="pa-tab-name-full">🔢 Số Học Huyền Bí</span><span class="pa-tab-name-short">🔢 Số Học</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('sudoku')}</span>${trialBadgeFor('sudoku')}</span>
+          </button>
+          <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="chess" class="pa-mode-tab" title="Cờ Phù Thủy">
+            <span class="pa-tab-name"><span class="pa-tab-name-full">🏰 Cờ Phù Thủy</span><span class="pa-tab-name-short">🏰 Cờ Phù Thủy</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('chess')}</span>${trialBadgeFor('chess')}</span>
+          </button>
+          <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="blocks" class="pa-mode-tab" title="Sinh Vật Huyền Bí">
+            <span class="pa-tab-name"><span class="pa-tab-name-full">🦄 Sinh Vật Huyền Bí</span><span class="pa-tab-name-short">🦄 Sinh Vật</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('blocks')}</span>${trialBadgeFor('blocks')}</span>
+          </button>
+          <button type="button" role="tab" aria-selected="true" class="pa-mode-tab active" title="Bùa Gặt Honeydukes">
+            <span class="pa-tab-name"><span class="pa-tab-name-full">🍬 Bùa Gặt Honeydukes</span><span class="pa-tab-name-short">🍬 Bùa Gặt</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('match3')}</span>${trialBadgeFor('match3')}</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="pa-stage-banner">
+        <div class="pa-stage-meta">
+          <div class="pa-stage-title">${stageHeadline}</div>
+          <div class="pa-stage-sub">${stageSubtitle}</div>
+        </div>
+      </div>
+      ${(() => {
+        if (bossState) {
+          const hpPct =
+            bossState.maxHp > 0
+              ? Math.max(0, Math.min(100, Math.round((bossState.hp / bossState.maxHp) * 100)))
+              : 0;
+          return `<div id="m3BossLiveStrip" class="pa-boss-strip m3-boss-live-strip" data-enraged="${bossState.enraged && !bossState.defeated}" data-defeated="${bossState.defeated}">
+            <div class="m3-boss-head-row">
+              <span id="m3BossPhaseBadge" class="m3-boss-phase-pill">${
+                bossState.defeated
+                  ? '✓ Toàn Thắng'
+                  : bossState.enraged
+                    ? '🔥 CUỒNG NỘ PHA 2'
+                    : 'Pha 1'
+              }</span>
+              <div class="m3-boss-hp-track" role="progressbar" aria-valuemin="0" aria-valuemax="${bossState.maxHp}" aria-valuenow="${bossState.hp}" aria-label="Máu Đại Trùm">
+                <div id="m3BossHpFill" class="m3-boss-hp-fill" style="width:${hpPct}%"></div>
+                <span id="m3BossHpText" class="m3-boss-hp-label">${
+                  bossState.defeated
+                    ? '✓ ĐÃ HẠ GỤC'
+                    : `${bossState.hp.toLocaleString('vi-VN')} / ${bossState.maxHp.toLocaleString('vi-VN')} HP`
+                }</span>
+              </div>
+              <span id="m3BossHexText" class="m3-boss-hex-tag">${
+                bossState.defeated
+                  ? '✓ Bùa tan biến'
+                  : `⚡ ${escapeHtml(bossState.hexName)} (${bossState.turnsUntilHex} lượt)`
+              }</span>
+            </div>
+          </div>`;
+        }
+        return '';
+      })()}
+      ${(() => {
+        if (this.rescueContext) {
+          return `<div class="pa-trial-strip urgent">
+            <span>⚔️ <strong>CỨU MÀN ${this.rescueContext.stage}</strong> (${escapeHtml(this.rescueContext.neighborEmoji)} <strong>${escapeHtml(this.rescueContext.neighborName)}</strong>) • <strong>+3 🍀 + 95G</strong></span>
+          </div>`;
+        }
+        const social = this.sim.ensureNeighborSocial();
+        const mySos = social.playerMinigameSos;
+        let sosStrip = '';
+        if (mySos && !mySos.claimed && mySos.kind === 'match3' && mySos.stage === lv.id) {
+          if (mySos.rescuedAt) {
+            sosStrip = `<div class="pa-trial-strip done">
+              <span>🎉 <strong>${escapeHtml(mySos.rescuerEmoji ?? '🦉')} ${escapeHtml(mySos.rescuerName ?? 'Hàng xóm')}</strong> đã cứu Màn ${mySos.stage}!</span>
+              <button type="button" id="btnM3ClaimSosRescue" class="brass-btn gold-cta pa-trial-jump-btn">🎉 Qua Màn</button>
+            </div>`;
+          } else {
+            sosStrip = `<div class="pa-trial-strip">
+              <span>🦉 Đang gọi cứu viện <strong>Màn ${mySos.stage}</strong>...</span>
+            </div>`;
+          }
+        }
+        return sosStrip;
+      })()}
+    `;
+
+    // Case 1: Out of Hearts
+    if (!this.engine) {
+      const leftSec = Math.max(0, Math.ceil((m3.nextHeartAt - Date.now()) / 1000));
+      const mm = Math.floor(leftSec / 60);
+      const ss = String(leftSec % 60).padStart(2, '0');
+      const butterbeerQty = st.supply.goods.aged_butterbeer ?? 0;
+
+      box.innerHTML = `
+        <div id="m3LiveAnnouncer" class="m3-sr-only" aria-live="polite" aria-atomic="true"></div>
+        <div class="pa-layout-shell m3-empty-shell">
+          <aside class="pa-side-dock" aria-label="Bảng chọn trò chơi">
+            ${topStripHtml}
+          </aside>
+          <div class="pa-stage-viewport">
+            <div class="m3-empty-hearts-card">
+              <img src="/sprites/m3_icon_heart.png" alt="Tim" style="width:52px;height:52px;object-fit:contain;filter:grayscale(0.25) drop-shadow(0 6px 10px rgba(0,0,0,0.3));" />
+              <h3 style="font-size:18px;font-weight:900;color:#451a03;">Hết Tim Giải Đố!</h3>
+              <p style="font-size:12.5px;max-width:440px;line-height:1.45;color:#78350f;margin:0;">
+                <strong>+1 ❤️</strong> sau <strong id="m3NoHeartsCountdown" style="color:#b45309;">${mm}:${ss}</strong>
+              </p>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:4px;">
+                <button id="btnM3RefillHeartsNow" type="button" class="brass-btn gold-cta" style="padding:8px 16px;font-size:13px;">
+                  ${
+                    butterbeerQty > 0
+                      ? `🍻 Hồi 5 ❤️ (×${butterbeerQty})`
+                      : `❤️ Hồi 5/5 (🪙 ${REFILL_HEARTS_GOLD_COST}G)`
+                  }
+                </button>
+                <button id="btnM3EmptyGoArcade" type="button" class="brass-btn pa-hud-cta" style="padding:8px 14px;font-size:12.5px;">
+                  ♟️ 4 Môn Khảo Thí
+                </button>
+                <button id="btnM3BackToPark" type="button" class="brass-btn" style="padding:8px 14px;font-size:12.5px;">
+                  🏡 Về Vườn
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      box.querySelector('#btnM3SwitchPuzzleArcade')?.addEventListener('click', () => {
+        this.getDialog()?.close();
+        this.onSwitchToPuzzleArcade?.();
+      });
+      box.querySelector('#btnM3OpenLeaderboard')?.addEventListener('click', () => {
+        this.sim.audio.playClick();
+        this.onOpenLeaderboard?.();
+      });
+      box.querySelector('#btnM3EmptyGoArcade')?.addEventListener('click', () => {
+        this.getDialog()?.close();
+        this.onSwitchToPuzzleArcade?.();
+      });
+      box.querySelectorAll('[data-m3-jump-arcade]').forEach((el) => {
+        el.addEventListener('click', () => {
+          const target = (el as HTMLElement).dataset.m3JumpArcade as PuzzleArcadeMode | undefined;
+          this.getDialog()?.close();
+          this.onSwitchToPuzzleArcade?.(target);
+        });
+      });
+      box.querySelector('#btnM3RefillHeartsNow')?.addEventListener('click', () => {
+        const res = this.sim.refillMatch3Hearts();
+        this.showToast(res.msg, res.ok ? '❤️' : '🪙');
+        if (res.ok) {
+          this.startFreshStage(this.sim.state.match3.currentLevel);
+          this.renderDOM();
+        }
+      });
+      box.querySelector('#btnM3BackToPark')?.addEventListener('click', () => {
+        this.getDialog()?.close();
+      });
+      return;
+    }
+
+    // Case 2: Active Board
+    const snap = this.engine.getHudSnapshot()!;
+    const talismanQty = this.sim.getPhoenixTalismanCount();
+    const talismanDaily = this.sim.getPhoenixTalismanDailyStatus();
+    const talismanUsed = snap.talismanUsed || talismanDaily.usedByGame.match3 === true;
+    const talismanTooltip = talismanUsed
+      ? `Bùa Phượng Hoàng — Đã dùng 1/1 lượt hôm nay ở môn này (${talismanDaily.usedCount}/${talismanDaily.maxDaily} môn hôm nay, mở lại sau 00:00)`
+      : `Bùa Phượng Hoàng — Tối đa 1 lần/môn/ngày (Đã dùng ${talismanDaily.usedCount}/${talismanDaily.maxDaily} môn hôm nay)`;
+
+    const goalsHtml = snap.objectives
+      .map((g, idx) => {
+        const meta = describeCandyObjective(g);
+        return `
+          <div class="m3-goal-pill ${g.completed ? 'done' : ''}" data-m3-goal-idx="${idx}" style="border-left: 5px solid ${meta.accent};" title="${escapeHtml(meta.label)}">
+            <div class="m3-goal-icon-well" style="position:relative;">${meta.visualHtml}</div>
+            <div class="m3-goal-meta">
+              <div class="m3-goal-name">${escapeHtml(meta.label)}</div>
+              <div class="m3-goal-count">${escapeHtml(meta.countText)}</div>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+
+    const boostersHtml = MATCH3_BOOSTERS.map((bDef) => {
+      const qty = m3.boosters[bDef.id] ?? 0;
+      const media = BOOSTER_MEDIA[bDef.id];
+      const armed = snap.activeBooster === media.engineKind;
+      const isBuy = !st.sandboxMode && qty <= 0;
+      return `
+        <button
+          type="button"
+          class="brass-btn m3-booster-btn"
+          data-m3-booster="${bDef.id}"
+          data-active="${armed}"
+          aria-pressed="${armed}"
+          title="${escapeHtml(bDef.description)}"
+        >
+          ${pictureSpriteHtml(media.webp, media.png, 'm3-booster-sprite')}
+          <span class="m3-booster-lbl">${escapeHtml(bDef.shortLabel)}</span>
+          <span class="m3-booster-qty ${isBuy ? 'buy' : ''}">${st.sandboxMode ? '∞' : qty > 0 ? `×${qty}` : `🪙${bDef.goldCost}`}</span>
+        </button>
+      `;
+    }).join('');
+
+    const socialState = this.sim.ensureNeighborSocial();
+    const mySosMatch3 =
+      !this.rescueContext &&
+      socialState.playerMinigameSos &&
+      !socialState.playerMinigameSos.claimed &&
+      socialState.playerMinigameSos.kind === 'match3' &&
+      socialState.playerMinigameSos.stage === lv.id
+        ? socialState.playerMinigameSos
+        : null;
+    const rescuesReceivedLeft = Math.max(
+      0,
+      MAX_DAILY_MINIGAME_RESCUES - socialState.dailyRescuesReceivedCount
+    );
+
     const restartLabel = this.rescueContext
       ? '🔄 Ván Mới'
       : this.movesMadeThisAttempt === 0
         ? '🔄 Ván Mới'
-        : '🔄 Lại (-1 ❤️)';
+        : '🔄 Lại (-1❤️)';
+
+    const comp = this.sim.getActiveMinigameCompanion();
+    const compReady = this.companionCharge >= comp.chargeEveryMoves;
+    const compPct = Math.min(
+      100,
+      Math.round((this.companionCharge / Math.max(1, comp.chargeEveryMoves)) * 100)
+    );
+    const compSpriteMap: Record<string, string> = {
+      niffler_den: 'beast_niffler_play',
+      hippogriff_glade: 'beast_hippogriff_bow',
+      phoenix_perch: 'beast_phoenix_soar',
+      dragon_lair: 'beast_dragon_roar',
+      unicorn_glade: 'beast_unicorn_prance',
+      thestral_grove: 'beast_thestral_wings',
+      hagrid_bowtruckle: 'hagrid_bowtruckle',
+    };
+    const compShortMap: Record<string, string> = {
+      niffler_den: 'Niffler',
+      hippogriff_glade: 'Bằng Mã',
+      phoenix_perch: 'Phượng',
+      dragon_lair: 'Rồng Nhỏ',
+      unicorn_glade: 'Kỳ Lân',
+      thestral_grove: 'Vong Mã',
+      hagrid_bowtruckle: 'Bowtruckle',
+    };
+    const compSpriteKey = compSpriteMap[comp.speciesId] ?? 'beast_niffler_play';
+    const compShortName = compShortMap[comp.speciesId] ?? 'Niffler';
+    const pieQty = this.sim.getFarmItemCount('cinnamon_apple_pie');
+
+    const synergyDockHtml = `
+      <div class="aaa-synergy-dock" role="region" aria-label="Bánh Táo và Đồng hành Niffler">
+        <button
+          id="btnM3SnackApplePie"
+          type="button"
+          class="aaa-snack-btn"
+          ${this.snackPieUsedThisAttempt || snap.status === 'won' || (!st.sandboxMode && pieQty <= 0) ? 'disabled' : ''}
+          title="Dùng 1 Bánh Táo Quế từ Kho Đỏ (+3 Lượt đi & lùi +3 nhịp Bom)"
+        >
+          <img src="/sprites/ui_icon_pie_ready.png" alt="" width="20" height="20" class="aaa-synergy-sprite" />
+          <span><span class="aaa-lbl-full">Bánh Táo </span><strong data-m3-pie-qty="1">${this.snackPieUsedThisAttempt ? '✓' : st.sandboxMode ? '∞' : `×${pieQty}`}</strong></span>
+        </button>
+        <button
+          id="btnM3TriggerCompanion"
+          type="button"
+          class="aaa-companion-pill"
+          data-ready="${compReady}"
+          ${!compReady || snap.status === 'won' ? 'disabled' : ''}
+          title="${escapeHtml(comp.nameVi)} (Cấp ${comp.bondLevel}) — Đầy năng lượng nhận +2 Lượt, Cánh Vàng Snitch & +15G!"
+        >
+          <img src="/sprites/${compSpriteKey}.png" alt="" width="22" height="22" class="aaa-synergy-sprite" />
+          <span class="aaa-comp-name">${escapeHtml(compShortName)}</span>
+          <span class="aaa-comp-meter" aria-hidden="true"><span class="aaa-comp-meter-fill" data-m3-comp-meter="1" style="width:${compPct}%"></span></span>
+          <span data-m3-comp-charge="1">${compReady ? '⚡' : `${this.companionCharge}/${comp.chargeEveryMoves}`}</span>
+        </button>
+      </div>
+    `;
 
     box.innerHTML = `
-      ${topStripHtml}
+      <div id="m3LiveAnnouncer" class="m3-sr-only" aria-live="polite" aria-atomic="true"></div>
+      <div class="pa-layout-shell m3-unified-shell">
+        <aside class="pa-side-dock" aria-label="Bảng chọn trò chơi và mục tiêu">
+          ${topStripHtml}
 
-      <div class="m3-main-grid">
-        <!-- MOVES MEDALLION + HARVEST GOAL TRAY -->
-        <div class="m3-hud-panel">
-          <div class="m3-moves-crest">
-            <div class="m3-moves-lbl">LƯỢT</div>
-            <div id="m3MovesLeftVal" class="m3-moves-num ${this.engine.movesLeft <= 5 ? 'low-moves' : ''}">${this.engine.movesLeft}</div>
-            <div class="m3-score-sub"><strong id="m3ScoreVal">${this.engine.score.toLocaleString('vi-VN')}</strong> đ</div>
-          </div>
-
-          <div class="m3-goals-box">
-            <div class="m3-box-title">🧺 Mục Tiêu</div>
+          <div class="m3-dock-hud" title="Mốc 1★: ${lv.stars[0].toLocaleString('vi-VN')} • 2★: ${lv.stars[1].toLocaleString('vi-VN')} • 3★: ${lv.stars[2].toLocaleString('vi-VN')}">
+            <div class="m3-moves-crest">
+              <span class="m3-moves-lbl">LƯỢT</span>
+              <strong id="m3MovesLeftVal" class="m3-moves-num ${snap.movesLeft <= 5 ? 'low-moves' : ''}">${snap.movesLeft}</strong>
+              <span class="m3-score-sub"><strong id="m3ScoreVal">${snap.score.toLocaleString('vi-VN')}</strong> đ</span>
+            </div>
             <div class="m3-goals-list">
               ${goalsHtml}
             </div>
           </div>
-        </div>
 
-        <!-- 8x8 ATTIC HARVEST BOARD CANVAS -->
-        <div class="m3-board-stage">
-          <div class="m3-canvas-wrap">
+          ${synergyDockHtml}
+        </aside>
+
+        <div class="pa-stage-viewport">
+          <div class="pa-canvas-shell" data-pa-board-mode="match3">
             <canvas
               id="match3Canvas"
               width="${VIRTUAL_W}"
               height="${VIRTUAL_W}"
               tabindex="0"
-              aria-label="Bàn phép Gác Xép Bùa Gặt Honeydukes 8 nhân 8"
+              aria-label="Bàn kẹo phép thuật Hang Sóc ${lv.size} nhân ${lv.size}, mũi tên di chuyển, Enter chọn"
             ></canvas>
           </div>
         </div>
 
-        <!-- 3D BOOSTER DOCK & RESTART -->
-        <div class="m3-controls-panel">
-          <div class="m3-boosters-box">
-            <div class="m3-box-title">🪄 Trợ Giúp</div>
-            <div class="m3-booster-row">
-              ${boostersHtml}
-            </div>
-            <button
-              id="btnM3PhoenixTalisman"
-              type="button"
-              class="pa-tool-btn talisman m3-talisman-btn"
-              style="width:100%;margin-top:8px;padding:7px 8px;font-size:11.6px;justify-content:space-between;"
-              ${talismanUsed || (!st.sandboxMode && talismanQty <= 0) ? 'disabled' : ''}
-              title="Bùa Phượng Hoàng (+5 Lượt &amp; Chong Chóng)"
-            >
-              <span>🔥 Bùa Phượng Hoàng</span>
-              <span class="pa-cost-pill">${talismanUsed ? '✓' : `×${st.sandboxMode ? '∞' : talismanQty}`}</span>
-            </button>
+        <div class="pa-controls-bar m3-dock-controls">
+          <div class="m3-booster-row">
+            ${boostersHtml}
           </div>
-
-          <div id="m3ActionHintBar" class="m3-action-hint">
-            ${this.buildActionHintHtml()}
-          </div>
-
-          <div class="m3-restart-row" style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button id="btnM3RestartStage" type="button" class="brass-btn" style="flex:1;font-size:12px;padding:7px 10px;">
-              ${restartLabel}
-            </button>
-            ${
-              !this.rescueContext
-                ? mySosMatch3?.rescuedAt
-                  ? `<button id="btnM3SideClaimSos" type="button" class="brass-btn gold-cta" style="flex:1;font-size:11.8px;padding:7px 10px;">
-                      🎉 Qua Màn!
-                    </button>`
-                  : `<button id="btnM3AskFriendSos" type="button" class="brass-btn" style="flex:1;font-size:11.8px;padding:7px 10px;" ${rescuesReceivedLeft <= 0 && !mySosMatch3 ? 'disabled' : ''} title="Nhờ bạn bè giải cứu">
-                      ${mySosMatch3 ? '🦉 Đang gọi...' : `🆘 Cứu (${rescuesReceivedLeft}/${MAX_DAILY_MINIGAME_RESCUES})`}
-                    </button>`
-                : ''
-            }
-          </div>
+          <button
+            id="btnM3PhoenixTalisman"
+            type="button"
+            class="pa-tool-btn talisman m3-talisman-btn"
+            ${talismanUsed || snap.status === 'won' || (!st.sandboxMode && talismanQty <= 0) ? 'disabled' : ''}
+            title="${talismanTooltip}"
+          >
+            <span>🔥 Bùa</span>
+            <span class="pa-cost-pill">${talismanUsed ? '✓ 1/1' : `×${st.sandboxMode ? '∞' : talismanQty}`}</span>
+          </button>
+          <button id="btnM3RestartStage" type="button" class="pa-tool-btn">
+            ${restartLabel}
+          </button>
+          ${
+            !this.rescueContext
+              ? mySosMatch3?.rescuedAt
+                ? `<button id="btnM3SideClaimSos" type="button" class="pa-tool-btn active">
+                    🎉 Qua Màn!
+                  </button>`
+                : `<button id="btnM3AskFriendSos" type="button" class="pa-tool-btn" ${rescuesReceivedLeft <= 0 && !mySosMatch3 ? 'disabled' : ''} title="Nhờ bạn bè giải cứu">
+                    ${mySosMatch3 ? '🦉 Đang gọi' : `🆘 Cứu ${rescuesReceivedLeft}/${MAX_DAILY_MINIGAME_RESCUES}`}
+                  </button>`
+              : ''
+          }
         </div>
       </div>
-      ${overlayHtml}
+      <div id="m3OverlayMount">${this.renderOverlayHtml(lv)}</div>
     `;
 
     this.bindStageDOMEvents(box);
   }
 
-  private bindStageDOMEvents(box: HTMLElement): void {
-    // Booster buttons
-    box.querySelectorAll<HTMLButtonElement>('[data-m3-booster]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        if (!this.engine || this.engine.status !== 'playing') return;
-        const bId = btn.dataset.m3Booster as Match3BoosterId;
-        const bDef = MATCH3_BOOSTERS.find((b) => b.id === bId);
-        if (!bDef) return;
-
-        // Instant booster: Alohomora Shuffle
-        if (!bDef.requiresCellTarget) {
-          const pay = this.sim.spendOrBuyMatch3Booster(bId);
-          if (!pay.ok) {
-            this.showToast(pay.msg, '🪙');
-            return;
-          }
-          const res = this.engine.useBooster(bId);
-          if (res.ok) {
-            this.activeBoosterTargetMode = null;
-            this.selectedCell = null;
-            this.showToast(res.msg, '🌪️');
-            this.syncPostTurnState(2, true);
-          }
-          return;
-        }
-
-        // Targeted booster (Hammer / Row-Col Cannon): toggle arming!
-        this.activeBoosterTargetMode = this.activeBoosterTargetMode === bId ? null : bId;
-        this.selectedCell = null;
-        this.updateSideCountersOnly();
-      });
-    });
-
-    // Restart button (Royal Match rule: 0 moves made -> free board reroll; >=1 move -> costs 1 Heart)
-    box.querySelector('#btnM3SwitchPuzzleArcade')?.addEventListener('click', () => {
-      this.getDialog()?.close();
-      this.onSwitchToPuzzleArcade?.();
-    });
-    box.querySelector('#btnM3OpenLeaderboard')?.addEventListener('click', () => {
-      this.sim.audio.playClick();
-      this.onOpenLeaderboard?.();
-    });
-    box.querySelector('#btnM3VictoryLeaderboard')?.addEventListener('click', () => {
-      this.sim.audio.playClick();
-      this.onOpenLeaderboard?.();
-    });
-    box.querySelectorAll('[data-m3-jump-arcade]').forEach((el) => {
-      el.addEventListener('click', () => {
-        const target = (el as HTMLElement).dataset.m3JumpArcade as PuzzleArcadeMode | undefined;
-        this.getDialog()?.close();
-        this.onSwitchToPuzzleArcade?.(target);
-      });
-    });
-    box.querySelector('#btnM3RestartStage')?.addEventListener('click', () => {
-      if (!this.engine) return;
-      if (!this.rescueContext && this.movesMadeThisAttempt > 0) {
-        this.sim.loseMatch3Heart();
-      }
-      this.startFreshStage(
-        this.rescueContext ? this.rescueContext.stage : this.sim.state.match3.currentLevel,
-        Boolean(this.rescueContext)
-      );
-      this.renderDOM();
-    });
-
-    const handleAskFriendSos = () => {
-      if (!this.engine || this.rescueContext) return;
-      this.sim.requestPlayerMinigameSos('match3', this.engine.levelDef.level);
-      this.lastSeenSosRescuedAt =
-        this.sim.ensureNeighborSocial().playerMinigameSos?.rescuedAt ?? 0;
-      this.renderDOM();
-    };
-    const handleClaimFriendSos = () => {
-      const res = this.sim.claimPlayerMinigameSosRescue();
-      if (res.ok) {
-        this.lastSeenSosRescuedAt = 0;
-        this.startFreshStage(this.sim.state.match3.currentLevel);
-        this.renderDOM();
-      } else {
-        this.showToast(res.msg, '🦉');
-      }
-    };
-    box.querySelector('#btnM3AskFriendSos')?.addEventListener('click', handleAskFriendSos);
-    box.querySelector('#btnM3OverlayAskFriend')?.addEventListener('click', handleAskFriendSos);
-    box.querySelector('#btnM3ClaimSosRescue')?.addEventListener('click', handleClaimFriendSos);
-    box.querySelector('#btnM3SideClaimSos')?.addEventListener('click', handleClaimFriendSos);
-    box.querySelector('#btnM3OverlayClaimSos')?.addEventListener('click', handleClaimFriendSos);
-
-    // Victory overlay buttons
+  private bindOverlayEvents(box: HTMLElement): void {
     box.querySelector('#btnM3NextLevel')?.addEventListener('click', () => {
       this.startFreshStage(this.sim.state.match3.currentLevel);
       this.renderDOM();
+    });
+
+    box.querySelector('#btnM3VictoryLeaderboard')?.addEventListener('click', () => {
+      this.sim.audio.playClick();
+      this.onOpenLeaderboard?.();
     });
 
     box.querySelector('#btnM3UseStarsInPark')?.addEventListener('click', () => {
       this.getDialog()?.close();
     });
 
-    // Out-of-moves rescue buttons
-    const triggerMatch3Talisman = () => {
-      if (!this.engine || this.engine.status === 'won') return;
-      if (this.engine.talismanUsed) {
-        this.showToast('Bùa Phượng Hoàng chỉ dùng tối đa 1 lần mỗi lượt thử màn!', '🔥');
-        return;
-      }
-      const pay = this.sim.consumePhoenixTalisman();
-      if (!pay.ok) {
-        this.showToast(pay.msg, '🔥');
-        return;
-      }
-      const wasOutOfMoves = this.engine.status === 'out_of_moves';
-      const res = this.engine.applyPhoenixTalisman();
-      this.showToast(res.msg, '🔥');
-      if (res.ok) {
-        this.activeBoosterTargetMode = null;
-        this.selectedCell = null;
-        if (wasOutOfMoves) {
-          this.renderDOM();
-        }
-        this.syncPostTurnState(3, true);
-      }
-    };
-
-    box.querySelector('#btnM3PhoenixTalisman')?.addEventListener('click', triggerMatch3Talisman);
-    box.querySelector('#btnM3RescuePhoenixTalisman')?.addEventListener('click', triggerMatch3Talisman);
+    box.querySelector('#btnM3RescuePhoenixTalisman')?.addEventListener('click', () => {
+      void this.triggerMatch3Talisman();
+    });
 
     box.querySelector('#btnM3BuyExtraMoves')?.addEventListener('click', () => {
-      if (!this.engine) return;
-      const res = this.sim.buyMatch3ExtraMoves(this.engine.levelDef.level);
+      if (!this.engine || !this.engine.level) return;
+      const res = this.sim.buyMatch3ExtraMoves(this.engine.level.id);
       this.showToast(res.msg, res.ok ? '🪄' : '🪙');
       if (res.ok) {
         this.engine.addExtraMoves(EXTRA_MOVES_COUNT);
-        this.renderDOM();
+        this.onParentRefresh();
+        this.mountOverlayOnly();
+        this.syncHudSnapshot(this.engine.getHudSnapshot());
       }
     });
 
@@ -1430,1305 +1586,189 @@ export class Match3ModalController {
       this.renderDOM();
     });
 
-    // Canvas pointer & keyboard interactions
+    box.querySelector('#btnM3OverlayAskFriend')?.addEventListener('click', () => {
+      this.handleAskFriendSos();
+    });
+
+    box.querySelector('#btnM3OverlayClaimSos')?.addEventListener('click', () => {
+      this.handleClaimFriendSos();
+    });
+  }
+
+  private handleAskFriendSos(): void {
+    if (!this.engine?.level || this.rescueContext) return;
+    this.sim.requestPlayerMinigameSos('match3', this.engine.level.id);
+    this.lastSeenSosRescuedAt =
+      this.sim.ensureNeighborSocial().playerMinigameSos?.rescuedAt ?? 0;
+    this.renderDOM();
+  }
+
+  private handleClaimFriendSos(): void {
+    const res = this.sim.claimPlayerMinigameSosRescue();
+    if (res.ok) {
+      this.lastSeenSosRescuedAt = 0;
+      this.startFreshStage(this.sim.state.match3.currentLevel);
+      this.renderDOM();
+    } else {
+      this.showToast(res.msg, '🦉');
+    }
+  }
+
+  private async triggerMatch3Talisman(): Promise<void> {
+    if (!this.engine || this.engine.status === 'won') return;
+    const gate = this.sim.canUsePhoenixTalismanInGame('match3');
+    if (!gate.ok) {
+      this.showToast(gate.msg, '🔥');
+      return;
+    }
+    if (this.engine.talismanUsed) {
+      this.showToast(
+        'Hôm nay bạn đã dùng 🔥 Bùa Phượng Hoàng ở môn này rồi (giới hạn 1 lần/môn/ngày)!',
+        '🔥'
+      );
+      return;
+    }
+    const pay = this.sim.consumePhoenixTalisman('match3');
+    if (!pay.ok) {
+      this.showToast(pay.msg, '🔥');
+      return;
+    }
+    const wasOutOfMoves = this.engine.status === 'out_of_moves';
+    if (wasOutOfMoves) {
+      const mount = this.root.querySelector('#m3OverlayMount') as HTMLElement | null;
+      if (mount) mount.innerHTML = '';
+    }
+    const res = await this.engine.applyPhoenixTalisman();
+    if (!res.ok) {
+      this.sim.refundPhoenixTalismanAttempt('match3');
+    }
+    this.showToast(res.msg, '🔥');
+    this.onParentRefresh();
+    this.syncHudSnapshot(this.engine.getHudSnapshot());
+  }
+
+  private bindStageDOMEvents(box: HTMLElement): void {
     const canvas = box.querySelector('#match3Canvas') as HTMLCanvasElement | null;
-    if (!canvas) return;
+    if (canvas && this.engine) {
+      this.engine.attachCanvas(canvas);
+    }
 
-    const eventToCell = (e: PointerEvent): { r: number; c: number } | null => {
-      const rect = canvas.getBoundingClientRect();
-      const pad = rect.width * (BOARD_PAD / VIRTUAL_W);
-      const boardW = rect.width - pad * 2;
-      const cellPx = boardW / MATCH3_BOARD_SIZE;
-      const c = Math.floor((e.clientX - rect.left - pad) / cellPx);
-      const r = Math.floor((e.clientY - rect.top - pad) / cellPx);
-      if (r < 0 || r >= MATCH3_BOARD_SIZE || c < 0 || c >= MATCH3_BOARD_SIZE) return null;
-      return { r, c };
-    };
+    // Booster buttons
+    box.querySelectorAll<HTMLButtonElement>('[data-m3-booster]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!this.engine || this.engine.status !== 'playing') return;
+        const bId = btn.dataset.m3Booster as Match3BoosterId;
+        const bDef = MATCH3_BOOSTERS.find((b) => b.id === bId);
+        if (!bDef) return;
+        const media = BOOSTER_MEDIA[bId];
 
-    canvas.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || !this.engine || this.engine.status !== 'playing') return;
-      const hit = eventToCell(e);
-      if (!hit) return;
-
-      canvas.focus({ preventScroll: true });
-      this.cursorCell = { ...hit };
-
-      // 1. Targeted Booster Mode (Hammer / Row-Col Cannon)
-      if (this.activeBoosterTargetMode) {
-        const bId = this.activeBoosterTargetMode;
-        const validTarget = this.engine.canUseBooster(bId, hit.r, hit.c);
-        if (!validTarget.ok) {
-          this.showToast(validTarget.msg, '🎯');
+        const st = this.sim.state;
+        const qty = st.match3.boosters[bId] ?? 0;
+        const alreadyArmed = this.engine.activeBooster === media.engineKind;
+        if (!alreadyArmed && !st.sandboxMode && qty <= 0 && st.galleons < bDef.goldCost) {
+          this.sim.audio.playCheekyAlert();
+          this.showToast(`Cần ${bDef.goldCost}G để mua ${bDef.name}!`, '🪙');
           return;
         }
-        const pay = this.sim.spendOrBuyMatch3Booster(bId);
-        if (!pay.ok) {
-          this.showToast(pay.msg, '🪙');
-          return;
-        }
-        const res = this.engine.useBooster(bId, hit.r, hit.c);
-        if (res.ok) {
-          this.activeBoosterTargetMode = null;
-          this.selectedCell = null;
-          this.syncPostTurnState(2, true);
-        }
+
+        this.sim.audio.playClick();
+        this.engine.setBoosterMode(media.engineKind);
+      });
+    });
+
+    // Header & navigation buttons
+    box.querySelector('#btnM3SwitchPuzzleArcade')?.addEventListener('click', () => {
+      this.getDialog()?.close();
+      this.onSwitchToPuzzleArcade?.();
+    });
+    box.querySelector('#btnM3OpenLeaderboard')?.addEventListener('click', () => {
+      this.sim.audio.playClick();
+      this.onOpenLeaderboard?.();
+    });
+    box.querySelectorAll('[data-m3-jump-arcade]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const target = (el as HTMLElement).dataset.m3JumpArcade as PuzzleArcadeMode | undefined;
+        this.getDialog()?.close();
+        this.onSwitchToPuzzleArcade?.(target);
+      });
+    });
+
+    box.querySelector('#btnM3RestartStage')?.addEventListener('click', () => {
+      if (!this.engine) return;
+      if (!this.rescueContext && this.movesMadeThisAttempt > 0) {
+        this.sim.loseMatch3Heart();
+      }
+      this.startFreshStage(
+        this.rescueContext ? this.rescueContext.stage : this.sim.state.match3.currentLevel,
+        Boolean(this.rescueContext)
+      );
+      this.renderDOM();
+    });
+
+    box.querySelector('#btnM3AskFriendSos')?.addEventListener('click', () => {
+      this.handleAskFriendSos();
+    });
+    box.querySelector('#btnM3ClaimSosRescue')?.addEventListener('click', () => {
+      this.handleClaimFriendSos();
+    });
+    box.querySelector('#btnM3SideClaimSos')?.addEventListener('click', () => {
+      this.handleClaimFriendSos();
+    });
+
+    box.querySelector('#btnM3PhoenixTalisman')?.addEventListener('click', () => {
+      void this.triggerMatch3Talisman();
+    });
+
+    // Farm Synergy Dock
+    box.querySelector('#btnM3TriggerCompanion')?.addEventListener('click', () => {
+      if (!this.engine || this.engine.status === 'won') return;
+      const comp = this.sim.getActiveMinigameCompanion();
+      if (this.companionCharge < comp.chargeEveryMoves) return;
+      this.companionCharge = 0;
+      const wasOut = this.engine.status === 'out_of_moves';
+      this.engine.triggerFarmCompanion(comp.bondLevel);
+      if (!this.sim.state.sandboxMode) {
+        this.sim.state.galleons += 15;
+      }
+      this.sim.audio.playSpell();
+      this.sim.saveToStorage();
+      this.onParentRefresh();
+      this.showToast(
+        `${comp.emoji} ${comp.nameVi} trợ chiến: +2 Lượt, Cánh Vàng Snitch & +15G!`,
+        comp.emoji
+      );
+      if (wasOut) {
+        this.mountOverlayOnly();
+      }
+      this.persistMatch3Session(true);
+      this.syncHudSnapshot(this.engine.getHudSnapshot());
+    });
+
+    box.querySelector('#btnM3SnackApplePie')?.addEventListener('click', () => {
+      if (!this.engine || this.engine.status === 'won' || this.snackPieUsedThisAttempt) return;
+      const res = this.sim.consumeMollyMinigameSnack('cinnamon_apple_pie');
+      if (!res.ok) {
+        this.showToast(res.msg, '🥧');
         return;
       }
-
-      // 2. Normal Swipe / Click-Swap Tracking
-      canvas.setPointerCapture(e.pointerId);
-      this.dragStart = {
-        pointerId: e.pointerId,
-        r: hit.r,
-        c: hit.c,
-        clientX: e.clientX,
-        clientY: e.clientY,
-        swapped: false,
-      };
-    });
-
-    canvas.addEventListener('pointermove', (e) => {
-      const hit = eventToCell(e);
-      this.hoverCell = hit;
-
-      if (!this.dragStart || this.dragStart.pointerId !== e.pointerId || this.dragStart.swapped) {
-        return;
+      this.snackPieUsedThisAttempt = true;
+      const wasOut = this.engine.status === 'out_of_moves';
+      this.engine.addExtraMoves(3);
+      this.persistMatch3Session(true);
+      this.onParentRefresh();
+      this.showToast('🥧 Bánh Táo Quế Bà Molly tiếp sức: +3 Lượt đi & lùi ngòi Bom!', '🥧');
+      if (wasOut) {
+        this.mountOverlayOnly();
       }
-      if (!this.engine || this.engine.status !== 'playing') return;
-
-      const dx = e.clientX - this.dragStart.clientX;
-      const dy = e.clientY - this.dragStart.clientY;
-      const dist = Math.hypot(dx, dy);
-      if (dist < 16) return;
-
-      let dr = 0;
-      let dc = 0;
-      if (Math.abs(dx) > Math.abs(dy)) {
-        dc = dx > 0 ? 1 : -1;
-      } else {
-        dr = dy > 0 ? 1 : -1;
-      }
-
-      const r1 = this.dragStart.r;
-      const c1 = this.dragStart.c;
-      const r2 = r1 + dr;
-      const c2 = c1 + dc;
-      this.dragStart.swapped = true;
-      this.selectedCell = null;
-      this.attemptBoardSwap(r1, c1, r2, c2);
-    });
-
-    const finishPointer = (e: PointerEvent) => {
-      if (!this.dragStart || this.dragStart.pointerId !== e.pointerId) return;
-      const ds = this.dragStart;
-      this.dragStart = null;
-      if (ds.swapped || !this.engine || this.engine.status !== 'playing') return;
-
-      this.handleCellTapOrClick(ds.r, ds.c);
-    };
-
-    canvas.addEventListener('pointerup', finishPointer);
-    canvas.addEventListener('pointercancel', () => {
-      this.dragStart = null;
-    });
-    canvas.addEventListener('pointerleave', () => {
-      this.hoverCell = null;
-    });
-
-    // Full Keyboard Accessibility (Arrows + Enter/Space)
-    canvas.addEventListener('keydown', (e) => {
-      if (!this.engine || this.engine.status !== 'playing') return;
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        this.cursorCell.r = (this.cursorCell.r + MATCH3_BOARD_SIZE - 1) % MATCH3_BOARD_SIZE;
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        this.cursorCell.r = (this.cursorCell.r + 1) % MATCH3_BOARD_SIZE;
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        this.cursorCell.c = (this.cursorCell.c + MATCH3_BOARD_SIZE - 1) % MATCH3_BOARD_SIZE;
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        this.cursorCell.c = (this.cursorCell.c + 1) % MATCH3_BOARD_SIZE;
-      } else if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        if (this.activeBoosterTargetMode) {
-          const bId = this.activeBoosterTargetMode;
-          const validTarget = this.engine.canUseBooster(bId, this.cursorCell.r, this.cursorCell.c);
-          if (!validTarget.ok) {
-            this.showToast(validTarget.msg, '🎯');
-            return;
-          }
-          const pay = this.sim.spendOrBuyMatch3Booster(bId);
-          if (!pay.ok) {
-            this.showToast(pay.msg, '🪙');
-            return;
-          }
-          const res = this.engine.useBooster(bId, this.cursorCell.r, this.cursorCell.c);
-          if (res.ok) {
-            this.activeBoosterTargetMode = null;
-            this.syncPostTurnState(2, true);
-          }
-        } else {
-          this.handleCellTapOrClick(this.cursorCell.r, this.cursorCell.c);
-        }
+      this.syncHudSnapshot(this.engine.getHudSnapshot());
+      const pieBtn = box.querySelector('#btnM3SnackApplePie') as HTMLButtonElement | null;
+      if (pieBtn) {
+        pieBtn.disabled = true;
+        const qtyEl = pieBtn.querySelector('[data-m3-pie-qty]');
+        if (qtyEl) qtyEl.textContent = '✓';
       }
     });
-  }
 
-  private handleCellTapOrClick(r: number, c: number): void {
-    if (!this.engine || this.engine.status !== 'playing') return;
-    if (!this.engine.canInteractCell(r, c)) {
-      this.selectedCell = null;
-      this.updateSideCountersOnly();
-      return;
-    }
-
-    if (!this.selectedCell) {
-      this.selectedCell = { r, c };
-      this.updateSideCountersOnly();
-      return;
-    }
-
-    if (this.selectedCell.r === r && this.selectedCell.c === c) {
-      this.selectedCell = null;
-      this.updateSideCountersOnly();
-      return;
-    }
-
-    const dist = Math.abs(this.selectedCell.r - r) + Math.abs(this.selectedCell.c - c);
-    if (dist === 1) {
-      const r1 = this.selectedCell.r;
-      const c1 = this.selectedCell.c;
-      this.selectedCell = null;
-      this.attemptBoardSwap(r1, c1, r, c);
-      return;
-    }
-
-    this.selectedCell = { r, c };
-    this.updateSideCountersOnly();
-  }
-
-  private attemptBoardSwap(r1: number, c1: number, r2: number, c2: number): void {
-    if (!this.engine || this.engine.status !== 'playing') return;
-    if (r2 < 0 || r2 >= MATCH3_BOARD_SIZE || c2 < 0 || c2 >= MATCH3_BOARD_SIZE) return;
-
-    const p1 = this.engine.grid[r1]?.[c1]?.piece;
-    const p2 = this.engine.grid[r2]?.[c2]?.piece;
-    const hadSpecial =
-      (p1?.kind === 'gem' && p1.special !== 'none') ||
-      (p2?.kind === 'gem' && p2.special !== 'none');
-
-    const wasFreeBefore = this.movesMadeThisAttempt === 0;
-    const res = this.engine.trySwap(r1, c1, r2, c2);
-    if (!res.valid) {
-      this.invalidShake = { r1, c1, r2, c2, age: 0, duration: 0.24 };
-      this.updateSideCountersOnly();
-      return;
-    }
-
-    this.movesMadeThisAttempt += 1;
-    if (wasFreeBefore) {
-      this.refreshRestartButtonLabel();
-    }
-    this.syncPostTurnState(res.comboCount, hadSpecial || Boolean(res.createdSpecial));
-  }
-
-  private refreshRestartButtonLabel(): void {
-    const btn = this.root.querySelector('#btnM3RestartStage') as HTMLButtonElement | null;
-    if (btn) {
-      btn.textContent = '🔄 Chơi lại (-1 Tim)';
-    }
-  }
-
-  // ==================== AAA 60FPS HIGH-DPI CANDY / GARDENSCAPES RENDERER ====================
-
-  private stepParticlesAndFlyingGoals(dt: number): void {
-    for (let i = this.particles.length - 1; i >= 0; i--) {
-      const p = this.particles[i];
-      p.age += dt;
-      if (p.age >= p.duration) {
-        this.particles.splice(i, 1);
-        continue;
-      }
-      p.vy += p.gravity * dt;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.rot += p.vRot * dt;
-    }
-
-    for (let i = this.flyingGoals.length - 1; i >= 0; i--) {
-      const fg = this.flyingGoals[i];
-      fg.age += dt;
-      if (fg.age >= fg.duration) {
-        this.flyingGoals.splice(i, 1);
-      }
-    }
-  }
-
-  private updateAndDrawCanvas(dt: number, timeSec: number): void {
-    const canvas = this.root.querySelector('#match3Canvas') as HTMLCanvasElement | null;
-    if (!canvas || !this.engine) return;
-
-    this.drainEngineVfx();
-    let simDt = dt;
-    if (this.hitStopTimer > 0) {
-      this.hitStopTimer = Math.max(0, this.hitStopTimer - dt);
-      simDt = 0;
-    }
-    this.engine.stepVisualTweens(simDt);
-    this.stepParticlesAndFlyingGoals(simDt);
-
-    if (this.engine.status === 'playing') {
-      this.idleSeconds += simDt;
-    } else {
-      this.idleSeconds = 0;
-    }
-
-    if (this.invalidShake) {
-      this.invalidShake.age += dt;
-      if (this.invalidShake.age >= this.invalidShake.duration) {
-        this.invalidShake = null;
-      }
-    }
-
-    for (let i = this.activeVfx.length - 1; i >= 0; i--) {
-      this.activeVfx[i].age += simDt;
-      if (this.activeVfx[i].age >= this.activeVfx[i].duration) {
-        this.activeVfx.splice(i, 1);
-      }
-    }
-
-    const dpr = Math.min(2.5, window.devicePixelRatio || 1);
-    const cssSize = Math.max(260, Math.round(canvas.clientWidth || VIRTUAL_W));
-    const targetPx = Math.round(cssSize * dpr);
-    if (canvas.width !== targetPx || canvas.height !== targetPx) {
-      canvas.width = targetPx;
-      canvas.height = targetPx;
-    }
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.save();
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.scale(targetPx / VIRTUAL_W, targetPx / VIRTUAL_W);
-
-    const W = VIRTUAL_W;
-    const pad = BOARD_PAD;
-    const boardPx = BOARD_PX;
-    const cellPx = CELL_PX;
-
-    // 1. Sculpted Sunlit Honey-Oak & Biscuit Outer Tray Frame
-    this.drawRoyalBoardFrame(ctx, W, pad, timeSec);
-
-    // 2. Shaped Warm Oak Well Backing behind Active Non-Hole Cells (seamless shaped boards!)
-    ctx.save();
-    ctx.fillStyle = '#8b572a';
-    for (let r = 0; r < MATCH3_BOARD_SIZE; r++) {
-      for (let c = 0; c < MATCH3_BOARD_SIZE; c++) {
-        if (this.engine.grid[r][c].hole) continue;
-        const x = pad + c * cellPx;
-        const y = pad + r * cellPx;
-        this.roundRect(ctx, x - 3, y - 3, cellPx + 6, cellPx + 6, 13);
-        ctx.fill();
-      }
-    }
-    ctx.restore();
-
-    // 3. Recessed Candy-Crush / Gardenscapes Pearl-Porcelain Checkerboard Cushions + Ice + Crates
-    const hasScrollGoal = this.engine.levelDef.scrollsTotal > 0;
-    for (let r = 0; r < MATCH3_BOARD_SIZE; r++) {
-      for (let c = 0; c < MATCH3_BOARD_SIZE; c++) {
-        const cell = this.engine.grid[r][c];
-        const x = pad + c * cellPx;
-        const y = pad + r * cellPx;
-
-        if (cell.hole) continue;
-
-        this.drawPorcelainCushionTile(ctx, x, y, cellPx, (r + c) % 2 === 0);
-
-        // Scroll Collector Exit Archway on bottom row!
-        if (hasScrollGoal && r === MATCH3_BOARD_SIZE - 1 && c >= 1 && c <= 6) {
-          this.drawScrollExitChute(ctx, x, y, cellPx, timeSec, c);
-        }
-
-        // Crystal Ice Underlay (1..2 layers)
-        if (cell.ice > 0) {
-          this.drawIceLayer(ctx, x, y, cellPx, cell.ice);
-        }
-
-        // Spreading Golden Honeycomb Tile Underlay (Stage >= 160)
-        if (cell.honey) {
-          this.drawHoneycombLayer(ctx, x, y, cellPx, timeSec);
-        }
-
-        // Honeydukes Carved Wooden / Treasure Crate Blocker (1..3 layers)
-        if (cell.box > 0) {
-          this.drawWoodenBox(ctx, x, y, cellPx, cell.box);
-        }
-      }
-    }
-
-    // 4. Idle Hint Golden Pulsing Frame (after 3.5s idle)
-    if (this.engine.status === 'playing' && this.idleSeconds >= 3.5 && !this.selectedCell) {
-      const hint = this.engine.findBestHintMove();
-      if (hint) {
-        const pulse = 0.5 + 0.5 * Math.sin(timeSec * 6.5);
-        for (const [hr, hc] of [
-          [hint.r1, hint.c1],
-          [hint.r2, hint.c2],
-        ]) {
-          const hx = pad + hc * cellPx;
-          const hy = pad + hr * cellPx;
-          ctx.save();
-          ctx.fillStyle = `rgba(254, 240, 138, ${0.18 + pulse * 0.22})`;
-          this.roundRect(ctx, hx + 2, hy + 2, cellPx - 4, cellPx - 4, 11);
-          ctx.fill();
-          ctx.strokeStyle = `rgba(245, 158, 11, ${0.65 + pulse * 0.35})`;
-          ctx.lineWidth = 3.2;
-          ctx.stroke();
-          ctx.restore();
-        }
-      }
-    }
-
-    // 5. Selected Cell & Armed Booster Crosshair Highlight
-    if (this.selectedCell) {
-      const sx = pad + this.selectedCell.c * cellPx;
-      const sy = pad + this.selectedCell.r * cellPx;
-      ctx.save();
-      ctx.fillStyle = 'rgba(254, 240, 138, 0.34)';
-      this.roundRect(ctx, sx + 2, sy + 2, cellPx - 4, cellPx - 4, 11);
-      ctx.fill();
-      ctx.strokeStyle = '#f59e0b';
-      ctx.lineWidth = 3.5;
-      ctx.shadowColor = 'rgba(245, 158, 11, 0.65)';
-      ctx.shadowBlur = 10;
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    if (this.activeBoosterTargetMode && this.hoverCell) {
-      const { r: hr, c: hc } = this.hoverCell;
-      ctx.save();
-      if (this.activeBoosterTargetMode === 'row_col_cannon') {
-        ctx.fillStyle = 'rgba(56, 189, 248, 0.24)';
-        this.roundRect(ctx, pad, pad + hr * cellPx + 4, boardPx, cellPx - 8, 8);
-        ctx.fill();
-        this.roundRect(ctx, pad + hc * cellPx + 4, pad, cellPx - 8, boardPx, 8);
-        ctx.fill();
-      }
-      ctx.strokeStyle = '#0284c7';
-      ctx.lineWidth = 3.2;
-      this.roundRect(ctx, pad + hc * cellPx + 2.5, pad + hr * cellPx + 2.5, cellPx - 5, cellPx - 5, 11);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    if (document.activeElement === canvas) {
-      const kx = pad + this.cursorCell.c * cellPx;
-      const ky = pad + this.cursorCell.r * cellPx;
-      ctx.save();
-      ctx.strokeStyle = 'rgba(37, 99, 235, 0.72)';
-      ctx.lineWidth = 2.2;
-      this.roundRect(ctx, kx + 3.5, ky + 3.5, cellPx - 7, cellPx - 7, 9);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // 6. 3D Glossy Candies, Specials, Scrolls & Cobweb Overlays
-    for (let r = 0; r < MATCH3_BOARD_SIZE; r++) {
-      for (let c = 0; c < MATCH3_BOARD_SIZE; c++) {
-        const cell: Match3Cell = this.engine.grid[r][c];
-        if (cell.hole || cell.box > 0 || !cell.piece) continue;
-
-        let shakeX = 0;
-        let shakeY = 0;
-        if (this.invalidShake) {
-          const sh = this.invalidShake;
-          const phase = Math.sin((sh.age / sh.duration) * Math.PI * 3) * 6.5;
-          const dirX = sh.c2 - sh.c1;
-          const dirY = sh.r2 - sh.r1;
-          if (r === sh.r1 && c === sh.c1) {
-            shakeX = dirX * phase;
-            shakeY = dirY * phase;
-          } else if (r === sh.r2 && c === sh.c2) {
-            shakeX = -dirX * phase;
-            shakeY = -dirY * phase;
-          }
-        }
-
-        const isSelected = Boolean(
-          this.selectedCell && this.selectedCell.r === r && this.selectedCell.c === c
-        );
-        const selBounce = isSelected ? Math.sin(timeSec * 8) * 2.2 : 0;
-
-        const cx = pad + (cell.piece.visC + 0.5) * cellPx + shakeX;
-        const cy = pad + (cell.piece.visR + 0.5) * cellPx + shakeY - Math.abs(selBounce);
-
-        this.drawPiece(ctx, cell.piece, cx, cy, cellPx, timeSec, isSelected);
-
-        if (cell.ice > 0) {
-          this.drawIceFrostOverlay(ctx, pad + c * cellPx, pad + r * cellPx, cellPx, cell.ice);
-        }
-
-        if (cell.web) {
-          this.drawCobwebOverlay(ctx, pad + c * cellPx, pad + r * cellPx, cellPx);
-        }
-      }
-    }
-
-    // 7. Shatter Shards, Beams, Shockwaves, Snitch Lightning, Flying Goal Sprites & 3D Praise Text!
-    this.drawVfxAndParticlesLayer(ctx, pad, boardPx, cellPx);
-
-    ctx.restore();
-  }
-
-  private drawRoyalBoardFrame(
-    ctx: CanvasRenderingContext2D,
-    W: number,
-    pad: number,
-    timeSec: number
-  ): void {
-    // Sunlit Playrix Township Honey-Oak Tray Base (matches Gác Xép Mùa Gặt)
-    const woodGrad = ctx.createLinearGradient(0, 0, 0, W);
-    woodGrad.addColorStop(0, '#dea86c');
-    woodGrad.addColorStop(0.5, '#be8142');
-    woodGrad.addColorStop(1, '#935b28');
-    ctx.fillStyle = woodGrad;
-    this.roundRect(ctx, 0, 0, W, W, 22);
-    ctx.fill();
-
-    // Sculpted Warm Biscuit-Gold Outer Rim Bevel
-    const goldRim = ctx.createLinearGradient(0, 0, W, W);
-    goldRim.addColorStop(0, '#fff4cf');
-    goldRim.addColorStop(0.35, '#e8b468');
-    goldRim.addColorStop(0.72, '#a96b30');
-    goldRim.addColorStop(1, '#f5d28c');
-    ctx.lineWidth = 4.5;
-    ctx.strokeStyle = goldRim;
-    this.roundRect(ctx, 2.5, 2.5, W - 5, W - 5, 20);
-    ctx.stroke();
-
-    // Crisp Warm Contour Outline
-    ctx.lineWidth = 1.8;
-    ctx.strokeStyle = '#5a3314';
-    this.roundRect(ctx, 1, 1, W - 2, W - 2, 21);
-    ctx.stroke();
-
-    // Subtle Inner Cream Trim around Playfield Well
-    ctx.lineWidth = 1.8;
-    ctx.strokeStyle = 'rgba(255, 245, 214, 0.72)';
-    this.roundRect(ctx, pad - 4, pad - 4, W - (pad - 4) * 2, W - (pad - 4) * 2, 15);
-    ctx.stroke();
-
-    // 4 Corner Honey-Brass Dowels
-    const glint = 0.75 + 0.25 * Math.sin(timeSec * 3);
-    for (const [rx, ry] of [
-      [8.5, 8.5],
-      [W - 8.5, 8.5],
-      [8.5, W - 8.5],
-      [W - 8.5, W - 8.5],
-    ]) {
-      ctx.save();
-      ctx.fillStyle = '#d98a2b';
-      ctx.beginPath();
-      ctx.arc(rx, ry, 3.6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = `rgba(255, 255, 255, ${glint})`;
-      ctx.beginPath();
-      ctx.arc(rx - 1, ry - 1, 1.3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    }
-  }
-
-  private drawPorcelainCushionTile(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    cellPx: number,
-    isLight: boolean
-  ): void {
-    ctx.save();
-    // Recessed warm biscuit slot shadow rim
-    ctx.fillStyle = isLight ? '#d8bd8e' : '#caa976';
-    this.roundRect(ctx, x + 1.2, y + 1.2, cellPx - 2.4, cellPx - 2.4, 10.5);
-    ctx.fill();
-
-    // Warm sunlit Township cream-parchment & wheat cushion checkerboard
-    const tileGrad = ctx.createLinearGradient(x, y + 2, x, y + cellPx - 2);
-    if (isLight) {
-      tileGrad.addColorStop(0, '#fffef7');
-      tileGrad.addColorStop(1, '#f9eed2');
-    } else {
-      tileGrad.addColorStop(0, '#f4e4bf');
-      tileGrad.addColorStop(1, '#e8d1a2');
-    }
-    ctx.fillStyle = tileGrad;
-    this.roundRect(ctx, x + 2.1, y + 2.4, cellPx - 4.2, cellPx - 4.6, 9.5);
-    ctx.fill();
-
-    // Soft top inner bevel highlight
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.82)';
-    ctx.lineWidth = 1;
-    this.roundRect(ctx, x + 3, y + 3.1, cellPx - 6, cellPx - 6.2, 8.5);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  private drawHoneycombLayer(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    cellPx: number,
-    timeSec: number
-  ): void {
-    ctx.save();
-    const glow = 0.88 + 0.12 * Math.sin(timeSec * 3.8 + (x + y) * 0.04);
-    const honeyGrad = ctx.createLinearGradient(x, y + 1, x, y + cellPx - 1);
-    honeyGrad.addColorStop(0, `rgba(254, 240, 138, ${0.95 * glow})`);
-    honeyGrad.addColorStop(0.52, 'rgba(245, 158, 11, 0.92)');
-    honeyGrad.addColorStop(1, 'rgba(180, 83, 9, 0.94)');
-    ctx.fillStyle = honeyGrad;
-    this.roundRect(ctx, x + 1.8, y + 1.8, cellPx - 3.6, cellPx - 3.6, 10);
-    ctx.fill();
-
-    ctx.strokeStyle = '#92400e';
-    ctx.lineWidth = 2;
-    this.roundRect(ctx, x + 2.2, y + 2.2, cellPx - 4.4, cellPx - 4.4, 9.5);
-    ctx.stroke();
-
-    // Subtle 3-hexagon beeswax comb cells inside the cushion
-    const drawHex = (cx: number, cy: number, rad: number) => {
-      ctx.beginPath();
-      for (let i = 0; i < 6; i++) {
-        const ang = (Math.PI / 3) * i - Math.PI / 6;
-        const hx = cx + Math.cos(ang) * rad;
-        const hy = cy + Math.sin(ang) * rad;
-        if (i === 0) ctx.moveTo(hx, hy);
-        else ctx.lineTo(hx, hy);
-      }
-      ctx.closePath();
-    };
-
-    ctx.strokeStyle = 'rgba(120, 53, 15, 0.48)';
-    ctx.fillStyle = 'rgba(254, 249, 195, 0.28)';
-    ctx.lineWidth = 1.4;
-    const rHex = cellPx * 0.16;
-    for (const [ox, oy] of [
-      [0.34, 0.34],
-      [0.66, 0.38],
-      [0.48, 0.66],
-    ]) {
-      drawHex(x + cellPx * ox, y + cellPx * oy, rHex);
-      ctx.fill();
-      ctx.stroke();
-    }
-
-    // Glossy top honey drip highlight
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.58)';
-    ctx.beginPath();
-    ctx.ellipse(x + cellPx * 0.32, y + 6.5, cellPx * 0.2, 2.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  private drawScrollExitChute(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    cellPx: number,
-    timeSec: number,
-    colIdx: number
-  ): void {
-    const pulse = 0.55 + 0.45 * Math.sin(timeSec * 4.5 + colIdx * 0.7);
-    const cx = x + cellPx * 0.5;
-    const by = y + cellPx - 3;
-    ctx.save();
-    ctx.fillStyle = `rgba(234, 179, 8, ${0.24 + pulse * 0.22})`;
-    this.roundRect(ctx, x + 9, y + cellPx - 12, cellPx - 18, 9, 4);
-    ctx.fill();
-
-    ctx.fillStyle = '#b45309';
-    ctx.beginPath();
-    ctx.moveTo(cx - 6, by - 6);
-    ctx.lineTo(cx + 6, by - 6);
-    ctx.lineTo(cx, by);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.fillStyle = `rgba(254, 240, 138, ${0.7 + pulse * 0.3})`;
-    ctx.beginPath();
-    ctx.moveTo(cx - 4.5, by - 6.5);
-    ctx.lineTo(cx + 4.5, by - 6.5);
-    ctx.lineTo(cx, by - 1.5);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
-
-  private drawIceLayer(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    cellPx: number,
-    tier: number
-  ): void {
-    const iceImg = this.getSprite('m3_obs_ice');
-    ctx.save();
-    // Rich Candy-Crush / Royal-Match icy turquoise crystal cushion backing
-    const iceGrad = ctx.createLinearGradient(x, y + 2, x, y + cellPx - 2);
-    if (tier >= 2) {
-      iceGrad.addColorStop(0, '#7dd3fc');
-      iceGrad.addColorStop(1, '#0284c7');
-    } else {
-      iceGrad.addColorStop(0, '#bae6fd');
-      iceGrad.addColorStop(1, '#38bdf8');
-    }
-    ctx.fillStyle = iceGrad;
-    this.roundRect(ctx, x + 1.8, y + 1.8, cellPx - 3.6, cellPx - 3.6, 10.5);
-    ctx.fill();
-
-    if (iceImg) {
-      ctx.globalAlpha = tier >= 2 ? 0.96 : 0.78;
-      ctx.drawImage(iceImg, x + 0.5, y + 0.5, cellPx - 1, cellPx - 1);
-      ctx.globalAlpha = 1;
-    }
-    ctx.restore();
-  }
-
-  private drawIceFrostOverlay(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    cellPx: number,
-    tier: number
-  ): void {
-    ctx.save();
-    // Translucent frost glaze & crystalline corner facets framing the candy inside the ice block!
-    const sheen = ctx.createLinearGradient(x + 3, y + 3, x + cellPx - 3, y + cellPx - 3);
-    sheen.addColorStop(0, tier >= 2 ? 'rgba(224, 242, 254, 0.42)' : 'rgba(224, 242, 254, 0.25)');
-    sheen.addColorStop(0.45, 'rgba(56, 189, 248, 0.04)');
-    sheen.addColorStop(1, tier >= 2 ? 'rgba(125, 211, 252, 0.36)' : 'rgba(125, 211, 252, 0.18)');
-    ctx.fillStyle = sheen;
-    this.roundRect(ctx, x + 2.5, y + 2.5, cellPx - 5, cellPx - 5, 10);
-    ctx.fill();
-
-    // Outer icy-cyan crystal bevel
-    ctx.strokeStyle = tier >= 2 ? '#0284c7' : 'rgba(14, 165, 233, 0.92)';
-    ctx.lineWidth = tier >= 2 ? 2.6 : 2;
-    this.roundRect(ctx, x + 2.2, y + 2.2, cellPx - 4.4, cellPx - 4.4, 10);
-    ctx.stroke();
-
-    // Inner gleaming white frost rim
-    ctx.strokeStyle = tier >= 2 ? 'rgba(255, 255, 255, 0.95)' : 'rgba(240, 249, 255, 0.85)';
-    ctx.lineWidth = tier >= 2 ? 1.8 : 1.25;
-    this.roundRect(ctx, x + 4.2, y + 4.2, cellPx - 8.4, cellPx - 8.4, 8.5);
-    ctx.stroke();
-
-    // Top-left & bottom-right crystalline frost corner facets
-    ctx.fillStyle = tier >= 2 ? 'rgba(255, 255, 255, 0.88)' : 'rgba(240, 249, 255, 0.72)';
-    ctx.beginPath();
-    ctx.moveTo(x + 4, y + 13);
-    ctx.lineTo(x + 4, y + 5.5);
-    ctx.lineTo(x + 13, y + 4);
-    ctx.closePath();
-    ctx.fill();
-
-    if (tier >= 2) {
-      ctx.beginPath();
-      ctx.moveTo(x + cellPx - 4, y + cellPx - 13);
-      ctx.lineTo(x + cellPx - 4, y + cellPx - 5.5);
-      ctx.lineTo(x + cellPx - 13, y + cellPx - 4);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  private drawWoodenBox(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    cellPx: number,
-    layers: number
-  ): void {
-    const boxImg = this.getSprite('m3_farm_crate');
-
-    ctx.save();
-    // Tactile 3D crate drop shadow inside cushion
-    ctx.fillStyle = 'rgba(74, 44, 22, 0.24)';
-    this.roundRect(ctx, x + 3, y + 5, cellPx - 6, cellPx - 6, 10);
-    ctx.fill();
-
-    if (boxImg) {
-      ctx.drawImage(boxImg, x + 1, y + 0.5, cellPx - 2, cellPx - 2);
-    } else {
-      ctx.fillStyle = layers >= 2 ? '#92400e' : '#b45309';
-      this.roundRect(ctx, x + 3, y + 3, cellPx - 6, cellPx - 6, 9);
-      ctx.fill();
-    }
-
-    if (layers >= 2) {
-      // Multi-hit Harvest Crate badge (×2 / ×3)
-      ctx.strokeStyle = layers >= 3 ? '#fde047' : '#f59e0b';
-      ctx.lineWidth = 2.2;
-      this.roundRect(ctx, x + 3.5, y + 3, cellPx - 7, cellPx - 7, 9);
-      ctx.stroke();
-
-      const bx = x + cellPx - 12;
-      const by = y + cellPx - 11;
-      ctx.fillStyle = layers >= 3 ? '#be123c' : '#b45309';
-      ctx.beginPath();
-      ctx.arc(bx, by, 8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#fde68a';
-      ctx.lineWidth = 1.6;
-      ctx.stroke();
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '900 9.5px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(`×${layers}`, bx, by + 0.5);
-    }
-    ctx.restore();
-  }
-
-  private drawCobwebOverlay(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    cellPx: number
-  ): void {
-    const cx = x + cellPx * 0.5;
-    const cy = y + cellPx * 0.5;
-    const rad = cellPx * 0.45;
-    ctx.save();
-
-    // Subtle dark backing shadow so white silk strands pop on every bright gem!
-    for (const pass of ['shadow', 'silk'] as const) {
-      ctx.strokeStyle = pass === 'shadow' ? 'rgba(15, 23, 42, 0.58)' : 'rgba(255, 255, 255, 0.94)';
-      ctx.lineWidth = pass === 'shadow' ? 3.2 : 1.55;
-      ctx.lineCap = 'round';
-
-      for (let i = 0; i < 8; i++) {
-        const ang = (i * Math.PI) / 4;
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx + Math.cos(ang) * rad, cy + Math.sin(ang) * rad);
-        ctx.stroke();
-      }
-
-      for (const ring of [0.38, 0.74]) {
-        ctx.beginPath();
-        for (let i = 0; i <= 8; i++) {
-          const ang = (i * Math.PI) / 4;
-          const px = cx + Math.cos(ang) * rad * ring;
-          const py = cy + Math.sin(ang) * rad * ring;
-          if (i === 0) ctx.moveTo(px, py);
-          else ctx.quadraticCurveTo(cx + Math.cos(ang - 0.39) * rad * ring * 0.86, cy + Math.sin(ang - 0.39) * rad * ring * 0.86, px, py);
-        }
-        ctx.stroke();
-      }
-    }
-
-    // Glistening pearl center knot
-    ctx.fillStyle = '#e0f2fe';
-    ctx.beginPath();
-    ctx.arc(cx, cy, 3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  private drawPiece(
-    ctx: CanvasRenderingContext2D,
-    piece: Match3Piece,
-    cx: number,
-    cy: number,
-    cellPx: number,
-    timeSec: number,
-    isSelected: boolean
-  ): void {
-    const squash = piece.squash ?? 0;
-    const baseScale = piece.scale * (isSelected ? 1.09 : 1);
-    const scaleX = baseScale * (1 + squash * 0.85);
-    const scaleY = baseScale * (1 - squash * 0.72);
-
-    ctx.save();
-    ctx.translate(cx, cy);
-
-    // Tactile 3D Candy Contact Shadow on Cushion Slot
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.21)';
-    ctx.beginPath();
-    ctx.ellipse(0, cellPx * 0.33, cellPx * 0.31 * scaleX, cellPx * 0.11, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.scale(scaleX, scaleY);
-
-    if (piece.kind === 'scroll') {
-      const floatY = Math.sin(timeSec * 4.2 + piece.id) * 1.8;
-      ctx.translate(0, floatY);
-      const scrollImg = this.getSprite('m3_piece_scroll');
-      const sz = cellPx * 0.92;
-      if (scrollImg) {
-        ctx.drawImage(scrollImg, -sz * 0.5, -sz * 0.5, sz, sz);
-      }
-      this.drawTinySparkleStar(ctx, sz * 0.3, -sz * 0.3, 4.2, timeSec * 4 + piece.id, '#fde047');
-      ctx.restore();
-      return;
-    }
-
-    if (piece.special === 'snitch') {
-      const pulse = 1 + 0.05 * Math.sin(timeSec * 6.5 + piece.id);
-      // Radiant rainbow-gold aura behind Harvest Pinwheel
-      const aura = ctx.createRadialGradient(0, 0, 2, 0, 0, cellPx * 0.48);
-      aura.addColorStop(0, 'rgba(254, 240, 138, 0.85)');
-      aura.addColorStop(0.6, 'rgba(250, 204, 21, 0.35)');
-      aura.addColorStop(1, 'rgba(250, 204, 21, 0)');
-      ctx.fillStyle = aura;
-      ctx.beginPath();
-      ctx.arc(0, 0, cellPx * 0.48, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.rotate(Math.sin(timeSec * 2.4 + piece.id) * 0.14);
-      ctx.scale(pulse, pulse);
-      const pinwheelImg = this.getSprite('m3_farm_pinwheel');
-      const sz = cellPx * 0.96;
-      if (pinwheelImg) {
-        ctx.drawImage(pinwheelImg, -sz * 0.5, -sz * 0.5, sz, sz);
-      }
-      this.drawTinySparkleStar(ctx, -sz * 0.32, -sz * 0.28, 4.8, timeSec * 5, '#ffffff');
-      this.drawTinySparkleStar(ctx, sz * 0.32, sz * 0.22, 4.2, timeSec * 5 + 2, '#fde047');
-      ctx.restore();
-      return;
-    }
-
-    if (piece.special === 'bomb') {
-      const meta = GEM_META[piece.color];
-      const isPrimed = Boolean(piece.bombPrimed);
-      const pulse = isPrimed
-        ? 1 + 0.14 * Math.sin(timeSec * 22 + piece.id)
-        : 1 + 0.055 * Math.sin(timeSec * 7 + piece.id);
-      const aura = ctx.createRadialGradient(0, 0, 2, 0, 0, cellPx * 0.48);
-      aura.addColorStop(0, isPrimed ? 'rgba(254, 240, 138, 0.92)' : meta.glow);
-      aura.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = aura;
-      ctx.beginPath();
-      ctx.arc(0, 0, cellPx * 0.48, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.scale(pulse, pulse);
-
-      // Candy Crush Colored Translucent Wrapper Pouch around the fruit
-      const wrapSz = cellPx * 0.84;
-      const halfW = wrapSz * 0.5;
-      ctx.save();
-      ctx.globalAlpha = isPrimed ? 0.92 : 0.78;
-      const wrapGrad = ctx.createLinearGradient(-halfW, -halfW, halfW, halfW);
-      wrapGrad.addColorStop(0, meta.fillLight);
-      wrapGrad.addColorStop(0.55, meta.fillPrimary);
-      wrapGrad.addColorStop(1, meta.stroke);
-      ctx.fillStyle = wrapGrad;
-      this.roundRect(ctx, -halfW, -halfW, wrapSz, wrapSz, 11);
-      ctx.fill();
-
-      ctx.lineWidth = isPrimed ? 3 : 2.2;
-      ctx.strokeStyle = isPrimed ? '#fef08a' : '#ffffff';
-      this.roundRect(ctx, -halfW, -halfW, wrapSz, wrapSz, 11);
-      ctx.stroke();
-
-      ctx.lineWidth = 1.3;
-      ctx.strokeStyle = meta.fillPrimary;
-      this.roundRect(ctx, -halfW + 2.5, -halfW + 2.5, wrapSz - 5, wrapSz - 5, 8.5);
-      ctx.stroke();
-      ctx.restore();
-
-      // Base colored fruit inside the wrapper
-      const gemImg = this.getSprite(GEM_SPRITE_KEYS[piece.color]);
-      const fruitSz = cellPx * 0.76;
-      if (gemImg) {
-        ctx.drawImage(gemImg, -fruitSz * 0.5, -fruitSz * 0.5, fruitSz, fruitSz);
-      }
-
-      // Corner Jam-Bomb emblem & fuse sparkle
-      const bombImg = this.getSprite('m3_farm_jam_bomb');
-      const badgeSz = cellPx * 0.42;
-      if (bombImg) {
-        ctx.drawImage(bombImg, halfW - badgeSz * 0.78, halfW - badgeSz * 0.82, badgeSz, badgeSz);
-      }
-      this.drawTinySparkleStar(
-        ctx,
-        -halfW * 0.68,
-        -halfW * 0.68,
-        isPrimed ? 5.4 : 4.2,
-        timeSec * (isPrimed ? 12 : 6),
-        '#fef08a'
-      );
-      ctx.restore();
-      return;
-    }
-
-    if (piece.special === 'rocket_h' || piece.special === 'rocket_v') {
-      const isHoriz = piece.special === 'rocket_h';
-      const meta = GEM_META[piece.color];
-      const pulse = 1 + 0.055 * Math.sin(timeSec * 8 + piece.id);
-      const aura = ctx.createRadialGradient(0, 0, 2, 0, 0, cellPx * 0.47);
-      aura.addColorStop(0, meta.glow);
-      aura.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = aura;
-      ctx.beginPath();
-      ctx.arc(0, 0, cellPx * 0.47, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.scale(pulse, pulse);
-
-      // Rocket tips peeking behind the fruit along the stripe axis
-      ctx.save();
-      if (!isHoriz) ctx.rotate(Math.PI / 2);
-      ctx.globalAlpha = 0.72;
-      const rocketImg = this.getSprite('m3_sp_rocket_h');
-      const rSz = cellPx * 1.02;
-      if (rocketImg) {
-        ctx.drawImage(rocketImg, -rSz * 0.5, -rSz * 0.5, rSz, rSz);
-      }
-      ctx.restore();
-
-      // Base colored fruit sprite so player clearly sees its color
-      const gemImg = this.getSprite(GEM_SPRITE_KEYS[piece.color]);
-      const sz = cellPx * 0.86;
-      if (gemImg) {
-        ctx.drawImage(gemImg, -sz * 0.5, -sz * 0.5, sz, sz);
-      } else {
-        ctx.fillStyle = meta.fillPrimary;
-        ctx.beginPath();
-        ctx.arc(0, 0, sz * 0.42, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // Candy Crush Striped Candy overlay bands across the fruit
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(0, 0, sz * 0.39, 0, Math.PI * 2);
-      ctx.clip();
-      if (!isHoriz) ctx.rotate(Math.PI / 2);
-      for (const offset of [-sz * 0.21, 0, sz * 0.21]) {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.fillRect(-sz * 0.45, offset - 2.6, sz * 0.9, 5.2);
-        ctx.fillStyle = meta.fillPrimary;
-        ctx.fillRect(-sz * 0.45, offset - 1.1, sz * 0.9, 2.2);
-      }
-      ctx.restore();
-
-      // Glowing color ring + animated fuse sparks at both rocket tips
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.8;
-      ctx.beginPath();
-      ctx.arc(0, 0, sz * 0.4, 0, Math.PI * 2);
-      ctx.stroke();
-
-      const tipJitter = Math.sin(timeSec * 22 + piece.id) * 1.8;
-      if (isHoriz) {
-        this.drawTinySparkleStar(ctx, cellPx * 0.44, tipJitter, 4.4, timeSec * 7, '#fde047');
-        this.drawTinySparkleStar(ctx, -cellPx * 0.44, -tipJitter, 4.4, timeSec * 7 + 1.5, '#fde047');
-      } else {
-        this.drawTinySparkleStar(ctx, tipJitter, cellPx * 0.44, 4.4, timeSec * 7, '#fde047');
-        this.drawTinySparkleStar(ctx, -tipJitter, -cellPx * 0.44, 4.4, timeSec * 7 + 1.5, '#fde047');
-      }
-      ctx.restore();
-      return;
-    }
-
-    // Standard Glossy 3D Candy-Jewel Sprite!
-    const gemImg = this.getSprite(GEM_SPRITE_KEYS[piece.color]);
-    const sz = cellPx * 0.9;
-    if (gemImg) {
-      ctx.drawImage(gemImg, -sz * 0.5, -sz * 0.5, sz, sz);
-    } else {
-      const meta = GEM_META[piece.color];
-      ctx.fillStyle = meta.fillPrimary;
-      ctx.beginPath();
-      ctx.arc(0, 0, sz * 0.42, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Periodic ambient Candy-Crush specular twinkle on ~1 in 12 gems
-    const glistenCycle = (timeSec * 0.9 + piece.id * 0.37) % 6.5;
-    if (glistenCycle < 0.55) {
-      const gAlpha = Math.sin((glistenCycle / 0.55) * Math.PI);
-      this.drawTinySparkleStar(
-        ctx,
-        -sz * 0.18,
-        -sz * 0.2,
-        4.6 * gAlpha,
-        timeSec * 3,
-        `rgba(255, 255, 255, ${gAlpha.toFixed(2)})`
-      );
-    }
-
-    ctx.restore();
-  }
-
-  private drawTinySparkleStar(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    rad: number,
-    rot: number,
-    color: string
-  ): void {
-    if (rad <= 0.4) return;
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(rot);
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    for (let i = 0; i < 8; i++) {
-      const r = i % 2 === 0 ? rad : rad * 0.28;
-      const a = (i * Math.PI) / 4;
-      if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
-      else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
-    }
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
-
-  private drawVfxAndParticlesLayer(
-    ctx: CanvasRenderingContext2D,
-    pad: number,
-    boardPx: number,
-    cellPx: number
-  ): void {
-    // 1. Beams, Shockwaves, Expanding Glow Rings & Snitch Lightning
-    for (const v of this.activeVfx) {
-      const t = Math.min(1, v.age / v.duration);
-      const alpha = 1 - t;
-
-      if (v.kind === 'ring' && v.r !== undefined && v.c !== undefined) {
-        const cx = pad + (v.c + 0.5) * cellPx;
-        const cy = pad + (v.r + 0.5) * cellPx;
-        ctx.save();
-        ctx.globalAlpha = alpha * 0.85;
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = (1 - t) * 5 + 1;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 6 + t * cellPx * 0.52, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.strokeStyle = v.color ?? '#fde047';
-        ctx.lineWidth = (1 - t) * 3.5;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 3 + t * cellPx * 0.62, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-      } else if (v.kind === 'beam_row' && v.r !== undefined) {
-        const cy = pad + (v.r + 0.5) * cellPx;
-        const halfH = (1 - t * 0.72) * cellPx * 0.48;
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        const grad = ctx.createLinearGradient(0, cy - halfH, 0, cy + halfH);
-        grad.addColorStop(0, 'rgba(249, 115, 22, 0)');
-        grad.addColorStop(0.25, '#fb923c');
-        grad.addColorStop(0.5, '#ffffff');
-        grad.addColorStop(0.75, '#fde047');
-        grad.addColorStop(1, 'rgba(249, 115, 22, 0)');
-        ctx.fillStyle = grad;
-        ctx.fillRect(pad, cy - halfH, boardPx, halfH * 2);
-        ctx.restore();
-      } else if (v.kind === 'beam_col' && v.c !== undefined) {
-        const cx = pad + (v.c + 0.5) * cellPx;
-        const halfW = (1 - t * 0.72) * cellPx * 0.48;
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        const grad = ctx.createLinearGradient(cx - halfW, 0, cx + halfW, 0);
-        grad.addColorStop(0, 'rgba(14, 165, 233, 0)');
-        grad.addColorStop(0.25, '#38bdf8');
-        grad.addColorStop(0.5, '#ffffff');
-        grad.addColorStop(0.75, '#fde047');
-        grad.addColorStop(1, 'rgba(14, 165, 233, 0)');
-        ctx.fillStyle = grad;
-        ctx.fillRect(cx - halfW, pad, halfW * 2, boardPx);
-        ctx.restore();
-      } else if (v.kind === 'shockwave' && v.r !== undefined && v.c !== undefined) {
-        const cx = pad + (v.c + 0.5) * cellPx;
-        const cy = pad + (v.r + 0.5) * cellPx;
-        const maxR = (v.radius ?? 1.8) * cellPx;
-        const curR = 10 + t * maxR;
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        const glow = ctx.createRadialGradient(cx, cy, curR * 0.35, cx, cy, curR);
-        glow.addColorStop(0, 'rgba(52, 211, 153, 0)');
-        glow.addColorStop(0.75, 'rgba(52, 211, 153, 0.42)');
-        glow.addColorStop(1, 'rgba(254, 240, 138, 0.85)');
-        ctx.fillStyle = glow;
-        ctx.beginPath();
-        ctx.arc(cx, cy, curR, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.strokeStyle = '#ecfdf5';
-        ctx.lineWidth = 4.5 * (1 - t) + 1.5;
-        ctx.stroke();
-        ctx.restore();
-      } else if (
-        v.kind === 'lightning' &&
-        v.r !== undefined &&
-        v.c !== undefined &&
-        v.toR !== undefined &&
-        v.toC !== undefined
-      ) {
-        const x1 = pad + (v.c + 0.5) * cellPx;
-        const y1 = pad + (v.r + 0.5) * cellPx;
-        const x2 = pad + (v.toC + 0.5) * cellPx;
-        const y2 = pad + (v.toR + 0.5) * cellPx;
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        const len = Math.max(1, Math.hypot(dx, dy));
-        const nx = -dy / len;
-        const ny = dx / len;
-        const bowSign = (Math.floor(v.seed) % 2 === 0 ? 1 : -1) * Math.min(36, len * 0.24);
-        const ctrlX = (x1 + x2) * 0.5 + nx * bowSign;
-        const ctrlY = (y1 + y2) * 0.5 + ny * bowSign - 10;
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        for (const pass of [
-          { w: 6.2, col: 'rgba(56, 189, 248, 0.68)' },
-          { w: 3.4, col: 'rgba(250, 204, 21, 0.85)' },
-          { w: 1.9, col: '#fef9c3' },
-        ]) {
-          ctx.strokeStyle = pass.col;
-          ctx.lineWidth = pass.w * (1 - t * 0.35);
-          ctx.lineCap = 'round';
-          ctx.beginPath();
-          ctx.moveTo(x1, y1);
-          ctx.quadraticCurveTo(ctrlX, ctrlY, x2, y2);
-          ctx.stroke();
-        }
-        const headT = Math.min(1, t * 1.4);
-        const invH = 1 - headT;
-        const hx = invH * invH * x1 + 2 * invH * headT * ctrlX + headT * headT * x2;
-        const hy = invH * invH * y1 + 2 * invH * headT * ctrlY + headT * headT * y2;
-        this.drawTinySparkleStar(ctx, hx, hy, 8.5 * (1 - t * 0.4), t * 6, '#ffffff');
-        ctx.restore();
-      }
-    }
-
-    // 2. 60fps Candy Shards, Frost Diamonds, Wood Chips & Star Sparkles
-    for (const p of this.particles) {
-      const t = Math.min(1, p.age / p.duration);
-      const alpha = Math.max(0, 1 - t * t);
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.translate(p.x, p.y);
-      ctx.rotate(p.rot);
-
-      if (p.shape === 'spark') {
-        this.drawTinySparkleStar(ctx, 0, 0, p.size * (1 - t * 0.4), 0, '#fef08a');
-      } else if (p.shape === 'wood') {
-        ctx.fillStyle = p.color;
-        ctx.strokeStyle = '#451a03';
-        ctx.lineWidth = 1.2;
-        ctx.fillRect(-p.size, -p.size * 0.48, p.size * 2, p.size * 0.96);
-        ctx.strokeRect(-p.size, -p.size * 0.48, p.size * 2, p.size * 0.96);
-      } else {
-        // Glossy Gem / Ice Crystal Shard
-        const s = p.size * (1 - t * 0.35);
-        ctx.fillStyle = p.color;
-        ctx.strokeStyle = p.accent;
-        ctx.lineWidth = 1.1;
-        ctx.beginPath();
-        ctx.moveTo(0, -s * 1.25);
-        ctx.lineTo(s * 0.95, 0);
-        ctx.lineTo(0, s * 1.25);
-        ctx.lineTo(-s * 0.95, 0);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-
-    // 3. Gardenscapes / Royal Match Flying Goal Collectibles Arcing Toward Goal Tray!
-    for (const fg of this.flyingGoals) {
-      const t = Math.min(1, fg.age / fg.duration);
-      const inv = 1 - t;
-      const x = inv * inv * fg.startX + 2 * inv * t * fg.ctrlX + t * t * fg.endX;
-      const y = inv * inv * fg.startY + 2 * inv * t * fg.ctrlY + t * t * fg.endY;
-      const sc = 1 + Math.sin(t * Math.PI) * 0.35 - t * 0.25;
-
-      ctx.save();
-      // Golden stardust comet tail
-      ctx.fillStyle = 'rgba(253, 224, 71, 0.55)';
-      ctx.beginPath();
-      ctx.arc(x, y, 16 * sc, 0, Math.PI * 2);
-      ctx.fill();
-
-      const img = this.getSprite(fg.spriteKey);
-      const sz = 36 * sc;
-      if (img) {
-        ctx.drawImage(img, x - sz * 0.5, y - sz * 0.5, sz, sz);
-      } else {
-        ctx.fillStyle = fg.color;
-        ctx.beginPath();
-        ctx.arc(x, y, 10 * sc, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-    }
-
-    // 4. Extruded 3D Candy-Crush Combo Praise Typography on Top!
-    for (const v of this.activeVfx) {
-      if (v.kind !== 'text' || v.r === undefined || v.c === undefined || !v.text) continue;
-      const cleanText = v.text.replace(/^[^\p{L}\p{N}+×!]+/u, '').trim();
-      if (!cleanText) continue;
-
-      const t = Math.min(1, v.age / v.duration);
-      const popScale = t < 0.18 ? 0.55 + (t / 0.18) * 0.62 : 1.17 - (t - 0.18) * 0.18;
-      const alpha = t > 0.72 ? Math.max(0, 1 - (t - 0.72) / 0.28) : 1;
-      const rawCx = pad + (v.c + 0.5) * cellPx;
-      const cx = Math.max(pad + 78, Math.min(pad + boardPx - 78, rawCx));
-      const cy = Math.max(pad + 26, pad + (v.r + 0.5) * cellPx - t * 32);
-
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.translate(cx, cy);
-      ctx.scale(popScale, popScale);
-      ctx.font = '900 20px "Be Vietnam Pro", system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.lineJoin = 'round';
-
-      // Extruded dark-berry & gold 3D Candy Crush text outline
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
-      ctx.shadowBlur = 6;
-      ctx.shadowOffsetY = 3;
-      ctx.lineWidth = 6.5;
-      ctx.strokeStyle = '#3b0764';
-      ctx.strokeText(cleanText, 0, 1.5);
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetY = 0;
-
-      const textGrad = ctx.createLinearGradient(0, -11, 0, 11);
-      textGrad.addColorStop(0, '#ffffff');
-      textGrad.addColorStop(0.45, '#fef08a');
-      textGrad.addColorStop(1, '#f59e0b');
-      ctx.fillStyle = textGrad;
-      ctx.fillText(cleanText, 0, 0);
-      ctx.restore();
-    }
-  }
-
-  private roundRect(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    r: number
-  ): void {
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, r);
+    this.bindOverlayEvents(box);
   }
 }

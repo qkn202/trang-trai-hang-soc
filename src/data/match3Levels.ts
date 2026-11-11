@@ -26,6 +26,11 @@ export function isMilestoneBossStage(rawStage: number): boolean {
   return MILESTONE_BOSS_SET.has(Math.floor(rawStage));
 }
 
+export function isCandyHogwartsBossStage(rawStage: number): boolean {
+  const s = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(Number(rawStage) || 1)));
+  return s % 111 === 0 || s % 10 === 0 || isMilestoneBossStage(s);
+}
+
 export interface MilestoneBossMeta {
   stage: number;
   bossTitleVi: string;
@@ -228,30 +233,33 @@ export interface Match3BoosterDef {
 export const MATCH3_BOOSTERS: Match3BoosterDef[] = [
   {
     id: 'reparo_hammer',
-    name: 'Xẻng Bạc Làm Vườn',
-    shortLabel: 'Xẻng Bạc',
-    emoji: '🪏',
+    name: 'Búa Kẹo Đũa Phép',
+    shortLabel: 'Búa Kẹo',
+    emoji: '🔨',
     goldCost: 65,
     requiresCellTarget: true,
-    description: 'Xúc gọn ngay 1 nông sản hoặc gỡ 1 lớp thùng gỗ/sương giá tại ô chọn (không tốn lượt).',
+    description:
+      'Vung Búa Kẹo Đũa Phép đập vỡ ngay 1 viên kẹo, gỡ Bom, phá Khiên Linh Giá hoặc 1 lớp Vật Cản (không tốn lượt).',
   },
   {
     id: 'row_col_cannon',
-    name: 'Bình Tưới Phép Thuật',
-    shortLabel: 'Bình Tưới',
-    emoji: '🚿',
+    name: 'Đũa Phép Đổi Kẹo',
+    shortLabel: 'Đổi Kẹo',
+    emoji: '🪄',
     goldCost: 95,
     requiresCellTarget: true,
-    description: 'Tưới bừng sáng thu hoạch trọn 1 hàng ngang + 1 cột dọc qua ô chọn (không tốn lượt).',
+    description:
+      'Vẫy Đũa Phép Đổi Kẹo hoán đổi tự do 2 viên Kẹo Bertie hoặc Ếch Sô-cô-la liền kề mà không tốn lượt đi.',
   },
   {
     id: 'alohomora_shuffle',
-    name: 'Đũa Phép Mùa Gặt',
-    shortLabel: 'Đũa Xáo',
-    emoji: '🪄',
+    name: 'Kẹo Xoáy Thời Gian',
+    shortLabel: 'Xoáy Kẹo',
+    emoji: '🍬',
     goldCost: 55,
     requiresCellTarget: false,
-    description: 'Vẩy đũa trộn mới toàn bộ nông sản trên gác xép và tạo 1 Hũ Mứt Nổ (không tốn lượt).',
+    description:
+      'Xoay Đồng Hồ Đường Vàng xáo trộn mới toàn bộ kẹo trên bàn cờ để mở chuỗi Combo mới (không tốn lượt).',
   },
 ];
 
@@ -306,50 +314,52 @@ export function createInitialMatch3State(): Match3ProgressionState {
       alohomora_shuffle: 2,
     },
     levelsWon: 0,
+    activeSession: null,
   };
 }
 
-// ==================== GEOMETRIC STAR ECONOMY (1 -> 2 -> 4 -> 8 -> 16 -> 32...) ====================
+// ==================== BALANCED ESTATE STAR ECONOMY (7,150 🌟 TOTAL BUDGET) ====================
 
 const ITEM_STAR_COST_BY_ID: Record<string, number> = {
-  // Cấp số nhân ×2 từ 1 🌟 (trần 512..1024 🌟)
+  // Tổng 33 công trình = 6.400 🌟 (+ 255 🌟 mở 10 vùng đất + 495 🌟 nâng cấp 1★→5★ = 7.150 🌟,
+  // khớp trọn vẹn nguồn cung 5 × 1.455 + 3 = 7.278 🌟 cơ bản không khóa cứng cốt truyện).
   burrow_house_canon: 1,
   molly_apple_bakery: 2,
-  butterbeer_cart: 4,
-  burrow_chicken_coop: 8,
-  burrow_self_knitting_loom: 16,
-  burrow_pumpkin_gnomes: 32,
-  burrow_owl_post: 64,
+  butterbeer_cart: 2,
+  burrow_chicken_coop: 3,
+  burrow_self_knitting_loom: 4,
+  burrow_pumpkin_gnomes: 5,
+  burrow_owl_post: 6,
   // Chapter 2
-  arthur_ford_shed: 128,
-  burrow_reed_pond_mill: 256,
-  burrow_apple_orchard: 512,
-  niffler_den: 512,
-  burrow_cider_apiary: 512,
-  burrow_puffskein_pasture: 512,
-  burrow_honeydukes_canon: 512,
-  hogsmeade_stone_bridge: 512,
-  halloween_arch: 512,
+  arthur_ford_shed: 8,
+  burrow_reed_pond_mill: 10,
+  burrow_apple_orchard: 14,
+  niffler_den: 18,
+  burrow_cider_apiary: 22,
+  burrow_puffskein_pasture: 28,
+  burrow_honeydukes_canon: 35,
+  hogsmeade_stone_bridge: 42,
+  halloween_arch: 50,
   // Chapter 3
-  burrow_windmill_canon: 512,
-  burrow_broomsticks_canon: 512,
-  burrow_greenhouse_canon: 512,
-  floo_fireplace_gate: 512,
-  hagrid_bowtruckle: 512,
-  burrow_feast_marquee: 512,
-  eeylops_owl_emporium: 512,
+  burrow_windmill_canon: 60,
+  burrow_broomsticks_canon: 75,
+  burrow_greenhouse_canon: 95,
+  floo_fireplace_gate: 115,
+  hagrid_bowtruckle: 140,
+  burrow_feast_marquee: 165,
+  eeylops_owl_emporium: 195,
   // Chapter 4
-  hagrid_pumpkin_hut: 1024,
-  whomping_willow: 1024,
-  owlery_elf_hut: 1024,
-  hogsmeade_harvest_fountain: 1024,
-  hippogriff_glade: 1024,
-  black_lake_boats: 1024,
+  hagrid_pumpkin_hut: 230,
+  whomping_willow: 270,
+  owlery_elf_hut: 315,
+  hogsmeade_harvest_fountain: 395,
+  hippogriff_glade: 470,
+  black_lake_boats: 505,
   // Chapter 5
-  thestral_grove: 1024,
-  unicorn_glade: 1024,
-  phoenix_perch: 1024,
-  dragon_lair: 1024,
+  thestral_grove: 595,
+  unicorn_glade: 705,
+  phoenix_perch: 860,
+  dragon_lair: 960,
 };
 
 const ZONE_STAR_COST_BY_ID: Record<ZoneId, number> = {

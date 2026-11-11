@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Preview Khung Floo Độc Quyền (username: kimchi) — Vàng Hổ Phách & Kẹo Vàng Đơn</title>
+  <link rel="stylesheet" href="./burrow-candy-floo.css" />
+  <style>
+    /* Mô phỏng nền tảng .shoutbox-hogwarts của hpvn-archive.net/floo & ánh xạ đường dẫn ảnh tương đối khi test local */
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: #120b06;
+      color: #f4e6c8;
+    }
+
+    .demo-shell {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    .demo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 11px;
+      margin-bottom: 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(245, 200, 76, 0.45);
+      background: #28190d;
+      color: #ffe07d;
+      font-size: 12.5px;
+      font-weight: 600;
+    }
+
+    .floo-mock-feed {
+      background: #160f09;
+      border: 1px solid rgba(197, 166, 107, 0.45);
+      border-radius: 14px;
+      padding: 24px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .shout-message-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      position: relative;
+    }
+
+    .shout-message-row.is-self {
+      justify-content: flex-end;
+    }
+
+    .shout-house-seal {
+      width: 28px;
+      height: 28px;
+      flex: 0 0 28px;
+      border-radius: 8px;
+      border: 1px solid rgba(245, 234, 219, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 5px;
+      background: #5c1916;
+      font-size: 15px;
+    }
+
+    .shout-message-content {
+      max-width: 84%;
+      min-width: 0;
+    }
+
+    /* Rule nền gốc tương đương .shout-message-row[data-store-frame] trên hpvn-archive.net */
+    .shout-message-row[data-store-frame] .shout-message-bubble {
+      position: relative;
+      box-sizing: border-box;
+      width: fit-content;
+      max-width: 100%;
+      background: var(--sf-paper);
+      box-shadow: var(--sf-shadow);
+      border: 1px solid var(--sf-edge) !important;
+      border-radius: 12px 12px 12px 4px;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .shout-message-row.is-self:not(.is-self-shared-direction) .shout-message-bubble {
+      border-radius: 12px 12px 4px 12px;
+      margin-left: auto;
+    }
+
+    /* Ghi đè đường dẫn tương đối ./ để mở trực tiếp file preview.html không cần copy sang /images/floo-items/ */
+    .shout-message-row[data-store-frame="burrow-candy-amber"] .shout-message-bubble::before {
+      background-image: url("./corner-tl.png") !important;
+      background-image: image-set(
+        url("./corner-tl.webp") type("image/webp") 1x,
+        url("./corner-tl-2x.webp") type("image/webp") 2x,
+        url("./corner-tl.png") type("image/png") 1x
+      ) !important;
+    }
+
+    .shout-message-row[data-store-frame="burrow-candy-amber"] .shout-message-bubble::after {
+      background-image: url("./candy-charm-gold.png") !important;
+      background-image: image-set(
+        url("./candy-charm-gold.webp") type("image/webp") 1x,
+        url("./candy-charm-gold-2x.webp") type("image/webp") 2x,
+        url("./candy-charm-gold.png") type("image/png") 1x
+      ) !important;
+    }
+
+    .shout-meta-line {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 3px;
+      font-size: 12.5px;
+    }
+
+    .shout-message-author {
+      font-weight: 700;
+    }
+
+    .shout-quote-preview {
+      margin: 4px 0 6px;
+      padding: 5px 9px;
+      border-left: 3px solid #f5c84c;
+      border-radius: 4px;
+      font-size: 12.5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-shell">
+    <h1 style="font-size: 18px; margin: 0 0 6px;">🍯 Preview Khung Mạng Floo — Vàng Hổ Phách &amp; Kẹo Vàng Đơn</h1>
+    <p style="font-size: 13px; color: #cbb68c; margin: 0 0 10px;">
+      Bản kiểm tra trực tiếp từ bộ file bàn giao trong thư mục <code>burrow-candy/</code> (mã khung <code>burrow-candy-amber</code>).
+    </p>
+    <div class="demo-badge">
+      <span aria-hidden="true">🔒</span> Chỉ định độc quyền cho username: <code>kimchi</code>
+    </div>
+
+    <div class="floo-mock-feed">
+      <div class="shout-message-row is-other" data-store-frame="burrow-candy-amber">
+        <div class="shout-house-seal" aria-hidden="true">🦁</div>
+        <div class="shout-message-content">
+          <div class="shout-message-bubble">
+            <div class="shout-meta-line">
+              <span class="shout-message-author">kimchi</span>
+              <span class="shout-message-meta-time">21:48</span>
+            </div>
+            <div class="shout-rich-text">
+              Góc nhìn của mọi người trong phòng chat khi thấy tin nhắn của <b>kimchi</b> (<code>.is-other</code>) — nền Vàng Hổ Phách và Kẹo Vàng Đơn góc phải.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="shout-message-row is-self" data-store-frame="burrow-candy-amber">
+        <div class="shout-message-content">
+          <div class="shout-message-bubble">
+            <div class="shout-meta-line" style="justify-content: flex-end;">
+              <span class="shout-message-author">kimchi</span>
+              <span class="shout-message-meta-time">21:49</span>
+            </div>
+            <div class="shout-quote-preview">
+              <b>Phù thủy khác:</b> Hôm nay trên Mạng Floo có kẹo mới hả?
+            </div>
+            <div class="shout-rich-text">
+              Góc nhìn của chính <b>kimchi</b> khi tự nhắn tin (<code>.is-self</code> — tự lật gương viên kẹo vàng đơn sang góc trái, kèm hiển thị <a href="#preview">link mẫu</a> &amp; trích dẫn).
+            </div>
+          </div>
+        </div>
+        <div class="shout-house-seal" style="background: #6b4e12;" aria-hidden="true">🦡</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

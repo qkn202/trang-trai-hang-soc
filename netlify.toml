@@ -32,6 +32,24 @@
   [headers.values]
     Cache-Control = "public, max-age=604800, stale-while-revalidate=86400"
 
+[[headers]]
+  for = "/icons/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800, stale-while-revalidate=86400"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://*.hpvn-archive.net https://hpvn-archive.net; media-src 'self' data: blob:; connect-src 'self' ws: wss: http://127.0.0.1:* http://localhost:* https://*.cloudfunctions.net https://*.a.run.app https://*.run.app https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.google.com https://hpvn-archive.net https://*.hpvn-archive.net https://hpvn.net https://*.hpvn.net https://hpvnn-archive.web.app https://hpvnn-burrow.web.app; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self' https://hpvn-archive.net https://*.hpvn-archive.net https://hpvn.net https://*.hpvn.net https://hpvnn-archive.web.app https://hpvnn-archive.firebaseapp.com https://hpvnn-burrow.web.app https://hpvnn-burrow.firebaseapp.com http://localhost:* http://127.0.0.1:*;"
+
+# Không bao giờ rewrite /api/* thành 200 HTML index.html khi chưa gắn proxy backend
+[[redirects]]
+  from = "/api/*"
+  to = "/api/:splat"
+  status = 404
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

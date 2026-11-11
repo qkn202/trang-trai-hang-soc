@@ -1,0 +1,390 @@
+rules_version = '2';
+
+// ============================================================================
+// Trang Trại Hang Sóc & Thung Lũng Hogsmeade — Cloud Firestore Security Rules
+// Architecture: Server-Authoritative Backend (`burrow-game` / `asia-southeast1`)
+// Namespace Isolation: 100% `burrow_*` Collections (Fully Independent)
+// ============================================================================
+//
+// IMPORTANT DEPLOYMENT NOTE (`hpvnn-archive` Shared Project):
+// By default, `firebase.json` targets the isolated Named Firestore Database
+// `burrow-game` (`BURROW_FIRESTORE_DATABASE_ID`). In addition, every collection
+// in this ruleset is strictly isolated under the `burrow_*` namespace so that
+// even if merged into a shared database ruleset, zero collections collide with
+// external applications. Before running `firebase deploy --only firestore:rules`,
+// operators MUST either:
+//   1. Deploy to the isolated Named Firestore Database (`burrow-game`)
+//      configured in `firebase.json` (`"firestore": { "database": "burrow-game", ... }`), OR
+//   2. Merge these helper functions and `burrow_*` collection `match` blocks
+//      into the unified project `firestore.rules` file if sharing `(default)`.
+//
+// Security Model Overview:
+// - 100% Server-Authoritative Writes: All valley state mutations, economy
+//   cycles, independent Hang Sóc Gringotts dual-bucket wallet transactions,
+//   Vietnam-timezone (`Asia/Ho_Chi_Minh`, UTC+7) daily caps, Hogwarts House Cup
+//   increments, neighbor visit helps, Co-op SOS assistance, and minigame
+//   leaderboard updates are executed exclusively via Firebase Cloud Functions v2
+//   (`firebase-admin` SDK in `asia-southeast1`), which bypasses security rules.
+// - Zero Client Writes: Client SDKs are strictly prohibited from creating,
+//   updating, or deleting (`allow write: if false;`) any document in any
+//   collection or subcollection.
+// - Anti-Scraping Read Isolation: Collection-wide `list` queries are disabled
+//   across all collections (`allow list: if false;`). Clients may only `get`
+//   documents they are explicitly authorized to read by exact document ID, and
+//   anonymous sessions are blocked from probing `burrow_friends`.
+//
+// ============================================================================
+// Assumed Data Model (1:1 Alignment with `server/firebaseCallableAdapter.ts`)
+// ============================================================================
+//
+// 1. Collection: `burrow_states/{uid}`
+//    - Document ID: `{uid}` (Firebase Auth UID)
+//    - Fields: `uid` (string), `revision` (number), `createdAt` (number),
+//      `updatedAt` (number), `parkName` (string), `playerName` (string),
+//      `friendCode` (string), `avatarEmoji` (string), `house` (string),
+//      `level` (number), `xp` (number), `magicStars` (number),
+//      `timeSand` (number), `phoenixTalismans` (number),
+//      `friendshipTokens` (number), `inventory` (map), `supplies` (map),
+//      `decorations` (map), `flooFrames` (map), `economicCycles` (map),
+//      `timers` (list), `builtIds` (list), `guideDone` (list),
+//      `festival` (map), `achievementsClaimed` (list),
+//      `clearanceUsed` (bool), `minigameRecords` (map)
+//    - Access: Owner `get` only (`isOwner(uid)`); `list` denied; `write` denied.
+//
+// 2. Collection: `burrow_daily/{docId}`
+//    - Document ID: `{uid}_{YYYY-MM-DD}` (Vietnam UTC+7 day key)
+//    - Fields: `dayKey` (string), `uid` (string), `streakDays` (number),
+//      `quests` (list), `chestClaimed` (bool), `bonusQuests` (list),
+//      `bonusChestClaimed` (bool), `helpsGivenCount` (number, max 5/day),
+//      `helpedHostUids` (list), `rescuesGivenCount` (number),
+//      `rescuedHostUids` (list), `owlHelpsRequestedCount` (number),
+//      `freeActions` (map), `storeBoughtByItem` (map),
+//      `marketEarnedGalleons` (number), `marketSoldByItem` (map),
+//      `houseCupPointsToday` (number), `ops` (map, idempotency receipts)
+//    - Access: Owner `get` only (`isDocUidOwner()`, or owner-scoped
+//      `isOwnerDatedDocId(docId)` when `resource == null`); `list` denied;
+//      `write` denied.
+//
+// 3. Collection: `burrow_wallets/{uid}`
+//    - Document ID: `{uid}` (Firebase Auth UID)
+//    - Fields: `uid` (string), `spendable` (number), `balance` (number),
+//      `bankBalance` (number), `frozen` (bool), `updatedAt` (number)
+//    - Description: Independent Gringotts dual-bucket wallet for Hang Sóc.
+//    - Access: Owner `get` only (`isOwner(uid)`); `list` denied; `write` denied.
+//
+// 4. Collection: `burrow_ledger/{docId}`
+//    - Document ID: `{uid}` (KV adapter array wrapper) or `{txId}` (individual
+//      append-only Hang Sóc wallet ledger entry)
+//    - Fields: `uid` (string), `txId` (string), `requestId` (string),
+//      `type` ('debit' | 'credit'), `amount` (number), `fromBank` (number),
+//      `fromPocket` (number), `balanceAfter` (number), `sourceType` (string),
+//      `reasonCode` (string), `createdAt` (number), or `__rawJson` (string)
+//    - Access: Owner `get` only (`isOwner(docId) || isDocUidOwner()`);
+//      `list` denied; `write` denied.
+//
+// 5. Collection: `burrow_ledger_rows/{txId}`
+//    - Document ID: `{txId}` (Flat snake_case ledger row dual-written for
+//      BigQuery Export)
+//    - Fields: `tx_id` (string), `request_id` (string), `uid` (string),
+//      `direction` ('debit' | 'credit'), `amount` (number),
+//      `from_bank` (number), `from_pocket` (number), `balance_after` (number),
+//      `source_type` (string), `reason_code` (string), `created_at` (number)
+//    - Access: Owner `get` only (`isDocUidOwner()`); `list` denied; `write` denied.
+//
+// 6. Collection: `burrow_helpers/{docId}`
+//    - Document ID: `{hostUid}_{YYYY-MM-DD}`
+//    - Fields: `hostUid` (optional string) or `__rawJson` (serialized list of
+//      `HelperVisitNotification` items: `id`, `uid`, `name`, `avatarEmoji`,
+//      `kind`, `buildingUid`, `noteText`, `at`)
+//    - Access: Host owner `get` only (`isOwnerDatedDocId(docId) || isDocHostOwner()`);
+//      `list` denied; `write` denied.
+//
+// 7. Collection: `burrow_coop_requests/{uid}`
+//    - Document ID: `{uid}` (Host player UID requesting Co-op assistance)
+//    - Fields: `hostUid` (string), `__rawJson` (serialized bounded list of
+//      `CoopAssistanceRequestDoc` items: `requestId`, `hostUid`, `hostName`,
+//      `hostEmoji`, `kind` ['owl_crate' | 'minigame_sos'], `orderId`, `reqIndex`,
+//      `itemId`, `qty`, `minigameKind`, `stage`, `createdAt`, `fulfilledAt`,
+//      `helperUid`, `helperName`, `helperEmoji`, `ghostReplayMoves`,
+//      `ghostReplaySummaryVi`)
+//    - Access: Signed-in `get` only (`isSignedIn()`, allows neighbors to inspect
+//      and fulfill active Owl Crate / Minigame SOS requests by host UID);
+//      `list` denied; `write` denied.
+//
+// 8. Collection: `burrow_fire/{uid}`
+//    - Document ID: `{uid}` (Valley owner UID)
+//    - Fields: `mode` ('real' | 'visual'), `since` (number), `until` (number)
+//    - Access: Signed-in `get` only (`isSignedIn()`, allows visitors to render
+//      active valley fire hazard and extinguish via callable); `list` denied;
+//      `write` denied.
+//
+// 9. Collection: `burrow_public_layouts/{uid}`
+//    - Document ID: `{uid}` (Valley owner UID)
+//    - Fields: `uid` (string), `parkName` (string), `playerName` (string),
+//      `level` (number), `house` (string), `avatarEmoji` (string),
+//      `buildings` (list), `tileOverrides` (map), `unlockedZones` (list),
+//      `updatedAt` (number)
+//    - Access: Signed-in `get` only (`isSignedIn()`, sanitized public valley
+//      layout separated from private `burrow_states` & `burrow_friends` cards);
+//      `list` denied; `write` denied.
+//
+// 10. Collection: `burrow_house_cup/{weekKey}`
+//     - Document ID: `{weekKey}` (ISO week anchored to Monday 00:00 UTC+7, e.g. `2026-W46`)
+//     - Fields: `weekKey` (string), `houses` (map of `Gryffindor`, `Hufflepuff`,
+//       `Ravenclaw`, `Slytherin` points), `rewardMin` (number), `updatedAt` (number)
+//     - Access: Signed-in `get` only (`isSignedIn()`); `list` denied; `write` denied.
+//
+// 11. Collection: `burrow_leaderboards/{gameId}`
+//     - Document ID: `{gameId}` (`match3`, `sudoku`, `blocks`, `caro`, `chess`, `seedquiz`)
+//     - Fields: Top-50 sanitized public leaderboard entries (or `__rawJson`)
+//     - Access: Signed-in `get` only (`isSignedIn()`); `list` denied; `write` denied.
+//
+// 12. Collection: `burrow_friends/{friendCode}`
+//     - Document ID: `{friendCode}` (Normalized uppercase valley friend code)
+//     - Fields: `userId` (string), `friendCode` (string), `name` (string),
+//       `parkName` (string), `level` (number), `house` (string),
+//       `avatarEmoji` (string), `updatedAt` (number)
+//     - Access: Non-anonymous signed-in member `get` (`isNonAnonymousMember()`)
+//       by exact `friendCode` only (blocks anonymous sessions from scraping
+//       directory cards containing internal `userId`s); `list` denied;
+//       `write` denied.
+//
+// 13. Collection: `burrow_config/{docId}`
+//     - Document ID: `'sales'`
+//     - Fields: `revision` (number), `marketOff` (bool),
+//       `discountPercent` (number), `priceOverrides` (map),
+//       `dailyCapGalleons` (number), `masteryDailyCapGalleons` (number),
+//       `perItemDailyCap` (number), `updatedAt` (number)
+//     - Access: Signed-in `get` ONLY when `docId == 'sales'`
+//       (`isSignedIn() && docId == 'sales'`); `list` denied; `write` denied
+//       (managed solely via `manageBurrowSales` callable verifying `saleAdmin`
+//       custom claim).
+//
+// 14. Collection: `burrow_save/{uid}`
+//     - Document ID: `{uid}` (Firebase Auth UID)
+//     - Fields: Cloud save snapshot envelope (`uid`, `updatedAt`, `payload` / `__rawJson`)
+//     - Access: Owner `get` only (`isOwner(uid)`); `list` denied; `write` denied.
+//
+// 15. Internal Server & Cloud KV Bridge Collections:
+//     - `burrow_meta/{docId}` (e.g. `visit_directory`), `burrow_track/{docId}`,
+//       `burrow_kv/{docId}`, and catch-all `/{document=**}`:
+//       Default deny (`allow read, write: if false;`).
+//
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ========================================================================
+    // Helper Functions
+    // ========================================================================
+
+    // Verify that the caller is authenticated with Firebase Auth.
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Alias for clear readability across game collection rules.
+    function isSignedIn() {
+      return isAuthenticated();
+    }
+
+    // Verify that the caller is a signed-in non-anonymous member (allows
+    // custom tokens / full auth providers while blocking anonymous scraping).
+    function isNonAnonymousMember() {
+      return isSignedIn() &&
+        (!('firebase' in request.auth.token) ||
+         !('sign_in_provider' in request.auth.token.firebase) ||
+         request.auth.token.firebase.sign_in_provider != 'anonymous');
+    }
+
+    // Verify that the signed-in user matches the target UID parameter.
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Ensure the UID contains only safe characters (`[A-Za-z0-9_-]`) before
+    // interpolating into a regular expression, preventing regex metacharacter injection.
+    function isSafeUidFormat(uid) {
+      return uid is string &&
+        uid.size() >= 1 &&
+        uid.size() <= 128 &&
+        uid.matches('^[A-Za-z0-9_-]+$');
+    }
+
+    // Match composite per-day document IDs of exact form `{uid}_{YYYY-MM-DD}`.
+    // Because the `_YYYY-MM-DD` suffix has a fixed 11-character anchored format,
+    // two distinct UIDs can never collide on the same `docId`.
+    function isOwnerDatedDocId(docId) {
+      return isSignedIn() &&
+        isSafeUidFormat(request.auth.uid) &&
+        docId.matches('^' + request.auth.uid + '_[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    // Verify ownership via the stored document's `uid` string field.
+    function isDocUidOwner() {
+      return isSignedIn() &&
+        resource != null &&
+        ('uid' in resource.data) &&
+        (resource.data.uid is string) &&
+        resource.data.uid == request.auth.uid;
+    }
+
+    // Verify ownership via the stored document's `hostUid` string field.
+    function isDocHostOwner() {
+      return isSignedIn() &&
+        resource != null &&
+        ('hostUid' in resource.data) &&
+        (resource.data.hostUid is string) &&
+        resource.data.hostUid == request.auth.uid;
+    }
+
+    // ========================================================================
+    // 1. Authoritative Player Valley & Progression State
+    // ========================================================================
+    match /burrow_states/{uid} {
+      allow get: if isOwner(uid);
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ========================================================================
+    // 2. Per-User Per-Vietnam-Day Quests, Help Caps & Idempotency Log
+    // ========================================================================
+    match /burrow_daily/{docId} {
+      allow get: if isDocUidOwner() || (resource == null && isOwnerDatedDocId(docId));
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ========================================================================
+    // 3. Independent Hang Sóc Gringotts Dual-Bucket Wallet Accounts
+    // ========================================================================
+    match /burrow_wallets/{uid} {
+      allow get: if isOwner(uid);
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ========================================================================
+    // 4. Append-Only Hang Sóc Wallet Transaction Ledger
+    // ========================================================================
+    match /burrow_ledger/{docId} {
+      allow get: if isOwner(docId) || isDocUidOwner();
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ========================================================================
+    // 5. Flat Wallet Ledger Rows Dual-Written for BigQuery Export
+    // ========================================================================
+    match /burrow_ledger_rows/{txId} {
+      allow get: if isDocUidOwner();
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ========================================================================
+    // 6. Daily Visitor Help Notifications (`{hostUid}_{YYYY-MM-DD}`)
+    // ========================================================================
+    match /burrow_helpers/{docId} {
+      allow get: if isOwnerDatedDocId(docId) || isDocHostOwner();
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ========================================================================
+    // 7. Co-op Owl Crate & Minigame SOS Assistance Requests
+    // ========================================================================
+    match /burrow_coop_requests/{uid} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ========================================================================
+    // 8. Active Valley Fire Hazard Status
+    // ========================================================================
+    match /burrow_fire/{uid} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ========================================================================
+    // 9. Sanitized Public Valley Layouts for Neighbor Visits
+    // ========================================================================
+    match /burrow_public_layouts/{uid} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ========================================================================
+    // 10. Weekly Hogwarts House Cup Standings
+    // ========================================================================
+    match /burrow_house_cup/{weekKey} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ========================================================================
+    // 11. Top-50 Minigame Leaderboards (6 Disciplines)
+    // ========================================================================
+    match /burrow_leaderboards/{gameId} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ========================================================================
+    // 12. Public Friend-Code Lookup Cards (Non-Anonymous Exact Key Lookup Only)
+    // ========================================================================
+    match /burrow_friends/{friendCode} {
+      allow get: if isNonAnonymousMember();
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ========================================================================
+    // 13. Store & Market Sales Configuration (`burrow_config/sales`)
+    // ========================================================================
+    match /burrow_config/{docId} {
+      allow get: if isSignedIn() && docId == 'sales';
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ========================================================================
+    // 14. Authoritative Cloud Save Envelope
+    // ========================================================================
+    match /burrow_save/{uid} {
+      allow get: if isOwner(uid);
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ========================================================================
+    // 15. Internal Server & Cloud KV Bridge Collections
+    // ========================================================================
+    match /burrow_meta/{docId} {
+      allow read, write: if false;
+    }
+
+    match /burrow_track/{docId} {
+      allow read, write: if false;
+    }
+
+    match /burrow_kv/{docId} {
+      allow read, write: if false;
+    }
+
+    // ========================================================================
+    // Default Deny Catch-All (All Unmatched Collections & Subcollections)
+    // ========================================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -2,6 +2,7 @@
 // Pattern delegation: hàm nhận `sim` để giữ nguyên state, không đổi hành vi gameplay.
 
 import {
+  computeExamStreakReductionSec,
   computeRealTimeBuildSeconds,
   FARM_CROPS,
   FARM_GOODS,
@@ -11,6 +12,7 @@ import {
   getCatalogItem,
   getFarmItemMeta,
   getMinRemainingBuildFloorSec,
+  getStageSawtoothTag,
   MINIGAME_CLEAR_REDUCTION_SEC,
   PASTURE_ANIMALS,
   TIME_SAND_SKIP_SECONDS,
@@ -62,6 +64,7 @@ import {
   getUpgradePuzzleStarCost,
   getZonePuzzleStarCost,
   HEART_REGEN_MS,
+  isCandyHogwartsBossStage,
   MATCH3_BOOSTERS,
   MAX_MATCH3_HEARTS,
   MAX_MINIGAME_STAGE,
@@ -104,6 +107,7 @@ import {
   MinigameRescueContext,
   PastureAnimalId,
   MinigameTrialKind,
+  PhoenixTalismanDailyUsageState,
   NeighborGardenHelpKind,
   NeighborMinigameSos,
   NeighborPresetNoteId,
@@ -168,7 +172,7 @@ import {
   createInitialPuzzleArcadeState,
   JIGSAW_PAINTINGS,
   PuzzleRewardSpec,
-} from './puzzleArcadeEngine';
+} from './puzzleShared';
 import {
   ActiveQuizChallenge,
   createInitialLanguageQuizState,
@@ -294,6 +298,37 @@ export function trialsGetRequiredLevelTrial(sim: ParkSimulation): LevelTrialRequ
     return getLevelTrialRequirement(sim.state.level, maxedKinds);
 }
 
+const VALID_LAST_PLAYED_MINIGAMES: ReadonlySet<LeaderboardGameId> = new Set([
+  'match3',
+  'caro',
+  'sudoku',
+  'chess',
+  'blocks',
+  'seedquiz',
+]);
+
+export function trialsGetLastPlayedMinigame(sim: ParkSimulation): LeaderboardGameId {
+    const raw = sim.state.lastPlayedMinigame;
+    if (raw && VALID_LAST_PLAYED_MINIGAMES.has(raw)) {
+      return raw;
+    }
+    return 'match3';
+}
+
+export function trialsSetLastPlayedMinigame(
+    sim: ParkSimulation,
+    gameId: LeaderboardGameId
+): LeaderboardGameId {
+    const safe: LeaderboardGameId = VALID_LAST_PLAYED_MINIGAMES.has(gameId) ? gameId : 'match3';
+    if (sim.state.lastPlayedMinigame !== safe) {
+      sim.state.lastPlayedMinigame = safe;
+      if (!sim.isHeadmasterPreview) {
+        sim.saveToStorage();
+      }
+    }
+    return safe;
+}
+
 export function trialsIsCurrentLevelTrialPassed(sim: ParkSimulation): boolean {
     return sim.state.level >= MAX_LEVEL || sim.state.sandboxMode || sim.isHeadmasterPreview;
 }
@@ -401,6 +436,7 @@ export function trialsLoseMatch3Heart(sim: ParkSimulation): void {
       }
     }
     m3.winStreak = 0;
+    sim.state.examWinStreak = 0;
     sim.saveToStorage();
     sim.onUiChange?.();
 }
@@ -566,6 +602,7 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
     leaderboardRankUp?: LeaderboardRankChange;
   } {
     const prevLbRank = trialsGetPlayerMinigameRank(sim, 'match3', 'valley');
+    sim.state.lastPlayedMinigame = 'match3';
     const m3 = sim.state.match3;
     const pa = sim.state.puzzleArcade;
     const playedStage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, m3.currentLevel ?? 1));
@@ -576,11 +613,15 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
     const isFirstClear = prevCleared < MAX_MINIGAME_STAGE && playedStage > prevCleared;
 
     const def = getMatch3LevelDef(playedStage);
+    const isBossStage = Boolean(isCandyHogwartsBossStage(playedStage) || def.difficulty === 'boss');
     const reqBefore = trialsGetRequiredLevelTrial(sim);
+    const featuredKind =
+      reqBefore?.kind ??
+      getLevelTrialRequirement(MAX_LEVEL + (pa.featuredWinsCount ?? 0))?.kind ??
+      'match3';
     const featuredBonusApplied = Boolean(
       isFirstClear &&
-        reqBefore &&
-        reqBefore.kind === 'match3' &&
+        featuredKind === 'match3' &&
         !sim.state.sandboxMode &&
         !sim.isHeadmasterPreview
     );
@@ -604,35 +645,53 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
           featuredBonusStars += 1;
         }
       }
+      const sawtooth = getStageSawtoothTag(playedStage);
       starsEarned = def.starReward + featuredBonusStars;
-      sandEarned = def.bonusSandReward + (featuredBonusApplied ? 1 : 0);
+      sandEarned = Math.max(def.bonusSandReward, isBossStage ? 1 : 0) + (featuredBonusApplied ? 1 : 0);
       goldEarned = Math.round(
         (def.goldReward + Math.max(0, Math.round(bonusCoinsFromMoves))) *
           streakMult *
+          sawtooth.bonusGoldMult *
           (featuredBonusApplied ? 1.35 : 1)
       );
       xpEarned = def.xpReward;
-      boosterReward = def.bonusBoosterReward;
+      boosterReward = def.bonusBoosterReward ?? (isBossStage ? 'reparo_hammer' : undefined);
 
-      m3.maxClearedLevel = Math.min(MAX_MINIGAME_STAGE, playedStage);
-      m3.currentLevel = Math.min(MAX_MINIGAME_STAGE, playedStage + 1);
+      m3.maxClearedLevel = Math.min(MAX_MINIGAME_STAGE, Math.max(prevCleared, playedStage));
+      m3.currentLevel = Math.min(MAX_MINIGAME_STAGE, m3.maxClearedLevel + 1);
       m3.stars += starsEarned;
       m3.totalStarsEarned += starsEarned;
       if (boosterReward) {
         m3.boosters[boosterReward] = (m3.boosters[boosterReward] ?? 0) + 1;
       }
     } else {
-      m3.currentLevel = MAX_MINIGAME_STAGE;
-      m3.maxClearedLevel = MAX_MINIGAME_STAGE;
+      m3.maxClearedLevel = Math.min(MAX_MINIGAME_STAGE, Math.max(prevCleared, playedStage));
+      m3.currentLevel = Math.min(MAX_MINIGAME_STAGE, m3.maxClearedLevel + 1);
+      if (prevCleared >= MAX_MINIGAME_STAGE && playedStage === MAX_MINIGAME_STAGE) {
+        starsEarned = 1;
+        m3.stars += 1;
+        m3.totalStarsEarned += 1;
+      }
       goldEarned = Math.max(
         20,
         Math.round((def.goldReward + Math.max(0, Math.round(bonusCoinsFromMoves))) * 0.5)
       );
       xpEarned = Math.max(10, Math.round(def.xpReward * 0.5));
     }
+    m3.activeSession = null;
 
     m3.levelsWon += 1;
     m3.winStreak += 1;
+    const examStreak = (sim.state.examWinStreak ?? 0) + 1;
+    sim.state.examWinStreak = examStreak;
+    const streakInfo = computeExamStreakReductionSec(examStreak);
+    if (streakInfo.dewPhialAwarded > 0) {
+      sim.state.morningDewPhials = Math.min(20, (sim.state.morningDewPhials ?? 0) + streakInfo.dewPhialAwarded);
+      sim.onToast?.(
+        `🧪 Chuỗi thắng Khảo Thí ×${examStreak} (${streakInfo.multiplierLabel}): Nhận +${streakInfo.dewPhialAwarded} Bình Sương Mai (-15p có chọn lọc)!`,
+        '🧪'
+      );
+    }
 
     sim.state.galleons += goldEarned;
     sim.state.finance.harvestRevenue += goldEarned;
@@ -640,13 +699,14 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
 
     const lvRes = trialsAdvanceMasterPuzzleLevel(sim, 'match3', isFirstClear);
     sim.addXp(xpEarned);
-    sim.addHarvestFeastPoints(isFirstClear ? (def.difficulty === 'boss' ? 40 : 28) : 14);
+    sim.addHarvestFeastPoints(isFirstClear ? (isBossStage ? 40 : 28) : 14);
     sim.recordQuestProgress('cast_spells', undefined, 3);
-    if (isFirstClear && (def.difficulty === 'boss' || playedStage === MAX_MINIGAME_STAGE)) {
+    sim.checkAndToastAchievements?.();
+    if (isFirstClear && (isBossStage || playedStage === MAX_MINIGAME_STAGE)) {
       sim.launchFireworksShow(playedStage === MAX_MINIGAME_STAGE ? 18 : 10);
     }
 
-    const rawReduceSec = MINIGAME_CLEAR_REDUCTION_SEC;
+    const rawReduceSec = streakInfo.rawReduceSec;
     const buildReduction = sim.applyConstructionReductionFromGameplay(
       rawReduceSec,
       'Bùa Gặt Honeydukes'
@@ -705,6 +765,121 @@ export function trialsSpendPuzzleHelperGold(sim: ParkSimulation, goldCost: numbe
     return { ok: true, msg: `Đã dùng ${cost}G kích hoạt trợ giúp phép thuật!` };
 }
 
+export const PHOENIX_TALISMAN_DISCIPLINES: readonly MinigameTrialKind[] = [
+  'match3',
+  'sudoku',
+  'caro',
+  'chess',
+  'blocks',
+];
+export const MAX_DAILY_PHOENIX_TALISMANS = PHOENIX_TALISMAN_DISCIPLINES.length; // 5 lần/ngày (1 lần/môn)
+
+function ensurePhoenixTalismanDailyState(
+  state: GameState,
+  nowMs?: number
+): PhoenixTalismanDailyUsageState {
+  const todayKey = getLocalCalendarResetKey(nowMs);
+  if (state.phoenixTalismanDaily && state.phoenixTalismanDaily.dayKey > todayKey) {
+    if (!state.phoenixTalismanDaily.usedByGame) {
+      state.phoenixTalismanDaily.usedByGame = {};
+    }
+    return state.phoenixTalismanDaily;
+  }
+  if (!state.phoenixTalismanDaily || state.phoenixTalismanDaily.dayKey !== todayKey) {
+    state.phoenixTalismanDaily = {
+      dayKey: todayKey,
+      usedByGame: {},
+    };
+  } else if (!state.phoenixTalismanDaily.usedByGame) {
+    state.phoenixTalismanDaily.usedByGame = {};
+  }
+  return state.phoenixTalismanDaily;
+}
+
+export function trialsGetPhoenixTalismanDailyStatus(
+  sim: ParkSimulation,
+  nowMs?: number
+): {
+  dayKey: string;
+  usedCount: number;
+  maxDaily: number;
+  remainingToday: number;
+  usedByGame: Partial<Record<MinigameTrialKind, boolean>>;
+} {
+  const daily = ensurePhoenixTalismanDailyState(sim.state, nowMs);
+  let usedCount = 0;
+  for (const kind of PHOENIX_TALISMAN_DISCIPLINES) {
+    if (daily.usedByGame[kind] === true) {
+      usedCount += 1;
+    }
+  }
+  return {
+    dayKey: daily.dayKey,
+    usedCount,
+    maxDaily: MAX_DAILY_PHOENIX_TALISMANS,
+    remainingToday: Math.max(0, MAX_DAILY_PHOENIX_TALISMANS - usedCount),
+    usedByGame: { ...daily.usedByGame },
+  };
+}
+
+export function trialsIsPhoenixTalismanUsedToday(
+  sim: ParkSimulation,
+  kind: MinigameTrialKind,
+  nowMs?: number
+): boolean {
+  const daily = ensurePhoenixTalismanDailyState(sim.state, nowMs);
+  return daily.usedByGame[kind] === true;
+}
+
+export function trialsCanUsePhoenixTalismanInGame(
+  sim: ParkSimulation,
+  kind: MinigameTrialKind,
+  nowMs?: number
+): {
+  ok: boolean;
+  usedTodayInGame: boolean;
+  usedCountToday: number;
+  maxDaily: number;
+  msg: string;
+} {
+  const status = trialsGetPhoenixTalismanDailyStatus(sim, nowMs);
+  if (status.usedByGame[kind] === true) {
+    const meta = getMinigameKindLabelVi(kind);
+    return {
+      ok: false,
+      usedTodayInGame: true,
+      usedCountToday: status.usedCount,
+      maxDaily: status.maxDaily,
+      msg: `Hôm nay bạn đã dùng 🔥 Bùa Phượng Hoàng ở môn ${meta.nameVi} rồi (giới hạn 1 lần/môn/ngày • đã dùng ${status.usedCount}/${status.maxDaily} môn hôm nay, mở lại sau 00:00)!`,
+    };
+  }
+  if (status.usedCount >= status.maxDaily) {
+    return {
+      ok: false,
+      usedTodayInGame: true,
+      usedCountToday: status.usedCount,
+      maxDaily: status.maxDaily,
+      msg: `Hôm nay bạn đã dùng hết ${status.maxDaily}/${status.maxDaily} lượt 🔥 Bùa Phượng Hoàng trên cả 5 môn khảo thí! Hẹn mở lại sau 00:00.`,
+    };
+  }
+  if (!sim.state.sandboxMode && trialsGetPhoenixTalismanCount(sim) <= 0) {
+    return {
+      ok: false,
+      usedTodayInGame: false,
+      usedCountToday: status.usedCount,
+      maxDaily: status.maxDaily,
+      msg: 'Chưa có 🔥 Bùa Phượng Hoàng — hãy niệm đúng 8 câu Thần Chú Đa Ngữ, giao Đơn Cú hoặc rèn tại Kho Nông Sản!',
+    };
+  }
+  return {
+    ok: true,
+    usedTodayInGame: false,
+    usedCountToday: status.usedCount,
+    maxDaily: status.maxDaily,
+    msg: '',
+  };
+}
+
 export function trialsGetPhoenixTalismanCount(sim: ParkSimulation): number {
     return Math.max(
       0,
@@ -720,18 +895,31 @@ export function trialsGrantPhoenixTalisman(sim: ParkSimulation, qty = 1): number
     return added;
 }
 
-export function trialsConsumePhoenixTalisman(sim: ParkSimulation): { ok: boolean; msg: string } {
-    if (sim.state.sandboxMode) {
-      return { ok: true, msg: '🔥 Đã kích hoạt Bùa Trợ Chiến Phượng Hoàng!' };
-    }
-    const cur = trialsGetPhoenixTalismanCount(sim);
-    if (cur <= 0) {
+export function trialsConsumePhoenixTalisman(
+  sim: ParkSimulation,
+  kind?: MinigameTrialKind,
+  nowMs?: number
+): { ok: boolean; msg: string } {
+    if (kind) {
+      const gate = trialsCanUsePhoenixTalismanInGame(sim, kind, nowMs);
+      if (!gate.ok) {
+        return { ok: false, msg: gate.msg };
+      }
+    } else if (!sim.state.sandboxMode && trialsGetPhoenixTalismanCount(sim) <= 0) {
       return {
         ok: false,
         msg: 'Chưa có 🔥 Bùa Phượng Hoàng — hãy niệm đúng 8 câu Thần Chú Đa Ngữ, giao Đơn Cú hoặc rèn tại Kho Nông Sản!',
       };
     }
-    sim.state.phoenixTalismans = cur - 1;
+
+    if (!sim.state.sandboxMode) {
+      const cur = trialsGetPhoenixTalismanCount(sim);
+      sim.state.phoenixTalismans = Math.max(0, cur - 1);
+    }
+    if (kind) {
+      const daily = ensurePhoenixTalismanDailyState(sim.state, nowMs);
+      daily.usedByGame[kind] = true;
+    }
     if (typeof sim.audio.playTalismanBlast === 'function') {
       sim.audio.playTalismanBlast();
     } else {
@@ -739,7 +927,27 @@ export function trialsConsumePhoenixTalisman(sim: ParkSimulation): { ok: boolean
     }
     sim.saveToStorage();
     sim.onUiChange?.();
-    return { ok: true, msg: '🔥 Đã kích hoạt Bùa Trợ Chiến Phượng Hoàng!' };
+    const afterStatus = trialsGetPhoenixTalismanDailyStatus(sim, nowMs);
+    return {
+      ok: true,
+      msg: kind
+        ? `🔥 Đã kích hoạt Bùa Phượng Hoàng (${afterStatus.usedCount}/${afterStatus.maxDaily} môn hôm nay)!`
+        : '🔥 Đã kích hoạt Bùa Trợ Chiến Phượng Hoàng!',
+    };
+}
+
+export function trialsRefundPhoenixTalismanAttempt(
+  sim: ParkSimulation,
+  kind: MinigameTrialKind,
+  nowMs?: number
+): void {
+  const daily = ensurePhoenixTalismanDailyState(sim.state, nowMs);
+  delete daily.usedByGame[kind];
+  if (!sim.state.sandboxMode) {
+    trialsGrantPhoenixTalisman(sim, 1);
+  }
+  sim.saveToStorage();
+  sim.onUiChange?.();
 }
 
 export function trialsGetCraftablePhoenixBarnGood(sim: ParkSimulation): FarmGoodId | null {
@@ -807,6 +1015,7 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
     leaderboardRankUp?: LeaderboardRankChange;
   } {
     const isScoredMode = isScoredLeaderboardGame(mode);
+    sim.state.lastPlayedMinigame = mode;
     const prevLbRank = isScoredMode ? trialsGetPlayerMinigameRank(sim, mode, 'valley') : 0;
     const pa = sim.state.puzzleArcade;
     const m3 = sim.state.match3;
@@ -817,10 +1026,13 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
     const isFirstClear = prevCleared < MAX_MINIGAME_STAGE && playedStage > prevCleared;
 
     const reqBefore = trialsGetRequiredLevelTrial(sim);
+    const featuredKind =
+      reqBefore?.kind ??
+      getLevelTrialRequirement(MAX_LEVEL + (pa.featuredWinsCount ?? 0))?.kind ??
+      'match3';
     const featuredBonusApplied = Boolean(
       isFirstClear &&
-        reqBefore &&
-        reqBefore.kind === mode &&
+        featuredKind === mode &&
         !sim.state.sandboxMode &&
         !sim.isHeadmasterPreview
     );
@@ -844,21 +1056,37 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
           featuredBonusStars += 1;
         }
       }
+      const sawtooth = getStageSawtoothTag(playedStage);
       starsEarned = baseStars + featuredBonusStars;
       sandEarned = Math.max(0, Math.round(reward.sand)) + (featuredBonusApplied ? 1 : 0);
       goldEarned = Math.round(
-        Math.max(0, reward.gold) * streakMult * (featuredBonusApplied ? 1.35 : 1)
+        Math.max(0, reward.gold) * streakMult * sawtooth.bonusGoldMult * (featuredBonusApplied ? 1.35 : 1)
       );
       xpEarned = Math.max(0, Math.round(reward.xp));
 
       m3.stars += starsEarned;
       m3.totalStarsEarned += starsEarned;
     } else {
+      if (prevCleared >= MAX_MINIGAME_STAGE && playedStage === MAX_MINIGAME_STAGE) {
+        starsEarned = 1;
+        m3.stars += 1;
+        m3.totalStarsEarned += 1;
+      }
       goldEarned = Math.max(18, Math.round(Math.max(0, reward.gold) * 0.5));
       xpEarned = Math.max(10, Math.round(Math.max(0, reward.xp) * 0.5));
     }
 
     m3.winStreak = (m3.winStreak ?? 0) + 1;
+    const examStreak = (sim.state.examWinStreak ?? 0) + 1;
+    sim.state.examWinStreak = examStreak;
+    const streakInfo = computeExamStreakReductionSec(examStreak);
+    if (streakInfo.dewPhialAwarded > 0) {
+      sim.state.morningDewPhials = Math.min(20, (sim.state.morningDewPhials ?? 0) + streakInfo.dewPhialAwarded);
+      sim.onToast?.(
+        `🧪 Chuỗi thắng Khảo Thí ×${examStreak} (${streakInfo.multiplierLabel}): Nhận +${streakInfo.dewPhialAwarded} Bình Sương Mai (-15p có chọn lọc)!`,
+        '🧪'
+      );
+    }
     sim.state.timeSand += sandEarned;
     sim.state.galleons += goldEarned;
     sim.state.finance.harvestRevenue += goldEarned;
@@ -866,25 +1094,25 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
     pa.activeMode = mode;
     pa.totalPuzzlesSolved += 1;
 
-    const nextStage = isFirstClear
-      ? Math.min(MAX_MINIGAME_STAGE, playedStage + 1)
-      : MAX_MINIGAME_STAGE;
-    const newCleared = isFirstClear
-      ? Math.min(MAX_MINIGAME_STAGE, playedStage)
-      : MAX_MINIGAME_STAGE;
+    const newCleared = Math.min(MAX_MINIGAME_STAGE, Math.max(prevCleared, playedStage));
+    const nextStage = Math.min(MAX_MINIGAME_STAGE, newCleared + 1);
 
     if (mode === 'sudoku') {
       pa.sudokuStage = nextStage;
       pa.sudokuCleared = newCleared;
+      pa.sudokuSession = null;
     } else if (mode === 'caro') {
       pa.caroStage = nextStage;
       pa.caroCleared = newCleared;
+      pa.caroSession = null;
     } else if (mode === 'chess') {
       pa.chessStage = nextStage;
       pa.chessCleared = newCleared;
+      pa.chessSession = null;
     } else {
       pa.blockStage = nextStage;
       pa.blockCleared = newCleared;
+      pa.onetSession = null;
     }
 
     let newlyRestoredPainting = false;
@@ -897,11 +1125,12 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
     sim.addXp(xpEarned);
     sim.addHarvestFeastPoints(isFirstClear ? (playedStage % 25 === 0 ? 40 : 28) : 14);
     sim.recordQuestProgress('cast_spells', undefined, 2);
+    sim.checkAndToastAchievements?.();
     if (isFirstClear && playedStage === MAX_MINIGAME_STAGE) {
       sim.launchFireworksShow(18);
     }
 
-    const rawReduceSec = MINIGAME_CLEAR_REDUCTION_SEC;
+    const rawReduceSec = streakInfo.rawReduceSec;
     const buildReduction = sim.applyConstructionReductionFromGameplay(
       rawReduceSec,
       'Đại Sảnh Khảo Thí'

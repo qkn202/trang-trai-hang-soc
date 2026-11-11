@@ -266,18 +266,24 @@ export function cropsDrawFarmlandCropRows(self: IsometricRenderer,
       ctx.fill();
     }
 
-    // Pass 2: Depth-sorted 2.5D painted crop/flower bushes
+    // Pass 2: Depth-sorted 2.5D painted crop/flower bushes with traveling valley wind shear!
     for (const p of pts) {
       const tuftJitter = 0.97 + (((p.idx * 7 + Math.abs(seedHash)) % 5) * 0.015);
       const clW = baseClW * tuftJitter;
       const clH = clW * (srcH / srcW);
-      const sway = self.reducedMotion
+      const windShear = self.reducedMotion
         ? 0
-        : Math.sin(self.tick * 0.05 + p.idx * 0.85 + seedHash) * 0.038 * swayDamp;
+        : Math.sin(self.tick * 0.044 - seedHash * 0.12 + p.idx * 0.48) * 0.068 * swayDamp;
+      const breathY =
+        self.reducedMotion || !isRipe
+          ? 1
+          : 1 + Math.sin(self.tick * 0.055 + p.idx + seedHash * 0.2) * 0.018;
 
       ctx.save();
       ctx.translate(p.x, p.y);
-      if (sway !== 0) ctx.rotate(sway);
+      if (windShear !== 0 || breathY !== 1) {
+        ctx.transform(1, 0, windShear, breathY, 0, 0);
+      }
       ctx.drawImage(cropSprite, 0, 0, srcW, srcH, -clW * 0.5, -clH * anchorYRatio, clW, clH);
       ctx.restore();
     }

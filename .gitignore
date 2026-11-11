@@ -1,16 +1,26 @@
 # Build output
 dist/
+release/
+*.tar.gz
+functions/lib/
+.firebase/
 
 # Node
 node_modules/
+functions/node_modules/
 package-lock.json
+functions/package-lock.json
 
 # OS / editor noise
 .DS_Store
 Thumbs.db
 *.log
+.claude/
+__pycache__/
+*.pyc
 
 # The 3 BGM MP3s are shipped game assets — keep them tracked.
 # Only ignore regenerated local copies outside public/.
 *.mp3
 !public/audio/*.mp3
+.github/workflows/

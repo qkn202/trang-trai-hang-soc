@@ -16,10 +16,27 @@ export interface ErrorEventPayload {
 
 export class ErrorMonitor {
   public readonly analytics: Analytics;
+  public readonly maxErrorsPerSession: number;
   private isListening = false;
+  private readonly seenSignatures = new Set<string>();
+  private errorCountThisSession = 0;
 
-  constructor(analytics: Analytics) {
+  constructor(analytics: Analytics, options: { maxErrorsPerSession?: number } = {}) {
     this.analytics = analytics;
+    this.maxErrorsPerSession = Math.max(1, options.maxErrorsPerSession ?? 10);
+  }
+
+  private recordDeduplicatedError(payload: ErrorEventPayload): void {
+    if (this.errorCountThisSession >= this.maxErrorsPerSession) return;
+    const sig = `${payload.type || 'err'}|${payload.msg.slice(0, 160)}|${payload.line ?? 0}|${payload.col ?? 0}`;
+    if (this.seenSignatures.has(sig)) return;
+    this.seenSignatures.add(sig);
+    this.errorCountThisSession += 1;
+    try {
+      this.analytics.track('error', payload as unknown as Record<string, unknown>);
+    } catch {
+      // Bỏ qua lỗi gửi track
+    }
   }
 
   private handleError = (event: ErrorEvent): void => {
@@ -38,11 +55,7 @@ export class ErrorMonitor {
       type: 'uncaught_error',
     };
 
-    try {
-      this.analytics.track('error', payload as unknown as Record<string, unknown>);
-    } catch {
-      // Bỏ qua lỗi gửi track
-    }
+    this.recordDeduplicatedError(payload);
 
     console.error('[ErrorMonitor] Uncaught error detected:', event.message, event.error);
   };
@@ -61,11 +74,7 @@ export class ErrorMonitor {
       type: 'unhandledrejection',
     };
 
-    try {
-      this.analytics.track('error', payload as unknown as Record<string, unknown>);
-    } catch {
-      // Bỏ qua lỗi gửi track
-    }
+    this.recordDeduplicatedError(payload);
 
     console.error('[ErrorMonitor] Unhandled Promise rejection detected:', reason);
   };

@@ -1,8 +1,11 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { defineConfig, type ResolvedConfig } from 'vite';
+import { BurrowAuthoritativeBackend, MemoryBackendKVStore } from './server/burrowBackendCore';
+import { handleAuthoritativeHttpRequest } from './server/index';
 
 const COMPRESSIBLE_EXTS = new Set([
   '.js',
@@ -12,8 +15,11 @@ const COMPRESSIBLE_EXTS = new Set([
   '.json',
   '.webmanifest',
   '.svg',
+  '.ico',
+  '.xml',
+  '.txt',
 ]);
-const MIN_COMPRESS_BYTES = 1024;
+const MIN_COMPRESS_BYTES = 256;
 
 function sendJsonMaybeGzip(
   req: IncomingMessage,
@@ -53,47 +59,121 @@ function collectCompressibleFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-const localDevSaveStore = new Map<string, string>();
-const localDevFriendDirectory = new Map<string, string>();
-const localDevLeaderboardStore = new Map<string, Array<Record<string, unknown>>>();
+const localAuthoritativeKv = new MemoryBackendKVStore();
+let devFlooCommunitySeeded: Promise<void> | null = null;
 
-function indexLocalFriendProfile(userId: string, bodyText: string): string | null {
-  try {
-    const parsed = JSON.parse(bodyText) as Record<string, unknown>;
-    const soc =
-      parsed.neighborSocial && typeof parsed.neighborSocial === 'object'
-        ? (parsed.neighborSocial as Record<string, unknown>)
-        : null;
-    const rawCode = String(soc?.playerFriendCode ?? parsed.friendCode ?? '')
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-Z0-9-]/g, '')
-      .slice(0, 18);
-    if (rawCode.length < 4) return null;
-    const parkName = String(parsed.parkName || 'Trang Trại Hang Sóc').slice(0, 42);
-    const profile = {
-      userId,
-      friendCode: rawCode,
-      name: String(parsed.name || parkName).slice(0, 42),
-      parkName,
-      level: Math.max(1, Math.min(100, Math.floor(Number(parsed.level) || 1))),
-      house: String(parsed.house || 'Gryffindor'),
-      avatarEmoji: String(parsed.avatarEmoji || '🧙‍♂️').slice(0, 8),
-      buildings: Array.isArray(parsed.buildings) ? parsed.buildings.slice(0, 260) : undefined,
-      tileOverrides:
-        parsed.tileOverrides && typeof parsed.tileOverrides === 'object'
-          ? parsed.tileOverrides
-          : undefined,
-      unlockedZones: Array.isArray(parsed.unlockedZones)
-        ? parsed.unlockedZones.slice(0, 12)
-        : undefined,
-      updatedAt: Date.now(),
-    };
-    localDevFriendDirectory.set(rawCode, JSON.stringify(profile));
-    return rawCode;
-  } catch {
-    return null;
-  }
+function ensureDevFlooCommunitySeeded(): Promise<void> {
+  if (devFlooCommunitySeeded) return devFlooCommunitySeeded;
+  devFlooCommunitySeeded = (async () => {
+    const backend = new BurrowAuthoritativeBackend({
+      store: localAuthoritativeKv,
+      allowEmulatorTokens: true,
+    });
+    const now = Date.now();
+    const members: Array<{
+      uid: string;
+      playerName: string;
+      parkName: string;
+      house: 'Gryffindor' | 'Ravenclaw' | 'Hufflepuff' | 'Slytherin';
+      avatarEmoji: string;
+      level: number;
+      growing: number;
+      fire: boolean;
+      weather: string;
+      atmosphere: string;
+    }> = [
+      {
+        uid: 'hpvn_hoanglong_gf',
+        playerName: 'Hoàng Long',
+        parkName: 'Lò Sưởi Sư Tử Đỏ',
+        house: 'Gryffindor',
+        avatarEmoji: '🦁',
+        level: 31,
+        growing: 3,
+        fire: true,
+        weather: 'clear',
+        atmosphere: 'dusk',
+      },
+      {
+        uid: 'hpvn_linh_rc',
+        playerName: 'Khánh Linh',
+        parkName: 'Đài Sao Ravenclaw',
+        house: 'Ravenclaw',
+        avatarEmoji: '🦅',
+        level: 26,
+        growing: 4,
+        fire: false,
+        weather: 'fireflies',
+        atmosphere: 'night',
+      },
+      {
+        uid: 'hpvn_minhanh_hp',
+        playerName: 'Minh Anh',
+        parkName: 'Nhà Kính Hufflepuff',
+        house: 'Hufflepuff',
+        avatarEmoji: '🦡',
+        level: 19,
+        growing: 2,
+        fire: false,
+        weather: 'clear',
+        atmosphere: 'day',
+      },
+      {
+        uid: 'hpvn_thaovy_sl',
+        playerName: 'Thảo Vy',
+        parkName: 'Thung Lũng Lục Bảo',
+        house: 'Slytherin',
+        avatarEmoji: '🐍',
+        level: 42,
+        growing: 5,
+        fire: false,
+        weather: 'fog',
+        atmosphere: 'dawn',
+      },
+    ];
+
+    for (const m of members) {
+      const st = await backend.getOrCreateState(m.uid, m.house);
+      st.playerName = m.playerName;
+      st.parkName = m.parkName;
+      st.avatarEmoji = m.avatarEmoji;
+      st.level = m.level;
+      st.decorations.scene = {
+        weather: m.weather,
+        atmosphere: m.atmosphere,
+        event: 'harvest_feast',
+      };
+      st.timers = Array.from({ length: m.growing }, (_, idx) => ({
+        timerId: `tm_${m.uid}_${idx}`,
+        domain: 'crop' as const,
+        targetId: idx % 2 === 0 ? 'pumpkin' : 'wheat',
+        qty: 1,
+        startedAt: now - 15 * 60_000,
+        readyAt: now + 45 * 60_000,
+        boosted: false,
+        cared: false,
+      }));
+      st.rawClientSave = {
+        version: 1,
+        name: m.playerName,
+        parkName: m.parkName,
+        level: m.level,
+        house: m.house,
+      };
+      await localAuthoritativeKv.put(`burrow_states:${m.uid}`, JSON.stringify(st));
+      await backend.syncVisitDirectoryForState(st);
+      if (m.fire) {
+        await localAuthoritativeKv.put(
+          `burrow_fire:${m.uid}`,
+          JSON.stringify({ mode: 'visual', since: now - 600_000, until: now + 7_200_000 }),
+          { expirationTtl: 86_400 }
+        );
+      }
+    }
+  })().catch(() => {
+    // Non-blocking dev seed
+  });
+  return devFlooCommunitySeeded;
 }
 
 function attachLocalApiMiddleware(middlewares: {
@@ -102,168 +182,91 @@ function attachLocalApiMiddleware(middlewares: {
   middlewares.use((req, res, next) => {
     const rawUrl = req.url || '';
     const pathname = rawUrl.split('?')[0];
-    if (
-      pathname !== '/api/save' &&
-      pathname !== '/api/track' &&
-      pathname !== '/api/leaderboard' &&
-      pathname !== '/api/friends/register' &&
-      pathname !== '/api/friends/lookup'
-    ) {
+    const isApiRoute = pathname.startsWith('/api/');
+    const isEmulatorCallable = /^\/demo-[a-z0-9-]+\/[a-z0-9-]+\/[a-zA-Z0-9_]+$/.test(pathname);
+    if (!isApiRoute && !isEmulatorCallable) {
       next();
       return;
     }
 
-    if (req.method === 'OPTIONS') {
-      res.statusCode = 204;
-      res.end();
-      return;
-    }
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', async () => {
+      try {
+        await ensureDevFlooCommunitySeeded();
+        const method = (req.method || 'GET').toUpperCase();
+        const rawBody = chunks.length > 0 ? Buffer.concat(chunks) : undefined;
+        const isGzipReq =
+          String(req.headers['content-encoding'] || '').toLowerCase() === 'gzip';
+        const decodedBody =
+          rawBody && isGzipReq ? zlib.gunzipSync(rawBody) : rawBody;
 
-    if (pathname === '/api/track') {
-      req.resume();
-      sendJsonMaybeGzip(req, res, 200, JSON.stringify({ ok: true, mocked: true }));
-      return;
-    }
-
-    const search = rawUrl.includes('?') ? rawUrl.slice(rawUrl.indexOf('?')) : '';
-    const params = new URLSearchParams(search);
-    const headerUid = req.headers['x-user-id'];
-    const rawUid = (Array.isArray(headerUid) ? headerUid[0] : headerUid) || params.get('userId') || 'default_player';
-    const userId = rawUid.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64) || 'default_player';
-
-    if (pathname === '/api/leaderboard') {
-      if (req.method === 'GET') {
-        const gameId = String(params.get('game') || 'match3');
-        const entries = localDevLeaderboardStore.get(gameId) ?? [];
-        sendJsonMaybeGzip(req, res, 200, JSON.stringify({ ok: true, gameId, entries }));
-        return;
-      }
-      if (req.method === 'POST') {
-        const chunks: Buffer[] = [];
-        req.on('data', (chunk: Buffer) => chunks.push(chunk));
-        req.on('end', () => {
-          try {
-            const rawBody = Buffer.concat(chunks);
-            const isGz = String(req.headers['content-encoding'] || '').toLowerCase() === 'gzip';
-            const body = JSON.parse((isGz ? zlib.gunzipSync(rawBody) : rawBody).toString('utf8')) as {
-              gameId?: string;
-              entry?: Record<string, unknown>;
-            };
-            const gameId = String(body.gameId || 'match3');
-            const entry = { ...(body.entry ?? {}), userId, updatedAt: Date.now() };
-            const prevList = localDevLeaderboardStore.get(gameId) ?? [];
-            const byUser = new Map<string, Record<string, unknown>>();
-            for (const it of prevList) {
-              if (typeof it.userId === 'string') byUser.set(it.userId, it);
-            }
-            byUser.set(userId, entry);
-            const sorted = Array.from(byUser.values())
-              .sort(
-                (a, b) =>
-                  Number(b.primaryValue || 0) - Number(a.primaryValue || 0) ||
-                  Number(b.ratingScore || 0) - Number(a.ratingScore || 0)
-              )
-              .slice(0, 50);
-            localDevLeaderboardStore.set(gameId, sorted);
-            sendJsonMaybeGzip(req, res, 200, JSON.stringify({ ok: true, gameId, entries: sorted }));
-          } catch {
-            sendJsonMaybeGzip(req, res, 400, JSON.stringify({ ok: false, error: 'Invalid JSON' }));
+        const headers = new Headers();
+        for (const [k, v] of Object.entries(req.headers)) {
+          if (k.toLowerCase() === 'content-encoding' && isGzipReq) continue;
+          if (k.toLowerCase() === 'accept-encoding') continue;
+          if (Array.isArray(v)) {
+            headers.set(k, v.join(', '));
+          } else if (typeof v === 'string') {
+            headers.set(k, v);
           }
-        });
-        return;
-      }
-      sendJsonMaybeGzip(req, res, 405, JSON.stringify({ error: 'Method Not Allowed' }));
-      return;
-    }
+        }
 
-    if (pathname === '/api/friends/lookup') {
-      const code = String(params.get('code') || '')
-        .trim()
-        .toUpperCase()
-        .replace(/[^A-Z0-9-]/g, '')
-        .slice(0, 18);
-      const rawProfile = code ? localDevFriendDirectory.get(code) : undefined;
-      if (!rawProfile) {
+        const fullUrl = `http://${req.headers.host || 'localhost:5173'}${rawUrl}`;
+        const webReq = new Request(fullUrl, {
+          method,
+          headers,
+          body:
+            method === 'GET' || method === 'HEAD' || method === 'OPTIONS' || !decodedBody
+              ? undefined
+              : new Uint8Array(decodedBody),
+        });
+
+        const webRes = await handleAuthoritativeHttpRequest(webReq, {
+          SAVE_KV: localAuthoritativeKv,
+          ENVIRONMENT: 'development',
+        });
+
+        for (const [hk, hv] of webRes.headers.entries()) {
+          if (hk.toLowerCase() === 'content-encoding' || hk.toLowerCase() === 'content-length') {
+            continue;
+          }
+          res.setHeader(hk, hv);
+        }
+
+        if (webRes.status === 204) {
+          res.statusCode = 204;
+          res.end();
+          return;
+        }
+
+        const respText = await webRes.text();
+        sendJsonMaybeGzip(req, res, webRes.status, respText);
+      } catch (err) {
         sendJsonMaybeGzip(
           req,
           res,
-          404,
+          500,
           JSON.stringify({
-            ok: false,
-            found: false,
-            error: 'Không tìm thấy người chơi thật nào đăng ký Mã Thung Lũng này!',
+            error: 'Local Authoritative Middleware Error',
+            message: err instanceof Error ? err.message : String(err),
           })
         );
-        return;
       }
-      sendJsonMaybeGzip(
-        req,
-        res,
-        200,
-        `{"ok":true,"found":true,"profile":${rawProfile}}`
-      );
-      return;
-    }
-
-    if (pathname === '/api/friends/register') {
-      if (req.method !== 'POST') {
-        sendJsonMaybeGzip(req, res, 405, JSON.stringify({ error: 'Method Not Allowed' }));
-        return;
-      }
-      const chunks: Buffer[] = [];
-      req.on('data', (chunk: Buffer) => chunks.push(chunk));
-      req.on('end', () => {
-        const rawBody = Buffer.concat(chunks);
-        const isGz = String(req.headers['content-encoding'] || '').toLowerCase() === 'gzip';
-        const bodyText = (isGz ? zlib.gunzipSync(rawBody) : rawBody).toString('utf8');
-        const code = indexLocalFriendProfile(userId, bodyText);
-        if (!code) {
-          sendJsonMaybeGzip(req, res, 400, JSON.stringify({ ok: false, error: 'Invalid friendCode' }));
-          return;
-        }
-        sendJsonMaybeGzip(req, res, 200, JSON.stringify({ ok: true, friendCode: code, userId }));
-      });
-      return;
-    }
-
-    if (req.method === 'GET') {
-      const saved = localDevSaveStore.get(userId);
-      if (!saved) {
-        res.statusCode = 204;
-        res.end();
-        return;
-      }
-      sendJsonMaybeGzip(req, res, 200, saved);
-      return;
-    }
-
-    if (req.method === 'POST') {
-      const chunks: Buffer[] = [];
-      req.on('data', (chunk: Buffer) => chunks.push(chunk));
-      req.on('end', () => {
-        const rawBody = Buffer.concat(chunks);
-        const isGz = String(req.headers['content-encoding'] || '').toLowerCase() === 'gzip';
-        const bodyText = (isGz ? zlib.gunzipSync(rawBody) : rawBody).toString('utf8');
-        localDevSaveStore.set(userId, bodyText);
-        indexLocalFriendProfile(userId, bodyText);
-        sendJsonMaybeGzip(req, res, 200, JSON.stringify({ ok: true, userId, mocked: true }));
-      });
-      return;
-    }
-
-    sendJsonMaybeGzip(req, res, 405, JSON.stringify({ error: 'Method Not Allowed' }));
+    });
   });
 }
 
 let resolvedViteConfig: ResolvedConfig | null = null;
 
 export default defineConfig({
+  base: process.env.VITE_BASE_PATH || '/',
   optimizeDeps: {
     exclude: ['input-switch-polyfill'],
   },
   plugins: [
     {
-      name: 'local-api-dev-mock',
+      name: 'local-authoritative-backend',
       configureServer(server) {
         attachLocalApiMiddleware(server.middlewares);
       },
@@ -291,8 +294,77 @@ export default defineConfig({
         resolvedViteConfig = cfg;
       },
       closeBundle() {
-        if (!resolvedViteConfig || process.env.SKIP_PRECOMPRESS === '1') return;
+        if (!resolvedViteConfig) return;
         const outDir = path.resolve(resolvedViteConfig.root, resolvedViteConfig.build.outDir);
+
+        // Tự động đóng dấu mã băm tài sản (`v33-<hash>`) vào `dist/sw.js` ở mỗi lần build
+        // để trình duyệt tự dọn cache Service Worker cũ ngay khi triển khai bản mới lên HPVN.
+        const swPath = path.join(outDir, 'sw.js');
+        const assetsDir = path.join(outDir, 'assets');
+        if (fs.existsSync(swPath) && fs.existsSync(assetsDir)) {
+          const assetEntries = fs
+            .readdirSync(assetsDir)
+            .filter((name) => !name.endsWith('.gz') && !name.endsWith('.br'))
+            .sort();
+          const buildHash = crypto
+            .createHash('sha256')
+            .update(assetEntries.join('|'))
+            .digest('hex')
+            .slice(0, 8);
+          const swRaw = fs.readFileSync(swPath, 'utf8');
+          const verMatch = swRaw.match(/const CACHE_VERSION = ['"](v\d+)[^'"]*['"];/);
+          const verPrefix = verMatch ? verMatch[1] : 'v36';
+          const swStamped = swRaw.replace(
+            /const CACHE_VERSION = ['"][^'"]+['"];/,
+            `const CACHE_VERSION = '${verPrefix}-${buildHash}';`
+          );
+          if (swStamped !== swRaw) {
+            fs.writeFileSync(swPath, swStamped, 'utf8');
+            console.log(`✓ [sw-stamp] Stamped dist/sw.js CACHE_VERSION = '${verPrefix}-${buildHash}'`);
+          }
+        }
+
+        if (resolvedViteConfig.base && resolvedViteConfig.base !== '/') {
+          const baseWithSlash = resolvedViteConfig.base.endsWith('/')
+            ? resolvedViteConfig.base
+            : `${resolvedViteConfig.base}/`;
+          const baseNoTrail = baseWithSlash.slice(0, -1);
+          const assetPrefixRe =
+            /(['"(`=])\/((?:sprites|paintings|audio|fonts|icons)\/|(?:manifest\.webmanifest|offline\.html|favicon\.ico))/g;
+
+          const rewriteFilePaths = (filePath: string) => {
+            if (!fs.existsSync(filePath)) return;
+            const src = fs.readFileSync(filePath, 'utf8');
+            const next = src.replace(assetPrefixRe, `$1${baseNoTrail}/$2`);
+            if (next !== src) {
+              fs.writeFileSync(filePath, next, 'utf8');
+            }
+          };
+
+          rewriteFilePaths(path.join(outDir, 'index.html'));
+          rewriteFilePaths(path.join(outDir, 'offline.html'));
+          if (fs.existsSync(assetsDir)) {
+            for (const name of fs.readdirSync(assetsDir)) {
+              if (name.endsWith('.js') || name.endsWith('.css')) {
+                rewriteFilePaths(path.join(assetsDir, name));
+              }
+            }
+          }
+
+          const manifestPath = path.join(outDir, 'manifest.webmanifest');
+          if (fs.existsSync(manifestPath)) {
+            const mRaw = fs.readFileSync(manifestPath, 'utf8');
+            const mNext = mRaw
+              .replace(/"(id|start_url|scope)":\s*"\/"/g, `"$1": "${baseWithSlash}"`)
+              .replace(/"url":\s*"\/\?/g, `"url": "${baseWithSlash}?`)
+              .replace(assetPrefixRe, `$1${baseNoTrail}/$2`);
+            if (mNext !== mRaw) {
+              fs.writeFileSync(manifestPath, mNext, 'utf8');
+            }
+          }
+        }
+
+        if (process.env.SKIP_PRECOMPRESS === '1') return;
         const files = collectCompressibleFiles(outDir);
         let totalRaw = 0;
         let totalGz = 0;
@@ -300,16 +372,22 @@ export default defineConfig({
         let count = 0;
 
         for (const file of files) {
+          const stat = fs.statSync(file);
+          if (stat.size < MIN_COMPRESS_BYTES) continue;
           const raw = fs.readFileSync(file);
-          if (raw.byteLength < MIN_COMPRESS_BYTES) continue;
           const gz = zlib.gzipSync(raw, { level: zlib.constants.Z_BEST_COMPRESSION });
           const br = zlib.brotliCompressSync(raw, {
             params: {
               [zlib.constants.BROTLI_PARAM_QUALITY]: zlib.constants.BROTLI_MAX_QUALITY,
             },
           });
-          fs.writeFileSync(`${file}.gz`, gz);
-          fs.writeFileSync(`${file}.br`, br);
+          const gzPath = `${file}.gz`;
+          const brPath = `${file}.br`;
+          fs.writeFileSync(gzPath, gz);
+          fs.writeFileSync(brPath, br);
+          // Giữ đồng bộ mtime giữa file gốc và .gz/.br để Nginx `gzip_static on;` / `brotli_static on;` nhận diện chuẩn xác
+          fs.utimesSync(gzPath, stat.atime, stat.mtime);
+          fs.utimesSync(brPath, stat.atime, stat.mtime);
           totalRaw += raw.byteLength;
           totalGz += gz.byteLength;
           totalBr += br.byteLength;
@@ -328,9 +406,12 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    headers: {
+      'Cache-Control': 'no-cache, max-age=0, must-revalidate',
+    },
   },
   build: {
-    target: 'esnext',
+    target: ['es2020', 'safari16'],
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -344,7 +425,17 @@ export default defineConfig({
           }
           if (
             id.includes('/src/sim/puzzleArcadeEngine') ||
+            id.includes('/src/sim/blocksEngine') ||
+            id.includes('/src/sim/sudokuEngine') ||
+            id.includes('/src/sim/caroEngine') ||
+            id.includes('/src/sim/chessPresets') ||
+            id.includes('/src/sim/chessEngine') ||
+            id.includes('/src/sim/onetEngine') ||
+            id.includes('/src/data/chessTacticsPack') ||
             id.includes('/src/sim/match3Engine') ||
+            id.includes('/src/sim/candyHogwartsEngine') ||
+            id.includes('/src/engine/candyHogwartsRenderer') ||
+            id.includes('/src/data/candyHogwartsLevels') ||
             id.includes('/src/ui/match3Modal') ||
             id.includes('/src/ui/puzzleArcadeModal')
           ) {

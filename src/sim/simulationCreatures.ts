@@ -167,7 +167,7 @@ import {
   createInitialPuzzleArcadeState,
   JIGSAW_PAINTINGS,
   PuzzleRewardSpec,
-} from './puzzleArcadeEngine';
+} from './puzzleShared';
 import {
   ActiveQuizChallenge,
   createInitialLanguageQuizState,
@@ -244,6 +244,8 @@ export function creaturesFeedCreature(sim: ParkSimulation, uid: string): boolean
     sim.audio.playSpell();
     sim.spawnFloatingText(b.gx + 1, b.gy + 1, `💖 Măm măm! +${xpGain} ⭐`, '#f472b6');
     sim.tryDropWizardCard(b.gx + 1, b.gy + 1, 0.12);
+    sim.checkAndToastAchievements?.();
+    sim.saveToStorage();
     sim.onUiChange?.();
     return true;
 }
@@ -323,6 +325,10 @@ export function creaturesSpawnEscapedFromHabitat(sim: ParkSimulation, hab: Place
 }
 
 export function creaturesCastAccioHarvestAll(sim: ParkSimulation): void {
+    if (sim.isVisitingNeighbor || sim.isHeadmasterPreview) {
+      sim.onToast?.('🦉 Chế độ Khách Tham Quan — không thể dùng Accio gom tài nguyên vườn bạn!', '🦉');
+      return;
+    }
     let count = 0;
     let sumG = 0;
     let sumX = 0;
@@ -337,24 +343,35 @@ export function creaturesCastAccioHarvestAll(sim: ParkSimulation): void {
         }
         continue;
       }
+      let remainingGoods: FarmGoodId[] = [];
+      let collectedAnyGood = false;
       if (b.readyFarmGoods && b.readyFarmGoods.length > 0) {
         for (const gid of b.readyFarmGoods) {
-          sim.addFarmItemToBarn(gid, 1);
+          if (sim.addFarmItemToBarn(gid, 1) > 0) {
+            collectedAnyGood = true;
+          } else {
+            remainingGoods.push(gid);
+          }
         }
-        b.readyFarmGoods = [];
+        b.readyFarmGoods = remainingGoods;
+        if (collectedAnyGood && b.storedGalleons <= 0) {
+          count++;
+        }
       }
       if (b.storedGalleons > 0) {
         sumG += b.storedGalleons;
         sumX += b.storedXp;
         b.storedGalleons = 0;
         b.storedXp = 0;
-        b.readyBubbles = 0;
+        b.readyBubbles = remainingGoods.length > 0 ? Math.min(8, remainingGoods.length) : 0;
         if (it?.grantsButterbeer) {
           sim.state.stats.butterbeerServed++;
           sim.recordQuestProgress('serve_butterbeer', undefined, 1);
         }
         sim.grantBuildingIngredientDrop(b, it, false);
         count++;
+      } else if (remainingGoods.length === 0 && collectedAnyGood) {
+        b.readyBubbles = 0;
       }
     }
     for (const esc of [...sim.escapedCreatures]) {
@@ -391,9 +408,11 @@ export function creaturesCastAccioHarvestAll(sim: ParkSimulation): void {
 }
 
 export function creaturesGetBuiltCreatureHabitats(sim: ParkSimulation): Array<{ building: PlacedBuilding; item: CatalogItem }> {
+    if (sim.isHeadmasterPreview) return [];
     const now = Date.now();
+    const sourceBuildings = (sim.homeStateWhileVisiting ?? sim.state).buildings;
     const list: Array<{ building: PlacedBuilding; item: CatalogItem }> = [];
-    for (const b of sim.state.buildings) {
+    for (const b of sourceBuildings) {
       if (now < b.constructEndsAt) continue;
       const item = getCatalogItem(b.itemId);
       if (item?.isCreatureHabitat) {
@@ -694,6 +713,7 @@ export function creaturesClaimMorphIncubation(sim: ParkSimulation): {
     const variantTitle = profile ? profile.morphNames[hatchedMorph] : MORPH_INFO[hatchedMorph].badge;
     sim.addXp(hatchedMorph === 'radiant' ? 140 : hatchedMorph === 'mystic' ? 85 : 45);
     sim.audio.playLevelUp();
+    sim.checkAndToastAchievements?.();
     sim.saveToStorage();
     sim.onUiChange?.();
 

@@ -32,33 +32,33 @@ const FEATURED_DISCIPLINE_ROTATION: ReadonlyArray<{
 }> = [
   {
     kind: 'match3',
-    icon: '🍓',
+    icon: '🍬',
     shortVi: 'Bùa Gặt Honeydukes',
-    descVi: 'Vượt màn mới Gác Xép Bùa Gặt Honeydukes (777 màn) để tích tiến độ lên cấp + nhận thưởng Sao Đề Cử, +1 ⏳ Cát & +35% Vàng!',
+    descVi: 'Vượt màn mới Bùa Gặt Honeydukes (777 màn) để tích tiến độ lên cấp + nhận thưởng Sao Đề Cử, +1 ⏳ Cát & +35% Vàng!',
   },
   {
     kind: 'caro',
     icon: '🗺️',
     shortVi: 'Ngũ Ấn Đạo Tặc',
-    descVi: 'Kết nối 5 Ấn Phượng Hoàng trên Bản Đồ Đạo Tặc (777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
+    descVi: 'Kết nối 5 Ấn Phượng Hoàng trong Ngũ Ấn Đạo Tặc (777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
   },
   {
     kind: 'sudoku',
-    icon: '🔮',
-    shortVi: 'Ma Trận Bảo Bối',
-    descVi: 'Khảm đủ 9 Bảo Bối Phép Thuật trên Sách Da Rồng 9×9 (777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
+    icon: '🔢',
+    shortVi: 'Số Học Huyền Bí',
+    descVi: 'Điền chuẩn xác bảng 9×9 trong Số Học Huyền Bí (777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
   },
   {
     kind: 'chess',
     icon: '🏰',
     shortVi: 'Cờ Phù Thủy',
-    descVi: 'Chiếu bí đối thủ trên bàn Cờ Phù Thủy Đại Sảnh Đường (777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
+    descVi: 'Chiếu bí đối thủ trong Cờ Phù Thủy (777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
   },
   {
     kind: 'blocks',
     icon: '🦄',
-    shortVi: 'Nối Hình Sinh Vật',
-    descVi: 'Ghép đôi các Sinh Vật Huyền Bí bằng đường nối tối đa 3 đoạn thẳng (777 màn cổ điển) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
+    shortVi: 'Sinh Vật Huyền Bí',
+    descVi: 'Ghép đôi các loài trong Sinh Vật Huyền Bí bằng đường nối tối đa 3 đoạn thẳng (777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
   },
 ];
 

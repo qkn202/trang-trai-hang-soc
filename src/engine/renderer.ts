@@ -87,6 +87,8 @@ import {
   terrainDrawDiamondOutline,
   terrainRectScreenCorners,
   terrainDrawLockedForestProp,
+  terrainDrawScenicRiverBridge,
+  terrainDrawSculptedHomesteadWallSeg,
 } from './renderTerrain';
 
 import {
@@ -158,6 +160,7 @@ export class IsometricRenderer {
   public sprites: SpriteRegistry;
   public presentation = new PresentationCeilingController();
   public dpr = 1;
+  public adaptiveDprCap = 2;
   public hotspots: ScreenHotspot[] = [];
   public particles: Array<{ x: number; y: number; r: number; vy: number; vx: number; hue: string }> = [];
   public rainStreaks: Array<{ x: number; y: number; len: number; speed: number }> = [];
@@ -172,6 +175,7 @@ export class IsometricRenderer {
   public juiceFx: JuiceFX;
   public harvestBloom: { x: number; y: number; startedAt: number } | null = null;
   private prevRipePlots = new Set<string>();
+  private prevRipeSceneKey = '';
   public activeSeedBrushCropId: FarmCropId | null = null;
   public activePastureBrushAnimalId: PastureAnimalId | null = null;
   public activeMovingUid: string | null = null;
@@ -368,7 +372,7 @@ export class IsometricRenderer {
 
   public resize(): void {
     const rect = this.canvas.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, this.adaptiveDprCap);
     this.dpr = dpr;
     const w = Math.max(1, Math.floor(rect.width * dpr));
     const h = Math.max(1, Math.floor(rect.height * dpr));
@@ -662,6 +666,119 @@ export class IsometricRenderer {
       });
     }
 
+    // 3d. AAA Scenic 2.5D Arched Mossy Stone River Bridges, Chunky Homestead Stone Walls & Non-Blocking Valley Flora!
+    const scenicRiverBridges: Array<[number, number, number, number]> = [
+      [4, 22, 4.18, 22.25],
+      [4, 34, 4.55, 34.25],
+    ];
+    for (const [bgx, bgy, cgx, cgy] of scenicRiverBridges) {
+      const bCell = sim.grid[bgy]?.[bgx];
+      if (!bCell || bCell.buildingUid || bCell.terrain !== 'water') continue;
+      if (!sim.state.sandboxMode && !unlockedSet.has(bCell.zoneId)) continue;
+      const bAnchor = gridToScreen(cgx, cgy, cam, viewW, viewH, bCell.elevation * ELEV_PX);
+      if (
+        bAnchor.sx < -margin * 2 ||
+        bAnchor.sx > viewW + margin * 2 ||
+        bAnchor.sy < -margin * 2 ||
+        bAnchor.sy > viewH + margin * 2
+      ) {
+        continue;
+      }
+      const { rx0, ry0, rbw, rbh } = rotateGridRect(bgx - 1, bgy, 3, 1, viewRot);
+      drawList.push({
+        rxMin: rx0 + 0.05,
+        ryMin: ry0 + 0.05,
+        rxMax: rx0 + rbw - 0.05,
+        ryMax: ry0 + rbh - 0.05,
+        depth: rx0 + rbw + ry0 + rbh - 0.12,
+        draw: () =>
+          terrainDrawScenicRiverBridge(
+            this,
+            cgx,
+            cgy,
+            bCell.elevation,
+            cam,
+            viewW,
+            viewH,
+            isNightLike
+          ),
+      });
+    }
+
+    // Chunky 2.5D Stacked Grey-Limestone & Emerald-Moss Homestead Walls framing the River Ottery bank & Hang Sóc terraces (auto-hides if built upon!)
+    const pushHomesteadWall = (wgx: number, wgy: number, axis: 'ew' | 'ns', isGatePost: boolean) => {
+      const wCell = sim.grid[wgy]?.[wgx];
+      if (!wCell || wCell.buildingUid || wCell.path !== 'none' || wCell.terrain !== 'grass') return;
+      if (!sim.state.sandboxMode && !unlockedSet.has(wCell.zoneId)) return;
+      const wp = rotatedTileDiamondToScreen(wgx, wgy, cam, viewW, viewH, wCell.elevation * ELEV_PX);
+      if (wp.sx < -margin || wp.sx > viewW + margin || wp.sy < -margin || wp.sy > viewH + margin) return;
+      const { rx0, ry0 } = rotateGridRect(wgx, wgy, 1, 1, viewRot);
+      drawList.push({
+        rxMin: rx0 + 0.12,
+        ryMin: ry0 + 0.12,
+        rxMax: rx0 + 0.88,
+        ryMax: ry0 + 0.88,
+        depth: rx0 + ry0 + 1.02,
+        draw: () =>
+          terrainDrawSculptedHomesteadWallSeg(
+            this,
+            wgx,
+            wgy,
+            wCell.elevation,
+            axis,
+            isGatePost,
+            cam,
+            viewW,
+            viewH,
+            isNightLike
+          ),
+      });
+    };
+    for (let wgy = 14; wgy <= 20; wgy++) pushHomesteadWall(6, wgy, 'ns', wgy === 14 || wgy === 20);
+    for (let wgy = 26; wgy <= 31; wgy++) pushHomesteadWall(6, wgy, 'ns', wgy === 26 || wgy === 31);
+    for (let wgx = 7; wgx <= 12; wgx++) pushHomesteadWall(wgx, 13, 'ew', wgx === 12);
+    for (let wgx = 19; wgx <= 25; wgx++) pushHomesteadWall(wgx, 13, 'ew', wgx === 19 || wgx === 25);
+    for (let wgx = 8; wgx <= 14; wgx++) pushHomesteadWall(wgx, 30, 'ew', wgx === 8 || wgx === 14);
+
+    // Curated non-blocking 2.5D riverside flowering bushes, wildflowers & mossy rocks on open unlocked grass tiles!
+    const valleyFloraSpots: Array<[number, number, string, number, boolean]> = [
+      [2, 17, 'env_bush_flowers', 1.02, false],
+      [2, 20, 'env_mossy_rock', 0.96, true],
+      [2, 24, 'env_bush_flowers', 1.05, true],
+      [2, 28, 'env_flower_patch', 0.98, false],
+      [5, 19, 'env_mossy_rock', 0.92, false],
+      [5, 25, 'env_mossy_rock', 0.95, true],
+      [7, 17, 'env_bush_flowers', 0.98, false],
+      [7, 21, 'env_flower_patch', 1.04, true],
+      [7, 27, 'env_bush_flowers', 1.02, true],
+      [8, 19, 'env_flower_patch', 0.96, false],
+      [11, 21, 'env_bush_flowers', 0.95, false],
+      [15, 28, 'env_flower_patch', 1.0, true],
+      [22, 21, 'env_bush_flowers', 1.02, true],
+      [22, 26, 'env_flower_patch', 0.98, false],
+      [24, 17, 'env_bush_flowers', 1.04, false],
+      [28, 18, 'env_mossy_rock', 0.94, true],
+      [30, 23, 'env_bush_flowers', 1.05, false],
+      [33, 21, 'env_flower_patch', 1.02, true],
+    ];
+    for (const [fgx, fgy, spriteKey, scale, flipX] of valleyFloraSpots) {
+      const fCell = sim.grid[fgy]?.[fgx];
+      if (!fCell || fCell.buildingUid || fCell.path !== 'none' || fCell.terrain !== 'grass') continue;
+      if (!sim.state.sandboxMode && !unlockedSet.has(fCell.zoneId)) continue;
+      const fp = gridToScreen(fgx + 0.5, fgy + 0.5, cam, viewW, viewH, fCell.elevation * ELEV_PX);
+      if (fp.sx < -margin || fp.sx > viewW + margin || fp.sy < -margin || fp.sy > viewH + margin) continue;
+      const { rx, ry } = rotateGridPoint(fgx + 0.5, fgy + 0.5, viewRot);
+      const floraProp: LockedSceneryProp = { gx: fgx, gy: fgy, zoneId: fCell.zoneId, spriteKey, scale, flipX };
+      drawList.push({
+        rxMin: rx - 0.22,
+        ryMin: ry - 0.22,
+        rxMax: rx + 0.22,
+        ryMax: ry + 0.22,
+        depth: rx + ry + 0.28,
+        draw: () => this.drawLockedForestProp(floraProp, fp.sx, fp.sy, cam.zoom, shadowVec, isNightLike),
+      });
+    }
+
     // 3f. Escaped Creatures (Hand-Inked Beast Sprites!)
     for (const esc of sim.escapedCreatures) {
       const ep = gridToScreen(esc.gx + 0.5, esc.gy + 0.5, cam, viewW, viewH);
@@ -878,7 +995,8 @@ export class IsometricRenderer {
       this.drawTutorialWorldTarget(sim, cam, viewW, viewH);
     }
 
-    // 6b. Internal Juice Hook: Track harvested plots automatically
+    // 6b. Internal Juice Hook: Track harvested plots automatically (reset cleanly on scene switch)
+    const sceneKey = `${sim.isVisitingNeighbor ? sim.getActiveVisitingNeighbor()?.id ?? 'visit' : 'home'}|${sim.isHeadmasterPreview ? 'preview' : 'live'}`;
     const currentRipePlots = new Set<string>();
     for (const b of sim.state.buildings) {
       const item = getCatalogItem(b.itemId);
@@ -892,15 +1010,18 @@ export class IsometricRenderer {
         currentRipePlots.add(b.uid);
       }
     }
-    for (const prevUid of this.prevRipePlots) {
-      if (!currentRipePlots.has(prevUid)) {
-        const b = this.buildingMap.get(prevUid);
-        if (b) {
-          const pt = gridToScreen(b.gx + 0.5, b.gy + 0.5, cam, viewW, viewH, 18);
-          this.notifyJuice('harvest', pt.sx, pt.sy);
+    if (this.prevRipeSceneKey && this.prevRipeSceneKey === sceneKey) {
+      for (const prevUid of this.prevRipePlots) {
+        if (!currentRipePlots.has(prevUid)) {
+          const b = this.buildingMap.get(prevUid);
+          if (b) {
+            const pt = gridToScreen(b.gx + 0.5, b.gy + 0.5, cam, viewW, viewH, 18);
+            this.notifyJuice('harvest', pt.sx, pt.sy);
+          }
         }
       }
     }
+    this.prevRipeSceneKey = sceneKey;
     this.prevRipePlots = currentRipePlots;
 
     // 7. Floating Text Feedback

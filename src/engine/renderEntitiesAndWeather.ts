@@ -396,24 +396,69 @@ export function entitiesDrawValleyVillager(self: IsometricRenderer,
 
     const baseH = (v.id === 'hagrid' ? 62 : 52) * zoom;
     const drawW = baseH * (sp.width / sp.height);
+    const isWalking = !self.reducedMotion && v.state === 'walking';
     const hop = self.reducedMotion
       ? 0
-      : v.state === 'walking'
-        ? Math.abs(Math.sin(v.walkPhase * 2.1)) * 2.6 * zoom
-        : Math.sin(self.tick * 0.05 + v.gx * 1.7) * 0.8 * zoom;
+      : isWalking
+        ? Math.abs(Math.sin(v.walkPhase * 2.1)) * 2.8 * zoom
+        : Math.sin(self.tick * 0.05 + v.gx * 1.7) * 0.7 * zoom;
+    // AAA 2.5D Procedural Puppet Breathing & Stride Tilt
+    const breathPhase = self.tick * 0.065 + v.gx * 1.3 + v.gy * 0.9;
+    const puppetScaleX = self.reducedMotion
+      ? 1
+      : isWalking
+        ? 1 + Math.sin(v.walkPhase * 2.1) * 0.024
+        : 1 + Math.sin(breathPhase) * 0.018;
+    const puppetScaleY = self.reducedMotion
+      ? 1
+      : isWalking
+        ? 1 - Math.sin(v.walkPhase * 2.1) * 0.022
+        : 1 - Math.sin(breathPhase) * 0.020;
+    const strideLean = isWalking ? Math.sin(v.walkPhase * 1.05) * 0.038 : 0;
+    const shadowScale = Math.max(0.78, 1 - hop / Math.max(12, 24 * zoom));
 
     ctx.save();
-    // Warm sunlit contact shadow beneath boots
-    ctx.fillStyle = isNight ? 'rgba(10, 16, 28, 0.42)' : 'rgba(34, 62, 24, 0.30)';
+    // Warm sunlit contact shadow beneath boots (shrinks subtly mid-hop!)
+    ctx.fillStyle = isNight ? 'rgba(10, 16, 28, 0.44)' : 'rgba(34, 62, 24, 0.32)';
     ctx.beginPath();
-    ctx.ellipse(sx, sy + 2 * zoom, drawW * 0.28, drawW * 0.13, 0, 0, Math.PI * 2);
+    ctx.ellipse(
+      sx,
+      sy + 2 * zoom,
+      drawW * 0.28 * shadowScale,
+      drawW * 0.13 * shadowScale,
+      0,
+      0,
+      Math.PI * 2
+    );
     ctx.fill();
 
     ctx.translate(sx, sy - hop);
     if (v.facingLeft) {
       ctx.scale(-1, 1);
     }
+    if (strideLean !== 0 || puppetScaleX !== 1 || puppetScaleY !== 1) {
+      ctx.transform(puppetScaleX, 0, strideLean, puppetScaleY, 0, 0);
+    }
     ctx.drawImage(sp, -drawW * 0.5, -baseH, drawW, baseH);
+
+    // Enchanted Self-Floating Umbrella Canopy when raining in the valley!
+    if (v.moodBubble === '☔') {
+      const umbY = -baseH - 4 * zoom + (self.reducedMotion ? 0 : Math.sin(self.tick * 0.08 + v.gx) * 1.4 * zoom);
+      const umbR = Math.max(10, 13.5 * zoom);
+      ctx.fillStyle = v.id === 'molly' || v.id === 'ginny' ? '#dc2626' : '#2563eb';
+      ctx.strokeStyle = '#fde047';
+      ctx.lineWidth = Math.max(1, 1.3 * zoom);
+      ctx.beginPath();
+      ctx.arc(0, umbY, umbR, Math.PI, 0, false);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = '#78350f';
+      ctx.beginPath();
+      ctx.moveTo(0, umbY);
+      ctx.lineTo(0, umbY + 9 * zoom);
+      ctx.stroke();
+    }
     ctx.restore();
 
     self.hotspots.push({
@@ -467,14 +512,14 @@ export function entitiesDrawNightCandlelightPass(self: IsometricRenderer,
     const ctx = self.ctx;
     ctx.save();
 
-    // 1. Subtle cozy twilight indigo veil using multiply so daytime sprites settle into dusk/night
+    // 1. Cozy twilight indigo/amber veil using multiply so daytime sprites settle into dusk/night
     ctx.globalCompositeOperation = 'multiply';
-    ctx.fillStyle = isFullNight ? 'rgba(186, 198, 232, 0.88)' : 'rgba(236, 206, 192, 0.92)';
+    ctx.fillStyle = isFullNight ? 'rgba(178, 194, 234, 0.88)' : 'rgba(238, 204, 186, 0.92)';
     ctx.fillRect(0, 0, viewW, viewH);
 
-    // 2. Additive warm Hogsmeade candlelight pools over active buildings & street lamps!
+    // 2. AAA 2.5D Point-Light Pass: Multi-Window Cottage Bounce Pools, Roaring Emerald Floo Hearth & Bioluminescent Crops!
     ctx.globalCompositeOperation = 'lighter';
-    const flicker = self.reducedMotion ? 1 : 0.94 + Math.sin(self.tick * 0.09) * 0.06;
+    const flicker = self.reducedMotion ? 1 : 0.93 + Math.sin(self.tick * 0.09) * 0.07;
     for (const b of sim.state.buildings) {
       if (now < b.constructEndsAt) continue;
       const item = getCatalogItem(b.itemId);
@@ -489,17 +534,63 @@ export function entitiesDrawNightCandlelightPass(self: IsometricRenderer,
         viewH,
         elev * ELEV_PX + 18 + Math.max(bw, bh) * 8
       );
-      if (pt.sx < -140 || pt.sx > viewW + 140 || pt.sy < -140 || pt.sy > viewH + 140) continue;
+      if (pt.sx < -160 || pt.sx > viewW + 160 || pt.sy < -160 || pt.sy > viewH + 160) continue;
 
-      const rad = Math.max(28, (bw + bh) * 20) * cam.zoom * flicker;
-      const color = item.isFlooPortal
-        ? 'rgba(52, 211, 153, 0.18)'
-        : item.id === 'patronus_ward_lantern'
-          ? 'rgba(125, 211, 252, 0.24)'
+      if (item.isFlooPortal) {
+        // Dramatic Emerald-Green Floo Hearth ground spill + glowing fireplace core (Mockup 2)!
+        const groundPt = gridToScreen(b.gx + bw * 0.5, b.gy + bh * 0.5, cam, viewW, viewH, elev * ELEV_PX + 2);
+        const flooRad = Math.max(58, (bw + bh) * 38) * cam.zoom * flicker;
+        entitiesDrawRadialGlow(self, groundPt.sx, groundPt.sy + 8 * cam.zoom, flooRad * 1.28, 'rgba(16, 185, 129, 0.48)');
+        entitiesDrawRadialGlow(self, pt.sx, pt.sy - 4 * cam.zoom, flooRad * 0.78, 'rgba(110, 231, 183, 0.62)');
+        continue;
+      }
+
+      // Bioluminescent Magical Crops & Flowers (`glow_mushroom`, `moonlight_flower`, `phoenix_fireflower`, `rainbow_tulip`)
+      if (item.isFarmlandPlot) {
+        if (!b.cropId) continue;
+        const bioColor =
+          b.cropId === 'glow_mushroom'
+            ? 'rgba(56, 189, 248, 0.42)'
+            : b.cropId === 'moonlight_flower'
+              ? 'rgba(167, 139, 250, 0.38)'
+              : b.cropId === 'phoenix_fireflower'
+                ? 'rgba(251, 146, 60, 0.42)'
+                : b.cropId === 'rainbow_tulip'
+                  ? 'rgba(244, 114, 182, 0.32)'
+                  : FARM_CROPS[b.cropId]?.nocturnalGlowColor;
+        if (bioColor) {
+          entitiesDrawRadialGlow(self, pt.sx, pt.sy + 4 * cam.zoom, 42 * cam.zoom * flicker, bioColor);
+        }
+        continue;
+      }
+
+      if (item.isAnimalPasturePlot || item.spriteKey?.startsWith('env_')) continue;
+
+      const rad = Math.max(36, (bw + bh) * 24) * cam.zoom * flicker;
+      const color =
+        item.id === 'patronus_ward_lantern'
+          ? 'rgba(125, 211, 252, 0.38)'
           : isFullNight
-            ? 'rgba(251, 191, 36, 0.19)'
-            : 'rgba(251, 146, 60, 0.13)';
+            ? 'rgba(251, 191, 36, 0.28)'
+            : 'rgba(251, 146, 60, 0.24)';
       entitiesDrawRadialGlow(self, pt.sx, pt.sy, rad, color);
+
+      // Warm front-porch ground bounce ellipse & multi-story cottage window glints (Mockup 2)
+      if (bw >= 2 || bh >= 2) {
+        const porchPt = gridToScreen(b.gx + bw * 0.65, b.gy + bh * 0.65, cam, viewW, viewH, elev * ELEV_PX + 2);
+        entitiesDrawRadialGlow(
+          self,
+          porchPt.sx,
+          porchPt.sy + 5 * cam.zoom,
+          rad * 0.72,
+          isFullNight ? 'rgba(253, 224, 71, 0.26)' : 'rgba(251, 146, 60, 0.22)'
+        );
+        if (item.id === 'burrow_house_canon') {
+          entitiesDrawRadialGlow(self, pt.sx - 6 * cam.zoom, pt.sy - 34 * cam.zoom, 28 * cam.zoom * flicker, 'rgba(253, 224, 71, 0.36)');
+          entitiesDrawRadialGlow(self, pt.sx + 5 * cam.zoom, pt.sy - 58 * cam.zoom, 24 * cam.zoom * flicker, 'rgba(251, 191, 36, 0.34)');
+          entitiesDrawRadialGlow(self, pt.sx - 2 * cam.zoom, pt.sy - 82 * cam.zoom, 18 * cam.zoom * flicker, 'rgba(254, 240, 138, 0.30)');
+        }
+      }
     }
 
     ctx.restore();
@@ -587,27 +678,35 @@ export function entitiesDrawWeatherParticles(self: IsometricRenderer,
       self.lightningFlashAlpha *= 0.84;
     }
 
-    // 3. Snowflakes & Golden Nighttime Fireflies
+    // 3. Snowflakes, Sunlit Dandelion Pollen Motes & Golden Nighttime Fireflies
     const mode = sim.state.settings.weatherOverride;
-    if (mode === 'clear' || self.reducedMotion) return;
+    if (self.reducedMotion) return;
 
     const isSnow = weather.kind === 'snow';
     const showFireflies =
+      mode !== 'clear' &&
       !isSnow &&
       weather.kind !== 'rain' &&
       weather.kind !== 'storm' &&
       (festival === 'halloween' || isNight || mode === 'fireflies');
+    const showSunPollen =
+      !isNight &&
+      !isSnow &&
+      weather.kind !== 'rain' &&
+      weather.kind !== 'storm' &&
+      weather.kind !== 'fog';
 
-    if (!isSnow && !showFireflies) return;
+    if (!isSnow && !showFireflies && !showSunPollen) return;
 
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
     const particleBudget = computeWeatherParticleBudget(dpr, Math.max(viewW, self.canvas.width));
-    const particleLimit = Math.min(self.particles.length, particleBudget);
+    const rawLimit = Math.min(self.particles.length, particleBudget);
+    const particleLimit = showSunPollen && !showFireflies ? Math.min(28, rawLimit) : rawLimit;
 
     ctx.save();
     for (let i = 0; i < particleLimit; i++) {
       const p = self.particles[i];
-      p.y = (p.y + (isSnow ? p.vy : -p.vy * 0.55) + 1) % 1;
+      p.y = (p.y + (isSnow ? p.vy : -p.vy * 0.45) + 1) % 1;
       p.x = (p.x + p.vx + Math.sin(self.tick * 0.015 + p.r) * 0.0005 + 1) % 1;
 
       if (isSnow) {
@@ -634,11 +733,50 @@ export function entitiesDrawWeatherParticles(self: IsometricRenderer,
         ctx.beginPath();
         ctx.arc(fx, fy, haloR, 0, Math.PI * 2);
         ctx.fill();
-        // Bright pin-point core on top of the halo.
         ctx.fillStyle = 'rgba(255, 255, 235, 0.9)';
         ctx.beginPath();
         ctx.arc(fx, fy, p.r * 0.5, 0, Math.PI * 2);
         ctx.fill();
+      } else if (showSunPollen) {
+        // AAA Glowing Starburst Dandelion Wish-Seeds & Warm Golden Meadow Pollen Motes (Mockup 1)
+        const pulse = 0.42 + 0.38 * Math.sin(self.tick * 0.05 + i * 1.7);
+        const fx = p.x * viewW;
+        const fy = p.y * viewH;
+        if (i % 3 === 0) {
+          const seedR = Math.max(4.5, p.r * 2.4);
+          const halo = ctx.createRadialGradient(fx, fy, 0.5, fx, fy, seedR * 2.4);
+          halo.addColorStop(0, `rgba(255, 253, 232, ${pulse * 0.85})`);
+          halo.addColorStop(0.45, `rgba(253, 224, 71, ${pulse * 0.42})`);
+          halo.addColorStop(1, 'rgba(253, 224, 71, 0)');
+          ctx.fillStyle = halo;
+          ctx.beginPath();
+          ctx.arc(fx, fy, seedR * 2.4, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 8 delicate starburst dandelion pappus filaments + curved seed stem
+          const tilt = Math.sin(self.tick * 0.025 + i) * 0.25;
+          ctx.strokeStyle = `rgba(255, 252, 235, ${Math.min(0.95, pulse + 0.18)})`;
+          ctx.lineWidth = 1.05;
+          ctx.beginPath();
+          for (let k = 0; k < 8; k++) {
+            const ang = tilt + (Math.PI * 2 * k) / 8;
+            ctx.moveTo(fx, fy);
+            ctx.lineTo(fx + Math.cos(ang) * seedR, fy + Math.sin(ang) * seedR);
+          }
+          ctx.moveTo(fx, fy);
+          ctx.quadraticCurveTo(fx + 1.8, fy + seedR * 0.9, fx + 0.6, fy + seedR * 1.55);
+          ctx.stroke();
+
+          ctx.fillStyle = '#fffbeb';
+          ctx.beginPath();
+          ctx.arc(fx, fy, 1.65, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.fillStyle = i % 2 === 0 ? `rgba(255, 251, 235, ${pulse * 0.78})` : `rgba(254, 240, 138, ${pulse * 0.82})`;
+          ctx.beginPath();
+          ctx.arc(fx, fy, Math.max(1.4, p.r * 0.78), 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     }
     ctx.restore();
@@ -988,9 +1126,9 @@ export function entitiesDrawGoldenAtmosphereAndVignette(self: IsometricRenderer,
           sunX + Math.cos(ang) * rayLen * 0.85,
           sunY + Math.sin(ang) * rayLen * 0.85
         );
-        const peakAlpha = period === 'dusk' ? 0.095 : 0.105 - i * 0.015;
+        const peakAlpha = period === 'dusk' ? 0.135 : 0.155 - i * 0.022;
         rayGrad.addColorStop(0, `rgba(255, 250, 214, ${peakAlpha})`);
-        rayGrad.addColorStop(0.5, `rgba(254, 236, 162, ${peakAlpha * 0.55})`);
+        rayGrad.addColorStop(0.5, `rgba(254, 236, 162, ${peakAlpha * 0.58})`);
         rayGrad.addColorStop(1, 'rgba(254, 240, 138, 0)');
 
         ctx.fillStyle = rayGrad;
@@ -1002,6 +1140,47 @@ export function entitiesDrawGoldenAtmosphereAndVignette(self: IsometricRenderer,
         ctx.fill();
       }
 
+      ctx.restore();
+    }
+
+    // 1b. AAA Soft Painterly Foreground Cloud Banks framing the outer viewport edges (Mockup 1 aerial valley look!)
+    if (weather.kind !== 'storm') {
+      ctx.save();
+      const driftX = self.reducedMotion ? 0 : Math.sin(self.tick * 0.0045) * 18;
+      const cloudAnchors: Array<[number, number, number]> = [
+        [viewW * 0.67 + driftX, viewH * 0.03, 1.05],
+        [viewW * 0.96 - driftX * 0.7, viewH * 0.27, 0.92],
+        [viewW * 0.04 + driftX * 0.8, viewH * 0.77, 0.96],
+        [viewW * 0.63 - driftX * 0.6, viewH * 0.97, 1.12],
+      ];
+      const baseR = Math.max(68, Math.min(viewW, viewH) * 0.115);
+      for (const [bx, by, sc] of cloudAnchors) {
+        const puffs: Array<[number, number, number]> = [
+          [-baseR * 0.62 * sc, baseR * 0.1 * sc, baseR * 0.76 * sc],
+          [0, -baseR * 0.08 * sc, baseR * 0.96 * sc],
+          [baseR * 0.66 * sc, baseR * 0.12 * sc, baseR * 0.78 * sc],
+        ];
+        for (const [ox, oy, pr] of puffs) {
+          const cg = ctx.createRadialGradient(bx + ox, by + oy, pr * 0.12, bx + ox, by + oy, pr);
+          if (period === 'night') {
+            cg.addColorStop(0, 'rgba(148, 163, 198, 0.24)');
+            cg.addColorStop(0.58, 'rgba(100, 116, 158, 0.10)');
+            cg.addColorStop(1, 'rgba(30, 41, 59, 0)');
+          } else if (period === 'dusk') {
+            cg.addColorStop(0, 'rgba(255, 228, 205, 0.46)');
+            cg.addColorStop(0.58, 'rgba(251, 182, 148, 0.20)');
+            cg.addColorStop(1, 'rgba(251, 146, 60, 0)');
+          } else {
+            cg.addColorStop(0, 'rgba(255, 253, 246, 0.58)');
+            cg.addColorStop(0.56, 'rgba(254, 249, 232, 0.26)');
+            cg.addColorStop(1, 'rgba(255, 255, 255, 0)');
+          }
+          ctx.fillStyle = cg;
+          ctx.beginPath();
+          ctx.ellipse(bx + ox, by + oy, pr * 1.28, pr * 0.78, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
       ctx.restore();
     }
 

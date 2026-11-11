@@ -29,6 +29,8 @@ import {
 import { MAX_DAILY_MINIGAME_RESCUES } from '../sim/neighborSocial';
 import { ParkSimulation } from '../sim/simulation';
 import {
+  ACTIVE_MINIGAME_RESUME_KEY,
+  ActiveMinigameResumeRecord,
   BuildReductionResult,
   LeaderboardRankChange,
   MinigameRescueContext,
@@ -38,37 +40,35 @@ import {
 const PA_VIRTUAL_W = JIGSAW_VIRTUAL_W; // 692
 const PA_VIRTUAL_H = JIGSAW_VIRTUAL_H; // 504
 
-// Sudoku 9x9 virtual layout (inside 692 x 504)
-const SUDOKU_BOARD_X = 16;
-const SUDOKU_BOARD_Y = 16;
-const SUDOKU_CELL_PX = 52; // 9 * 52 = 468
+// Classic Sudoku ("Số Học Huyền Bí") 9x9 virtual layout in Hang Sóc parlor style (662 x 502 desktop, 502 x 568 portrait)
+const SUDOKU_BOARD_X = 8;
+const SUDOKU_BOARD_Y = 8;
+const SUDOKU_CELL_PX = 54; // 9 * 54 = 486
 const SUDOKU_BOARD_PX = 9 * SUDOKU_CELL_PX;
-const SUDOKU_PAD_X = 498;
-const SUDOKU_PAD_Y = 16;
-const SUDOKU_PAD_W = 180;
-const SUDOKU_PAD_H = 468;
+const SUDOKU_PAD_X = 505;
+const SUDOKU_PAD_Y = 6;
+const SUDOKU_PAD_W = 151;
+const SUDOKU_PAD_H = 490;
+const SUDOKU_DESKTOP_W = 662;
+const SUDOKU_DESKTOP_H = 502;
+const SUDOKU_MOBILE_W = 502;
+const SUDOKU_MOBILE_H = 568;
 
-// Caro 13x13 virtual layout (inside 692 x 504)
-const CARO_FRAME_X = 12;
-const CARO_FRAME_Y = 12;
-const CARO_FRAME_PX = 480;
-const CARO_ORIGIN_X = 36;
-const CARO_ORIGIN_Y = 36;
-const CARO_STEP_PX = 36; // 12 intervals * 36 = 432 (36..468)
-const CARO_SIDE_X = 504;
-const CARO_SIDE_Y = 12;
-const CARO_SIDE_W = 178;
-const CARO_SIDE_H = 480;
+// Caro 13x13 full-square virtual layout (504 x 504 — 100% board, zero side dead-space)
+const CARO_VIRTUAL_PX = 504;
+const CARO_FRAME_X = 6;
+const CARO_FRAME_Y = 6;
+const CARO_FRAME_PX = 492;
+const CARO_ORIGIN_X = 24;
+const CARO_ORIGIN_Y = 24;
+const CARO_STEP_PX = 38; // 12 intervals * 38 = 456 (24..480)
 
-// Wizard's Chess 8x8 virtual layout (inside 692 x 504)
-const CHESS_BOARD_X = 18;
-const CHESS_BOARD_Y = 16;
-const CHESS_CELL_PX = 59; // 8 * 59 = 472
+// Wizard's Chess 8x8 full-square virtual layout (504 x 504 — 100% board, zero side dead-space)
+const CHESS_VIRTUAL_PX = 504;
+const CHESS_BOARD_X = 12;
+const CHESS_BOARD_Y = 12;
+const CHESS_CELL_PX = 60; // 8 * 60 = 480 (12..492)
 const CHESS_BOARD_PX = 8 * CHESS_CELL_PX;
-const CHESS_SIDE_X = 508;
-const CHESS_SIDE_Y = 16;
-const CHESS_SIDE_W = 176;
-const CHESS_SIDE_H = 472;
 
 const HP_CHESS_PIECE_KEYS = [
   'wk',
@@ -90,165 +90,81 @@ const HP_CHESS_PIECE_META: Record<
   { name: string; roleVi: string; glyph: string; spellName: string }
 > = {
   wk: {
-    name: 'Cụ Albus Dumbledore',
-    roleVi: 'Vua Gryffindor',
-    glyph: '♔',
-    spellName: 'Hỏa Phượng Đũa Cơm Nguội',
+    name: 'Tượng Vua Hiệp Sĩ',
+    roleVi: 'Vua Trắng Ngà',
+    glyph: '♚',
+    spellName: 'Kiếm Vương Khai Trận',
   },
   wq: {
-    name: 'Hermione & Fawkes',
-    roleVi: 'Hậu Gryffindor',
-    glyph: '♕',
-    spellName: 'Ánh Lửa Phượng Hoàng',
+    name: 'Tượng Hậu Chiến Binh',
+    roleVi: 'Hậu Trắng Ngà',
+    glyph: '♛',
+    spellName: 'Quyền Trượng Hoàng Gia',
   },
   wb: {
-    name: 'Harry Potter',
-    roleVi: 'Tượng Gryffindor',
-    glyph: '♗',
-    spellName: 'Thần Hộ Mệnh Bạc',
+    name: 'Tượng Giám Mục Đá',
+    roleVi: 'Tượng Trắng Ngà',
+    glyph: '♝',
+    spellName: 'Trượng Pháp Đường Chéo',
   },
   wn: {
-    name: 'Bằng Mã Buckbeak',
-    roleVi: 'Mã Gryffindor',
-    glyph: '♘',
-    spellName: 'Cánh Gió Kiêu Hãnh',
+    name: 'Tượng Chiến Mã Giáp Đá',
+    roleVi: 'Mã Trắng Ngà',
+    glyph: '♞',
+    spellName: 'Vó Thiết Mã Xung Phong',
   },
   wr: {
-    name: 'Tháp Lâu Đài Hogwarts',
-    roleVi: 'Xe Gryffindor',
-    glyph: '♖',
-    spellName: 'Thành Trì Cú Tuyết',
+    name: 'Tượng Tháp Thành Trì',
+    roleVi: 'Xe Trắng Ngà',
+    glyph: '♜',
+    spellName: 'Pháo Đài Đá Cẩm Thạch',
   },
   wp: {
-    name: 'Gia Tinh Dobby',
-    roleVi: 'Tốt Gryffindor',
-    glyph: '♙',
-    spellName: 'Búng Tay Tất Len',
+    name: 'Tượng Lính Khiên Đá',
+    roleVi: 'Tốt Trắng Ngà',
+    glyph: '♟',
+    spellName: 'Lá Chắn Tiên Phong',
   },
   bk: {
-    name: 'Chúa Tể Voldemort',
-    roleVi: 'Vua Slytherin',
+    name: 'Tượng Vua Hiệp Sĩ',
+    roleVi: 'Vua Đá Đen',
     glyph: '♚',
-    spellName: 'Tia Chớp Hắc Ám',
+    spellName: 'Kiếm Vương Lục Bảo',
   },
   bq: {
-    name: 'Bellatrix & Tử Xà',
-    roleVi: 'Hậu Slytherin',
+    name: 'Tượng Hậu Chiến Binh',
+    roleVi: 'Hậu Đá Đen',
     glyph: '♛',
-    spellName: 'Lốc Xoáy Tử Xà',
+    spellName: 'Quyền Trượng Bạc Đen',
   },
   bb: {
-    name: 'Giáo Sư Severus Snape',
-    roleVi: 'Tượng Slytherin',
+    name: 'Tượng Giám Mục Đá',
+    roleVi: 'Tượng Đá Đen',
     glyph: '♝',
-    spellName: 'Độc Dược Bí Truyền',
+    spellName: 'Trượng Ngọc Xuyên Tâm',
   },
   bn: {
-    name: 'Vong Mã Thestral',
-    roleVi: 'Mã Slytherin',
+    name: 'Tượng Chiến Mã Giáp Đá',
+    roleVi: 'Mã Đá Đen',
     glyph: '♞',
-    spellName: 'Vó Ngựa Bóng Đêm',
+    spellName: 'Thiết Mã Huyền Thạch',
   },
   br: {
-    name: 'Azkaban & Giám Ngục',
-    roleVi: 'Xe Slytherin',
+    name: 'Tượng Tháp Thành Trì',
+    roleVi: 'Xe Đá Đen',
     glyph: '♜',
-    spellName: 'Sương Lạnh Giám Ngục',
+    spellName: 'Pháo Đài Huyền Vũ',
   },
   bp: {
-    name: 'Tử Thần Thực Tử',
-    roleVi: 'Tốt Slytherin',
+    name: 'Tượng Lính Khiên Đá',
+    roleVi: 'Tốt Đá Đen',
     glyph: '♟',
-    spellName: 'Ấn Xà Hắc Ám',
+    spellName: 'Khiên Đá Hộ Vệ',
   },
 };
 
 export type SudokuDisplayMode = 'relic_num' | 'relic_only' | 'num_only';
-
-const HP_SUDOKU_RELIC_META: Record<
-  number,
-  {
-    fileKey: string;
-    nameVi: string;
-    shortVi: string;
-    loreVi: string;
-    accent: string;
-    runeGlyph: string;
-  }
-> = {
-  1: {
-    fileKey: 'relic_1',
-    nameVi: 'Trái Snitch Vàng',
-    shortVi: 'Snitch Vàng',
-    loreVi: 'Bảo bối Quidditch cất giấu viên Đá Phục Sinh',
-    accent: '#f59e0b',
-    runeGlyph: 'ᚠ',
-  },
-  2: {
-    fileKey: 'relic_2',
-    nameVi: 'Chiếc Mũ Phân Loại',
-    shortVi: 'Mũ Phân Loại',
-    loreVi: 'Mũ thông thái của Godric Gryffindor phân viện',
-    accent: '#b45309',
-    runeGlyph: 'ᚢ',
-  },
-  3: {
-    fileKey: 'relic_3',
-    nameVi: 'Đũa Phép Cơm Nguội',
-    shortVi: 'Đũa Cơm Nguội',
-    loreVi: 'Bảo bối Tử Thần quyền năng nhất giới phù thủy',
-    accent: '#3b82f6',
-    runeGlyph: 'ᚦ',
-  },
-  4: {
-    fileKey: 'relic_4',
-    nameVi: 'Chiếc Cốc Lửa',
-    shortVi: 'Cốc Lửa',
-    loreVi: 'Ngọn lửa xanh huyền thoại chọn Quán quân',
-    accent: '#38bdf8',
-    runeGlyph: 'ᚨ',
-  },
-  5: {
-    fileKey: 'relic_5',
-    nameVi: 'Vạc Độc Dược Lục Bảo',
-    shortVi: 'Vạc Độc Dược',
-    loreVi: 'Vạc đồng ủ Phúc Lạc Dược dưới hầm Hogwarts',
-    accent: '#10b981',
-    runeGlyph: 'ᚱ',
-  },
-  6: {
-    fileKey: 'relic_6',
-    nameVi: 'Bản Đồ Đạo Tặc',
-    shortVi: 'Bản Đồ Đạo Tặc',
-    loreVi: 'Tôi trang trọng thề rằng tôi đang mưu đồ bất chính',
-    accent: '#dc2626',
-    runeGlyph: 'ᚲ',
-  },
-  7: {
-    fileKey: 'relic_7',
-    nameVi: 'Xoay Thời Gian',
-    shortVi: 'Xoay Thời Gian',
-    loreVi: 'Đồng hồ cát vàng của Hermione xoay ngược giờ',
-    accent: '#d97706',
-    runeGlyph: 'ᚷ',
-  },
-  8: {
-    fileKey: 'relic_8',
-    nameVi: 'Cú Tuyết Hedwig',
-    shortVi: 'Cú Hedwig',
-    loreVi: 'Sứ giả trung thành mang thư sáp đỏ Hogwarts',
-    accent: '#64748b',
-    runeGlyph: 'ᚹ',
-  },
-  9: {
-    fileKey: 'relic_9',
-    nameVi: 'Phượng Hoàng Fawkes',
-    shortVi: 'Phượng Hoàng',
-    loreVi: 'Linh điểu bất tử của cụ Albus Dumbledore',
-    accent: '#ef4444',
-    runeGlyph: 'ᛊ',
-  },
-};
+type SudokuQuickActionKey = 'undo' | 'erase' | 'notes' | 'hint';
 
 const HP_CARO_SEAL_KEYS = ['phoenix_seal', 'dark_mark_seal'] as const;
 
@@ -451,16 +367,14 @@ export class PuzzleArcadeModalController {
 
   private iconImages = new Map<string, HTMLImageElement>();
   private chessPieceImages = new Map<string, HTMLImageElement>();
-  private sudokuRelicImages = new Map<number, HTMLImageElement>();
   private caroSealImages = new Map<string, HTMLImageElement>();
   private parlorBgImage: HTMLImageElement | null = null;
   private greatHallBgImage: HTMLImageElement | null = null;
-  private potionsSudokuBgImage: HTMLImageElement | null = null;
   private marauderCaroBgImage: HTMLImageElement | null = null;
   private unicornLakeBgImage: HTMLImageElement | null = null;
 
   public mode: PuzzleArcadeMode = 'caro';
-  public sudokuDisplayMode: SudokuDisplayMode = 'relic_num';
+  public sudokuDisplayMode: SudokuDisplayMode = 'num_only';
   public sudokuEngine: SudokuPuzzleEngine | null = null;
   public caroEngine: CaroGameEngine | null = null;
   public chessEngine: WizardChessEngine | null = null;
@@ -469,9 +383,13 @@ export class PuzzleArcadeModalController {
   private chessForceSubMode?: ChessSubMode;
   private aiThinkTimer = 0;
   private sudokuPadRects = new Map<number, { x: number; y: number; w: number; h: number }>();
-  private sudokuEraseRect: { x: number; y: number; w: number; h: number } | null = null;
+  private sudokuActionRects = new Map<
+    SudokuQuickActionKey,
+    { x: number; y: number; w: number; h: number }
+  >();
   private sudokuHoverCell: { r: number; c: number } | null = null;
   private sudokuHoverPadDigit: number | null = null;
+  private sudokuHoverAction: SudokuQuickActionKey | null = null;
   private caroHoverCell: { r: number; c: number } | null = null;
   private caroLastMoveAnim: { r: number; c: number; age: number; duration: number } | null = null;
   private caroWinRevealTimer = 0;
@@ -487,9 +405,30 @@ export class PuzzleArcadeModalController {
   private pendingChessWorkerReqId: number | null = null;
   private hitStopTimer = 0;
   private inspectingTurningPoint = false;
+  private companionCharge = 0;
+  private snackPieUsedThisAttempt = false;
+  private lossStreakResetForStage = false;
+  private sudokuAutoSaveAccumSec = 0;
 
   private victoryClaimed = false;
   public rescueContext: MinigameRescueContext | null = null;
+
+  public resetSession(): void {
+    this.pendingChessWorkerReqId = null;
+    this.aiThinkTimer = 0;
+    this.sudokuEngine = null;
+    this.caroEngine = null;
+    this.chessEngine = null;
+    this.onetEngine = null;
+    this.tileEngine = null;
+    this.victoryClaimed = false;
+    this.rescueContext = null;
+    this.rescueVictoryOutcome = null;
+    const dlg = this.root.querySelector('#puzzleDialog') as HTMLDialogElement | null;
+    if (dlg?.open) {
+      dlg.close();
+    }
+  }
   private rescueVictoryOutcome: {
     tokensEarned: number;
     goldEarned: number;
@@ -533,6 +472,10 @@ export class PuzzleArcadeModalController {
     age: number;
     duration: number;
   }> = [];
+  private onetSlideAnims = new Map<
+    string,
+    { fromR: number; fromC: number; age: number; duration: number }
+  >();
   private onetWinRevealTimer = 0;
   private hoveredTileUid: number | null = null;
 
@@ -581,48 +524,109 @@ export class PuzzleArcadeModalController {
         this.caroEngine = null;
         this.chessEngine = null;
         this.onetEngine = null;
+      } else {
+        this.persistModeSession(this.mode, true);
+      }
+      if (typeof document === 'undefined' || !document.hidden) {
+        this.clearActiveModalResumeMarker();
       }
       this.stopLoop();
       this.onParentRefresh();
     });
 
-    window.addEventListener('keydown', (e) => {
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          this.flushArcadeAndModalBeforeHide();
+        } else {
+          this.lastFrameTs = performance.now();
+          const openDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
+          if (openDlg?.open) {
+            if (!this.rafId) {
+              this.startLoop();
+            }
+            this.renderDOM();
+            this.drawFrame();
+          }
+        }
+      });
+    }
+
+    if (typeof window !== 'undefined') {
+      const flushOnHide = () => {
+        this.flushArcadeAndModalBeforeHide();
+      };
+      window.addEventListener('pagehide', flushOnHide);
+      window.addEventListener('beforeunload', flushOnHide);
+      window.addEventListener('hangsoc:before-sw-reload', flushOnHide);
+      window.addEventListener('pageshow', () => {
+        this.lastFrameTs = performance.now();
+        const openDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
+        if (openDlg?.open) {
+          if (!this.rafId) {
+            this.startLoop();
+          }
+          this.renderDOM();
+          this.drawFrame();
+        }
+      });
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('keydown', (e) => {
       const openDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
       if (!openDlg?.open || this.victoryClaimed) return;
 
-      if (this.mode === 'blocks' && this.onetEngine && this.onetEngine.status === 'playing') {
+      if (
+        this.mode === 'blocks' &&
+        this.onetEngine &&
+        (this.onetEngine.status === 'playing' || this.onetEngine.status === 'lost')
+      ) {
         const oe = this.onetEngine;
-        if (e.key === 'h' || e.key === 'H') {
-          e.preventDefault();
-          (this.root.querySelector('#btnPaOnetHint') as HTMLButtonElement | null)?.click();
-          return;
-        }
         if (e.key === 's' || e.key === 'S') {
           e.preventDefault();
           (this.root.querySelector('#btnPaOnetShuffle') as HTMLButtonElement | null)?.click();
           return;
         }
-        if (
-          e.key === 'ArrowUp' ||
-          e.key === 'ArrowDown' ||
-          e.key === 'ArrowLeft' ||
-          e.key === 'ArrowRight'
-        ) {
-          e.preventDefault();
-          const cur = this.onetCursorCell ?? oe.selected ?? { r: 0, c: 0 };
-          const dr = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
-          const dc = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
-          this.onetCursorCell = {
-            r: (cur.r + dr + oe.rows) % oe.rows,
-            c: (cur.c + dc + oe.cols) % oe.cols,
-          };
-          return;
+        if (oe.status === 'playing') {
+          if (e.key === 'h' || e.key === 'H') {
+            e.preventDefault();
+            (this.root.querySelector('#btnPaOnetHint') as HTMLButtonElement | null)?.click();
+            return;
+          }
+          if (
+            e.key === 'ArrowUp' ||
+            e.key === 'ArrowDown' ||
+            e.key === 'ArrowLeft' ||
+            e.key === 'ArrowRight'
+          ) {
+            e.preventDefault();
+            const cur = this.onetCursorCell ?? oe.selected ?? { r: 0, c: 0 };
+            const dr = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
+            const dc = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
+            this.onetCursorCell = {
+              r: (cur.r + dr + oe.rows) % oe.rows,
+              c: (cur.c + dc + oe.cols) % oe.cols,
+            };
+            return;
+          }
+          if ((e.key === 'Enter' || e.key === ' ') && this.onetCursorCell) {
+            e.preventDefault();
+            this.handleOnetCellTap(this.onetCursorCell.r, this.onetCursorCell.c);
+            return;
+          }
         }
-        if ((e.key === 'Enter' || e.key === ' ') && this.onetCursorCell) {
-          e.preventDefault();
-          this.handleOnetCellTap(this.onetCursorCell.r, this.onetCursorCell.c);
-          return;
-        }
+      }
+
+      if (
+        this.mode === 'chess' &&
+        this.chessEngine &&
+        this.chessEngine.status === 'playing' &&
+        (e.key === 'h' || e.key === 'H')
+      ) {
+        e.preventDefault();
+        (this.root.querySelector('#btnPaChessAssist') as HTMLButtonElement | null)?.click();
+        return;
       }
 
       if (
@@ -632,7 +636,10 @@ export class PuzzleArcadeModalController {
       ) {
         return;
       }
-      if (e.key >= '1' && e.key <= '9' && this.sudokuEngine.status === 'playing') {
+      if (e.key === 'z' || e.key === 'Z') {
+        e.preventDefault();
+        this.triggerSudokuUndoAction();
+      } else if (e.key >= '1' && e.key <= '9' && this.sudokuEngine.status === 'playing') {
         e.preventDefault();
         this.applySudokuDigit(Number(e.key));
       } else if (
@@ -656,59 +663,63 @@ export class PuzzleArcadeModalController {
         if (this.sudokuEngine.pencilMode) {
           this.sudokuEngine.eraseMode = false;
         }
+        this.persistSudokuSession(true);
         this.sim.audio.playClick();
         this.renderDOM();
-      } else if (e.key === 'h' || e.key === 'H') {
+      } else if ((e.key === 'h' || e.key === 'H') && this.sudokuEngine.status === 'playing') {
         e.preventDefault();
-        this.cycleSudokuDisplayMode();
+        this.triggerSudokuHintAction();
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         this.sudokuEngine.moveSelection(-1, 0);
+        this.persistSudokuSession(false);
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
         this.sudokuEngine.moveSelection(1, 0);
+        this.persistSudokuSession(false);
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
         this.sudokuEngine.moveSelection(0, -1);
+        this.persistSudokuSession(false);
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
         this.sudokuEngine.moveSelection(0, 1);
+        this.persistSudokuSession(false);
       }
-    });
+      });
+    }
   }
 
   private isMobileBoardLayout(): boolean {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
       return false;
     }
-    return window.matchMedia('(max-width: 740px)').matches;
+    if (window.matchMedia('(orientation: landscape) and (max-height: 620px)').matches) {
+      return false;
+    }
+    return window.matchMedia('(max-width: 979px)').matches;
   }
 
   private getVirtualCanvasSize(): { w: number; h: number } {
-    if (!this.isMobileBoardLayout()) {
-      return { w: PA_VIRTUAL_W, h: PA_VIRTUAL_H };
-    }
     switch (this.mode) {
       case 'caro':
-        return { w: 504, h: 504 };
+        return { w: CARO_VIRTUAL_PX, h: CARO_VIRTUAL_PX };
       case 'chess':
-        return { w: 508, h: 504 };
+        return { w: CHESS_VIRTUAL_PX, h: CHESS_VIRTUAL_PX };
       case 'sudoku':
-        return { w: 500, h: 636 };
-      case 'blocks':
-        return { w: 504, h: 616 };
+        return this.isMobileBoardLayout()
+          ? { w: SUDOKU_MOBILE_W, h: SUDOKU_MOBILE_H }
+          : { w: SUDOKU_DESKTOP_W, h: SUDOKU_DESKTOP_H };
+      case 'blocks': {
+        if (this.canvas && typeof this.canvas.getBoundingClientRect === 'function') {
+          const r = this.canvas.getBoundingClientRect();
+          if (r.width >= 60 && r.height >= 60) {
+            return { w: Math.round(r.width), h: Math.round(r.height) };
+          }
+        }
+        return this.isMobileBoardLayout() ? { w: 540, h: 810 } : { w: 864, h: 540 };
+      }
     }
-  }
-
-  private cycleSudokuDisplayMode(): void {
-    this.sudokuDisplayMode =
-      this.sudokuDisplayMode === 'relic_num'
-        ? 'relic_only'
-        : this.sudokuDisplayMode === 'relic_only'
-          ? 'num_only'
-          : 'relic_num';
-    this.sim.audio.playClick();
-    this.renderDOM();
   }
 
   private preloadAssets(): void {
@@ -721,11 +732,6 @@ export class PuzzleArcadeModalController {
     hallImg.decoding = 'async';
     hallImg.src = '/paintings/great_hall_chess_bg.jpg';
     this.greatHallBgImage = hallImg;
-
-    const potionsImg = new Image();
-    potionsImg.decoding = 'async';
-    potionsImg.src = '/paintings/potions_runes_sudoku_bg.jpg';
-    this.potionsSudokuBgImage = potionsImg;
 
     const marauderImg = new Image();
     marauderImg.decoding = 'async';
@@ -742,15 +748,6 @@ export class PuzzleArcadeModalController {
       pImg.decoding = 'async';
       pImg.src = `/paintings/chess/${key}.png`;
       this.chessPieceImages.set(key, pImg);
-    }
-
-    for (let d = 1; d <= 9; d++) {
-      const meta = HP_SUDOKU_RELIC_META[d];
-      if (!meta) continue;
-      const rImg = new Image();
-      rImg.decoding = 'async';
-      rImg.src = `/paintings/sudoku/${meta.fileKey}.png`;
-      this.sudokuRelicImages.set(d, rImg);
     }
 
     for (const sealKey of HP_CARO_SEAL_KEYS) {
@@ -776,12 +773,6 @@ export class PuzzleArcadeModalController {
       img.src = `/sprites/${key}.png`;
       this.iconImages.set(key, img);
     }
-  }
-
-  private getSudokuRelicImage(digit: number): HTMLImageElement | null {
-    const img = this.sudokuRelicImages.get(digit);
-    if (img && img.complete && img.naturalWidth > 0) return img;
-    return null;
   }
 
   private getCaroSealImage(stone: 1 | 2): HTMLImageElement | null {
@@ -812,6 +803,7 @@ export class PuzzleArcadeModalController {
         : 'caro';
     this.mode = targetMode;
     this.sim.state.puzzleArcade.activeMode = targetMode;
+    this.sim.setLastPlayedMinigame(targetMode);
     this.ensureEngineForMode(targetMode, false);
     this.lastSeenSosRescuedAt = this.sim.ensureNeighborSocial().playerMinigameSos?.rescuedAt ?? 0;
 
@@ -821,7 +813,14 @@ export class PuzzleArcadeModalController {
     if (!dlg.open) {
       dlg.showModal();
     }
+    if (!this.rescueContext) {
+      this.persistModeSession(targetMode, true);
+      this.persistActiveModalResumeMarker();
+    } else {
+      this.clearActiveModalResumeMarker();
+    }
     this.startLoop();
+    this.onParentRefresh();
   }
 
   public openRescue(ctx: MinigameRescueContext): void {
@@ -831,6 +830,7 @@ export class PuzzleArcadeModalController {
       this.showToast(check.reason ?? 'Không thể giải cứu màn này lúc này!', '🦉');
       return;
     }
+    this.clearActiveModalResumeMarker();
     this.rescueContext = { ...ctx };
     this.rescueVictoryOutcome = null;
     this.mode = ctx.kind;
@@ -844,6 +844,7 @@ export class PuzzleArcadeModalController {
       dlg.showModal();
     }
     this.startLoop();
+    this.onParentRefresh();
   }
 
   public switchMode(nextMode: PuzzleArcadeMode): void {
@@ -852,12 +853,23 @@ export class PuzzleArcadeModalController {
       this.onetWinRevealTimer = 0;
       this.checkAndClaimVictory();
     }
+    if (!this.rescueContext) {
+      this.persistModeSession(this.mode, false);
+    }
     this.mode = nextMode;
     this.sim.state.puzzleArcade.activeMode = nextMode;
-    this.sim.saveToStorage();
+    this.sim.setLastPlayedMinigame(nextMode);
     this.resetInteractionState();
     this.ensureEngineForMode(nextMode, false);
+    if (!this.rescueContext) {
+      this.persistModeSession(nextMode, false);
+      this.persistActiveModalResumeMarker();
+    } else {
+      this.clearActiveModalResumeMarker();
+    }
+    this.sim.saveToStorage();
     this.renderDOM();
+    this.onParentRefresh();
   }
 
   private resetInteractionState(): void {
@@ -866,9 +878,11 @@ export class PuzzleArcadeModalController {
     this.onetCursorCell = null;
     this.onetBlockedFlash = null;
     this.onetBeams = [];
+    this.onetSlideAnims.clear();
     this.onetWinRevealTimer = 0;
     this.sudokuHoverCell = null;
     this.sudokuHoverPadDigit = null;
+    this.sudokuHoverAction = null;
     this.caroHoverCell = null;
     this.caroLastMoveAnim = null;
     this.caroWinRevealTimer = 0;
@@ -937,13 +951,16 @@ export class PuzzleArcadeModalController {
       if (aiRes.playerWon) {
         this.checkAndClaimVictory();
       } else if (aiRes.aiWon || aiRes.draw || this.chessEngine.isInCheck('w')) {
+        this.persistModeSession('chess', true);
         this.renderDOM();
       } else {
+        this.persistModeSession('chess', true);
         this.updateLiveCountersOnly();
       }
     } else if (aiRes?.playerWon) {
       this.checkAndClaimVictory();
     } else {
+      this.persistModeSession('chess', true);
       this.renderDOM();
     }
   }
@@ -1031,6 +1048,135 @@ export class PuzzleArcadeModalController {
     return this.onetEngine?.stage ?? pa.blockStage ?? 1;
   }
 
+  private persistActiveModalResumeMarker(): void {
+    if (typeof localStorage === 'undefined' || this.rescueContext || this.victoryClaimed) return;
+    try {
+      const rec: ActiveMinigameResumeRecord = {
+        dialog: 'puzzleArcade',
+        mode: this.mode,
+        stage: this.getActiveEngineStage(),
+        savedAt: Date.now(),
+      };
+      localStorage.setItem(ACTIVE_MINIGAME_RESUME_KEY, JSON.stringify(rec));
+    } catch {
+      // Ignore storage quota errors
+    }
+  }
+
+  private clearActiveModalResumeMarker(): void {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.removeItem(ACTIVE_MINIGAME_RESUME_KEY);
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  private persistSudokuSession(saveToDisk = true): void {
+    this.persistModeSession('sudoku', saveToDisk);
+  }
+
+  private persistModeSession(mode: PuzzleArcadeMode, saveToDisk = true): void {
+    if (this.rescueContext) return;
+    const pa = this.sim.state.puzzleArcade;
+    const extra =
+      this.mode === mode
+        ? {
+            companionCharge: this.companionCharge,
+            snackPieUsed: this.snackPieUsedThisAttempt,
+          }
+        : undefined;
+
+    if (mode === 'sudoku') {
+      if (!this.sudokuEngine || this.sudokuEngine.stage !== pa.sudokuStage) return;
+      if (this.sudokuEngine.status === 'won' || (this.mode === 'sudoku' && this.victoryClaimed)) {
+        if (pa.sudokuSession) {
+          pa.sudokuSession = null;
+          if (saveToDisk) this.sim.saveToStorage();
+        }
+        return;
+      }
+      this.sudokuAutoSaveAccumSec = 0;
+      pa.sudokuSession = this.sudokuEngine.exportSession(
+        extra ?? {
+          companionCharge: pa.sudokuSession?.companionCharge ?? 0,
+          snackPieUsed: pa.sudokuSession?.snackPieUsed ?? false,
+        }
+      );
+      if (saveToDisk) this.sim.saveToStorage();
+      return;
+    }
+
+    if (mode === 'caro') {
+      if (!this.caroEngine || this.caroEngine.stage !== pa.caroStage) return;
+      if (this.caroEngine.status === 'won' || (this.mode === 'caro' && this.victoryClaimed)) {
+        if (pa.caroSession) {
+          pa.caroSession = null;
+          if (saveToDisk) this.sim.saveToStorage();
+        }
+        return;
+      }
+      pa.caroSession = this.caroEngine.exportSession(
+        extra ?? {
+          companionCharge: pa.caroSession?.companionCharge ?? 0,
+          snackPieUsed: pa.caroSession?.snackPieUsed ?? false,
+        }
+      );
+      if (saveToDisk) this.sim.saveToStorage();
+      return;
+    }
+
+    if (mode === 'chess') {
+      if (!this.chessEngine || this.chessEngine.stage !== pa.chessStage) return;
+      if (this.chessEngine.status === 'won' || (this.mode === 'chess' && this.victoryClaimed)) {
+        if (pa.chessSession) {
+          pa.chessSession = null;
+          if (saveToDisk) this.sim.saveToStorage();
+        }
+        return;
+      }
+      pa.chessSession = this.chessEngine.exportSession(
+        extra ?? {
+          companionCharge: pa.chessSession?.companionCharge ?? 0,
+          snackPieUsed: pa.chessSession?.snackPieUsed ?? false,
+        }
+      );
+      if (saveToDisk) this.sim.saveToStorage();
+      return;
+    }
+
+    if (!this.onetEngine || this.onetEngine.stage !== pa.blockStage) return;
+    if (this.onetEngine.status === 'won' || (this.mode === 'blocks' && this.victoryClaimed)) {
+      if (pa.onetSession) {
+        pa.onetSession = null;
+        if (saveToDisk) this.sim.saveToStorage();
+      }
+      return;
+    }
+    pa.onetSession = this.onetEngine.exportSession(
+      extra ?? {
+        companionCharge: pa.onetSession?.companionCharge ?? 0,
+        snackPieUsed: pa.onetSession?.snackPieUsed ?? false,
+      }
+    );
+    if (saveToDisk) this.sim.saveToStorage();
+  }
+
+  private flushArcadeAndModalBeforeHide(): void {
+    if ((this.caroWinRevealTimer > 0 || this.onetWinRevealTimer > 0) && !this.victoryClaimed) {
+      this.caroWinRevealTimer = 0;
+      this.onetWinRevealTimer = 0;
+      this.checkAndClaimVictory();
+    }
+    if (!this.rescueContext) {
+      this.persistModeSession(this.mode, true);
+    }
+    const openDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
+    if (openDlg?.open && !this.rescueContext && !this.victoryClaimed) {
+      this.persistActiveModalResumeMarker();
+    }
+  }
+
   private ensureEngineForMode(mode: PuzzleArcadeMode, forceRestart: boolean): void {
     const pa = this.sim.state.puzzleArcade;
     this.victoryClaimed = false;
@@ -1049,7 +1195,34 @@ export class PuzzleArcadeModalController {
         this.sudokuEngine.stage !== stage ||
         this.sudokuEngine.status === 'won'
       ) {
-        this.sudokuEngine = new SudokuPuzzleEngine(stage);
+        if (forceRestart && !rescueStage && pa.sudokuSession) {
+          pa.sudokuSession = null;
+          this.sim.saveToStorage();
+        }
+        const nextEngine = new SudokuPuzzleEngine(stage);
+        let restored = false;
+        if (
+          !forceRestart &&
+          !rescueStage &&
+          pa.sudokuSession &&
+          pa.sudokuSession.stage === stage
+        ) {
+          restored = nextEngine.restoreSession(pa.sudokuSession);
+        }
+        this.sudokuEngine = nextEngine;
+        if (restored && pa.sudokuSession) {
+          this.companionCharge = Math.max(0, Math.round(pa.sudokuSession.companionCharge ?? 0));
+          this.snackPieUsedThisAttempt = Boolean(pa.sudokuSession.snackPieUsed);
+          this.lossStreakResetForStage = false;
+        } else {
+          this.resetStageSynergySession();
+          if (!rescueStage) {
+            this.persistModeSession('sudoku', true);
+          }
+        }
+      } else if (!rescueStage && pa.sudokuSession?.stage === stage) {
+        this.companionCharge = Math.max(0, Math.round(pa.sudokuSession.companionCharge ?? 0));
+        this.snackPieUsedThisAttempt = Boolean(pa.sudokuSession.snackPieUsed);
       }
     } else if (mode === 'caro') {
       const stage = rescueStage ?? pa.caroStage ?? 1;
@@ -1059,7 +1232,37 @@ export class PuzzleArcadeModalController {
         this.caroEngine.stage !== stage ||
         this.caroEngine.status === 'won'
       ) {
-        this.caroEngine = new CaroGameEngine(stage);
+        if (forceRestart && !rescueStage && pa.caroSession) {
+          pa.caroSession = null;
+          this.sim.saveToStorage();
+        }
+        const nextEngine = new CaroGameEngine(stage);
+        let restored = false;
+        if (
+          !forceRestart &&
+          !rescueStage &&
+          pa.caroSession &&
+          pa.caroSession.stage === stage
+        ) {
+          restored = nextEngine.restoreSession(pa.caroSession);
+        }
+        this.caroEngine = nextEngine;
+        if (restored && pa.caroSession) {
+          this.companionCharge = Math.max(0, Math.round(pa.caroSession.companionCharge ?? 0));
+          this.snackPieUsedThisAttempt = Boolean(pa.caroSession.snackPieUsed);
+          this.lossStreakResetForStage = false;
+        } else {
+          this.resetStageSynergySession();
+          if (!rescueStage) {
+            this.persistModeSession('caro', true);
+          }
+        }
+      } else if (!rescueStage && pa.caroSession?.stage === stage) {
+        this.companionCharge = Math.max(0, Math.round(pa.caroSession.companionCharge ?? 0));
+        this.snackPieUsedThisAttempt = Boolean(pa.caroSession.snackPieUsed);
+      }
+      if (this.caroEngine.status === 'ai_thinking') {
+        this.aiThinkTimer = 0.25;
       }
     } else if (mode === 'chess') {
       const stage = rescueStage ?? pa.chessStage ?? 1;
@@ -1069,7 +1272,38 @@ export class PuzzleArcadeModalController {
         this.chessEngine.stage !== stage ||
         this.chessEngine.status === 'won'
       ) {
-        this.chessEngine = new WizardChessEngine(stage, this.chessForceSubMode);
+        const savedChess =
+          !forceRestart && !rescueStage && pa.chessSession?.stage === stage
+            ? pa.chessSession
+            : null;
+        if (forceRestart && !rescueStage && pa.chessSession) {
+          pa.chessSession = null;
+          this.sim.saveToStorage();
+        }
+        const preferredSubMode = savedChess ? savedChess.subMode : this.chessForceSubMode;
+        const nextEngine = new WizardChessEngine(stage, preferredSubMode);
+        let restored = false;
+        if (savedChess) {
+          restored = nextEngine.restoreSession(savedChess);
+        }
+        this.chessEngine = nextEngine;
+        if (restored && savedChess) {
+          this.chessForceSubMode = nextEngine.subMode;
+          this.companionCharge = Math.max(0, Math.round(savedChess.companionCharge ?? 0));
+          this.snackPieUsedThisAttempt = Boolean(savedChess.snackPieUsed);
+          this.lossStreakResetForStage = false;
+        } else {
+          this.resetStageSynergySession();
+          if (!rescueStage) {
+            this.persistModeSession('chess', true);
+          }
+        }
+      } else if (!rescueStage && pa.chessSession?.stage === stage) {
+        this.companionCharge = Math.max(0, Math.round(pa.chessSession.companionCharge ?? 0));
+        this.snackPieUsedThisAttempt = Boolean(pa.chessSession.snackPieUsed);
+      }
+      if (this.chessEngine.status === 'ai_thinking') {
+        this.aiThinkTimer = 0.25;
       }
     } else {
       const stage = rescueStage ?? pa.blockStage ?? 1;
@@ -1079,9 +1313,47 @@ export class PuzzleArcadeModalController {
         this.onetEngine.stage !== stage ||
         this.onetEngine.status === 'won'
       ) {
-        this.onetEngine = new CreatureOnetEngine(stage);
+        if (forceRestart && !rescueStage && pa.onetSession) {
+          pa.onetSession = null;
+          this.sim.saveToStorage();
+        }
+        const nextEngine = new CreatureOnetEngine(stage);
+        let restored = false;
+        if (
+          !forceRestart &&
+          !rescueStage &&
+          pa.onetSession &&
+          pa.onetSession.stage === stage
+        ) {
+          restored = nextEngine.restoreSession(pa.onetSession);
+        }
+        this.onetEngine = nextEngine;
+        if (restored && pa.onetSession) {
+          this.companionCharge = Math.max(0, Math.round(pa.onetSession.companionCharge ?? 0));
+          this.snackPieUsedThisAttempt = Boolean(pa.onetSession.snackPieUsed);
+          this.lossStreakResetForStage = false;
+        } else {
+          this.resetStageSynergySession();
+          if (!rescueStage) {
+            this.persistModeSession('blocks', true);
+          }
+        }
+      } else if (!rescueStage && pa.onetSession?.stage === stage) {
+        this.companionCharge = Math.max(0, Math.round(pa.onetSession.companionCharge ?? 0));
+        this.snackPieUsedThisAttempt = Boolean(pa.onetSession.snackPieUsed);
       }
     }
+  }
+
+  private resetStageSynergySession(): void {
+    this.companionCharge = 0;
+    this.snackPieUsedThisAttempt = false;
+    this.lossStreakResetForStage = false;
+  }
+
+  private bumpCompanionCharge(): void {
+    const comp = this.sim.getActiveMinigameCompanion();
+    this.companionCharge = Math.min(comp.chargeEveryMoves, this.companionCharge + 1);
   }
 
   private checkAndClaimVictory(): void {
@@ -1110,11 +1382,18 @@ export class PuzzleArcadeModalController {
 
     if (this.mode === 'sudoku' && this.sudokuEngine?.status === 'won') {
       this.victoryClaimed = true;
+      this.sim.state.puzzleArcade.sudokuSession = null;
+      this.clearActiveModalResumeMarker();
       this.victorySummary = this.sim.completePuzzleArcadeVictory(
         'sudoku',
         this.sudokuEngine.reward,
         {
-          sessionScore: Math.max(1200, 2600 - this.sudokuEngine.mistakesCount * 220),
+          sessionScore: Math.max(
+            1200,
+            2800 -
+              this.sudokuEngine.mistakesCount * 220 -
+              Math.min(600, Math.floor(this.sudokuEngine.elapsedSec * 1.2))
+          ),
           efficiency: this.sudokuEngine.mistakesCount,
         }
       );
@@ -1123,6 +1402,8 @@ export class PuzzleArcadeModalController {
       this.renderDOM();
     } else if (this.mode === 'caro' && this.caroEngine?.status === 'won') {
       this.victoryClaimed = true;
+      this.sim.state.puzzleArcade.caroSession = null;
+      this.clearActiveModalResumeMarker();
       const humanMoves = Math.max(
         1,
         this.caroEngine.moveHistory.filter((m) => m.stone === 1).length
@@ -1136,6 +1417,8 @@ export class PuzzleArcadeModalController {
       this.renderDOM();
     } else if (this.mode === 'chess' && this.chessEngine?.status === 'won') {
       this.victoryClaimed = true;
+      this.sim.state.puzzleArcade.chessSession = null;
+      this.clearActiveModalResumeMarker();
       this.victorySummary = this.sim.completePuzzleArcadeVictory('chess', this.chessEngine.reward, {
         sessionScore: Math.max(
           1300,
@@ -1148,6 +1431,8 @@ export class PuzzleArcadeModalController {
       this.renderDOM();
     } else if (this.mode === 'blocks' && this.onetEngine?.status === 'won') {
       this.victoryClaimed = true;
+      this.sim.state.puzzleArcade.onetSession = null;
+      this.clearActiveModalResumeMarker();
       this.victorySummary = this.sim.completePuzzleArcadeVictory(
         'blocks',
         this.onetEngine.reward,
@@ -1306,7 +1591,7 @@ export class PuzzleArcadeModalController {
       '#puzzleArcadeDialog .pa-modal-inner'
     ) as HTMLElement | null;
     modalInner?.classList.toggle('pa-great-hall-mode', this.mode === 'chess');
-    modalInner?.classList.toggle('pa-potions-sudoku-mode', this.mode === 'sudoku');
+    modalInner?.classList.remove('pa-potions-sudoku-mode');
     modalInner?.classList.toggle('pa-marauder-caro-mode', this.mode === 'caro');
 
     const modalTitle = this.root.querySelector('#puzzleArcadeDialogTitle') as HTMLElement | null;
@@ -1316,37 +1601,31 @@ export class PuzzleArcadeModalController {
           '<img src="/paintings/chess/wk.png" alt="" style="width:28px;height:32px;object-fit:contain;vertical-align:-8px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Cờ Phù Thủy';
       } else if (this.mode === 'sudoku') {
         modalTitle.innerHTML =
-          '<img src="/paintings/sudoku/relic_1.png" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Cửu Bảo Bối (Sudoku)';
+          '<img src="/sprites/m3_piece_scroll.png" alt="" style="width:26px;height:26px;object-fit:contain;vertical-align:-6px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Số Học Huyền Bí';
       } else if (this.mode === 'caro') {
         modalTitle.innerHTML =
-          '<img src="/paintings/caro/phoenix_seal.png" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Ngũ Ấn Đạo Tặc (Caro)';
+          '<img src="/paintings/caro/phoenix_seal.png" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Ngũ Ấn Đạo Tặc';
       } else {
         modalTitle.innerHTML =
-          '<img src="/sprites/beast_niffler.png" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Nối Hình Sinh Vật (Pikachu)';
+          '<img src="/sprites/beast_niffler.png" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Sinh Vật Huyền Bí';
       }
     }
 
     const st = this.sim.state;
     const talismanQty = this.sim.getPhoenixTalismanCount();
     const talismanDisp = st.sandboxMode ? '∞' : String(talismanQty);
+    const talismanDaily = this.sim.getPhoenixTalismanDailyStatus();
+    const usedTodayInMode = talismanDaily.usedByGame[this.mode] === true;
+    const talismanTooltip = usedTodayInMode
+      ? `Bùa Phượng Hoàng — Đã dùng 1/1 lượt hôm nay ở môn này (${talismanDaily.usedCount}/${talismanDaily.maxDaily} môn hôm nay, mở lại sau 00:00)`
+      : `Bùa Phượng Hoàng — Tối đa 1 lần/môn/ngày (Đã dùng ${talismanDaily.usedCount}/${talismanDaily.maxDaily} môn hôm nay)`;
     const reqTrial = this.sim.getRequiredLevelTrial();
-    const winsProg = this.sim.getWinsProgressForCurrentLevel();
     const curInfo = this.sim.getDisciplineStageInfo(this.mode);
     const isScoredMode = this.mode === 'sudoku' || this.mode === 'blocks';
     const activeModeRank = isScoredMode ? this.sim.getPlayerMinigameRank(this.mode, 'valley') : 0;
-    const nextCap = Math.min(100, st.level + 1);
-    const isFeaturedModeNow = Boolean(
-      !curInfo.isMaxed &&
-        reqTrial &&
-        !st.sandboxMode &&
-        !this.sim.isHeadmasterPreview &&
-        reqTrial.kind === this.mode &&
-        !this.victorySummary
-    );
 
     let stageHeadline = '';
     let stageSubtitle = '';
-    let rewardSpec = { stars: 2, sand: 1, gold: 100 };
     let controlsHtml = '';
     let statusBannerHtml = '';
 
@@ -1397,73 +1676,16 @@ export class PuzzleArcadeModalController {
       }
     }
 
-    if (!this.rescueContext && reqTrial && !st.sandboxMode && !this.sim.isHeadmasterPreview) {
-      const isCurrentTrialTab = reqTrial.kind === this.mode;
-      if (this.victorySummary) {
-        statusBannerHtml += `
-          <div class="pa-trial-strip done">
-            <span>🎉 <strong>Lv.${st.level} (${winsProg.current}/${winsProg.required})</strong> • Đề cử: <strong>${escapeHtml(reqTrial.icon)} ${escapeHtml(reqTrial.shortVi)}</strong></span>
-            ${
-              !isCurrentTrialTab
-                ? `<button type="button" id="btnPaJumpRequiredTrial" class="pa-mini-pill active">▶️ ${escapeHtml(reqTrial.shortVi)}</button>`
-                : ''
-            }
-          </div>
-        `;
-      } else if (curInfo.isMaxed) {
-        statusBannerHtml += `
-          <div class="pa-trial-strip done">
-            <span>👑 <strong>777/777</strong> • Đề cử: <strong>${escapeHtml(reqTrial.icon)} ${escapeHtml(reqTrial.shortVi)}</strong></span>
-            ${
-              !isCurrentTrialTab
-                ? `<button type="button" id="btnPaJumpRequiredTrial" class="pa-mini-pill active">▶️ ${escapeHtml(reqTrial.shortVi)}</button>`
-                : ''
-            }
-          </div>
-        `;
-      } else if (isCurrentTrialTab) {
-        statusBannerHtml += `
-          <div class="pa-trial-strip urgent">
-            <span>
-              🔥 <strong>ĐỀ CỬ:</strong> +🌟 + ⏳ • Lv.${st.level}→${nextCap} (${winsProg.current}/${winsProg.required})
-            </span>
-          </div>
-        `;
-      } else {
-        statusBannerHtml += `
-          <div class="pa-trial-strip">
-            <span>
-              🎯 Lv.${st.level}→${nextCap} (${winsProg.current}/${winsProg.required}) • Đề cử: <strong>${escapeHtml(reqTrial.icon)} ${escapeHtml(reqTrial.shortVi)}</strong>
-            </span>
-            <button type="button" id="btnPaJumpRequiredTrial" class="pa-mini-pill active">▶️ ${escapeHtml(reqTrial.shortVi)}</button>
-          </div>
-        `;
-      }
-    }
-
     if (this.mode === 'sudoku' && this.sudokuEngine) {
       const se = this.sudokuEngine;
-      rewardSpec = se.reward;
-      const dispLbl =
-        this.sudokuDisplayMode === 'relic_num'
-          ? '🔮 Hình + Số'
-          : this.sudokuDisplayMode === 'relic_only'
-            ? '🏺 Hình'
-            : '🔢 Số';
-      const variantBadges = [
-        se.diagonalRule ? '✕ Chéo' : '',
-        se.parityRule ? '◇Lẻ/◯Chẵn' : '',
-      ]
-        .filter(Boolean)
-        .map((b) => ` • <strong>${b}</strong>`)
-        .join('');
-      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${se.stage}/${MAX_MINIGAME_STAGE} • ${escapeHtml(se.difficultyLabel)}`;
-      stageSubtitle = `🔢 <strong id="paSudokuProgress">${se.filledCount}/81</strong> • ❌ <strong id="paSudokuMistakes" class="${se.mistakesCount > 0 ? 'pa-err-inline' : ''}">${se.mistakesCount}/${se.maxMistakes}</strong>${variantBadges}`;
+      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${se.stage}/${MAX_MINIGAME_STAGE} • ${se.classicDifficultyVi}`;
+      stageSubtitle = `❌ Lỗi: <strong id="paSudokuMistakes" class="${se.mistakesCount > 0 ? 'pa-err-inline' : ''}">${se.mistakesCount}/${se.maxMistakes}</strong> • ⏱ <strong id="paSudokuTimer">${se.formatElapsedTime()}</strong>`;
       const canSudokuHint =
         se.status === 'playing' && (st.sandboxMode || se.freeHintsLeft + se.paidHintsLeft > 0);
+      const talismanLocked = se.talismanUsed || usedTodayInMode;
       const canTalisman =
         (se.status === 'playing' || se.status === 'lost') &&
-        !se.talismanUsed &&
+        !talismanLocked &&
         (st.sandboxMode || talismanQty > 0);
       const hintCostLbl = st.sandboxMode
         ? '∞'
@@ -1473,20 +1695,20 @@ export class PuzzleArcadeModalController {
             ? `${se.hintGoldCost}G`
             : '0';
       controlsHtml = `
-        <button id="btnPaSudokuDisplayMode" type="button" class="pa-tool-btn ${this.sudokuDisplayMode !== 'num_only' ? 'active' : ''}" title="Đổi chế độ hiển thị (H)">
-          ${dispLbl}
+        <button id="btnPaSudokuUndo" type="button" class="pa-tool-btn" ${!se.canUndo ? 'disabled' : ''} title="Hoàn tác bước vừa điền (Z)">
+          ↩️ Hoàn Tác
         </button>
-        <button id="btnPaSudokuPencil" type="button" class="pa-tool-btn ${se.pencilMode ? 'active' : ''}" ${se.status !== 'playing' ? 'disabled' : ''}>
-          🪶 Nháp: <strong>${se.pencilMode ? 'Bật' : 'Tắt'}</strong>
+        <button id="btnPaSudokuPencil" type="button" class="pa-tool-btn ${se.pencilMode ? 'active' : ''}" aria-pressed="${se.pencilMode}" ${se.status !== 'playing' ? 'disabled' : ''} title="Bật/tắt chế độ ghi chú bút chì 1–9 (N)">
+          ✏️ Ghi Chú${se.pencilMode ? ' ✓' : ''}
         </button>
-        <button id="btnPaSudokuClear" type="button" class="pa-tool-btn ${se.eraseMode ? 'active' : ''}" ${se.status !== 'playing' && se.status !== 'lost' ? 'disabled' : ''} title="Xoá ô đang chọn hoặc bật Chổi Xoá (Del / Backspace)">
-          🧹 ${se.eraseMode ? 'Xoá: <strong>Bật</strong>' : 'Xóa'}
+        <button id="btnPaSudokuClear" type="button" class="pa-tool-btn ${se.eraseMode ? 'active' : ''}" aria-pressed="${se.eraseMode}" ${se.status !== 'playing' && se.status !== 'lost' ? 'disabled' : ''} title="Xoá ô đang chọn hoặc bật tẩy (Del / Backspace)">
+          🧹 Xoá${se.eraseMode ? ' ✓' : ''}
         </button>
-        <button id="btnPaSudokuHint" type="button" class="pa-tool-btn gold" ${!canSudokuHint ? 'disabled' : ''}>
+        <button id="btnPaSudokuHint" type="button" class="pa-tool-btn gold" ${!canSudokuHint ? 'disabled' : ''} title="Điền đúng 1 ô trên bảng (H)">
           💡 Gợi Ý <span class="pa-cost-pill">${hintCostLbl}</span>
         </button>
-        <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="Bùa Phượng Hoàng">
-          🔥 Bùa <span class="pa-cost-pill">${se.talismanUsed ? '✓' : `×${talismanDisp}`}</span>
+        <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="${talismanTooltip}">
+          🔥 Bùa <span class="pa-cost-pill">${talismanLocked ? '✓ 1/1' : `×${talismanDisp}`}</span>
         </button>
         <button id="btnPaRestart" type="button" class="pa-tool-btn">
           🔄 Ván Mới
@@ -1495,20 +1717,19 @@ export class PuzzleArcadeModalController {
       if (se.status === 'lost') {
         statusBannerHtml += `
           <div class="pa-alert-strip">
-            <span>📕 Quá giới hạn sai (<strong>${se.mistakesCount}/${se.maxMistakes}</strong>)!</span>
+            <span>❌ Quá giới hạn lỗi (<strong>${se.mistakesCount}/${se.maxMistakes}</strong>)! Hoàn tác hoặc xoá ô sai để chơi tiếp.</span>
             ${canTalisman ? `<button id="btnPaRescuePhoenixTalisman" type="button" class="pa-tool-btn talisman">🔥 Bùa (×${talismanDisp})</button>` : ''}
           </div>
         `;
       }
     } else if (this.mode === 'caro' && this.caroEngine) {
       const ce = this.caroEngine;
-      rewardSpec = ce.reward;
-      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${ce.stage}/${MAX_MINIGAME_STAGE} • ${escapeHtml(ce.opponent.emoji)} ${escapeHtml(ce.opponent.name)} (${escapeHtml(ce.difficultyLabel)})`;
+      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${ce.stage}/${MAX_MINIGAME_STAGE} • ${escapeHtml(ce.opponent.emoji)} ${escapeHtml(ce.opponent.name)}`;
       const sealNote =
         ce.runeSealCount > 0
           ? ` • 🔒 ${ce.runeSealCount}`
           : '';
-      stageSubtitle = `🔥 Nối 5${sealNote} • <strong id="paCaroMoves">${ce.moveHistory.length}</strong> nước`;
+      stageSubtitle = `⚔️ ${escapeHtml(ce.opponent.name)}${sealNote} • <strong id="paCaroMoves">${ce.moveHistory.length} nước</strong>`;
       const canCaroUndo =
         ce.moveHistory.length > ce.initialHistoryLen &&
         ce.status !== 'ai_thinking' &&
@@ -1516,9 +1737,10 @@ export class PuzzleArcadeModalController {
         (st.sandboxMode || ce.freeUndosLeft + ce.paidUndosLeft > 0);
       const canCaroHint =
         ce.status === 'playing' && (st.sandboxMode || ce.freeHintsLeft + ce.paidHintsLeft > 0);
+      const talismanLocked = ce.talismanUsed || usedTodayInMode;
       const canTalisman =
         (ce.status === 'playing' || ce.status === 'lost' || ce.status === 'draw') &&
-        !ce.talismanUsed &&
+        !talismanLocked &&
         (st.sandboxMode || talismanQty > 0);
       const undoLbl = st.sandboxMode
         ? '∞'
@@ -1541,8 +1763,8 @@ export class PuzzleArcadeModalController {
         <button id="btnPaCaroHint" type="button" class="pa-tool-btn gold" ${!canCaroHint ? 'disabled' : ''}>
           💡 Gợi Ý <span class="pa-cost-pill">${hintLbl}</span>
         </button>
-        <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="Bùa Phượng Hoàng">
-          🔥 Bùa <span class="pa-cost-pill">${ce.talismanUsed ? '✓' : `×${talismanDisp}`}</span>
+        <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="${talismanTooltip}">
+          🔥 Bùa <span class="pa-cost-pill">${talismanLocked ? '✓ 1/1' : `×${talismanDisp}`}</span>
         </button>
         <button id="btnPaRestart" type="button" class="pa-tool-btn">
           🔄 Ván Mới
@@ -1564,25 +1786,25 @@ export class PuzzleArcadeModalController {
       }
     } else if (this.mode === 'chess' && this.chessEngine) {
       const we = this.chessEngine;
-      rewardSpec = we.reward;
       const isTactics = we.subMode === 'tactics';
-      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${we.stage}/${MAX_MINIGAME_STAGE} • ${escapeHtml(we.difficultyLabel)}`;
+      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${we.stage}/${MAX_MINIGAME_STAGE}`;
       stageSubtitle = `🦁 <strong id="paChessTurn">${
         we.status === 'ai_thinking'
           ? `${escapeHtml(we.opponentName)} đang đi...`
           : we.isInCheck('w')
             ? '⚠️ Chiếu tướng!'
             : 'Lượt bạn'
-      }</strong>`;
+      }</strong> • ⚔️ ${escapeHtml(we.opponentName)}`;
       const canChessUndo =
         we.moveCount > 0 &&
         we.status !== 'ai_thinking' &&
         (st.sandboxMode || we.freeUndosLeft + we.paidUndosLeft > 0);
       const canChessAssist =
         we.status === 'playing' && (st.sandboxMode || we.freeHintsLeft + we.paidAssistsLeft > 0);
+      const talismanLocked = we.talismanUsed || usedTodayInMode;
       const canTalisman =
         (we.status === 'playing' || we.status === 'lost' || we.status === 'draw') &&
-        !we.talismanUsed &&
+        !talismanLocked &&
         (st.sandboxMode || talismanQty > 0);
       const undoLbl = st.sandboxMode
         ? '∞'
@@ -1609,8 +1831,8 @@ export class PuzzleArcadeModalController {
         <button id="btnPaChessAssist" type="button" class="pa-tool-btn gold" ${!canChessAssist ? 'disabled' : ''}>
           💡 Gợi Ý <span class="pa-cost-pill">${hintLbl}</span>
         </button>
-        <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="Bùa Phượng Hoàng">
-          🔥 Bùa <span class="pa-cost-pill">${we.talismanUsed ? '✓' : `×${talismanDisp}`}</span>
+        <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="${talismanTooltip}">
+          🔥 Bùa <span class="pa-cost-pill">${talismanLocked ? '✓ 1/1' : `×${talismanDisp}`}</span>
         </button>
         <button id="btnPaRestart" type="button" class="pa-tool-btn">
           🔄 Ván Mới
@@ -1632,16 +1854,18 @@ export class PuzzleArcadeModalController {
       }
     } else if (this.mode === 'blocks' && this.onetEngine) {
       const oe = this.onetEngine;
-      rewardSpec = oe.reward;
-      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${oe.stage}/${MAX_MINIGAME_STAGE} • ${escapeHtml(oe.difficultyLabel)}`;
-      stageSubtitle = `🦄 <strong id="paOnetProgress">${oe.matchedPairs}/${oe.totalPairs}</strong> cặp • ⚡ <strong id="paOnetCombo">×${oe.combo}</strong>`;
+      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${oe.stage}/${MAX_MINIGAME_STAGE}`;
+      stageSubtitle = `❤️ <strong id="paOnetLives" class="${oe.lives <= 2 ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : oe.lives}</strong> • 🧩 <strong id="paOnetProgress">${oe.matchedPairs}/${oe.totalPairs}</strong> cặp • <strong>${escapeHtml(oe.shiftBadgeVi)}</strong>`;
       const canHint =
         oe.status === 'playing' && (st.sandboxMode || oe.freeHintsLeft + oe.paidHintsLeft > 0);
       const canShuffle =
-        oe.status === 'playing' &&
-        (st.sandboxMode || oe.freeShufflesLeft + oe.paidShufflesLeft > 0);
+        (oe.status === 'playing' || oe.status === 'lost') &&
+        (st.sandboxMode || oe.lives + oe.paidShufflesLeft > 0);
+      const talismanLocked = oe.talismanUsed || usedTodayInMode;
       const canTalisman =
-        oe.status === 'playing' && !oe.talismanUsed && (st.sandboxMode || talismanQty > 0);
+        (oe.status === 'playing' || oe.status === 'lost') &&
+        !talismanLocked &&
+        (st.sandboxMode || talismanQty > 0);
       const hintCostLbl = st.sandboxMode
         ? '∞'
         : oe.freeHintsLeft > 0
@@ -1650,9 +1874,9 @@ export class PuzzleArcadeModalController {
             ? `${oe.hintGoldCost}G`
             : '0';
       const shuffleCostLbl = st.sandboxMode
-        ? '∞'
-        : oe.freeShufflesLeft > 0
-          ? `${oe.freeShufflesLeft}`
+        ? '❤️∞'
+        : oe.lives > 0
+          ? `❤️${oe.lives}`
           : oe.paidShufflesLeft > 0
             ? `${oe.shuffleGoldCost}G`
             : '0';
@@ -1660,16 +1884,24 @@ export class PuzzleArcadeModalController {
         <button id="btnPaOnetHint" type="button" class="pa-tool-btn gold" ${!canHint ? 'disabled' : ''} title="Dò Cặp (H)">
           🔍 Dò <span class="pa-cost-pill">${hintCostLbl}</span>
         </button>
-        <button id="btnPaOnetShuffle" type="button" class="pa-tool-btn" ${!canShuffle ? 'disabled' : ''} title="Đảo Đàn Thú (S)">
-          🔀 Đảo <span class="pa-cost-pill">${shuffleCostLbl}</span>
+        <button id="btnPaOnetShuffle" type="button" class="pa-tool-btn" ${!canShuffle ? 'disabled' : ''} title="Đổi Vị Trí Bàn Cờ (S)">
+          🔀 Đổi <span class="pa-cost-pill">${shuffleCostLbl}</span>
         </button>
-        <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="Bùa Phượng Hoàng">
-          🔥 Bùa <span class="pa-cost-pill">${oe.talismanUsed ? '✓' : `×${talismanDisp}`}</span>
+        <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="${talismanTooltip}">
+          🔥 Bùa <span class="pa-cost-pill">${talismanLocked ? '✓ 1/1' : `×${talismanDisp}`}</span>
         </button>
         <button id="btnPaRestart" type="button" class="pa-tool-btn">
           🔄 Ván Mới
         </button>
       `;
+      if (oe.status === 'lost') {
+        statusBannerHtml += `
+          <div class="pa-alert-strip">
+            <span>💔 Hết đường nối &amp; hết lượt đổi vị trí (<strong>0 ❤️</strong>)!</span>
+            ${canTalisman ? `<button id="btnPaRescuePhoenixTalisman" type="button" class="pa-tool-btn talisman">🔥 Bùa (×${talismanDisp})</button>` : ''}
+          </div>
+        `;
+      }
     }
 
     if (!this.rescueContext && !this.victorySummary) {
@@ -1681,7 +1913,7 @@ export class PuzzleArcadeModalController {
         `
         : `
           <button id="btnPaAskFriendSos" type="button" class="pa-tool-btn" ${rescuesReceivedLeft <= 0 && !mySosArcade ? 'disabled' : ''} title="Nhờ bạn bè giải cứu">
-            ${mySosArcade ? '🦉 Đang gọi...' : `🆘 Cứu (${rescuesReceivedLeft}/${MAX_DAILY_MINIGAME_RESCUES})`}
+            ${mySosArcade ? '🦉 Đang gọi' : `🆘 Cứu ${rescuesReceivedLeft}/${MAX_DAILY_MINIGAME_RESCUES}`}
           </button>
         `;
     }
@@ -1735,47 +1967,16 @@ export class PuzzleArcadeModalController {
               <div class="pa-victory-title">${
                 vs.isMasterReplay || curInfo.isMaxed
                   ? `👑 777/777!`
-                  : `🎉 Thắng • Lv.${vs.newMasterLevel ?? st.level}!`
+                  : `🎉 Thắng Màn ${activeStageNum}/${MAX_MINIGAME_STAGE}!`
               }</div>
-              ${
-                vs.featuredBonusApplied
-                  ? `<div style="font-size:12.5px;font-weight:900;color:#b45309;background:#fef3c7;border:1.5px solid #f59e0b;border-radius:999px;padding:3px 12px;">🔥 ĐỀ CỬ</div>`
-                  : ''
-              }
               <div class="m3-reward-badges">
                 ${
                   vs.starsEarned > 0
                     ? `<span class="m3-reward-chip star">
                         <img src="/sprites/m3_icon_star.png" alt="" style="width:16px;height:16px;" />
-                        +${vs.starsEarned} 🌟${vs.featuredBonusApplied ? ' 🔥' : ''}
+                        +${vs.starsEarned} 🌟
                       </span>`
-                    : `<span class="m3-reward-chip">👑 777/777</span>`
-                }
-                ${
-                  vs.sandEarned > 0
-                    ? `<span class="m3-reward-chip" style="border-color:#0284c7;color:#0c4a6e;background:#e0f2fe;">
-                        ⏳ +${vs.sandEarned}
-                      </span>`
-                    : ''
-                }
-                <span class="m3-reward-chip">🪙 +${vs.goldEarned}G</span>
-                <span class="m3-reward-chip">⭐ +${vs.xpEarned} XP</span>
-                ${
-                  vs.buildReduction && vs.buildReduction.reducedSec > 0
-                    ? `<span class="m3-reward-chip">🔨 -${formatDurationCompactVi(vs.buildReduction.reducedSec)}</span>`
-                    : ''
-                }
-                ${
-                  vs.leaderboardRankUp
-                    ? vs.leaderboardRankUp.rankUpBy > 0
-                      ? `<span class="lb-rankup-badge">🏆 #${vs.leaderboardRankUp.newRank} (🔼+${vs.leaderboardRankUp.rankUpBy})</span>`
-                      : `<span class="m3-reward-chip">🏆 #${vs.leaderboardRankUp.newRank}</span>`
-                    : ''
-                }
-                ${
-                  vs.leaderboardRankUp?.housePointsAwarded && vs.leaderboardRankUp.playerHouse
-                    ? `<span class="m3-reward-chip">⏳ +${vs.leaderboardRankUp.housePointsAwarded}đ ${escapeHtml(vs.leaderboardRankUp.playerHouse)}</span>`
-                    : ''
+                    : `<span class="m3-reward-chip star">👑 777/777</span>`
                 }
               </div>
               ${winReview ? this.renderTurningPointCardHtml(winReview) : ''}
@@ -1807,8 +2008,69 @@ export class PuzzleArcadeModalController {
       return inf.isMaxed ? `👑777` : `${inf.currentStage}/777`;
     };
 
-    const previewSand = isFeaturedModeNow ? rewardSpec.sand + 1 : rewardSpec.sand;
-    const streakCount = st.match3.winStreak ?? 0;
+    const isFailedNow =
+      (this.mode === 'sudoku' && this.sudokuEngine?.status === 'lost') ||
+      (this.mode === 'blocks' && this.onetEngine?.status === 'lost') ||
+      (this.mode === 'caro' &&
+        (this.caroEngine?.status === 'lost' || this.caroEngine?.status === 'draw')) ||
+      (this.mode === 'chess' &&
+        (this.chessEngine?.status === 'lost' || this.chessEngine?.status === 'draw'));
+    if (isFailedNow && !this.lossStreakResetForStage && !this.rescueContext) {
+      this.lossStreakResetForStage = true;
+      this.sim.resetExamWinStreak();
+    }
+
+    const comp = this.sim.getActiveMinigameCompanion();
+    const compReady = this.companionCharge >= comp.chargeEveryMoves;
+    const compPct = Math.min(100, Math.round((this.companionCharge / Math.max(1, comp.chargeEveryMoves)) * 100));
+    const compSpriteMap: Record<string, string> = {
+      niffler_den: 'beast_niffler_play',
+      hippogriff_glade: 'beast_hippogriff_bow',
+      phoenix_perch: 'beast_phoenix_soar',
+      dragon_lair: 'beast_dragon_roar',
+      unicorn_glade: 'beast_unicorn_prance',
+      thestral_grove: 'beast_thestral_wings',
+      hagrid_bowtruckle: 'hagrid_bowtruckle',
+    };
+    const compShortMap: Record<string, string> = {
+      niffler_den: 'Niffler',
+      hippogriff_glade: 'Bằng Mã',
+      phoenix_perch: 'Phượng',
+      dragon_lair: 'Rồng Nhỏ',
+      unicorn_glade: 'Kỳ Lân',
+      thestral_grove: 'Vong Mã',
+      hagrid_bowtruckle: 'Bowtruckle',
+    };
+    const compSpriteKey = compSpriteMap[comp.speciesId] ?? 'beast_niffler_play';
+    const compShortName = compShortMap[comp.speciesId] ?? 'Niffler';
+    const pieQty = this.sim.getFarmItemCount('cinnamon_apple_pie');
+    const paSynergyDockHtml = `
+      <div class="aaa-synergy-dock" role="region" aria-label="Bánh Táo và Đồng hành Niffler">
+        <button
+          id="btnPaSnackApplePie"
+          type="button"
+          class="aaa-snack-btn"
+          ${this.snackPieUsedThisAttempt || this.victoryClaimed || (!st.sandboxMode && pieQty <= 0) ? 'disabled' : ''}
+          title="Dùng 1 Bánh Táo Quế từ Kho Đỏ (Xoá 1 lỗi / +1 Lùi hoặc Đảo + 1 Gợi Ý)"
+        >
+          <img src="/sprites/ui_icon_pie_ready.png" alt="" width="20" height="20" class="aaa-synergy-sprite" />
+          <span><span class="aaa-lbl-full">Bánh Táo </span><strong>${this.snackPieUsedThisAttempt ? '✓' : st.sandboxMode ? '∞' : `×${pieQty}`}</strong></span>
+        </button>
+        <button
+          id="btnPaTriggerCompanion"
+          type="button"
+          class="aaa-companion-pill"
+          data-ready="${compReady}"
+          ${!compReady || this.victoryClaimed ? 'disabled' : ''}
+          title="${escapeHtml(comp.nameVi)} (Cấp ${comp.bondLevel}) — Đầy năng lượng nhận +1 Gợi Ý Miễn Phí & +15G!"
+        >
+          <img src="/sprites/${compSpriteKey}.png" alt="" width="22" height="22" class="aaa-synergy-sprite" />
+          <span class="aaa-comp-name">${escapeHtml(compShortName)}</span>
+          <span class="aaa-comp-meter" aria-hidden="true"><span class="aaa-comp-meter-fill" data-pa-comp-meter="1" style="width:${compPct}%"></span></span>
+          <span data-pa-comp-charge="1">${compReady ? '⚡' : `${this.companionCharge}/${comp.chargeEveryMoves}`}</span>
+        </button>
+      </div>
+    `;
 
     box.innerHTML = `
       <div class="pa-layout-shell">
@@ -1816,10 +2078,6 @@ export class PuzzleArcadeModalController {
           <div class="pa-top-bar">
             <div class="pa-dock-head-row">
               <div class="pa-currencies">
-                <span class="m3-res-chip" title="Cấp Giải Đố (${winsProg.current}/${winsProg.required})">
-                  <span>🏆</span>
-                  <strong>Lv.${st.level} (${winsProg.current}/${winsProg.required})</strong>
-                </span>
                 <span class="m3-res-chip" title="Sao Phép Thuật">
                   <img src="/sprites/m3_icon_star.png" alt="Sao" class="m3-res-icon" />
                   <strong id="paStarsText">${st.sandboxMode ? '∞' : st.match3.stars}</strong>
@@ -1836,15 +2094,10 @@ export class PuzzleArcadeModalController {
                   <span>🔥</span>
                   <strong id="paTalismanText">${talismanDisp}</strong>
                 </span>
-                <button id="btnPaOpenLeaderboard" type="button" class="m3-res-chip minigame-lb-chip" title="Bảng Xếp Hạng">
+                <button id="btnPaOpenLeaderboard" type="button" class="m3-res-chip minigame-lb-chip" title="${isScoredMode ? 'Bảng Xếp Hạng' : 'Bảng Xếp Hạng 3 Môn Tính Điểm'}">
                   <span>🏆</span>
                   <strong id="paRankText">${isScoredMode ? `#${activeModeRank}` : 'BXH'}</strong>
                 </button>
-                ${
-                  streakCount > 0
-                    ? `<span class="m3-res-chip" title="Chuỗi Thắng">⚡ <strong>×${streakCount}</strong></span>`
-                    : ''
-                }
               </div>
               <form method="dialog" class="pa-inline-close-form">
                 <button type="submit" class="brass-btn pa-inline-close-btn" title="Đóng (Esc)" aria-label="Đóng">✕</button>
@@ -1853,19 +2106,19 @@ export class PuzzleArcadeModalController {
 
             <div class="pa-mode-tabs" role="tablist" aria-label="Chọn môn khảo thí phép thuật Hogwarts" ${this.rescueContext ? 'style="opacity:0.65;pointer-events:none;"' : ''}>
               <button type="button" role="tab" aria-selected="${this.mode === 'caro'}" data-pa-mode="caro" class="pa-mode-tab ${this.mode === 'caro' ? 'active' : ''}" title="Ngũ Ấn Đạo Tặc">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🗺️ Caro</span><span class="pa-tab-name-short">🗺️ Caro</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('caro')}</span>${trialBadgeFor('caro')}</span>
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🗺️ Ngũ Ấn Đạo Tặc</span><span class="pa-tab-name-short">🗺️ Ngũ Ấn</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('caro')}</span>${trialBadgeFor('caro')}</span>
               </button>
-              <button type="button" role="tab" aria-selected="${this.mode === 'sudoku'}" data-pa-mode="sudoku" class="pa-mode-tab ${this.mode === 'sudoku' ? 'active' : ''}" title="Cửu Bảo Bối (Sudoku)">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🔮 Sudoku</span><span class="pa-tab-name-short">🔮 Sudoku</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('sudoku')}</span>${trialBadgeFor('sudoku')}</span>
+              <button type="button" role="tab" aria-selected="${this.mode === 'sudoku'}" data-pa-mode="sudoku" class="pa-mode-tab ${this.mode === 'sudoku' ? 'active' : ''}" title="Số Học Huyền Bí">
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🔢 Số Học Huyền Bí</span><span class="pa-tab-name-short">🔢 Số Học</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('sudoku')}</span>${trialBadgeFor('sudoku')}</span>
               </button>
               <button type="button" role="tab" aria-selected="${this.mode === 'chess'}" data-pa-mode="chess" class="pa-mode-tab ${this.mode === 'chess' ? 'active' : ''}" title="Cờ Phù Thủy">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🏰 Cờ Vua</span><span class="pa-tab-name-short">🏰 Cờ Vua</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('chess')}</span>${trialBadgeFor('chess')}</span>
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🏰 Cờ Phù Thủy</span><span class="pa-tab-name-short">🏰 Cờ Phù Thủy</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('chess')}</span>${trialBadgeFor('chess')}</span>
               </button>
-              <button type="button" role="tab" aria-selected="${this.mode === 'blocks'}" data-pa-mode="blocks" class="pa-mode-tab ${this.mode === 'blocks' ? 'active' : ''}" title="Nối Hình Sinh Vật (Pikachu)">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🦄 Pikachu</span><span class="pa-tab-name-short">🦄 Pikachu</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('blocks')}</span>${trialBadgeFor('blocks')}</span>
+              <button type="button" role="tab" aria-selected="${this.mode === 'blocks'}" data-pa-mode="blocks" class="pa-mode-tab ${this.mode === 'blocks' ? 'active' : ''}" title="Sinh Vật Huyền Bí">
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🦄 Sinh Vật Huyền Bí</span><span class="pa-tab-name-short">🦄 Sinh Vật</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('blocks')}</span>${trialBadgeFor('blocks')}</span>
               </button>
-              <button id="btnPaGoMatch3" type="button" class="pa-mode-tab switch-m3" title="Gác Xép Bùa Gặt (Match-3)">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🍓 Match-3</span><span class="pa-tab-name-short">🍓 Match-3</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('match3')}</span>${trialBadgeFor('match3')}</span>
+              <button id="btnPaGoMatch3" type="button" role="tab" aria-selected="false" class="pa-mode-tab" title="Bùa Gặt Honeydukes">
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🍬 Bùa Gặt Honeydukes</span><span class="pa-tab-name-short">🍬 Bùa Gặt</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('match3')}</span>${trialBadgeFor('match3')}</span>
               </button>
             </div>
           </div>
@@ -1875,24 +2128,15 @@ export class PuzzleArcadeModalController {
               <div class="pa-stage-title">${stageHeadline}</div>
               <div class="pa-stage-sub">${stageSubtitle}</div>
             </div>
-            <div class="pa-reward-preview" title="Phần thưởng màn">
-              ${
-                curInfo.isMaxed
-                  ? `<span>👑</span><strong>+${Math.max(18, Math.round(rewardSpec.gold * 0.5))}G</strong>`
-                  : `${isFeaturedModeNow ? '<span>🔥</span>' : ''}
-                     <strong>+${rewardSpec.stars}${isFeaturedModeNow ? '+' : ''} 🌟</strong>
-                     <strong>+${previewSand} ⏳</strong>
-                     <strong>+${rewardSpec.gold}G</strong>`
-              }
-            </div>
           </div>
 
           ${statusBannerHtml}
+          ${paSynergyDockHtml}
         </aside>
 
         <div class="pa-stage-viewport">
           <div class="pa-canvas-shell" data-pa-board-mode="${this.mode}">
-            <canvas id="paBoardCanvas" width="${PA_VIRTUAL_W}" height="${PA_VIRTUAL_H}" aria-label="Bàn chơi Sảnh Bàn Cờ &amp; Cổ Ngữ Phép Thuật"></canvas>
+            <canvas id="paBoardCanvas" width="${this.getVirtualCanvasSize().w}" height="${this.getVirtualCanvasSize().h}" aria-label="Bàn chơi Sảnh Bàn Cờ &amp; Cổ Ngữ Phép Thuật"></canvas>
             ${inspectReturnBarHtml}
           </div>
         </div>
@@ -1922,14 +2166,35 @@ export class PuzzleArcadeModalController {
     if (talEl) talEl.textContent = st.sandboxMode ? '∞' : String(this.sim.getPhoenixTalismanCount());
 
     if (this.mode === 'sudoku' && this.sudokuEngine) {
-      const prog = box.querySelector('#paSudokuProgress');
-      if (prog) {
-        prog.textContent = `${this.sudokuEngine.filledCount}/81`;
-      }
+      const se = this.sudokuEngine;
       const mistEl = box.querySelector('#paSudokuMistakes');
       if (mistEl) {
-        mistEl.textContent = `${this.sudokuEngine.mistakesCount}/${this.sudokuEngine.maxMistakes}`;
-        mistEl.classList.toggle('pa-err-inline', this.sudokuEngine.mistakesCount > 0);
+        mistEl.textContent = `${se.mistakesCount}/${se.maxMistakes}`;
+        mistEl.classList.toggle('pa-err-inline', se.mistakesCount > 0);
+      }
+      const timerEl = box.querySelector('#paSudokuTimer');
+      if (timerEl) {
+        timerEl.textContent = se.formatElapsedTime();
+      }
+      const undoBtn = box.querySelector('#btnPaSudokuUndo') as HTMLButtonElement | null;
+      if (undoBtn) {
+        undoBtn.disabled = !se.canUndo;
+      }
+      const hintBtn = box.querySelector('#btnPaSudokuHint') as HTMLButtonElement | null;
+      if (hintBtn) {
+        const canHint =
+          se.status === 'playing' && (st.sandboxMode || se.freeHintsLeft + se.paidHintsLeft > 0);
+        hintBtn.disabled = !canHint;
+        const pill = hintBtn.querySelector('.pa-cost-pill');
+        if (pill) {
+          pill.textContent = st.sandboxMode
+            ? '∞'
+            : se.freeHintsLeft > 0
+              ? `${se.freeHintsLeft}`
+              : se.paidHintsLeft > 0
+                ? `${se.hintGoldCost}G`
+                : '0';
+        }
       }
     } else if (this.mode === 'caro' && this.caroEngine) {
       const prog = box.querySelector('#paCaroMoves');
@@ -1956,8 +2221,8 @@ export class PuzzleArcadeModalController {
           this.chessEngine.status === 'ai_thinking'
             ? `${this.chessEngine.opponentName} đang đi...`
             : this.chessEngine.isInCheck('w')
-              ? '⚠️ Cụ Dumbledore (Vua) đang bị chiếu!'
-              : 'Lượt Gryffindor';
+              ? '⚠️ Chiếu tướng!'
+              : 'Lượt bạn';
       }
       const undoBtn = box.querySelector('#btnPaChessUndo') as HTMLButtonElement | null;
       if (undoBtn) {
@@ -1975,13 +2240,67 @@ export class PuzzleArcadeModalController {
             this.chessEngine.freeHintsLeft + this.chessEngine.paidAssistsLeft <= 0);
       }
     } else if (this.mode === 'blocks' && this.onetEngine) {
+      const oe = this.onetEngine;
+      const livesEl = box.querySelector('#paOnetLives');
+      if (livesEl) {
+        livesEl.textContent = st.sandboxMode ? '∞' : String(oe.lives);
+        livesEl.classList.toggle('pa-err-inline', !st.sandboxMode && oe.lives <= 2);
+      }
       const prog = box.querySelector('#paOnetProgress');
       if (prog) {
-        prog.textContent = `${this.onetEngine.matchedPairs}/${this.onetEngine.totalPairs}`;
+        prog.textContent = `${oe.matchedPairs}/${oe.totalPairs}`;
       }
-      const comboEl = box.querySelector('#paOnetCombo');
-      if (comboEl) {
-        comboEl.textContent = `×${this.onetEngine.combo}`;
+      const hintBtn = box.querySelector('#btnPaOnetHint') as HTMLButtonElement | null;
+      if (hintBtn) {
+        const canHint =
+          oe.status === 'playing' && (st.sandboxMode || oe.freeHintsLeft + oe.paidHintsLeft > 0);
+        hintBtn.disabled = !canHint;
+        const pill = hintBtn.querySelector('.pa-cost-pill');
+        if (pill) {
+          pill.textContent = st.sandboxMode
+            ? '∞'
+            : oe.freeHintsLeft > 0
+              ? String(oe.freeHintsLeft)
+              : oe.paidHintsLeft > 0
+                ? `${oe.hintGoldCost}G`
+                : '0';
+        }
+      }
+      const shufBtn = box.querySelector('#btnPaOnetShuffle') as HTMLButtonElement | null;
+      if (shufBtn) {
+        const canShuf =
+          (oe.status === 'playing' || oe.status === 'lost') &&
+          (st.sandboxMode || oe.lives + oe.paidShufflesLeft > 0);
+        shufBtn.disabled = !canShuf;
+        const pill = shufBtn.querySelector('.pa-cost-pill');
+        if (pill) {
+          pill.textContent = st.sandboxMode
+            ? '❤️∞'
+            : oe.lives > 0
+              ? `❤️${oe.lives}`
+              : oe.paidShufflesLeft > 0
+                ? `${oe.shuffleGoldCost}G`
+                : '0';
+        }
+      }
+    }
+
+    const compBtn = box.querySelector('#btnPaTriggerCompanion') as HTMLButtonElement | null;
+    if (compBtn) {
+      const comp = this.sim.getActiveMinigameCompanion();
+      const compReady = this.companionCharge >= comp.chargeEveryMoves;
+      compBtn.dataset.ready = String(compReady);
+      compBtn.disabled = !compReady || this.victoryClaimed;
+      const chargeSpan = compBtn.querySelector('[data-pa-comp-charge]');
+      if (chargeSpan) {
+        chargeSpan.textContent = compReady
+          ? '⚡'
+          : `${this.companionCharge}/${comp.chargeEveryMoves}`;
+      }
+      const meterFill = compBtn.querySelector('[data-pa-comp-meter]') as HTMLElement | null;
+      if (meterFill) {
+        const pct = Math.min(100, Math.round((this.companionCharge / Math.max(1, comp.chargeEveryMoves)) * 100));
+        meterFill.style.width = `${pct}%`;
       }
     }
   }
@@ -2024,17 +2343,18 @@ export class PuzzleArcadeModalController {
       }
     });
 
-    // Sudoku controls
-    box.querySelector('#btnPaSudokuDisplayMode')?.addEventListener('click', () => {
-      this.cycleSudokuDisplayMode();
+    // Classic Sudoku controls
+    box.querySelector('#btnPaSudokuUndo')?.addEventListener('click', () => {
+      this.triggerSudokuUndoAction();
     });
 
     box.querySelector('#btnPaSudokuPencil')?.addEventListener('click', () => {
-      if (!this.sudokuEngine) return;
+      if (!this.sudokuEngine || this.sudokuEngine.status !== 'playing') return;
       this.sudokuEngine.pencilMode = !this.sudokuEngine.pencilMode;
       if (this.sudokuEngine.pencilMode) {
         this.sudokuEngine.eraseMode = false;
       }
+      this.persistSudokuSession(true);
       this.sim.audio.playClick();
       this.renderDOM();
     });
@@ -2044,36 +2364,7 @@ export class PuzzleArcadeModalController {
     });
 
     box.querySelector('#btnPaSudokuHint')?.addEventListener('click', () => {
-      if (!this.sudokuEngine || this.sudokuEngine.status !== 'playing') return;
-      const se = this.sudokuEngine;
-      if (!this.sim.state.sandboxMode && se.freeHintsLeft <= 0 && se.paidHintsLeft <= 0) {
-        this.showToast('Màn này đã dùng hết lượt Phúc Lạc Dược soi ô!', '🧪');
-        return;
-      }
-      if (se.freeHintsLeft > 0) {
-        se.freeHintsLeft -= 1;
-      } else {
-        const pay = this.sim.spendPuzzleHelperGold(se.hintGoldCost);
-        if (!pay.ok) {
-          this.showToast(pay.msg, '🪙');
-          return;
-        }
-        if (!this.sim.state.sandboxMode) {
-          se.paidHintsLeft = Math.max(0, se.paidHintsLeft - 1);
-        }
-      }
-      const res = se.useMagicHint();
-      if (res.ok) {
-        const cx = SUDOKU_BOARD_X + (res.c + 0.5) * SUDOKU_CELL_PX;
-        const cy = SUDOKU_BOARD_Y + (res.r + 0.5) * SUDOKU_CELL_PX;
-        this.spawnBurst(cx, cy, '#facc15', 20);
-        this.sim.audio.playPowerupBlast();
-        if (res.won) {
-          this.checkAndClaimVictory();
-        } else {
-          this.renderDOM();
-        }
-      }
+      this.triggerSudokuHintAction();
     });
 
     // Caro controls
@@ -2099,6 +2390,7 @@ export class PuzzleArcadeModalController {
       if (ce.undoTurnPair()) {
         this.aiThinkTimer = 0;
         this.inspectingTurningPoint = false;
+        this.persistModeSession('caro', true);
         this.sim.audio.playClick();
         this.renderDOM();
       }
@@ -2125,6 +2417,7 @@ export class PuzzleArcadeModalController {
       }
       const hint = ce.useBestMoveHint();
       if (hint) {
+        this.persistModeSession('caro', true);
         const cx = CARO_ORIGIN_X + hint.c * CARO_STEP_PX;
         const cy = CARO_ORIGIN_Y + hint.r * CARO_STEP_PX;
         this.spawnBurst(cx, cy, '#34d399', 16);
@@ -2181,6 +2474,7 @@ export class PuzzleArcadeModalController {
         this.pendingChessWorkerReqId = null;
         this.aiThinkTimer = 0;
         this.inspectingTurningPoint = false;
+        this.persistModeSession('chess', true);
         this.sim.audio.playClick();
         this.renderDOM();
       }
@@ -2188,46 +2482,64 @@ export class PuzzleArcadeModalController {
 
     box.querySelector('#btnPaChessAssist')?.addEventListener('click', () => {
       const we = this.chessEngine;
-      if (!we || we.status !== 'playing') return;
-      if (!this.sim.state.sandboxMode && we.freeHintsLeft <= 0 && we.paidAssistsLeft <= 0) {
-        this.showToast('Màn này đã dùng hết lượt Lệnh Nước Tối Ưu!', '🪄');
+      if (!we || we.status !== 'playing' || we.turn !== 'w') return;
+
+      // Nếu đã có gợi ý đang sáng trên bàn cờ hiện tại, chỉ nháy lại hiệu ứng mà không trừ thêm lượt/vàng
+      if (we.hintMove) {
+        we.selected = { r: we.hintMove.fromR, c: we.hintMove.fromC };
+        const x0 = CHESS_BOARD_X + (we.hintMove.fromC + 0.5) * CHESS_CELL_PX;
+        const y0 = CHESS_BOARD_Y + (we.hintMove.fromR + 0.5) * CHESS_CELL_PX;
+        const x1 = CHESS_BOARD_X + (we.hintMove.toC + 0.5) * CHESS_CELL_PX;
+        const y1 = CHESS_BOARD_Y + (we.hintMove.toR + 0.5) * CHESS_CELL_PX;
+        this.spawnBurst(x0, y0, '#fde047', 12);
+        this.spawnBurst(x1, y1, '#34d399', 16);
+        this.sim.audio.playMatchPop(2);
+        this.showToast('💡 Quân cờ và ô đích gợi ý đang phát sáng trên bàn cờ!', '💡');
+        this.renderDOM();
         return;
       }
+
+      if (!this.sim.state.sandboxMode && we.freeHintsLeft <= 0 && we.paidAssistsLeft <= 0) {
+        this.showToast('Màn này đã dùng hết lượt Gợi Ý nước đi!', '💡');
+        return;
+      }
+      let spentFree = false;
+      let spentGold = 0;
       if (we.freeHintsLeft > 0) {
         we.freeHintsLeft -= 1;
+        spentFree = true;
       } else {
         const pay = this.sim.spendPuzzleHelperGold(we.assistGoldCost);
         if (!pay.ok) {
           this.showToast(pay.msg, '🪙');
           return;
         }
+        spentGold = we.assistGoldCost;
         if (!this.sim.state.sandboxMode) {
           we.paidAssistsLeft = Math.max(0, we.paidAssistsLeft - 1);
         }
       }
-      const res = we.useBestMoveAssist();
-      if (res.ok && res.move) {
-        const movedPiece =
-          we.board[res.move.toR]?.[res.move.toC] ?? { color: 'w', type: 'q' };
-        this.triggerChessMoveVfx(
-          res.move.fromR,
-          res.move.fromC,
-          res.move.toR,
-          res.move.toC,
-          movedPiece,
-          Boolean(res.move.captured || res.move.isEnPassant),
-          res.won
-        );
-        this.sim.audio.playPowerupBlast();
-        if (res.won) {
-          this.checkAndClaimVictory();
-        } else if (res.aiThinking) {
-          this.aiThinkTimer = 0.42;
-          this.renderDOM();
-        } else {
-          this.renderDOM();
+      const res = we.useBestMoveHint();
+      if (!res.ok || !res.move) {
+        if (spentFree) {
+          we.freeHintsLeft += 1;
+        } else if (spentGold > 0 && !this.sim.state.sandboxMode) {
+          this.sim.state.galleons += spentGold;
+          we.paidAssistsLeft += 1;
         }
+        return;
       }
+      const x0 = CHESS_BOARD_X + (res.move.fromC + 0.5) * CHESS_CELL_PX;
+      const y0 = CHESS_BOARD_Y + (res.move.fromR + 0.5) * CHESS_CELL_PX;
+      const x1 = CHESS_BOARD_X + (res.move.toC + 0.5) * CHESS_CELL_PX;
+      const y1 = CHESS_BOARD_Y + (res.move.toR + 0.5) * CHESS_CELL_PX;
+      this.spawnBurst(x0, y0, '#fde047', 14);
+      this.spawnBurst(x1, y1, '#34d399', 18);
+      this.sim.audio.playMatchPop(2);
+      this.persistModeSession('chess', true);
+      this.onParentRefresh();
+      this.showToast(`💡 Gợi ý: ${res.labelVi} — chạm ô đích sáng ngọc để đi quân!`, '💡');
+      this.renderDOM();
     });
 
     box.querySelector('#btnPaNextStage')?.addEventListener('click', () => {
@@ -2270,6 +2582,7 @@ export class PuzzleArcadeModalController {
       }
       const res = oe.useHint();
       if (res.ok) {
+        this.persistModeSession('blocks', true);
         this.sim.audio.playClick();
         this.showToast(res.msg, '🔍');
         this.renderDOM();
@@ -2278,35 +2591,55 @@ export class PuzzleArcadeModalController {
 
     box.querySelector('#btnPaOnetShuffle')?.addEventListener('click', () => {
       const oe = this.onetEngine;
-      if (!oe || oe.status !== 'playing') return;
-      if (!this.sim.state.sandboxMode && oe.freeShufflesLeft <= 0 && oe.paidShufflesLeft <= 0) {
-        this.showToast('Màn này đã dùng hết lượt Đảo Đàn Thú chủ động!', '🔀');
+      if (!oe || (oe.status !== 'playing' && oe.status !== 'lost')) return;
+      if (this.sim.state.sandboxMode) {
+        const res = oe.useManualShuffle(true);
+        if (res.ok) {
+          this.persistModeSession('blocks', true);
+          this.onetSlideAnims.clear();
+          const virt = this.getVirtualCanvasSize();
+          this.spawnBurst(virt.w * 0.5, virt.h * 0.5, '#ef4444', 22);
+          this.sim.audio.playPowerupBlast();
+          this.showToast(res.msg, '🔀');
+          this.renderDOM();
+        }
         return;
       }
-      if (oe.freeShufflesLeft > 0) {
-        oe.freeShufflesLeft -= 1;
+      if (oe.lives <= 0 && oe.paidShufflesLeft <= 0) {
+        this.showToast('Màn này đã dùng hết lượt ❤️ Đổi Bàn!', '🔀');
+        return;
+      }
+      let res: { ok: boolean; msg: string };
+      if (oe.lives > 0) {
+        res = oe.useManualShuffle(false);
       } else {
         const pay = this.sim.spendPuzzleHelperGold(oe.shuffleGoldCost);
         if (!pay.ok) {
           this.showToast(pay.msg, '🪙');
           return;
         }
-        if (!this.sim.state.sandboxMode) {
-          oe.paidShufflesLeft = Math.max(0, oe.paidShufflesLeft - 1);
-        }
+        oe.paidShufflesLeft = Math.max(0, oe.paidShufflesLeft - 1);
+        res = oe.useManualShuffle(true);
       }
-      const res = oe.useManualShuffle();
       if (res.ok) {
+        this.persistModeSession('blocks', true);
+        this.onetSlideAnims.clear();
         const virt = this.getVirtualCanvasSize();
-        this.spawnBurst(virt.w * 0.38, virt.h * 0.5, '#fde047', 22);
+        this.spawnBurst(virt.w * 0.5, virt.h * 0.5, '#ef4444', 22);
         this.sim.audio.playPowerupBlast();
         this.showToast(res.msg, '🔀');
+        this.onParentRefresh();
         this.renderDOM();
       }
     });
 
-    // Phoenix Talisman (strictly 1 use per stage attempt across all 4 arcade disciplines)
+    // Phoenix Talisman (strictly 1 use per game per day — max 5 uses/day across all 5 games, never resets until next day)
     const handlePhoenixTalisman = () => {
+      const gate = this.sim.canUsePhoenixTalismanInGame(this.mode);
+      if (!gate.ok) {
+        this.showToast(gate.msg, '🔥');
+        return;
+      }
       const activeUsed =
         this.mode === 'sudoku'
           ? this.sudokuEngine?.talismanUsed
@@ -2316,22 +2649,22 @@ export class PuzzleArcadeModalController {
               ? this.chessEngine?.talismanUsed
               : this.onetEngine?.talismanUsed;
       if (activeUsed) {
-        this.showToast('Mỗi lượt thử màn chỉ được triệu hồi tối đa 1 Bùa Phượng Hoàng!', '🔥');
-        return;
-      }
-      if (!this.sim.state.sandboxMode && this.sim.getPhoenixTalismanCount() <= 0) {
         this.showToast(
-          'Chưa có Bùa Phượng Hoàng! Hãy ôn Ngoại Ngữ (8 câu đúng), giao Đơn Cú hoặc rèn tại Kho Đỏ!',
+          'Hôm nay bạn đã dùng 🔥 Bùa Phượng Hoàng ở môn này rồi (giới hạn 1 lần/môn/ngày)!',
           '🔥'
         );
         return;
       }
-      if (!this.sim.consumePhoenixTalisman()) return;
+      const pay = this.sim.consumePhoenixTalisman(this.mode);
+      if (!pay.ok) {
+        this.showToast(pay.msg, '🔥');
+        return;
+      }
 
       if (this.mode === 'sudoku' && this.sudokuEngine) {
         const res = this.sudokuEngine.applyPhoenixTalisman();
         if (!res.ok) {
-          this.sim.grantPhoenixTalisman(1);
+          this.sim.refundPhoenixTalismanAttempt(this.mode);
           this.showToast(res.msg, '🔥');
           return;
         }
@@ -2346,12 +2679,13 @@ export class PuzzleArcadeModalController {
         if (res.won) {
           this.checkAndClaimVictory();
         } else {
+          this.persistSudokuSession(true);
           this.renderDOM();
         }
       } else if (this.mode === 'caro' && this.caroEngine) {
         const res = this.caroEngine.applyPhoenixTalisman();
         if (!res.ok) {
-          this.sim.grantPhoenixTalisman(1);
+          this.sim.refundPhoenixTalismanAttempt(this.mode);
           this.showToast(res.msg, '🔥');
           return;
         }
@@ -2364,12 +2698,13 @@ export class PuzzleArcadeModalController {
         );
         this.sim.audio.playPowerupBlast();
         this.showToast(res.msg, '🔥');
+        this.persistModeSession('caro', true);
         this.onParentRefresh();
         this.renderDOM();
       } else if (this.mode === 'chess' && this.chessEngine) {
         const res = this.chessEngine.applyPhoenixTalisman();
         if (!res.ok) {
-          this.sim.grantPhoenixTalisman(1);
+          this.sim.refundPhoenixTalismanAttempt(this.mode);
           this.showToast(res.msg, '🔥');
           return;
         }
@@ -2399,14 +2734,16 @@ export class PuzzleArcadeModalController {
           this.checkAndClaimVictory();
         } else if (res.aiThinking) {
           this.aiThinkTimer = 0.42;
+          this.persistModeSession('chess', true);
           this.renderDOM();
         } else {
+          this.persistModeSession('chess', true);
           this.renderDOM();
         }
       } else if (this.mode === 'blocks' && this.onetEngine) {
         const res = this.onetEngine.applyPhoenixTalisman();
         if (!res.ok) {
-          this.sim.grantPhoenixTalisman(1);
+          this.sim.refundPhoenixTalismanAttempt(this.mode);
           this.showToast(res.msg, '🔥');
           return;
         }
@@ -2419,6 +2756,7 @@ export class PuzzleArcadeModalController {
         if (res.won) {
           this.onetWinRevealTimer = 0.28;
         } else {
+          this.persistModeSession('blocks', true);
           this.renderDOM();
         }
       }
@@ -2428,6 +2766,72 @@ export class PuzzleArcadeModalController {
     box
       .querySelector('#btnPaRescuePhoenixTalisman')
       ?.addEventListener('click', handlePhoenixTalisman);
+
+    box.querySelector('#btnPaTriggerCompanion')?.addEventListener('click', () => {
+      if (this.victoryClaimed) return;
+      const comp = this.sim.getActiveMinigameCompanion();
+      if (this.companionCharge < comp.chargeEveryMoves) return;
+      this.companionCharge = 0;
+      if (!this.sim.state.sandboxMode) {
+        this.sim.state.galleons += 15;
+      }
+      if (this.mode === 'sudoku' && this.sudokuEngine) {
+        this.sudokuEngine.freeHintsLeft += 1;
+      } else if (this.mode === 'caro' && this.caroEngine) {
+        this.caroEngine.freeHintsLeft += 1;
+      } else if (this.mode === 'chess' && this.chessEngine) {
+        this.chessEngine.freeHintsLeft += 1;
+      } else if (this.mode === 'blocks' && this.onetEngine) {
+        this.onetEngine.freeHintsLeft += 1;
+        if (
+          this.onetEngine.lives < CreatureOnetEngine.INITIAL_LIVES ||
+          this.onetEngine.status === 'lost'
+        ) {
+          this.onetEngine.reviveWithExtraLives(1);
+        }
+      }
+      this.persistModeSession(this.mode, false);
+      const virt = this.getVirtualCanvasSize();
+      this.spawnWeasleyFireworks(virt.w * 0.45, virt.h * 0.48, 2);
+      this.sim.audio.playSpell();
+      this.sim.saveToStorage();
+      this.onParentRefresh();
+      this.showToast(
+        `${comp.emoji} ${comp.nameVi} trợ chiến: +1 Lượt Gợi Ý miễn phí & +15G!`,
+        comp.emoji
+      );
+      this.renderDOM();
+    });
+
+    box.querySelector('#btnPaSnackApplePie')?.addEventListener('click', () => {
+      if (this.victoryClaimed || this.snackPieUsedThisAttempt) return;
+      const res = this.sim.consumeMollyMinigameSnack('cinnamon_apple_pie');
+      if (!res.ok) {
+        this.showToast(res.msg, '🥧');
+        return;
+      }
+      this.snackPieUsedThisAttempt = true;
+      if (this.mode === 'sudoku' && this.sudokuEngine) {
+        this.sudokuEngine.mistakesCount = Math.max(0, this.sudokuEngine.mistakesCount - 1);
+        if (this.sudokuEngine.status === 'lost') {
+          this.sudokuEngine.status = 'playing';
+        }
+        this.sudokuEngine.freeHintsLeft += 1;
+      } else if (this.mode === 'caro' && this.caroEngine) {
+        this.caroEngine.freeUndosLeft += 1;
+        this.caroEngine.freeHintsLeft += 1;
+      } else if (this.mode === 'chess' && this.chessEngine) {
+        this.chessEngine.freeUndosLeft += 1;
+        this.chessEngine.freeHintsLeft += 1;
+      } else if (this.mode === 'blocks' && this.onetEngine) {
+        this.onetEngine.reviveWithExtraLives(2);
+        this.onetEngine.freeHintsLeft += 1;
+      }
+      this.persistModeSession(this.mode, true);
+      this.onParentRefresh();
+      this.showToast('🥧 Bánh Táo Quế Bà Molly: hồi phục lượt trợ giúp & +1 Gợi Ý!', '🥧');
+      this.renderDOM();
+    });
 
     box.querySelector('#btnPaAskFriendSos')?.addEventListener('click', () => {
       if (this.rescueContext) return;
@@ -2524,66 +2928,118 @@ export class PuzzleArcadeModalController {
       this.hoveredTileUid = null;
       this.sudokuHoverCell = null;
       this.sudokuHoverPadDigit = null;
+      this.sudokuHoverAction = null;
       this.caroHoverCell = null;
       this.chessHoverSquare = null;
+      this.onetHoverCell = null;
     });
   }
 
   // ==========================================================================
-  // POINTER HANDLERS FOR ALL 6 PUZZLE MODES
+  // POINTER HANDLERS FOR ALL PUZZLE MODES
   // ==========================================================================
+
+  private triggerSudokuUndoAction(): void {
+    const se = this.sudokuEngine;
+    if (!se || !se.canUndo) {
+      this.sim.audio.playClick();
+      return;
+    }
+    const wasLost = se.status === 'lost';
+    if (se.undo()) {
+      this.persistSudokuSession(true);
+      if (se.selected) {
+        const cx = SUDOKU_BOARD_X + (se.selected.c + 0.5) * SUDOKU_CELL_PX;
+        const cy = SUDOKU_BOARD_Y + (se.selected.r + 0.5) * SUDOKU_CELL_PX;
+        this.spawnBurst(cx, cy, '#fcd34d', 10);
+      }
+      this.sim.audio.playClick();
+      if (wasLost) {
+        this.renderDOM();
+      } else {
+        this.updateLiveCountersOnly();
+      }
+    }
+  }
+
+  private triggerSudokuHintAction(): void {
+    if (!this.sudokuEngine || this.sudokuEngine.status !== 'playing') return;
+    const se = this.sudokuEngine;
+    if (!this.sim.state.sandboxMode && se.freeHintsLeft <= 0 && se.paidHintsLeft <= 0) {
+      this.showToast('Màn này đã dùng hết lượt Gợi Ý!', '💡');
+      return;
+    }
+    if (se.freeHintsLeft > 0) {
+      se.freeHintsLeft -= 1;
+    } else {
+      const pay = this.sim.spendPuzzleHelperGold(se.hintGoldCost);
+      if (!pay.ok) {
+        this.showToast(pay.msg, '🪙');
+        return;
+      }
+      if (!this.sim.state.sandboxMode) {
+        se.paidHintsLeft = Math.max(0, se.paidHintsLeft - 1);
+      }
+    }
+    const res = se.useMagicHint();
+    if (res.ok) {
+      const cx = SUDOKU_BOARD_X + (res.c + 0.5) * SUDOKU_CELL_PX;
+      const cy = SUDOKU_BOARD_Y + (res.r + 0.5) * SUDOKU_CELL_PX;
+      this.spawnBurst(cx, cy, '#fbbf24', 18);
+      this.sim.audio.playPowerupBlast();
+      if (res.won) {
+        this.checkAndClaimVictory();
+      } else {
+        this.persistSudokuSession(true);
+        this.renderDOM();
+      }
+    }
+  }
 
   private applySudokuDigit(digit: number): void {
     if (!this.sudokuEngine || this.sudokuEngine.status !== 'playing') return;
     const prevRem = this.sudokuEngine.getRemainingDigitCounts()[digit] ?? 0;
     const res = this.sudokuEngine.inputDigit(digit);
     if (!res.changed) {
+      this.persistSudokuSession(false);
       this.sim.audio.playClick();
       return;
     }
     const sel = this.sudokuEngine.selected;
-    const relicMeta = HP_SUDOKU_RELIC_META[digit];
     if (sel) {
       const cx = SUDOKU_BOARD_X + (sel.c + 0.5) * SUDOKU_CELL_PX;
       const cy = SUDOKU_BOARD_Y + (sel.r + 0.5) * SUDOKU_CELL_PX;
       this.spawnBurst(
         cx,
         cy,
-        res.conflict
-          ? '#fb7185'
-          : this.sudokuEngine.pencilMode
-            ? '#93c5fd'
-            : (relicMeta?.accent ?? '#facc15'),
-        res.conflict ? 9 : 15
+        res.conflict ? '#dc2626' : this.sudokuEngine.pencilMode ? '#d97706' : '#fbbf24',
+        res.conflict ? 8 : 12
       );
       const nextRem = this.sudokuEngine.getRemainingDigitCounts()[digit] ?? 0;
       if (!res.conflict && prevRem === 1 && nextRem === 0) {
-        // Completed all 9 instances of this Harry Potter Relic!
         const padRect = this.sudokuPadRects.get(digit);
         if (padRect) {
-          this.spawnBurst(
-            padRect.x + padRect.w * 0.5,
-            padRect.y + padRect.h * 0.5,
-            relicMeta?.accent ?? '#fde047',
-            22
-          );
+          this.spawnBurst(padRect.x + padRect.w * 0.5, padRect.y + padRect.h * 0.5, '#fde047', 18);
         }
       }
     }
     if (res.conflict) {
       this.sim.audio.playClick();
     } else {
+      this.bumpCompanionCharge();
       this.sim.audio.playMatchPop(1);
     }
     if (res.won) {
       this.checkAndClaimVictory();
     } else if (res.lost) {
+      this.persistSudokuSession(true);
       this.showToast(
-        `📕 Quá giới hạn sai (${this.sudokuEngine.mistakesCount}/${this.sudokuEngine.maxMistakes}) — Bấm 🧹 Xoá Ô để sửa hoặc Trang Sách Mới!`,
-        '📕'
+        `❌ Đã sai ${this.sudokuEngine.mistakesCount}/${this.sudokuEngine.maxMistakes} lần — Bấm ↩️ Hoàn Tác hoặc 🧹 Xoá để sửa!`,
+        '❌'
       );
       this.renderDOM();
     } else {
+      this.persistSudokuSession(true);
       this.updateLiveCountersOnly();
     }
   }
@@ -2595,10 +3051,11 @@ export class PuzzleArcadeModalController {
     const wasEraseMode = se.eraseMode;
     if (se.clearSelectedCell()) {
       se.eraseMode = false;
+      this.persistSudokuSession(true);
       if (se.selected) {
         const cx = SUDOKU_BOARD_X + (se.selected.c + 0.5) * SUDOKU_CELL_PX;
         const cy = SUDOKU_BOARD_Y + (se.selected.r + 0.5) * SUDOKU_CELL_PX;
-        this.spawnBurst(cx, cy, '#fda4af', 12);
+        this.spawnBurst(cx, cy, '#e7cba0', 10);
       }
       this.sim.audio.playClick();
       if (wasLost || wasEraseMode) {
@@ -2613,8 +3070,9 @@ export class PuzzleArcadeModalController {
       se.eraseMode = !se.eraseMode;
       if (se.eraseMode) {
         se.pencilMode = false;
-        this.showToast('🧹 Đã bật Chổi Xoá — chạm vào ô bạn đã điền trên bàn để xoá!', '🧹');
+        this.showToast('🧹 Đã bật tẩy — chạm vào ô bạn đã điền để xoá!', '🧹');
       }
+      this.persistSudokuSession(true);
       this.sim.audio.playClick();
       this.renderDOM();
     } else {
@@ -2636,9 +3094,11 @@ export class PuzzleArcadeModalController {
     if (!this.chessEngine || this.chessEngine.status !== 'playing') return;
     const res = this.chessEngine.clickSquare(r, c);
     if (!res.moved) {
+      this.persistModeSession('chess', false);
       this.sim.audio.playClick();
       return;
     }
+    this.bumpCompanionCharge();
     const lm = this.chessEngine.lastMove;
     const movedPiece =
       (lm ? this.chessEngine.board[lm.toR]?.[lm.toC] : null) ?? { color: 'w', type: 'p' };
@@ -2656,10 +3116,13 @@ export class PuzzleArcadeModalController {
       this.checkAndClaimVictory();
     } else if (res.aiThinking) {
       this.aiThinkTimer = 0.42;
+      this.persistModeSession('chess', true);
       this.updateLiveCountersOnly();
     } else if (res.draw) {
+      this.persistModeSession('chess', true);
       this.renderDOM();
     } else {
+      this.persistModeSession('chess', true);
       this.updateLiveCountersOnly();
     }
   }
@@ -2667,15 +3130,27 @@ export class PuzzleArcadeModalController {
   private handlePointerDown(vx: number, vy: number): void {
     if (this.mode === 'sudoku' && this.sudokuEngine) {
       const se = this.sudokuEngine;
-      if (
-        this.sudokuEraseRect &&
-        vx >= this.sudokuEraseRect.x &&
-        vx <= this.sudokuEraseRect.x + this.sudokuEraseRect.w &&
-        vy >= this.sudokuEraseRect.y &&
-        vy <= this.sudokuEraseRect.y + this.sudokuEraseRect.h
-      ) {
-        this.triggerSudokuClearAction(true);
-        return;
+      for (const [act, rect] of this.sudokuActionRects.entries()) {
+        if (vx >= rect.x && vx <= rect.x + rect.w && vy >= rect.y && vy <= rect.y + rect.h) {
+          if (act === 'undo') {
+            this.triggerSudokuUndoAction();
+          } else if (act === 'erase') {
+            this.triggerSudokuClearAction(true);
+          } else if (act === 'notes') {
+            if (se.status === 'playing') {
+              se.pencilMode = !se.pencilMode;
+              if (se.pencilMode) se.eraseMode = false;
+              this.persistSudokuSession(true);
+              this.sim.audio.playClick();
+              this.renderDOM();
+            } else {
+              this.sim.audio.playClick();
+            }
+          } else if (act === 'hint') {
+            this.triggerSudokuHintAction();
+          }
+          return;
+        }
       }
 
       if (
@@ -2692,9 +3167,11 @@ export class PuzzleArcadeModalController {
           const wasErase = se.eraseMode;
           if (se.clearCellAt(r, c)) {
             se.eraseMode = false;
+            se.selectCell(r, c);
+            this.persistSudokuSession(true);
             const cx = SUDOKU_BOARD_X + (c + 0.5) * SUDOKU_CELL_PX;
             const cy = SUDOKU_BOARD_Y + (r + 0.5) * SUDOKU_CELL_PX;
-            this.spawnBurst(cx, cy, '#fda4af', 12);
+            this.spawnBurst(cx, cy, '#e7cba0', 10);
             this.sim.audio.playClick();
             if (wasLost || wasErase) {
               this.renderDOM();
@@ -2704,7 +3181,8 @@ export class PuzzleArcadeModalController {
             return;
           }
         }
-        se.selected = { r, c };
+        se.selectCell(r, c);
+        this.persistSudokuSession(true);
         this.sim.audio.playClick();
         return;
       }
@@ -2727,6 +3205,7 @@ export class PuzzleArcadeModalController {
         this.sim.audio.playClick();
         return;
       }
+      this.bumpCompanionCharge();
       this.caroLastMoveAnim = { r: cell.r, c: cell.c, age: 0, duration: 0.24 };
       const ix = CARO_ORIGIN_X + cell.c * CARO_STEP_PX;
       const iy = CARO_ORIGIN_Y + cell.r * CARO_STEP_PX;
@@ -2740,6 +3219,7 @@ export class PuzzleArcadeModalController {
         this.caroWinRevealTimer = 0.72;
         this.updateLiveCountersOnly();
       } else {
+        this.persistModeSession('caro', true);
         this.sim.audio.playMatchPop(1);
         if (res.aiThinking) {
           this.aiThinkTimer = 0.28;
@@ -2777,11 +3257,11 @@ export class PuzzleArcadeModalController {
       ) {
         const dc = Math.min(
           m.dispCols - 1,
-          Math.max(0, Math.floor((vx - m.originX) / m.cellPx))
+          Math.max(0, Math.floor((vx - m.originX) / m.cellW))
         );
         const dr = Math.min(
           m.dispRows - 1,
-          Math.max(0, Math.floor((vy - m.originY) / m.cellPx))
+          Math.max(0, Math.floor((vy - m.originY) / m.cellH))
         );
         const r = m.transposed ? dc : dr;
         const c = m.transposed ? dr : dc;
@@ -2851,10 +3331,20 @@ export class PuzzleArcadeModalController {
         }
       }
       this.sudokuHoverPadDigit = hoverPad;
+
+      let hoverAct: SudokuQuickActionKey | null = null;
+      for (const [act, rect] of this.sudokuActionRects.entries()) {
+        if (vx >= rect.x && vx <= rect.x + rect.w && vy >= rect.y && vy <= rect.y + rect.h) {
+          hoverAct = act;
+          break;
+        }
+      }
+      this.sudokuHoverAction = hoverAct;
       return;
     }
     this.sudokuHoverCell = null;
     this.sudokuHoverPadDigit = null;
+    this.sudokuHoverAction = null;
 
     if (this.mode === 'caro' && this.caroEngine && this.caroEngine.status === 'playing') {
       const cell = this.getCaroIntersectionAt(vx, vy);
@@ -2874,11 +3364,11 @@ export class PuzzleArcadeModalController {
       ) {
         const dc = Math.min(
           m.dispCols - 1,
-          Math.max(0, Math.floor((vx - m.originX) / m.cellPx))
+          Math.max(0, Math.floor((vx - m.originX) / m.cellW))
         );
         const dr = Math.min(
           m.dispRows - 1,
-          Math.max(0, Math.floor((vy - m.originY) / m.cellPx))
+          Math.max(0, Math.floor((vy - m.originY) / m.cellH))
         );
         const r = m.transposed ? dc : dr;
         const c = m.transposed ? dr : dc;
@@ -2923,32 +3413,36 @@ export class PuzzleArcadeModalController {
     frameH: number;
     originX: number;
     originY: number;
-    cellPx: number;
+    cellW: number;
+    cellH: number;
+    outerTrackMargin: number;
     boardW: number;
     boardH: number;
     dispRows: number;
     dispCols: number;
     transposed: boolean;
   } {
-    const mobile = this.isMobileBoardLayout();
     const virt = this.getVirtualCanvasSize();
-    // On portrait mobile, orient the longer axis (8..12) vertically so every creature card is huge!
-    const transposed = mobile && engine.cols > engine.rows;
+    // Auto-orient 16 rows × 9 cols whenever canvas is taller than wide so all 144 tiles fill the viewport!
+    const transposed = virt.h > virt.w * 1.02 && engine.cols > engine.rows;
     const dispRows = transposed ? engine.cols : engine.rows;
     const dispCols = transposed ? engine.rows : engine.cols;
 
-    const boxX = mobile ? 6 : 10;
-    const boxY = mobile ? 6 : 40;
-    const boxW = mobile ? virt.w - 12 : virt.w - 20;
-    const boxH = mobile ? virt.h - 12 : virt.h - 48;
-    const outerTrackMargin = 14;
-    const availW = boxW - outerTrackMargin * 2;
-    const availH = boxH - outerTrackMargin * 2;
-    const cellPx = Math.max(32, Math.floor(Math.min(availW / dispCols, availH / dispRows)));
-    const boardW = dispCols * cellPx;
-    const boardH = dispRows * cellPx;
-    const originX = Math.round(boxX + (boxW - boardW) * 0.5);
-    const originY = Math.round(boxY + (boxH - boardH) * 0.5);
+    const outerTrackMargin = Math.max(
+      9,
+      Math.min(13, Math.round(Math.min(virt.w, virt.h) * 0.018))
+    );
+    const boxPad = 2;
+    const availW = Math.max(180, virt.w - (outerTrackMargin + boxPad) * 2);
+    const availH = Math.max(180, virt.h - (outerTrackMargin + boxPad) * 2);
+    const rawCellW = availW / dispCols;
+    const rawCellH = availH / dispRows;
+    const cellW = Math.min(rawCellW, rawCellH * 1.75);
+    const cellH = Math.min(rawCellH, rawCellW * 1.75);
+    const boardW = dispCols * cellW;
+    const boardH = dispRows * cellH;
+    const originX = (virt.w - boardW) * 0.5;
+    const originY = (virt.h - boardH) * 0.5;
     return {
       frameX: originX - outerTrackMargin,
       frameY: originY - outerTrackMargin,
@@ -2956,7 +3450,9 @@ export class PuzzleArcadeModalController {
       frameH: boardH + outerTrackMargin * 2,
       originX,
       originY,
-      cellPx,
+      cellW,
+      cellH,
+      outerTrackMargin,
       boardW,
       boardH,
       dispRows,
@@ -2972,25 +3468,32 @@ export class PuzzleArcadeModalController {
   ): { x: number; y: number } {
     const dr = m.transposed ? pt.c : pt.r;
     const dc = m.transposed ? pt.r : pt.c;
+    const borderOffset = Math.round(m.outerTrackMargin * 0.58);
     const px =
       dc < 0
-        ? m.originX - 9
+        ? m.originX - borderOffset
         : dc >= m.dispCols
-          ? m.originX + m.boardW + 9
-          : m.originX + (dc + 0.5) * m.cellPx;
+          ? m.originX + m.boardW + borderOffset
+          : m.originX + (dc + 0.5) * m.cellW;
     const py =
       dr < 0
-        ? m.originY - 9
+        ? m.originY - borderOffset
         : dr >= m.dispRows
-          ? m.originY + m.boardH + 9
-          : m.originY + (dr + 0.5) * m.cellPx;
+          ? m.originY + m.boardH + borderOffset
+          : m.originY + (dr + 0.5) * m.cellH;
     return { x: px, y: py };
   }
 
   private handleOnetCellTap(r: number, c: number): void {
     if (!this.onetEngine || this.onetEngine.status !== 'playing') return;
     const res = this.onetEngine.tapCell(r, c);
-    if (res.action === 'empty' || res.action === 'selected' || res.action === 'deselected' || res.action === 'switched') {
+    if (
+      res.action === 'empty' ||
+      res.action === 'selected' ||
+      res.action === 'deselected' ||
+      res.action === 'switched'
+    ) {
+      this.persistModeSession('blocks', false);
       this.sim.audio.playClick();
       return;
     }
@@ -3001,41 +3504,59 @@ export class PuzzleArcadeModalController {
       return;
     }
     if (res.action === 'matched') {
-      this.drainOnetMatchVfx();
+      this.bumpCompanionCharge();
+      this.drainOnetMatchVfx(Boolean(res.autoShuffled));
       const comboLv = Math.min(6, Math.max(1, this.onetEngine.combo));
       this.sim.audio.playMatchPop(comboLv);
       if (this.onetEngine.combo >= 4) {
         this.hitStopTimer = 0.028;
       }
-      if (res.autoShuffled && this.onetEngine.lastAutoShuffleNotice) {
-        this.showToast(this.onetEngine.lastAutoShuffleNotice, '🔀');
+      if ((res.autoShuffled || res.lost) && this.onetEngine.lastAutoShuffleNotice) {
+        this.showToast(this.onetEngine.lastAutoShuffleNotice, res.lost ? '💔' : '🔀');
       }
       if (res.won) {
         this.onetWinRevealTimer = 0.3;
         this.updateLiveCountersOnly();
+      } else if (res.lost || res.autoShuffled) {
+        this.persistModeSession('blocks', true);
+        this.renderDOM();
       } else {
+        this.persistModeSession('blocks', true);
         this.updateLiveCountersOnly();
       }
     }
   }
 
-  private drainOnetMatchVfx(): void {
+  private drainOnetMatchVfx(skipSlideAnims = false): void {
     if (!this.onetEngine) return;
     const m = this.computeOnetBoardMetrics(this.onetEngine);
     while (this.onetEngine.matchVfxQueue.length > 0) {
       const ev = this.onetEngine.matchVfxQueue.shift()!;
-      const spDef = CreatureOnetEngine.getSpeciesDef(ev.speciesId);
       const pts = ev.waypoints.map((wp) => this.onetPointToPixel(wp, this.onetEngine!, m));
       this.onetBeams.push({
         points: pts,
-        accent: spDef.accent,
+        accent: '#ef4444',
         age: 0,
-        duration: 0.32,
+        duration: 0.3,
       });
       const pFrom = this.onetPointToPixel(ev.from, this.onetEngine, m);
       const pTo = this.onetPointToPixel(ev.to, this.onetEngine, m);
-      this.spawnBurst(pFrom.x, pFrom.y, spDef.accent, 11);
-      this.spawnBurst(pTo.x, pTo.y, spDef.accent, 11);
+      this.spawnBurst(pFrom.x, pFrom.y, '#ef4444', 10);
+      this.spawnBurst(pTo.x, pTo.y, '#ef4444', 10);
+    }
+    if (skipSlideAnims) {
+      this.onetEngine.slideVfxQueue.length = 0;
+      this.onetSlideAnims.clear();
+      return;
+    }
+    while (this.onetEngine.slideVfxQueue.length > 0) {
+      const sev = this.onetEngine.slideVfxQueue.shift()!;
+      this.onetSlideAnims.set(`${sev.toR},${sev.toC}`, {
+        fromR: sev.fromR,
+        fromC: sev.fromC,
+        age: 0,
+        duration: 0.19,
+      });
     }
   }
 
@@ -3114,7 +3635,23 @@ export class PuzzleArcadeModalController {
     }
 
     if (!this.victoryClaimed) {
-      if (this.mode === 'blocks' && this.onetWinRevealTimer > 0) {
+      if (this.mode === 'sudoku' && this.sudokuEngine) {
+        const isPageHidden = typeof document !== 'undefined' && document.hidden;
+        if (!isPageHidden && this.sudokuEngine.tickTimer(dt)) {
+          const timerEl = this.root.querySelector('#paSudokuTimer');
+          if (timerEl) {
+            timerEl.textContent = this.sudokuEngine.formatElapsedTime();
+          }
+        }
+        if (!isPageHidden && !this.rescueContext && this.sudokuEngine.status === 'playing') {
+          this.sudokuAutoSaveAccumSec += dt;
+          if (this.sudokuAutoSaveAccumSec >= 5) {
+            this.sudokuAutoSaveAccumSec = 0;
+            this.persistSudokuSession(true);
+            this.persistActiveModalResumeMarker();
+          }
+        }
+      } else if (this.mode === 'blocks' && this.onetWinRevealTimer > 0) {
         this.onetWinRevealTimer -= dt;
         if (this.onetWinRevealTimer <= 0) {
           this.onetWinRevealTimer = 0;
@@ -3144,6 +3681,7 @@ export class PuzzleArcadeModalController {
         if (this.aiThinkTimer <= 0) {
           const aiRes = this.caroEngine.stepAiMove();
           if (aiRes) {
+            this.persistModeSession('caro', true);
             this.caroLastMoveAnim = { r: aiRes.r, c: aiRes.c, age: 0, duration: 0.24 };
             const ix = CARO_ORIGIN_X + aiRes.c * CARO_STEP_PX;
             const iy = CARO_ORIGIN_Y + aiRes.r * CARO_STEP_PX;
@@ -3209,6 +3747,13 @@ export class PuzzleArcadeModalController {
       }
     }
 
+    for (const [key, anim] of this.onetSlideAnims.entries()) {
+      anim.age += dt;
+      if (anim.age >= anim.duration) {
+        this.onetSlideAnims.delete(key);
+      }
+    }
+
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.age += dt;
@@ -3264,7 +3809,7 @@ export class PuzzleArcadeModalController {
     if (this.mode === 'chess') {
       this.drawGreatHallChessBackdrop(ctx, virt.w, virt.h);
     } else if (this.mode === 'sudoku') {
-      this.drawPotionsSudokuBackdrop(ctx, virt.w, virt.h);
+      this.drawClassicSudokuBackdrop(ctx, virt.w, virt.h);
     } else if (this.mode === 'caro') {
       this.drawMarauderCaroBackdrop(ctx, virt.w, virt.h);
     } else {
@@ -3318,30 +3863,29 @@ export class PuzzleArcadeModalController {
     ctx: CanvasRenderingContext2D,
     engine: CreatureOnetEngine
   ): void {
-    const mobile = this.isMobileBoardLayout();
     const m = this.computeOnetBoardMetrics(engine);
     const now = performance.now();
 
-    // 1. Carved Sanctuary Wood & Brass Outer Frame (includes outer border connection track)
+    // 1. Classic Pikachu Dark Recessed Board Tray (makes ivory 3D tiles & crimson lightning pop!)
     ctx.save();
-    drawRoundedRect(ctx, m.frameX, m.frameY, m.frameW, m.frameH, 16);
-    const woodGrad = ctx.createLinearGradient(0, m.frameY, 0, m.frameY + m.frameH);
-    woodGrad.addColorStop(0, 'rgba(42, 24, 14, 0.9)');
-    woodGrad.addColorStop(0.5, 'rgba(28, 17, 10, 0.92)');
-    woodGrad.addColorStop(1, 'rgba(18, 11, 7, 0.94)');
-    ctx.fillStyle = woodGrad;
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.52)';
+    drawRoundedRect(ctx, m.frameX, m.frameY, m.frameW, m.frameH, 14);
+    const trayGrad = ctx.createLinearGradient(0, m.frameY, 0, m.frameY + m.frameH);
+    trayGrad.addColorStop(0, 'rgba(17, 25, 22, 0.94)');
+    trayGrad.addColorStop(0.5, 'rgba(12, 18, 16, 0.95)');
+    trayGrad.addColorStop(1, 'rgba(8, 13, 12, 0.97)');
+    ctx.fillStyle = trayGrad;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
     ctx.shadowBlur = 14;
     ctx.shadowOffsetY = 4;
     ctx.fill();
-    ctx.lineWidth = 2.4;
-    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = '#d97706';
     ctx.stroke();
 
-    // Subtle inner golden border showing the walkable outer path corridor
-    drawRoundedRect(ctx, m.originX - 4, m.originY - 4, m.boardW + 8, m.boardH + 8, 10);
-    ctx.strokeStyle = 'rgba(251, 191, 36, 0.25)';
-    ctx.lineWidth = 1.2;
+    // Subtle inner corridor guide along the 1-cell walkable outer border
+    drawRoundedRect(ctx, m.originX - 3, m.originY - 3, m.boardW + 6, m.boardH + 6, 6);
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.22)';
+    ctx.lineWidth = 1;
     ctx.stroke();
     ctx.restore();
 
@@ -3350,22 +3894,29 @@ export class PuzzleArcadeModalController {
         ? engine.getTurningPointReview()
         : null;
 
-    // 2. Creature Grid Cells (Static Classic Layout — cleared spaces stay open corridors)
+    // 2. Classic 9 × 16 Rectangular 3D Tiles (with smooth gravity/shift sliding)
     for (let r = 0; r < engine.rows; r++) {
       for (let c = 0; c < engine.cols; c++) {
         const dr = m.transposed ? c : r;
         const dc = m.transposed ? r : c;
-        const cx = m.originX + dc * m.cellPx;
-        const cy = m.originY + dr * m.cellPx;
+        let cx = m.originX + dc * m.cellW;
+        let cy = m.originY + dr * m.cellH;
         const spId = engine.grid[r][c];
 
         if (!spId) {
-          // Soft subtle dot in empty corridor cell to help eye-track straight lines
-          ctx.fillStyle = 'rgba(254, 243, 199, 0.12)';
-          ctx.beginPath();
-          ctx.arc(cx + m.cellPx * 0.5, cy + m.cellPx * 0.5, 2.2, 0, Math.PI * 2);
-          ctx.fill();
           continue;
+        }
+
+        const slide = this.onetSlideAnims.get(`${r},${c}`);
+        if (slide && slide.age < slide.duration) {
+          const p = Math.min(1, Math.max(0, slide.age / slide.duration));
+          const ease = 1 - (1 - p) * (1 - p);
+          const fromDr = m.transposed ? slide.fromC : slide.fromR;
+          const fromDc = m.transposed ? slide.fromR : slide.fromC;
+          const fromX = m.originX + fromDc * m.cellW;
+          const fromY = m.originY + fromDr * m.cellH;
+          cx = fromX + (cx - fromX) * ease;
+          cy = fromY + (cy - fromY) * ease;
         }
 
         const spDef = CreatureOnetEngine.getSpeciesDef(spId);
@@ -3390,7 +3941,8 @@ export class PuzzleArcadeModalController {
           ctx,
           cx,
           cy,
-          m.cellPx,
+          m.cellW,
+          m.cellH,
           spDef,
           isSel,
           isHinted,
@@ -3407,29 +3959,29 @@ export class PuzzleArcadeModalController {
       for (const hc of activeRev.highlightCells) {
         const dr = m.transposed ? hc.c : hc.r;
         const dc = m.transposed ? hc.r : hc.c;
-        const hx = m.originX + dc * m.cellPx;
-        const hy = m.originY + dr * m.cellPx;
-        drawRoundedRect(ctx, hx + 3, hy + 3, m.cellPx - 6, m.cellPx - 6, 10);
-        ctx.fillStyle = 'rgba(250, 204, 21, 0.24)';
+        const hx = m.originX + dc * m.cellW;
+        const hy = m.originY + dr * m.cellH;
+        drawRoundedRect(ctx, hx + 2, hy + 2, m.cellW - 4, m.cellH - 4, 6);
+        ctx.fillStyle = 'rgba(250, 204, 21, 0.28)';
         ctx.fill();
-        ctx.lineWidth = 2.6;
+        ctx.lineWidth = 2.4;
         ctx.strokeStyle = '#fde047';
         ctx.stroke();
       }
       ctx.restore();
     }
 
-    // 3. Hint Preview Polyline (if player used 🔍 Dò Cặp)
+    // 3. Hint Preview Polyline (if player used 🔍 Dò)
     if (engine.hintPath && engine.hintPath.length >= 2) {
       const hPts = engine.hintPath.map((wp) => this.onetPointToPixel(wp, engine, m));
-      const pulse = 0.55 + 0.35 * Math.sin(now * 0.008);
+      const pulse = 0.6 + 0.35 * Math.sin(now * 0.009);
       ctx.save();
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      ctx.setLineDash([7, 6]);
-      ctx.lineDashOffset = -(now * 0.03);
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = `rgba(253, 224, 71, ${pulse.toFixed(2)})`;
+      ctx.setLineDash([7, 5]);
+      ctx.lineDashOffset = -(now * 0.032);
+      ctx.lineWidth = 3.8;
+      ctx.strokeStyle = `rgba(239, 68, 68, ${pulse.toFixed(2)})`;
       ctx.beginPath();
       ctx.moveTo(hPts[0].x, hPts[0].y);
       for (let i = 1; i < hPts.length; i++) {
@@ -3439,7 +3991,7 @@ export class PuzzleArcadeModalController {
       ctx.restore();
     }
 
-    // 4. Active Patronus / Wand Lightning Match Beams (<= 3 segments)
+    // 4. Iconic Classic Pikachu 2003 Crimson-Red Electric Connection Line (<= 3 segments)
     for (const beam of this.onetBeams) {
       if (beam.points.length < 2) continue;
       const t = Math.min(1, beam.age / beam.duration);
@@ -3448,12 +4000,12 @@ export class PuzzleArcadeModalController {
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
 
-      // Outer magical aura
-      ctx.shadowColor = beam.accent;
+      // Outer crimson-red electric glow
+      ctx.shadowColor = '#dc2626';
       ctx.shadowBlur = 14;
-      ctx.strokeStyle = beam.accent;
-      ctx.globalAlpha = alpha * 0.85;
-      ctx.lineWidth = 8.5 * (1 - t * 0.35);
+      ctx.strokeStyle = '#dc2626';
+      ctx.globalAlpha = alpha * 0.92;
+      ctx.lineWidth = 8.5 * (1 - t * 0.3);
       ctx.beginPath();
       ctx.moveTo(beam.points[0].x, beam.points[0].y);
       for (let i = 1; i < beam.points.length; i++) {
@@ -3461,42 +4013,30 @@ export class PuzzleArcadeModalController {
       }
       ctx.stroke();
 
-      // Crisp bright golden-white core
+      // Mid vivid red body
       ctx.shadowBlur = 0;
-      ctx.strokeStyle = '#fffbeb';
+      ctx.strokeStyle = '#ef4444';
       ctx.globalAlpha = alpha;
-      ctx.lineWidth = 3.4 * (1 - t * 0.3);
+      ctx.lineWidth = 5 * (1 - t * 0.25);
       ctx.stroke();
 
-      // Corner spark nodes
-      ctx.fillStyle = '#fef08a';
+      // Hot white-rose lightning core
+      ctx.strokeStyle = '#fff1f2';
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = 2.1 * (1 - t * 0.25);
+      ctx.stroke();
+
+      // Electric spark nodes at endpoints & 90° turns
       for (const pt of beam.points) {
+        ctx.fillStyle = '#ef4444';
         ctx.beginPath();
-        ctx.arc(pt.x, pt.y, 4.5 * (1 - t * 0.4), 0, Math.PI * 2);
+        ctx.arc(pt.x, pt.y, 4.8 * (1 - t * 0.35), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 2.2 * (1 - t * 0.35), 0, Math.PI * 2);
         ctx.fill();
       }
-      ctx.restore();
-    }
-
-    // 5. Desktop Top Compact Menagerie Ribbon (lets the 48..108-tile Pikachu board use full 692px width!)
-    if (!mobile) {
-      ctx.save();
-      drawRoundedRect(ctx, m.frameX, 6, m.frameW, 26, 9);
-      ctx.fillStyle = 'rgba(42, 24, 14, 0.88)';
-      ctx.fill();
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = 'rgba(244, 198, 104, 0.65)';
-      ctx.stroke();
-
-      ctx.fillStyle = '#fef3c7';
-      ctx.font = '800 11.5px "Be Vietnam Pro", system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(
-        `🦄 Bàn ${engine.rows}×${engine.cols} (${engine.totalPairs * 2} ô • ${engine.speciesCount} loài)   •   Đã ghép: ${engine.matchedPairs}/${engine.totalPairs} cặp   •   ⚡ Combo ×${engine.combo} (Đỉnh ×${engine.maxCombo})   •   🎯 ${engine.score.toLocaleString('vi-VN')} đ`,
-        m.frameX + m.frameW * 0.5,
-        19
-      );
       ctx.restore();
     }
   }
@@ -3505,7 +4045,8 @@ export class PuzzleArcadeModalController {
     ctx: CanvasRenderingContext2D,
     x: number,
     y: number,
-    size: number,
+    cellW: number,
+    cellH: number,
     spDef: (typeof CREATURE_ONET_SPECIES)[number],
     isSelected: boolean,
     isHinted: boolean,
@@ -3513,88 +4054,100 @@ export class PuzzleArcadeModalController {
     isBlockedFlash: boolean,
     nowMs: number
   ): void {
-    const pad = Math.max(2, size * 0.048);
-    let bx = x + pad;
-    let by = y + pad;
-    const bw = size - pad * 2;
-    const bh = size - pad * 2;
-    const rad = Math.max(6, size * 0.17);
+    // Classic Pikachu 2003 tightly-packed 3D bevelled rectangular domino tile
+    const seam = 0.75;
+    let bx = x + seam;
+    const by = y + seam;
+    const bw = cellW - seam * 2;
+    const bh = cellH - seam * 2;
+    const rad = 3.5;
+    const lipDepth = 3.2;
 
     if (isBlockedFlash) {
-      bx += Math.sin(nowMs * 0.06) * 3;
-    } else if (isSelected) {
-      by -= 2.2;
+      bx += Math.sin(nowMs * 0.065) * 2.5;
     }
 
     ctx.save();
 
-    // 3D tactile card lip
-    drawRoundedRect(ctx, bx, by + 2.5, bw, bh - 1, rad);
-    ctx.fillStyle = isSelected ? '#92400e' : spDef.border;
+    // 1. Extruded 3D bottom-right block shadow lip (classic Pikachu 3D button feel)
+    drawRoundedRect(ctx, bx, by, bw, bh, rad);
+    ctx.fillStyle = isBlockedFlash
+      ? '#991b1b'
+      : isSelected
+        ? '#15803d'
+        : isHinted
+          ? '#b45309'
+          : '#988158';
     ctx.fill();
 
-    // Pastel species-tinted parchment face
-    drawRoundedRect(ctx, bx, by, bw, bh - 2.2, rad);
-    const faceGrad = ctx.createLinearGradient(bx, by, bx, by + bh);
-    faceGrad.addColorStop(0, isSelected ? '#fffbeb' : spDef.bgTop);
-    faceGrad.addColorStop(1, isSelected ? '#fde68a' : spDef.bgBot);
+    // 2. Top-left raised ivory-cream tile face
+    const faceW = bw - 1.8;
+    const faceH = bh - lipDepth;
+    drawRoundedRect(ctx, bx + 0.4, by + 0.4, faceW, faceH, Math.max(2, rad - 0.5));
+    const faceGrad = ctx.createLinearGradient(bx, by, bx, by + faceH);
+    if (isBlockedFlash) {
+      faceGrad.addColorStop(0, '#fee2e2');
+      faceGrad.addColorStop(1, '#fecaca');
+    } else if (isSelected) {
+      // Classic Pikachu emerald-lime active tile highlight
+      faceGrad.addColorStop(0, '#dcfce7');
+      faceGrad.addColorStop(1, '#86efac');
+    } else if (isHinted) {
+      const p = 0.5 + 0.5 * Math.sin(nowMs * 0.01);
+      faceGrad.addColorStop(0, '#fefce8');
+      faceGrad.addColorStop(1, p > 0.5 ? '#fde047' : '#fef08a');
+    } else if (isHovered) {
+      faceGrad.addColorStop(0, '#ffffff');
+      faceGrad.addColorStop(1, '#f7eed8');
+    } else {
+      faceGrad.addColorStop(0, spDef.bgTop);
+      faceGrad.addColorStop(1, spDef.bgBot);
+    }
     ctx.fillStyle = faceGrad;
     ctx.fill();
 
-    // Border highlight (selected / hinted / hovered / normal)
-    ctx.lineWidth = isSelected || isHinted ? 2.8 : isHovered ? 2.1 : 1.5;
-    ctx.strokeStyle = isBlockedFlash
-      ? '#ef4444'
-      : isSelected
-        ? '#f59e0b'
-        : isHinted
-          ? '#eab308'
-          : isHovered
-            ? '#fde047'
-            : spDef.border;
+    // 3. Crisp top & left white 3D bevel highlight
+    ctx.beginPath();
+    ctx.moveTo(bx + 1.5, by + faceH - 1.5);
+    ctx.lineTo(bx + 1.5, by + 1.5);
+    ctx.lineTo(bx + faceW - 1.5, by + 1.5);
+    ctx.strokeStyle = isSelected ? 'rgba(255, 255, 255, 0.92)' : 'rgba(255, 255, 255, 0.88)';
+    ctx.lineWidth = 1.3;
     ctx.stroke();
 
-    if (isSelected || isHinted) {
-      drawRoundedRect(ctx, bx - 1.5, by - 1.5, bw + 3, bh + 0.5, rad + 1.5);
-      ctx.strokeStyle = isSelected
-        ? 'rgba(253, 224, 71, 0.92)'
-        : `rgba(250, 204, 21, ${(0.45 + 0.4 * Math.sin(nowMs * 0.009)).toFixed(2)})`;
-      ctx.lineWidth = 2.2;
-      ctx.stroke();
-    }
+    // 4. Crisp outer tile seam border
+    drawRoundedRect(ctx, bx, by, bw, bh, rad);
+    ctx.lineWidth = isSelected || isHinted ? 2.1 : isHovered ? 1.5 : 1;
+    ctx.strokeStyle = isBlockedFlash
+      ? '#dc2626'
+      : isSelected
+        ? '#16a34a'
+        : isHinted
+          ? '#dc2626'
+          : isHovered
+            ? '#d97706'
+            : '#4a3723';
+    ctx.stroke();
 
-    // Crisp gloss top band
-    drawRoundedRect(ctx, bx + bw * 0.1, by + 2, bw * 0.8, bh * 0.22, rad * 0.5);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.48)';
-    ctx.fill();
-
-    // Magical Creature Sprite Art (fills ~80% of card cleanly!)
+    // 5. Crisp Hang Sóc Creature / Magical Item Sprite centered cleanly on the ivory tile
     const spr = this.getSpriteImage(spDef.spriteKey);
     if (spr) {
-      const iconBox = Math.min(bw, bh - 2) * 0.82;
+      const maxW = (faceW - 2) * 0.92;
+      const maxH = (faceH - 2) * 0.92;
       const aspect = spr.naturalWidth / Math.max(1, spr.naturalHeight);
-      const dw = aspect >= 1 ? iconBox : iconBox * aspect;
-      const dh = aspect >= 1 ? iconBox / Math.max(0.2, aspect) : iconBox;
+      let dw = maxW;
+      let dh = dw / Math.max(0.2, aspect);
+      if (dh > maxH) {
+        dh = maxH;
+        dw = dh * aspect;
+      }
       ctx.drawImage(
         spr,
-        bx + (bw - dw) * 0.5,
-        by + (bh - 2 - dh) * 0.5,
+        bx + 0.4 + (faceW - dw) * 0.5,
+        by + 0.4 + (faceH - dh) * 0.5,
         dw,
         dh
       );
-    }
-
-    // Distinct corner star badge for awakened rare variants (Stage >= 500)
-    if (spDef.rareBadge && size >= 34) {
-      ctx.fillStyle = spDef.border;
-      ctx.beginPath();
-      ctx.arc(bx + bw - 7.5, by + 7.5, 5.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#fef08a';
-      ctx.font = '900 8.5px "Be Vietnam Pro", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('✦', bx + bw - 7.5, by + 7.8);
     }
 
     ctx.restore();
@@ -3914,72 +4467,6 @@ export class PuzzleArcadeModalController {
     ctx.restore();
   }
 
-  private drawParchmentSidePanel(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    ribbonTitle: string
-  ): void {
-    ctx.save();
-    // 1. Warm honey-oak outer frame with 3D drop shadow
-    drawRoundedRect(ctx, x, y, w, h, 18);
-    const woodGrad = ctx.createLinearGradient(0, y, 0, y + h);
-    woodGrad.addColorStop(0, '#8d4c25');
-    woodGrad.addColorStop(0.5, '#6e391c');
-    woodGrad.addColorStop(1, '#4a240d');
-    ctx.fillStyle = woodGrad;
-    ctx.shadowColor = 'rgba(28, 12, 3, 0.52)';
-    ctx.shadowBlur = 14;
-    ctx.shadowOffsetY = 5;
-    ctx.fill();
-    ctx.lineWidth = 2.2;
-    ctx.strokeStyle = '#f4c668';
-    ctx.stroke();
-    ctx.shadowColor = 'transparent';
-
-    // 2. Cream-vellum Playrix Township parchment sheet inset
-    drawRoundedRect(ctx, x + 6, y + 6, w - 12, h - 12, 13);
-    const sheetGrad = ctx.createLinearGradient(0, y + 6, 0, y + h - 6);
-    sheetGrad.addColorStop(0, '#fffdf5');
-    sheetGrad.addColorStop(0.65, '#faeccd');
-    sheetGrad.addColorStop(1, '#eed6a6');
-    ctx.fillStyle = sheetGrad;
-    ctx.fill();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = '#cfa66b';
-    ctx.stroke();
-
-    this.drawBrassCornerBrackets(ctx, x + 2, y + 2, w - 4, h - 4, 13);
-
-    // 3. Hogwarts Crimson & Gold header ribbon
-    const rx = x + 14;
-    const ry = y + 12;
-    const rw = w - 28;
-    const rh = 25;
-    drawRoundedRect(ctx, rx, ry + 2, rw, rh, 12);
-    ctx.fillStyle = '#5c1111';
-    ctx.fill();
-    drawRoundedRect(ctx, rx, ry, rw, rh, 12);
-    const ribGrad = ctx.createLinearGradient(0, ry, 0, ry + rh);
-    ribGrad.addColorStop(0, '#dc2626');
-    ribGrad.addColorStop(0.55, '#991b1b');
-    ribGrad.addColorStop(1, '#7f1d1d');
-    ctx.fillStyle = ribGrad;
-    ctx.fill();
-    ctx.lineWidth = 1.6;
-    ctx.strokeStyle = '#fde68a';
-    ctx.stroke();
-
-    ctx.fillStyle = '#fffbeb';
-    ctx.font = '900 12px "Be Vietnam Pro", system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(ribbonTitle, x + w * 0.5, ry + rh * 0.52, rw - 14);
-    ctx.restore();
-  }
-
   private drawCharacterPortraitMedallion(
     ctx: CanvasRenderingContext2D,
     cx: number,
@@ -4060,406 +4547,174 @@ export class PuzzleArcadeModalController {
   }
 
   // --------------------------------------------------------------------------
-  // RENDERER 4: PHÒNG ĐỘC DƯỢC & CỔ NGỮ HOGWARTS — SÁCH PHÉP DA RỒNG SUDOKU 9x9
+  // RENDERER 4: SỐ HỌC HUYỀN BÍ (CLASSIC SUDOKU 9×9 — HANG SÓC WOOD, PARCHMENT & BRASS)
   // --------------------------------------------------------------------------
 
-  private drawPotionsSudokuBackdrop(
+  private drawClassicSudokuBackdrop(
     ctx: CanvasRenderingContext2D,
-    virtW = PA_VIRTUAL_W,
-    virtH = PA_VIRTUAL_H
+    virtW = SUDOKU_DESKTOP_W,
+    virtH = SUDOKU_DESKTOP_H
   ): void {
-    ctx.save();
-    const bg = this.potionsSudokuBgImage;
-    if (bg && bg.complete && bg.naturalWidth > 0) {
-      const sw = bg.naturalWidth;
-      const sh = bg.naturalHeight;
-      ctx.drawImage(
-        bg,
-        sw * 0.02,
-        sh * 0.04,
-        sw * 0.96,
-        sh * 0.92,
-        0,
-        0,
-        virtW,
-        virtH
-      );
-      const glaze = ctx.createLinearGradient(0, 0, virtW, virtH);
-      glaze.addColorStop(0, 'rgba(10, 28, 24, 0.34)');
-      glaze.addColorStop(0.5, 'rgba(28, 18, 12, 0.22)');
-      glaze.addColorStop(1, 'rgba(16, 24, 34, 0.38)');
-      ctx.fillStyle = glaze;
-      ctx.fillRect(0, 0, virtW, virtH);
-    } else {
-      const dungeonGrad = ctx.createLinearGradient(0, 0, virtW, virtH);
-      dungeonGrad.addColorStop(0, '#0f2922');
-      dungeonGrad.addColorStop(0.5, '#2b1810');
-      dungeonGrad.addColorStop(1, '#111827');
-      ctx.fillStyle = dungeonGrad;
-      ctx.fillRect(0, 0, virtW, virtH);
-    }
-
-    // Animated floating Felix Felicis golden rune motes & emerald potion bubbles along outer rim
-    const now = performance.now() * 0.001;
-    const alchMotes: ReadonlyArray<[number, number, string, number]> = [
-      [8, 68, '#fde047', 0.0],
-      [9, 224, '#34d399', 1.1],
-      [8, 392, '#38bdf8', 2.3],
-      [virtW - 8, 92, '#fde047', 2.6],
-      [virtW - 9, 256, '#34d399', 0.4],
-      [virtW - 8, 418, '#f59e0b', 1.5],
-    ];
-    for (const [mx, my, col, phase] of alchMotes) {
-      const fy = my + Math.sin(now * 2.1 + phase) * 4.5;
-      const glow = ctx.createRadialGradient(mx, fy, 1, mx, fy, 10);
-      glow.addColorStop(0, col);
-      glow.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = glow;
-      ctx.beginPath();
-      ctx.arc(mx, fy, 10, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#fffbeb';
-      this.drawFourPointStar(ctx, mx, fy, 3.2, 1.1);
-      ctx.fill();
-    }
-
-    drawRoundedRect(ctx, 5, 5, virtW - 10, virtH - 10, 14);
-    ctx.lineWidth = 1.4;
-    ctx.strokeStyle = 'rgba(253, 230, 138, 0.36)';
-    ctx.stroke();
-    ctx.restore();
+    // Clear to transparent so the full-bleed sunlit Hang Sóc room (burrow_parlor_bg.jpg) shines seamlessly behind the carved walnut & brass board and numpad dock
+    ctx.clearRect(0, 0, virtW, virtH);
   }
 
   private drawSudokuScene(ctx: CanvasRenderingContext2D, engine: SudokuPuzzleEngine): void {
-    ctx.save();
-
-    // 1. Open Dragon-Hide Grimoire Binding spanning both Left 9x9 Page & Right Relic Page!
-    const bookX = SUDOKU_BOARD_X - 10;
-    const bookY = SUDOKU_BOARD_Y - 10;
-    const bookW = SUDOKU_PAD_X + SUDOKU_PAD_W - SUDOKU_BOARD_X + 20;
-    const bookH = SUDOKU_BOARD_PX + 20;
-
-    // Crimson & Slytherin-Emerald silk bookmark ribbons peeking below the open Grimoire
-    for (const [rx, col] of [
-      [SUDOKU_BOARD_X + 34, '#b91c1c'],
-      [SUDOKU_BOARD_X + 62, '#047857'],
-    ] as const) {
-      ctx.beginPath();
-      ctx.moveTo(rx, bookY + bookH - 4);
-      ctx.lineTo(rx + 18, bookY + bookH - 4);
-      ctx.lineTo(rx + 16, bookY + bookH + 9);
-      ctx.lineTo(rx + 9, bookY + bookH + 4);
-      ctx.lineTo(rx, bookY + bookH + 9);
-      ctx.closePath();
-      ctx.fillStyle = col;
-      ctx.fill();
-      ctx.lineWidth = 1.1;
-      ctx.strokeStyle = '#fde68a';
-      ctx.stroke();
-    }
-
-    // Embossed Emerald-Obsidian & Mahogany Dragon-Hide Outer Cover
-    drawRoundedRect(ctx, bookX, bookY, bookW, bookH, 18);
-    const coverGrad = ctx.createLinearGradient(bookX, bookY, bookX + bookW, bookY + bookH);
-    coverGrad.addColorStop(0, '#1e3a2f');
-    coverGrad.addColorStop(0.32, '#2d1c12');
-    coverGrad.addColorStop(0.5, '#1b110b');
-    coverGrad.addColorStop(0.68, '#2d1c12');
-    coverGrad.addColorStop(1, '#1e3a2f');
-    ctx.fillStyle = coverGrad;
-    ctx.shadowColor = 'rgba(8, 5, 3, 0.68)';
-    ctx.shadowBlur = 18;
-    ctx.shadowOffsetY = 6;
-    ctx.fill();
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = '#f4c668';
-    ctx.stroke();
-    ctx.shadowColor = 'transparent';
-
-    // Gold stitched dragon-leather seam + 4 ornate brass Grimoire corner clasps
-    drawRoundedRect(ctx, bookX + 5, bookY + 5, bookW - 10, bookH - 10, 14);
-    ctx.setLineDash([5, 4]);
-    ctx.lineWidth = 1.1;
-    ctx.strokeStyle = 'rgba(253, 230, 138, 0.45)';
-    ctx.stroke();
-    ctx.setLineDash([]);
-    this.drawBrassCornerBrackets(ctx, bookX + 2, bookY + 2, bookW - 4, bookH - 4, 17);
-
-    // Central Stitched Grimoire Spine & Brass Rib Clasps between Left & Right Pages
-    const spineX = SUDOKU_BOARD_X + SUDOKU_BOARD_PX + 2;
-    const spineW = SUDOKU_PAD_X - spineX - 2;
-    const spineGrad = ctx.createLinearGradient(spineX, 0, spineX + spineW, 0);
-    spineGrad.addColorStop(0, '#1c1008');
-    spineGrad.addColorStop(0.5, '#4a2c16');
-    spineGrad.addColorStop(1, '#1c1008');
-    ctx.fillStyle = spineGrad;
-    ctx.fillRect(spineX, bookY + 4, spineW, bookH - 8);
-    for (const ry of [bookY + 56, bookY + bookH * 0.5, bookY + bookH - 56]) {
-      drawRoundedRect(ctx, spineX - 2, ry - 5, spineW + 4, 10, 4);
-      ctx.fillStyle = '#d97706';
-      ctx.fill();
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = '#fef08a';
-      ctx.stroke();
-    }
-    ctx.restore();
-
+    const isPortraitSudoku = this.isMobileBoardLayout();
     const sel = engine.selected;
     const selVal = sel ? engine.grid[sel.r]?.[sel.c] ?? 0 : 0;
-    const hoverBoardVal =
-      this.sudokuHoverCell ? engine.grid[this.sudokuHoverCell.r]?.[this.sudokuHoverCell.c] ?? 0 : 0;
-    const spotlightDigit =
-      this.sudokuHoverPadDigit ?? (hoverBoardVal > 0 ? hoverBoardVal : selVal > 0 ? selVal : 1);
+    const activeDigit =
+      this.sudokuHoverPadDigit ?? (selVal > 0 ? selVal : engine.highlightDigit > 0 ? engine.highlightDigit : 0);
 
-    // 2. Left Grimoire Page: 9x9 Enchanted Parchment Cells + 9 Harry Potter Relics
+    // 1. Carved Hang Sóc Mahogany-Oak Frame & Antique Brass Bezel around the 9×9 Board
+    const framePad = 5.5;
+    const fx = SUDOKU_BOARD_X - framePad;
+    const fy = SUDOKU_BOARD_Y - framePad;
+    const fw = SUDOKU_BOARD_PX + framePad * 2;
+    const fh = SUDOKU_BOARD_PX + framePad * 2;
+
+    ctx.save();
+    // 3D bottom lip & tabletop shadow
+    drawRoundedRect(ctx, fx, fy + 2.5, fw, fh, 11);
+    ctx.fillStyle = 'rgba(24, 10, 4, 0.55)';
+    ctx.shadowColor = 'rgba(20, 8, 3, 0.42)';
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = 4;
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+
+    // Carved dark walnut-oak frame body
+    drawRoundedRect(ctx, fx, fy, fw, fh, 11);
+    const frameGrad = ctx.createLinearGradient(0, fy, 0, fy + fh);
+    frameGrad.addColorStop(0, '#63371a');
+    frameGrad.addColorStop(0.48, '#45230e');
+    frameGrad.addColorStop(1, '#2b1407');
+    ctx.fillStyle = frameGrad;
+    ctx.fill();
+
+    // Antique brass outer rim
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#e5a93c';
+    ctx.stroke();
+
+    // Inner specular highlight rim
+    drawRoundedRect(ctx, fx + 1.8, fy + 1.8, fw - 3.6, fh - 3.6, 9.5);
+    ctx.lineWidth = 0.9;
+    ctx.strokeStyle = 'rgba(254, 243, 199, 0.35)';
+    ctx.stroke();
+
+    // Parchment backing inside frame
+    ctx.fillStyle = '#fffdf6';
+    ctx.fillRect(SUDOKU_BOARD_X, SUDOKU_BOARD_Y, SUDOKU_BOARD_PX, SUDOKU_BOARD_PX);
+    ctx.restore();
+
+    // 2. Classic 9×9 Parchment Cells (Alternating 3×3 Warm Vellum + 4-State Golden-Amber Highlighting)
     for (let r = 0; r < 9; r++) {
       for (let c = 0; c < 9; c++) {
         const cx = SUDOKU_BOARD_X + c * SUDOKU_CELL_PX;
         const cy = SUDOKU_BOARD_Y + r * SUDOKU_CELL_PX;
-        const boxParity = (Math.floor(r / 3) + Math.floor(c / 3)) % 2;
         const val = engine.grid[r][c];
+        const isEvenBox = (Math.floor(r / 3) + Math.floor(c / 3)) % 2 === 0;
         const isSel = Boolean(sel && sel.r === r && sel.c === c);
         const isHover = Boolean(
           this.sudokuHoverCell && this.sudokuHoverCell.r === r && this.sudokuHoverCell.c === c
         );
-        const onMainDiag = r === c;
-        const onAntiDiag = r + c === 8;
-        const isDiagCell = engine.diagonalRule && (onMainDiag || onAntiDiag);
         const isPeer = Boolean(
           sel &&
             !isSel &&
             (sel.r === r ||
               sel.c === c ||
               (Math.floor(sel.r / 3) === Math.floor(r / 3) &&
-                Math.floor(sel.c / 3) === Math.floor(c / 3)) ||
-              (engine.diagonalRule &&
-                ((sel.r === sel.c && onMainDiag) || (sel.r + sel.c === 8 && onAntiDiag))))
+                Math.floor(sel.c / 3) === Math.floor(c / 3)))
         );
-        const isSameVal = selVal > 0 && val === selVal && !isSel;
-        const conflict = engine.hasConflict(r, c) || engine.isWrongCell(r, c);
+        const isSameVal = activeDigit > 0 && val === activeDigit && !isSel;
+        const isWrong = engine.isWrongCell(r, c);
+        const conflict = engine.hasConflict(r, c);
 
-        if (conflict) {
-          ctx.fillStyle = '#ffe4e6';
+        if (isSel && conflict) {
+          ctx.fillStyle = '#fca5a5';
+        } else if (conflict) {
+          ctx.fillStyle = '#fde2dc';
         } else if (isSel) {
-          const lumos = ctx.createRadialGradient(
-            cx + SUDOKU_CELL_PX * 0.5,
-            cy + SUDOKU_CELL_PX * 0.5,
-            3,
-            cx + SUDOKU_CELL_PX * 0.5,
-            cy + SUDOKU_CELL_PX * 0.5,
-            SUDOKU_CELL_PX * 0.75
-          );
-          lumos.addColorStop(0, '#fffbeb');
-          lumos.addColorStop(0.55, '#fde047');
-          lumos.addColorStop(1, '#f59e0b');
-          ctx.fillStyle = lumos;
+          const selGrad = ctx.createLinearGradient(0, cy, 0, cy + SUDOKU_CELL_PX);
+          selGrad.addColorStop(0, '#fef08a');
+          selGrad.addColorStop(1, '#f7c948');
+          ctx.fillStyle = selGrad;
         } else if (isSameVal) {
-          ctx.fillStyle = '#fde28a';
+          ctx.fillStyle = '#fbd374';
         } else if (isHover) {
-          ctx.fillStyle = '#fef08a';
+          ctx.fillStyle = '#f9e0a2';
         } else if (isPeer) {
-          ctx.fillStyle = boxParity === 0 ? '#fef3c7' : '#f6e1a4';
+          ctx.fillStyle = isEvenBox ? '#f2e2be' : '#ebd8b0';
         } else {
-          ctx.fillStyle = boxParity === 0 ? '#fffdf6' : '#f4e3bc';
+          ctx.fillStyle = isEvenBox ? '#fffdf6' : '#f7edd6';
         }
         ctx.fillRect(cx, cy, SUDOKU_CELL_PX, SUDOKU_CELL_PX);
 
-        // Sudoku-X Diagonal Gold Wash & Hairline (underneath relics & digits!)
-        if (isDiagCell) {
+        // Subtle tactile ivory top-edge sheen on each parchment tile
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.38)';
+        ctx.fillRect(cx, cy, SUDOKU_CELL_PX, 1.2);
+
+        if (isSameVal && !conflict) {
           ctx.save();
-          if (!conflict && !isSel) {
-            ctx.fillStyle = 'rgba(245, 158, 11, 0.16)';
-            ctx.fillRect(cx, cy, SUDOKU_CELL_PX, SUDOKU_CELL_PX);
-          }
-          ctx.strokeStyle = 'rgba(180, 83, 9, 0.30)';
-          ctx.lineWidth = 1.25;
-          ctx.setLineDash([4, 3]);
-          ctx.beginPath();
-          if (onMainDiag) {
-            ctx.moveTo(cx + 2, cy + 2);
-            ctx.lineTo(cx + SUDOKU_CELL_PX - 2, cy + SUDOKU_CELL_PX - 2);
-          }
-          if (onAntiDiag) {
-            ctx.moveTo(cx + SUDOKU_CELL_PX - 2, cy + 2);
-            ctx.lineTo(cx + 2, cy + SUDOKU_CELL_PX - 2);
-          }
-          ctx.stroke();
-          ctx.restore();
-        }
-
-        // Odd/Even Parity Rune Watermark (1 = Odd ◇, 2 = Even ◯ — top-left corner + subtle inset)
-        const pMask = engine.parityMask?.[r]?.[c] ?? 0;
-        if (pMask === 1 || pMask === 2) {
-          ctx.save();
-          const mx = cx + SUDOKU_CELL_PX * 0.5;
-          const my = cy + SUDOKU_CELL_PX * 0.5;
-          if (pMask === 1) {
-            // Odd (1,3,5,7,9): Warm Amber Diamond ◇
-            const dr = SUDOKU_CELL_PX * 0.39;
-            ctx.beginPath();
-            ctx.moveTo(mx, my - dr);
-            ctx.lineTo(mx + dr, my);
-            ctx.lineTo(mx, my + dr);
-            ctx.lineTo(mx - dr, my);
-            ctx.closePath();
-            ctx.fillStyle = 'rgba(217, 119, 6, 0.09)';
-            ctx.fill();
-            ctx.lineWidth = 1.25;
-            ctx.strokeStyle = 'rgba(180, 83, 9, 0.34)';
-            ctx.stroke();
-
-            ctx.fillStyle = 'rgba(146, 64, 14, 0.78)';
-            ctx.font = '900 9px "Be Vietnam Pro", system-ui, sans-serif';
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'top';
-            ctx.fillText('◇', cx + 3.5, cy + 2.5);
-          } else {
-            // Even (2,4,6,8): Cool Arcane Teal Circle ◯
-            ctx.beginPath();
-            ctx.arc(mx, my, SUDOKU_CELL_PX * 0.36, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(14, 165, 233, 0.09)';
-            ctx.fill();
-            ctx.lineWidth = 1.25;
-            ctx.strokeStyle = 'rgba(3, 105, 161, 0.34)';
-            ctx.stroke();
-
-            ctx.fillStyle = 'rgba(3, 105, 161, 0.80)';
-            ctx.font = '900 8.5px "Be Vietnam Pro", system-ui, sans-serif';
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'top';
-            ctx.fillText('◯', cx + 3.5, cy + 2.5);
-          }
+          ctx.lineWidth = 1.4;
+          ctx.strokeStyle = 'rgba(180, 83, 9, 0.55)';
+          ctx.strokeRect(cx + 1.5, cy + 1.5, SUDOKU_CELL_PX - 3, SUDOKU_CELL_PX - 3);
           ctx.restore();
         }
 
         if (val >= 1 && val <= 9) {
           const midCellX = cx + SUDOKU_CELL_PX * 0.5;
-          const midCellY = cy + SUDOKU_CELL_PX * 0.5;
-          const meta = HP_SUDOKU_RELIC_META[val];
-          const relicImg = this.getSudokuRelicImage(val);
+          const midCellY = cy + SUDOKU_CELL_PX * 0.5 + 1;
+          const isInitialClue = Boolean(engine.initialGiven[r]?.[c]);
+          ctx.save();
+          ctx.font = isInitialClue
+            ? '800 30.5px "Be Vietnam Pro", system-ui, -apple-system, sans-serif'
+            : '700 30.5px "Be Vietnam Pro", system-ui, -apple-system, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
 
-          // Subtle enchanted halo ring for given clues or matching relics
-          if (engine.given[r][c] || isSameVal) {
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(midCellX, midCellY, SUDOKU_CELL_PX * 0.39, 0, Math.PI * 2);
-            ctx.fillStyle = isSameVal
-              ? 'rgba(217, 119, 6, 0.20)'
-              : `${meta?.accent ?? '#8a5630'}18`;
-            ctx.fill();
-            ctx.lineWidth = engine.given[r][c] ? 1.15 : 1;
-            ctx.strokeStyle = isSameVal
-              ? 'rgba(180, 83, 9, 0.52)'
-              : 'rgba(120, 68, 28, 0.22)';
-            ctx.stroke();
-            ctx.restore();
-          }
+          // Subtle letterpress highlight so numbers sit naturally in the parchment
+          ctx.fillStyle = 'rgba(255, 253, 244, 0.72)';
+          ctx.fillText(String(val), midCellX, midCellY + 1);
 
-          if (this.sudokuDisplayMode === 'relic_only' && relicImg) {
-            // Pure 2.5D Harry Potter Relic Mode (42x42 centered inside 52x52 cell)
-            ctx.save();
-            ctx.globalAlpha = conflict ? 0.65 : 1;
-            ctx.drawImage(relicImg, cx + 5, cy + 5, 42, 42);
-            if (!engine.given[r][c] && !conflict) {
-              ctx.fillStyle = '#10b981';
-              ctx.beginPath();
-              ctx.arc(cx + SUDOKU_CELL_PX - 7, cy + 7, 3.4, 0, Math.PI * 2);
-              ctx.fill();
-            }
-            ctx.restore();
-          } else if (this.sudokuDisplayMode === 'relic_num' && relicImg) {
-            // Default Hybrid Mode: Large 35x35 2.5D Relic + Crisp Golden Corner Numeral Badge!
-            ctx.save();
-            ctx.globalAlpha = conflict ? 0.65 : 1;
-            ctx.drawImage(relicImg, cx + 4.5, cy + 13, 35, 35);
-
-            // Corner numeral pill at top-right so numbers & icons never overlap
-            const badgeX = cx + SUDOKU_CELL_PX - 17.5;
-            const badgeY = cy + 2.5;
-            drawRoundedRect(ctx, badgeX, badgeY, 15, 15.5, 5);
-            ctx.fillStyle = conflict
-              ? '#be123c'
-              : engine.given[r][c]
-                ? 'rgba(69, 26, 3, 0.86)'
-                : 'rgba(6, 95, 70, 0.90)';
-            ctx.fill();
-            ctx.lineWidth = 0.95;
-            ctx.strokeStyle = '#fde68a';
-            ctx.stroke();
-
-            ctx.fillStyle = conflict ? '#fff1f2' : engine.given[r][c] ? '#fef08a' : '#ecfdf5';
-            ctx.font = '900 11.5px "Be Vietnam Pro", system-ui, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(String(val), badgeX + 7.5, badgeY + 8.2);
-            ctx.restore();
+          if (isWrong) {
+            ctx.fillStyle = '#b91c1c';
+          } else if (isInitialClue) {
+            ctx.fillStyle = conflict ? '#991b1b' : '#2b1407';
           } else {
-            // Number-First Mode ('num_only' or while relic PNG decodes): Large Numeral + Corner Relic Crest
-            if (relicImg) {
-              ctx.save();
-              ctx.globalAlpha = conflict ? 0.45 : 0.85;
-              ctx.drawImage(
-                relicImg,
-                cx + SUDOKU_CELL_PX - 17.5,
-                cy + SUDOKU_CELL_PX - 17.5,
-                16,
-                16
-              );
-              ctx.restore();
-            }
-            ctx.save();
-            ctx.font = engine.given[r][c]
-              ? '900 26px "Playfair Display", Georgia, serif'
-              : '800 25px "Be Vietnam Pro", system-ui, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            if (!engine.given[r][c] && !conflict) {
-              ctx.lineWidth = 2.6;
-              ctx.strokeStyle = 'rgba(255, 253, 245, 0.88)';
-              ctx.strokeText(String(val), midCellX - 1.5, midCellY + 0.5);
-            }
-            ctx.fillStyle = conflict
-              ? '#be123c'
-              : engine.given[r][c]
-                ? '#3d1c08'
-                : '#065f46';
-            ctx.fillText(String(val), midCellX - 1.5, midCellY + 0.5);
-            ctx.restore();
+            ctx.fillStyle = conflict ? '#b91c1c' : '#0f5257';
           }
-
-          if (conflict) {
-            ctx.save();
-            ctx.strokeStyle = '#e11d48';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(cx + 1.5, cy + 1.5, SUDOKU_CELL_PX - 3, SUDOKU_CELL_PX - 3);
-            ctx.restore();
-          }
+          ctx.fillText(String(val), midCellX, midCellY);
+          ctx.restore();
         } else {
-          // Feather-quill pencil notes (mini relics in relic_only mode, crisp digits otherwise)
           const mask = engine.notes[r][c];
           if (mask !== 0) {
             ctx.save();
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
+            const subPx = SUDOKU_CELL_PX / 3;
             for (let d = 1; d <= 9; d++) {
               if ((mask & (1 << d)) === 0) continue;
               const nr = Math.floor((d - 1) / 3);
               const nc = (d - 1) % 3;
-              const nx = cx + (nc + 0.5) * (SUDOKU_CELL_PX / 3);
-              const ny = cy + (nr + 0.5) * (SUDOKU_CELL_PX / 3);
-              const isMatchNote = selVal === d;
-              const miniImg =
-                this.sudokuDisplayMode === 'relic_only' ? this.getSudokuRelicImage(d) : null;
-              if (miniImg) {
-                ctx.globalAlpha = isMatchNote ? 1 : 0.82;
-                ctx.drawImage(miniImg, nx - 7, ny - 7, 14, 14);
+              const nx = cx + (nc + 0.5) * subPx;
+              const ny = cy + (nr + 0.5) * subPx + 0.5;
+              const isMatchNote = activeDigit === d;
+              if (isMatchNote) {
+                drawRoundedRect(ctx, nx - 7.5, ny - 7.5, 15, 15, 4);
+                ctx.fillStyle = '#fde047';
+                ctx.fill();
+                ctx.lineWidth = 0.8;
+                ctx.strokeStyle = '#b45309';
+                ctx.stroke();
+                ctx.font = '800 12px "Be Vietnam Pro", system-ui, sans-serif';
+                ctx.fillStyle = '#7c2d12';
               } else {
-                ctx.font = isMatchNote
-                  ? '900 12px "Be Vietnam Pro", system-ui, sans-serif'
-                  : '700 11px "Be Vietnam Pro", system-ui, sans-serif';
-                ctx.fillStyle = isMatchNote ? '#b45309' : '#6e401d';
-                ctx.fillText(String(d), nx, ny);
+                ctx.font = '700 11.5px "Be Vietnam Pro", system-ui, sans-serif';
+                ctx.fillStyle = '#6b4423';
               }
+              ctx.fillText(String(d), nx, ny);
             }
             ctx.restore();
           }
@@ -4467,331 +4722,470 @@ export class PuzzleArcadeModalController {
       }
     }
 
-    // 3. Engraved Ancient Rune Circles inside each 3x3 Palace + Gilded Palace Dividers
+    // 3. Warm Parchment Cell Gridlines, Carved Walnut 3×3 Box Borders & Brass Corner Brackets
     ctx.save();
-    const palaceRunes = ['ᚠ', 'ᚢ', 'ᚦ', 'ᚨ', 'ᚱ', 'ᚲ', 'ᚷ', 'ᚹ', 'ᛊ'];
-    for (let br = 0; br < 3; br++) {
-      for (let bc = 0; bc < 3; bc++) {
-        const idx = br * 3 + bc;
-        const px = SUDOKU_BOARD_X + (bc * 3 + 1.5) * SUDOKU_CELL_PX;
-        const py = SUDOKU_BOARD_Y + (br * 3 + 1.5) * SUDOKU_CELL_PX;
-        ctx.beginPath();
-        ctx.arc(px, py, 42, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(120, 53, 15, 0.065)';
-        ctx.lineWidth = 1.4;
-        ctx.stroke();
-
-        ctx.fillStyle = 'rgba(120, 53, 15, 0.055)';
-        ctx.font = '900 28px Georgia, serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(palaceRunes[idx], px, py);
-      }
-    }
-
-    for (let i = 0; i <= 9; i++) {
-      const isBold = i % 3 === 0;
-      ctx.lineWidth = isBold ? 2.8 : 1;
-      ctx.strokeStyle = isBold ? '#451a03' : 'rgba(120, 53, 15, 0.28)';
-
+    ctx.lineWidth = 1.1;
+    ctx.strokeStyle = '#cfb486';
+    for (let i = 1; i < 9; i++) {
+      if (i % 3 === 0) continue;
       const x = SUDOKU_BOARD_X + i * SUDOKU_CELL_PX;
+      const y = SUDOKU_BOARD_Y + i * SUDOKU_CELL_PX;
       ctx.beginPath();
       ctx.moveTo(x, SUDOKU_BOARD_Y);
       ctx.lineTo(x, SUDOKU_BOARD_Y + SUDOKU_BOARD_PX);
-      ctx.stroke();
-
-      const y = SUDOKU_BOARD_Y + i * SUDOKU_CELL_PX;
-      ctx.beginPath();
       ctx.moveTo(SUDOKU_BOARD_X, y);
       ctx.lineTo(SUDOKU_BOARD_X + SUDOKU_BOARD_PX, y);
       ctx.stroke();
-
-      if (isBold && i > 0 && i < 9) {
-        ctx.lineWidth = 0.8;
-        ctx.strokeStyle = 'rgba(253, 224, 71, 0.45)';
-        ctx.beginPath();
-        ctx.moveTo(x, SUDOKU_BOARD_Y + 2);
-        ctx.lineTo(x, SUDOKU_BOARD_Y + SUDOKU_BOARD_PX - 2);
-        ctx.moveTo(SUDOKU_BOARD_X + 2, y);
-        ctx.lineTo(SUDOKU_BOARD_X + SUDOKU_BOARD_PX - 2, y);
-        ctx.stroke();
-      }
     }
 
-    // Lumos wand-aura frame on selected cell
+    // Bold 3×3 box dividers in deep carved mahogany-walnut
+    ctx.lineWidth = 2.8;
+    ctx.strokeStyle = '#43200d';
+    for (const i of [3, 6]) {
+      const x = SUDOKU_BOARD_X + i * SUDOKU_CELL_PX;
+      const y = SUDOKU_BOARD_Y + i * SUDOKU_CELL_PX;
+      ctx.beginPath();
+      ctx.moveTo(x, SUDOKU_BOARD_Y);
+      ctx.lineTo(x, SUDOKU_BOARD_Y + SUDOKU_BOARD_PX);
+      ctx.moveTo(SUDOKU_BOARD_X, y);
+      ctx.lineTo(SUDOKU_BOARD_X + SUDOKU_BOARD_PX, y);
+      ctx.stroke();
+    }
+
     if (sel) {
       const sx = SUDOKU_BOARD_X + sel.c * SUDOKU_CELL_PX;
       const sy = SUDOKU_BOARD_Y + sel.r * SUDOKU_CELL_PX;
-      ctx.lineWidth = 2.8;
-      ctx.strokeStyle = '#b45309';
-      ctx.strokeRect(sx + 1.5, sy + 1.5, SUDOKU_CELL_PX - 3, SUDOKU_CELL_PX - 3);
-      ctx.fillStyle = '#fffbeb';
-      this.drawFourPointStar(ctx, sx + 5, sy + 5, 4.2, 1.4);
-      ctx.fill();
-      this.drawFourPointStar(ctx, sx + SUDOKU_CELL_PX - 5, sy + SUDOKU_CELL_PX - 5, 4.2, 1.4);
-      ctx.fill();
+      const selConflict = engine.hasConflict(sel.r, sel.c);
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = selConflict ? '#b91c1c' : '#9a3412';
+      ctx.strokeRect(sx + 1.25, sy + 1.25, SUDOKU_CELL_PX - 2.5, SUDOKU_CELL_PX - 2.5);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = selConflict ? '#fecaca' : 'rgba(255, 251, 235, 0.85)';
+      ctx.strokeRect(sx + 3, sy + 3, SUDOKU_CELL_PX - 6, SUDOKU_CELL_PX - 6);
     }
+
+    // Inner recessed wood-brass border around 9×9 field
+    ctx.lineWidth = 2.6;
+    ctx.strokeStyle = '#3b1c0a';
+    ctx.strokeRect(SUDOKU_BOARD_X, SUDOKU_BOARD_Y, SUDOKU_BOARD_PX, SUDOKU_BOARD_PX);
     ctx.restore();
 
-    // 4. Relic Pad: Full-width 2x5 bottom bar on Mobile Portrait, Right Grimoire Page on Desktop
-    if (this.isMobileBoardLayout()) {
+    // Heirloom brass corner brackets on the outer wooden frame
+    this.drawBrassCornerBrackets(ctx, fx + 1, fy + 1, fw - 2, fh - 2, 14);
+
+    const rem = engine.getRemainingDigitCounts();
+
+    // 4a. Portrait / Mobile: Hang Sóc Wood & Brass Single-Row 1–9 Bar below 9×9 Grid
+    if (isPortraitSudoku) {
       this.sudokuPadRects.clear();
-      const rem = engine.getRemainingDigitCounts();
-      const padTrayX = 12;
-      const padTrayY = 496;
-      const padTrayW = 476;
-      const padTrayH = 130;
+      this.sudokuActionRects.clear();
+
+      const trayX = fx;
+      const trayY = 501;
+      const trayW = fw;
+      const trayH = 64;
+
       ctx.save();
-      drawRoundedRect(ctx, padTrayX, padTrayY, padTrayW, padTrayH, 13);
-      ctx.fillStyle = 'rgba(42, 22, 10, 0.88)';
+      drawRoundedRect(ctx, trayX, trayY, trayW, trayH, 11);
+      const trayGrad = ctx.createLinearGradient(0, trayY, 0, trayY + trayH);
+      trayGrad.addColorStop(0, '#542d14');
+      trayGrad.addColorStop(1, '#2d1507');
+      ctx.fillStyle = trayGrad;
+      ctx.shadowColor = 'rgba(20, 8, 3, 0.38)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetY = 3;
       ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#f4c668';
+      ctx.shadowColor = 'transparent';
+      ctx.lineWidth = 1.8;
+      ctx.strokeStyle = '#e5a93c';
       ctx.stroke();
 
-      const cols = 5;
-      const gapX = 5;
-      const gapY = 6;
-      const btnW = (padTrayW - 16 - gapX * (cols - 1)) / cols; // ~88
-      const btnH = 55;
-      const startX = padTrayX + 8;
-      const startY = padTrayY + 7;
+      const barX = SUDOKU_BOARD_X;
+      const barY = 505;
+      const barW = SUDOKU_BOARD_PX;
+      const gap = 4;
+      const btnW = (barW - gap * 8) / 9;
+      const btnH = 54;
 
       for (let d = 1; d <= 9; d++) {
-        const pr = Math.floor((d - 1) / cols);
-        const pc = (d - 1) % cols;
-        const bx = startX + pc * (btnW + gapX);
-        const by = startY + pr * (btnH + gapY);
+        const bx = barX + (d - 1) * (btnW + gap);
+        const by = barY;
         this.sudokuPadRects.set(d, { x: bx, y: by, w: btnW, h: btnH });
 
         const done = rem[d] === 0;
-        const activeDigit = selVal === d || this.sudokuHoverPadDigit === d;
+        const isKeyActive = activeDigit === d && !done;
+        const isKeyHover = this.sudokuHoverPadDigit === d && !done;
 
-        drawRoundedRect(ctx, bx, by + 2.5, btnW, btnH - 2, 10);
-        ctx.fillStyle = done ? '#64748b' : activeDigit ? '#7c2d12' : '#6e391c';
-        ctx.fill();
-
-        drawRoundedRect(ctx, bx, by, btnW, btnH - 2.5, 10);
-        const bGrad = ctx.createLinearGradient(0, by, 0, by + btnH);
-        if (done) {
-          bGrad.addColorStop(0, '#ecfdf5');
-          bGrad.addColorStop(1, '#d1fae5');
-        } else if (activeDigit) {
-          bGrad.addColorStop(0, '#fde047');
-          bGrad.addColorStop(0.55, '#f59e0b');
-          bGrad.addColorStop(1, '#d97706');
-        } else {
-          bGrad.addColorStop(0, '#fffdf6');
-          bGrad.addColorStop(0.6, '#faeccb');
-          bGrad.addColorStop(1, '#e8ca8c');
+        if (!done) {
+          // Tactile 3D dark-walnut bottom lip
+          drawRoundedRect(ctx, bx, by + 2.5, btnW, btnH, 8.5);
+          ctx.fillStyle = '#1e0d04';
+          ctx.fill();
         }
-        ctx.fillStyle = bGrad;
+
+        drawRoundedRect(ctx, bx, by, btnW, btnH, 8.5);
+        if (done) {
+          ctx.fillStyle = 'rgba(28, 13, 5, 0.55)';
+        } else if (isKeyActive) {
+          const actGrad = ctx.createLinearGradient(0, by, 0, by + btnH);
+          actGrad.addColorStop(0, '#fff3b0');
+          actGrad.addColorStop(0.55, '#fbbf24');
+          actGrad.addColorStop(1, '#d97706');
+          ctx.fillStyle = actGrad;
+        } else if (isKeyHover) {
+          const hovGrad = ctx.createLinearGradient(0, by, 0, by + btnH);
+          hovGrad.addColorStop(0, '#fffef7');
+          hovGrad.addColorStop(1, '#fde68a');
+          ctx.fillStyle = hovGrad;
+        } else {
+          const keyGrad = ctx.createLinearGradient(0, by, 0, by + btnH);
+          keyGrad.addColorStop(0, '#fffef8');
+          keyGrad.addColorStop(0.58, '#f8e9ca');
+          keyGrad.addColorStop(1, '#ebd3a4');
+          ctx.fillStyle = keyGrad;
+        }
         ctx.fill();
-        ctx.lineWidth = activeDigit ? 2.2 : 1.4;
-        ctx.strokeStyle = done ? '#10b981' : activeDigit ? '#78350f' : '#9d6f3a';
+
+        ctx.lineWidth = isKeyActive ? 2 : 1.3;
+        ctx.strokeStyle = done
+          ? 'rgba(229, 169, 60, 0.25)'
+          : isKeyActive
+            ? '#fffbeb'
+            : '#b87d32';
         ctx.stroke();
 
-        const relicImg = this.getSudokuRelicImage(d);
-        if (relicImg) {
-          ctx.save();
-          ctx.globalAlpha = done ? 0.48 : 1;
-          ctx.drawImage(relicImg, bx + 5, by + 8, 34, 34);
-          ctx.restore();
-        }
-        ctx.fillStyle = done ? '#047857' : activeDigit ? '#3b1706' : '#4a240d';
-        ctx.font = '900 20px "Playfair Display", Georgia, serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(String(d), bx + (relicImg ? btnW * 0.72 : btnW * 0.5), by + 21);
+        ctx.font = '800 25px "Be Vietnam Pro", system-ui, -apple-system, sans-serif';
+        ctx.fillStyle = done
+          ? 'rgba(253, 230, 138, 0.35)'
+          : isKeyActive
+            ? '#3b1806'
+            : engine.pencilMode
+              ? '#6b4423'
+              : '#2b1407';
+        ctx.fillText(String(d), bx + btnW * 0.5, by + 20.5);
 
-        ctx.fillStyle = done ? '#047857' : activeDigit ? '#451a03' : '#78350f';
+        // Dark wood count pill at bottom of key
+        drawRoundedRect(ctx, bx + 5, by + 35.5, btnW - 10, 14.5, 5);
+        ctx.fillStyle = done
+          ? 'transparent'
+          : isKeyActive
+            ? 'rgba(59, 24, 6, 0.82)'
+            : 'rgba(67, 32, 13, 0.82)';
+        ctx.fill();
+
         ctx.font = '800 10px "Be Vietnam Pro", system-ui, sans-serif';
-        ctx.fillText(done ? '✓ Đủ' : `Còn ${rem[d]}`, bx + btnW * 0.68, by + 40);
+        ctx.fillStyle = done ? '#eab308' : '#fde68a';
+        ctx.fillText(done ? '✓' : String(rem[d]), bx + btnW * 0.5, by + 43.2);
       }
-
-      // Slot 10 (row 1, col 4): Erase + Mistakes button
-      const ex = startX + 4 * (btnW + gapX);
-      const ey = startY + (btnH + gapY);
-      this.sudokuEraseRect = { x: ex, y: ey, w: btnW, h: btnH };
-      drawRoundedRect(ctx, ex, ey + 2.5, btnW, btnH - 2, 10);
-      ctx.fillStyle = '#4c0519';
-      ctx.fill();
-      drawRoundedRect(ctx, ex, ey, btnW, btnH - 2.5, 10);
-      const eraseGrad = ctx.createLinearGradient(0, ey, 0, ey + btnH);
-      eraseGrad.addColorStop(0, engine.eraseMode ? '#f59e0b' : '#e11d48');
-      eraseGrad.addColorStop(1, engine.eraseMode ? '#b45309' : '#9f1239');
-      ctx.fillStyle = eraseGrad;
-      ctx.fill();
-      ctx.lineWidth = engine.eraseMode ? 2.4 : 1.5;
-      ctx.strokeStyle = engine.eraseMode ? '#fffbeb' : '#fde68a';
-      ctx.stroke();
-
-      ctx.fillStyle = '#fffbeb';
-      ctx.font = '900 12.5px "Be Vietnam Pro", system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(engine.eraseMode ? '🧹 Đang Xoá' : '🧹 Xoá Ô', ex + btnW * 0.5, ey + 19, btnW - 8);
-      ctx.font = '800 10px "Be Vietnam Pro", system-ui, sans-serif';
-      ctx.fillText(`Sai ${engine.mistakesCount}/${engine.maxMistakes}`, ex + btnW * 0.5, ey + 38, btnW - 8);
       ctx.restore();
       return;
     }
 
-    // 4b. Desktop Right Grimoire Page: Relic Lore Spotlight + 3x3 Sculpted HP Relic Pad + Erase Seal
-    this.drawParchmentSidePanel(
-      ctx,
-      SUDOKU_PAD_X,
-      SUDOKU_PAD_Y,
-      SUDOKU_PAD_W,
-      SUDOKU_PAD_H,
-      '🔮 9 BẢO BỐI HOGWARTS'
-    );
+    // 4b. Desktop / Landscape: Hang Sóc Carved Wood & Brass Control + 3×3 Numpad Dock on Right
+    this.sudokuPadRects.clear();
+    this.sudokuActionRects.clear();
 
     ctx.save();
-    // Relic Lore Spotlight Card (shows hovered/selected Harry Potter Relic!)
-    const spX = SUDOKU_PAD_X + 10;
-    const spY = SUDOKU_PAD_Y + 42;
-    const spW = SUDOKU_PAD_W - 20;
-    const spH = 52;
-    const spotMeta = HP_SUDOKU_RELIC_META[spotlightDigit] ?? HP_SUDOKU_RELIC_META[1];
-    const spotImg = this.getSudokuRelicImage(spotlightDigit);
-
-    drawRoundedRect(ctx, spX, spY, spW, spH, 11);
-    ctx.fillStyle = engine.pencilMode ? '#ecfdf5' : '#fffaf0';
+    // 3D bottom lip & shadow under right dock
+    drawRoundedRect(ctx, SUDOKU_PAD_X, SUDOKU_PAD_Y + 2.5, SUDOKU_PAD_W, SUDOKU_PAD_H, 12);
+    ctx.fillStyle = 'rgba(24, 10, 4, 0.52)';
+    ctx.shadowColor = 'rgba(20, 8, 3, 0.38)';
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetY = 4;
     ctx.fill();
-    ctx.lineWidth = 1.4;
-    ctx.strokeStyle = engine.pencilMode ? '#059669' : '#cfa66b';
+    ctx.shadowColor = 'transparent';
+
+    // Carved mahogany-oak dock panel
+    drawRoundedRect(ctx, SUDOKU_PAD_X, SUDOKU_PAD_Y, SUDOKU_PAD_W, SUDOKU_PAD_H, 12);
+    const dockGrad = ctx.createLinearGradient(0, SUDOKU_PAD_Y, 0, SUDOKU_PAD_Y + SUDOKU_PAD_H);
+    dockGrad.addColorStop(0, '#5a3116');
+    dockGrad.addColorStop(0.5, '#3e200d');
+    dockGrad.addColorStop(1, '#261206');
+    ctx.fillStyle = dockGrad;
+    ctx.fill();
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#e5a93c';
     ctx.stroke();
 
-    if (spotImg) {
-      ctx.drawImage(spotImg, spX + 5, spY + 8, 36, 36);
-    }
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#451a03';
-    ctx.font = '900 10.6px "Be Vietnam Pro", system-ui, sans-serif';
-    ctx.fillText(`${spotlightDigit} • ${spotMeta.nameVi}`, spX + 44, spY + 18, spW - 50);
+    drawRoundedRect(ctx, SUDOKU_PAD_X + 2, SUDOKU_PAD_Y + 2, SUDOKU_PAD_W - 4, SUDOKU_PAD_H - 4, 10);
+    ctx.lineWidth = 0.9;
+    ctx.strokeStyle = 'rgba(254, 243, 199, 0.28)';
+    ctx.stroke();
 
-    ctx.fillStyle = engine.pencilMode ? '#065f46' : '#7c4a21';
-    ctx.font = '700 9.1px "Be Vietnam Pro", system-ui, sans-serif';
-    ctx.fillText(
-      engine.pencilMode
-        ? '🪶 Đang bật Mực Ghi Nháp (Phím N)'
-        : `${spotMeta.loreVi}`,
-      spX + 44,
-      spY + 36,
-      spW - 50
-    );
+    const innerX = SUDOKU_PAD_X + 8;
+    const innerW = SUDOKU_PAD_W - 16; // 135px
+    const actGap = 6;
+    const actW = (innerW - actGap) / 2; // 64.5px
+    const actH = 47;
+    const actStartY = SUDOKU_PAD_Y + 8; // 14
 
-    // 3x3 Harry Potter Relic Pad (1..9)
-    this.sudokuPadRects.clear();
-    const rem = engine.getRemainingDigitCounts();
-    const btnW = 50;
-    const btnH = 88;
-    const gapX = 5;
-    const gapY = 8;
-    const startX = SUDOKU_PAD_X + (SUDOKU_PAD_W - (btnW * 3 + gapX * 2)) * 0.5;
-    const startY = SUDOKU_PAD_Y + 104;
+    const sandbox = this.sim.state.sandboxMode;
+    const canHint =
+      engine.status === 'playing' && (sandbox || engine.freeHintsLeft + engine.paidHintsLeft > 0);
+    const hintBadge = sandbox
+      ? '∞'
+      : engine.freeHintsLeft > 0
+        ? String(engine.freeHintsLeft)
+        : engine.paidHintsLeft > 0
+          ? `${engine.hintGoldCost}G`
+          : '0';
+
+    const quickActions: ReadonlyArray<{
+      key: SudokuQuickActionKey;
+      icon: string;
+      label: string;
+      active: boolean;
+      disabled: boolean;
+      isGoldCta?: boolean;
+      badge?: string;
+      badgeActive?: boolean;
+    }> = [
+      {
+        key: 'undo',
+        icon: '↩️',
+        label: 'Hoàn tác',
+        active: false,
+        disabled: !engine.canUndo,
+      },
+      {
+        key: 'erase',
+        icon: '🧹',
+        label: 'Xoá',
+        active: engine.eraseMode,
+        disabled: engine.status !== 'playing' && engine.status !== 'lost',
+      },
+      {
+        key: 'notes',
+        icon: '✏️',
+        label: 'Ghi chú',
+        active: engine.pencilMode,
+        disabled: engine.status !== 'playing',
+        badge: engine.pencilMode ? 'ON' : 'OFF',
+        badgeActive: engine.pencilMode,
+      },
+      {
+        key: 'hint',
+        icon: '💡',
+        label: 'Gợi ý',
+        active: false,
+        disabled: !canHint,
+        isGoldCta: true,
+        badge: hintBadge,
+        badgeActive: canHint && (sandbox || engine.freeHintsLeft > 0),
+      },
+    ];
+
+    quickActions.forEach((act, idx) => {
+      const ar = Math.floor(idx / 2);
+      const ac = idx % 2;
+      const ax = innerX + ac * (actW + actGap);
+      const ay = actStartY + ar * (actH + actGap);
+      this.sudokuActionRects.set(act.key, { x: ax, y: ay, w: actW, h: actH });
+
+      const isHov = this.sudokuHoverAction === act.key && !act.disabled;
+
+      if (!act.disabled) {
+        drawRoundedRect(ctx, ax, ay + 2, actW, actH, 9);
+        ctx.fillStyle = '#1a0b04';
+        ctx.fill();
+      }
+
+      drawRoundedRect(ctx, ax, ay, actW, actH, 9);
+      if (act.disabled) {
+        ctx.fillStyle = 'rgba(32, 15, 6, 0.55)';
+      } else if (act.active) {
+        const actGrad = ctx.createLinearGradient(0, ay, 0, ay + actH);
+        actGrad.addColorStop(0, '#e04f3e');
+        actGrad.addColorStop(0.55, '#b91c1c');
+        actGrad.addColorStop(1, '#7f1d1d');
+        ctx.fillStyle = actGrad;
+      } else if (act.isGoldCta) {
+        const goldGrad = ctx.createLinearGradient(0, ay, 0, ay + actH);
+        goldGrad.addColorStop(0, isHov ? '#fff3b0' : '#ffe484');
+        goldGrad.addColorStop(0.55, '#f5b301');
+        goldGrad.addColorStop(1, '#c27c08');
+        ctx.fillStyle = goldGrad;
+      } else if (isHov) {
+        const hovGrad = ctx.createLinearGradient(0, ay, 0, ay + actH);
+        hovGrad.addColorStop(0, '#fffef7');
+        hovGrad.addColorStop(1, '#fde68a');
+        ctx.fillStyle = hovGrad;
+      } else {
+        const btnGrad = ctx.createLinearGradient(0, ay, 0, ay + actH);
+        btnGrad.addColorStop(0, '#fffdf5');
+        btnGrad.addColorStop(0.58, '#f7e5be');
+        btnGrad.addColorStop(1, '#e8cb94');
+        ctx.fillStyle = btnGrad;
+      }
+      ctx.fill();
+
+      ctx.lineWidth = act.active || isHov ? 1.8 : 1.3;
+      ctx.strokeStyle = act.disabled
+        ? 'rgba(229, 169, 60, 0.22)'
+        : act.active
+          ? '#fde047'
+          : act.isGoldCta
+            ? '#fffbeb'
+            : '#b87d32';
+      ctx.stroke();
+
+      ctx.save();
+      ctx.globalAlpha = act.disabled ? 0.42 : 1;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '15px system-ui, sans-serif';
+      ctx.fillText(act.icon, ax + actW * 0.5, ay + 15.5);
+
+      ctx.font = '800 9.8px "Be Vietnam Pro", system-ui, sans-serif';
+      ctx.fillStyle = act.disabled
+        ? '#d6be96'
+        : act.active
+          ? '#fffbeb'
+          : '#3b1806';
+      ctx.fillText(act.label, ax + actW * 0.5, ay + 35, actW - 6);
+      ctx.restore();
+
+      if (act.badge) {
+        const bw = Math.max(20, act.badge.length * 5.8 + 7);
+        const bh = 13.5;
+        const bx = ax + actW - bw - 2.5;
+        const by = ay + 2.5;
+        drawRoundedRect(ctx, bx, by, bw, bh, 6.5);
+        ctx.fillStyle = act.disabled
+          ? 'rgba(59, 31, 13, 0.6)'
+          : act.badgeActive
+            ? '#15803d'
+            : '#3b1f0d';
+        ctx.fill();
+        ctx.lineWidth = 0.8;
+        ctx.strokeStyle = 'rgba(253, 230, 138, 0.6)';
+        ctx.stroke();
+        ctx.font = '800 8px "Be Vietnam Pro", system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = act.disabled ? '#a89070' : '#fef3c7';
+        ctx.fillText(act.badge, bx + bw * 0.5, by + bh * 0.54);
+      }
+    });
+
+    // Ornamental brass divider with 4-point Hogwarts star between Quick Actions and 3×3 Numpad
+    const divY = actStartY + actH * 2 + actGap + 8.5;
+    const midDockX = innerX + innerW * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(innerX + 2, divY);
+    ctx.lineTo(midDockX - 10, divY);
+    ctx.moveTo(midDockX + 10, divY);
+    ctx.lineTo(innerX + innerW - 2, divY);
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = 'rgba(244, 198, 104, 0.55)';
+    ctx.stroke();
+    this.drawFourPointStar(ctx, midDockX, divY, 5, 1.8);
+    ctx.fillStyle = '#f4c668';
+    ctx.fill();
+
+    // 3×3 Tactile Hang Sóc Ivory-Wood Number Pad (1..9)
+    const numGapX = 5;
+    const numGapY = 6;
+    const btnW = (innerW - numGapX * 2) / 3; // ~41.6px
+    const btnH = 112;
+    const startY = divY + 8.5;
 
     for (let d = 1; d <= 9; d++) {
       const pr = Math.floor((d - 1) / 3);
       const pc = (d - 1) % 3;
-      const bx = startX + pc * (btnW + gapX);
-      const by = startY + pr * (btnH + gapY);
+      const bx = innerX + pc * (btnW + numGapX);
+      const by = startY + pr * (btnH + numGapY);
       this.sudokuPadRects.set(d, { x: bx, y: by, w: btnW, h: btnH });
 
       const done = rem[d] === 0;
-      const activeDigit = selVal === d || this.sudokuHoverPadDigit === d;
-      const rMeta = HP_SUDOKU_RELIC_META[d];
+      const isKeyActive = activeDigit === d && !done;
+      const isKeyHover = this.sudokuHoverPadDigit === d && !done;
 
-      drawRoundedRect(ctx, bx, by + 3, btnW, btnH - 2, 12);
-      ctx.fillStyle = done ? '#64748b' : activeDigit ? '#7c2d12' : '#6e391c';
-      ctx.fill();
+      if (!done) {
+        // Extruded 3D dark-walnut lip
+        drawRoundedRect(ctx, bx, by + 3, btnW, btnH, 10);
+        ctx.fillStyle = '#1a0b04';
+        ctx.fill();
+      }
 
-      drawRoundedRect(ctx, bx, by, btnW, btnH - 3, 12);
-      const bGrad = ctx.createLinearGradient(0, by, 0, by + btnH - 3);
+      drawRoundedRect(ctx, bx, by, btnW, btnH, 10);
       if (done) {
-        bGrad.addColorStop(0, '#ecfdf5');
-        bGrad.addColorStop(1, '#d1fae5');
-      } else if (activeDigit) {
-        bGrad.addColorStop(0, '#fde047');
-        bGrad.addColorStop(0.55, '#f59e0b');
-        bGrad.addColorStop(1, '#d97706');
+        ctx.fillStyle = 'rgba(26, 11, 4, 0.52)';
+      } else if (isKeyActive) {
+        const actGrad = ctx.createLinearGradient(0, by, 0, by + btnH);
+        actGrad.addColorStop(0, '#fff3b0');
+        actGrad.addColorStop(0.55, '#fbbf24');
+        actGrad.addColorStop(1, '#d97706');
+        ctx.fillStyle = actGrad;
+      } else if (isKeyHover) {
+        const hovGrad = ctx.createLinearGradient(0, by, 0, by + btnH);
+        hovGrad.addColorStop(0, '#fffef8');
+        hovGrad.addColorStop(1, '#fde68a');
+        ctx.fillStyle = hovGrad;
       } else {
-        bGrad.addColorStop(0, '#fffdf6');
-        bGrad.addColorStop(0.6, '#faeccb');
-        bGrad.addColorStop(1, '#e8ca8c');
+        const keyGrad = ctx.createLinearGradient(0, by, 0, by + btnH);
+        keyGrad.addColorStop(0, '#fffef8');
+        keyGrad.addColorStop(0.58, '#f8e9ca');
+        keyGrad.addColorStop(1, '#ebd3a4');
+        ctx.fillStyle = keyGrad;
       }
-      ctx.fillStyle = bGrad;
       ctx.fill();
-      ctx.lineWidth = activeDigit ? 2.2 : 1.5;
-      ctx.strokeStyle = done ? '#10b981' : activeDigit ? '#78350f' : '#9d6f3a';
-      ctx.stroke();
 
-      const relicImg = this.getSudokuRelicImage(d);
-      if (relicImg) {
-        ctx.save();
-        ctx.globalAlpha = done ? 0.48 : 1;
-        ctx.drawImage(relicImg, bx + 3, by + 9, 31, 31);
-        ctx.restore();
+      // Top ivory specular gloss
+      if (!done) {
+        drawRoundedRect(ctx, bx + 2, by + 1.5, btnW - 4, 14, 7);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.fill();
       }
 
-      ctx.fillStyle = done ? '#047857' : activeDigit ? '#3b1706' : '#4a240d';
-      ctx.font = '900 18px "Playfair Display", Georgia, serif';
+      ctx.lineWidth = isKeyActive ? 2.1 : 1.4;
+      ctx.strokeStyle = done
+        ? 'rgba(229, 169, 60, 0.24)'
+        : isKeyActive
+          ? '#fffbeb'
+          : engine.pencilMode
+            ? '#d97706'
+            : '#b87d32';
+      if (engine.pencilMode && !done && !isKeyActive) {
+        ctx.setLineDash([3.5, 2.5]);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(String(d), bx + (relicImg ? btnW * 0.77 : btnW * 0.5), by + 24);
-
-      // Short relic name & remaining count pill
-      drawRoundedRect(ctx, bx + 3, by + 54, btnW - 6, 22, 7);
+      ctx.font = '800 33px "Be Vietnam Pro", system-ui, -apple-system, sans-serif';
       ctx.fillStyle = done
-        ? 'rgba(16, 185, 129, 0.2)'
-        : activeDigit
-          ? 'rgba(69, 26, 3, 0.24)'
-          : 'rgba(120, 53, 15, 0.11)';
-      ctx.fill();
+        ? 'rgba(253, 230, 138, 0.3)'
+        : isKeyActive
+          ? '#3b1806'
+          : engine.pencilMode
+            ? '#6b4423'
+            : '#2b1407';
+      ctx.fillText(String(d), bx + btnW * 0.5, by + 43);
 
-      ctx.fillStyle = done ? '#047857' : activeDigit ? '#fffbeb' : '#633416';
-      ctx.font = '800 8.5px "Be Vietnam Pro", system-ui, sans-serif';
-      ctx.fillText(
-        done ? `✓ ${rMeta.shortVi}` : `${rMeta.shortVi} (${rem[d]})`,
-        bx + btnW * 0.5,
-        by + 65.5,
-        btnW - 8
-      );
+      // Recessed dark-wood count pill at bottom of key (matches 1/777 Hang Sóc pills)
+      drawRoundedRect(ctx, bx + 5, by + 76, btnW - 10, 22, 7);
+      ctx.fillStyle = done
+        ? 'transparent'
+        : isKeyActive
+          ? 'rgba(59, 24, 6, 0.86)'
+          : 'rgba(67, 32, 13, 0.85)';
+      ctx.fill();
+      if (!done) {
+        ctx.lineWidth = 0.8;
+        ctx.strokeStyle = 'rgba(244, 198, 104, 0.45)';
+        ctx.stroke();
+      }
+
+      ctx.font = '800 11.5px "Be Vietnam Pro", system-ui, sans-serif';
+      ctx.fillStyle = done ? '#eab308' : '#fde68a';
+      ctx.fillText(done ? '✓' : String(rem[d]), bx + btnW * 0.5, by + 87.5);
     }
 
-    // Howler Wax-Seal Erase Button + Mistake Counter
-    const ex = startX;
-    const ey = startY + 3 * (btnH + gapY) + 4;
-    const ew = btnW * 3 + gapX * 2;
-    const eh = 42;
-    this.sudokuEraseRect = { x: ex, y: ey, w: ew, h: eh };
-    drawRoundedRect(ctx, ex, ey + 2.5, ew, eh - 2, 10);
-    ctx.fillStyle = '#4c0519';
-    ctx.fill();
-    drawRoundedRect(ctx, ex, ey, ew, eh - 2.5, 10);
-    const eraseGrad = ctx.createLinearGradient(0, ey, 0, ey + eh);
-    eraseGrad.addColorStop(0, engine.eraseMode ? '#f59e0b' : '#e11d48');
-    eraseGrad.addColorStop(1, engine.eraseMode ? '#b45309' : '#9f1239');
-    ctx.fillStyle = eraseGrad;
-    ctx.fill();
-    ctx.lineWidth = engine.eraseMode ? 2.2 : 1.4;
-    ctx.strokeStyle = engine.eraseMode ? '#fffbeb' : '#fde68a';
-    ctx.stroke();
-
-    ctx.fillStyle = '#fffbeb';
-    ctx.font = '800 11px "Be Vietnam Pro", system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(
-      engine.eraseMode
-        ? `🧹 Đang Bật Xoá Ô • Chạm ô để xoá`
-        : `🧹 Xoá Ô (Del) • Sai: ${engine.mistakesCount}/${engine.maxMistakes}`,
-      ex + ew * 0.5,
-      ey + (eh - 2) * 0.52,
-      ew - 12
-    );
     ctx.restore();
   }
 
@@ -5276,156 +5670,6 @@ export class PuzzleArcadeModalController {
       }
     }
     ctx.restore();
-
-    // 6. Right-hand Order of the Phoenix vs Death Eater Duel Scroll Panel (Desktop only — Mobile gives 100% width to the 13x13 board!)
-    if (this.isMobileBoardLayout()) return;
-    this.drawParchmentSidePanel(
-      ctx,
-      CARO_SIDE_X,
-      CARO_SIDE_Y,
-      CARO_SIDE_W,
-      CARO_SIDE_H,
-      '🔥 HỘI PHƯỢNG HOÀNG'
-    );
-
-    ctx.save();
-    const midX = CARO_SIDE_X + CARO_SIDE_W * 0.5;
-    this.drawCharacterPortraitMedallion(
-      ctx,
-      midX,
-      CARO_SIDE_Y + 80,
-      31,
-      engine.opponent.portraitKey,
-      engine.opponent.emoji
-    );
-
-    ctx.fillStyle = '#3b1508';
-    ctx.font = '900 13.5px "Playfair Display", Georgia, serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(engine.opponent.name, midX, CARO_SIDE_Y + 130, CARO_SIDE_W - 18);
-
-    ctx.fillStyle = '#065f46';
-    ctx.font = '700 10px "Be Vietnam Pro", system-ui, sans-serif';
-    ctx.fillText(engine.opponent.title, midX, CARO_SIDE_Y + 148, CARO_SIDE_W - 18);
-
-    // Rolled Marauder Parchment Dialogue Scroll
-    const scX = CARO_SIDE_X + 12;
-    const scY = CARO_SIDE_Y + 166;
-    const scW = CARO_SIDE_W - 24;
-    const scH = 98;
-    drawRoundedRect(ctx, scX - 3, scY - 3, scW + 6, 6, 3);
-    ctx.fillStyle = '#78350f';
-    ctx.fill();
-    drawRoundedRect(ctx, scX - 3, scY + scH - 3, scW + 6, 6, 3);
-    ctx.fill();
-
-    drawRoundedRect(ctx, scX, scY, scW, scH, 8);
-    ctx.fillStyle = '#fffaf0';
-    ctx.fill();
-    ctx.lineWidth = 1.3;
-    ctx.strokeStyle = '#cfa66b';
-    ctx.stroke();
-
-    ctx.fillStyle = '#4a240d';
-    ctx.font = '600 10.4px "Be Vietnam Pro", system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    this.drawWrappedCanvasText(
-      ctx,
-      `“${engine.opponent.quote}”`,
-      scX + 8,
-      scY + 18,
-      scW - 16,
-      15.2,
-      5
-    );
-
-    // Recessed Medallion Seal Legend (Order of the Phoenix vs Death Eater Dark Mark)
-    const lgX = CARO_SIDE_X + 11;
-    const lgY = CARO_SIDE_Y + 280;
-    const lgW = CARO_SIDE_W - 22;
-    drawRoundedRect(ctx, lgX, lgY, lgW, 74, 12);
-    ctx.fillStyle = '#ecd4a4';
-    ctx.fill();
-    ctx.lineWidth = 1.4;
-    ctx.strokeStyle = '#b48347';
-    ctx.stroke();
-
-    this.drawCaroStone(ctx, lgX + 19, lgY + 21.5, 1, false, 0.78);
-    ctx.fillStyle = '#7f1d1d';
-    ctx.font = '800 10.2px "Be Vietnam Pro", system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('Bạn: Ấn Phượng Hoàng', lgX + 36, lgY + 21.5, lgW - 42);
-
-    this.drawCaroStone(ctx, lgX + 19, lgY + 52.5, 2, false, 0.78);
-    ctx.fillStyle = '#064e3b';
-    ctx.fillText('Địch: Ấn Đầu Lâu Xà', lgX + 36, lgY + 52.5, lgW - 42);
-
-    // Turn / Priori Incantatem Victory Banner
-    let bannerTop = '#fde047';
-    let bannerBot = '#eab308';
-    let bannerBorder = '#92400e';
-    let bannerInk = '#3b1706';
-    let bannerText = '🔥 Lượt Hội Phượng Hoàng!';
-    if (engine.status === 'ai_thinking') {
-      bannerTop = '#a7f3d0';
-      bannerBot = '#34d399';
-      bannerBorder = '#065f46';
-      bannerInk = '#022c22';
-      bannerText = `🐍 ${engine.opponent.name} đang đặt ấn...`;
-    } else if (engine.status === 'won') {
-      bannerTop = '#fde047';
-      bannerBot = '#f97316';
-      bannerBorder = '#991b1b';
-      bannerInk = '#450a0a';
-      bannerText = '⚡ Priori Incantatem — 5 Ấn Rực Lửa!';
-    } else if (engine.status === 'lost') {
-      bannerTop = '#fecdd3';
-      bannerBot = '#fb7185';
-      bannerBorder = '#9f1239';
-      bannerInk = '#4c0519';
-      bannerText = '🐍 Lộ 5 Ấn Hắc Ám! Xoay Thời Gian!';
-    } else if (engine.status === 'draw') {
-      bannerTop = '#e2e8f0';
-      bannerBot = '#cbd5e1';
-      bannerBorder = '#475569';
-      bannerInk = '#1e293b';
-      bannerText = '🤝 Kín Bản Đồ — Bấm Trải Lại!';
-    }
-
-    const bnY = CARO_SIDE_Y + 370;
-    drawRoundedRect(ctx, lgX, bnY + 2.5, lgW, 46, 11);
-    ctx.fillStyle = bannerBorder;
-    ctx.fill();
-    drawRoundedRect(ctx, lgX, bnY, lgW, 46, 11);
-    const bnGrad = ctx.createLinearGradient(0, bnY, 0, bnY + 46);
-    bnGrad.addColorStop(0, bannerTop);
-    bnGrad.addColorStop(1, bannerBot);
-    ctx.fillStyle = bnGrad;
-    ctx.fill();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = bannerBorder;
-    ctx.stroke();
-
-    ctx.fillStyle = bannerInk;
-    ctx.font = '800 10.6px "Be Vietnam Pro", system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(bannerText, midX, bnY + 23.5, lgW - 12);
-
-    ctx.fillStyle = '#7a4b26';
-    ctx.font = '700 9.6px "Be Vietnam Pro", system-ui, sans-serif';
-    ctx.fillText(
-      engine.runeSealCount > 0
-        ? `🔒 ${engine.runeSealCount} Ấn Chì Cổ Ngữ khóa ô trung tâm`
-        : 'Nối 5 ấn liên tiếp ngang / dọc / chéo',
-      midX,
-      CARO_SIDE_Y + 448,
-      CARO_SIDE_W - 16
-    );
-    ctx.restore();
   }
 
   private drawCaroStone(
@@ -5437,8 +5681,8 @@ export class PuzzleArcadeModalController {
     scale = 1
   ): void {
     if (stone === 0) return;
-    const drawSz = 34 * scale;
-    const rad = 15.4 * scale;
+    const drawSz = 36 * scale;
+    const rad = 16.3 * scale;
 
     ctx.save();
     // Warm parchment contact shadow
@@ -5596,9 +5840,9 @@ export class PuzzleArcadeModalController {
     for (const beam of this.chessSpellBeams) {
       const t = Math.min(1, beam.age / beam.duration);
       const alpha = Math.max(0, 1 - t * t);
-      const outerCol = beam.isWhiteCaster ? '#ef4444' : '#10b981';
-      const midCol = beam.isWhiteCaster ? '#f59e0b' : '#34d399';
-      const coreCol = beam.isWhiteCaster ? '#fef9c3' : '#ecfdf5';
+      const outerCol = beam.isWhiteCaster ? '#d97706' : '#059669';
+      const midCol = beam.isWhiteCaster ? '#fbbf24' : '#6ee7b7';
+      const coreCol = beam.isWhiteCaster ? '#fffbeb' : '#f8fafc';
 
       const dx = beam.x1 - beam.x0;
       const dy = beam.y1 - beam.y0;
@@ -5676,17 +5920,17 @@ export class PuzzleArcadeModalController {
     ctx.save();
     drawRoundedRect(
       ctx,
-      CHESS_BOARD_X - 13,
-      CHESS_BOARD_Y - 13,
-      CHESS_BOARD_PX + 26,
-      CHESS_BOARD_PX + 26,
-      16
+      CHESS_BOARD_X - 10,
+      CHESS_BOARD_Y - 10,
+      CHESS_BOARD_PX + 20,
+      CHESS_BOARD_PX + 20,
+      14
     );
     const frameGrad = ctx.createLinearGradient(
       0,
-      CHESS_BOARD_Y - 13,
+      CHESS_BOARD_Y - 10,
       0,
-      CHESS_BOARD_Y + CHESS_BOARD_PX + 13
+      CHESS_BOARD_Y + CHESS_BOARD_PX + 10
     );
     frameGrad.addColorStop(0, '#16302b'); // Slytherin obsidian-emerald top
     frameGrad.addColorStop(0.48, '#291d18');
@@ -5694,10 +5938,10 @@ export class PuzzleArcadeModalController {
     frameGrad.addColorStop(1, '#4c1118'); // Gryffindor deep burgundy-oak bottom
     ctx.fillStyle = frameGrad;
     ctx.shadowColor = 'rgba(8, 5, 4, 0.72)';
-    ctx.shadowBlur = 18;
-    ctx.shadowOffsetY = 6;
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = 4;
     ctx.fill();
-    ctx.lineWidth = 2.4;
+    ctx.lineWidth = 2.2;
     ctx.strokeStyle = '#f4c668';
     ctx.stroke();
     ctx.shadowColor = 'transparent';
@@ -5705,26 +5949,26 @@ export class PuzzleArcadeModalController {
     // Subtle inlaid house heraldic trim strips (top Slytherin emerald, bottom Gryffindor scarlet)
     ctx.save();
     ctx.strokeStyle = 'rgba(52, 211, 153, 0.42)';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.8;
     ctx.beginPath();
-    ctx.moveTo(CHESS_BOARD_X + 12, CHESS_BOARD_Y - 10.5);
-    ctx.lineTo(CHESS_BOARD_X + CHESS_BOARD_PX - 12, CHESS_BOARD_Y - 10.5);
+    ctx.moveTo(CHESS_BOARD_X + 12, CHESS_BOARD_Y - 8);
+    ctx.lineTo(CHESS_BOARD_X + CHESS_BOARD_PX - 12, CHESS_BOARD_Y - 8);
     ctx.stroke();
 
     ctx.strokeStyle = 'rgba(251, 191, 36, 0.58)';
     ctx.beginPath();
-    ctx.moveTo(CHESS_BOARD_X + 12, CHESS_BOARD_Y + CHESS_BOARD_PX + 10.5);
-    ctx.lineTo(CHESS_BOARD_X + CHESS_BOARD_PX - 12, CHESS_BOARD_Y + CHESS_BOARD_PX + 10.5);
+    ctx.moveTo(CHESS_BOARD_X + 12, CHESS_BOARD_Y + CHESS_BOARD_PX + 8);
+    ctx.lineTo(CHESS_BOARD_X + CHESS_BOARD_PX - 12, CHESS_BOARD_Y + CHESS_BOARD_PX + 8);
     ctx.stroke();
     ctx.restore();
 
     this.drawBrassCornerBrackets(
       ctx,
-      CHESS_BOARD_X - 11.5,
-      CHESS_BOARD_Y - 11.5,
-      CHESS_BOARD_PX + 23,
-      CHESS_BOARD_PX + 23,
-      15
+      CHESS_BOARD_X - 9,
+      CHESS_BOARD_Y - 9,
+      CHESS_BOARD_PX + 18,
+      CHESS_BOARD_PX + 18,
+      13
     );
 
     const sel = engine.selected;
@@ -5822,6 +6066,24 @@ export class PuzzleArcadeModalController {
           ctx.fillRect(sx, sy, CHESS_CELL_PX, CHESS_CELL_PX);
         }
 
+        // Hint highlight on origin and destination squares (💡 Gợi Ý)
+        if (engine.hintMove && engine.status === 'playing') {
+          const isHintFrom = engine.hintMove.fromR === r && engine.hintMove.fromC === c;
+          const isHintTo = engine.hintMove.toR === r && engine.hintMove.toC === c;
+          if (isHintFrom || isHintTo) {
+            const hPulse = 0.78 + 0.22 * Math.sin(now * 0.008);
+            ctx.save();
+            ctx.fillStyle = isHintTo
+              ? `rgba(16, 185, 129, ${(0.34 * hPulse).toFixed(2)})`
+              : `rgba(250, 204, 21, ${(0.28 * hPulse).toFixed(2)})`;
+            ctx.fillRect(sx, sy, CHESS_CELL_PX, CHESS_CELL_PX);
+            ctx.lineWidth = 2.6;
+            ctx.strokeStyle = isHintTo ? '#34d399' : '#fde047';
+            ctx.strokeRect(sx + 2, sy + 2, CHESS_CELL_PX - 4, CHESS_CELL_PX - 4);
+            ctx.restore();
+          }
+        }
+
         // Legal move markers (Snitch star for empty square, arcane spell-lock ring for captures)
         const leg = legalMap.get(`${r},${c}`);
         if (leg) {
@@ -5872,7 +6134,7 @@ export class PuzzleArcadeModalController {
     ctx.lineWidth = 1.6;
     ctx.strokeRect(CHESS_BOARD_X, CHESS_BOARD_Y, CHESS_BOARD_PX, CHESS_BOARD_PX);
 
-    ctx.font = '800 9.5px "Be Vietnam Pro", system-ui, sans-serif';
+    ctx.font = '800 9px "Be Vietnam Pro", system-ui, sans-serif';
     ctx.fillStyle = '#fde68a';
     for (let i = 0; i < 8; i++) {
       ctx.textAlign = 'center';
@@ -5880,11 +6142,11 @@ export class PuzzleArcadeModalController {
       ctx.fillText(
         String.fromCharCode(97 + i),
         CHESS_BOARD_X + (i + 0.5) * CHESS_CELL_PX,
-        CHESS_BOARD_Y + CHESS_BOARD_PX + 7.5
+        CHESS_BOARD_Y + CHESS_BOARD_PX + 5.5
       );
       ctx.fillText(
         String(8 - i),
-        CHESS_BOARD_X - 7.5,
+        CHESS_BOARD_X - 5.5,
         CHESS_BOARD_Y + (i + 0.5) * CHESS_CELL_PX
       );
     }
@@ -5970,6 +6232,69 @@ export class PuzzleArcadeModalController {
       );
     }
 
+    // 3a. Magical Hint Guide Arrow & Target Badge (when player clicked 💡 Gợi Ý)
+    if (engine.hintMove && engine.status === 'playing' && !this.chessMoveAnim) {
+      const hm = engine.hintMove;
+      const hx0 = CHESS_BOARD_X + (hm.fromC + 0.5) * CHESS_CELL_PX;
+      const hy0 = CHESS_BOARD_Y + (hm.fromR + 0.5) * CHESS_CELL_PX;
+      const hx1 = CHESS_BOARD_X + (hm.toC + 0.5) * CHESS_CELL_PX;
+      const hy1 = CHESS_BOARD_Y + (hm.toR + 0.5) * CHESS_CELL_PX;
+      const dx = hx1 - hx0;
+      const dy = hy1 - hy0;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 4) {
+        const ux = dx / dist;
+        const uy = dy / dist;
+        const startX = hx0 + ux * 12;
+        const startY = hy0 + uy * 12;
+        const endX = hx1 - ux * 11;
+        const endY = hy1 - uy * 11;
+        const arrowPulse = 0.8 + 0.2 * Math.sin(now * 0.009);
+
+        ctx.save();
+        ctx.globalAlpha = arrowPulse;
+        ctx.shadowColor = '#10b981';
+        ctx.shadowBlur = 10;
+        ctx.strokeStyle = '#34d399';
+        ctx.lineWidth = 4.2;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+
+        // Inner golden core line
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = '#fef08a';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+
+        // Arrowhead pointing to destination square
+        const headLen = 10.5;
+        const angle = Math.atan2(dy, dx);
+        ctx.fillStyle = '#34d399';
+        ctx.strokeStyle = '#fef08a';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(hx1 - ux * 4, hy1 - uy * 4);
+        ctx.lineTo(
+          hx1 - ux * 4 - headLen * Math.cos(angle - Math.PI / 6),
+          hy1 - uy * 4 - headLen * Math.sin(angle - Math.PI / 6)
+        );
+        ctx.lineTo(
+          hx1 - ux * 4 - headLen * Math.cos(angle + Math.PI / 6),
+          hy1 - uy * 4 - headLen * Math.sin(angle + Math.PI / 6)
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
     // 3b. Gương Chiếu Hậu Pháp Thuật (Turning-Point Move Review) Overlay on Chessboard
     const chessReview = engine.getTurningPointReview();
     if (
@@ -6008,246 +6333,6 @@ export class PuzzleArcadeModalController {
       }
     }
     ctx.restore();
-
-    // 4. Right-hand Hogwarts Great Hall Strategy Scroll (Desktop only — Mobile gives 100% width to the 8x8 board!)
-    if (this.isMobileBoardLayout()) return;
-    this.drawParchmentSidePanel(
-      ctx,
-      CHESS_SIDE_X,
-      CHESS_SIDE_Y,
-      CHESS_SIDE_W,
-      CHESS_SIDE_H,
-      '⚡ ĐẠI SẢNH CỜ PHÙ THỦY'
-    );
-
-    ctx.save();
-    const midX = CHESS_SIDE_X + CHESS_SIDE_W * 0.5;
-    const obX = CHESS_SIDE_X + 10;
-    const obW = CHESS_SIDE_W - 20;
-
-    // Row 1: Compact Opponent Portrait Medallion + Mission Subtitle
-    this.drawCharacterPortraitMedallion(
-      ctx,
-      CHESS_SIDE_X + 27,
-      CHESS_SIDE_Y + 64,
-      15.5,
-      engine.opponentPortrait,
-      engine.opponentEmoji
-    );
-
-    ctx.fillStyle = '#4a240d';
-    ctx.font = '900 11.4px "Playfair Display", Georgia, serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(engine.opponentName, CHESS_SIDE_X + 49, CHESS_SIDE_Y + 56, CHESS_SIDE_W - 58);
-
-    ctx.fillStyle = '#991b1b';
-    ctx.font = '700 9.4px "Be Vietnam Pro", system-ui, sans-serif';
-    ctx.fillText(
-      engine.subMode === 'tactics' ? `⚡ ${engine.title}` : '👑 Đại Chiến 8×8 • Gryffindor',
-      CHESS_SIDE_X + 49,
-      CHESS_SIDE_Y + 72,
-      CHESS_SIDE_W - 58
-    );
-
-    // Row 2: Harry Potter Character Spotlight Card (hovered -> selected -> last moved -> Dumbledore)
-    let focusPiece: ChessPiece | null = null;
-    if (this.chessHoverSquare) {
-      focusPiece = engine.board[this.chessHoverSquare.r]?.[this.chessHoverSquare.c] ?? null;
-    }
-    if (!focusPiece && sel) {
-      focusPiece = engine.board[sel.r]?.[sel.c] ?? null;
-    }
-    if (!focusPiece && engine.lastMove) {
-      focusPiece = engine.board[engine.lastMove.toR]?.[engine.lastMove.toC] ?? null;
-    }
-    if (!focusPiece) {
-      focusPiece = { color: 'w', type: 'k' };
-    }
-
-    const focusKey = `${focusPiece.color}${focusPiece.type}`;
-    const meta = HP_CHESS_PIECE_META[focusKey] ?? HP_CHESS_PIECE_META.wk;
-    const focusIsWhite = focusPiece.color === 'w';
-
-    const spY = CHESS_SIDE_Y + 92;
-    const spH = 118;
-    drawRoundedRect(ctx, obX, spY, obW, spH, 11);
-    const spBg = ctx.createLinearGradient(0, spY, 0, spY + spH);
-    if (focusIsWhite) {
-      spBg.addColorStop(0, '#fffdf7');
-      spBg.addColorStop(1, '#f9e4bc');
-    } else {
-      spBg.addColorStop(0, '#f4fbf8');
-      spBg.addColorStop(1, '#d7ede4');
-    }
-    ctx.fillStyle = spBg;
-    ctx.fill();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = focusIsWhite ? '#d97706' : '#059669';
-    ctx.stroke();
-
-    // Left arched showcase alcove with zoomed 2.5D Chibi figurine
-    const alcX = obX + 5;
-    const alcY = spY + 7;
-    const alcW = 54;
-    const alcH = spH - 14;
-    drawRoundedRect(ctx, alcX, alcY, alcW, alcH, 9);
-    const alcGrad = ctx.createLinearGradient(0, alcY, 0, alcY + alcH);
-    if (focusIsWhite) {
-      alcGrad.addColorStop(0, '#991b1b');
-      alcGrad.addColorStop(1, '#450a0a');
-    } else {
-      alcGrad.addColorStop(0, '#065f46');
-      alcGrad.addColorStop(1, '#08201b');
-    }
-    ctx.fillStyle = alcGrad;
-    ctx.fill();
-    ctx.lineWidth = 1.2;
-    ctx.strokeStyle = focusIsWhite ? '#fbbf24' : '#6ee7b7';
-    ctx.stroke();
-
-    const focusImg = this.chessPieceImages.get(focusKey);
-    if (focusImg && focusImg.complete && focusImg.naturalWidth > 0) {
-      ctx.save();
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(focusImg, alcX - 2, alcY + 18, 58, 66);
-      ctx.restore();
-    } else {
-      this.drawWizardChessPiece(ctx, alcX + alcW * 0.5, alcY + alcH * 0.58, focusPiece, 1.05, false);
-    }
-
-    // Right character lore details
-    const tx = alcX + alcW + 6;
-    const tw = obW - (alcW + 16);
-
-    // House crest pill
-    drawRoundedRect(ctx, tx, spY + 9, tw, 17, 8.5);
-    ctx.fillStyle = focusIsWhite ? '#7f1d1d' : '#064e3b';
-    ctx.fill();
-    ctx.fillStyle = focusIsWhite ? '#fef08a' : '#a7f3d0';
-    ctx.font = '800 8.2px "Be Vietnam Pro", system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(
-      focusIsWhite ? '🦁 HỘI PHƯỢNG HOÀNG' : '🐍 SLYTHERIN HẮC ÁM',
-      tx + tw * 0.5,
-      spY + 17.5,
-      tw - 6
-    );
-
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = focusIsWhite ? '#4a1807' : '#063328';
-    ctx.font = '900 10.6px "Playfair Display", Georgia, serif';
-    ctx.fillText(meta.name, tx, spY + 44, tw);
-
-    ctx.fillStyle = focusIsWhite ? '#b91c1c' : '#047857';
-    ctx.font = '800 9.6px "Be Vietnam Pro", system-ui, sans-serif';
-    ctx.fillText(`${meta.glyph} ${meta.roleVi}`, tx, spY + 61, tw);
-
-    ctx.fillStyle = '#5c3317';
-    ctx.font = '600 9px "Be Vietnam Pro", system-ui, sans-serif';
-    if (engine.subMode === 'tactics') {
-      this.drawWrappedCanvasText(ctx, engine.subtitle, tx, spY + 78, tw, 12.5, 3);
-    } else {
-      ctx.fillText(`✨ ${meta.spellName}`, tx, spY + 79, tw);
-      ctx.fillStyle = '#7c4a21';
-      ctx.font = '600 8.5px "Be Vietnam Pro", system-ui, sans-serif';
-      ctx.fillText('Di chuột xem thông tin quân', tx, spY + 98, tw);
-    }
-
-    // Row 3: Captured Harry Potter Figurines Trophy Shelves
-    const trY = CHESS_SIDE_Y + 222;
-    const trH = 124;
-    drawRoundedRect(ctx, obX, trY, obW, trH, 11);
-    ctx.fillStyle = '#ecd4a4';
-    ctx.fill();
-    ctx.lineWidth = 1.4;
-    ctx.strokeStyle = '#b48347';
-    ctx.stroke();
-
-    ctx.fillStyle = '#064e3b';
-    ctx.font = '800 9.4px "Be Vietnam Pro", system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText('🐍 Phe Hắc Ám bạn đã hạ:', obX + 8, trY + 18);
-    this.drawCapturedChessRow(ctx, obX + 12, trY + 41, obW - 24, engine.capturedByWhite, 'b');
-
-    ctx.strokeStyle = 'rgba(138, 86, 48, 0.25)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(obX + 8, trY + 62);
-    ctx.lineTo(obX + obW - 8, trY + 62);
-    ctx.stroke();
-
-    ctx.fillStyle = '#7f1d1d';
-    ctx.fillText('🦁 Phe Gryffindor đã ngã:', obX + 8, trY + 80);
-    this.drawCapturedChessRow(ctx, obX + 12, trY + 103, obW - 24, engine.capturedByBlack, 'w');
-
-    // Row 4: Chunky Turn / Check / Checkmate Banner
-    let cTop = '#fde047';
-    let cBot = '#eab308';
-    let cBorder = '#92400e';
-    let cInk = '#3b1706';
-    let cText = whiteInCheck
-      ? '⚠️ Cụ Dumbledore đang bị chiếu!'
-      : '🦁 Lượt bạn • Quân Gryffindor';
-    if (engine.status === 'ai_thinking') {
-      cTop = '#a7f3d0';
-      cBot = '#10b981';
-      cBorder = '#065f46';
-      cInk = '#022c22';
-      cText = `🐍 ${engine.opponentName} đang niệm chú...`;
-    } else if (engine.status === 'won') {
-      cTop = '#86efac';
-      cBot = '#22c55e';
-      cBorder = '#166534';
-      cInk = '#052e16';
-      cText = '🏆 Chiếu bí thế lực Hắc Ám!';
-    } else if (engine.status === 'lost') {
-      cTop = '#fecdd3';
-      cBot = '#fb7185';
-      cBorder = '#9f1239';
-      cInk = '#4c0519';
-      cText = '💥 Gryffindor thất thủ! Đi Lại / Ván Mới';
-    } else if (engine.status === 'draw') {
-      cTop = '#e2e8f0';
-      cBot = '#cbd5e1';
-      cBorder = '#475569';
-      cInk = '#1e293b';
-      cText = '🤝 Hoà cờ tại Đại Sảnh Đường!';
-    }
-
-    const cbY = CHESS_SIDE_Y + 358;
-    drawRoundedRect(ctx, obX, cbY + 2.5, obW, 44, 11);
-    ctx.fillStyle = cBorder;
-    ctx.fill();
-    drawRoundedRect(ctx, obX, cbY, obW, 44, 11);
-    const cbGrad = ctx.createLinearGradient(0, cbY, 0, cbY + 44);
-    cbGrad.addColorStop(0, cTop);
-    cbGrad.addColorStop(1, cBot);
-    ctx.fillStyle = cbGrad;
-    ctx.fill();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = cBorder;
-    ctx.stroke();
-
-    ctx.fillStyle = cInk;
-    ctx.font = '800 10.2px "Be Vietnam Pro", system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(cText, midX, cbY + 22.5, obW - 10);
-
-    ctx.fillStyle = '#7a4b26';
-    ctx.font = '700 9.4px "Be Vietnam Pro", system-ui, sans-serif';
-    ctx.fillText(
-      `Nước đi: ${engine.moveCount} • Chạm hoặc kéo thả quân`,
-      midX,
-      CHESS_SIDE_Y + 434,
-      obW
-    );
-    ctx.restore();
   }
 
   private drawCapturedChessRow(
@@ -6282,9 +6367,9 @@ export class PuzzleArcadeModalController {
   }
 
   /**
-   * Renders a 2.5D Chibi Harry Potter Chess Figurine from `/paintings/chess/{wk..bp}.png`
-   * (Gryffindor Scarlet-Gold vs Slytherin Emerald-Silver) with animated levitation aura
-   * and an instant pedestal+glyph fallback while sprites decode.
+   * Renders a unified 2.5D Hogwarts Wizard's Chess Armored Stone Figurine from `/paintings/chess/{wk..bp}.png`
+   * (Identical sculpt across both sides: Ivory-Gold vs Obsidian-Silver/Emerald) with animated levitation aura
+   * and an instant matching-silhouette pedestal+glyph fallback while sprites decode.
    */
   private drawWizardChessPiece(
     ctx: CanvasRenderingContext2D,
@@ -6304,29 +6389,29 @@ export class PuzzleArcadeModalController {
     ctx.translate(cx, cy);
     ctx.scale(scale, scale);
 
-    // 1. Ambient ground shadow + house reflection rim so dark Slytherin robes pop on dark marble
+    // 1. Ambient ground shadow + reflection rim so both Ivory-Gold and Obsidian-Emerald pop on every square
     if (isSelected) {
       ctx.save();
       ctx.beginPath();
       ctx.ellipse(0, 14.5, 19, 7.6, 0, 0, Math.PI * 2);
-      ctx.fillStyle = isWhite ? 'rgba(250, 204, 21, 0.38)' : 'rgba(16, 185, 129, 0.38)';
+      ctx.fillStyle = isWhite ? 'rgba(250, 204, 21, 0.38)' : 'rgba(52, 211, 153, 0.38)';
       ctx.fill();
       ctx.lineWidth = 1.6;
       ctx.setLineDash([4, 3]);
       ctx.lineDashOffset = -now * 0.02;
-      ctx.strokeStyle = isWhite ? '#fde047' : '#6ee7b7';
+      ctx.strokeStyle = isWhite ? '#fde047' : '#a7f3d0';
       ctx.stroke();
       ctx.restore();
     } else {
       ctx.beginPath();
       ctx.ellipse(0, 14.8, 16.4, 6.2, 0, 0, Math.PI * 2);
-      ctx.fillStyle = isWhite ? 'rgba(254, 240, 138, 0.18)' : 'rgba(110, 231, 183, 0.24)';
+      ctx.fillStyle = isWhite ? 'rgba(254, 243, 199, 0.2)' : 'rgba(167, 243, 208, 0.28)';
       ctx.fill();
     }
 
     ctx.beginPath();
     ctx.ellipse(0.6, 15.6, 15.2, 5.6, 0, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(14, 8, 4, 0.46)';
+    ctx.fillStyle = 'rgba(14, 8, 4, 0.48)';
     ctx.fill();
 
     ctx.translate(0, -bob);
@@ -6341,27 +6426,27 @@ export class PuzzleArcadeModalController {
       return;
     }
 
-    // Lightweight instant fallback while PNG finishes decoding on first frame
+    // Lightweight instant fallback while PNG finishes decoding on first frame (identical sculpt glyph, color-only diff)
     const meta = HP_CHESS_PIECE_META[pieceKey];
     ctx.beginPath();
     ctx.ellipse(0, 12.5, 14, 5, 0, 0, Math.PI * 2);
-    ctx.fillStyle = isWhite ? '#b91c1c' : '#065f46';
+    ctx.fillStyle = isWhite ? '#f5ead4' : '#111827';
     ctx.fill();
     ctx.lineWidth = 1.5;
-    ctx.strokeStyle = isWhite ? '#fde047' : '#a7f3d0';
+    ctx.strokeStyle = isWhite ? '#d97706' : '#6ee7b7';
     ctx.stroke();
 
     ctx.beginPath();
     ctx.arc(0, -1, 11.5, 0, Math.PI * 2);
-    ctx.fillStyle = isWhite ? '#fffbeb' : '#1e293b';
+    ctx.fillStyle = isWhite ? '#fffdf7' : '#1e293b';
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = isWhite ? '#7f1d1d' : '#ecfdf5';
+    ctx.fillStyle = isWhite ? '#92400e' : '#ecfdf5';
     ctx.font = '900 15px "Apple Symbols", Georgia, serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(meta?.glyph ?? '♔', 0, -0.5);
+    ctx.fillText(meta?.glyph ?? '♚', 0, -0.5);
     ctx.restore();
   }
 

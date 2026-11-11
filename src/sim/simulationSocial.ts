@@ -85,12 +85,14 @@ import {
   FestivalType,
   FireworkBurst,
   FloatingEffect,
+  FlooVisitDirectoryRow,
   FlyRewardKind,
   GameState,
   HarvestFeastState,
   HarvestFeastTierDef,
   HeatmapMode,
   HomeOwlLanternMark,
+  HonorGardenTourDef,
   HouseName,
   IsoDirection,
   LanguageQuizState,
@@ -130,6 +132,7 @@ import {
 } from '../types/game';
 import { buildSampleCoasterLoop, TrackWaypoint, traceCoasterCircuit } from './coaster';
 import {
+  buildHonorGardenSnapshot,
   buildNeighborValleySnapshot,
   CANON_NPC_NEIGHBOR_IDS,
   classifyBuildingGardenHelpKind,
@@ -137,16 +140,21 @@ import {
   createInitialNeighborSocialState,
   FRIENDSHIP_CHEST_TOKEN_COST,
   getGardenHelpMetaVi,
+  getHonorGardenById,
   getLocalCalendarResetKey,
   getMinigameKindLabelVi,
   getPresetNoteMeta,
+  HONOR_GARDENS,
   isNpcNeighborProfile,
   MAX_DAILY_FRIEND_HELPS,
   MAX_DAILY_MINIGAME_RESCUES,
   MAX_DAILY_OWL_HELP_REQUESTS,
   MAX_HOME_LANTERN_MARKS,
+  normalizeSceneTimeOverride,
+  normalizeSceneWeatherOverride,
   pickSimulatedHomeLanternMark,
   syncNeighborSocialDailyReset,
+  upsertFlooMemberToNeighborProfile,
 } from './neighborSocial';
 import {
   buildAllPersonalRecordsSummary,
@@ -169,7 +177,7 @@ import {
   createInitialPuzzleArcadeState,
   JIGSAW_PAINTINGS,
   PuzzleRewardSpec,
-} from './puzzleArcadeEngine';
+} from './puzzleShared';
 import {
   ActiveQuizChallenge,
   createInitialLanguageQuizState,
@@ -287,7 +295,10 @@ export function socialEnterNeighborVisit(sim: ParkSimulation, neighborId: string
     const now = Date.now();
     const snap = buildNeighborValleySnapshot(neighbor, now);
     const homeBase = sim.homeStateWhileVisiting;
+    const hostWeather = normalizeSceneWeatherOverride(neighbor.scene?.weather);
+    const hostTime = normalizeSceneTimeOverride(neighbor.scene?.atmosphere);
 
+    sim.activeHonorTourId = null;
     sim.activeVisitNeighborId = neighbor.id;
     sim.state = {
       ...homeBase,
@@ -295,6 +306,11 @@ export function socialEnterNeighborVisit(sim: ParkSimulation, neighborId: string
       unlockedZones: snap.unlockedZones,
       buildings: snap.buildings,
       tileOverrides: snap.tileOverrides,
+      settings: {
+        ...homeBase.settings,
+        weatherOverride: hostWeather ?? homeBase.settings.weatherOverride,
+        timeOverride: hostTime ?? homeBase.settings.timeOverride,
+      },
     };
     sim.escapedCreatures = [];
     sim.fireworks = [];
@@ -306,7 +322,7 @@ export function socialEnterNeighborVisit(sim: ParkSimulation, neighborId: string
     sim.stateRevision++;
 
     sim.audio.playOwlHoot(0.035);
-    const msg = `🚂 Đang ghé thăm "${neighbor.parkName}" của ${neighbor.avatarEmoji} ${neighbor.name} (Cấp ${neighbor.level})!`;
+    const msg = `🔥 Bay Floo tới "${neighbor.parkName}" của ${neighbor.avatarEmoji} ${neighbor.name} (Cấp ${neighbor.level})!`;
     sim.onToast?.(msg, neighbor.avatarEmoji);
     sim.onUiChange?.();
     return { ok: true, msg, focusGx: snap.focusGx, focusGy: snap.focusGy };
@@ -319,12 +335,14 @@ export function socialExitNeighborVisit(sim: ParkSimulation, silent = false): {
   } {
     if (!sim.homeStateWhileVisiting) {
       sim.activeVisitNeighborId = null;
+      sim.activeHonorTourId = null;
       return { ok: false, focusGx: 18, focusGy: 22 };
     }
     sim.syncPlayerPrimitivesToHomeState();
     sim.state = sim.homeStateWhileVisiting;
     sim.homeStateWhileVisiting = null;
     sim.activeVisitNeighborId = null;
+    sim.activeHonorTourId = null;
 
     sim.escapedCreatures = [];
     sim.fireworks = [];
@@ -590,9 +608,18 @@ export function socialHelpVisitedNeighborBuilding(sim: ParkSimulation, buildingU
     );
     const msg = `🏮 Đã ${meta.actionVi.toLowerCase()} cho ${nb.name} kèm lời chúc "${note.shortVi}"! Nhận +1 🍀, +${meta.goldReward}G, +${meta.xpReward} XP!`;
     sim.onToast?.(msg, meta.icon);
+    recordNeighborHelpStat(sim);
     sim.saveToStorage();
     sim.onUiChange?.();
     return { ok: true, msg };
+}
+
+function recordNeighborHelpStat(sim: ParkSimulation, amount = 1): void {
+  sim.state.stats.neighborHelpsDone = Math.max(
+    0,
+    Math.floor(sim.state.stats.neighborHelpsDone ?? 0) + amount
+  );
+  sim.checkAndToastAchievements?.();
 }
 
 export function socialLikeVisitedNeighborFarm(sim: ParkSimulation, targetNeighborId?: string): { ok: boolean; msg: string } {
@@ -623,6 +650,7 @@ export function socialLikeVisitedNeighborFarm(sim: ParkSimulation, targetNeighbo
     socialPushSocialActivity(sim, '❤️', `Thả tim khen "${nb.parkName}" của ${nb.name} (+1 🍀, +4G)`, now);
     const msg = `❤️ Đã gửi tim khen ngợi "${nb.parkName}"! Nhận +1 🍀 Huy Hiệu Tình Bạn, +4G & +10 XP!`;
     sim.onToast?.(msg, '❤️');
+    recordNeighborHelpStat(sim);
     sim.saveToStorage();
     sim.onUiChange?.();
     return { ok: true, msg };
@@ -694,6 +722,7 @@ export function socialClaimVisitedNeighborMysteryGift(sim: ParkSimulation): { ok
     );
     const msg = `🎁 Mở Giỏ Quà Bí Ẩn tại vườn ${nb.name}: Nhận +1 🍀, +${gold}G, +${xp} XP &${bonusLabel}!`;
     sim.onToast?.(msg, '🎁');
+    recordNeighborHelpStat(sim);
     sim.saveToStorage();
     sim.onUiChange?.();
     return { ok: true, msg };
@@ -741,6 +770,7 @@ export function socialFulfillNeighborOwlCrate(sim: ParkSimulation,
     );
     const msg = `📦 Đã đóng hộ ${crate.qty} ${meta.emoji} ${meta.name} giúp ${nb.name}! Nhận +${crate.rewardTokens} 🍀, +${crate.rewardGalleons}G & +${crate.rewardXp} XP!`;
     sim.onToast?.(msg, '🦉');
+    recordNeighborHelpStat(sim);
     sim.saveToStorage();
     sim.onUiChange?.();
     return { ok: true, msg };
@@ -825,6 +855,7 @@ export function socialCompleteNeighborMinigameRescue(sim: ParkSimulation, ctx: M
     );
     const msg = `🏆 Tuyệt đỉnh! Bạn đã vượt hộ ${kindMeta.nameVi} Màn ${ctx.stage} giúp ${nb.avatarEmoji} ${nb.name}! Nhận +${tokensEarned} 🍀, +${goldEarned}G & +${xpEarned} XP${buildMsg}!`;
     sim.onToast?.(msg, '🏆');
+    recordNeighborHelpStat(sim);
     sim.saveToStorage();
     sim.onUiChange?.();
     return { ok: true, msg, tokensEarned, goldEarned, xpEarned, buildReduction };
@@ -984,6 +1015,7 @@ export function socialClaimHomeLanternMark(sim: ParkSimulation, markIdOrBuilding
       now
     );
     sim.onToast?.(msg, '🏮');
+    recordNeighborHelpStat(sim);
     sim.saveToStorage();
     sim.onUiChange?.();
     return { ok: true, msg };
@@ -997,7 +1029,7 @@ export function socialRequestPlayerOwlCrateHelp(sim: ParkSimulation,
     if (social.neighbors.length === 0) {
       return {
         ok: false,
-        msg: 'Sổ Hàng Xóm chưa có người chơi nào! Hãy kết bạn với người chơi thật qua Mã Thung Lũng trước nhé.',
+        msg: 'Chưa có thành viên cộng đồng nào trong danh bạ Cổng Floo! Hãy mở Cổng Floo & Hàng Xóm (Cấp 10+) để kết nối thành viên HPVN nhé.',
       };
     }
     const barn = sim.ensureFarmBarn();
@@ -1050,7 +1082,7 @@ export function socialRequestPlayerMinigameSos(sim: ParkSimulation,
     if (social.neighbors.length === 0) {
       return {
         ok: false,
-        msg: 'Sổ Hàng Xóm chưa có người chơi nào! Hãy kết bạn với người chơi thật qua Mã Thung Lũng trước nhé.',
+        msg: 'Chưa có thành viên cộng đồng nào trong danh bạ Cổng Floo! Hãy mở Cổng Floo & Hàng Xóm (Cấp 10+) để kết nối thành viên HPVN nhé.',
       };
     }
     const cleanStage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.round(stage)));
@@ -1108,6 +1140,8 @@ export function socialClaimPlayerMinigameSosRescue(sim: ParkSimulation): {
     kind?: MinigameTrialKind;
     clearedStage?: number;
     nextStage?: number;
+    ghostReplaySummaryVi?: string;
+    ghostReplayMoves?: string[];
   } {
     const social = socialEnsureNeighborSocial(sim);
     const sos = social.playerMinigameSos;
@@ -1129,6 +1163,14 @@ export function socialClaimPlayerMinigameSosRescue(sim: ParkSimulation): {
     const stage = sos.stage;
     const rescuerLabel = `${sos.rescuerEmoji ?? '🦉'} ${sos.rescuerName ?? 'Hàng xóm'}`;
     const kindMeta = getMinigameKindLabelVi(kind);
+    const ghostReplaySummaryVi =
+      sos.ghostReplaySummaryVi ||
+      `👻 Linh ảnh giải cứu: Khai triển Bùa Phượng Hoàng phá thế bế tắc Màn ${stage}!`;
+    const ghostReplayMoves = sos.ghostReplayMoves ?? [
+      `Nước #4: Mở khóa trung tâm Màn ${stage}`,
+      `Nước #9: Kích hoạt chuỗi liên hoàn`,
+      `Nước kết: Bùa Phượng Hoàng dứt điểm`,
+    ];
 
     sos.claimed = true;
     social.playerMinigameSos = null;
@@ -1162,7 +1204,7 @@ export function socialClaimPlayerMinigameSosRescue(sim: ParkSimulation): {
     }
 
     sim.launchFireworksShow(6);
-    const msg = `🎉 ${rescuerLabel} đã phá đảo hộ ${kindMeta.icon} ${kindMeta.nameVi} Màn ${stage} — mở khóa Màn ${nextStage} cho bạn!`;
+    const msg = `🎉 ${rescuerLabel} đã phá đảo hộ ${kindMeta.icon} ${kindMeta.nameVi} Màn ${stage} — mở khóa Màn ${nextStage}! (${ghostReplaySummaryVi})`;
     socialPushSocialActivity(sim, '🎉', msg, now);
     sim.onToast?.(msg, '🎉');
     sim.saveToStorage();
@@ -1173,6 +1215,8 @@ export function socialClaimPlayerMinigameSosRescue(sim: ParkSimulation): {
       kind,
       clearedStage: stage,
       nextStage,
+      ghostReplaySummaryVi,
+      ghostReplayMoves,
     };
 }
 
@@ -1191,11 +1235,19 @@ export function socialTickNeighborSocialBackground(sim: ParkSimulation, now = Da
       const pickIdx = Math.abs(Math.floor(social.playerMinigameSos.requestedAt / 1000)) % social.neighbors.length;
       const helper = social.neighbors[pickIdx];
       const kindMeta = getMinigameKindLabelVi(social.playerMinigameSos.kind);
+      const stg = social.playerMinigameSos.stage;
+      const movesUsed = 11 + (stg % 9);
       social.playerMinigameSos.rescuedAt = now;
       social.playerMinigameSos.rescuerId = helper.id;
       social.playerMinigameSos.rescuerName = helper.name;
       social.playerMinigameSos.rescuerEmoji = helper.avatarEmoji;
-      social.playerMinigameSos.rescuerNoteVi = `Mình vừa giải xong Màn ${social.playerMinigameSos.stage} (${kindMeta.nameVi}) giúp bồ rồi nè!`;
+      social.playerMinigameSos.rescuerNoteVi = `Mình vừa giải xong Màn ${stg} (${kindMeta.nameVi}) giúp bồ rồi nè!`;
+      social.playerMinigameSos.ghostReplaySummaryVi = `👻 Linh ảnh ${helper.name}: Phá đảo Màn ${stg} ở nước #${movesUsed} bằng chuỗi liên hoàn!`;
+      social.playerMinigameSos.ghostReplayMoves = [
+        `Nước #3: Mở khóa ô trung tâm Màn ${stg}`,
+        `Nước #${movesUsed - 3}: Tạo combo phá chướng ngại`,
+        `Nước #${movesUsed}: Dứt điểm hoàn hảo!`,
+      ];
       sim.audio.playOwlHoot(0.045);
       socialPushSocialActivity(sim, 
         helper.avatarEmoji,
@@ -1257,4 +1309,305 @@ export function socialTickNeighborSocialBackground(sim: ParkSimulation, now = Da
       sim.saveToStorage();
       sim.onUiChange?.();
     }
+}
+
+// =========================================================================
+// HAGRIDFARM / HPVN FLOO COMMUNITY DIRECTORY, 1-TAP HELP, POSTCARD & HONOR TOURS
+// =========================================================================
+
+export function socialGetActiveHonorGardenTour(sim: ParkSimulation): HonorGardenTourDef | null {
+  if (!sim.activeHonorTourId) return null;
+  return getHonorGardenById(sim.activeHonorTourId);
+}
+
+export function socialEnterHonorGardenTour(
+  sim: ParkSimulation,
+  tourId = 'tour_hagrid'
+): {
+  ok: boolean;
+  msg: string;
+  focusGx?: number;
+  focusGy?: number;
+} {
+  if (sim.isHeadmasterPreview) {
+    sim.toggleHeadmasterPreview();
+  }
+  const now = Date.now();
+  const snap = buildHonorGardenSnapshot(tourId, now);
+  if (!snap) {
+    return { ok: false, msg: 'Không tìm thấy Vườn Mẫu Danh Dự này!' };
+  }
+
+  const social = socialEnsureNeighborSocial(sim);
+  if (sim.homeStateWhileVisiting) {
+    sim.syncPlayerPrimitivesToHomeState();
+  } else {
+    sim.homeStateWhileVisiting = sim.state;
+  }
+
+  const homeBase = sim.homeStateWhileVisiting;
+  sim.activeVisitNeighborId = null;
+  sim.activeHonorTourId = snap.tour.id;
+  sim.state = {
+    ...homeBase,
+    parkName: `${snap.tour.titleVi} (${snap.tour.ownerName})`,
+    unlockedZones: snap.unlockedZones,
+    buildings: snap.buildings,
+    tileOverrides: snap.tileOverrides,
+    settings: {
+      ...homeBase.settings,
+      weatherOverride: snap.tour.weather,
+      timeOverride: snap.tour.atmosphere,
+    },
+  };
+  sim.escapedCreatures = [];
+  sim.fireworks = [];
+  sim.effects = [];
+  sim.rideQueues.clear();
+  sim.rebuildGrid();
+  sim.syncStaffEntities();
+  sim.syncValleyVillagers();
+  sim.stateRevision++;
+
+  let bonusSuffix = '';
+  if (!social.dailyHonorTourClaimed) {
+    social.dailyHonorTourClaimed = true;
+    sim.state.galleons += 8;
+    sim.state.finance.harvestRevenue += 8;
+    sim.addXp(15);
+    sim.addHarvestFeastPoints(8);
+    bonusSuffix = ' · Quà tham quan đầu ngày: +8G +15 XP!';
+    socialPushSocialActivity(
+      sim,
+      snap.tour.avatarEmoji,
+      `Tham quan Vườn Mẫu "${snap.tour.titleVi}" (+8G, +15 XP)`,
+      now
+    );
+  }
+
+  sim.audio.playOwlHoot(0.035);
+  const msg = `🏛️ Đang tham quan "${snap.tour.titleVi}" của ${snap.tour.avatarEmoji} ${snap.tour.ownerName}${bonusSuffix}`;
+  sim.onToast?.(msg, snap.tour.avatarEmoji);
+  sim.saveToStorage();
+  sim.onUiChange?.();
+  return { ok: true, msg, focusGx: snap.focusGx, focusGy: snap.focusGy };
+}
+
+export function socialCycleHonorGardenTour(
+  sim: ParkSimulation,
+  dir: 1 | -1 = 1
+): {
+  ok: boolean;
+  msg: string;
+  focusGx?: number;
+  focusGy?: number;
+} {
+  const curIdx = HONOR_GARDENS.findIndex((g) => g.id === sim.activeHonorTourId);
+  const n = HONOR_GARDENS.length;
+  const nextIdx = curIdx >= 0 ? (curIdx + dir + n) % n : 0;
+  return socialEnterHonorGardenTour(sim, HONOR_GARDENS[nextIdx].id);
+}
+
+/**
+ * Tự động đồng bộ danh sách thành viên thực từ Cổng Bay Floo HPVN (`visitBurrowGarden`) vào Sổ Hàng Xóm
+ * (không cần nhập Mã Kết Bạn thủ công).
+ */
+export function socialSyncFlooDirectoryMembers(
+  sim: ParkSimulation,
+  rows: ReadonlyArray<FlooVisitDirectoryRow>,
+  ownUid?: string,
+  nowMs = Date.now()
+): NeighborProfileState[] {
+  const social = socialEnsureNeighborSocial(sim);
+  const synced: NeighborProfileState[] = [];
+
+  for (const row of rows) {
+    if (!row || !row.uid) continue;
+    if (ownUid && row.uid === ownUid) continue;
+    const existingIdx = social.neighbors.findIndex(
+      (n) =>
+        n.remoteUserId === row.uid ||
+        (Boolean(row.friendCode) &&
+          n.friendCode.toUpperCase() === String(row.friendCode).toUpperCase())
+    );
+    const existing = existingIdx >= 0 ? social.neighbors[existingIdx] : undefined;
+    const updated = upsertFlooMemberToNeighborProfile(existing, row, nowMs);
+    if (social.dailyRescuesGivenIds.includes(updated.id) && updated.minigameSos) {
+      updated.minigameSos.rescuedToday = true;
+    }
+    if (existingIdx >= 0) {
+      social.neighbors[existingIdx] = updated;
+    } else if (social.neighbors.length < 30) {
+      social.neighbors.push(updated);
+    }
+    synced.push(updated);
+  }
+
+  if (synced.length > 0) {
+    sim.saveToStorage();
+    sim.onUiChange?.();
+  }
+  return synced;
+}
+
+/**
+ * Chăm giúp toàn thung lũng 1 chạm chuẩn `hagridfarm` (`Chăm giúp` trên thanh điều hướng Cổng Floo):
+ *  - Rút ngắn 15 phút cho các ô ruộng/xưởng đang sản xuất của chủ vườn.
+ *  - Tối đa 5 lượt/ngày trên toàn bộ bạn bè (không reset khi chưa qua ngày mới 00:00), 1 lần/bạn/ngày.
+ */
+export function socialHelpVisitedFlooMemberWholeGarden(
+  sim: ParkSimulation,
+  options: { alreadySyncedServer?: boolean; serverHelpsLeft?: number } = {}
+): { ok: boolean; msg: string; helpsLeft: number } {
+  const social = socialEnsureNeighborSocial(sim);
+  const nb = socialGetActiveVisitingNeighbor(sim);
+  if (!nb) {
+    return {
+      ok: false,
+      msg: 'Hãy bay Floo tới thung lũng của một thành viên để chăm giúp nhé!',
+      helpsLeft: Math.max(0, MAX_DAILY_FRIEND_HELPS - (social.dailyGardenHelpsCount ?? 0)),
+    };
+  }
+
+  const usedToday = Math.max(
+    social.dailyGardenHelpsCount ?? 0,
+    social.neighbors.reduce((s, n) => s + (n.helpedViaFlooToday ? 1 : n.helpedMarksToday.length), 0)
+  );
+  if (nb.helpedViaFlooToday || nb.helpedMarksToday.length > 0) {
+    return {
+      ok: false,
+      msg: `Hôm nay bạn đã chăm giúp thung lũng của ${nb.name} rồi (1 lần/bạn/ngày)!`,
+      helpsLeft: Math.max(0, MAX_DAILY_FRIEND_HELPS - usedToday),
+    };
+  }
+  if (usedToday >= MAX_DAILY_FRIEND_HELPS) {
+    return {
+      ok: false,
+      msg: `Hôm nay bạn đã dùng hết ${MAX_DAILY_FRIEND_HELPS}/${MAX_DAILY_FRIEND_HELPS} lượt hỗ trợ bạn bè (chỉ làm mới sau 00:00 ngày mới)!`,
+      helpsLeft: 0,
+    };
+  }
+  if ((nb.hostHelpsLeft ?? 10) <= 0) {
+    return {
+      ok: false,
+      msg: `Thung lũng của ${nb.name} đã nhận đủ số lượt chăm giúp tối đa trong hôm nay!`,
+      helpsLeft: Math.max(0, MAX_DAILY_FRIEND_HELPS - usedToday),
+    };
+  }
+
+  const now = Date.now();
+  const nextUsed =
+    typeof options.serverHelpsLeft === 'number'
+      ? Math.max(usedToday + 1, MAX_DAILY_FRIEND_HELPS - Math.max(0, options.serverHelpsLeft))
+      : usedToday + 1;
+  social.dailyGardenHelpsCount = Math.min(MAX_DAILY_FRIEND_HELPS, nextUsed);
+  nb.helpedViaFlooToday = true;
+  nb.hostHelpsLeft = Math.max(0, (nb.hostHelpsLeft ?? 10) - 1);
+
+  const note = getPresetNoteMeta(social.selectedPresetNoteId);
+  let helpedPlots = 0;
+  for (const b of sim.state.buildings) {
+    const item = getCatalogItem(b.itemId);
+    if (item?.isFarmlandPlot && b.cropId && b.cropReadyAt && now < b.cropReadyAt) {
+      b.cropWateredBoost = true;
+      b.cropReadyAt = Math.max(now + 30_000, b.cropReadyAt - 900_000);
+      helpedPlots++;
+      if (nb.helpedMarksToday.length === 0) {
+        nb.helpedMarksToday.push({
+          buildingUid: b.uid,
+          kind: 'water_crop',
+          helperName: social.playerDisplayName || 'Bạn',
+          noteId: note.id,
+          noteText: note.textVi,
+          helpedAt: now,
+        });
+      }
+    } else if (b.workshopQueue && b.workshopQueue.length > 0 && now < b.workshopQueue[0].endsAt) {
+      b.workshopQueue[0].endsAt = Math.max(now + 20_000, b.workshopQueue[0].endsAt - 900_000);
+      helpedPlots++;
+    }
+  }
+  if (nb.helpedMarksToday.length === 0 && sim.state.buildings[0]) {
+    nb.helpedMarksToday.push({
+      buildingUid: sim.state.buildings[0].uid,
+      kind: 'water_crop',
+      helperName: social.playerDisplayName || 'Bạn',
+      noteId: note.id,
+      noteText: note.textVi,
+      helpedAt: now,
+    });
+  }
+
+  const goldReward = 5;
+  const xpReward = 14;
+  sim.state.galleons += goldReward;
+  sim.state.finance.harvestRevenue += goldReward;
+  social.friendshipTokens += 1;
+  sim.addXp(xpReward);
+  sim.addHarvestFeastPoints(12);
+
+  sim.audio.playHarvestBubble();
+  sim.onRewardFly?.('galleons', goldReward, 19.5, 24.5);
+  sim.spawnFloatingText(
+    19.5,
+    24.5,
+    `🔥 Chăm giúp -15p! +${goldReward}G +1 🍀 +${xpReward} XP`,
+    '#fde047'
+  );
+
+  const helpsLeft = Math.max(0, MAX_DAILY_FRIEND_HELPS - social.dailyGardenHelpsCount);
+  socialPushSocialActivity(
+    sim,
+    '🔥',
+    `Bay Floo chăm giúp toàn thung lũng ${nb.name} (-15 phút${helpedPlots > 0 ? ` cho ${helpedPlots} mẻ` : ''}, +${goldReward}G, +1 🍀)`,
+    now
+  );
+    const msg = `🔥 Đã chăm giúp thung lũng ${nb.name} (cây chín sớm 15 phút)! Nhận +${goldReward}G · +1 🍀 · +${xpReward} XP (Còn ${helpsLeft}/${MAX_DAILY_FRIEND_HELPS} lượt hôm nay)`;
+    sim.onToast?.(msg, '🔥');
+    recordNeighborHelpStat(sim);
+    sim.saveToStorage();
+    sim.onUiChange?.();
+    return { ok: true, msg, helpsLeft };
+}
+
+/**
+ * Thưởng 1 lần/ngày khi lưu Bưu Thiếp hoặc khoe vườn rủ bạn trên Mạng Floo (`FREE_FESTIVAL_ACTIONS_PER_DAY` từ `hagridfarm`).
+ */
+export function socialRecordFlooShareOrPostcard(
+  sim: ParkSimulation,
+  kind: 'postcard' | 'shareFloo'
+): { rewarded: boolean; msg: string } {
+  const social = socialEnsureNeighborSocial(sim);
+  const now = Date.now();
+  if (social.dailyFlooShareClaimed) {
+    return {
+      rewarded: false,
+      msg:
+        kind === 'shareFloo'
+          ? '✨ Đã gửi lời mời & Bưu Thiếp Thung Lũng lên Mạng Floo!'
+          : '🖼️ Đã lưu Bưu Thiếp Thung Lũng về máy!',
+    };
+  }
+
+  social.dailyFlooShareClaimed = true;
+  sim.state.galleons += 10;
+  sim.state.finance.harvestRevenue += 10;
+  social.friendshipTokens += 1;
+  sim.addXp(12);
+  sim.addHarvestFeastPoints(15);
+  socialPushSocialActivity(
+    sim,
+    kind === 'shareFloo' ? '🔥' : '🖼️',
+    kind === 'shareFloo'
+      ? 'Khoe Bưu Thiếp & rủ bạn sang thăm trên Mạng Floo (+10G, +1 🍀, +15 điểm Lễ Hội)'
+      : 'Lưu Bưu Thiếp Thung Lũng đầu ngày (+10G, +1 🍀, +15 điểm Lễ Hội)',
+    now
+  );
+  recordNeighborHelpStat(sim);
+  sim.saveToStorage();
+  sim.onUiChange?.();
+  return {
+    rewarded: true,
+    msg: '✨ Gửi Bưu Thiếp Mạng Floo đầu ngày: Nhận +10G · +1 🍀 · +15 điểm Đại Tiệc!',
+  };
 }

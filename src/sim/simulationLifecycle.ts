@@ -167,7 +167,7 @@ import {
   createInitialPuzzleArcadeState,
   JIGSAW_PAINTINGS,
   PuzzleRewardSpec,
-} from './puzzleArcadeEngine';
+} from './puzzleShared';
 import {
   ActiveQuizChallenge,
   createInitialLanguageQuizState,
@@ -233,6 +233,7 @@ export function lifecycleSyncPlayerPrimitivesToHomeState(sim: ParkSimulation): v
     h.galleons = sim.state.galleons;
     h.timeSand = sim.state.timeSand;
     h.phoenixTalismans = sim.state.phoenixTalismans;
+    h.phoenixTalismanDaily = sim.state.phoenixTalismanDaily;
     h.quizTalismanProgress = sim.state.quizTalismanProgress;
     h.levelUpTrialCompletedLevel = sim.state.levelUpTrialCompletedLevel;
     h.puzzleLevelWinsProgress = sim.state.puzzleLevelWinsProgress;
@@ -248,14 +249,26 @@ export function lifecycleSyncPlayerPrimitivesToHomeState(sim: ParkSimulation): v
     h.languageQuiz = sim.state.languageQuiz;
     h.tutorial = sim.state.tutorial;
     h.harvestFeast = sim.state.harvestFeast;
+    h.cropMastery = sim.state.cropMastery;
+    h.morningDewPhials = sim.state.morningDewPhials;
+    h.examWinStreak = sim.state.examWinStreak;
+    h.a11ySettings = sim.state.a11ySettings;
+    h.weeklyHouseCupServerStandings = sim.state.weeklyHouseCupServerStandings;
+    h.retention = sim.state.retention;
     h.neighborSocial = sim.state.neighborSocial;
     h.match3 = sim.state.match3;
     h.puzzleArcade = sim.state.puzzleArcade;
+    h.minigameLeaderboard = sim.state.minigameLeaderboard;
+    h.lastPlayedMinigame = sim.state.lastPlayedMinigame;
     h.supply = sim.state.supply;
     h.suitcase = sim.state.suitcase;
     h.finance = sim.state.finance;
     h.stats = sim.state.stats;
-    h.settings = sim.state.settings;
+    h.settings = {
+      ...sim.state.settings,
+      weatherOverride: h.settings.weatherOverride,
+      timeOverride: h.settings.timeOverride,
+    };
     h.lastSavedAt = sim.state.lastSavedAt;
 }
 
@@ -264,8 +277,14 @@ export function lifecycleSaveToStorage(sim: ParkSimulation): void {
     try {
       const now = Date.now();
       sim.state.lastSavedAt = now;
+      if (sim.state.sandboxMode) {
+        sim.state.sandboxTainted = true;
+      }
       lifecycleSyncPlayerPrimitivesToHomeState(sim);
       const baseState = sim.homeStateWhileVisiting ?? sim.state;
+      if (baseState.sandboxMode) {
+        baseState.sandboxTainted = true;
+      }
       const persistedState: GameState = {
         ...baseState,
         lastSavedAt: now,
@@ -343,6 +362,7 @@ export function lifecycleToggleHeadmasterPreview(sim: ParkSimulation, targetLeve
       sim.state.galleons = 999999;
       sim.state.timeSand = 99;
       sim.state.sandboxMode = true;
+      sim.state.sandboxTainted = true;
       sim.state.unlockedZones = ZONES.filter((z) => z.unlockLevel <= targetLevel).map((z) => z.id);
       sim.state.collectedCards = {};
       sim.state.housePoints = {
@@ -520,6 +540,27 @@ export function lifecycleToggleHeadmasterPreview(sim: ParkSimulation, targetLeve
           sim.rebuildGrid();
         }
       }
+
+      // Lay connected AAA Golden Cobblestone Homestead Avenues across unoccupied grass tiles in Headmaster Lv.100 Preview!
+      const layPreviewCobble = (gx: number, gy: number) => {
+        const cell = sim.grid[gy]?.[gx];
+        if (!cell || cell.buildingUid || cell.terrain === 'water') return;
+        const k = `${gx},${gy}`;
+        sim.state.tileOverrides[k] = { ...(sim.state.tileOverrides[k] ?? {}), path: 'cobble' };
+      };
+      for (const gx of [1, 2, 6, 7, 8]) layPreviewCobble(gx, 22);
+      for (let gx = 8; gx <= 29; gx++) layPreviewCobble(gx, 19);
+      for (let gx = 6; gx <= 29; gx++) {
+        layPreviewCobble(gx, 24);
+        layPreviewCobble(gx, 25);
+      }
+      for (let gy = 14; gy <= 31; gy++) {
+        layPreviewCobble(13, gy);
+        layPreviewCobble(18, gy);
+      }
+      for (let gy = 13; gy <= 25; gy++) layPreviewCobble(29, gy);
+      for (let gx = 15; gx <= 26; gx++) layPreviewCobble(gx, 31);
+      for (let gx = 29; gx <= 44; gx++) layPreviewCobble(gx, 11);
 
       sim.state.suitcase = {
         discoveredMorphs: CREATURE_SPECIES_PROFILES.flatMap((sp) => [
@@ -732,7 +773,7 @@ export function lifecycleGetWeatherForecast(sim: ParkSimulation, count = 4, nowM
     return list;
 }
 
-export function lifecycleCheckDailyReset(sim: ParkSimulation, now = new Date()): void {
+export function lifecycleCheckDailyReset(sim: ParkSimulation, now?: Date): void {
     const key = getLocalDateKey(now);
     let changed = false;
     if (sim.state.lastDailyResetKey !== key) {
@@ -742,7 +783,7 @@ export function lifecycleCheckDailyReset(sim: ParkSimulation, now = new Date()):
       changed = true;
     }
     const social = sim.ensureNeighborSocial();
-    if (syncNeighborSocialDailyReset(social, now.getTime())) {
+    if (syncNeighborSocialDailyReset(social, now?.getTime())) {
       sim.onToast?.('🦉 Qua 00:00 ngày mới — lượt Giải Cứu Màn Khó & Quà Thăm Vườn đã làm mới!', '🍀');
       changed = true;
     }
@@ -753,7 +794,7 @@ export function lifecycleCheckDailyReset(sim: ParkSimulation, now = new Date()):
 
 export function lifecycleProcessOfflineProgress(sim: ParkSimulation): OfflineReport | null {
     const now = Date.now();
-    lifecycleCheckDailyReset(sim, new Date(now));
+    lifecycleCheckDailyReset(sim);
     const awayMs = now - (sim.state.lastSavedAt || now);
     const awaySec = Math.floor(awayMs / 1000);
     if (awaySec < 45) {

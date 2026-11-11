@@ -70,7 +70,7 @@ export const CHESS_TACTIC_PRESETS: ReadonlyArray<ChessTacticPreset> = [
   // Tier 1: Mate in 1..2 Onboarding
   {
     title: 'Tháp Hogwarts Xuất Kích',
-    subtitle: 'Điều Xe Tháp Hogwarts (♖) tung đòn chiếu bí Chúa tể Voldemort ngay trong 1 nước!',
+    subtitle: 'Điều Xe Tháp Thành Trì (♖) tung đòn chiếu bí Vua Đen ngay trong 1 nước!',
     opponentName: 'Ron Weasley',
     opponentEmoji: '🦁',
     opponentPortrait: 'ron',
@@ -78,8 +78,8 @@ export const CHESS_TACTIC_PRESETS: ReadonlyArray<ChessTacticPreset> = [
     tier: 1,
   },
   {
-    title: 'Ánh Lửa Phượng Hoàng Fawkes',
-    subtitle: 'Phối hợp Cụ Dumbledore (♔) & Hermione (♕) khóa chặt Voldemort sát góc bàn!',
+    title: 'Song Kiếm Vương & Hậu',
+    subtitle: 'Phối hợp Vua Hiệp Sĩ (♔) & Hậu Chiến Binh (♕) khóa chặt Vua Đen sát góc bàn!',
     opponentName: 'Ông Arthur Weasley',
     opponentEmoji: '👑',
     opponentPortrait: 'arthur',
@@ -88,7 +88,7 @@ export const CHESS_TACTIC_PRESETS: ReadonlyArray<ChessTacticPreset> = [
   },
   {
     title: 'Song Tháp Lâu Đài Hogwarts',
-    subtitle: 'Khóa hàng 7 và điều hai Xe Tháp Hogwarts (♖) dồn chiếu bí trên hàng 8!',
+    subtitle: 'Khóa hàng 7 và điều hai Xe Tháp Thành Trì (♖) dồn chiếu bí trên hàng 8!',
     opponentName: 'Bà Molly Weasley',
     opponentEmoji: '🏰',
     opponentPortrait: 'molly',
@@ -96,8 +96,8 @@ export const CHESS_TACTIC_PRESETS: ReadonlyArray<ChessTacticPreset> = [
     tier: 1,
   },
   {
-    title: 'Nụ Hôn Giám Ngục Ngộp Thở',
-    subtitle: 'Nhảy Bằng Mã Buckbeak (♘) chiếu ngộp Vua Đen bị kẹt giữa hàng rào quân mình!',
+    title: 'Thiết Mã Chiếu Ngộp',
+    subtitle: 'Nhảy Chiến Mã Giáp Đá (♘) chiếu ngộp Vua Đen bị kẹt giữa hàng rào quân mình!',
     opponentName: 'Ron Weasley',
     opponentEmoji: '🐴',
     opponentPortrait: 'ron',
@@ -106,8 +106,8 @@ export const CHESS_TACTIC_PRESETS: ReadonlyArray<ChessTacticPreset> = [
   },
   // Tier 2: Mate in 2 & Double-Attack Combinations
   {
-    title: 'Liên Kích Harry & Hermione',
-    subtitle: 'Lập trận Hermione (♕) + Harry Potter (♗) nhắm thẳng ô cánh Vua (Chiếu bí liên hoàn)!',
+    title: 'Liên Kích Hậu & Tượng Đá',
+    subtitle: 'Lập trận Hậu Chiến Binh (♕) + Tượng Giám Mục (♗) nhắm thẳng ô cánh Vua!',
     opponentName: 'Bác Rubeus Hagrid',
     opponentEmoji: '🪄',
     opponentPortrait: 'hagrid',
@@ -115,8 +115,8 @@ export const CHESS_TACTIC_PRESETS: ReadonlyArray<ChessTacticPreset> = [
     tier: 2,
   },
   {
-    title: 'Đôi Cánh Bằng Mã Buckbeak',
-    subtitle: 'Đưa Bằng Mã Buckbeak (♘) khóa đường thoát để Tháp Hogwarts kết liễu góc bàn!',
+    title: 'Vó Thiết Mã Khóa Góc',
+    subtitle: 'Đưa Chiến Mã Giáp Đá (♘) khóa đường thoát để Xe Tháp kết liễu góc bàn!',
     opponentName: 'Ron Weasley',
     opponentEmoji: '🦅',
     opponentPortrait: 'ron',
@@ -124,8 +124,8 @@ export const CHESS_TACTIC_PRESETS: ReadonlyArray<ChessTacticPreset> = [
     tier: 2,
   },
   {
-    title: 'Tàn Cuộc Hội Phượng Hoàng',
-    subtitle: 'Siết vòng vây Cụ Dumbledore (♔) và Hermione (♕) chiếu bí Voldemort trên hàng 8!',
+    title: 'Tàn Cuộc Vương Quyền',
+    subtitle: 'Siết vòng vây Vua Hiệp Sĩ (♔) và Hậu Chiến Binh (♕) chiếu bí Vua Đen trên hàng 8!',
     opponentName: 'Ông Arthur Weasley',
     opponentEmoji: '✨',
     opponentPortrait: 'arthur',
@@ -133,8 +133,8 @@ export const CHESS_TACTIC_PRESETS: ReadonlyArray<ChessTacticPreset> = [
     tier: 2,
   },
   {
-    title: 'Thần Hộ Mệnh Đại Sảnh Đường',
-    subtitle: 'Tận dụng Harry Potter (♗) đường chéo lớn và Hermione (♕) công phá cánh Vua!',
+    title: 'Trận Đồ Chéo Đại Sảnh Đường',
+    subtitle: 'Tận dụng Tượng Giám Mục (♗) đường chéo lớn và Hậu Chiến Binh (♕) công phá cánh Vua!',
     opponentName: 'Bác Rubeus Hagrid',
     opponentEmoji: '🔥',
     opponentPortrait: 'hagrid',
@@ -161,8 +161,8 @@ export const CHESS_TACTIC_PRESETS: ReadonlyArray<ChessTacticPreset> = [
   },
   // Tier 3: Deep Sacrifices, Endgame Studies & Middlegame Storms (Stages 140..777)
   {
-    title: 'Đại Chiến Hogwarts Của McGonagall',
-    subtitle: 'Phối hợp Hermione, Harry, Buckbeak & Tháp Hogwarts phá vỡ phòng tuyến Hắc Ám!',
+    title: 'Đại Chiến Bàn Cờ Đá McGonagall',
+    subtitle: 'Phối hợp Hậu, Tượng, Chiến Mã & Song Xe phá vỡ phòng tuyến Đá Đen!',
     opponentName: 'Giáo Sư McGonagall',
     opponentEmoji: '🎩',
     opponentPortrait: 'professor',

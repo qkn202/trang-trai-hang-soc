@@ -65,7 +65,14 @@ import {
   MAX_PHOENIX_TALISMANS,
   ParkSimulation,
   PHOENIX_FORGE_GOLD_COST,
+  STORY_CUTSCENE_CHAPTERS,
 } from '../sim/simulation';
+import {
+  applyA11ySettingsToDocument,
+  DEFAULT_PLATFORM_A11Y_SETTINGS,
+  PlatformA11ySettings,
+  syncA11yVolumesToAudio,
+} from './platformAndA11y';
 import {
   FRIENDSHIP_CHEST_TOKEN_COST,
   getMinigameKindLabelVi,
@@ -82,6 +89,7 @@ import {
   FarmCropId,
   FarmItemId,
   FestivalType,
+  FlooVisitDirectoryRow,
   FlyRewardKind,
   HeatmapMode,
   HouseName,
@@ -199,10 +207,14 @@ import {
 } from './hudSuitcase';
 
 import {
+  socialUiApplyAuthoritativeSnapshotIdentity,
   socialUiOpenNeighborDialog,
   socialUiOpenMinigameRescue,
   socialUiEnterVisitFromHud,
+  socialUiEnterHonorTourFromHud,
+  socialUiEnterFlooMemberVisitFromHud,
   socialUiExitVisitFromHud,
+  socialUiRefreshFlooDirectory,
   socialUiSyncLiveNeighborSocialUI,
   socialUiRefreshNeighborBadges,
   socialUiRenderVisitorDockBar,
@@ -258,6 +270,7 @@ export class GameHUD {
   public galleonRollRaf = 0;
   public activeWorkshopTab: 'barn' | 'brew' | 'cargo' | 'synergy' = 'barn';
   public activeQuestTab: 'orders' | 'quests' = 'orders';
+  public activeAlbumTab: 'cup' | 'achievements' | 'friendship' | 'login7' = 'cup';
   public selectedOwlOrderId: string | null = null;
   public lastWsBrewId: string | null = null;
   public activeSuitcaseTab: 'care' | 'morph' | 'expedition' = 'care';
@@ -265,8 +278,21 @@ export class GameHUD {
   public useStarlightForIncubation = true;
   public lastSuitcaseIncReady = false;
   public lastSuitcaseExpReady = false;
-  public activeNeighborTab: 'friends' | 'chest' | 'log' = 'friends';
+  public activeNeighborTab: 'friends' | 'postcard' | 'chest' | 'log' = 'friends';
   public focusedNeighborId: string | null = null;
+  public flooDirectoryRows: FlooVisitDirectoryRow[] = [];
+  public flooQueueRows: FlooVisitDirectoryRow[] = [];
+  public flooHelpsLeft: number | null = null;
+  public flooLoading = false;
+  public flooLastLoadedAt = 0;
+  public flooAutoAdvanceTimer = 0;
+  public flooHelpersToday: Array<{
+    uid: string;
+    name: string;
+    avatarEmoji?: string;
+    avatarUrl?: string;
+    at: number;
+  }> = [];
   public lastSocialLiveSig = '';
   public tutorialMinimized = false;
   public lastRenderedTutorialSig = '';
@@ -380,10 +406,11 @@ export class GameHUD {
       this.enterVisitFromHud(nid);
     };
     this.leaderboardModal.onOpenNeighborBook = () => {
-      this.openNeighborDialog('chest');
+      this.openNeighborDialog('friends');
     };
     this.wireDraggableBanner();
     this.bindEvents();
+    this.applyStoredA11ySettings();
     this.refreshAll();
 
     // Update live 24h clock & active countdown timers cleanly without clobbering DOM or interrupting range sliders
@@ -493,12 +520,59 @@ export class GameHUD {
   }
 
   private installDialogLightDismissFallback(): void {
+    const syncDialogAudioMuffle = () => {
+      const anyModalOpen = Boolean(this.root.querySelector('dialog[open]'));
+      this.sim.audio?.setModalMuffle?.(anyModalOpen);
+    };
+
     for (const dialog of Array.from(this.root.querySelectorAll<HTMLDialogElement>('dialog'))) {
       dialog.addEventListener('close', () => {
         dialog.returnValue = '';
+        syncDialogAudioMuffle();
       });
     }
-    if (!('closedBy' in HTMLDialogElement.prototype)) {
+
+    if (typeof MutationObserver !== 'undefined') {
+      const observer = new MutationObserver(() => syncDialogAudioMuffle());
+      observer.observe(this.root, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['open'],
+      });
+    }
+
+    // Pause heavy background updates on off-screen .aaa-codex-scroll containers (capturing delegation)
+    this.root.addEventListener(
+      'contentvisibilityautostatechange',
+      (event) => {
+        const target = event.target as HTMLElement | null;
+        if (target && typeof target.matches === 'function' && target.matches('.aaa-codex-scroll')) {
+          const skipped = Boolean((event as Event & { skipped?: boolean }).skipped);
+          target.dataset.cvSkipped = skipped ? 'true' : 'false';
+        }
+      },
+      { capture: true }
+    );
+
+    if (
+      typeof document !== 'undefined' &&
+      !('contentVisibility' in document.documentElement.style) &&
+      typeof IntersectionObserver !== 'undefined'
+    ) {
+      const cvFallbackObserver = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            (entry.target as HTMLElement).dataset.cvSkipped = entry.isIntersecting ? 'false' : 'true';
+          }
+        },
+        { rootMargin: '200px' }
+      );
+      for (const scroller of Array.from(this.root.querySelectorAll<HTMLElement>('.aaa-codex-scroll'))) {
+        cvFallbackObserver.observe(scroller);
+      }
+    }
+
+    if (typeof HTMLDialogElement !== 'undefined' && !('closedBy' in HTMLDialogElement.prototype)) {
       const outside = (e: PointerEvent, dialog: HTMLDialogElement) => {
         const r = dialog.getBoundingClientRect();
         return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
@@ -532,7 +606,7 @@ export class GameHUD {
   public togglePhotoMode(force?: boolean): void { return headerTogglePhotoMode(this, force); }
 
   public openNeighborDialog(
-    tab?: 'friends' | 'chest' | 'log',
+    tab?: 'friends' | 'postcard' | 'chest' | 'log',
     focusNeighborId?: string
   ): void { return socialUiOpenNeighborDialog(this, tab, focusNeighborId); }
 
@@ -547,6 +621,20 @@ export class GameHUD {
   public openMinigameRescue(ctx: MinigameRescueContext): void { return socialUiOpenMinigameRescue(this, ctx); }
 
   public enterVisitFromHud(neighborId: string): void { return socialUiEnterVisitFromHud(this, neighborId); }
+
+  public enterHonorTourFromHud(tourId: string): void { return socialUiEnterHonorTourFromHud(this, tourId); }
+
+  public enterFlooMemberVisitFromHud(hostUid: string, queue?: FlooVisitDirectoryRow[]): void {
+    return socialUiEnterFlooMemberVisitFromHud(this, hostUid, queue);
+  }
+
+  public refreshFlooDirectoryFromHud(force?: boolean): Promise<void> {
+    return socialUiRefreshFlooDirectory(this, force);
+  }
+
+  public applyAuthoritativeSnapshot(snap: unknown): void {
+    socialUiApplyAuthoritativeSnapshotIdentity(this, snap);
+  }
 
   public exitVisitFromHud(): void { return socialUiExitVisitFromHud(this); }
 
@@ -605,16 +693,19 @@ export class GameHUD {
 
   public openLeaderboardDialog(gameId?: LeaderboardGameId, scope?: LeaderboardScope): void {
     this.closeHudPopovers();
-    const fallbackGame: LeaderboardGameId =
-      gameId ?? this.sim.getRequiredLevelTrial()?.kind ?? 'match3';
+    const fallbackGame: LeaderboardGameId = gameId ?? this.sim.getLastPlayedMinigame();
     this.leaderboardModal.open(fallbackGame, scope);
   }
 
   public openMatch3Dialog(overrideLevel?: number): void {
+    this.sim.setLastPlayedMinigame('match3');
     void this.getMatch3Modal().then((m) => m.open(overrideLevel));
   }
 
   public openPuzzleArcadeDialog(mode?: PuzzleArcadeMode): void {
+    if (mode) {
+      this.sim.setLastPlayedMinigame(mode);
+    }
     void this.getPuzzleArcadeModal().then((m) => m.open(mode));
   }
 
@@ -627,16 +718,34 @@ export class GameHUD {
     subView?: 'practice' | 'codex'
   ): void {
     this.closeHudPopovers();
+    if (!targetPlotUid) {
+      this.sim.setLastPlayedMinigame('seedquiz');
+    }
     this.seedQuizModal.open(cropId, targetPlotUid, lang, tier, format, subView);
+  }
+
+  public openLastPlayedMinigame(): void {
+    this.closeHudPopovers();
+    const lastGame = this.sim.getLastPlayedMinigame();
+    if (lastGame === 'match3') {
+      this.openMatch3Dialog();
+    } else if (lastGame === 'seedquiz') {
+      this.openSeedQuizDialog();
+    } else {
+      this.openPuzzleArcadeDialog(lastGame);
+    }
   }
 
   public openTrialMinigame(kind?: MinigameTrialKind): void {
     this.closeHudPopovers();
-    const target = kind ?? this.sim.getRequiredLevelTrial()?.kind ?? 'caro';
-    if (target === 'match3') {
+    if (!kind) {
+      this.openLastPlayedMinigame();
+      return;
+    }
+    if (kind === 'match3') {
       this.openMatch3Dialog();
     } else {
-      this.openPuzzleArcadeDialog(target);
+      this.openPuzzleArcadeDialog(kind);
     }
   }
 
@@ -750,4 +859,51 @@ export class GameHUD {
   public renderTutorialCoach(): void { return socialUiRenderTutorialCoach(this); }
 
   private handleTutorialPrimaryAction(stepId: string): void { return socialUiHandleTutorialPrimaryAction(this, stepId); }
+
+  public getEffectiveA11ySettings(): PlatformA11ySettings {
+    const saved = this.sim.state.a11ySettings;
+    return {
+      colorblindMode: saved?.colorblindMode ?? DEFAULT_PLATFORM_A11Y_SETTINGS.colorblindMode,
+      fontScale: saved?.fontScale ?? DEFAULT_PLATFORM_A11Y_SETTINGS.fontScale,
+      highContrast: saved?.highContrast ?? DEFAULT_PLATFORM_A11Y_SETTINGS.highContrast,
+      keyboardFocusVisible: saved?.keyboardFocusVisible ?? true,
+      volumes: {
+        ...DEFAULT_PLATFORM_A11Y_SETTINGS.volumes,
+        ...(saved?.volumes ?? {}),
+      },
+    };
+  }
+
+  public applyStoredA11ySettings(): void {
+    const cfg = this.getEffectiveA11ySettings();
+    applyA11ySettingsToDocument(cfg);
+    if (this.sim.audio?.ceiling) {
+      syncA11yVolumesToAudio(cfg, this.sim.audio);
+    }
+  }
+
+  public playStoryCutscene(chapterId: string): void {
+    const chap = STORY_CUTSCENE_CHAPTERS.find((c) => c.id === chapterId);
+    if (!chap) return;
+    if (this.sim.state.level < chap.unlockLevel && !this.sim.isHeadmasterPreview) {
+      this.showToast(`Cần đạt Cấp ${chap.unlockLevel} để mở khoá ${chap.titleVi}!`, '🔒');
+      return;
+    }
+    (this.root.querySelector('#albumDialog') as HTMLDialogElement | null)?.close();
+    this.sim.audio.playSpell();
+    this.showToast(`🎬 ${chap.titleVi}`, '🎬');
+
+    let delayAcc = 120;
+    chap.keyframes.forEach((kf, idx) => {
+      window.setTimeout(() => {
+        centerCameraOnGrid(this.cam, kf.cameraFocusGx, kf.cameraFocusGy);
+        this.onCameraJump?.();
+        this.showToast(`🎬 ${kf.captionVi}`, idx === chap.keyframes.length - 1 ? '✨' : '🕯️');
+        if (chap.chapterNumber === 3 && idx === chap.keyframes.length - 1) {
+          this.sim.launchFireworksShow(10);
+        }
+      }, delayAcc);
+      delayAcc += kf.durationMs;
+    });
+  }
 }

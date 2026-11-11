@@ -451,7 +451,7 @@ export function splitWordIntoKidTiles(rawWord: string, lang: QuizLanguageId): st
 
   const chars = Array.from(core);
   if (chars.length <= 1) {
-    return [core, '✨'];
+    return chars.length === 1 ? [chars[0]] : [];
   }
   if (chars.length <= 6) {
     return chars;
@@ -527,7 +527,23 @@ function buildFromCurated(item: CuratedQuizItem, isReview: boolean): ActiveQuizC
     base.promptVi = `🧩 Nhìn tranh "${heroVisual.shortVi}" và ghép các mảnh chữ:`;
     base.stemText = heroVisual.shortVi;
     base.stemPhonetic = primaryNote.phonetic;
-    const expectedTiles = splitWordIntoKidTiles(primaryNote.word, item.lang);
+    let expectedTiles = splitWordIntoKidTiles(primaryNote.word, item.lang);
+    if (expectedTiles.length < 2) {
+      const sentenceParts = Array.isArray(item.orderedTokens)
+        ? item.orderedTokens.filter((tok: string) => Boolean(tok && tok.trim().length > 0))
+        : [];
+      expectedTiles =
+        sentenceParts.length >= 2 && sentenceParts.length <= 6
+          ? sentenceParts
+          : splitWordIntoKidTiles(item.fullSentence, item.lang);
+      base.promptVi = `🧩 Nhìn tranh "${heroVisual.shortVi}" và ghép câu "${item.translationVi}":`;
+      base.stemText = item.translationVi;
+      base.stemPhonetic = item.fullPhonetic;
+      base.fullSentence = item.fullSentence;
+      base.fullPhonetic = item.fullPhonetic;
+      base.ttsPromptText = item.fullSentence;
+      base.translationVi = item.translationVi;
+    }
     const indexed = expectedTiles.map((text, idx) => ({ idx, text }));
     let shuffled = shuffleArray(indexed);
     if (

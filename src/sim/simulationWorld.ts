@@ -167,7 +167,7 @@ import {
   createInitialPuzzleArcadeState,
   JIGSAW_PAINTINGS,
   PuzzleRewardSpec,
-} from './puzzleArcadeEngine';
+} from './puzzleShared';
 import {
   ActiveQuizChallenge,
   createInitialLanguageQuizState,
@@ -557,7 +557,7 @@ export function worldCanPlaceItem(sim: ParkSimulation,
         if (!sim.state.sandboxMode && (sim.state.match3?.stars ?? 0) < starCost) {
           return {
             ok: false,
-            reason: `Cần ${starCost} 🌟 Sao Phép Thuật (Vượt Bùa Gặt Honeydukes, Ngũ Ấn Đạo Tặc, Ma Trận Bảo Bối, Cờ Phù Thủy hoặc Nối Hình Sinh Vật để nhận Sao!)`,
+            reason: `Cần ${starCost} 🌟 Sao Phép Thuật (Vượt Bùa Gặt Honeydukes, Ngũ Ấn Đạo Tặc, Số Học Huyền Bí, Cờ Phù Thủy hoặc Sinh Vật Huyền Bí để nhận Sao!)`,
           };
         }
       } else if (!sim.state.sandboxMode && sim.state.galleons < item.cost) {
@@ -851,6 +851,7 @@ export function worldPlaceItem(sim: ParkSimulation, item: CatalogItem, gx: numbe
     if (item.category === 'decor') {
       sim.recordQuestProgress('place_paths', item.id, 1);
     }
+    sim.checkAndToastAchievements?.();
     sim.saveToStorage();
     sim.onUiChange?.();
     return true;

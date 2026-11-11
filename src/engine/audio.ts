@@ -195,6 +195,8 @@ export class MagicalAudio {
   private lastRainLevel = -1;
   private sfxAtlasBuffer: AudioBuffer | null = null;
   private sfxAtlasLoading = false;
+  private masterFilter: BiquadFilterNode | null = null;
+  private modalMuffled = false;
 
   constructor() {
     this.slotA = this.initBgmSlot('A');
@@ -204,7 +206,7 @@ export class MagicalAudio {
     const unlockHandler = () => {
       this.unlocked = true;
       const ctx = this.ensureCtx();
-      if (ctx && ctx.state === 'suspended') {
+      if (ctx && (ctx.state === 'suspended' || (ctx.state as string) === 'interrupted')) {
         ctx.resume().catch(() => {});
       }
       this.ensureSfxAtlasLoaded();
@@ -219,6 +221,8 @@ export class MagicalAudio {
       }
     };
     window.addEventListener('pointerdown', unlockHandler, { passive: true });
+    window.addEventListener('touchend', unlockHandler, { passive: true });
+    window.addEventListener('click', unlockHandler, { passive: true });
     window.addEventListener('keydown', unlockHandler, { passive: true });
   }
 
@@ -242,7 +246,45 @@ export class MagicalAudio {
       });
   }
 
-  private playAtlasCue(cue: SfxAtlasCueId, gainVal = 0.28, playbackRate = 1.0): boolean {
+  private getMasterOutput(ctx: AudioContext): AudioNode {
+    if (!this.masterFilter && typeof ctx.createBiquadFilter === 'function') {
+      try {
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = this.modalMuffled ? 1800 : 20000;
+        filter.Q.value = 0.707;
+        filter.connect(ctx.destination);
+        this.masterFilter = filter;
+      } catch {
+        this.masterFilter = null;
+      }
+    }
+    return this.masterFilter ?? ctx.destination;
+  }
+
+  private connectWithOptionalPan(ctx: AudioContext, sourceGain: AudioNode, pan = 0): void {
+    const dest = this.getMasterOutput(ctx);
+    const clampedPan = Math.max(-0.85, Math.min(0.85, Number.isFinite(pan) ? pan : 0));
+    if (Math.abs(clampedPan) > 0.01 && typeof ctx.createStereoPanner === 'function') {
+      try {
+        const panner = ctx.createStereoPanner();
+        panner.pan.value = clampedPan;
+        sourceGain.connect(panner);
+        panner.connect(dest);
+        return;
+      } catch {
+        // Fallback directly to master output
+      }
+    }
+    sourceGain.connect(dest);
+  }
+
+  private playAtlasCue(
+    cue: SfxAtlasCueId,
+    gainVal = 0.28,
+    playbackRate = 1.0,
+    pan = 0
+  ): boolean {
     if (!this.enabled || !this.sfxAtlasBuffer) return false;
     const ctx = this.ensureCtx();
     if (!ctx || ctx.state !== 'running') return false;
@@ -258,7 +300,7 @@ export class MagicalAudio {
       now + Math.max(0.06, def.duration / Math.max(0.6, playbackRate))
     );
     src.connect(gain);
-    gain.connect(ctx.destination);
+    this.connectWithOptionalPan(ctx, gain, pan);
     src.start(now, def.offset, def.duration);
     return true;
   }
@@ -405,7 +447,8 @@ export class MagicalAudio {
     duration: number,
     type: OscillatorType = 'sine',
     gainVal = 0.08,
-    delay = 0
+    delay = 0,
+    pan = 0
   ): void {
     const ctx = this.ensureCtx();
     if (!ctx || ctx.state !== 'running') return;
@@ -418,7 +461,7 @@ export class MagicalAudio {
     gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, gainVal), now + 0.018);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    this.connectWithOptionalPan(ctx, gain, pan);
     osc.start(now);
     osc.stop(now + duration + 0.03);
   }
@@ -445,6 +488,34 @@ export class MagicalAudio {
     const ctx = this.ensureCtx(level > 0);
     if (!ctx) return;
 
+    if (level <= 0) {
+      if (this.rainSource && this.rainGain) {
+        const srcToStop = this.rainSource;
+        const gainToStop = this.rainGain;
+        this.rainSource = null;
+        this.rainGain = null;
+        try {
+          if (ctx.state === 'running') {
+            gainToStop.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.18);
+          }
+        } catch {
+          // Ignore ramp errors on suspended contexts
+        }
+        if (typeof window !== 'undefined') {
+          window.setTimeout(() => {
+            try {
+              srcToStop.stop();
+              srcToStop.disconnect();
+              gainToStop.disconnect();
+            } catch {
+              // Already stopped
+            }
+          }, 600);
+        }
+      }
+      return;
+    }
+
     if (level > 0 && ctx.state === 'running' && !this.rainSource) {
       const src = ctx.createBufferSource();
       src.buffer = this.getNoiseBuffer(ctx);
@@ -464,7 +535,7 @@ export class MagicalAudio {
       src.connect(hp);
       hp.connect(lp);
       lp.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getMasterOutput(ctx));
       src.start();
 
       this.rainSource = src;
@@ -518,11 +589,49 @@ export class MagicalAudio {
    * between dual <audio> slots, and manages fallback procedural synthesis and spatial soundscape.
    */
   public setModalDucking(active: boolean): void {
-    this.ceiling.setModalDucking(active);
+    this.setModalMuffle(active);
+  }
+
+  /**
+   * Warm BiquadFilter low-pass muffle (1,800 Hz inside cozy halls/dialogs, 20,000 Hz open valley air)
+   * paired with smooth BGM & ambience ducking.
+   */
+  public setModalMuffle(muffled: boolean): void {
+    this.modalMuffled = Boolean(muffled);
+    this.ceiling.setModalDucking(this.modalMuffled);
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    this.getMasterOutput(this.ctx);
+    if (this.masterFilter) {
+      const targetFreq = this.modalMuffled ? 1800 : 20000;
+      if (typeof this.masterFilter.frequency.setTargetAtTime === 'function') {
+        this.masterFilter.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.16);
+      } else {
+        this.masterFilter.frequency.value = targetFreq;
+      }
+    }
+  }
+
+  public isModalMuffled(): boolean {
+    return this.modalMuffled;
   }
 
   public setBusVolume(bus: AudioBusName, value: number): void {
     this.ceiling.setBusVolume(bus, value);
+  }
+
+  /**
+   * Pentatonic celesta combo chime ([1, 9/8, 5/4, 3/2, 5/3, 2] over C5) for sequential harvests & combos.
+   */
+  public playComboChime(step = 0, pan = 0): void {
+    this.ceiling.triggerIntensityPulse(0.14);
+    if (!this.enabled) return;
+    const pentatonicRatios = [1, 9 / 8, 5 / 4, 3 / 2, 5 / 3, 2, 9 / 4, 5 / 2];
+    const ratio = pentatonicRatios[Math.min(pentatonicRatios.length - 1, Math.max(0, step))];
+    const freq = 523.25 * ratio;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (this.playAtlasCue('harvest', 0.32 * sfxGain, Math.min(2.2, ratio), pan)) return;
+    this.playTone(freq, 0.2, 'sine', 0.068 * sfxGain, 0, pan);
+    this.playTone(freq * 1.5, 0.24, 'triangle', 0.034 * sfxGain, 0.035, pan);
   }
 
   public playSpatialSfx(
@@ -537,11 +646,13 @@ export class MagicalAudio {
     const spatial = computeSpatialCue(screenX, screenY, viewW, viewH, zoom);
     const sfxGain = this.ceiling.getEffectiveBusGain('sfx') * spatial.gainMul;
     if (cue === 'water') {
-      this.playTone(587.33, 0.14, 'sine', 0.045 * sfxGain, 0);
+      if (!this.playAtlasCue('water', 0.26 * sfxGain, 1.0, spatial.pan)) {
+        this.playTone(587.33, 0.14, 'sine', 0.045 * sfxGain, 0, spatial.pan);
+      }
     } else if (cue === 'creature') {
-      this.playTone(783.99, 0.16, 'triangle', 0.05 * sfxGain, 0);
+      this.playTone(783.99, 0.16, 'triangle', 0.05 * sfxGain, 0, spatial.pan);
     } else {
-      this.playTone(440.0, 0.18, 'triangle', 0.048 * sfxGain, 0);
+      this.playTone(440.0, 0.18, 'triangle', 0.048 * sfxGain, 0, spatial.pan);
     }
   }
 
@@ -836,7 +947,11 @@ export class MagicalAudio {
   }
 
   public resume(): void {
-    if (this.ctx && this.ctx.state === 'suspended' && this.unlocked) {
+    if (
+      this.ctx &&
+      (this.ctx.state === 'suspended' || (this.ctx.state as string) === 'interrupted') &&
+      this.unlocked
+    ) {
       this.ctx.resume().catch(() => {});
     }
     if (this.bgmEnabled && this.unlocked) {

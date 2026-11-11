@@ -168,7 +168,7 @@ import {
   createInitialPuzzleArcadeState,
   JIGSAW_PAINTINGS,
   PuzzleRewardSpec,
-} from './puzzleArcadeEngine';
+} from './puzzleShared';
 import {
   ActiveQuizChallenge,
   createInitialLanguageQuizState,
@@ -295,7 +295,10 @@ export function economySetBuildingCustomPrice(sim: ParkSimulation, uid: string, 
 export function economyGetEffectiveItemStarCost(sim: ParkSimulation, item: CatalogItem): number {
     const baseStars = getItemPuzzleStarCost(item);
     if (baseStars <= 0) return 0;
-    if (item.connectableGroup && sim.state.buildings.some((b) => b.itemId === item.id)) {
+    if (
+      (item.connectableGroup || item.isFlooPortal) &&
+      sim.state.buildings.some((b) => b.itemId === item.id)
+    ) {
       return 0;
     }
     return baseStars;
@@ -345,6 +348,7 @@ export function economyUpgradeBuildingStar(sim: ParkSimulation, uid: string): { 
     sim.recordQuestProgress('upgrade_star', item.id, 1);
     sim.audio.playSpell();
     sim.spawnFloatingText(b.gx + 1, b.gy + 1, `Kiến trúc ${b.stars}★! +${bonusXp} ⭐`, '#f59e0b');
+    sim.checkAndToastAchievements?.();
     sim.saveToStorage();
     sim.onUiChange?.();
     return { ok: true, msg: `Đã nâng cấp lên ${b.stars}★!` };
@@ -792,13 +796,15 @@ export function economyTickProductionToTimestamp(sim: ParkSimulation, now: numbe
             (item.id === 'burrow_chicken_coop' || item.id === 'burrow_puffskein_pasture')
           ) {
             const curGoods = b.readyFarmGoods ?? [];
-            if (curGoods.length < 4) {
-              b.readyFarmGoods = [...curGoods, 'farm_egg_wool'];
+            const canAdd = Math.min(addCycles, Math.max(0, 4 - curGoods.length));
+            if (canAdd > 0) {
+              b.readyFarmGoods = [...curGoods, ...Array(canAdd).fill('farm_egg_wool')];
             }
           } else if (addCycles > 0 && item.id === 'burrow_flower_garden') {
             const curGoods = b.readyFarmGoods ?? [];
-            if (curGoods.length < 3) {
-              b.readyFarmGoods = [...curGoods, 'floral_bouquet_gift'];
+            const canAdd = Math.min(addCycles, Math.max(0, 3 - curGoods.length));
+            if (canAdd > 0) {
+              b.readyFarmGoods = [...curGoods, ...Array(canAdd).fill('floral_bouquet_gift')];
             }
           }
         }

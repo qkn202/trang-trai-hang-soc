@@ -68,6 +68,10 @@ import { getZoneAt, getZoneById, GRID_SIZE, ZONES } from '../data/zones';
 import { MagicalAudio } from '../engine/audio';
 import { findNextStepOnPaths, getRandomUnlockedPathTile } from '../engine/pathfinding';
 import {
+  createDefaultRetentionState,
+  reconcileRetentionStateOnLoad,
+} from './retentionAndNarrative';
+import {
   BuildReductionResult,
   CatalogItem,
   CraftedGoodId,
@@ -111,6 +115,15 @@ import {
   QuestDef,
   QuestObjectiveType,
   RibbonUnveilCelebration,
+  SavedCaroSession,
+  SavedChessHistoryItem,
+  SavedChessPiece,
+  SavedChessSession,
+  SavedMatch3Piece,
+  SavedMatch3Session,
+  SavedOnetSession,
+  SavedSudokuSession,
+  SavedSudokuUndoItem,
   StaffEntity,
   SuitcaseExpeditionId,
   TileCell,
@@ -165,7 +178,7 @@ import {
   createInitialPuzzleArcadeState,
   JIGSAW_PAINTINGS,
   PuzzleRewardSpec,
-} from './puzzleArcadeEngine';
+} from './puzzleShared';
 import {
   ActiveQuizChallenge,
   createInitialLanguageQuizState,
@@ -195,7 +208,10 @@ export const PLAYFUL_BREAKDOWNS = [
 
 export const FIREWORK_COLORS = ['#fbbf24', '#f472b6', '#38bdf8', '#34d399', '#c084fc', '#fb7185'];
 
-export function getLocalDateKey(now = new Date()): string {
+export function getLocalDateKey(now?: Date): string {
+  if (!now) {
+    return getLocalCalendarResetKey();
+  }
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const d = String(now.getDate()).padStart(2, '0');
@@ -720,7 +736,19 @@ export function createInitialGameState(): GameState {
     }
   }
 
-  // Clean sunlit 36×30 (1,080-tile) starter meadow: no stray pre-built trails so players design freely from scratch!
+  // 5. AAA Sunlit Homestead Golden Cobblestone Lanes connecting the Western Arched Stone Bridge (gy=22) into the Hang Sóc Courtyard!
+  const starterCobbleCoords: Array<[number, number]> = [
+    [1, 22], [2, 22],
+    [6, 22], [7, 22], [8, 22], [9, 22],
+    [9, 23], [10, 23], [11, 23], [12, 23], [13, 23], [14, 23], [15, 23], [16, 23], [17, 23], [18, 23], [19, 23], [20, 23], [21, 23],
+    [16, 20], [16, 21], [16, 22], [16, 24], [16, 25], [16, 26], [16, 27], [16, 28],
+    [12, 27], [13, 27], [14, 27], [15, 27], [17, 27], [18, 27], [19, 27], [20, 27],
+  ];
+  for (const [cgx, cgy] of starterCobbleCoords) {
+    if (tileOverrides[`${cgx},${cgy}`]?.terrain !== 'water') {
+      setTile(cgx, cgy, { ...(tileOverrides[`${cgx},${cgy}`] ?? {}), path: 'cobble' });
+    }
+  }
 
   const mkBuilding = (
     uid: string,
@@ -818,11 +846,13 @@ export function createInitialGameState(): GameState {
     suitcase: createInitialSuitcaseState(),
     match3: createInitialMatch3State(),
     puzzleArcade: createInitialPuzzleArcadeState(),
+    lastPlayedMinigame: 'match3',
     levelUpTrialCompletedLevel: 0,
     puzzleLevelWinsProgress: 0,
     featuredStarClaimedLevel: 0,
     phoenixTalismans: 1,
     quizTalismanProgress: 0,
+    retention: createDefaultRetentionState(),
     staffPatrolZones: {},
     lastProphetHeadline: {
       title: 'KHAI HOANG ĐỒI CỎ HANG SÓC — THÁP 5 MÔN GIẢI ĐỐ 777 MÀN!',
@@ -839,6 +869,8 @@ export function createInitialGameState(): GameState {
     },
     stats: {
       totalGalleonsHarvested: 0,
+      farmHarvestsCount: 0,
+      neighborHelpsDone: 0,
       butterbeerServed: 0,
       wandsSold: 0,
       spellsCastByGuests: 0,
@@ -916,6 +948,651 @@ export function sanitizeQuestList(raw: unknown, fallback: QuestDef[]): QuestDef[
     });
   }
   return cleaned.length > 0 ? cleaned : fallback;
+}
+
+function sanitizeSudoku9x9NumberMatrix(
+  raw: unknown,
+  min: number,
+  max: number
+): number[][] | null {
+  if (!Array.isArray(raw) || raw.length !== 9) return null;
+  const out: number[][] = [];
+  for (let r = 0; r < 9; r++) {
+    const row = raw[r];
+    if (!Array.isArray(row) || row.length !== 9) return null;
+    const outRow: number[] = [];
+    for (let c = 0; c < 9; c++) {
+      const n = row[c];
+      if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+      const iv = Math.round(n);
+      if (iv < min || iv > max) return null;
+      outRow.push(iv);
+    }
+    out.push(outRow);
+  }
+  return out;
+}
+
+function sanitizeSudoku9x9BooleanMatrix(raw: unknown): boolean[][] | null {
+  if (!Array.isArray(raw) || raw.length !== 9) return null;
+  const out: boolean[][] = [];
+  for (let r = 0; r < 9; r++) {
+    const row = raw[r];
+    if (!Array.isArray(row) || row.length !== 9) return null;
+    out.push(row.map((v) => Boolean(v)));
+  }
+  return out;
+}
+
+function sanitizeSudokuCoord(raw: unknown): { r: number; c: number } | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const rec = raw as { r?: unknown; c?: unknown };
+  if (typeof rec.r !== 'number' || typeof rec.c !== 'number') return null;
+  const r = Math.round(rec.r);
+  const c = Math.round(rec.c);
+  if (!Number.isFinite(r) || !Number.isFinite(c) || r < 0 || r >= 9 || c < 0 || c >= 9) {
+    return null;
+  }
+  return { r, c };
+}
+
+export function sanitizeSavedSudokuSession(
+  raw: unknown,
+  expectedStage: number
+): SavedSudokuSession | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const rec = raw as Partial<SavedSudokuSession>;
+  if (Math.round(clampFinite(rec.stage, -1, MAX_MINIGAME_STAGE, -1)) !== expectedStage) {
+    return null;
+  }
+  if (rec.status !== 'playing' && rec.status !== 'lost') {
+    return null;
+  }
+  const solution = sanitizeSudoku9x9NumberMatrix(rec.solution, 1, 9);
+  const initialGiven = sanitizeSudoku9x9BooleanMatrix(rec.initialGiven);
+  const given = sanitizeSudoku9x9BooleanMatrix(rec.given);
+  const grid = sanitizeSudoku9x9NumberMatrix(rec.grid, 0, 9);
+  const notes = sanitizeSudoku9x9NumberMatrix(rec.notes, 0, 0x3fe);
+  if (!solution || !initialGiven || !given || !grid || !notes) {
+    return null;
+  }
+  let allSolved = true;
+  for (let r = 0; r < 9; r++) {
+    for (let c = 0; c < 9; c++) {
+      if ((initialGiven[r][c] || given[r][c]) && grid[r][c] !== solution[r][c]) {
+        return null;
+      }
+      if (grid[r][c] !== solution[r][c]) {
+        allSolved = false;
+      }
+    }
+  }
+  if (allSolved) {
+    return null;
+  }
+
+  const editHistory: Array<{ r: number; c: number }> = [];
+  if (Array.isArray(rec.editHistory)) {
+    for (const item of rec.editHistory.slice(-81)) {
+      const pt = sanitizeSudokuCoord(item);
+      if (pt) editHistory.push(pt);
+    }
+  }
+
+  const undoStack: SavedSudokuUndoItem[] = [];
+  if (Array.isArray(rec.undoStack)) {
+    for (const item of rec.undoStack.slice(-60)) {
+      if (!item || typeof item !== 'object') continue;
+      const u = item as Partial<SavedSudokuUndoItem>;
+      const uGrid = sanitizeSudoku9x9NumberMatrix(u.grid, 0, 9);
+      const uNotes = sanitizeSudoku9x9NumberMatrix(u.notes, 0, 0x3fe);
+      if (!uGrid || !uNotes) continue;
+      undoStack.push({
+        grid: uGrid,
+        notes: uNotes,
+        selected: sanitizeSudokuCoord(u.selected),
+      });
+    }
+  }
+
+  const maxMistakes = Math.round(clampFinite(rec.maxMistakes, 3, 12, 3));
+  return {
+    stage: expectedStage,
+    solution,
+    initialGiven,
+    given,
+    grid,
+    notes,
+    mistakesCount: Math.round(clampFinite(rec.mistakesCount, 0, maxMistakes + 3, 0)),
+    maxMistakes,
+    freeHintsLeft: Math.round(clampFinite(rec.freeHintsLeft, 0, 20, 1)),
+    paidHintsLeft: Math.round(clampFinite(rec.paidHintsLeft, 0, 20, 2)),
+    talismanUsed: Boolean(rec.talismanUsed),
+    pencilMode: Boolean(rec.pencilMode),
+    eraseMode: Boolean(rec.eraseMode),
+    selected: sanitizeSudokuCoord(rec.selected),
+    highlightDigit: Math.round(clampFinite(rec.highlightDigit, 0, 9, 0)),
+    elapsedSec: clampFinite(rec.elapsedSec, 0, 864000, 0),
+    status: rec.status,
+    editHistory,
+    undoStack,
+    companionCharge: Math.round(clampFinite(rec.companionCharge, 0, 20, 0)),
+    snackPieUsed: Boolean(rec.snackPieUsed),
+    savedAt: Math.round(clampFinite(rec.savedAt, 0, Number.MAX_SAFE_INTEGER, Date.now())),
+  };
+}
+
+export function sanitizeSavedCaroSession(
+  raw: unknown,
+  expectedStage: number
+): SavedCaroSession | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const rec = raw as Partial<SavedCaroSession>;
+  if (Math.round(clampFinite(rec.stage, -1, MAX_MINIGAME_STAGE, -1)) !== expectedStage) {
+    return null;
+  }
+  if (
+    rec.status !== 'playing' &&
+    rec.status !== 'ai_thinking' &&
+    rec.status !== 'lost' &&
+    rec.status !== 'draw'
+  ) {
+    return null;
+  }
+  if (!Array.isArray(rec.grid) || rec.grid.length !== 13) return null;
+  const grid: Array<Array<0 | 1 | 2 | 3>> = [];
+  let runeSealCount = 0;
+  for (let r = 0; r < 13; r++) {
+    const row = rec.grid[r];
+    if (!Array.isArray(row) || row.length !== 13) return null;
+    const outRow: Array<0 | 1 | 2 | 3> = [];
+    for (let c = 0; c < 13; c++) {
+      const v = row[c];
+      if (v !== 0 && v !== 1 && v !== 2 && v !== 3) return null;
+      if (v === 3) runeSealCount++;
+      outRow.push(v);
+    }
+    grid.push(outRow);
+  }
+
+  const validPt = (p: unknown): { r: number; c: number } | null => {
+    if (!p || typeof p !== 'object') return null;
+    const pr = p as { r?: unknown; c?: unknown };
+    if (typeof pr.r !== 'number' || typeof pr.c !== 'number') return null;
+    const r = Math.round(pr.r);
+    const c = Math.round(pr.c);
+    if (!Number.isFinite(r) || !Number.isFinite(c) || r < 0 || r >= 13 || c < 0 || c >= 13) {
+      return null;
+    }
+    return { r, c };
+  };
+
+  const moveHistory: Array<{ r: number; c: number; stone: 1 | 2 }> = [];
+  if (Array.isArray(rec.moveHistory)) {
+    for (const m of rec.moveHistory.slice(0, 169)) {
+      const pt = validPt(m);
+      const st = (m as { stone?: unknown })?.stone;
+      if (pt && (st === 1 || st === 2)) {
+        moveHistory.push({ r: pt.r, c: pt.c, stone: st });
+      }
+    }
+  }
+
+  return {
+    stage: expectedStage,
+    grid,
+    moveHistory,
+    initialHistoryLen: Math.round(
+      clampFinite(rec.initialHistoryLen, 0, moveHistory.length, 0)
+    ),
+    runeSealCount,
+    winningLine: Array.isArray(rec.winningLine)
+      ? rec.winningLine
+          .map((p) => validPt(p))
+          .filter((p): p is { r: number; c: number } => Boolean(p))
+          .slice(0, 13)
+      : null,
+    hintCell: validPt(rec.hintCell),
+    freeUndosLeft: Math.round(clampFinite(rec.freeUndosLeft, 0, 10, 0)),
+    paidUndosLeft: Math.round(clampFinite(rec.paidUndosLeft, 0, 10, 1)),
+    freeHintsLeft: Math.round(clampFinite(rec.freeHintsLeft, 0, 10, 0)),
+    paidHintsLeft: Math.round(clampFinite(rec.paidHintsLeft, 0, 10, 1)),
+    talismanUsed: Boolean(rec.talismanUsed),
+    status: rec.status,
+    companionCharge: Math.round(clampFinite(rec.companionCharge, 0, 20, 0)),
+    snackPieUsed: Boolean(rec.snackPieUsed),
+    savedAt: Math.round(clampFinite(rec.savedAt, 0, Number.MAX_SAFE_INTEGER, Date.now())),
+  };
+}
+
+function sanitizeChessBoard8x8(raw: unknown): Array<Array<SavedChessPiece | null>> | null {
+  if (!Array.isArray(raw) || raw.length !== 8) return null;
+  const validTypes = new Set<SavedChessPiece['type']>(['p', 'n', 'b', 'r', 'q', 'k']);
+  let wKings = 0;
+  let bKings = 0;
+  const out: Array<Array<SavedChessPiece | null>> = [];
+  for (let r = 0; r < 8; r++) {
+    const row = raw[r];
+    if (!Array.isArray(row) || row.length !== 8) return null;
+    const outRow: Array<SavedChessPiece | null> = [];
+    for (let c = 0; c < 8; c++) {
+      const cell = row[c];
+      if (cell === null || cell === undefined) {
+        outRow.push(null);
+        continue;
+      }
+      if (!cell || typeof cell !== 'object') return null;
+      const cp = cell as Partial<SavedChessPiece>;
+      if ((cp.color !== 'w' && cp.color !== 'b') || !cp.type || !validTypes.has(cp.type)) {
+        return null;
+      }
+      if (cp.type === 'k') {
+        if (cp.color === 'w') wKings++;
+        else bKings++;
+      }
+      outRow.push({ color: cp.color, type: cp.type });
+    }
+    out.push(outRow);
+  }
+  if (wKings !== 1 || bKings !== 1) return null;
+  return out;
+}
+
+export function sanitizeSavedChessSession(
+  raw: unknown,
+  expectedStage: number
+): SavedChessSession | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const rec = raw as Partial<SavedChessSession>;
+  if (Math.round(clampFinite(rec.stage, -1, MAX_MINIGAME_STAGE, -1)) !== expectedStage) {
+    return null;
+  }
+  if (rec.subMode !== 'tactics' && rec.subMode !== 'match') return null;
+  if (rec.turn !== 'w' && rec.turn !== 'b') return null;
+  if (
+    rec.status !== 'playing' &&
+    rec.status !== 'ai_thinking' &&
+    rec.status !== 'lost' &&
+    rec.status !== 'draw'
+  ) {
+    return null;
+  }
+  const board = sanitizeChessBoard8x8(rec.board);
+  if (!board) return null;
+
+  const validTypes = new Set<SavedChessPiece['type']>(['p', 'n', 'b', 'r', 'q', 'k']);
+  const validSq = (s: unknown): { r: number; c: number } | null => {
+    if (!s || typeof s !== 'object') return null;
+    const sq = s as { r?: unknown; c?: unknown };
+    if (typeof sq.r !== 'number' || typeof sq.c !== 'number') return null;
+    const r = Math.round(sq.r);
+    const c = Math.round(sq.c);
+    if (!Number.isFinite(r) || !Number.isFinite(c) || r < 0 || r >= 8 || c < 0 || c >= 8) {
+      return null;
+    }
+    return { r, c };
+  };
+  const validMv = (
+    m: unknown
+  ): { fromR: number; fromC: number; toR: number; toC: number } | null => {
+    if (!m || typeof m !== 'object') return null;
+    const mv = m as Record<string, unknown>;
+    if (
+      typeof mv.fromR !== 'number' ||
+      typeof mv.fromC !== 'number' ||
+      typeof mv.toR !== 'number' ||
+      typeof mv.toC !== 'number'
+    ) {
+      return null;
+    }
+    const fromR = Math.round(mv.fromR);
+    const fromC = Math.round(mv.fromC);
+    const toR = Math.round(mv.toR);
+    const toC = Math.round(mv.toC);
+    if (
+      fromR < 0 ||
+      fromR >= 8 ||
+      fromC < 0 ||
+      fromC >= 8 ||
+      toR < 0 ||
+      toR >= 8 ||
+      toC < 0 ||
+      toC >= 8
+    ) {
+      return null;
+    }
+    return { fromR, fromC, toR, toC };
+  };
+
+  const history: SavedChessHistoryItem[] = [];
+  if (Array.isArray(rec.history)) {
+    for (const h of rec.history.slice(-40)) {
+      if (!h || typeof h !== 'object') continue;
+      const hi = h as Partial<SavedChessHistoryItem>;
+      if (hi.turn !== 'w' && hi.turn !== 'b') continue;
+      const hb = sanitizeChessBoard8x8(hi.board);
+      if (!hb) continue;
+      history.push({
+        board: hb,
+        turn: hi.turn,
+        castling: {
+          wK: Boolean(hi.castling?.wK),
+          wQ: Boolean(hi.castling?.wQ),
+          bK: Boolean(hi.castling?.bK),
+          bQ: Boolean(hi.castling?.bQ),
+        },
+        enPassant: validSq(hi.enPassant),
+        capturedByWhite: Array.isArray(hi.capturedByWhite)
+          ? hi.capturedByWhite.filter((t): t is SavedChessPiece['type'] => validTypes.has(t)).slice(0, 16)
+          : [],
+        capturedByBlack: Array.isArray(hi.capturedByBlack)
+          ? hi.capturedByBlack.filter((t): t is SavedChessPiece['type'] => validTypes.has(t)).slice(0, 16)
+          : [],
+        lastMove: validMv(hi.lastMove),
+        halfMoveClock: Math.round(clampFinite(hi.halfMoveClock, 0, 200, 0)),
+      });
+    }
+  }
+
+  return {
+    stage: expectedStage,
+    subMode: rec.subMode,
+    loadedFen: sanitizePlainText(rec.loadedFen, 140),
+    board,
+    turn: rec.turn,
+    castling: {
+      wK: Boolean(rec.castling?.wK),
+      wQ: Boolean(rec.castling?.wQ),
+      bK: Boolean(rec.castling?.bK),
+      bQ: Boolean(rec.castling?.bQ),
+    },
+    enPassant: validSq(rec.enPassant),
+    capturedByWhite: Array.isArray(rec.capturedByWhite)
+      ? rec.capturedByWhite.filter((t): t is SavedChessPiece['type'] => validTypes.has(t)).slice(0, 16)
+      : [],
+    capturedByBlack: Array.isArray(rec.capturedByBlack)
+      ? rec.capturedByBlack.filter((t): t is SavedChessPiece['type'] => validTypes.has(t)).slice(0, 16)
+      : [],
+    lastMove: validMv(rec.lastMove),
+    hintMove: validMv(rec.hintMove),
+    selected: validSq(rec.selected),
+    halfMoveClock: Math.round(clampFinite(rec.halfMoveClock, 0, 200, 0)),
+    moveCount: Math.round(clampFinite(rec.moveCount, 0, 500, 0)),
+    freeUndosLeft: Math.round(clampFinite(rec.freeUndosLeft, 0, 10, 0)),
+    paidUndosLeft: Math.round(clampFinite(rec.paidUndosLeft, 0, 10, 1)),
+    freeHintsLeft: Math.round(clampFinite(rec.freeHintsLeft, 0, 10, 0)),
+    paidAssistsLeft: Math.round(clampFinite(rec.paidAssistsLeft, 0, 5, 1)),
+    talismanUsed: Boolean(rec.talismanUsed),
+    status: rec.status,
+    history,
+    companionCharge: Math.round(clampFinite(rec.companionCharge, 0, 20, 0)),
+    snackPieUsed: Boolean(rec.snackPieUsed),
+    savedAt: Math.round(clampFinite(rec.savedAt, 0, Number.MAX_SAFE_INTEGER, Date.now())),
+  };
+}
+
+export function sanitizeSavedOnetSession(
+  raw: unknown,
+  expectedStage: number
+): SavedOnetSession | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const rec = raw as Partial<SavedOnetSession>;
+  if (Math.round(clampFinite(rec.stage, -1, MAX_MINIGAME_STAGE, -1)) !== expectedStage) {
+    return null;
+  }
+  if (rec.status !== 'playing' && rec.status !== 'lost') return null;
+  const rows = Math.round(clampFinite(rec.rows, 4, 12, 9));
+  const cols = Math.round(clampFinite(rec.cols, 4, 20, 16));
+  if (!Array.isArray(rec.grid) || rec.grid.length !== rows) return null;
+
+  let remainingTiles = 0;
+  const grid: Array<Array<string | null>> = [];
+  for (let r = 0; r < rows; r++) {
+    const row = rec.grid[r];
+    if (!Array.isArray(row) || row.length !== cols) return null;
+    const outRow: Array<string | null> = [];
+    for (let c = 0; c < cols; c++) {
+      const cell = row[c];
+      if (cell === null || cell === undefined) {
+        outRow.push(null);
+      } else if (typeof cell === 'string' && cell.length > 0 && cell.length <= 32) {
+        outRow.push(sanitizePlainText(cell, 32));
+        remainingTiles++;
+      } else {
+        return null;
+      }
+    }
+    grid.push(outRow);
+  }
+  const totalPairs = Math.floor((rows * cols) / 2);
+  if (remainingTiles < 2 || remainingTiles % 2 !== 0 || remainingTiles > rows * cols) {
+    return null;
+  }
+
+  const validCell = (pt: unknown): { r: number; c: number } | null => {
+    if (!pt || typeof pt !== 'object') return null;
+    const p = pt as { r?: unknown; c?: unknown };
+    if (typeof p.r !== 'number' || typeof p.c !== 'number') return null;
+    const r = Math.round(p.r);
+    const c = Math.round(p.c);
+    if (r < 0 || r >= rows || c < 0 || c >= cols) return null;
+    return { r, c };
+  };
+
+  const hp0 = Array.isArray(rec.hintPair) ? validCell(rec.hintPair[0]) : null;
+  const hp1 = Array.isArray(rec.hintPair) ? validCell(rec.hintPair[1]) : null;
+
+  return {
+    stage: expectedStage,
+    rows,
+    cols,
+    grid,
+    selected: validCell(rec.selected),
+    hintPair: hp0 && hp1 ? [hp0, hp1] : null,
+    hintPath: Array.isArray(rec.hintPath)
+      ? rec.hintPath
+          .filter(
+            (pt): pt is { r: number; c: number } =>
+              Boolean(
+                pt &&
+                  typeof pt === 'object' &&
+                  typeof pt.r === 'number' &&
+                  typeof pt.c === 'number' &&
+                  pt.r >= -1 &&
+                  pt.r <= rows &&
+                  pt.c >= -1 &&
+                  pt.c <= cols
+              )
+          )
+          .slice(0, 8)
+          .map((pt) => ({ r: Math.round(pt.r), c: Math.round(pt.c) }))
+      : null,
+    matchedPairs: totalPairs - remainingTiles / 2,
+    combo: Math.round(clampFinite(rec.combo, 0, 200, 0)),
+    maxCombo: Math.round(clampFinite(rec.maxCombo, 0, 200, 0)),
+    score: Math.round(clampFinite(rec.score, 0, 99999999, 0)),
+    movesAttempted: Math.round(clampFinite(rec.movesAttempted, 0, 99999, 0)),
+    autoShufflesCount: Math.round(clampFinite(rec.autoShufflesCount, 0, 999, 0)),
+    lives: Math.round(clampFinite(rec.lives, 0, 30, 10)),
+    freeHintsLeft: Math.round(clampFinite(rec.freeHintsLeft, 0, 15, 0)),
+    paidHintsLeft: Math.round(clampFinite(rec.paidHintsLeft, 0, 15, 1)),
+    paidShufflesLeft: Math.round(clampFinite(rec.paidShufflesLeft, 0, 15, 1)),
+    talismanUsed: Boolean(rec.talismanUsed),
+    status: rec.status,
+    companionCharge: Math.round(clampFinite(rec.companionCharge, 0, 20, 0)),
+    snackPieUsed: Boolean(rec.snackPieUsed),
+    savedAt: Math.round(clampFinite(rec.savedAt, 0, Number.MAX_SAFE_INTEGER, Date.now())),
+  };
+}
+
+export function sanitizeSavedMatch3Session(
+  raw: unknown,
+  expectedLevelId: number
+): SavedMatch3Session | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const rec = raw as Partial<SavedMatch3Session>;
+  if (Math.round(clampFinite(rec.levelId, -1, MAX_MINIGAME_STAGE, -1)) !== expectedLevelId) {
+    return null;
+  }
+  if (rec.status !== 'playing' && rec.status !== 'out_of_moves') return null;
+  const size = Math.round(clampFinite(rec.size, 6, 11, -1));
+  if (size < 6 || size > 11) return null;
+
+  const sanitizeMatrix = (m: unknown, maxVal = 20): number[][] | null => {
+    if (!Array.isArray(m) || m.length !== size) return null;
+    const out: number[][] = [];
+    for (let r = 0; r < size; r++) {
+      const row = m[r];
+      if (!Array.isArray(row) || row.length !== size) return null;
+      const outRow: number[] = [];
+      for (let c = 0; c < size; c++) {
+        const v = row[c];
+        if (typeof v !== 'number' || !Number.isFinite(v)) return null;
+        const iv = Math.round(v);
+        if (iv < 0 || iv > maxVal) return null;
+        outRow.push(iv);
+      }
+      out.push(outRow);
+    }
+    return out;
+  };
+
+  const mask = sanitizeMatrix(rec.mask, 1);
+  const jelly = sanitizeMatrix(rec.jelly, 10);
+  const ice = sanitizeMatrix(rec.ice, 10);
+  const frosting = sanitizeMatrix(rec.frosting, 10);
+  const chocolate = sanitizeMatrix(rec.chocolate, 10);
+  const cauldron = sanitizeMatrix(rec.cauldron, 10);
+  const cauldronCharge = sanitizeMatrix(rec.cauldronCharge, 20);
+  const lockGrid = sanitizeMatrix(rec.lockGrid, 10);
+  const petrify = sanitizeMatrix(rec.petrify, 10);
+  const dementor = sanitizeMatrix(rec.dementor, 10);
+  const dementorCharge = sanitizeMatrix(rec.dementorCharge, 20);
+  const decree = sanitizeMatrix(rec.decree, 10);
+  const fiendfyre = sanitizeMatrix(rec.fiendfyre, 10);
+  const horcrux = sanitizeMatrix(rec.horcrux, 10);
+  if (
+    !mask ||
+    !jelly ||
+    !ice ||
+    !frosting ||
+    !chocolate ||
+    !cauldron ||
+    !cauldronCharge ||
+    !lockGrid ||
+    !petrify ||
+    !dementor ||
+    !dementorCharge ||
+    !decree ||
+    !fiendfyre ||
+    !horcrux
+  ) {
+    return null;
+  }
+
+  if (!Array.isArray(rec.grid) || rec.grid.length !== size) return null;
+  const validSpecials = new Set<NonNullable<SavedMatch3Piece['special']>>([
+    'striped_h',
+    'striped_v',
+    'wrapped',
+    'seeker',
+    'color_bomb',
+  ]);
+  const grid: Array<Array<SavedMatch3Piece | null>> = [];
+  for (let r = 0; r < size; r++) {
+    const row = rec.grid[r];
+    if (!Array.isArray(row) || row.length !== size) return null;
+    const outRow: Array<SavedMatch3Piece | null> = [];
+    for (let c = 0; c < size; c++) {
+      const cell = row[c];
+      if (cell === null || cell === undefined) {
+        outRow.push(null);
+        continue;
+      }
+      if (!cell || typeof cell !== 'object') return null;
+      const pc = cell as Partial<SavedMatch3Piece>;
+      if (typeof pc.color !== 'number' || !Number.isFinite(pc.color)) return null;
+      const color = Math.round(pc.color);
+      if (color < -1 || color > 8) return null;
+      outRow.push({
+        color,
+        special: pc.special && validSpecials.has(pc.special) ? pc.special : null,
+        blocker: pc.blocker === 'swirl' ? 'swirl' : null,
+        isIngredient: Boolean(pc.isIngredient),
+        bombTimer:
+          typeof pc.bombTimer === 'number' && Number.isFinite(pc.bombTimer)
+            ? Math.round(clampFinite(pc.bombTimer, 0, 99, 0))
+            : null,
+        hasKey: Boolean(pc.hasKey),
+        primedWrapped: Boolean(pc.primedWrapped),
+        primedMega: Boolean(pc.primedMega),
+      });
+    }
+    grid.push(outRow);
+  }
+
+  const house: SavedMatch3Session['house'] =
+    rec.house === 'gryffindor' ||
+    rec.house === 'slytherin' ||
+    rec.house === 'ravenclaw' ||
+    rec.house === 'hufflepuff'
+      ? rec.house
+      : 'gryffindor';
+
+  const collected: Record<string, number> = {};
+  if (rec.collected && typeof rec.collected === 'object') {
+    for (let k = 0; k <= 6; k++) {
+      const v = Number((rec.collected as Record<string, unknown>)[String(k)] ?? 0);
+      collected[String(k)] = Number.isFinite(v) && v > 0 ? Math.round(Math.min(99999, v)) : 0;
+    }
+  }
+
+  return {
+    levelId: expectedLevelId,
+    size,
+    house,
+    mask,
+    jelly,
+    ice,
+    frosting,
+    chocolate,
+    cauldron,
+    cauldronCharge,
+    lockGrid,
+    petrify,
+    dementor,
+    dementorCharge,
+    decree,
+    fiendfyre,
+    horcrux,
+    grid,
+    ingredientsCollected: Math.round(clampFinite(rec.ingredientsCollected, 0, 99, 0)),
+    ingredientsSpawned: Math.round(clampFinite(rec.ingredientsSpawned, 0, 99, 0)),
+    pendingBombSpawns: Math.round(clampFinite(rec.pendingBombSpawns, 0, 99, 0)),
+    bossHp: Math.round(clampFinite(rec.bossHp, 0, 999999, 0)),
+    bossDefeated: Boolean(rec.bossDefeated),
+    bossEnraged: Boolean(rec.bossEnraged),
+    pendingBossEnrageBurst: Boolean(rec.pendingBossEnrageBurst),
+    bossEffectiveCastInterval: Math.round(clampFinite(rec.bossEffectiveCastInterval, 2, 20, 4)),
+    patronusCharge: clampFinite(rec.patronusCharge, 0, 100, 0),
+    score: Math.round(clampFinite(rec.score, 0, 99999999, 0)),
+    movesLeft: Math.round(clampFinite(rec.movesLeft, 0, 99, 1)),
+    movesUsed: Math.round(clampFinite(rec.movesUsed, 0, 999, 0)),
+    talismanUsed: Boolean(rec.talismanUsed),
+    status: rec.status,
+    failReason: rec.failReason === 'moves' || rec.failReason === 'bomb' ? rec.failReason : null,
+    collected,
+    specialStats: {
+      striped: Math.round(clampFinite(rec.specialStats?.striped, 0, 9999, 0)),
+      wrapped: Math.round(clampFinite(rec.specialStats?.wrapped, 0, 9999, 0)),
+      seeker: Math.round(clampFinite(rec.specialStats?.seeker, 0, 9999, 0)),
+      color_bomb: Math.round(clampFinite(rec.specialStats?.color_bomb, 0, 9999, 0)),
+    },
+    movesMadeThisAttempt: Math.round(clampFinite(rec.movesMadeThisAttempt, 0, 999, 0)),
+    companionCharge: Math.round(clampFinite(rec.companionCharge, 0, 20, 0)),
+    snackPieUsed: Boolean(rec.snackPieUsed),
+    savedAt: Math.round(clampFinite(rec.savedAt, 0, Number.MAX_SAFE_INTEGER, Date.now())),
+  };
 }
 
 export function migrateLoadedState(parsed: GameState): GameState {
@@ -1038,11 +1715,15 @@ export function migrateLoadedState(parsed: GameState): GameState {
   const rawSuitcase = parsed.suitcase ?? def.suitcase;
   const morphSet = new Set<string>(
     Array.isArray(rawSuitcase.discoveredMorphs)
-      ? rawSuitcase.discoveredMorphs.filter((m): m is string => typeof m === 'string' && m.length < 60)
+      ? rawSuitcase.discoveredMorphs.filter((m): m is string => {
+          if (typeof m !== 'string' || m.length >= 60) return false;
+          const prefix = m.split(':')[0] ?? '';
+          return Boolean(getSpeciesProfile(prefix));
+        })
       : []
   );
   for (const b of safeBuildings) {
-    if (b.creatureMorph) {
+    if (b.creatureMorph && getSpeciesProfile(b.itemId)) {
       morphSet.add(`${b.itemId}:normal`);
       morphSet.add(`${b.itemId}:${b.creatureMorph}`);
     }
@@ -1141,6 +1822,37 @@ export function migrateLoadedState(parsed: GameState): GameState {
     safeTileOverrides = { ...(parsed.tileOverrides ?? def.tileOverrides) };
   }
 
+  // Non-destructively upgrade pre-AAA saves that had 0 golden cobblestone lanes so existing players immediately see sculpted roads!
+  let existingCobbleCount = 0;
+  for (const ov of Object.values(safeTileOverrides)) {
+    if (ov?.path === 'cobble') {
+      existingCobbleCount++;
+      if (existingCobbleCount >= 6) break;
+    }
+  }
+  if (existingCobbleCount < 6) {
+    const occupiedFootprint = new Set<string>();
+    for (const b of safeBuildings) {
+      const it = getCatalogItem(b.itemId);
+      const bw = it ? (b.rotation % 2 === 1 ? it.height : it.width) : 2;
+      const bh = it ? (b.rotation % 2 === 1 ? it.width : it.height) : 2;
+      for (let dy = 0; dy < bh; dy++) {
+        for (let dx = 0; dx < bw; dx++) {
+          occupiedFootprint.add(`${b.gx + dx},${b.gy + dy}`);
+        }
+      }
+    }
+    for (const [k, defOv] of Object.entries(def.tileOverrides)) {
+      if (defOv?.path !== 'cobble') continue;
+      if (occupiedFootprint.has(k)) continue;
+      const curOv = safeTileOverrides[k];
+      if (curOv?.terrain === 'water') continue;
+      if (!curOv?.path || curOv.path === 'none') {
+        safeTileOverrides[k] = { ...(curOv ?? {}), path: 'cobble' };
+      }
+    }
+  }
+
   const validZoneIds = new Set<ZoneId>(ZONES.map((z) => z.id));
   const unlockedZoneSet = new Set<ZoneId>(['ga_hogsmeade', 'hem_xeo']);
   if (Array.isArray(parsed.unlockedZones)) {
@@ -1154,7 +1866,7 @@ export function migrateLoadedState(parsed: GameState): GameState {
     unlockedZoneSet.add(getZoneAt(b.gx, b.gy).id);
   }
 
-  return {
+  const migratedState: GameState = {
     ...def,
     ...parsed,
     version: 6,
@@ -1317,6 +2029,7 @@ export function migrateLoadedState(parsed: GameState): GameState {
           ),
         },
         levelsWon: Math.round(clampFinite(parsed.match3?.levelsWon, 0, 999999, 0)),
+        activeSession: sanitizeSavedMatch3Session(parsed.match3?.activeSession, safeM3Level),
       };
     })(),
     puzzleArcade: (() => {
@@ -1371,8 +2084,29 @@ export function migrateLoadedState(parsed: GameState): GameState {
         totalPuzzlesSolved: Math.round(
           clampFinite(parsed.puzzleArcade?.totalPuzzlesSolved, 0, 999999, 0)
         ),
+        sudokuSession: sanitizeSavedSudokuSession(
+          parsed.puzzleArcade?.sudokuSession,
+          safeSudokuStage
+        ),
+        caroSession: sanitizeSavedCaroSession(
+          parsed.puzzleArcade?.caroSession,
+          safeCaroStage
+        ),
+        chessSession: sanitizeSavedChessSession(
+          parsed.puzzleArcade?.chessSession,
+          safeChessStage
+        ),
+        onetSession: sanitizeSavedOnetSession(
+          parsed.puzzleArcade?.onetSession,
+          safeBlockStage
+        ),
       };
     })(),
+    lastPlayedMinigame: (
+      ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'seedquiz'] as const
+    ).includes(parsed.lastPlayedMinigame as LeaderboardGameId)
+      ? (parsed.lastPlayedMinigame as LeaderboardGameId)
+      : 'match3',
     levelUpTrialCompletedLevel:
       typeof parsed.levelUpTrialCompletedLevel === 'number' &&
       Number.isFinite(parsed.levelUpTrialCompletedLevel)
@@ -1387,6 +2121,27 @@ export function migrateLoadedState(parsed: GameState): GameState {
     phoenixTalismans: Math.round(
       clampFinite(parsed.phoenixTalismans, 0, MAX_PHOENIX_TALISMANS, 1)
     ),
+    phoenixTalismanDaily: (() => {
+      const rawDaily = parsed.phoenixTalismanDaily;
+      if (!rawDaily || typeof rawDaily !== 'object') return undefined;
+      const dayKey =
+        typeof rawDaily.dayKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDaily.dayKey)
+          ? rawDaily.dayKey
+          : '';
+      if (!dayKey) return undefined;
+      const rawMap =
+        rawDaily.usedByGame && typeof rawDaily.usedByGame === 'object'
+          ? (rawDaily.usedByGame as Record<string, unknown>)
+          : {};
+      const validKinds = ['match3', 'sudoku', 'caro', 'chess', 'blocks'] as const;
+      const usedByGame: Partial<Record<(typeof validKinds)[number], boolean>> = {};
+      for (const k of validKinds) {
+        if (rawMap[k] === true) {
+          usedByGame[k] = true;
+        }
+      }
+      return { dayKey, usedByGame };
+    })(),
     quizTalismanProgress: Math.round(
       clampFinite(parsed.quizTalismanProgress, 0, 7, 0)
     ),
@@ -1436,4 +2191,16 @@ export function migrateLoadedState(parsed: GameState): GameState {
       cutawayMode: false,
     },
   };
+
+  reconcileRetentionStateOnLoad(
+    migratedState,
+    parsed.retention,
+    Boolean(
+      (typeof parsed.lastSavedAt === 'number' && parsed.lastSavedAt > 0) ||
+        safeLevel > 1 ||
+        (parsed.stats?.minigamesWon ?? 0) > 0 ||
+        (parsed.stats?.totalGalleonsHarvested ?? 0) > 0
+    )
+  );
+  return migratedState;
 }

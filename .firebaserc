@@ -1,0 +1,22 @@
+{
+  "projects": {
+    "default": "demo-hpvnn-burrow",
+    "hpvnn": "hpvnn-archive"
+  },
+  "targets": {
+    "demo-hpvnn-burrow": {
+      "hosting": {
+        "burrow": [
+          "demo-hpvnn-burrow"
+        ]
+      }
+    },
+    "hpvnn-archive": {
+      "hosting": {
+        "burrow": [
+          "hpvnn-burrow"
+        ]
+      }
+    }
+  }
+}

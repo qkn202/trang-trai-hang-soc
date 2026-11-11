@@ -8,6 +8,7 @@ import {
   getCatalogItem,
   getFarmItemMeta,
   getMinRemainingBuildFloorSec,
+  MORNING_DEW_REDUCTION_SEC,
   PASTURE_ANIMALS,
   TIME_SAND_SKIP_SECONDS,
 } from '../data/catalog';
@@ -81,15 +82,19 @@ import {
   FestivalType,
   FireworkBurst,
   FloatingEffect,
+  FlooVisitDirectoryRow,
   FlyRewardKind,
   GameState,
   HarvestFeastState,
   HarvestFeastTierDef,
   HeatmapMode,
   HomeOwlLanternMark,
+  HonorGardenTourDef,
   HouseName,
   IsoDirection,
   LanguageQuizState,
+  LayoutPresetEntry,
+  LayoutPresetId,
   LeaderboardGameId,
   LeaderboardRankChange,
   LeaderboardScope,
@@ -164,7 +169,7 @@ import {
   createInitialPuzzleArcadeState,
   JIGSAW_PAINTINGS,
   PuzzleRewardSpec,
-} from './puzzleArcadeEngine';
+} from './puzzleShared';
 import {
   ActiveQuizChallenge,
   createInitialLanguageQuizState,
@@ -172,6 +177,20 @@ import {
   recordQuizAttempt,
   sanitizeLanguageQuizState,
 } from './languageQuizEngine';
+import {
+  ACHIEVEMENT_REGISTRY,
+  answerVillagerDialogue,
+  claimAchievementReward,
+  claimDailyRetentionReward,
+  DAY_1_TO_7_REWARDS,
+  ensureRetentionState,
+  evaluateAchievements,
+  loadFromNamedSlot,
+  SaveSlotId,
+  SaveSlotMetadata,
+  saveToNamedSlot,
+  STORY_CUTSCENE_CHAPTERS,
+} from './retentionAndNarrative';
 import {
   BackstageEvaluation,
   BiomeEvaluation,
@@ -307,6 +326,8 @@ import {
   trialsGetTotalTowerClearedStages,
   trialsGetWinsProgressForCurrentLevel,
   trialsGetRequiredLevelTrial,
+  trialsGetLastPlayedMinigame,
+  trialsSetLastPlayedMinigame,
   trialsIsCurrentLevelTrialPassed,
   trialsIsWaitingOnLevelTrial,
   trialsAdvanceMasterPuzzleLevel,
@@ -326,9 +347,13 @@ import {
   trialsGetAllPersonalLeaderboardSummaries,
   trialsCompleteMatch3LevelVictory,
   trialsSpendPuzzleHelperGold,
+  trialsGetPhoenixTalismanDailyStatus,
+  trialsIsPhoenixTalismanUsedToday,
+  trialsCanUsePhoenixTalismanInGame,
   trialsGetPhoenixTalismanCount,
   trialsGrantPhoenixTalisman,
   trialsConsumePhoenixTalisman,
+  trialsRefundPhoenixTalismanAttempt,
   trialsGetCraftablePhoenixBarnGood,
   trialsCraftPhoenixTalismanFromBarn,
   trialsCompletePuzzleArcadeVictory,
@@ -399,6 +424,12 @@ import {
   socialRequestPlayerMinigameSos,
   socialClaimPlayerMinigameSosRescue,
   socialTickNeighborSocialBackground,
+  socialGetActiveHonorGardenTour,
+  socialEnterHonorGardenTour,
+  socialCycleHonorGardenTour,
+  socialSyncFlooDirectoryMembers,
+  socialHelpVisitedFlooMemberWholeGarden,
+  socialRecordFlooShareOrPostcard,
 } from './simulationSocial';
 
 import {
@@ -451,6 +482,7 @@ export class ParkSimulation {
   public audio: MagicalAudio;
   public isHeadmasterPreview = false;
   public activeVisitNeighborId: string | null = null;
+  public activeHonorTourId: string | null = null;
   /** Public (internal): module domain (neighborSocial/economy) đọc-ghi state khi thăm hàng xóm. */
   public homeStateWhileVisiting: GameState | null = null;
   private socialSimAcc = 0;
@@ -458,7 +490,14 @@ export class ParkSimulation {
   public backupMainStateJson: string | null = null;
 
   public get isVisitingNeighbor(): boolean {
-    return this.activeVisitNeighborId !== null && this.homeStateWhileVisiting !== null;
+    return (
+      (this.activeVisitNeighborId !== null || this.activeHonorTourId !== null) &&
+      this.homeStateWhileVisiting !== null
+    );
+  }
+
+  public get isVisitingHonorTour(): boolean {
+    return this.activeHonorTourId !== null && this.homeStateWhileVisiting !== null;
   }
 
   // Cached V2/V3 coaster circuits, biome evaluations, backstage, road connectivity, queues & synergies
@@ -647,6 +686,10 @@ export class ParkSimulation {
 
   public getRequiredLevelTrial(): LevelTrialRequirement | null { return trialsGetRequiredLevelTrial(this); }
 
+  public getLastPlayedMinigame(): LeaderboardGameId { return trialsGetLastPlayedMinigame(this); }
+
+  public setLastPlayedMinigame(gameId: LeaderboardGameId): LeaderboardGameId { return trialsSetLastPlayedMinigame(this, gameId); }
+
   public isCurrentLevelTrialPassed(): boolean { return trialsIsCurrentLevelTrialPassed(this); }
 
   public isWaitingOnLevelTrial(): boolean { return trialsIsWaitingOnLevelTrial(this); }
@@ -779,12 +822,17 @@ export class ParkSimulation {
     const clampedDt = Math.min(0.1, dt) * this.simSpeed;
     const now = Date.now();
 
-    this.tickProductionToTimestamp(now);
+    if (!this.isVisitingNeighbor) {
+      this.tickProductionToTimestamp(now);
+    }
 
     this.autoSaveAcc += clampedDt;
     if (this.autoSaveAcc >= 15) {
       this.autoSaveAcc = 0;
-      this.checkDailyReset(new Date(now));
+      this.checkDailyReset();
+      if (!this.isVisitingNeighbor) {
+        this.checkAndToastAchievements(now);
+      }
       this.saveToStorage();
       this.onUiChange?.();
     }
@@ -795,21 +843,64 @@ export class ParkSimulation {
       this.tickNeighborSocialBackground(now);
     }
 
-    // Periodic gentle staff wage accounting every 45s
-    this.wageTickAcc += clampedDt;
-    if (this.wageTickAcc >= 45) {
-      this.wageTickAcc = 0;
-      const wage = this.getHourlyStaffWage();
-      if (!this.state.sandboxMode && this.state.galleons > wage * 3) {
-        this.state.galleons -= wage;
-      }
-      this.state.finance.staffWagesPaid += wage;
-    }
-
     const unlockedSet = new Set(this.state.unlockedZones);
 
-    // Update Contraption Wear & Breakdowns!
-    this.updateRideQueues(clampedDt, now);
+    if (!this.isVisitingNeighbor) {
+      // Periodic gentle staff wage accounting every 45s
+      this.wageTickAcc += clampedDt;
+      if (this.wageTickAcc >= 45) {
+        this.wageTickAcc = 0;
+        const wage = this.getHourlyStaffWage();
+        if (!this.state.sandboxMode && this.state.galleons > wage * 3) {
+          this.state.galleons -= wage;
+        }
+        this.state.finance.staffWagesPaid += wage;
+      }
+
+      // Update Contraption Wear & Breakdowns!
+      this.updateRideQueues(clampedDt, now);
+
+      // Creature hunger (slowed down if a Creature Feeder is nearby; rural farmstead coops/pastures are auto-tended!)
+      for (const b of this.state.buildings) {
+        const it = getCatalogItem(b.itemId);
+        if (!it || !it.isCreatureHabitat || now < b.constructEndsAt || b.isEscaped) continue;
+        if (it.isRuralFarmstead) {
+          b.creatureHunger = 96;
+          b.creatureHappiness = 98;
+          continue;
+        }
+        const bio = this.biomeCache.get(b.uid);
+        const decayRate = bio?.hasFeeder ? 0.08 : 0.18;
+        b.creatureHunger = Math.max(5, (b.creatureHunger ?? 90) - clampedDt * decayRate);
+        if (it.canEscape && (b.creatureHunger ?? 90) < 16 && this.escapedCreatures.length < 2) {
+          if (Math.random() < clampedDt * 0.08) {
+            this.spawnEscapedFromHabitat(b);
+          }
+        }
+      }
+
+      for (const esc of this.escapedCreatures) {
+        esc.gx += esc.vx * clampedDt;
+        esc.gy += esc.vy * clampedDt;
+        const cell = this.grid[Math.floor(esc.gy)]?.[Math.floor(esc.gx)];
+        if (!cell || !unlockedSet.has(cell.zoneId) || Math.random() < 0.03) {
+          const spot = getRandomUnlockedPathTile(this.grid, unlockedSet);
+          if (spot) {
+            const angle = Math.atan2(spot.gy - esc.gy, spot.gx - esc.gx);
+            esc.vx = Math.cos(angle) * 1.35;
+            esc.vy = Math.sin(angle) * 1.35;
+          } else {
+            esc.vx *= -1;
+            esc.vy *= -1;
+          }
+        }
+        if (Math.random() < clampedDt * 0.35) {
+          esc.stolenCoins += 1;
+        }
+      }
+
+      this.updateStaff(clampedDt, unlockedSet);
+    }
 
     // Automatic nighttime fireworks when Fireworks Pavilion is built!
     const period = this.getRealTimePeriod();
@@ -826,46 +917,6 @@ export class ParkSimulation {
       }
     }
 
-    // Creature hunger (slowed down if a Creature Feeder is nearby; rural farmstead coops/pastures are auto-tended!)
-    for (const b of this.state.buildings) {
-      const it = getCatalogItem(b.itemId);
-      if (!it || !it.isCreatureHabitat || now < b.constructEndsAt || b.isEscaped) continue;
-      if (it.isRuralFarmstead) {
-        b.creatureHunger = 96;
-        b.creatureHappiness = 98;
-        continue;
-      }
-      const bio = this.biomeCache.get(b.uid);
-      const decayRate = bio?.hasFeeder ? 0.08 : 0.18;
-      b.creatureHunger = Math.max(5, (b.creatureHunger ?? 90) - clampedDt * decayRate);
-      if (it.canEscape && (b.creatureHunger ?? 90) < 16 && this.escapedCreatures.length < 2) {
-        if (Math.random() < clampedDt * 0.08) {
-          this.spawnEscapedFromHabitat(b);
-        }
-      }
-    }
-
-    for (const esc of this.escapedCreatures) {
-      esc.gx += esc.vx * clampedDt;
-      esc.gy += esc.vy * clampedDt;
-      const cell = this.grid[Math.floor(esc.gy)]?.[Math.floor(esc.gx)];
-      if (!cell || !unlockedSet.has(cell.zoneId) || Math.random() < 0.03) {
-        const spot = getRandomUnlockedPathTile(this.grid, unlockedSet);
-        if (spot) {
-          const angle = Math.atan2(spot.gy - esc.gy, spot.gx - esc.gx);
-          esc.vx = Math.cos(angle) * 1.35;
-          esc.vy = Math.sin(angle) * 1.35;
-        } else {
-          esc.vx *= -1;
-          esc.vy *= -1;
-        }
-      }
-      if (Math.random() < clampedDt * 0.35) {
-        esc.stolenCoins += 1;
-      }
-    }
-
-    this.updateStaff(clampedDt, unlockedSet);
     this.updateValleyVillagers(clampedDt, unlockedSet);
 
     for (let i = this.effects.length - 1; i >= 0; i--) {
@@ -1036,11 +1087,29 @@ export class ParkSimulation {
 
   public spendPuzzleHelperGold(goldCost: number): { ok: boolean; msg: string } { return trialsSpendPuzzleHelperGold(this, goldCost); }
 
+  public getPhoenixTalismanDailyStatus(nowMs?: number) {
+    return trialsGetPhoenixTalismanDailyStatus(this, nowMs);
+  }
+
+  public isPhoenixTalismanUsedToday(kind: MinigameTrialKind, nowMs?: number): boolean {
+    return trialsIsPhoenixTalismanUsedToday(this, kind, nowMs);
+  }
+
+  public canUsePhoenixTalismanInGame(kind: MinigameTrialKind, nowMs?: number) {
+    return trialsCanUsePhoenixTalismanInGame(this, kind, nowMs);
+  }
+
   public getPhoenixTalismanCount(): number { return trialsGetPhoenixTalismanCount(this); }
 
   public grantPhoenixTalisman(qty = 1): number { return trialsGrantPhoenixTalisman(this, qty); }
 
-  public consumePhoenixTalisman(): { ok: boolean; msg: string } { return trialsConsumePhoenixTalisman(this); }
+  public consumePhoenixTalisman(kind?: MinigameTrialKind, nowMs?: number): { ok: boolean; msg: string } {
+    return trialsConsumePhoenixTalisman(this, kind, nowMs);
+  }
+
+  public refundPhoenixTalismanAttempt(kind: MinigameTrialKind, nowMs?: number): void {
+    trialsRefundPhoenixTalismanAttempt(this, kind, nowMs);
+  }
 
   public getCraftablePhoenixBarnGood(): FarmGoodId | null { return trialsGetCraftablePhoenixBarnGood(this); }
 
@@ -1256,6 +1325,50 @@ export class ParkSimulation {
     nextStage?: number;
   } { return socialClaimPlayerMinigameSosRescue(this); }
 
+  public getActiveHonorGardenTour(): HonorGardenTourDef | null {
+    return socialGetActiveHonorGardenTour(this);
+  }
+
+  public enterHonorGardenTour(tourId = 'tour_hagrid'): {
+    ok: boolean;
+    msg: string;
+    focusGx?: number;
+    focusGy?: number;
+  } {
+    return socialEnterHonorGardenTour(this, tourId);
+  }
+
+  public cycleHonorGardenTour(dir: 1 | -1 = 1): {
+    ok: boolean;
+    msg: string;
+    focusGx?: number;
+    focusGy?: number;
+  } {
+    return socialCycleHonorGardenTour(this, dir);
+  }
+
+  public syncFlooDirectoryMembers(
+    rows: ReadonlyArray<FlooVisitDirectoryRow>,
+    ownUid?: string,
+    nowMs = Date.now()
+  ): NeighborProfileState[] {
+    return socialSyncFlooDirectoryMembers(this, rows, ownUid, nowMs);
+  }
+
+  public helpVisitedFlooMemberWholeGarden(options?: {
+    alreadySyncedServer?: boolean;
+    serverHelpsLeft?: number;
+  }): { ok: boolean; msg: string; helpsLeft: number } {
+    return socialHelpVisitedFlooMemberWholeGarden(this, options);
+  }
+
+  public recordFlooShareOrPostcard(kind: 'postcard' | 'shareFloo'): {
+    rewarded: boolean;
+    msg: string;
+  } {
+    return socialRecordFlooShareOrPostcard(this, kind);
+  }
+
   /**
    * Mô phỏng phản hồi hai chiều sống động từ hội bạn bè Canon/Mã Cú (sẵn sàng thay bằng WebSocket/REST sau này).
    */
@@ -1307,6 +1420,612 @@ export class ParkSimulation {
   public claimAllHarvestFeastTiers(): { ok: boolean; claimedCount: number; msg: string } { return questsClaimAllHarvestFeastTiers(this); }
 
   public startNextHarvestFeastCycle(): { ok: boolean; msg: string } { return questsStartNextHarvestFeastCycle(this); }
+
+  // ==================== AAA P3–P5: THÀNH TỰU, ĐIỂM DANH 7 NGÀY, TÌNH BẠN NPC, SAVE SLOTS & KIẾN TRÚC SƯ BỐ CỤC ====================
+
+  public checkAndToastAchievements(now = Date.now()): string[] {
+    if (this.isHeadmasterPreview || this.isVisitingHonorTour) return [];
+    if (this.homeStateWhileVisiting) {
+      this.syncPlayerPrimitivesToHomeState();
+    }
+    const targetState = this.homeStateWhileVisiting ?? this.state;
+    if (targetState.sandboxMode) return [];
+
+    const newlyUnlocked = evaluateAchievements(targetState, now);
+    const ret = ensureRetentionState(targetState);
+    if (this.homeStateWhileVisiting) {
+      this.state.retention = ret;
+    }
+    let stateMutated = newlyUnlocked.length > 0;
+
+    // Auto-unlock story cutscene chapters by level
+    for (const chap of STORY_CUTSCENE_CHAPTERS) {
+      if (targetState.level >= chap.unlockLevel && !ret.unlockedStoryChapters.includes(chap.id)) {
+        ret.unlockedStoryChapters.push(chap.id);
+        stateMutated = true;
+        this.onToast?.(`🎬 Mở khoá Phim Cốt Truyện: ${chap.titleVi}!`, '🎬');
+      }
+    }
+
+    if (this.onToast && ret.pendingToasts.length > 0) {
+      const toDisplay: Array<(typeof ACHIEVEMENT_REGISTRY)[number]> = [];
+      while (ret.pendingToasts.length > 0) {
+        const achId = ret.pendingToasts.shift()!;
+        const entry = ret.achievements[achId];
+        if (!entry?.unlockedAt || entry.notifiedAt) {
+          stateMutated = true;
+          continue;
+        }
+        entry.notifiedAt = now;
+        stateMutated = true;
+        const def = ACHIEVEMENT_REGISTRY.find((a) => a.id === achId);
+        if (def) {
+          toDisplay.push(def);
+        }
+      }
+
+      if (toDisplay.length === 1) {
+        const def = toDisplay[0];
+        this.onToast(
+          `🏅 Đạt Thành Tựu: ${def.titleVi} (+${def.rewardGalleons}G, +${def.rewardStars} 🌟 — nhận tại Sổ Vàng!)`,
+          def.icon
+        );
+      } else if (toDisplay.length > 1) {
+        const top = toDisplay[toDisplay.length - 1];
+        const sumGold = toDisplay.reduce((acc, d) => acc + d.rewardGalleons, 0);
+        const sumStars = toDisplay.reduce((acc, d) => acc + d.rewardStars, 0);
+        this.onToast(
+          `🏅 Mở khoá ${toDisplay.length} Thành Tựu mới (${top.titleVi}...) • +${sumGold}G, +${sumStars} 🌟 — nhận tại Sổ Vàng!`,
+          top.icon
+        );
+      }
+    }
+
+    if (stateMutated) {
+      this.saveToStorage();
+    }
+    return newlyUnlocked;
+  }
+
+  public claimAchievement(achId: string): {
+    ok: boolean;
+    msg: string;
+    rewardGalleons: number;
+    rewardStars: number;
+  } {
+    const def = ACHIEVEMENT_REGISTRY.find((a) => a.id === achId);
+    const res = claimAchievementReward(this.state, achId);
+    if (!res.ok || !def) {
+      return { ok: false, msg: 'Thành tựu chưa mở khoá hoặc đã nhận thưởng!', rewardGalleons: 0, rewardStars: 0 };
+    }
+    if (res.rewardStars > 0) {
+      this.state.match3.stars += res.rewardStars;
+      this.state.match3.totalStarsEarned += res.rewardStars;
+      this.onRewardFly?.('stars', res.rewardStars);
+    }
+    if (res.rewardGalleons > 0) {
+      this.onRewardFly?.('galleons', res.rewardGalleons);
+    }
+    this.audio.playLevelUp();
+    this.saveToStorage();
+    this.onUiChange?.();
+    return {
+      ok: true,
+      msg: `🎖️ Đã nhận thưởng "${def.titleVi}": +${res.rewardGalleons}G & +${res.rewardStars} 🌟!`,
+      rewardGalleons: res.rewardGalleons,
+      rewardStars: res.rewardStars,
+    };
+  }
+
+  public getUnlockedLoginDayMax(): number {
+    const ret = ensureRetentionState(this.state);
+    const todayKey = getLocalDateKey();
+    if (ret.lastLoginClaimDayKey === todayKey) {
+      return Math.min(7, Math.max(1, ret.claimedLoginDays.length));
+    }
+    return Math.min(7, Math.max(1, ret.claimedLoginDays.length + 1));
+  }
+
+  public claimLoginDayReward(dayNumber: number): { ok: boolean; msg: string } {
+    const ret = ensureRetentionState(this.state);
+    const todayKey = getLocalDateKey();
+    if (ret.claimedLoginDays.includes(dayNumber)) {
+      return { ok: false, msg: 'Quà điểm danh ngày này đã được nhận!' };
+    }
+    if (ret.lastLoginClaimDayKey === todayKey) {
+      return { ok: false, msg: 'Hôm nay bạn đã nhận quà điểm danh rồi — hẹn quay lại vào ngày mai nhé!' };
+    }
+    const maxDay = this.getUnlockedLoginDayMax();
+    if (dayNumber !== maxDay) {
+      return { ok: false, msg: `Hãy nhận quà Ngày ${maxDay} trước nhé!` };
+    }
+    const res = claimDailyRetentionReward(this.state, dayNumber, todayKey);
+    if (!res.ok || !res.reward) {
+      return { ok: false, msg: 'Quà điểm danh ngày này đã được nhận!' };
+    }
+    if (res.reward.magicStars > 0) {
+      this.state.match3.stars += res.reward.magicStars;
+      this.state.match3.totalStarsEarned += res.reward.magicStars;
+      this.onRewardFly?.('stars', res.reward.magicStars);
+    }
+    this.onRewardFly?.('galleons', res.reward.galleons);
+    this.audio.playLevelUp();
+    this.saveToStorage();
+    this.onUiChange?.();
+    return {
+      ok: true,
+      msg: `📅 Nhận ${res.reward.titleVi}: +${res.reward.galleons}G, +${res.reward.magicStars} 🌟${
+        res.reward.phoenixTalismans > 0 ? `, +${res.reward.phoenixTalismans} 🔥` : ''
+      }!`,
+    };
+  }
+
+  public talkWithVillagerChoice(
+    villagerId: ValleyVillagerId,
+    choiceIndex: 0 | 1
+  ): { ok: boolean; msg: string; level: number; leveledUp: boolean } {
+    const todayKey = getLocalDateKey();
+    const ret = ensureRetentionState(this.state);
+    const alreadyTalkedToday = ret.npcFriendship[villagerId]?.lastTalkedDayKey === todayKey;
+    if (alreadyTalkedToday) {
+      return {
+        ok: false,
+        msg: 'Hôm nay bạn đã trò chuyện tâm tình cùng cư dân này rồi — mai ghé lại nhé!',
+        level: ret.npcFriendship[villagerId]?.level ?? 1,
+        leveledUp: false,
+      };
+    }
+    const res = answerVillagerDialogue(this.state, villagerId, choiceIndex, todayKey);
+    const bonusGold = res.leveledUp ? 25 : 6;
+    this.state.galleons += bonusGold;
+    this.addXp(res.leveledUp ? 15 : 5);
+    if (res.leveledUp) {
+      this.state.match3.stars += 1;
+      this.state.match3.totalStarsEarned += 1;
+      this.audio.playLevelUp();
+    } else {
+      this.audio.playSpell();
+    }
+    this.checkAndToastAchievements();
+    this.saveToStorage();
+    this.onUiChange?.();
+    return {
+      ok: true,
+      msg: `💝 "${res.replyVi}" (+${bonusGold}G${res.leveledUp ? `, Lên Cấp Thân Thiết ${res.level} +1 🌟!` : ''})`,
+      level: res.level,
+      leveledUp: res.leveledUp,
+    };
+  }
+
+  public saveNamedProfileSlot(slotId: SaveSlotId): SaveSlotMetadata {
+    const baseState = this.homeStateWhileVisiting ?? this.state;
+    const meta = saveToNamedSlot(baseState, slotId);
+    this.saveToStorage();
+    this.onUiChange?.();
+    return meta;
+  }
+
+  public loadNamedProfileSlot(slotId: SaveSlotId): { ok: boolean; msg: string } {
+    const loaded = loadFromNamedSlot(slotId);
+    if (!loaded.ok || !loaded.state) {
+      return { ok: false, msg: 'Ô hồ sơ này hiện đang trống!' };
+    }
+    const ok = this.importSaveJson(JSON.stringify(loaded.state));
+    if (!ok) {
+      return { ok: false, msg: 'Không thể khôi phục hồ sơ này!' };
+    }
+    return {
+      ok: true,
+      msg: `💾 Đã tải ${loaded.meta?.label ?? slotId} (${loaded.meta?.parkName ?? 'Hang Sóc'} • Cấp ${loaded.state.level})!`,
+    };
+  }
+
+  public saveLayoutPreset(presetId: LayoutPresetId, customLabel?: string): LayoutPresetEntry {
+    const targetState = this.homeStateWhileVisiting ?? this.state;
+    const labels: Record<LayoutPresetId, string> = {
+      layout_1: 'Bố Cục Mùa Xuân',
+      layout_2: 'Bố Cục Lễ Hội',
+      layout_3: 'Bố Cục Tối Ưu Xưởng',
+    };
+    const entry: LayoutPresetEntry = {
+      id: presetId,
+      label: customLabel?.trim() || labels[presetId],
+      savedAt: Date.now(),
+      placements: targetState.buildings.map((b) => ({
+        uid: b.uid,
+        itemId: b.itemId,
+        gx: b.gx,
+        gy: b.gy,
+        rotation: b.rotation,
+      })),
+    };
+    targetState.layoutPresets = {
+      ...(targetState.layoutPresets ?? {}),
+      [presetId]: entry,
+    };
+    this.saveToStorage();
+    this.onUiChange?.();
+    return entry;
+  }
+
+  public applyLayoutPreset(presetId: LayoutPresetId): { ok: boolean; msg: string; movedCount: number } {
+    if (this.isVisitingNeighbor || this.isHeadmasterPreview) {
+      return { ok: false, msg: 'Chỉ có thể đổi bố cục tại Trang Trại Hang Sóc của bạn!', movedCount: 0 };
+    }
+    const entry = this.state.layoutPresets?.[presetId];
+    if (!entry) {
+      return { ok: false, msg: 'Bản vẽ bố cục này chưa được lưu!', movedCount: 0 };
+    }
+    const unlockedSet = new Set(this.state.unlockedZones);
+    const prevByUid = new Map(
+      this.state.buildings.map((b) => [b.uid, { gx: b.gx, gy: b.gy, rotation: b.rotation }])
+    );
+    const targetByUid = new Map(entry.placements.map((p) => [p.uid, p]));
+    const revertedUids = new Set<string>();
+
+    const isTerrainValid = (gx: number, gy: number, bw: number, bh: number): boolean => {
+      for (let dy = 0; dy < bh; dy++) {
+        for (let dx = 0; dx < bw; dx++) {
+          const cell = this.grid[gy + dy]?.[gx + dx];
+          if (!cell || !unlockedSet.has(cell.zoneId) || cell.terrain === 'water') {
+            return false;
+          }
+        }
+      }
+      return true;
+    };
+
+    for (const b of this.state.buildings) {
+      const it = getCatalogItem(b.itemId);
+      const target = targetByUid.get(b.uid);
+      if (!it || !target) {
+        revertedUids.add(b.uid);
+        continue;
+      }
+      const { bw, bh } = this.getBuildingFootprint(it, target.rotation);
+      if (!isTerrainValid(target.gx, target.gy, bw, bh)) {
+        revertedUids.add(b.uid);
+      }
+    }
+
+    // Iteratively resolve footprint collisions so no two buildings can ever stack on one tile!
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const occupied = new Set<string>();
+      for (const b of this.state.buildings) {
+        if (!revertedUids.has(b.uid)) continue;
+        const it = getCatalogItem(b.itemId);
+        if (!it) continue;
+        const prev = prevByUid.get(b.uid)!;
+        const pFp = this.getBuildingFootprint(it, prev.rotation);
+        for (let dy = 0; dy < pFp.bh; dy++) {
+          for (let dx = 0; dx < pFp.bw; dx++) {
+            occupied.add(`${prev.gx + dx},${prev.gy + dy}`);
+          }
+        }
+      }
+      for (const b of this.state.buildings) {
+        if (revertedUids.has(b.uid)) continue;
+        const it = getCatalogItem(b.itemId);
+        const target = targetByUid.get(b.uid);
+        if (!it || !target) {
+          revertedUids.add(b.uid);
+          changed = true;
+          continue;
+        }
+        const { bw, bh } = this.getBuildingFootprint(it, target.rotation);
+        let collides = false;
+        for (let dy = 0; dy < bh && !collides; dy++) {
+          for (let dx = 0; dx < bw; dx++) {
+            if (occupied.has(`${target.gx + dx},${target.gy + dy}`)) {
+              collides = true;
+              break;
+            }
+          }
+        }
+        if (collides) {
+          revertedUids.add(b.uid);
+          changed = true;
+        } else {
+          for (let dy = 0; dy < bh; dy++) {
+            for (let dx = 0; dx < bw; dx++) {
+              occupied.add(`${target.gx + dx},${target.gy + dy}`);
+            }
+          }
+        }
+      }
+    }
+
+    let movedCount = 0;
+    for (const b of this.state.buildings) {
+      if (revertedUids.has(b.uid)) continue;
+      const target = targetByUid.get(b.uid);
+      if (!target) continue;
+      if (b.gx !== target.gx || b.gy !== target.gy || b.rotation !== target.rotation) {
+        movedCount++;
+      }
+      b.gx = target.gx;
+      b.gy = target.gy;
+      b.rotation = target.rotation;
+    }
+
+    this.rebuildGrid();
+    this.syncValleyVillagers();
+    this.audio.playSpell();
+    this.saveToStorage();
+    this.onUiChange?.();
+    return {
+      ok: true,
+      msg: `📐 Đã áp dụng "${entry.label}" (sắp xếp lại ${movedCount} công trình)!`,
+      movedCount,
+    };
+  }
+
+  public stashAllDecorItems(): { ok: boolean; msg: string; count: number } {
+    if (this.isVisitingNeighbor || this.isHeadmasterPreview) {
+      return { ok: false, msg: 'Không thể cất trang trí khi đang thăm vườn!', count: 0 };
+    }
+    const now = Date.now();
+    const stash = { ...(this.state.stashedDecorInventory ?? {}) };
+    const stashStars: Record<string, number[]> = {};
+    for (const [k, arr] of Object.entries(this.state.stashedDecorStars ?? {})) {
+      if (Array.isArray(arr)) stashStars[k] = [...arr];
+    }
+    const kept: PlacedBuilding[] = [];
+    let count = 0;
+    for (const b of this.state.buildings) {
+      const it = getCatalogItem(b.itemId);
+      if (
+        it &&
+        it.category === 'decor' &&
+        !it.isFlooPortal &&
+        !it.isFarmlandPlot &&
+        !it.isAnimalPasturePlot &&
+        !it.isRuralFarmstead &&
+        now >= b.constructEndsAt
+      ) {
+        stash[b.itemId] = (stash[b.itemId] ?? 0) + 1;
+        if (!stashStars[b.itemId]) stashStars[b.itemId] = [];
+        stashStars[b.itemId].push(Math.max(1, Math.min(5, Math.floor(b.stars || 1))));
+        count++;
+      } else {
+        kept.push(b);
+      }
+    }
+    if (count === 0) {
+      return {
+        ok: false,
+        msg: 'Hiện không có vật phẩm trang trí đã hoàn thiện nào ngoài sân để cất!',
+        count: 0,
+      };
+    }
+    this.state.buildings = kept;
+    this.state.stashedDecorInventory = stash;
+    this.state.stashedDecorStars = stashStars;
+    this.rebuildGrid();
+    this.audio.playClick();
+    this.saveToStorage();
+    this.onUiChange?.();
+    return {
+      ok: true,
+      msg: `📦 Đã cất gọn ${count} vật phẩm Trang Trí vào Kho Kiến Trúc (đặt lại miễn phí 0G)!`,
+      count,
+    };
+  }
+
+  public restoreAllStashedDecor(): { ok: boolean; msg: string; placed: number } {
+    if (this.isVisitingNeighbor || this.isHeadmasterPreview) {
+      return { ok: false, msg: 'Chỉ có thể bày lại trang trí tại Trang Trại Hang Sóc của bạn!', placed: 0 };
+    }
+    const stash = { ...(this.state.stashedDecorInventory ?? {}) };
+    const stashStars: Record<string, number[]> = {};
+    for (const [k, arr] of Object.entries(this.state.stashedDecorStars ?? {})) {
+      if (Array.isArray(arr)) stashStars[k] = [...arr];
+    }
+    let placed = 0;
+    const now = Date.now();
+    for (const [itemId, qty] of Object.entries(stash)) {
+      const it = getCatalogItem(itemId);
+      if (!it || qty <= 0) continue;
+      let left = qty;
+      while (left > 0) {
+        let spot = this.findSmartSpotForStoryBuilding(it);
+        if (!spot) {
+          for (let gy = 14; gy < GRID_SIZE - 4 && !spot; gy++) {
+            for (let gx = 10; gx < GRID_SIZE - 4; gx++) {
+              if (this.canPlaceItem(it, gx, gy, 0).ok) {
+                spot = { gx, gy };
+                break;
+              }
+            }
+          }
+        }
+        if (!spot) break;
+        const restoredStar = stashStars[itemId]?.pop() ?? 1;
+        this.state.buildings.push({
+          uid: `decor_${itemId}_${now}_${placed}`,
+          itemId,
+          gx: spot.gx,
+          gy: spot.gy,
+          rotation: 0,
+          stars: Math.max(1, Math.min(5, restoredStar)),
+          placedAt: now,
+          constructEndsAt: now,
+          lastTickAt: now,
+          storedGalleons: 0,
+          storedXp: 0,
+          readyBubbles: 0,
+          durability: 100,
+          visitorsServed: 0,
+        });
+        this.rebuildGrid();
+        left--;
+        placed++;
+      }
+      if (left <= 0) {
+        delete stash[itemId];
+        delete stashStars[itemId];
+      } else {
+        stash[itemId] = left;
+      }
+    }
+    this.state.stashedDecorInventory = stash;
+    this.state.stashedDecorStars = stashStars;
+    if (placed === 0) {
+      return { ok: false, msg: 'Kho Trang Trí đang trống hoặc sân không còn ô trống!', placed: 0 };
+    }
+    this.audio.playPlace();
+    this.saveToStorage();
+    this.onUiChange?.();
+    return {
+      ok: true,
+      msg: `🌸 Đã bày lại ${placed} vật phẩm Trang Trí từ Kho Kiến Trúc ra sân (0G)!`,
+      placed,
+    };
+  }
+
+  public resetExamWinStreak(): void {
+    this.state.examWinStreak = 0;
+    this.saveToStorage();
+  }
+
+  public useMorningDewPhial(uid: string): { ok: boolean; msg: string; reducedSec: number } {
+    if (this.isVisitingNeighbor) {
+      return { ok: false, msg: 'Không thể dùng Bình Sương Mai tại vườn bạn bè!', reducedSec: 0 };
+    }
+    const have = Math.max(0, Math.floor(this.state.morningDewPhials ?? 0));
+    if (have <= 0 && !this.state.sandboxMode) {
+      return {
+        ok: false,
+        msg: 'Chưa có 🧪 Bình Sương Mai — đạt chuỗi 3 trận thắng Khảo Thí liên tiếp để nhận!',
+        reducedSec: 0,
+      };
+    }
+    const b = this.state.buildings.find((x) => x.uid === uid);
+    if (!b) return { ok: false, msg: 'Không tìm thấy công trình!', reducedSec: 0 };
+
+    const now = Date.now();
+    // Support construction, growing crop, or grazing pasture on the chosen building!
+    if (now < b.constructEndsAt) {
+      const res = this.applyConstructionReductionFromGameplay(
+        MORNING_DEW_REDUCTION_SEC,
+        'Bình Sương Mai',
+        uid
+      );
+      if (res.reducedSec <= 0) {
+        return { ok: false, msg: 'Công trình này đã chạm sàn thời gian tối thiểu!', reducedSec: 0 };
+      }
+      if (!this.state.sandboxMode) {
+        this.state.morningDewPhials = Math.max(0, have - 1);
+      }
+      this.audio.playSpell();
+      this.saveToStorage();
+      this.onUiChange?.();
+      return {
+        ok: true,
+        msg: `🧪 Đã tưới Bình Sương Mai rút ngắn ${formatDurationCompactVi(res.reducedSec)} cho ${res.targetName ?? 'công trình'}!`,
+        reducedSec: res.reducedSec,
+      };
+    }
+    if (b.cropId && b.cropReadyAt && now < b.cropReadyAt) {
+      const savedMs = Math.min(b.cropReadyAt - now - 1000, MORNING_DEW_REDUCTION_SEC * 1000);
+      if (savedMs <= 0) return { ok: false, msg: 'Luống cây đã sắp chín ngay!', reducedSec: 0 };
+      b.cropReadyAt -= savedMs;
+      if (!this.state.sandboxMode) this.state.morningDewPhials = Math.max(0, have - 1);
+      this.audio.playSpell();
+      this.saveToStorage();
+      this.onUiChange?.();
+      return {
+        ok: true,
+        msg: `🧪 Bình Sương Mai giúp luống cây chín sớm ${formatDurationCompactVi(Math.round(savedMs / 1000))}!`,
+        reducedSec: Math.round(savedMs / 1000),
+      };
+    }
+    if (b.pastureAnimalId && b.pastureReadyAt && now < b.pastureReadyAt) {
+      const savedMs = Math.min(b.pastureReadyAt - now - 1000, MORNING_DEW_REDUCTION_SEC * 1000);
+      if (savedMs <= 0) return { ok: false, msg: 'Đồng cỏ đã sắp thu hoạch!', reducedSec: 0 };
+      b.pastureReadyAt -= savedMs;
+      if (!this.state.sandboxMode) this.state.morningDewPhials = Math.max(0, have - 1);
+      this.audio.playSpell();
+      this.saveToStorage();
+      this.onUiChange?.();
+      return {
+        ok: true,
+        msg: `🧪 Bình Sương Mai rút ngắn ${formatDurationCompactVi(Math.round(savedMs / 1000))} tại Đồng Cỏ!`,
+        reducedSec: Math.round(savedMs / 1000),
+      };
+    }
+    return {
+      ok: false,
+      msg: 'Công trình này hiện không có đồng hồ chờ để dùng Bình Sương Mai!',
+      reducedSec: 0,
+    };
+  }
+
+  public getActiveMinigameCompanion(): {
+    nameVi: string;
+    emoji: string;
+    speciesId: string;
+    bondLevel: number;
+    chargeEveryMoves: number;
+  } {
+    const ownState = this.homeStateWhileVisiting ?? this.state;
+    const habitats = ownState.buildings.filter(
+      (b) => getCatalogItem(b.itemId)?.isCreatureHabitat && Date.now() >= b.constructEndsAt
+    );
+    if (habitats.length > 0) {
+      habitats.sort((a, b) => (b.creatureBondLevel ?? 1) - (a.creatureBondLevel ?? 1));
+      const best = habitats[0];
+      const sp = getSpeciesProfile(best.itemId);
+      const bond = Math.max(1, best.creatureBondLevel ?? 1);
+      return {
+        nameVi: best.creatureNickname || sp?.speciesName || 'Niffler Trợ Chiến',
+        emoji: sp?.emoji || '🐾',
+        speciesId: best.itemId,
+        bondLevel: bond,
+        chargeEveryMoves: bond >= 5 ? 4 : 5,
+      };
+    }
+    return {
+      nameVi: 'Niffler Nhỏ Hang Sóc',
+      emoji: '🐾',
+      speciesId: 'niffler_den',
+      bondLevel: 1,
+      chargeEveryMoves: 5,
+    };
+  }
+
+  public consumeMollyMinigameSnack(
+    snackId: 'cinnamon_apple_pie' | 'frothy_butterbeer'
+  ): { ok: boolean; msg: string; remaining: number } {
+    const meta = FARM_GOODS[snackId];
+    if (this.state.sandboxMode) {
+      this.audio.playSpell();
+      return {
+        ok: true,
+        msg: `${meta.emoji} Đã thưởng thức ${meta.name} Bà Molly!`,
+        remaining: 99,
+      };
+    }
+    const have = this.getFarmItemCount(snackId);
+    if (have <= 0) {
+      return {
+        ok: false,
+        msg: `Kho Đỏ chưa có ${meta.emoji} ${meta.name} — hãy nướng tại Lò Bánh Bà Molly hoặc Quầy Bia Bơ nhé!`,
+        remaining: 0,
+      };
+    }
+    this.consumeFarmItemFromBarn(snackId, 1);
+    this.audio.playSpell();
+    this.saveToStorage();
+    this.onUiChange?.();
+    return {
+      ok: true,
+      msg: `${meta.emoji} Đã dùng 1 ${meta.name} Bà Molly trợ lực khảo thí!`,
+      remaining: Math.max(0, have - 1),
+    };
+  }
 }
 
 export {
@@ -1321,9 +2040,11 @@ export {
   evaluateAchievements,
   exportSavePayload,
   getAchievementCodexSummary,
+  getCategoryMetricValue,
   getNpcScheduleForPeriod,
   importSavePayload,
   loadFromNamedSlot,
+  reconcileRetentionStateOnLoad,
   resolveCloudSaveConflict,
   saveToNamedSlot,
   STORY_CUTSCENE_CHAPTERS,

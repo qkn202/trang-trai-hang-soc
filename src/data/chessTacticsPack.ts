@@ -1,5 +1,5 @@
 // Auto-verified by WizardChessEngine legal-move & Alpha-Beta solver — 100% legal, unique positions
-import type { WizardingPortraitKey } from '../sim/puzzleArcadeEngine';
+import type { WizardingPortraitKey } from '../sim/puzzleShared';
 
 export interface ExtraChessTacticDef {
   title: string;

@@ -17,6 +17,8 @@ import { SpriteRegistry } from './engine/spriteLoader';
 import { sampleCoasterTrainPositions } from './sim/coaster';
 import { ParkSimulation } from './sim/simulation';
 import {
+  ACTIVE_MINIGAME_RESUME_KEY,
+  ActiveMinigameResumeRecord,
   CatalogItem,
   FarmCropId,
   HeatmapMode,
@@ -26,14 +28,27 @@ import {
   QuizFormatKind,
   QuizLanguageId,
   QuizProficiencyTier,
+  TimeOverride,
   ValleyVillagerId,
   WeatherOverride,
   ZoneId,
 } from './types/game';
 import { accessibility, announce } from './ui/accessibility';
+import { isLocalDevelopmentHost } from './ui/authoritativeClient';
+import { SAVE_KEY } from './ui/cloudSave';
 import { haptic } from './ui/haptics';
 import { GameHUD } from './ui/hud';
 import { installPrompt } from './ui/installPrompt';
+import onlineServices from './ui/onlineBootstrap';
+import {
+  GamepadController,
+  RADIAL_QUICK_SLICES,
+  RadialQuickActionId,
+} from './ui/platformAndA11y';
+import {
+  createRollbackSaveBackup,
+  ProductionTelemetryCollector,
+} from './ui/productionShip';
 
 function isDragPaintableItem(item: CatalogItem): boolean {
   return (
@@ -80,6 +95,7 @@ async function bootstrap(): Promise<void> {
   const hasExplicitCamParam = Boolean(
     params.get('preview') === '100' ||
       params.get('visit') ||
+      params.get('tour') ||
       params.get('zoom') ||
       params.get('cx') ||
       params.get('cy') ||
@@ -115,14 +131,21 @@ async function bootstrap(): Promise<void> {
       toZoom: targetZoom,
     };
   }
-  if (params.get('preview') === '100') {
+  const isDevHostAllowed =
+    Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV) ||
+    isLocalDevelopmentHost(window.location.hostname);
+
+  if (params.get('preview') === '100' && isDevHostAllowed) {
     sim.toggleHeadmasterPreview(100);
     if (!params.get('tutorial') && sim.isTutorialActive()) {
       sim.skipTutorial();
     }
-    cam.zoom = Number(params.get('zoom') || 0.62);
-    const cx = Number(params.get('cx') || 24.5);
-    const cy = Number(params.get('cy') || 23.0);
+    const z = Number(params.get('zoom') || 0.62);
+    cam.zoom = Number.isFinite(z) && z >= 0.32 && z <= 2.15 ? z : 0.62;
+    const rawCx = Number(params.get('cx'));
+    const rawCy = Number(params.get('cy'));
+    const cx = Number.isFinite(rawCx) && params.get('cx') ? rawCx : 24.5;
+    const cy = Number.isFinite(rawCy) && params.get('cy') ? rawCy : 23.0;
     centerCameraOnGrid(cam, cx, cy);
   }
   const tutorialParam = params.get('tutorial');
@@ -134,7 +157,7 @@ async function bootstrap(): Promise<void> {
     }
   }
   const tstepParam = params.get('tstep');
-  if (tstepParam !== null) {
+  if (tstepParam !== null && isDevHostAllowed) {
     const idx = Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, Number(tstepParam) || 0));
     const tut = sim.ensureTutorialState();
     tut.active = true;
@@ -175,8 +198,10 @@ async function bootstrap(): Promise<void> {
     if (Number.isFinite(z) && z >= 0.32 && z <= 2.15) cam.zoom = z;
   }
   if ((params.get('cx') || params.get('cy')) && params.get('preview') !== '100') {
-    const cx = Number(params.get('cx') || 18.0);
-    const cy = Number(params.get('cy') || 24.5);
+    const rawCx = Number(params.get('cx'));
+    const rawCy = Number(params.get('cy'));
+    const cx = Number.isFinite(rawCx) && params.get('cx') ? rawCx : 18.0;
+    const cy = Number.isFinite(rawCy) && params.get('cy') ? rawCy : 24.5;
     centerCameraOnGrid(cam, cx, cy);
   }
   const hm = params.get('heatmap') as HeatmapMode | null;
@@ -232,7 +257,15 @@ async function bootstrap(): Promise<void> {
     hud.openSuitcaseDialog(tabParam);
   } else if (dlgParam === 'match3') {
     const m3LvParam = Number(params.get('m3level') || 0);
-    hud.openMatch3Dialog(m3LvParam >= 1 ? m3LvParam : undefined);
+    const maxAllowedM3 = isDevHostAllowed
+      ? 777
+      : Math.min(777, (sim.state.match3.maxClearedLevel ?? 0) + 1);
+    const safeM3Lv =
+      Number.isFinite(m3LvParam) && m3LvParam >= 1 ? Math.min(maxAllowedM3, Math.floor(m3LvParam)) : undefined;
+    if (isDevHostAllowed && safeM3Lv && safeM3Lv > (sim.state.match3.maxClearedLevel ?? 0) + 1) {
+      sim.state.sandboxMode = true;
+    }
+    hud.openMatch3Dialog(safeM3Lv);
   } else if (
     dlgParam === 'puzzle' ||
     dlgParam === 'caro' ||
@@ -273,15 +306,163 @@ async function bootstrap(): Promise<void> {
         ? rawScope
         : undefined;
     hud.openLeaderboardDialog(validGame, validScope);
+  } else if (!params.get('tour') && !params.get('visit') && !sim.isHeadmasterPreview) {
+    try {
+      const rawResume = localStorage.getItem(ACTIVE_MINIGAME_RESUME_KEY);
+      if (rawResume) {
+        const parsedResume = JSON.parse(rawResume) as Partial<ActiveMinigameResumeRecord>;
+        const ageMs = Date.now() - Number(parsedResume.savedAt || 0);
+        const pa = sim.state.puzzleArcade;
+        if (ageMs >= 0 && ageMs <= 12 * 3600 * 1000) {
+          if (
+            parsedResume.dialog === 'puzzleArcade' &&
+            parsedResume.mode === 'sudoku' &&
+            pa.sudokuSession?.stage === pa.sudokuStage
+          ) {
+            hud.openPuzzleArcadeDialog('sudoku');
+          } else if (
+            parsedResume.dialog === 'puzzleArcade' &&
+            parsedResume.mode === 'caro' &&
+            pa.caroSession?.stage === pa.caroStage
+          ) {
+            hud.openPuzzleArcadeDialog('caro');
+          } else if (
+            parsedResume.dialog === 'puzzleArcade' &&
+            parsedResume.mode === 'chess' &&
+            pa.chessSession?.stage === pa.chessStage
+          ) {
+            hud.openPuzzleArcadeDialog('chess');
+          } else if (
+            parsedResume.dialog === 'puzzleArcade' &&
+            parsedResume.mode === 'blocks' &&
+            pa.onetSession?.stage === pa.blockStage
+          ) {
+            hud.openPuzzleArcadeDialog('blocks');
+          } else if (
+            parsedResume.dialog === 'match3' &&
+            sim.state.match3.activeSession?.levelId === sim.state.match3.currentLevel
+          ) {
+            hud.openMatch3Dialog();
+          } else {
+            localStorage.removeItem(ACTIVE_MINIGAME_RESUME_KEY);
+          }
+        } else {
+          localStorage.removeItem(ACTIVE_MINIGAME_RESUME_KEY);
+        }
+      }
+    } catch {
+      // Ignore malformed storage entries
+    }
   }
-  const visitParam = params.get('visit');
-  if (visitParam) {
-    hud.enterVisitFromHud(visitParam);
+  const LEGACY_SHOWCASE_TOUR_MAP: Record<string, string> = {
+    hagrid_valley: 'tour_hagrid',
+    luna_valley: 'tour_luna',
+    neville_valley: 'tour_sprout',
+    hermione_valley: 'tour_molly',
+    twins_valley: 'tour_twins',
+  };
+  const routeGardenTourOrVisit = (rawTarget: string): void => {
+    const trimmed = String(rawTarget || '').trim();
+    if (!trimmed) {
+      hud.exitVisitFromHud();
+      return;
+    }
+    const mappedTour =
+      LEGACY_SHOWCASE_TOUR_MAP[trimmed] || (trimmed.startsWith('tour_') ? trimmed : '');
+    if (mappedTour) {
+      hud.enterHonorTourFromHud(mappedTour);
+    } else if (
+      trimmed.startsWith('player_') ||
+      sim.ensureNeighborSocial().neighbors.some((n) => n.id === trimmed)
+    ) {
+      hud.enterVisitFromHud(trimmed);
+    } else {
+      hud.enterFlooMemberVisitFromHud(trimmed);
+    }
+  };
+
+  const tourOrVisitParam = params.get('tour') || params.get('visit');
+  if (tourOrVisitParam) {
+    routeGardenTourOrVisit(tourOrVisitParam);
   }
   if (sim.isTutorialActive() && !hasExplicitCamParam) {
     hud.panCameraToTutorialTarget();
   }
+  onlineServices.bindSimulationGringottsWallet(sim, {
+    onSnapshot: (snap) => hud.applyAuthoritativeSnapshot(snap),
+    onToast: (msg, icon) => hud.showToast(msg, icon ?? '🏦'),
+  });
+  if (onlineServices.authoritativeClient.snapshot) {
+    hud.applyAuthoritativeSnapshot(onlineServices.authoritativeClient.snapshot);
+  }
   hud.refreshAll();
+
+  window.addEventListener('hpvn:authoritative-snapshot', (ev) => {
+    hud.applyAuthoritativeSnapshot((ev as CustomEvent).detail);
+  });
+  window.addEventListener('hpvn:toast', (ev) => {
+    const detail = (ev as CustomEvent<{ text?: string }>).detail;
+    if (detail?.text) {
+      hud.showToast(String(detail.text), '🔥');
+    }
+  });
+  window.addEventListener('hpvn:tour-garden', (ev) => {
+    const detail = (ev as CustomEvent<{ tourId?: string | null }>).detail;
+    routeGardenTourOrVisit(String(detail?.tourId ?? ''));
+  });
+  window.addEventListener('gamesave:updated', (ev) => {
+    if (sim.isHeadmasterPreview || sim.isVisitingNeighbor) return;
+    const detail = (ev as CustomEvent<{ saveJson?: string }>).detail;
+    const rawSave =
+      (typeof detail?.saveJson === 'string' && detail.saveJson) ||
+      (typeof localStorage !== 'undefined' ? localStorage.getItem(SAVE_KEY) : null);
+    if (!rawSave) return;
+    createRollbackSaveBackup(sim.state);
+    if (sim.importSaveJson(rawSave)) {
+      if (onlineServices.authoritativeClient.snapshot) {
+        hud.applyAuthoritativeSnapshot(onlineServices.authoritativeClient.snapshot);
+      }
+      hud.match3Modal?.resetSession();
+      hud.puzzleArcadeModal?.resetSession();
+      hud.refreshAll();
+      accessibility.refresh();
+      hud.showToast('☁️ Đã đồng bộ thung lũng từ máy chủ HPVN!', '☁️');
+    }
+  });
+  window.addEventListener('hpvn:atmosphere', (ev) => {
+    if (sim.isVisitingNeighbor) return;
+    const rawMode = (ev as CustomEvent<{ mode?: string }>).detail?.mode;
+    const mode = rawMode === 'auto' ? 'realtime' : rawMode;
+    if (
+      mode === 'realtime' ||
+      mode === 'dawn' ||
+      mode === 'day' ||
+      mode === 'dusk' ||
+      mode === 'night'
+    ) {
+      sim.state.settings.timeOverride = mode as TimeOverride;
+      sim.saveToStorage();
+      hud.refreshAll();
+    }
+  });
+  window.addEventListener('hpvn:weather', (ev) => {
+    if (sim.isVisitingNeighbor) return;
+    const mode = (ev as CustomEvent<{ mode?: string }>).detail?.mode;
+    if (
+      mode === 'auto' ||
+      mode === 'clear' ||
+      mode === 'cloudy' ||
+      mode === 'rain' ||
+      mode === 'storm' ||
+      mode === 'snow' ||
+      mode === 'fog' ||
+      mode === 'fireflies'
+    ) {
+      sim.state.settings.weatherOverride = mode as WeatherOverride;
+      sim.saveToStorage();
+      hud.refreshAll();
+    }
+  });
 
   sim.onTutorialStepChanged = () => {
     hud.panCameraToTutorialTarget();
@@ -339,6 +520,24 @@ async function bootstrap(): Promise<void> {
   if (offlineReport) {
     hud.showOfflineModal(offlineReport);
   }
+
+  const notifyHpvnVisitHelpIfRealPlayer = (buildingUid: string): void => {
+    const visitingNb = sim.getActiveVisitingNeighbor();
+    if (!visitingNb?.remoteUserId) return;
+    const latestMark = visitingNb.helpedMarksToday[visitingNb.helpedMarksToday.length - 1];
+    window.dispatchEvent(
+      new CustomEvent('hpvn:visit-help', {
+        detail: {
+          hostUid: visitingNb.remoteUserId,
+          buildingUid,
+          kind: latestMark?.kind || 'water_crop',
+          noteText: latestMark?.noteText || 'Chúc vườn phép thuật bội thu!',
+          helperName: sim.state.parkName || 'Hàng Xóm Hang Sóc',
+          helperEmoji: '🧙‍♂️',
+        },
+      })
+    );
+  };
 
   let hoverTile: { gx: number; gy: number } | null = null;
   let isPointerDown = false;
@@ -507,6 +706,14 @@ async function bootstrap(): Promise<void> {
   });
   window.addEventListener('keyup', (e) => {
     keysPressed.delete(e.key.toLowerCase());
+  });
+  window.addEventListener('blur', () => {
+    keysPressed.clear();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      keysPressed.clear();
+    }
   });
 
   canvas.addEventListener('pointermove', (e) => {
@@ -963,6 +1170,7 @@ async function bootstrap(): Promise<void> {
           const res = sim.helpVisitedNeighborBuilding(best.id);
           if (res.ok) {
             renderer.notifyJuice('harvest', best.sx, best.sy);
+            notifyHpvnVisitHelpIfRealPlayer(best.id);
           } else {
             hud.showToast(res.msg, '💧');
           }
@@ -1069,6 +1277,7 @@ async function bootstrap(): Promise<void> {
                 const res = sim.helpVisitedNeighborBuilding(b.uid);
                 if (res.ok) {
                   renderer.notifyJuice('harvest', best.sx, best.sy);
+                  notifyHpvnVisitHelpIfRealPlayer(b.uid);
                 } else {
                   hud.showToast(res.msg, '💧');
                 }
@@ -1230,6 +1439,60 @@ async function bootstrap(): Promise<void> {
 
   let lastTime = performance.now();
   let minimapFrame = 0;
+  const gamepad = new GamepadController();
+  const telemetry = new ProductionTelemetryCollector();
+  createRollbackSaveBackup(sim.state);
+
+  // Mount lightweight 8-slice Gamepad Radial Quick Menu overlay (hidden until LB held)
+  const radialEl = document.createElement('div');
+  radialEl.id = 'gamepadRadialMenu';
+  radialEl.className = 'aaa-gamepad-radial';
+  radialEl.hidden = true;
+  radialEl.innerHTML = `
+    <div class="aaa-gamepad-wheel">
+      ${RADIAL_QUICK_SLICES.map((s) => {
+        const angle = (s.index * Math.PI * 2) / 8;
+        const leftPct = 50 + Math.cos(angle) * 37;
+        const topPct = 50 + Math.sin(angle) * 37;
+        return `<div class="aaa-gamepad-slice" data-radial-idx="${s.index}" style="left:${leftPct.toFixed(1)}%;top:${topPct.toFixed(1)}%;">${s.icon}<br/>${s.labelVi}</div>`;
+      }).join('')}
+    </div>
+  `;
+  app.appendChild(radialEl);
+  let lastRadialAction: RadialQuickActionId | null = null;
+  let wasRadialOpen = false;
+
+  const triggerRadialQuickAction = (action: RadialQuickActionId): void => {
+    switch (action) {
+      case 'seeds':
+        hud.openSeedTray();
+        break;
+      case 'barn':
+        hud.openWorkshopDialog('barn');
+        break;
+      case 'orders': {
+        hud.activeQuestTab = 'orders';
+        hud.renderQuestDialog();
+        (hud.root.querySelector('#questDialog') as HTMLDialogElement | null)?.showModal();
+        break;
+      }
+      case 'match3':
+        hud.openMatch3Dialog();
+        break;
+      case 'arcade':
+        hud.openPuzzleArcadeDialog();
+        break;
+      case 'seedquiz':
+        hud.openSeedQuizDialog();
+        break;
+      case 'neighbors':
+        hud.openNeighborDialog('friends');
+        break;
+      case 'feast':
+        hud.openHarvestFeastDialog();
+        break;
+    }
+  };
 
   function frame(now: number): void {
     if (document.hidden) {
@@ -1239,6 +1502,57 @@ async function bootstrap(): Promise<void> {
     }
     const dt = (now - lastTime) / 1000;
     lastTime = now;
+
+    if (dt > 0.002 && dt < 0.5) {
+      telemetry.recordFrameFps(1 / dt);
+      if (minimapFrame % 90 === 0 && minimapFrame > 0) {
+        const health = telemetry.getHealthReport();
+        renderer.adaptiveDprCap = health.p5LowFps < 46 ? 1.25 : health.p5LowFps < 54 ? 1.5 : 2;
+      }
+    }
+
+    // Poll Gamepad API (camera pan + 8-slice radial menu + modal cancel)
+    const gp = gamepad.poll();
+    if (gp.connected) {
+      if (gp.panDx !== 0 || gp.panDy !== 0) {
+        introGlide = null;
+        hud.rideCamUid = null;
+        const gpSpeed = (380 / cam.zoom) * Math.min(0.05, dt);
+        cam.x += gp.panDx * gpSpeed;
+        cam.y += gp.panDy * gpSpeed;
+      }
+      if (gp.radialOpen) {
+        radialEl.hidden = false;
+        wasRadialOpen = true;
+        if (gp.radialActionId) {
+          lastRadialAction = gp.radialActionId;
+        }
+        radialEl.querySelectorAll<HTMLElement>('[data-radial-idx]').forEach((el) => {
+          el.dataset.selected = String(Number(el.dataset.radialIdx) === gp.radialSliceIndex);
+        });
+        if (gp.confirmJustPressed && lastRadialAction) {
+          radialEl.hidden = true;
+          wasRadialOpen = false;
+          triggerRadialQuickAction(lastRadialAction);
+          lastRadialAction = null;
+        }
+      } else if (wasRadialOpen) {
+        radialEl.hidden = true;
+        wasRadialOpen = false;
+        if (lastRadialAction) {
+          triggerRadialQuickAction(lastRadialAction);
+          lastRadialAction = null;
+        }
+      }
+      if (gp.cancelJustPressed) {
+        const openDlgs = Array.from(hud.root.querySelectorAll<HTMLDialogElement>('dialog[open]'));
+        if (openDlgs.length > 0) {
+          openDlgs[openDlgs.length - 1]?.close();
+        } else if (hud.hasOpenFloatingTray()) {
+          hud.hideOpenFloatingTrays();
+        }
+      }
+    }
 
     if (
       keysPressed.has('w') ||
@@ -1264,6 +1578,9 @@ async function bootstrap(): Promise<void> {
     }
 
     const panSpeed = (340 / cam.zoom) * Math.min(0.05, dt);
+    if (keysPressed.size > 0 && document.querySelector('dialog[open]')) {
+      keysPressed.clear();
+    }
     if (keysPressed.has('w') || keysPressed.has('arrowup')) {
       hud.rideCamUid = null;
       cam.y -= panSpeed;
@@ -1365,6 +1682,7 @@ async function bootstrap(): Promise<void> {
 
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
+      sim.saveToStorage();
       audio.pause();
     } else {
       lastTime = performance.now();
@@ -1372,11 +1690,21 @@ async function bootstrap(): Promise<void> {
     }
   });
 
+  window.addEventListener('pagehide', () => {
+    sim.saveToStorage();
+  });
+
   window.addEventListener('beforeunload', () => {
     sim.saveToStorage();
   });
 
-  // --- External Online-Prod Event Bus Bridge ---
+  window.addEventListener('hangsoc:before-sw-reload', () => {
+    sim.saveToStorage();
+  });
+
+  // --- External Online-Prod & HPVN Host Shell Event Bus Bridge ---
+  let lastHpvnStateSyncAt = 0;
+  let lastHpvnSig = '';
   const previousUiChange = sim.onUiChange;
   sim.onUiChange = () => {
     previousUiChange?.();
@@ -1388,7 +1716,181 @@ async function bootstrap(): Promise<void> {
         },
       })
     );
+    const nowMs = Date.now();
+    const sig = `${sim.state.level}|${sim.state.match3.stars}|${sim.state.unlockedZones.length}|${sim.state.buildings.length}|${sim.state.settings.weatherOverride}|${sim.state.settings.timeOverride}`;
+    if (sig !== lastHpvnSig && nowMs - lastHpvnStateSyncAt >= 1200) {
+      lastHpvnSig = sig;
+      lastHpvnStateSyncAt = nowMs;
+      window.dispatchEvent(
+        new CustomEvent('hpvn:sync-state', {
+          detail: {
+            parkName: sim.state.parkName,
+            level: sim.state.level,
+            magicStars: sim.state.match3.stars,
+            galleons: sim.state.galleons,
+            unlockedZonesCount: sim.state.unlockedZones.length,
+            buildingsCount: sim.state.buildings.length,
+            weatherMode: sim.state.settings.weatherOverride,
+            atmosphereMode:
+              sim.state.settings.timeOverride === 'realtime'
+                ? 'auto'
+                : sim.state.settings.timeOverride,
+          },
+        })
+      );
+    }
   };
+
+  window.addEventListener('hpvn:event', (ev: Event) => {
+    if (sim.isVisitingNeighbor) return;
+    const mode = String((ev as CustomEvent<{ mode?: string }>).detail?.mode || 'auto');
+    if (
+      mode === 'auto' ||
+      mode === 'none' ||
+      mode === 'halloween' ||
+      mode === 'christmas' ||
+      mode === 'quidditch_cup'
+    ) {
+      sim.state.settings.activeFestival = mode;
+      sim.saveToStorage();
+      hud.refreshAll();
+    }
+  });
+
+  window.addEventListener('hpvn:mute', (ev: Event) => {
+    const muted = Boolean((ev as CustomEvent<{ muted?: boolean }>).detail?.muted);
+    sim.state.settings.soundEnabled = !muted;
+    sim.state.settings.bgmEnabled = !muted;
+    audio.enabled = !muted;
+    audio.bgmEnabled = !muted;
+    if (muted) {
+      audio.pause();
+    } else {
+      audio.resume();
+    }
+    sim.saveToStorage();
+    hud.refreshAll();
+  });
+
+  window.addEventListener('gamesave:helpers', (ev: Event) => {
+    const detail = (
+      ev as CustomEvent<{
+        helpers?: Array<{
+          id: string;
+          uid: string;
+          name: string;
+          avatarEmoji?: string;
+          kind?: 'water_crop' | 'tend_yard' | 'stoke_workshop';
+          buildingUid?: string;
+          noteText?: string;
+          at: number;
+        }>;
+        summaryVi?: string;
+      }>
+    ).detail;
+    if (!detail) return;
+    const targetState = sim.homeStateWhileVisiting ?? sim.state;
+    const social =
+      targetState === sim.state
+        ? sim.ensureNeighborSocial()
+        : (targetState.neighborSocial ??= sim.ensureNeighborSocial());
+    const seen = new Set(social.homeLanternMarks.map((m) => m.id));
+    const fallbackUid = targetState.buildings[0]?.uid || 'burrow_main_gate';
+    const nowMs = Date.now();
+    const speedupMs = 15 * 60 * 1000;
+    const minConstructFloorMs = 60 * 60 * 1000;
+    let added = 0;
+    for (const h of detail.helpers ?? []) {
+      if (!h?.id || seen.has(h.id) || social.homeLanternMarks.length >= 5) continue;
+      seen.add(h.id);
+      const preferredTarget = h.buildingUid
+        ? targetState.buildings.find((b) => b.uid === h.buildingUid)
+        : undefined;
+      const activeTimerBuilding =
+        (preferredTarget &&
+        ((preferredTarget.cropReadyAt ?? 0) > nowMs ||
+          (preferredTarget.pastureReadyAt ?? 0) > nowMs ||
+          (preferredTarget.workshopQueue?.[0]?.endsAt ?? 0) > nowMs ||
+          (preferredTarget.constructEndsAt ?? 0) > nowMs)
+          ? preferredTarget
+          : undefined) ??
+        targetState.buildings.find(
+          (b) =>
+            (b.cropReadyAt ?? 0) > nowMs ||
+            (b.pastureReadyAt ?? 0) > nowMs ||
+            (b.workshopQueue?.[0]?.endsAt ?? 0) > nowMs ||
+            (b.constructEndsAt ?? 0) > nowMs
+        );
+
+      if (activeTimerBuilding) {
+        if ((activeTimerBuilding.cropReadyAt ?? 0) > nowMs) {
+          activeTimerBuilding.cropReadyAt = Math.max(
+            nowMs,
+            (activeTimerBuilding.cropReadyAt ?? nowMs) - speedupMs
+          );
+          activeTimerBuilding.cropWateredBoost = true;
+        } else if ((activeTimerBuilding.pastureReadyAt ?? 0) > nowMs) {
+          activeTimerBuilding.pastureReadyAt = Math.max(
+            nowMs,
+            (activeTimerBuilding.pastureReadyAt ?? nowMs) - speedupMs
+          );
+        } else if ((activeTimerBuilding.workshopQueue?.[0]?.endsAt ?? 0) > nowMs) {
+          for (const slot of activeTimerBuilding.workshopQueue ?? []) {
+            slot.startedAt -= speedupMs;
+            slot.endsAt = Math.max(nowMs, slot.endsAt - speedupMs);
+          }
+        } else if ((activeTimerBuilding.constructEndsAt ?? 0) > nowMs + minConstructFloorMs) {
+          activeTimerBuilding.constructEndsAt = Math.max(
+            nowMs + minConstructFloorMs,
+            (activeTimerBuilding.constructEndsAt ?? nowMs) - speedupMs
+          );
+        }
+      }
+
+      social.homeLanternMarks.push({
+        id: h.id,
+        buildingUid: activeTimerBuilding?.uid || h.buildingUid || fallbackUid,
+        helperId: h.uid,
+        helperName: h.name || 'Hàng Xóm Hang Sóc',
+        helperEmoji: h.avatarEmoji || '🧙‍♂️',
+        kind: h.kind || 'water_crop',
+        noteVi: h.noteText || 'Đã sang chăm giúp thung lũng của bạn!',
+        createdAt: h.at || nowMs,
+      });
+      added++;
+    }
+    if (added > 0) {
+      sim.saveToStorage();
+      hud.refreshAll();
+      if (detail.summaryVi) {
+        hud.showToast(detail.summaryVi, '🏮');
+      }
+    }
+  });
+
+  window.addEventListener('gamesave:server-meta', (ev) => {
+    const detail = (
+      ev as CustomEvent<{
+        dayKey?: string;
+        dailyGardenHelpsCount?: number;
+      }>
+    ).detail;
+    if (!detail) return;
+    const targetState = sim.homeStateWhileVisiting ?? sim.state;
+    const social =
+      targetState === sim.state
+        ? sim.ensureNeighborSocial()
+        : (targetState.neighborSocial ??= sim.ensureNeighborSocial());
+    if (typeof detail.dayKey === 'string' && detail.dayKey) {
+      social.lastSocialResetKey = detail.dayKey;
+    }
+    if (
+      typeof detail.dailyGardenHelpsCount === 'number' &&
+      detail.dailyGardenHelpsCount > (social.dailyGardenHelpsCount ?? 0)
+    ) {
+      social.dailyGardenHelpsCount = detail.dailyGardenHelpsCount;
+    }
+  });
 }
 
 bootstrap().catch((err) => {

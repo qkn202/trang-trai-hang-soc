@@ -9,6 +9,8 @@ import {
   formatDurationCountdownVi,
   getBuildingEffectiveCycleSec,
   getCatalogItem,
+  getCropFamily,
+  getCropMasteryTierInfo,
   getFarmItemIconSrc,
   getFarmItemMeta,
   PASTURE_ANIMALS,
@@ -250,6 +252,16 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                     `;
                   })
                   .join('');
+                const soilEntry = hud.sim.state.plotSoilState?.[`${b.gx},${b.gy}`];
+                const familyLabelMap: Record<string, string> = {
+                  grain: 'Lúa mạch/Ngũ cốc',
+                  produce: 'Rau củ quả',
+                  flower: 'Hoa cảnh',
+                  magical: 'Thảo dược phép',
+                };
+                const soilHintHtml = soilEntry?.lastFamily
+                  ? `<div style="font-size:11px;font-weight:800;color:var(--teal-deep);margin-bottom:6px;">♻️ Luân canh: vừa gặt họ <strong>${familyLabelMap[soilEntry.lastFamily] ?? soilEntry.lastFamily}</strong> — gieo họ khác nhận <strong>×2 sản lượng</strong> & giảm mỏi đất!</div>`
+                  : '';
                 return `
                   <div class="ws-inspector-board">
                     <div class="ws-board-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
@@ -258,6 +270,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                         🪄 +Hạt
                       </button>
                     </div>
+                    ${soilHintHtml}
                     <div class="seed-filter-bar" role="group" aria-label="Bộ lọc hạt giống" style="margin-bottom:6px;">${filterPills}</div>
                     <div class="seed-picker-grid">${seedCards}</div>
                   </div>
@@ -269,6 +282,10 @@ export function inspectorRenderInspector(hud: GameHUD): void {
               const plantedAt = b.cropPlantedAt ?? readyAt - cropDef.growSec * 1000;
               const cropLeftSec = Math.max(0, Math.ceil((readyAt - now) / 1000));
               const isRipe = cropLeftSec <= 0;
+              const masteryCount = hud.sim.state.cropMastery?.[cropDef.id] ?? 0;
+              const masteryInfo = getCropMasteryTierInfo(masteryCount);
+              const dewPhials = Math.max(0, hud.sim.state.morningDewPhials ?? 0);
+              const effectiveYield = cropDef.yieldQty * (b.cropRotatedBonus ? 2 : 1);
               const growPct = isRipe
                 ? 100
                 : Math.max(
@@ -280,32 +297,42 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                   <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
                     <img src="${getFarmItemIconSrc(cropDef.id)}" alt="${escapeHtml(cropDef.name)}" style="width:44px;height:44px;object-fit:contain;" />
                     <div style="flex:1;">
-                      <div style="font-size:13.5px;font-weight:900;">${escapeHtml(cropDef.name)}</div>
+                      <div style="font-size:13.5px;font-weight:900;">${escapeHtml(cropDef.name)} <span style="font-size:11px;color:var(--amber-deep);">• Bậc ${masteryInfo.labelRom}</span></div>
                       <div style="font-size:12px;font-weight:700;opacity:0.86;">
-                        ${isRipe ? '🌾 Chín!' : `⏱️ ${formatDurationCountdownVi(cropLeftSec)}`}
+                        ${isRipe ? '🌾 Chín!' : `⏱️ ${formatDurationCountdownVi(cropLeftSec)}`}${b.cropRotatedBonus ? ' • 🌟 Luân canh ×2' : ''}
                       </div>
+                      <div style="font-size:10.5px;opacity:0.76;">Thông thạo: ${masteryCount} vụ • Họ ${getCropFamily(cropDef.id)}</div>
                     </div>
                   </div>
                   <div class="quest-bar" style="height:9px;margin-bottom:8px;">
                     <div class="quest-bar-fill" style="width:${growPct}%"></div>
                   </div>
-                  ${
-                    isRipe
-                      ? `
-                        <button id="btnInspHarvestCrop" type="button" class="owl-green-send-btn" style="width:100%;padding:8px 12px;font-size:13px;">
-                          <img src="/sprites/ui_icon_golden_sickle.png" alt="" style="width:20px;height:20px;object-fit:contain;vertical-align:-4px;margin-right:4px;" />
-                          Gặt (+${cropDef.yieldQty})
-                        </button>
-                      `
-                      : !b.cropWateredBoost
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    ${
+                      isRipe
                         ? `
-                          <button id="btnInspWaterCrop" type="button" class="brass-btn gold-cta" style="width:100%;">
-                            <img src="/sprites/ui_icon_watering_can.png" alt="" style="width:18px;height:18px;object-fit:contain;vertical-align:-3px;margin-right:4px;" />
-                            💧 Tưới (-30%)
+                          <button id="btnInspHarvestCrop" type="button" class="owl-green-send-btn" style="width:100%;padding:8px 12px;font-size:13px;">
+                            <img src="/sprites/ui_icon_golden_sickle.png" alt="" style="width:20px;height:20px;object-fit:contain;vertical-align:-4px;margin-right:4px;" />
+                            Gặt (+${effectiveYield})
                           </button>
                         `
-                        : `<div style="font-size:11.5px;font-weight:800;text-align:center;opacity:0.88;">💧 Đã tưới</div>`
-                  }
+                        : !b.cropWateredBoost
+                          ? `
+                            <button id="btnInspWaterCrop" type="button" class="brass-btn gold-cta" style="flex:1;">
+                              <img src="/sprites/ui_icon_watering_can.png" alt="" style="width:18px;height:18px;object-fit:contain;vertical-align:-3px;margin-right:4px;" />
+                              💧 Tưới (-30%)
+                            </button>
+                          `
+                          : `<div style="flex:1;font-size:11.5px;font-weight:800;text-align:center;opacity:0.88;padding:6px 4px;">💧 Đã tưới</div>`
+                    }
+                    ${
+                      !isRipe && (dewPhials > 0 || hud.sim.state.sandboxMode)
+                        ? `<button type="button" class="brass-btn" data-use-morning-dew="1" style="flex:1;" title="Dùng 1 Bình Sương Mai rút ngắn 15 phút">
+                            🧪 Sương Mai (-15p • ×${dewPhials})
+                          </button>`
+                        : ''
+                    }
+                  </div>
                 </div>
               `;
             })()
@@ -535,6 +562,13 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                     <button id="btnInspClearPasture" type="button" class="brass-btn" title="Đổi thú">
                       🔄 Đổi
                     </button>
+                    ${
+                      !isReady && ((hud.sim.state.morningDewPhials ?? 0) > 0 || hud.sim.state.sandboxMode)
+                        ? `<button type="button" class="brass-btn" data-use-morning-dew="1" style="flex:1;" title="Dùng 1 Bình Sương Mai rút ngắn 15 phút">
+                            🧪 Sương Mai (-15p • ×${hud.sim.state.morningDewPhials ?? 0})
+                          </button>`
+                        : ''
+                    }
                   </div>
                 </div>
               `;
@@ -644,6 +678,13 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                       <button id="btnInspQuizSpeed" type="button" class="brass-btn" style="flex:1;" ${canTriggerSpeedup ? '' : 'disabled'} title="Đố ngoại ngữ trừ 10–25p giờ xây">
                         🪄 Thần Chú (-10~25p)
                       </button>
+                      ${
+                        reducibleSec > 0 && ((hud.sim.state.morningDewPhials ?? 0) > 0 || hud.sim.state.sandboxMode)
+                          ? `<button type="button" class="brass-btn" data-use-morning-dew="1" style="flex:1;" title="Dùng 1 Bình Sương Mai rút ngắn 15 phút thi công">
+                              🧪 Sương Mai (-15p • ×${hud.sim.state.morningDewPhials ?? 0})
+                            </button>`
+                          : ''
+                      }
                       ${
                         hud.sim.state.sandboxMode
                           ? `<button id="btnFinishNowSand" type="button" class="brass-btn" style="flex:1;" title="Hoàn tất ngay">
@@ -872,6 +913,14 @@ export function inspectorRenderInspector(hud: GameHUD): void {
       panel.querySelector('#btnFinishNowSand')?.addEventListener('click', () => {
         hud.sim.speedUpWithTimeSand(b.uid, true);
         inspectorRenderInspector(hud);
+      });
+      panel.querySelectorAll<HTMLButtonElement>('[data-use-morning-dew]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const res = hud.sim.useMorningDewPhial(b.uid);
+          hud.showToast(res.msg, res.ok ? '🧪' : '⏳');
+          inspectorRenderInspector(hud);
+          hud.refreshHeader();
+        });
       });
       panel.querySelector('#btnCollectSingle')?.addEventListener('click', () => {
         hud.sim.harvestBuildingBubble(b.uid);

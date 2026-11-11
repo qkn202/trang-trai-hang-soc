@@ -5,12 +5,15 @@
 import {
   computeEconomicCycleSeconds,
   computeRealTimeBuildSeconds,
+  computeStrategicPlotGrowSeconds,
   FARM_CROPS,
   FARM_GOODS,
   FARM_WORKSHOP_RECIPES,
   FarmWorkshopRecipe,
   formatDurationCompactVi,
   getCatalogItem,
+  getCropFamily,
+  getCropMasteryTierInfo,
   getFarmItemMeta,
   getMinRemainingBuildFloorSec,
   MINIGAME_CLEAR_REDUCTION_SEC,
@@ -170,7 +173,7 @@ import {
   createInitialPuzzleArcadeState,
   JIGSAW_PAINTINGS,
   PuzzleRewardSpec,
-} from './puzzleArcadeEngine';
+} from './puzzleShared';
 import {
   ActiveQuizChallenge,
   createInitialLanguageQuizState,
@@ -243,7 +246,10 @@ export function farmEnsureFarmBarn(sim: ParkSimulation): FarmBarnState {
 export function farmGetBarnTotalUsed(sim: ParkSimulation): number {
     const barn = sim.ensureFarmBarn();
     const cropSum = Object.values(barn.crops).reduce((a, b) => a + (b || 0), 0);
-    const goodSum = Object.values(barn.goods).reduce((a, b) => a + (b || 0), 0);
+    const goodSum = Object.entries(barn.goods).reduce(
+      (a, [key, val]) => (key === 'muggle_plug_kit' ? a : a + (val || 0)),
+      0
+    );
     return cropSum + goodSum;
 }
 
@@ -438,6 +444,7 @@ export function farmCompleteSeedLanguageQuizAttempt(sim: ParkSimulation,
         sim.audio.playMatchPop(outcome.seedsAwarded);
       }
       sim.advanceTutorialStep('seed_quiz_or_buy');
+      sim.checkAndToastAchievements?.();
     } else {
       sim.audio.playClick();
     }
@@ -489,22 +496,36 @@ export function farmPlantCropOnPlot(sim: ParkSimulation,
     barn.seeds[cropId] = leftSeeds;
 
     const now = Date.now();
-    const effectiveGrowSec = computeEconomicCycleSeconds(b.harvestCycleCount ?? 0, crop.growSec);
+    const soilKey = `${b.gx},${b.gy}`;
+    const prevSoil = sim.state.plotSoilState?.[soilKey];
+    const fatigueStep = Math.max(b.harvestCycleCount ?? 0, prevSoil?.fatigueStep ?? 0);
+    const curFamily = getCropFamily(cropId);
+    const rotatedFamily = Boolean(prevSoil && prevSoil.lastFamily !== curFamily);
+    const masteryHarvests = sim.state.cropMastery?.[cropId] ?? 0;
+    const strat = computeStrategicPlotGrowSeconds(
+      fatigueStep,
+      rotatedFamily,
+      masteryHarvests,
+      crop.growSec
+    );
+    const effectiveGrowSec = strat.growSec;
     const growMs = sim.state.sandboxMode ? 4000 : effectiveGrowSec * 1000;
     b.cropId = cropId;
     b.cropPlantedAt = now;
     b.cropReadyAt = now + growMs;
     b.cropWateredBoost = false;
+    b.cropRotatedBonus = strat.isRotatedBonus;
     b.readyBubbles = 0;
     b.storedGalleons = 0;
     b.storedXp = 0;
 
     sim.audio.playPlace();
     sim.onBuildingTactile?.(b.uid);
+    const rotNote = strat.isRotatedBonus ? ' • 🍀 Luân Canh Vàng!' : '';
     sim.spawnFloatingText(
       b.gx + item.width * 0.5,
       b.gy + item.height * 0.5,
-      `🌱 Gieo ${crop.emoji} ${crop.name} (còn ${leftSeeds} hạt)!`,
+      `🌱 Gieo ${crop.emoji} ${crop.name}${strat.isRotatedBonus ? ' (Luân Canh ×2!)' : ` (còn ${leftSeeds} hạt)`}!`,
       '#86efac'
     );
     sim.advanceTutorialStep('sow_and_merge_plot');
@@ -512,7 +533,7 @@ export function farmPlantCropOnPlot(sim: ParkSimulation,
     sim.onUiChange?.();
     return {
       ok: true,
-      msg: `🌱 Đã gieo 1 hạt ${crop.emoji} ${crop.name} (Túi còn ${leftSeeds} hạt • ${formatDurationCompactVi(effectiveGrowSec)} chín)!`,
+      msg: `🌱 Đã gieo 1 hạt ${crop.emoji} ${crop.name} (Túi còn ${leftSeeds} hạt • ${formatDurationCompactVi(effectiveGrowSec)} chín${rotNote})!`,
     };
 }
 
@@ -564,17 +585,43 @@ export function farmHarvestCropPlot(sim: ParkSimulation, uid: string): { ok: boo
 
     const item = getCatalogItem(b.itemId);
     const crop = FARM_CROPS[b.cropId];
-    const yieldQty = crop.yieldQty + (b.stars >= 3 ? 1 : 0);
+    const isGoldenRotation = Boolean(b.cropRotatedBonus);
+    const baseYield = crop.yieldQty + (b.stars >= 3 ? 1 : 0);
+    const yieldQty = isGoldenRotation ? baseYield * 2 : baseYield;
     const added = sim.addFarmItemToBarn(crop.id, yieldQty);
-    const gold = crop.sellValue;
-    const xp = crop.xp;
+
+    const prevMastery = sim.state.cropMastery?.[crop.id] ?? 0;
+    const nextMastery = prevMastery + 1;
+    sim.state.cropMastery = {
+      ...(sim.state.cropMastery ?? {}),
+      [crop.id]: nextMastery,
+    };
+    const masteryBefore = getCropMasteryTierInfo(prevMastery);
+    const masteryAfter = getCropMasteryTierInfo(nextMastery);
+    const gold = Math.round(crop.sellValue * masteryBefore.valueMult);
+    const xp = crop.xp + (isGoldenRotation ? 4 : 0);
+
+    // Persist soil rotation & anti-bulldoze-exploit fatigue by tile coordinate!
+    const soilKey = `${b.gx},${b.gy}`;
+    const prevSoil = sim.state.plotSoilState?.[soilKey];
+    const prevFatigue = Math.max(b.harvestCycleCount ?? 0, prevSoil?.fatigueStep ?? 0);
+    const nextFatigue = isGoldenRotation ? Math.max(1, prevFatigue) : prevFatigue + 1;
+    sim.state.plotSoilState = {
+      ...(sim.state.plotSoilState ?? {}),
+      [soilKey]: {
+        lastFamily: getCropFamily(crop.id),
+        fatigueStep: nextFatigue,
+        updatedAt: now,
+      },
+    };
 
     // Clear plot to freshly-tilled dark loam ready for Seed Picker!
-    b.harvestCycleCount = (b.harvestCycleCount ?? 0) + 1;
+    b.harvestCycleCount = nextFatigue;
     b.cropId = undefined;
     b.cropPlantedAt = undefined;
     b.cropReadyAt = undefined;
     b.cropWateredBoost = false;
+    b.cropRotatedBonus = false;
     b.readyBubbles = 0;
     b.storedGalleons = 0;
     b.storedXp = 0;
@@ -582,9 +629,17 @@ export function farmHarvestCropPlot(sim: ParkSimulation, uid: string): { ok: boo
     sim.state.galleons += gold;
     sim.state.finance.harvestRevenue += gold;
     sim.state.stats.totalGalleonsHarvested += gold;
+    sim.state.stats.farmHarvestsCount = (sim.state.stats.farmHarvestsCount ?? 0) + 1;
     sim.addXp(xp);
     sim.addHarvestFeastPoints(crop.isFlowerCrop ? 7 : 5);
     sim.recordQuestProgress('harvest_galleons', undefined, gold);
+    if (masteryAfter.tier > masteryBefore.tier) {
+      sim.onToast?.(
+        `🌾 Thông Thạo ${crop.emoji} ${crop.name} thăng Bậc ${masteryAfter.labelRom} (Giá bán ×${masteryAfter.valueMult.toFixed(2)})!`,
+        '🏅'
+      );
+    }
+    sim.checkAndToastAchievements?.();
 
     sim.audio.playHarvestBubble();
     const cx = b.gx + (item ? item.width * 0.5 : 1);
@@ -701,6 +756,7 @@ export function farmFeedAnimalPasture(sim: ParkSimulation, uid: string): { ok: b
     b.pastureReadyAt = Math.max(now + 1000, b.pastureReadyAt - savedMs);
     b.pastureFedBoost = true;
     sim.addXp(5);
+    sim.recordQuestProgress('feed_creatures', undefined, 1);
     sim.audio.playSpell();
     sim.onBuildingTactile?.(b.uid);
     sim.spawnFloatingText(b.gx + 1, b.gy + 1, '🌾 Cỏ Mật! Nhanh +35%!', '#86efac');
@@ -748,9 +804,11 @@ export function farmHarvestAnimalPasture(sim: ParkSimulation, uid: string): { ok
     sim.state.galleons += gold;
     sim.state.finance.harvestRevenue += gold;
     sim.state.stats.totalGalleonsHarvested += gold;
+    sim.state.stats.farmHarvestsCount = (sim.state.stats.farmHarvestsCount ?? 0) + 1;
     sim.addXp(xp);
     sim.addHarvestFeastPoints(6);
     sim.recordQuestProgress('harvest_galleons', undefined, gold);
+    sim.checkAndToastAchievements?.();
 
     sim.audio.playHarvestBubble();
     const cx = b.gx + (item ? item.width * 0.5 : 1);

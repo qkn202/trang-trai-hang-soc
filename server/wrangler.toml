@@ -3,15 +3,29 @@ main = "index.ts"
 compatibility_date = "2024-09-23"
 
 # ============================================================
-# Cấu hình Cloudflare Worker cho 'Trang Trại Hang Sóc'
-# Cung cấp 2 API routes: /api/save và /api/track
+# Cấu hình Cloudflare Worker Authoritative Backend cho
+# 'Trang Trại Hang Sóc & Thung Lũng Hogsmeade'
+# Kiến trúc chuẩn HPVNN (`thachanhgau/hagridfarm`):
+#   - POST /api/auth/session       (Phiên HMAC-SHA256 Bearer JWT)
+#   - POST /api/rpc/:callableName  (8 Callable RPC chuẩn { data } -> { result | error })
+#   - GET/POST /api/save           (Cloud Save + đối soát lịch VN UTC+7 & trần 5 lượt/ngày)
+#   - GET/POST /api/leaderboard    (Bảng Xếp Hạng 3 Môn Tính Điểm + Cúp Nhà Hogwarts hàng tuần)
+#   - POST /api/friends/register   (Danh bạ Mã Thung Lũng người chơi thật)
+#   - GET  /api/friends/lookup     (Tra cứu & thăm vườn người chơi thật)
+#   - POST /api/track              (Telemetry & nhật ký lỗi)
 # ============================================================
 
-# KV Namespace binding cho Cloud Save & Analytics logs
-# Để tạo KV namespace thật trên tài khoản Cloudflare, chạy:
-#   npx wrangler kv namespace create SAVE_KV
-#   npx wrangler kv namespace create SAVE_KV --preview
-# Sau đó dán ID vào bên dưới:
+[vars]
+ENVIRONMENT = "production"
+REQUIRE_VERIFIED_AUTH = "true"
+ALLOWED_ORIGINS = "https://hpvn-archive.net,https://www.hpvn-archive.net,https://hpvn.net"
+
+# BẮT BUỘC TRƯỚC KHI DEPLOY PRODUCTION (`npx wrangler deploy`):
+# 1. Thay `id` và `preview_id` bên dưới bằng ID thật từ `npx wrangler kv namespace create SAVE_KV`.
+#    Backend sẽ FAIL-CLOSED (500 server-misconfigured) nếu thiếu binding SAVE_KV hoặc HMAC_SECRET trên production!
+# 2. Cài đặt khóa bí mật ký phiên (>= 32 ký tự ngẫu nhiên) & quản trị viên HPH:
+#      npx wrangler secret put HMAC_SECRET
+#      npx wrangler secret put ADMIN_TOKEN
 [[kv_namespaces]]
 binding = "SAVE_KV"
 id = "PLACEHOLDER_SAVE_KV_ID"
@@ -19,6 +33,5 @@ preview_id = "PLACEHOLDER_SAVE_KV_PREVIEW_ID"
 
 # Khi gắn domain riêng vào Cloudflare Pages / Worker:
 # routes = [
-#   { pattern = "*hangsoc.game/api/save*", zone_name = "hangsoc.game" },
-#   { pattern = "*hangsoc.game/api/track*", zone_name = "hangsoc.game" }
+#   { pattern = "*hangsoc.game/api/*", zone_name = "hangsoc.game" }
 # ]

@@ -8,14 +8,50 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Trang Trại Hang Sóc" />
-    <!-- Online services connect-src 'self' covers /api/save and /api/track. TODO: add https://<domain> if Cloudflare Worker is hosted on a separate external domain -->
+    <!-- Hạ tầng HPVN (hpvnn-archive / asia-southeast1): cho phép kết nối Firebase Cloud Functions v2, Auth/Firestore, HPVN Host & Emulator cục bộ -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; worker-src 'self' blob:; object-src 'none'; base-uri 'self';"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://*.hpvn-archive.net https://hpvn-archive.net https://hpvnn-archive.web.app https://hpvnn-burrow.web.app; media-src 'self' data: blob:; connect-src 'self' ws: wss: http://127.0.0.1:* http://localhost:* https://*.cloudfunctions.net https://*.a.run.app https://*.run.app https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.google.com https://hpvn-archive.net https://*.hpvn-archive.net https://hpvn.net https://*.hpvn.net https://hpvnn-archive.web.app https://hpvnn-burrow.web.app; worker-src 'self' blob:; object-src 'none'; base-uri 'self';"
     />
+    <meta name="application-name" content="Hang Sóc Farm" />
+    <meta
+      name="description"
+      content="Game nông trại phép thuật ấm cúng 2.5D Isometric thời gian thực: chăm sóc Trang Trại Hang Sóc nhà Weasley, nướng bánh bà Molly, gửi Cú Đưa Thư và mở rộng thung lũng Hogsmeade."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="vi_VN" />
+    <meta property="og:site_name" content="Trang Trại Hang Sóc &amp; Thung Lũng Hogsmeade" />
+    <meta
+      property="og:title"
+      content="Trang Trại Hang Sóc &amp; Thung Lũng Hogsmeade — Cozy Wizarding Farm"
+    />
+    <meta
+      property="og:description"
+      content="Chăm sóc nông trại Hang Sóc nhà Weasley 2.5D ấm cúng, nướng bánh bà Molly, gửi Cú Đưa Thư, thăm vườn hàng xóm Floo và tranh Cúp Nhà Hogwarts!"
+    />
+    <meta property="og:image" content="/icons/og-banner.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Toàn cảnh Trang Trại Hang Sóc nhà Weasley và Thung Lũng Hogsmeade dưới nắng chiều vàng ấm"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="Trang Trại Hang Sóc &amp; Thung Lũng Hogsmeade — Cozy Wizarding Farm"
+    />
+    <meta
+      name="twitter:description"
+      content="Chăm sóc nông trại Hang Sóc nhà Weasley 2.5D ấm cúng, nướng bánh bà Molly, gửi Cú Đưa Thư và tranh Cúp Nhà Hogwarts!"
+    />
+    <meta name="twitter:image" content="/icons/og-banner.jpg" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="icon" type="image/png" href="/icons/icon-192.png" />
-    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
     <title>Trang Trại Hang Sóc &amp; Thung Lũng Hogsmeade — Cozy Wizarding Farm</title>
     <link
       rel="preload"
@@ -44,51 +80,113 @@
     </style>
     <script>
       (function () {
-        if (!('serviceWorker' in navigator)) return;
-        var isViteDev = Boolean(document.querySelector('script[src*="/@vite/client"]'));
-        if (isViteDev) {
-          var hadController = Boolean(navigator.serviceWorker.controller);
-          navigator.serviceWorker
-            .getRegistrations()
-            .then(function (regs) {
-              var hasRegs = regs && regs.length > 0;
-              var cleanupPromises = (regs || []).map(function (r) {
-                return r.unregister();
-              });
-              if ('caches' in window) {
-                cleanupPromises.push(
-                  caches.keys().then(function (keys) {
-                    return Promise.all(
-                      keys.map(function (k) {
-                        return caches.delete(k);
-                      })
-                    );
+        var params;
+        try {
+          params = new URLSearchParams(window.location.search);
+        } catch (_e) {
+          params = null;
+        }
+        var forceClear = Boolean(
+          params && (params.has('clearcache') || params.has('nocache') || params.has('fresh'))
+        );
+        var isViteDev =
+          window.location.port === '5173' ||
+          Boolean(document.querySelector('script[src*="/@vite/client"]'));
+
+        if (isViteDev || forceClear) {
+          var hadController = Boolean(
+            'serviceWorker' in navigator && navigator.serviceWorker.controller
+          );
+          var tasks = [];
+          if ('serviceWorker' in navigator) {
+            tasks.push(
+              navigator.serviceWorker.getRegistrations().then(function (regs) {
+                return Promise.all(
+                  (regs || []).map(function (r) {
+                    return r.unregister();
                   })
-                );
+                ).then(function () {
+                  return Boolean(regs && regs.length > 0);
+                });
+              })
+            );
+          }
+          if ('caches' in window) {
+            tasks.push(
+              caches.keys().then(function (keys) {
+                return Promise.all(
+                  keys.map(function (k) {
+                    return caches.delete(k);
+                  })
+                ).then(function () {
+                  return Boolean(keys && keys.length > 0);
+                });
+              })
+            );
+          }
+          Promise.all(tasks)
+            .then(function (results) {
+              var purgedAnything = hadController || results.some(Boolean);
+              if (forceClear && params) {
+                params.delete('clearcache');
+                params.delete('nocache');
+                params.delete('fresh');
+                params.set('_v', String(Date.now()));
+                var nextUrl =
+                  window.location.pathname +
+                  '?' +
+                  params.toString() +
+                  (window.location.hash || '');
+                window.location.replace(nextUrl);
+                return;
               }
-              return Promise.all(cleanupPromises).then(function () {
-                if ((hadController || hasRegs) && !sessionStorage.getItem('hangsoc_dev_sw_cleared')) {
-                  sessionStorage.setItem('hangsoc_dev_sw_cleared', '1');
-                  window.location.reload();
-                } else {
-                  sessionStorage.removeItem('hangsoc_dev_sw_cleared');
-                }
-              });
+              if (purgedAnything && !sessionStorage.getItem('hangsoc_dev_sw_cleared')) {
+                sessionStorage.setItem('hangsoc_dev_sw_cleared', '1');
+                window.location.reload();
+              } else {
+                sessionStorage.removeItem('hangsoc_dev_sw_cleared');
+              }
             })
             .catch(function () {});
           return;
         }
+
+        if (!('serviceWorker' in navigator)) return;
         var hadInitialSw = Boolean(navigator.serviceWorker.controller);
         var refreshingSw = false;
-        navigator.serviceWorker.addEventListener('controllerchange', function () {
-          if (!hadInitialSw || refreshingSw) return;
+        var pendingSwReload = false;
+        function performSafeSwReload() {
+          if (refreshingSw) return;
           refreshingSw = true;
+          try {
+            window.dispatchEvent(new Event('hangsoc:before-sw-reload'));
+          } catch (e) {}
           window.location.reload();
+        }
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          if (!hadInitialSw || refreshingSw || pendingSwReload) return;
+          if (document.querySelector('dialog[open]')) {
+            pendingSwReload = true;
+            document.addEventListener(
+              'close',
+              function onOpenDialogClosed() {
+                setTimeout(function () {
+                  if (!document.querySelector('dialog[open]')) {
+                    document.removeEventListener('close', onOpenDialogClosed, true);
+                    performSafeSwReload();
+                  }
+                }, 120);
+              },
+              true
+            );
+            return;
+          }
+          performSafeSwReload();
         });
         window.addEventListener('load', function () {
           try {
             navigator.serviceWorker
-              .register('/sw.js')
+              .register('./sw.js')
               .then(function (reg) {
                 if (reg && typeof reg.update === 'function') {
                   reg.update().catch(function () {});

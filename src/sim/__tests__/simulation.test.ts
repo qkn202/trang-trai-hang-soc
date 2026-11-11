@@ -120,9 +120,17 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(t5.kind).toBe('blocks');
       expect(t6.kind).toBe('match3'); // Quay lại đầu chu kỳ
 
-      expect(t1.icon).toBe('🍓');
+      expect(t1.icon).toBe('🍬');
       expect(t2.icon).toBe('🗺️');
-      expect(t3.icon).toBe('🔮');
+      expect(t3.icon).toBe('🔢');
+      expect(t4.icon).toBe('🏰');
+      expect(t5.icon).toBe('🦄');
+
+      expect(t1.shortVi).toBe('Bùa Gặt Honeydukes');
+      expect(t2.shortVi).toBe('Ngũ Ấn Đạo Tặc');
+      expect(t3.shortVi).toBe('Số Học Huyền Bí');
+      expect(t4.shortVi).toBe('Cờ Phù Thủy');
+      expect(t5.shortVi).toBe('Sinh Vật Huyền Bí');
     });
 
     it('LEVELS có đủ 100 cấp độ với XP curve tăng đơn điệu sau cấp 1', () => {
@@ -443,32 +451,32 @@ describe('ParkSimulation & Progression Tests', () => {
       m3.stars = 100;
       m3.totalStarsEarned = 100;
 
-      expect(sim.getEffectiveItemStarCost(chickenItem)).toBe(8);
-      expect(sim.getEffectiveItemStarCost(pumpkinItem)).toBe(32);
+      expect(sim.getEffectiveItemStarCost(chickenItem)).toBe(3);
+      expect(sim.getEffectiveItemStarCost(pumpkinItem)).toBe(5);
 
-      // Đặt Sân Đàn Gà Mái đầu tiên: trừ 8 Sao, 0 Galleon
+      // Đặt Sân Đàn Gà Mái đầu tiên: trừ 3 Sao, 0 Galleon
       expect(sim.placeItem(chickenItem, 0, 12, 0)).toBe(true);
-      expect(m3.stars).toBe(92);
+      expect(m3.stars).toBe(97);
       expect(sim.state.galleons).toBe(2000);
       expect(sim.getEffectiveItemStarCost(chickenItem)).toBe(0);
 
       // Đặt Sân Đàn Gà Mái thứ hai sát cạnh để ghép rào: trừ 0 Sao, 130 Galleon
       expect(sim.placeItem(chickenItem, 0, 14, 0)).toBe(true);
-      expect(m3.stars).toBe(92);
+      expect(m3.stars).toBe(97);
       expect(sim.state.galleons).toBe(2000 - chickenItem.cost);
 
       // Xoá bớt ô thứ hai: hoàn Galleon (65%), không nhân bản Sao Phép Thuật
       expect(sim.removeAtTile(0, 14)).toBe(true);
-      expect(m3.stars).toBe(92);
+      expect(m3.stars).toBe(97);
 
       // Đặt Vườn Bí Ngô đầu tiên & thứ hai sát cạnh
       expect(sim.placeItem(pumpkinItem, 2, 12, 0)).toBe(true);
-      expect(m3.stars).toBe(60);
+      expect(m3.stars).toBe(92);
       expect(sim.getEffectiveItemStarCost(pumpkinItem)).toBe(0);
 
       const goldBeforeSecondPumpkin = sim.state.galleons;
       expect(sim.placeItem(pumpkinItem, 4, 12, 0)).toBe(true);
-      expect(m3.stars).toBe(60);
+      expect(m3.stars).toBe(92);
       expect(sim.state.galleons).toBe(goldBeforeSecondPumpkin - pumpkinItem.cost);
     });
   });
@@ -946,18 +954,24 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(pastureItem.buildDurationSec).toBe(0);
       expect(flowerGardenItem.buildDurationSec).toBe(0);
 
-      // 0. Kiểm tra số Sao mở khóa công trình tăng theo cấp số nhân ×2: 1 -> 2 -> 4 -> 8 -> 16 -> 32 -> 64 -> 128 -> 256 -> 512 -> 1024
+      // 0. Kiểm tra tổng ngân sách Sao mở khóa 33 công trình = đúng 6.400 🌟 (cộng 255 🌟 vùng đất + 495 🌟 nâng cấp 5★ = đúng 7.150 🌟 <= 7.278 🌟 cung cơ bản)
       expect(getItemPuzzleStarCost(getCatalogItem('burrow_house_canon')!)).toBe(1);
       expect(getItemPuzzleStarCost(getCatalogItem('molly_apple_bakery')!)).toBe(2);
-      expect(getItemPuzzleStarCost(getCatalogItem('butterbeer_cart')!)).toBe(4);
-      expect(getItemPuzzleStarCost(getCatalogItem('burrow_chicken_coop')!)).toBe(8);
-      expect(getItemPuzzleStarCost(getCatalogItem('burrow_self_knitting_loom')!)).toBe(16);
-      expect(getItemPuzzleStarCost(getCatalogItem('burrow_pumpkin_gnomes')!)).toBe(32);
-      expect(getItemPuzzleStarCost(getCatalogItem('burrow_owl_post')!)).toBe(64);
-      expect(getItemPuzzleStarCost(getCatalogItem('arthur_ford_shed')!)).toBe(128);
-      expect(getItemPuzzleStarCost(getCatalogItem('burrow_reed_pond_mill')!)).toBe(256);
-      expect(getItemPuzzleStarCost(getCatalogItem('burrow_apple_orchard')!)).toBe(512);
-      expect(getItemPuzzleStarCost(getCatalogItem('dragon_lair')!)).toBe(1024);
+      expect(getItemPuzzleStarCost(getCatalogItem('butterbeer_cart')!)).toBe(2);
+      expect(getItemPuzzleStarCost(getCatalogItem('burrow_chicken_coop')!)).toBe(3);
+      expect(getItemPuzzleStarCost(getCatalogItem('burrow_self_knitting_loom')!)).toBe(4);
+      expect(getItemPuzzleStarCost(getCatalogItem('burrow_pumpkin_gnomes')!)).toBe(5);
+      expect(getItemPuzzleStarCost(getCatalogItem('burrow_owl_post')!)).toBe(6);
+      expect(getItemPuzzleStarCost(getCatalogItem('arthur_ford_shed')!)).toBe(8);
+      expect(getItemPuzzleStarCost(getCatalogItem('burrow_reed_pond_mill')!)).toBe(10);
+      expect(getItemPuzzleStarCost(getCatalogItem('burrow_apple_orchard')!)).toBe(14);
+      expect(getItemPuzzleStarCost(getCatalogItem('dragon_lair')!)).toBe(960);
+
+      const totalStarBuildingsCost = CATALOG.reduce(
+        (sum, it) => sum + getItemPuzzleStarCost(it),
+        0
+      );
+      expect(totalStarBuildingsCost).toBe(6400);
 
       // 1. Kiểm tra 33 công trình có buildDurationSec > 0 theo cấp số nhân từ 60s (1 phút) ×2 tới 259.200s (3 ngày)
       const constructibleItems = CATALOG.filter((it) => it.buildDurationSec > 0).sort(
@@ -991,7 +1005,8 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(computeEconomicCycleSeconds(0)).toBe(3600);
       expect(computeEconomicCycleSeconds(1)).toBe(7200);
       expect(computeEconomicCycleSeconds(2)).toBe(14400);
-      expect(computeEconomicCycleSeconds(3)).toBe(28800);
+      expect(computeEconomicCycleSeconds(3)).toBe(21600);
+      expect(computeEconomicCycleSeconds(20)).toBe(21600);
 
       // 3. Kiểm tra 8 thú chăn thả mặc định 1 tiếng (3.600s) ở lần thu hoạch đầu
       const animalsSorted = Object.values(PASTURE_ANIMALS);
@@ -1130,6 +1145,65 @@ describe('ParkSimulation & Progression Tests', () => {
           expect(getCatalogItem(q.targetId)?.category).not.toBe('terrain');
         }
       }
+    });
+
+    it('Bảo vệ toàn diện chống mất hàng khi Kho Đỏ đầy, chống nhảy màn 777 khi chơi lại, khóa Lịch Điểm Danh 1 lần/ngày & chặn Accio khi thăm vườn', () => {
+      const sim = new ParkSimulation(createMockAudio());
+      const barn = sim.ensureFarmBarn();
+
+      // 1. Kho Đỏ đầy không bao giờ làm mất trắng readyFarmGoods khi thu hoạch bong bóng xưởng hoặc dùng Accio
+      sim.state.match3.stars = 20;
+      sim.state.galleons = 2000;
+      expect(sim.placeItem(getCatalogItem('molly_apple_bakery')!, 0, 12, 0)).toBe(true);
+      const bakery = sim.state.buildings.find((b) => b.itemId === 'molly_apple_bakery')!;
+      expect(bakery).toBeDefined();
+      bakery.constructEndsAt = 0;
+      bakery.readyFarmGoods = ['cinnamon_apple_pie', 'pumpkin_pie'];
+      barn.crops.ottery_wheat = (barn.crops.ottery_wheat ?? 0) + (barn.capacity - sim.getBarnTotalUsed());
+      expect(sim.getBarnTotalUsed()).toBe(barn.capacity);
+
+      expect(sim.harvestBuildingBubble(bakery.uid)).toBe(false);
+      expect(bakery.readyFarmGoods).toEqual(['cinnamon_apple_pie', 'pumpkin_pie']);
+
+      sim.castAccioHarvestAll();
+      expect(bakery.readyFarmGoods).toEqual(['cinnamon_apple_pie', 'pumpkin_pie']);
+
+      // Giải phóng 1 chỗ trong Kho Đỏ -> thu đúng 1 bánh, cái còn lại giữ nguyên trên khay!
+      barn.crops.ottery_wheat -= 1;
+      expect(sim.harvestBuildingBubble(bakery.uid)).toBe(true);
+      expect(bakery.readyFarmGoods).toEqual(['pumpkin_pie']);
+
+      // 2. Chơi lại màn cũ không bao giờ làm maxClearedLevel nhảy vọt lên 777
+      sim.state.match3.maxClearedLevel = 12;
+      sim.state.match3.currentLevel = 4; // Chơi lại màn 4
+      sim.completeMatch3LevelVictory(10, { sessionScore: 1800 });
+      expect(sim.state.match3.maxClearedLevel).toBe(12);
+      expect(sim.state.match3.currentLevel).toBe(13);
+
+      sim.state.puzzleArcade.sudokuCleared = 9;
+      sim.state.puzzleArcade.sudokuStage = 3; // Chơi lại màn 3
+      sim.completePuzzleArcadeVictory('sudoku', { stars: 1, sand: 0, gold: 40, xp: 15 });
+      expect(sim.state.puzzleArcade.sudokuCleared).toBe(9);
+      expect(sim.state.puzzleArcade.sudokuStage).toBe(10);
+
+      // 3. Lịch Điểm Danh 7 Ngày khóa chặt tối đa 1 mốc / ngày lịch thực tế
+      expect(sim.claimLoginDayReward(1).ok).toBe(true);
+      expect(sim.claimLoginDayReward(2).ok).toBe(false);
+
+      // 4. Đang thăm vườn bạn bè khóa hoàn toàn Accio và khôi phục kho trang trí
+      const addFriend = sim.addFriendByCode('HS-TEST-99', 'Người Bạn Thật');
+      expect(addFriend.ok).toBe(true);
+      expect(sim.enterNeighborVisit(addFriend.neighbor!.id).ok).toBe(true);
+      const guestPlot = sim.state.buildings.find((b) => Boolean(b.cropId));
+      if (guestPlot) {
+        guestPlot.cropReadyAt = Date.now() - 5000;
+      }
+      sim.castAccioHarvestAll();
+      if (guestPlot) {
+        expect(guestPlot.cropId).toBeDefined();
+      }
+      expect(sim.restoreAllStashedDecor().ok).toBe(false);
+      sim.exitNeighborVisit();
     });
   });
 });

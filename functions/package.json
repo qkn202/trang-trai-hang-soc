@@ -1,0 +1,23 @@
+{
+  "name": "hpvn-burrow-functions",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HPVN (hpvnn-archive) Authoritative Cloud Functions v2 (asia-southeast1) cho Trang Trại Hang Sóc & Thung Lũng Hogsmeade",
+  "type": "commonjs",
+  "main": "lib/functions/src/index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "serve": "npm run build && npx -y firebase-tools@latest emulators:start --only auth,functions,firestore,hosting",
+    "deploy": "npx -y firebase-tools@latest deploy --only functions"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.2",
+    "firebase-functions": "^6.3.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

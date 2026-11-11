@@ -1,4 +1,5 @@
 // Tách tự động từ src/sim/puzzleArcadeEngine.ts (P0.5 — tách puzzle engine theo môn).
+import { SavedCaroSession } from "../types/game";
 import {
   MAX_MINIGAME_STAGE,
   MilestoneBossMeta,
@@ -843,6 +844,112 @@ export class CaroGameEngine {
     }
 
     return { r: scored[0].r, c: scored[0].c };
+  }
+
+  public exportSession(extra?: {
+    companionCharge?: number;
+    snackPieUsed?: boolean;
+  }): SavedCaroSession | null {
+    if (this.status === 'won') return null;
+    return {
+      stage: this.stage,
+      grid: this.grid.map((row) => [...row]),
+      moveHistory: this.moveHistory.map((m) => ({ r: m.r, c: m.c, stone: m.stone })),
+      initialHistoryLen: this.initialHistoryLen,
+      runeSealCount: this.runeSealCount,
+      winningLine: this.winningLine ? this.winningLine.map((pt) => ({ r: pt.r, c: pt.c })) : null,
+      hintCell: this.hintCell ? { r: this.hintCell.r, c: this.hintCell.c } : null,
+      freeUndosLeft: this.freeUndosLeft,
+      paidUndosLeft: this.paidUndosLeft,
+      freeHintsLeft: this.freeHintsLeft,
+      paidHintsLeft: this.paidHintsLeft,
+      talismanUsed: this.talismanUsed,
+      status: this.status,
+      companionCharge: extra?.companionCharge,
+      snackPieUsed: extra?.snackPieUsed,
+      savedAt: Date.now(),
+    };
+  }
+
+  public restoreSession(snap: SavedCaroSession | null | undefined): boolean {
+    if (!snap || snap.stage !== this.stage) return false;
+    if (
+      snap.status !== 'playing' &&
+      snap.status !== 'ai_thinking' &&
+      snap.status !== 'lost' &&
+      snap.status !== 'draw'
+    ) {
+      return false;
+    }
+    if (!Array.isArray(snap.grid) || snap.grid.length !== CARO_BOARD_SIZE) return false;
+    for (let r = 0; r < CARO_BOARD_SIZE; r++) {
+      const row = snap.grid[r];
+      if (!Array.isArray(row) || row.length !== CARO_BOARD_SIZE) return false;
+      for (let c = 0; c < CARO_BOARD_SIZE; c++) {
+        const v = row[c];
+        if (v !== 0 && v !== 1 && v !== 2 && v !== 3) return false;
+      }
+    }
+
+    this.grid = snap.grid.map((row) => row.map((v) => v as CaroStone));
+    this.moveHistory = Array.isArray(snap.moveHistory)
+      ? snap.moveHistory
+          .filter(
+            (m) =>
+              m &&
+              Number.isInteger(m.r) &&
+              m.r >= 0 &&
+              m.r < CARO_BOARD_SIZE &&
+              Number.isInteger(m.c) &&
+              m.c >= 0 &&
+              m.c < CARO_BOARD_SIZE &&
+              (m.stone === 1 || m.stone === 2)
+          )
+          .map((m) => ({ r: m.r, c: m.c, stone: m.stone }))
+      : [];
+    this.initialHistoryLen = Math.max(
+      0,
+      Math.min(this.moveHistory.length, Math.floor(snap.initialHistoryLen || 0))
+    );
+    let countedRunes = 0;
+    for (let r = 0; r < CARO_BOARD_SIZE; r++) {
+      for (let c = 0; c < CARO_BOARD_SIZE; c++) {
+        if (this.grid[r][c] === 3) countedRunes++;
+      }
+    }
+    this.runeSealCount = countedRunes;
+    this.winningLine = Array.isArray(snap.winningLine)
+      ? snap.winningLine
+          .filter(
+            (pt) =>
+              pt &&
+              Number.isInteger(pt.r) &&
+              pt.r >= 0 &&
+              pt.r < CARO_BOARD_SIZE &&
+              Number.isInteger(pt.c) &&
+              pt.c >= 0 &&
+              pt.c < CARO_BOARD_SIZE
+          )
+          .map((pt) => ({ r: pt.r, c: pt.c }))
+      : null;
+    this.hintCell =
+      snap.hintCell &&
+      Number.isInteger(snap.hintCell.r) &&
+      snap.hintCell.r >= 0 &&
+      snap.hintCell.r < CARO_BOARD_SIZE &&
+      Number.isInteger(snap.hintCell.c) &&
+      snap.hintCell.c >= 0 &&
+      snap.hintCell.c < CARO_BOARD_SIZE
+        ? { r: snap.hintCell.r, c: snap.hintCell.c }
+        : null;
+    this.freeUndosLeft = Math.max(0, Math.min(10, Math.floor(snap.freeUndosLeft ?? 0)));
+    this.paidUndosLeft = Math.max(0, Math.min(10, Math.floor(snap.paidUndosLeft ?? 0)));
+    this.freeHintsLeft = Math.max(0, Math.min(10, Math.floor(snap.freeHintsLeft ?? 0)));
+    this.paidHintsLeft = Math.max(0, Math.min(10, Math.floor(snap.paidHintsLeft ?? 0)));
+    this.talismanUsed = Boolean(snap.talismanUsed);
+    this.status = snap.status;
+    this.humanTurnReviews = [];
+    return true;
   }
 }
 

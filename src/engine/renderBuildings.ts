@@ -120,9 +120,47 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
       );
       ctx.fill();
 
-      // Snug warm AO contact shadow hugging the building foundation
+      // Snug warm AO contact shadow + Honey-Limestone Courtyard Flagstone Apron hugging building foundation!
       if (!cutaway) {
-        ctx.fillStyle = isNight ? 'rgba(10, 12, 24, 0.26)' : 'rgba(58, 38, 18, 0.22)';
+        const hasFlagstoneApron =
+          !isConnectablePlot &&
+          !item.isFarmlandPlot &&
+          !item.spriteKey?.startsWith('env_') &&
+          item.id !== 'black_lake_boats' &&
+          item.id !== 'hogsmeade_stone_bridge' &&
+          (bw >= 2 || bh >= 2);
+        if (hasFlagstoneApron) {
+          const padR = footprintW * 0.42;
+          ctx.fillStyle = isNight ? '#3a3026' : '#8a6842';
+          ctx.beginPath();
+          ctx.ellipse(centerX, centerGroundY + 5.2 * cam.zoom, padR, padR * 0.48, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = isNight ? '#7a6f61' : '#ead4ab';
+          ctx.strokeStyle = isNight ? '#3a3026' : '#5e4326';
+          ctx.lineWidth = Math.max(0.95, 1.3 * cam.zoom);
+          ctx.beginPath();
+          ctx.ellipse(centerX, centerGroundY + 3.6 * cam.zoom, padR * 0.98, padR * 0.46, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          // Front doorstep stepping stones jutting onto lawn
+          for (const [ox, oy, sr] of [
+            [-0.26, 0.36, 6.2],
+            [0.02, 0.42, 6.8],
+            [0.28, 0.34, 5.9],
+          ] as Array<[number, number, number]>) {
+            const stX = centerX + ox * footprintW;
+            const stY = centerGroundY + oy * footprintW * 0.48 + 3.5 * cam.zoom;
+            ctx.fillStyle = isNight ? '#8a7e6e' : '#f7e6c4';
+            ctx.beginPath();
+            ctx.ellipse(stX, stY, sr * cam.zoom, sr * 0.48 * cam.zoom, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          }
+        }
+
+        ctx.fillStyle = isNight ? 'rgba(10, 12, 24, 0.30)' : 'rgba(54, 34, 14, 0.25)';
         ctx.beginPath();
         ctx.ellipse(
           centerX,
@@ -183,7 +221,9 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
       sy: bottomY - footprintW * 0.35,
       radius: Math.max(22, footprintW * 0.36),
     };
-    self.hotspots.push(buildingHotspot);
+    if (!fadeInCutaway) {
+      self.hotspots.push(buildingHotspot);
+    }
 
     // Under construction / Egg incubating state (Real-time wall-clock scaffolding & progress!)
     if (now < b.constructEndsAt) {
@@ -395,6 +435,14 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
           drawW * 0.55,
           item.isFarmlandPlot ? 'rgba(56, 189, 248, 0.22)' : 'rgba(251, 191, 36, 0.24)'
         );
+      } else if (!isNight && !fadeInCutaway && !isConnectablePlot && (bw >= 2 || bh >= 2)) {
+        // Warm Golden Hour sunlit rooftop & gable rim bounce (Mockup 1)
+        self.drawRadialGlow(
+          centerX + drawW * 0.12,
+          bottomY - drawH * 0.68,
+          drawW * 0.46,
+          'rgba(255, 248, 196, 0.22)'
+        );
       }
 
       const rotTotal = (b.rotation + (cam.viewRot ?? 0)) % 4;
@@ -436,12 +484,21 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
       const craftBreathY = isActivelyCrafting
         ? 1 - Math.sin(self.tick * 0.13 + b.gx * 1.7) * 0.015
         : 1;
+      const isFoliageProp =
+        Boolean(item.spriteKey?.startsWith('env_')) && item.spriteKey !== 'env_mossy_rock';
+      const foliageShear =
+        !self.reducedMotion && isFoliageProp
+          ? Math.sin(self.tick * 0.038 - b.gx * 0.26 - b.gy * 0.18) * 0.048
+          : 0;
 
       ctx.save();
       if (fadeInCutaway) {
         ctx.globalAlpha = 0.28;
       }
       ctx.translate(centerX, bottomY + (4 - completion.liftY) * cam.zoom);
+      if (foliageShear !== 0) {
+        ctx.transform(1, 0, foliageShear, 1, 0, 0);
+      }
       ctx.scale(
         (flipSprite ? -1 : 1) * squash.sx * completion.scale * craftBreathX,
         squash.sy * completion.scale * craftBreathY
@@ -829,7 +886,12 @@ export function buildingsDrawLiveBuildingAnimations(self: IsometricRenderer,
       }
     }
 
-    // 0d. Active Workshop Warm Hearth Glow & Fragrant Steam vs Calm Idle State!
+    // 0d. Active Workshop Warm Hearth Glow & Fragrant Steam + Cozy Cottage Chimney Puffs + Floo Emerald Fire!
+    const hasCottageChimney =
+      itemId === 'burrow_house_canon' ||
+      itemId === 'molly_apple_bakery' ||
+      itemId === 'three_broomsticks' ||
+      itemId === 'hagrid_pumpkin_hut';
     if (b.workshopQueue && b.workshopQueue.length > 0 && !b.isBrokenDown) {
       const pulse = self.reducedMotion ? 1 : 0.85 + Math.sin(self.tick * 0.12 + b.gx) * 0.15;
       self.drawRadialGlow(
@@ -839,13 +901,75 @@ export function buildingsDrawLiveBuildingAnimations(self: IsometricRenderer,
         `rgba(251, 146, 60, ${0.42 * pulse})`
       );
       if (!self.reducedMotion) {
-        for (let s = 0; s < 3; s++) {
-          const sp = ((self.tick * 0.022 + s * 0.33 + b.gy * 0.17) % 1);
-          const sx = cx + Math.sin(sp * Math.PI * 2 + s) * 7 * zoom;
-          const sy = bottomY - drawH * (0.68 + sp * 0.28);
-          ctx.fillStyle = `rgba(254, 243, 199, ${Math.sin(sp * Math.PI) * 0.68})`;
+        for (let s = 0; s < 4; s++) {
+          const sp = ((self.tick * 0.022 + s * 0.25 + b.gy * 0.17) % 1);
+          const sx = cx + sp * 10 * zoom + Math.sin(sp * Math.PI * 2 + s) * 6 * zoom;
+          const sy = bottomY - drawH * (0.72 + sp * 0.30);
+          ctx.fillStyle = `rgba(254, 243, 199, ${Math.sin(sp * Math.PI) * 0.72})`;
           ctx.beginPath();
-          ctx.arc(sx, sy, (2.6 + sp * 4.2) * zoom, 0, Math.PI * 2);
+          ctx.arc(sx, sy, (2.8 + sp * 4.8) * zoom, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    } else if (hasCottageChimney && !self.reducedMotion && !b.isBrokenDown) {
+      // Cozy gentle woodsmoke curls from The Burrow, Bakery, Three Broomsticks & Hagrid's Hut
+      const chX = itemId === 'burrow_house_canon' ? cx + drawW * 0.08 : cx - drawW * 0.12;
+      const chY = bottomY - drawH * (itemId === 'burrow_house_canon' ? 0.90 : 0.80);
+      for (let s = 0; s < 3; s++) {
+        const sp = ((self.tick * 0.014 + s * 0.33 + b.gx * 0.13) % 1);
+        const sx = chX + sp * 13 * zoom + Math.sin(sp * Math.PI * 2 + s) * 4 * zoom;
+        const sy = chY - sp * 22 * zoom;
+        const alpha = Math.sin(sp * Math.PI) * (isNight ? 0.34 : 0.48);
+        ctx.fillStyle = isNight ? `rgba(226, 232, 240, ${alpha})` : `rgba(255, 250, 240, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(sx, sy, (2.2 + sp * 4.4) * zoom, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // 0d-2. Arthur's Enchanted Tinker Sparks at Ford Anglia Shed (`arthur_ford_shed`)
+    if (!self.reducedMotion && itemId === 'arthur_ford_shed' && !b.isBrokenDown) {
+      const sparkBurst = Math.sin(self.tick * 0.16 + b.gx) > 0.35;
+      if (sparkBurst) {
+        const spx = cx + drawW * 0.08;
+        const spy = bottomY - drawH * 0.28;
+        self.drawRadialGlow(spx, spy, 13 * zoom, 'rgba(56, 189, 248, 0.52)');
+        for (let k = 0; k < 3; k++) {
+          const ang = self.tick * 0.28 + k * 2.1;
+          ctx.fillStyle = k % 2 === 0 ? '#fde047' : '#7dd3fc';
+          ctx.beginPath();
+          ctx.arc(spx + Math.cos(ang) * 6 * zoom, spy + Math.sin(ang) * 4 * zoom, 1.5 * zoom, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    // 0d-3. Roaring Emerald-Green Floo Hearth Fire & Rising Magical Embers (`floo_fireplace_gate`)!
+    if (item.isFlooPortal && !b.isBrokenDown) {
+      const flooPulse = self.reducedMotion ? 1 : 0.88 + Math.sin(self.tick * 0.15 + b.gx) * 0.12;
+      const hearthY = bottomY - drawH * 0.24;
+      // Ground emerald spill onto flagstones
+      ctx.save();
+      ctx.fillStyle = `rgba(16, 185, 129, ${(isNight ? 0.34 : 0.22) * flooPulse})`;
+      ctx.beginPath();
+      ctx.ellipse(cx, bottomY - 2 * zoom, drawW * 0.42 * flooPulse, drawW * 0.20 * flooPulse, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      self.drawRadialGlow(
+        cx,
+        hearthY,
+        Math.max(22, drawW * 0.38) * flooPulse,
+        `rgba(52, 211, 153, ${(isNight ? 0.62 : 0.42) * flooPulse})`
+      );
+      if (!self.reducedMotion) {
+        for (let e = 0; e < 5; e++) {
+          const ep = ((self.tick * 0.032 + e * 0.2 + b.gy * 0.11) % 1);
+          const ex = cx + Math.sin(ep * Math.PI * 3 + e * 1.4) * (drawW * 0.16);
+          const ey = hearthY - ep * drawH * 0.62;
+          const eAlpha = Math.sin(ep * Math.PI) * 0.88;
+          ctx.fillStyle = e % 2 === 0 ? `rgba(110, 231, 183, ${eAlpha})` : `rgba(52, 211, 153, ${eAlpha})`;
+          ctx.beginPath();
+          ctx.arc(ex, ey, (1.6 + (1 - ep) * 1.8) * zoom, 0, Math.PI * 2);
           ctx.fill();
         }
       }

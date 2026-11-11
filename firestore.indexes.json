@@ -1,0 +1,87 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "burrow_states",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "level", "order": "DESCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "burrow_ledger_rows",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "uid", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "burrow_states",
+      "fieldPath": "rawClientSave",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "burrow_daily",
+      "fieldPath": "ops",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "burrow_friends",
+      "fieldPath": "buildings",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "burrow_friends",
+      "fieldPath": "tileOverrides",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "burrow_save",
+      "fieldPath": "__rawJson",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "burrow_public_layouts",
+      "fieldPath": "buildings",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "burrow_public_layouts",
+      "fieldPath": "tileOverrides",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "burrow_daily",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "burrow_helpers",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "burrow_coop_requests",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "burrow_fire",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "burrow_track",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    }
+  ]
+}

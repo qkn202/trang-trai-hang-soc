@@ -360,6 +360,7 @@ export interface PlacedBuilding {
   cropPlantedAt?: number;
   cropReadyAt?: number;
   cropWateredBoost?: boolean;
+  cropRotatedBonus?: boolean; // Mùa Vụ Vàng Luân Canh (+100% sản lượng khi đổi họ cây trồng)
   pastureAnimalId?: PastureAnimalId | null;
   pastureStockedAt?: number;
   pastureReadyAt?: number;
@@ -540,6 +541,11 @@ export type QuestObjectiveType =
 
 export type MinigameTrialKind = 'match3' | 'sudoku' | 'caro' | 'chess' | 'blocks';
 
+export interface PhoenixTalismanDailyUsageState {
+  dayKey: string; // YYYY-MM-DD (không reset khi chơi lại/qua màn, chỉ mở lại khi sang ngày mới)
+  usedByGame: Partial<Record<MinigameTrialKind, boolean>>;
+}
+
 export interface LevelTrialRequirement {
   kind: MinigameTrialKind;
   icon: string;
@@ -657,6 +663,198 @@ export type Match3BoosterId = 'reparo_hammer' | 'row_col_cannon' | 'alohomora_sh
 
 export type PuzzleArcadeMode = 'sudoku' | 'caro' | 'chess' | 'blocks';
 
+export const ACTIVE_MINIGAME_RESUME_KEY = 'hangsoc_active_minigame_modal_v1';
+
+export interface ActiveMinigameResumeRecord {
+  dialog: 'puzzleArcade' | 'match3';
+  mode: PuzzleArcadeMode | 'match3';
+  stage: number;
+  savedAt: number;
+}
+
+export interface SavedSudokuUndoItem {
+  grid: number[][];
+  notes: number[][];
+  selected: { r: number; c: number } | null;
+}
+
+export interface SavedSudokuSession {
+  stage: number;
+  solution: number[][];
+  initialGiven: boolean[][];
+  given: boolean[][];
+  grid: number[][];
+  notes: number[][];
+  mistakesCount: number;
+  maxMistakes: number;
+  freeHintsLeft: number;
+  paidHintsLeft: number;
+  talismanUsed: boolean;
+  pencilMode: boolean;
+  eraseMode: boolean;
+  selected: { r: number; c: number } | null;
+  highlightDigit: number;
+  elapsedSec: number;
+  status: 'playing' | 'lost';
+  editHistory: Array<{ r: number; c: number }>;
+  undoStack: SavedSudokuUndoItem[];
+  companionCharge?: number;
+  snackPieUsed?: boolean;
+  savedAt: number;
+}
+
+export interface SavedCaroSession {
+  stage: number;
+  grid: Array<Array<0 | 1 | 2 | 3>>;
+  moveHistory: Array<{ r: number; c: number; stone: 1 | 2 }>;
+  initialHistoryLen: number;
+  runeSealCount: number;
+  winningLine: Array<{ r: number; c: number }> | null;
+  hintCell: { r: number; c: number } | null;
+  freeUndosLeft: number;
+  paidUndosLeft: number;
+  freeHintsLeft: number;
+  paidHintsLeft: number;
+  talismanUsed: boolean;
+  status: 'playing' | 'ai_thinking' | 'lost' | 'draw';
+  companionCharge?: number;
+  snackPieUsed?: boolean;
+  savedAt: number;
+}
+
+export interface SavedChessPiece {
+  color: 'w' | 'b';
+  type: 'p' | 'n' | 'b' | 'r' | 'q' | 'k';
+}
+
+export interface SavedChessCastling {
+  wK: boolean;
+  wQ: boolean;
+  bK: boolean;
+  bQ: boolean;
+}
+
+export interface SavedChessHistoryItem {
+  board: Array<Array<SavedChessPiece | null>>;
+  turn: 'w' | 'b';
+  castling: SavedChessCastling;
+  enPassant: { r: number; c: number } | null;
+  capturedByWhite: Array<'p' | 'n' | 'b' | 'r' | 'q' | 'k'>;
+  capturedByBlack: Array<'p' | 'n' | 'b' | 'r' | 'q' | 'k'>;
+  lastMove: { fromR: number; fromC: number; toR: number; toC: number } | null;
+  halfMoveClock: number;
+}
+
+export interface SavedChessSession {
+  stage: number;
+  subMode: 'tactics' | 'match';
+  loadedFen: string;
+  board: Array<Array<SavedChessPiece | null>>;
+  turn: 'w' | 'b';
+  castling: SavedChessCastling;
+  enPassant: { r: number; c: number } | null;
+  capturedByWhite: Array<'p' | 'n' | 'b' | 'r' | 'q' | 'k'>;
+  capturedByBlack: Array<'p' | 'n' | 'b' | 'r' | 'q' | 'k'>;
+  lastMove: { fromR: number; fromC: number; toR: number; toC: number } | null;
+  hintMove: { fromR: number; fromC: number; toR: number; toC: number } | null;
+  selected: { r: number; c: number } | null;
+  halfMoveClock: number;
+  moveCount: number;
+  freeUndosLeft: number;
+  paidUndosLeft: number;
+  freeHintsLeft: number;
+  paidAssistsLeft: number;
+  talismanUsed: boolean;
+  status: 'playing' | 'ai_thinking' | 'lost' | 'draw';
+  history: SavedChessHistoryItem[];
+  companionCharge?: number;
+  snackPieUsed?: boolean;
+  savedAt: number;
+}
+
+export interface SavedOnetSession {
+  stage: number;
+  rows: number;
+  cols: number;
+  grid: Array<Array<string | null>>;
+  selected: { r: number; c: number } | null;
+  hintPair: [{ r: number; c: number }, { r: number; c: number }] | null;
+  hintPath: Array<{ r: number; c: number }> | null;
+  matchedPairs: number;
+  combo: number;
+  maxCombo: number;
+  score: number;
+  movesAttempted: number;
+  autoShufflesCount: number;
+  lives: number;
+  freeHintsLeft: number;
+  paidHintsLeft: number;
+  paidShufflesLeft: number;
+  talismanUsed: boolean;
+  status: 'playing' | 'lost';
+  companionCharge?: number;
+  snackPieUsed?: boolean;
+  savedAt: number;
+}
+
+export interface SavedMatch3Piece {
+  color: number;
+  special: 'striped_h' | 'striped_v' | 'wrapped' | 'seeker' | 'color_bomb' | null;
+  blocker: 'swirl' | null;
+  isIngredient: boolean;
+  bombTimer: number | null;
+  hasKey: boolean;
+  primedWrapped: boolean;
+  primedMega: boolean;
+}
+
+export interface SavedMatch3Session {
+  levelId: number;
+  size: number;
+  house: 'gryffindor' | 'slytherin' | 'ravenclaw' | 'hufflepuff';
+  mask: number[][];
+  jelly: number[][];
+  ice: number[][];
+  frosting: number[][];
+  chocolate: number[][];
+  cauldron: number[][];
+  cauldronCharge: number[][];
+  lockGrid: number[][];
+  petrify: number[][];
+  dementor: number[][];
+  dementorCharge: number[][];
+  decree: number[][];
+  fiendfyre: number[][];
+  horcrux: number[][];
+  grid: Array<Array<SavedMatch3Piece | null>>;
+  ingredientsCollected: number;
+  ingredientsSpawned: number;
+  pendingBombSpawns: number;
+  bossHp: number;
+  bossDefeated: boolean;
+  bossEnraged: boolean;
+  pendingBossEnrageBurst: boolean;
+  bossEffectiveCastInterval: number;
+  patronusCharge: number;
+  score: number;
+  movesLeft: number;
+  movesUsed: number;
+  talismanUsed: boolean;
+  status: 'playing' | 'out_of_moves';
+  failReason: 'moves' | 'bomb' | null;
+  collected: Record<string, number>;
+  specialStats: {
+    striped: number;
+    wrapped: number;
+    seeker: number;
+    color_bomb: number;
+  };
+  movesMadeThisAttempt: number;
+  companionCharge?: number;
+  snackPieUsed?: boolean;
+  savedAt: number;
+}
+
 export interface PuzzleArcadeState {
   activeMode: PuzzleArcadeMode;
   sudokuStage: number;
@@ -672,6 +870,10 @@ export interface PuzzleArcadeState {
   featuredWinsCount?: number;
   restoredPaintings: string[];
   totalPuzzlesSolved: number;
+  sudokuSession?: SavedSudokuSession | null;
+  caroSession?: SavedCaroSession | null;
+  chessSession?: SavedChessSession | null;
+  onetSession?: SavedOnetSession | null;
 }
 
 export interface Match3ProgressionState {
@@ -684,6 +886,7 @@ export interface Match3ProgressionState {
   nextHeartAt: number; // Timestamp ms when next heart regenerates (0 when full)
   boosters: Record<Match3BoosterId, number>;
   levelsWon: number;
+  activeSession?: SavedMatch3Session | null;
 }
 
 export type LeaderboardGameId = 'match3' | 'caro' | 'sudoku' | 'chess' | 'blocks' | 'seedquiz';
@@ -761,11 +964,57 @@ export interface VerifiedRealPlayerProfile {
   level: number;
   house: HouseName;
   avatarEmoji?: string;
+  avatarUrl?: string;
   bioVi?: string;
   buildings?: PlacedBuilding[];
   tileOverrides?: Record<string, TileOverrideData>;
   unlockedZones?: ZoneId[];
+  scene?: {
+    weather?: string;
+    atmosphere?: string;
+    event?: string;
+  };
   updatedAt?: number;
+}
+
+export interface FlooVisitDirectoryRow {
+  uid: string;
+  friendCode?: string;
+  username: string;
+  parkName?: string;
+  house?: HouseName;
+  avatarEmoji?: string;
+  avatarUrl?: string;
+  level: number;
+  growing: number;
+  helped?: boolean;
+  hostHelpsLeft?: number;
+  fire?: {
+    mode: string;
+    since: number;
+    until: number;
+    burned?: number;
+  } | null;
+  scene?: {
+    weather?: string;
+    atmosphere?: string;
+    event?: string;
+  };
+  rawClientSave?: Record<string, unknown>;
+  updatedAt?: number;
+}
+
+export interface HonorGardenTourDef {
+  id: string;
+  ownerName: string;
+  titleVi: string;
+  keeperTitleVi: string;
+  avatarEmoji: string;
+  house: HouseName;
+  level: number;
+  atmosphere: TimeOverride;
+  weather: WeatherOverride;
+  descVi: string;
 }
 
 export interface NeighborProfileState {
@@ -777,6 +1026,7 @@ export interface NeighborProfileState {
   titleVi: string;
   parkName: string;
   avatarEmoji: string;
+  avatarUrl?: string;
   portraitSprite?: string;
   house: HouseName;
   level: number;
@@ -786,6 +1036,16 @@ export interface NeighborProfileState {
   valleyBuildings?: PlacedBuilding[];
   valleyTileOverrides?: Record<string, TileOverrideData>;
   valleyUnlockedZones?: ZoneId[];
+  // Floo Portal directory live metadata (`hagridfarm` style)
+  growingCount?: number;
+  helpedViaFlooToday?: boolean;
+  hostHelpsLeft?: number;
+  fireUntilMs?: number | null;
+  scene?: {
+    weather?: string;
+    atmosphere?: string;
+    event?: string;
+  };
   // Daily interactive states on this neighbor's farm (reset at 00:00 local)
   helpedMarksToday: NeighborHelpedBuildingMark[];
   owlHelpCrates: NeighborOwlHelpCrate[];
@@ -800,6 +1060,7 @@ export interface HomeOwlLanternMark {
   helperId: string;
   helperName: string;
   helperEmoji: string;
+  helperAvatarUrl?: string;
   kind: NeighborGardenHelpKind;
   noteVi: string;
   createdAt: number;
@@ -815,7 +1076,32 @@ export interface PlayerMinigameSosState {
   rescuerName?: string;
   rescuerEmoji?: string;
   rescuerNoteVi?: string;
+  ghostReplaySummaryVi?: string;
+  ghostReplayMoves?: string[];
   claimed?: boolean;
+}
+
+export type CropFamily = 'grain' | 'produce' | 'flower' | 'magical';
+
+export interface PlotSoilStateEntry {
+  lastFamily: CropFamily;
+  fatigueStep: number;
+  updatedAt: number;
+}
+
+export type LayoutPresetId = 'layout_1' | 'layout_2' | 'layout_3';
+
+export interface LayoutPresetEntry {
+  id: LayoutPresetId;
+  label: string;
+  savedAt: number;
+  placements: Array<{
+    uid: string;
+    itemId: string;
+    gx: number;
+    gy: number;
+    rotation: 0 | 1 | 2 | 3;
+  }>;
 }
 
 export interface PlayerOwlCrateHelpRequest {
@@ -846,6 +1132,8 @@ export interface MinigameRescueContext {
 
 export interface NeighborSocialState {
   playerFriendCode: string;
+  playerDisplayName?: string;
+  playerAvatarUrl?: string;
   selectedPresetNoteId: NeighborPresetNoteId;
   friendshipTokens: number; // 🍀 Huy Hiệu Tình Bạn (10 -> Mở Rương Quà Tình Bạn)
   chestsOpened: number;
@@ -858,11 +1146,48 @@ export interface NeighborSocialState {
   dailyOwlHelpRequestedCount: number; // Max 5 owl crate help calls/day
   dailyGardenHelpsCount?: number; // Max 5 garden helps/day across all friends
   dailyHomeLanternsClaimedCount?: number; // Max 5 home lantern helps received/claimed per day
+  dailyHonorTourClaimed?: boolean; // 1x/day inspiration gift from touring an Honor Garden
+  dailyFlooShareClaimed?: boolean; // 1x/day gift from sharing/saving a Valley Postcard to Floo
+  lastSeenHelperAt?: number; // Latest helper notification timestamp shown as toast
   neighbors: NeighborProfileState[];
   homeLanternMarks: HomeOwlLanternMark[];
   playerMinigameSos: PlayerMinigameSosState | null;
   playerOwlHelpRequests: PlayerOwlCrateHelpRequest[];
   activityLog: NeighborSocialLogEntry[];
+}
+
+export type AchievementCategory =
+  | 'farm'
+  | 'building'
+  | 'puzzle'
+  | 'language'
+  | 'social'
+  | 'collection';
+
+export interface AchievementProgressEntry {
+  unlockedAt?: number;
+  claimedAt?: number;
+  notifiedAt?: number;
+}
+
+export interface NpcFriendshipEntry {
+  villagerId: ValleyVillagerId;
+  level: number; // 1..10
+  xp: number;
+  lastTalkedDayKey?: string;
+}
+
+export type SaveSlotId = 'slot_1' | 'slot_2' | 'slot_3' | 'autosave';
+
+export interface RetentionNarrativeState {
+  schemaVersion: number;
+  achievements: Record<string, AchievementProgressEntry>;
+  pendingToasts: string[];
+  npcFriendship: Record<string, NpcFriendshipEntry>;
+  unlockedStoryChapters: string[];
+  claimedLoginDays: number[]; // [1..7]
+  lastLoginClaimDayKey?: string;
+  activeSaveSlotId: SaveSlotId;
 }
 
 export interface GameState {
@@ -873,6 +1198,7 @@ export interface GameState {
   galleons: number;
   timeSand: number; // Cát Xoay Thời Gian (Time-Turner charges)
   sandboxMode: boolean;
+  sandboxTainted?: boolean; // Đánh dấu vĩnh viễn hồ sơ từng bật Sandbox (chặn đẩy lên Cloud/BXH)
   parkEntryFee: number; // 0..50 Galleons gate fee
   unlockedZones: ZoneId[];
   buildings: PlacedBuilding[];
@@ -896,11 +1222,34 @@ export interface GameState {
   suitcase: SuitcaseSanctuaryState;
   match3: Match3ProgressionState;
   puzzleArcade: PuzzleArcadeState;
+  lastPlayedMinigame?: LeaderboardGameId;
   levelUpTrialCompletedLevel?: number;
   puzzleLevelWinsProgress?: number;
   featuredStarClaimedLevel?: number;
   phoenixTalismans?: number; // 🔥 Bùa Hộ Mệnh Phượng Hoàng (earned via Owl Orders & Language Quiz, never via losing!)
+  phoenixTalismanDaily?: PhoenixTalismanDailyUsageState; // Khóa cứng 1 lần/môn/ngày (tối đa 5 lần/ngày trên 5 môn khảo thí)
   quizTalismanProgress?: number; // 0..7 correct quiz answers toward next Phoenix Talisman
+  cropMastery?: Partial<Record<FarmCropId, number>>; // Account-bound harvests per crop (Tier I..V)
+  plotSoilState?: Record<string, PlotSoilStateEntry>; // Persisted by "gx,gy" to prevent bulldoze-plot reset exploit
+  morningDewPhials?: number; // 🧪 Bình Sương Mai (-15m targeted timer warp)
+  examWinStreak?: number; // Consecutive minigame stage wins (x1 -> x3 timer reduction)
+  stashedDecorInventory?: Record<string, number>; // Quick-stashed decor items ready to re-place for 0G
+  stashedDecorStars?: Record<string, number[]>; // Preserves 1★–5★ upgrade tiers for stashed decor items
+  layoutPresets?: Partial<Record<LayoutPresetId, LayoutPresetEntry>>;
+  a11ySettings?: {
+    colorblindMode: 'none' | 'protanopia' | 'deuteranopia' | 'tritanopia';
+    fontScale: 100 | 125 | 150;
+    highContrast: boolean;
+    keyboardFocusVisible?: boolean;
+    volumes: { master: number; music: number; sfx: number; ambience: number; voice: number };
+  };
+  weeklyHouseCupServerStandings?: {
+    weekKey: string;
+    totals: Record<HouseName, number>;
+    playerContribution: number;
+    updatedAt: number;
+  };
+  retention?: RetentionNarrativeState;
   staffPatrolZones: Record<string, ZoneId | 'all'>;
   lastProphetHeadline?: {
     title: string;
@@ -910,6 +1259,8 @@ export interface GameState {
   finance: FinanceLedger;
   stats: {
     totalGalleonsHarvested: number;
+    farmHarvestsCount?: number;
+    neighborHelpsDone?: number;
     butterbeerServed: number;
     wandsSold: number;
     spellsCastByGuests: number;

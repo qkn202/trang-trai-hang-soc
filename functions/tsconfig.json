@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "sourceMap": true,
+    "outDir": "lib",
+    "rootDir": ".."
+  },
+  "include": [
+    "src/**/*.ts",
+    "../server/burrowBackendCore.ts",
+    "../server/firebaseCallableAdapter.ts",
+    "../server/index.ts"
+  ]
+}

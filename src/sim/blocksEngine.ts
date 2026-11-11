@@ -1,5 +1,7 @@
 // Tách tự động từ src/sim/puzzleArcadeEngine.ts (P0.5 — tách puzzle engine theo môn).
 import {
+  JIGSAW_PAINTINGS,
+  JigsawPaintingDef,
   MAX_MINIGAME_STAGE,
   MilestoneBossMeta,
   PuzzleRewardSpec,
@@ -12,76 +14,12 @@ import {
   mulberry32,
 } from "./puzzleShared";
 
+export { JIGSAW_PAINTINGS };
+export type { JigsawPaintingDef };
+
 // ============================================================================
 // 1. GHÉP TRANH MẢNH KHỚP JIGSAW (3x3, 4x4, 5x5 INTERLOCKING HOGWARTS PAINTINGS)
 // ============================================================================
-
-export interface JigsawPaintingDef {
-  id: string;
-  title: string;
-  subtitle: string;
-  imageUrl: string;
-  accentColor: string;
-}
-
-export const JIGSAW_PAINTINGS: JigsawPaintingDef[] = [
-  {
-    id: 'p1_hogwarts_express',
-    title: 'Tàu Tốc Hành Qua Cầu Đá Hoàng Hôn',
-    subtitle: 'Đoàn tàu đỏ thẫm phun khói bụi sao băng qua cầu cạn vùng cao nguyên Scotland.',
-    imageUrl: '/paintings/p1_hogwarts_express.jpg',
-    accentColor: '#ea580c',
-  },
-  {
-    id: 'p2_great_hall',
-    title: 'Đại Sảnh Đường Ngàn Ngọn Nến Bay',
-    subtitle: 'Bầu trời đêm đầy sao được phù phép trên vòm trần bên dưới hàng trăm ngọn nến lơ lửng.',
-    imageUrl: '/paintings/p2_great_hall.jpg',
-    accentColor: '#eab308',
-  },
-  {
-    id: 'p3_hogsmeade_snow',
-    title: 'Làng Tuyết Hogsmeade Đêm Đông Ấm Áp',
-    subtitle: 'Ánh đèn lồng vàng óng hắt lên con phố đá cuội phủ tuyết trắng trước tiệm kẹo & đũa phép.',
-    imageUrl: '/paintings/p3_hogsmeade_snow.jpg',
-    accentColor: '#38bdf8',
-  },
-  {
-    id: 'p4_quidditch_snitch',
-    title: 'Đấu Trường Quidditch & Trái Snitch Vàng',
-    subtitle: 'Cuộc rượt đuổi ngoạn mục giữa các tòa tháp cờ hiệu 4 Nhà rực rỡ nắng vàng.',
-    imageUrl: '/paintings/p4_quidditch_snitch.jpg',
-    accentColor: '#10b981',
-  },
-  {
-    id: 'p5_unicorn_lake',
-    title: 'Độc Giác Thú Bạc Bên Hồ Rừng Cấm',
-    subtitle: ' Sinh vật thuần khiết tỏa hào quang lam ngọc giữa thảm nấm phát sáng huyền ảo.',
-    imageUrl: '/paintings/p5_unicorn_lake.jpg',
-    accentColor: '#06b6d4',
-  },
-  {
-    id: 'p6_phoenix_astronomy',
-    title: 'Phượng Hoàng Lửa Trên Đỉnh Tháp Thiên Văn',
-    subtitle: 'Chim bất tử khoe bộ lông đỏ vàng rực cháy bên quả cầu thiên체 bằng đồng cổ.',
-    imageUrl: '/paintings/p6_phoenix_astronomy.jpg',
-    accentColor: '#f43f5e',
-  },
-  {
-    id: 'p7_gringotts_dragon',
-    title: 'Rồng Hoàng Kim Canh Giữ Hầm Báu Vật',
-    subtitle: 'Kho vàng Galleon và cúp ngọc lấp lánh dưới ngọn đuốc lam sâu trong lòng đất.',
-    imageUrl: '/paintings/p7_gringotts_dragon.jpg',
-    accentColor: '#f59e0b',
-  },
-  {
-    id: 'p8_hogwarts_moon',
-    title: 'Đại Lâu Đài Hogwarts Dưới Ánh Trăng Tròn',
-    subtitle: 'Đoàn thuyền đèn lồng lướt nhẹ trên mặt Hồ Đen phẳng lặng như gương.',
-    imageUrl: '/paintings/p8_hogwarts_moon.jpg',
-    accentColor: '#8b5cf6',
-  },
-];
 
 export interface JigsawEdges {
   top: -1 | 0 | 1;

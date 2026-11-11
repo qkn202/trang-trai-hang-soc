@@ -187,6 +187,32 @@ describe('Master Upgrade 10/10 Suite (Đợt 1, Đợt 2 & Đợt 3)', () => {
       expect(caroRev?.mode).toBe('caro');
       expect(caroRev?.highlightCells.length).toBeGreaterThan(0);
 
+      // Gợi ý Cờ Phù Thủy (useBestMoveHint) chỉ đánh dấu nước đi gợi ý, KHÔNG tự động đi quân hay tự động qua màn
+      const hintProbe = new WizardChessEngine(1);
+      expect(hintProbe.subMode).toBe('tactics');
+      const hintRes = hintProbe.useBestMoveHint();
+      expect(hintRes.ok).toBe(true);
+      expect(hintRes.move).not.toBeNull();
+      expect(hintRes.labelVi.length).toBeGreaterThan(0);
+      expect(hintProbe.status).toBe('playing');
+      expect(hintProbe.turn).toBe('w');
+      expect(hintProbe.moveCount).toBe(0);
+      expect(hintProbe.hintMove).toEqual({
+        fromR: hintRes.move!.fromR,
+        fromC: hintRes.move!.fromC,
+        toR: hintRes.move!.toR,
+        toC: hintRes.move!.toC,
+      });
+      expect(hintProbe.selected).toEqual({
+        r: hintRes.move!.fromR,
+        c: hintRes.move!.fromC,
+      });
+      // Chỉ khi người chơi trực tiếp chạm ô đích thì nước cờ mới được thực thi và xoá gợi ý
+      const playerStep = hintProbe.clickSquare(hintRes.move!.toR, hintRes.move!.toC);
+      expect(playerStep.moved).toBe(true);
+      expect(hintProbe.hintMove).toBeNull();
+      expect(hintProbe.moveCount).toBe(1);
+
       // Cờ Phù Thủy thế cờ chiến thuật (màn 1): dùng trợ giúp đi nước chuẩn hoặc kết thúc ván để kiểm tra Gương Chiếu Hậu
       const tactics = new WizardChessEngine(1);
       expect(tactics.subMode).toBe('tactics');

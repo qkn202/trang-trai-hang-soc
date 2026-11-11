@@ -1,5 +1,6 @@
 import {
   CatalogItem,
+  CropFamily,
   FarmCropId,
   FarmGoodId,
   FarmItemId,
@@ -2128,12 +2129,104 @@ export const TIME_SAND_SKIP_SECONDS = 300; // 1 Cát Xoay Thời Gian dùng cho 
 export const MAX_WAIT_DURATION_SECONDS = 3 * 24 * 3600; // Trần tối đa 3 ngày (259.200s = 72 giờ)
 export const MIN_LONG_BUILD_FLOOR_SECONDS = 3600; // Sàn tối thiểu 1 tiếng (3.600s) để tự hoàn thành với công trình >= 1 tiếng
 export const FIRST_ECONOMIC_CYCLE_SEC = 3600; // Ở lần thu hoạch đầu tiên, mặc định hoàn thành trong 1 tiếng đồng hồ (3.600s)
-export const MINIGAME_CLEAR_REDUCTION_SEC = 600; // Mỗi lần chơi mini-game qua màn giảm 10 phút (600s)
+export const MINIGAME_CLEAR_REDUCTION_SEC = 600; // Mỗi lần chơi mini-game qua màn giảm 10 phút (600s) ở chuỗi 1
+export const MAX_ECONOMIC_CYCLE_SEC = 6 * 3600; // Trần tối đa 6 tiếng (21.600s) cho mọi chu kỳ sản xuất kinh tế
+export const TACTICAL_SOIL_FATIGUE_CAP_SEC = MAX_ECONOMIC_CYCLE_SEC; // Trần mềm chiến thuật 6 tiếng (21.600s) chống chờ đợi cực đoan
+export const MORNING_DEW_REDUCTION_SEC = 900; // 1 Bình Sương Mai rút ngắn 15 phút (900s) có chọn lọc
+
+export function getCropFamily(cropId: FarmCropId): CropFamily {
+  if (
+    cropId === 'glow_mushroom' ||
+    cropId === 'baby_mandrake' ||
+    cropId === 'moonlight_flower' ||
+    cropId === 'phoenix_fireflower'
+  ) {
+    return 'magical';
+  }
+  const meta = FARM_CROPS[cropId];
+  if (meta?.isFlowerCrop) return 'flower';
+  if (cropId === 'ottery_wheat' || cropId === 'golden_corn') return 'grain';
+  return 'produce';
+}
+
+export function getCropMasteryTierInfo(harvestCount: number): {
+  tier: 1 | 2 | 3 | 4 | 5;
+  labelRom: string;
+  valueMult: number;
+  speedMult: number;
+  nextTarget: number;
+} {
+  const n = Math.max(0, Math.floor(harvestCount));
+  if (n >= 25) return { tier: 5, labelRom: 'V', valueMult: 1.5, speedMult: 0.9, nextTarget: 25 };
+  if (n >= 15) return { tier: 4, labelRom: 'IV', valueMult: 1.35, speedMult: 0.94, nextTarget: 25 };
+  if (n >= 10) return { tier: 3, labelRom: 'III', valueMult: 1.2, speedMult: 0.97, nextTarget: 15 };
+  if (n >= 5) return { tier: 2, labelRom: 'II', valueMult: 1.1, speedMult: 1.0, nextTarget: 10 };
+  return { tier: 1, labelRom: 'I', valueMult: 1.0, speedMult: 1.0, nextTarget: 5 };
+}
+
+export function computeStrategicPlotGrowSeconds(
+  fatigueStep: number,
+  rotatedFamily: boolean,
+  masteryHarvests = 0,
+  baseSec = FIRST_ECONOMIC_CYCLE_SEC
+): { growSec: number; effectiveFatigueStep: number; isRotatedBonus: boolean } {
+  const safeFatigue = Math.max(0, Math.floor(fatigueStep));
+  const effectiveFatigueStep = rotatedFamily ? Math.max(0, safeFatigue - 1) : safeFatigue;
+  const rawSec = computeEconomicCycleSeconds(effectiveFatigueStep, baseSec);
+  const cappedSec = Math.min(TACTICAL_SOIL_FATIGUE_CAP_SEC, rawSec);
+  const mastery = getCropMasteryTierInfo(masteryHarvests);
+  const growSec = Math.max(60, Math.round(cappedSec * mastery.speedMult));
+  return {
+    growSec,
+    effectiveFatigueStep,
+    isRotatedBonus: rotatedFamily && safeFatigue >= 1,
+  };
+}
+
+export function computeExamStreakReductionSec(streakCount: number): {
+  rawReduceSec: number;
+  multiplierLabel: string;
+  dewPhialAwarded: number;
+} {
+  const s = Math.max(1, Math.floor(streakCount));
+  if (s === 1) {
+    return { rawReduceSec: MINIGAME_CLEAR_REDUCTION_SEC, multiplierLabel: '×1', dewPhialAwarded: 0 };
+  }
+  if (s === 2) {
+    return { rawReduceSec: 900, multiplierLabel: '×1.5', dewPhialAwarded: 0 };
+  }
+  if (s === 3) {
+    return { rawReduceSec: 1200, multiplierLabel: '×2', dewPhialAwarded: 1 };
+  }
+  return {
+    rawReduceSec: 1800,
+    multiplierLabel: '×3',
+    dewPhialAwarded: s % 3 === 0 ? 1 : 0,
+  };
+}
+
+export function getStageSawtoothTag(stage: number): {
+  kind: 'normal' | 'hard' | 'treasure' | 'boss';
+  badgeVi: string;
+  bonusGoldMult: number;
+} {
+  const s = Math.max(1, Math.floor(stage));
+  if (s % 10 === 0) {
+    return { kind: 'boss', badgeVi: '👑 Đại Trùm Mốc (+50% Vàng)', bonusGoldMult: 1.5 };
+  }
+  if (s % 10 === 5) {
+    return { kind: 'treasure', badgeVi: '🪙 Kho Báu Snitch (+60% Vàng)', bonusGoldMult: 1.6 };
+  }
+  if (s % 10 === 4 || s % 10 === 9) {
+    return { kind: 'hard', badgeVi: '🔥 Màn Khó Tinh Anh (+25% Vàng)', bonusGoldMult: 1.25 };
+  }
+  return { kind: 'normal', badgeVi: '', bonusGoldMult: 1.0 };
+}
 
 /**
  * Thời gian hoạt động kinh tế (trừ mini-game):
  * - Ở lần thu hoạch đầu tiên (completedCount <= 0): mặc định hoàn thành trong 1 tiếng đồng hồ (3.600s).
- * - Các lần thu hoạch tiếp theo (completedCount = 1, 2, 3, ...): tăng theo cấp số nhân ×2 (2g, 4g, 8g, 16g...).
+ * - Các lần thu hoạch tiếp theo (completedCount = 1, 2, 3, ...): tăng theo cấp số nhân ×2 (2g, 4g) và kẹp trần tối đa 6 tiếng (21.600s).
  */
 export function computeEconomicCycleSeconds(
   completedCount = 0,
@@ -2141,7 +2234,8 @@ export function computeEconomicCycleSeconds(
 ): number {
   const step = Math.max(0, Math.min(20, Math.floor(completedCount)));
   const startSec = baseSec > 0 ? baseSec : FIRST_ECONOMIC_CYCLE_SEC;
-  return Math.max(60, Math.round(startSec * Math.pow(2, step)));
+  const raw = Math.max(60, Math.round(startSec * Math.pow(2, step)));
+  return Math.min(MAX_ECONOMIC_CYCLE_SEC, raw);
 }
 
 export function getBuildingEffectiveCycleSec(

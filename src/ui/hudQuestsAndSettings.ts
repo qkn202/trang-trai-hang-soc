@@ -61,14 +61,25 @@ import {
 } from '../engine/isometric';
 import { SpriteRegistry } from '../engine/spriteLoader';
 import {
+  ACHIEVEMENT_REGISTRY,
+  AchievementCategory,
+  DAY_1_TO_7_REWARDS,
+  ensureRetentionState,
   FARM_HARVEST_CHEST_XP,
   formatHarvestFeastRewardVi,
+  getAchievementCodexSummary,
+  getCategoryMetricValue,
   getItemPriceBounds,
+  getNpcScheduleForPeriod,
   getUpgradeCost,
+  loadFromNamedSlot,
   MAX_PHOENIX_TALISMANS,
   ParkSimulation,
   PHOENIX_FORGE_GOLD_COST,
+  SaveSlotId,
+  STORY_CUTSCENE_CHAPTERS,
 } from '../sim/simulation';
+import { VALLEY_VILLAGER_PROFILES, getLocalDateKey } from '../sim/simulationData';
 import {
   FRIENDSHIP_CHEST_TOKEN_COST,
   getMinigameKindLabelVi,
@@ -88,6 +99,7 @@ import {
   FlyRewardKind,
   HeatmapMode,
   HouseName,
+  LayoutPresetId,
   LeaderboardGameId,
   LeaderboardScope,
   MAX_RIDE_QUEUE,
@@ -108,6 +120,7 @@ import {
   WeatherOverride,
   ZoneId,
 } from '../types/game';
+import { isLocalDevelopmentHost } from './authoritativeClient';
 import { LeaderboardModalController } from './leaderboardModal';
 import {
   lookupRealPlayerByFriendCode,
@@ -333,50 +346,314 @@ export function questsUiRenderFinanceDialog(hud: GameHUD): void {
 export function questsUiRenderAlbumDialog(hud: GameHUD): void {
     const box = hud.root.querySelector('#albumDialogContent') as HTMLElement;
     const st = hud.sim.state;
+    hud.sim.checkAndToastAchievements();
+    const ret = ensureRetentionState(st);
+    const codex = getAchievementCodexSummary(st);
+    const claimableAchCount = ACHIEVEMENT_REGISTRY.filter((a) => {
+      const e = ret.achievements[a.id];
+      return Boolean(e?.unlockedAt && !e?.claimedAt);
+    }).length;
+    const maxLoginDay = hud.sim.getUnlockedLoginDayMax();
+    const claimableLoginCount = DAY_1_TO_7_REWARDS.filter(
+      (d) => d.day <= maxLoginDay && !ret.claimedLoginDays.includes(d.day)
+    ).length;
 
-    const houses: Array<{ house: HouseName; icon: string; color: string; pts: number }> = [
-      { house: 'Gryffindor', icon: '🦁', color: '#b91c1c', pts: st.housePoints.Gryffindor ?? 0 },
-      { house: 'Slytherin', icon: '🐍', color: '#047857', pts: st.housePoints.Slytherin ?? 0 },
-      { house: 'Ravenclaw', icon: '🦅', color: '#1d4ed8', pts: st.housePoints.Ravenclaw ?? 0 },
-      { house: 'Hufflepuff', icon: '🦡', color: '#ca8a04', pts: st.housePoints.Hufflepuff ?? 0 },
-    ];
-    houses.sort((a, b) => b.pts - a.pts);
-
-    const totalPts = houses.reduce((acc, h) => acc + h.pts, 0);
-    const milestoneTarget = st.houseCupMilestoneTier * 300;
-    const canClaimCup = totalPts >= milestoneTarget;
-
-    box.innerHTML = `
-      <div class="quest-card-mini" style="padding:13px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
-          <div style="font-size:15px;font-weight:800;">🏆 Cúp 4 Nhà</div>
-          <span style="font-size:12px;font-weight:700;color:#78350f;">${totalPts} / ${milestoneTarget}</span>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-bottom:10px;">
-          ${houses
-            .map(
-              (h, idx) => `
-              <div style="background:rgba(255,255,255,0.65);border:2px solid ${h.color};border-radius:10px;padding:8px;">
-                <div style="font-size:13px;font-weight:800;color:${h.color};">${idx === 0 ? '👑 ' : ''}${h.icon} ${h.house}</div>
-                <div style="font-size:16px;font-weight:800;margin-top:2px;">${h.pts} đ</div>
-              </div>
-            `
-            )
-            .join('')}
-        </div>
-        <progress max="${milestoneTarget}" value="${Math.min(milestoneTarget, totalPts)}"></progress>
-        ${
-          canClaimCup
-            ? `<button id="btnClaimHouseCup" type="button" class="brass-btn gold-cta" style="width:100%;margin-top:8px;">🏆 Nhận Cúp Đợt ${st.houseCupMilestoneTier}</button>`
-            : ''
-        }
+    const tabsHtml = `
+      <div class="workshop-tabs" role="tablist" aria-label="Sổ Vàng Hang Sóc" style="margin-bottom:12px;">
+        <button type="button" data-atab="cup" data-active="${hud.activeAlbumTab === 'cup'}" aria-selected="${hud.activeAlbumTab === 'cup'}" class="brass-btn">
+          🏆 Cúp 4 Nhà
+        </button>
+        <button type="button" data-atab="achievements" data-active="${hud.activeAlbumTab === 'achievements'}" aria-selected="${hud.activeAlbumTab === 'achievements'}" class="brass-btn">
+          🎖️ Thành Tựu (${codex.unlocked}/${codex.total})${claimableAchCount > 0 ? ` • 🎁${claimableAchCount}` : ''}
+        </button>
+        <button type="button" data-atab="friendship" data-active="${hud.activeAlbumTab === 'friendship'}" aria-selected="${hud.activeAlbumTab === 'friendship'}" class="brass-btn">
+          💝 Tình Bạn &amp; Phim
+        </button>
+        <button type="button" data-atab="login7" data-active="${hud.activeAlbumTab === 'login7'}" aria-selected="${hud.activeAlbumTab === 'login7'}" class="brass-btn">
+          📅 Điểm Danh 7N${claimableLoginCount > 0 ? ` • 🎁${claimableLoginCount}` : ''}
+        </button>
       </div>
     `;
+
+    let bodyHtml = '';
+    if (hud.activeAlbumTab === 'cup') {
+      const playerHouse = hud.sim.getPlayerHouse();
+      const serverWeekly = st.weeklyHouseCupServerStandings;
+      const houses: Array<{ house: HouseName; icon: string; pts: number }> = [
+        {
+          house: 'Gryffindor',
+          icon: '🦁',
+          pts: (st.housePoints.Gryffindor ?? 0) + (serverWeekly?.totals.Gryffindor ?? 0),
+        },
+        {
+          house: 'Slytherin',
+          icon: '🐍',
+          pts: (st.housePoints.Slytherin ?? 0) + (serverWeekly?.totals.Slytherin ?? 0),
+        },
+        {
+          house: 'Ravenclaw',
+          icon: '🦅',
+          pts: (st.housePoints.Ravenclaw ?? 0) + (serverWeekly?.totals.Ravenclaw ?? 0),
+        },
+        {
+          house: 'Hufflepuff',
+          icon: '🦡',
+          pts: (st.housePoints.Hufflepuff ?? 0) + (serverWeekly?.totals.Hufflepuff ?? 0),
+        },
+      ];
+      houses.sort((a, b) => b.pts - a.pts);
+      const maxHousePts = Math.max(100, houses[0]?.pts ?? 100);
+      const localTotalPts =
+        (st.housePoints.Gryffindor ?? 0) +
+        (st.housePoints.Slytherin ?? 0) +
+        (st.housePoints.Ravenclaw ?? 0) +
+        (st.housePoints.Hufflepuff ?? 0);
+      const milestoneTarget = st.houseCupMilestoneTier * 300;
+      const canClaimCup = localTotalPts >= milestoneTarget;
+
+      bodyHtml = `
+        <div class="quest-card-mini" style="padding:13px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+            <div>
+              <div style="font-size:15px;font-weight:800;">🏆 Đồng Hồ Ngọc Cúp 4 Nhà Hogwarts</div>
+              <div style="font-size:12px;color:var(--ink-soft);">
+                Nhà của bạn: <strong>${playerHouse}</strong>${
+                  serverWeekly ? ` • Tuần HPVN ${serverWeekly.weekKey} (đóng góp: +${serverWeekly.playerContribution} đ)` : ' • Tích điểm khi thu hoạch, giao Đơn Cú & thắng Khảo Thí'
+                }
+              </div>
+            </div>
+            <span style="font-size:12px;font-weight:800;color:var(--ink-gold);">Đợt ${st.houseCupMilestoneTier}: ${localTotalPts} / ${milestoneTarget}</span>
+          </div>
+          <div class="aaa-hourglass-grid">
+            ${houses
+              .map((h, idx) => {
+                const pct = Math.min(100, Math.max(8, Math.round((h.pts / maxHousePts) * 100)));
+                const isMine = h.house === playerHouse;
+                return `
+                  <div class="aaa-hourglass-card" data-house="${h.house}" data-player-house="${isMine}">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:4px;">
+                      <span style="font-size:13px;font-weight:800;">${idx === 0 ? '👑 ' : ''}${h.icon} ${h.house}</span>
+                      ${isMine ? `<span style="padding:1px 6px;border-radius:var(--radius-pill);background:var(--house-you-pill-bg);color:var(--house-you-pill-ink);font-size:10px;font-weight:800;">NHÀ BẠN</span>` : ''}
+                    </div>
+                    <div style="font-size:18px;font-weight:900;">${h.pts.toLocaleString('vi-VN')} đ</div>
+                    <div class="aaa-hourglass-tube">
+                      <div class="aaa-hourglass-fill" style="width:${pct}%;"></div>
+                    </div>
+                  </div>
+                `;
+              })
+              .join('')}
+          </div>
+          <progress max="${milestoneTarget}" value="${Math.min(milestoneTarget, localTotalPts)}" style="width:100%;"></progress>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
+            ${
+              canClaimCup
+                ? `<button id="btnClaimHouseCup" type="button" class="brass-btn gold-cta" style="flex:1;">🏆 Nhận Thưởng Cúp Đợt ${st.houseCupMilestoneTier}</button>`
+                : ''
+            }
+            <button id="btnSyncServerHouseCup" type="button" class="brass-btn" style="font-size:12px;">🔄 Đồng Bộ Bảng Tuần HPVN</button>
+          </div>
+        </div>
+      `;
+    } else if (hud.activeAlbumTab === 'achievements') {
+      const nowAch = Date.now();
+      const metricByCat: Record<AchievementCategory, number> = {
+        farm: getCategoryMetricValue(st, 'farm', nowAch),
+        building: getCategoryMetricValue(st, 'building', nowAch),
+        puzzle: getCategoryMetricValue(st, 'puzzle', nowAch),
+        language: getCategoryMetricValue(st, 'language', nowAch),
+        social: getCategoryMetricValue(st, 'social', nowAch),
+        collection: getCategoryMetricValue(st, 'collection', nowAch),
+      };
+      bodyHtml = `
+        <div class="quest-card-mini" style="padding:12px;margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <strong>🎖️ Sổ Vàng 52 Thành Tựu Hang Sóc</strong>
+            <span style="font-size:12px;font-weight:800;color:var(--ink-gold);">Hoàn thành ${codex.completionPct}% (${codex.unlocked}/${codex.total})</span>
+          </div>
+          <progress max="${codex.total}" value="${codex.unlocked}" style="width:100%;"></progress>
+        </div>
+        <div class="aaa-codex-scroll">
+          ${ACHIEVEMENT_REGISTRY.map((def) => {
+            const entry = ret.achievements[def.id];
+            const unlocked = Boolean(entry?.unlockedAt);
+            const claimed = Boolean(entry?.claimedAt);
+            const curVal = Math.min(def.target, Math.max(0, metricByCat[def.category] ?? 0));
+            const curLabel = curVal.toLocaleString('vi-VN');
+            const targetLabel = def.target.toLocaleString('vi-VN');
+            return `
+              <div class="aaa-ach-card" data-unlocked="${unlocked}">
+                <div style="display:flex;align-items:center;gap:9px;min-width:0;flex:1;">
+                  <span style="font-size:22px;">${def.icon}</span>
+                  <div style="min-width:0;flex:1;">
+                    <div style="font-size:13px;font-weight:800;">${def.titleVi}</div>
+                    <div style="font-size:11.5px;color:var(--ink-soft);">${def.descVi} • Thưởng <strong>+${def.rewardGalleons}G, +${def.rewardStars} 🌟</strong></div>
+                    ${
+                      unlocked
+                        ? ''
+                        : `<progress max="${def.target}" value="${curVal}" style="width:100%;max-width:220px;height:6px;margin-top:4px;"></progress>`
+                    }
+                  </div>
+                </div>
+                <div style="flex-shrink:0;text-align:right;">
+                  ${
+                    claimed
+                      ? `<span style="font-size:11.5px;font-weight:800;color:var(--farm-green-text);">✓ Đã nhận</span>`
+                      : unlocked
+                        ? `<button type="button" data-claim-ach="${def.id}" class="brass-btn gold-cta" style="padding:4px 10px;font-size:11.5px;">🎁 Nhận</button>`
+                        : `<span style="font-size:11px;font-weight:700;color:var(--ink-soft);">🔒 ${curLabel}/${targetLabel}</span>`
+                  }
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    } else if (hud.activeAlbumTab === 'friendship') {
+      const period = hud.sim.getRealTimePeriod();
+      const todayKey = getLocalDateKey();
+      bodyHtml = `
+        <div class="quest-card-mini" style="padding:12px;margin-bottom:10px;">
+          <div style="font-size:13.5px;font-weight:800;margin-bottom:8px;">🎬 Ký Ức Phim Cốt Truyện Hang Sóc</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;">
+            ${STORY_CUTSCENE_CHAPTERS.map((chap) => {
+              const unlocked = st.level >= chap.unlockLevel || hud.sim.isHeadmasterPreview;
+              return `
+                <div class="aaa-slot-card">
+                  <div style="font-size:12.5px;font-weight:800;">${chap.titleVi}</div>
+                  <div style="font-size:11px;color:var(--ink-soft);">Yêu cầu: Cấp ${chap.unlockLevel}</div>
+                  <button type="button" data-play-cutscene="${chap.id}" ${unlocked ? '' : 'disabled'} class="brass-btn ${unlocked ? 'gold-cta' : ''}" style="font-size:11.5px;padding:4px 8px;">
+                    ${unlocked ? '🎬 Phát Phim Camera' : `🔒 Mở ở Cấp ${chap.unlockLevel}`}
+                  </button>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+        <div class="aaa-codex-scroll">
+          ${VALLEY_VILLAGER_PROFILES.map((v) => {
+            const sched = getNpcScheduleForPeriod(v.id, period);
+            const f = ret.npcFriendship[v.id] ?? { villagerId: v.id, level: 1, xp: 0 };
+            const nextXp = f.level * 60;
+            const talkedToday = f.lastTalkedDayKey === todayKey;
+            return `
+              <div class="aaa-slot-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                  <div>
+                    <strong style="font-size:13.5px;">${v.moodBubble} ${v.nameVi}</strong>
+                    <span style="font-size:11.5px;color:var(--ink-soft);"> • ${v.titleVi}</span>
+                  </div>
+                  <span style="font-size:12px;font-weight:800;color:var(--berry);">💝 Cấp ${f.level}/10 (${f.xp}/${nextXp})</span>
+                </div>
+                <div style="font-size:12px;color:var(--ink-soft);">🕒 Hiện tại: ${sched.activityVi}</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                  <button type="button" data-npc-talk="${v.id}" data-choice="0" ${talkedToday ? 'disabled' : ''} class="brass-btn" style="font-size:11.5px;padding:4px 9px;">
+                    ${talkedToday ? '✓ Đã trò chuyện hôm nay' : '☕ Hỏi thăm ấm áp (+35 XP)'}
+                  </button>
+                  ${
+                    talkedToday
+                      ? ''
+                      : `<button type="button" data-npc-talk="${v.id}" data-choice="1" class="brass-btn" style="font-size:11.5px;padding:4px 9px;">🪄 Bàn ý tưởng mới (+25 XP)</button>`
+                  }
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    } else {
+      bodyHtml = `
+        <div class="quest-card-mini" style="padding:12px;">
+          <div style="font-size:14px;font-weight:800;margin-bottom:8px;">📅 Lịch Quà Điểm Danh 7 Ngày Bà Molly</div>
+          <div class="aaa-slot-grid">
+            ${DAY_1_TO_7_REWARDS.map((d) => {
+              const claimed = ret.claimedLoginDays.includes(d.day);
+              const canClaim = !claimed && d.day <= maxLoginDay;
+              return `
+                <div class="aaa-slot-card">
+                  <div style="font-size:12.5px;font-weight:800;">${d.titleVi}</div>
+                  <div style="font-size:11.5px;color:var(--ink-soft);">
+                    +${d.galleons}G • +${d.magicStars} 🌟${d.phoenixTalismans > 0 ? ` • +${d.phoenixTalismans} 🔥` : ''}
+                  </div>
+                  ${
+                    claimed
+                      ? `<span style="font-size:11.5px;font-weight:800;color:var(--farm-green-text);">✓ Đã nhận quà</span>`
+                      : `<button type="button" data-claim-login="${d.day}" ${canClaim ? '' : 'disabled'} class="brass-btn ${canClaim ? 'gold-cta' : ''}" style="font-size:11.5px;padding:4px 8px;">
+                          ${canClaim ? '🎁 Nhận Ngay' : `🔒 Mở kế tiếp`}
+                        </button>`
+                  }
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    box.innerHTML = tabsHtml + bodyHtml;
+
+    box.querySelectorAll<HTMLButtonElement>('[data-atab]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        hud.activeAlbumTab = btn.dataset.atab as GameHUD['activeAlbumTab'];
+        questsUiRenderAlbumDialog(hud);
+      });
+    });
 
     box.querySelector('#btnClaimHouseCup')?.addEventListener('click', () => {
       if (hud.sim.claimHouseCupReward()) {
         questsUiRenderAlbumDialog(hud);
       }
+    });
+
+    box.querySelector('#btnSyncServerHouseCup')?.addEventListener('click', async () => {
+      try {
+        const mod = await import('./authoritativeClient');
+        if (typeof mod.fetchWeeklyHouseCupStandingsOnline === 'function') {
+          const snap = await mod.fetchWeeklyHouseCupStandingsOnline();
+          if (snap) {
+            st.weeklyHouseCupServerStandings = snap;
+            hud.sim.saveToStorage();
+            hud.showToast(`🏆 Đã đồng bộ Bảng Cúp 4 Nhà tuần ${snap.weekKey}!`, '🏆');
+            questsUiRenderAlbumDialog(hud);
+            return;
+          }
+        }
+        hud.showToast('Đang hiển thị điểm Cúp 4 Nhà tại Thung Lũng của bạn!', '🏆');
+      } catch {
+        hud.showToast('Chưa kết nối máy chủ HPVN — đang dùng bảng điểm cục bộ.', '🦉');
+      }
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-claim-ach]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const res = hud.sim.claimAchievement(String(btn.dataset.claimAch));
+        hud.showToast(res.msg, res.ok ? '🎖️' : '⚠️');
+        questsUiRenderAlbumDialog(hud);
+      });
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-play-cutscene]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        hud.playStoryCutscene(String(btn.dataset.playCutscene));
+      });
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-npc-talk]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const vid = btn.dataset.npcTalk as (typeof VALLEY_VILLAGER_PROFILES)[number]['id'];
+        const choice = Number(btn.dataset.choice) === 1 ? 1 : 0;
+        const res = hud.sim.talkWithVillagerChoice(vid, choice);
+        hud.showToast(res.msg, res.ok ? '💝' : '☕');
+        questsUiRenderAlbumDialog(hud);
+      });
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-claim-login]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const res = hud.sim.claimLoginDayReward(Number(btn.dataset.claimLogin));
+        hud.showToast(res.msg, res.ok ? '📅' : '🔒');
+        questsUiRenderAlbumDialog(hud);
+      });
     });
 }
 
@@ -830,10 +1107,15 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
               <span>✨ Hiện lưới ô</span>
               <input id="swGrid" type="checkbox" switch ${st.settings.showGrid ? 'checked' : ''} />
             </label>
-            <label class="switch-row">
-              <span>♾️ Sandbox</span>
-              <input id="swSandbox" type="checkbox" switch ${st.sandboxMode ? 'checked' : ''} />
-            </label>
+            ${
+              Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV) ||
+              (typeof window !== 'undefined' && isLocalDevelopmentHost(window.location.hostname))
+                ? `<label class="switch-row">
+                    <span>♾️ Sandbox (Dev)</span>
+                    <input id="swSandbox" type="checkbox" switch ${st.sandboxMode ? 'checked' : ''} />
+                  </label>`
+                : ''
+            }
           </div>
         </div>
 
@@ -893,20 +1175,143 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
       </div>
 
       <div class="quest-card-mini" style="margin-bottom:14px;">
+        <div style="font-size:13.5px;font-weight:800;margin-bottom:8px;">🎚️ Bàn Trộn Âm Thanh 4 Kênh &amp; Tiếp Cận (A11y)</div>
+        ${(() => {
+          const a11y = hud.getEffectiveA11ySettings();
+          const volRows: Array<{ key: 'master' | 'music' | 'sfx' | 'voice'; label: string }> = [
+            { key: 'master', label: '🔊 Tổng (Master)' },
+            { key: 'music', label: '🎼 Nhạc nền' },
+            { key: 'sfx', label: '🔔 Hiệu ứng' },
+            { key: 'voice', label: '🗣️ Giọng đọc' },
+          ];
+          return `
+            <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
+              ${volRows
+                .map((r) => {
+                  const pct = Math.round((a11y.volumes[r.key] ?? 0.85) * 100);
+                  return `
+                    <label class="aaa-slider-row">
+                      <span>${r.label}</span>
+                      <input type="range" min="0" max="100" value="${pct}" data-vol-bus="${r.key}" />
+                      <span data-vol-val="${r.key}">${pct}%</span>
+                    </label>
+                  `;
+                })
+                .join('')}
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px;">
+              <span style="font-size:12px;font-weight:700;">🎨 Chế độ màu:</span>
+              ${(
+                [
+                  ['none', 'Mặc định'],
+                  ['protanopia', 'Đỏ-Lục (P)'],
+                  ['deuteranopia', 'Lục-Đỏ (D)'],
+                  ['tritanopia', 'Xanh-Vàng (T)'],
+                ] as const
+              )
+                .map(
+                  ([mode, lbl]) =>
+                    `<button type="button" data-cb-mode="${mode}" data-active="${a11y.colorblindMode === mode}" aria-pressed="${a11y.colorblindMode === mode}" class="brass-btn" style="padding:3px 8px;font-size:11.5px;">${lbl}</button>`
+                )
+                .join('')}
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+              <span style="font-size:12px;font-weight:700;">🔠 Cỡ chữ:</span>
+              ${([100, 125, 150] as const)
+                .map(
+                  (sc) =>
+                    `<button type="button" data-font-scale="${sc}" data-active="${a11y.fontScale === sc}" aria-pressed="${a11y.fontScale === sc}" class="brass-btn" style="padding:3px 8px;font-size:11.5px;">${sc}%</button>`
+                )
+                .join('')}
+              <label class="switch-row" style="margin-left:auto;gap:6px;">
+                <span style="font-size:12px;">⚡ Tương phản cao</span>
+                <input id="swHighContrast" type="checkbox" switch ${a11y.highContrast ? 'checked' : ''} />
+              </label>
+            </div>
+          `;
+        })()}
+      </div>
+
+      <div class="quest-card-mini" style="margin-bottom:14px;">
+        <div style="font-size:13.5px;font-weight:800;margin-bottom:6px;">📐 Kiến Trúc Sư Điền Trang (Bố Cục &amp; Cất Nhanh)</div>
+        <div class="aaa-slot-grid" style="margin-bottom:8px;">
+          ${(['layout_1', 'layout_2', 'layout_3'] as LayoutPresetId[])
+            .map((pid, idx) => {
+              const saved = st.layoutPresets?.[pid];
+              const title = saved ? saved.label : `Bản Vẽ #${idx + 1}`;
+              return `
+                <div class="aaa-slot-card">
+                  <div style="font-size:12px;font-weight:800;">${title}</div>
+                  <div style="font-size:11px;color:var(--ink-soft);">${
+                    saved ? `${saved.placements.length} công trình đã lưu` : 'Chưa lưu vị trí'
+                  }</div>
+                  <div style="display:flex;gap:5px;">
+                    <button type="button" data-save-layout="${pid}" class="brass-btn" style="flex:1;padding:3px 6px;font-size:11px;">💾 Lưu</button>
+                    <button type="button" data-load-layout="${pid}" ${saved ? '' : 'disabled'} class="brass-btn ${saved ? 'gold-cta' : ''}" style="flex:1;padding:3px 6px;font-size:11px;">📐 Áp dụng</button>
+                  </div>
+                </div>
+              `;
+            })
+            .join('')}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          <button id="btnStashDecor" type="button" class="brass-btn">📦 Cất Nhanh Trang Trí</button>
+          <button id="btnRestoreDecor" type="button" class="brass-btn gold-cta">
+            🌸 Bày Lại Trang Trí (${Object.values(st.stashedDecorInventory ?? {}).reduce((a, b) => a + b, 0)})
+          </button>
+        </div>
+      </div>
+
+      <div class="quest-card-mini" style="margin-bottom:14px;">
+        <div style="font-size:13.5px;font-weight:800;margin-bottom:6px;">🗂️ 3 Hồ Sơ Lưu Game Độc Lập</div>
+        <div class="aaa-slot-grid">
+          ${(['slot_1', 'slot_2', 'slot_3'] as SaveSlotId[])
+            .map((sid, idx) => {
+              const info = loadFromNamedSlot(sid);
+              return `
+                <div class="aaa-slot-card">
+                  <div style="font-size:12px;font-weight:800;">Hồ Sơ #${idx + 1}</div>
+                  <div style="font-size:11px;color:var(--ink-soft);">${
+                    info.ok && info.meta
+                      ? `${info.meta.parkName} • Cấp ${info.meta.level}`
+                      : 'Ô trống'
+                  }</div>
+                  <div style="display:flex;gap:5px;">
+                    <button type="button" data-save-slot="${sid}" class="brass-btn" style="flex:1;padding:3px 6px;font-size:11px;">💾 Ghi</button>
+                    <button type="button" data-load-slot="${sid}" ${info.ok ? '' : 'disabled'} class="brass-btn ${info.ok ? 'gold-cta' : ''}" style="flex:1;padding:3px 6px;font-size:11px;">📂 Tải</button>
+                  </div>
+                </div>
+              `;
+            })
+            .join('')}
+        </div>
+      </div>
+
+      <div class="quest-card-mini" style="margin-bottom:14px;">
         <div style="font-size:13.5px;font-weight:800;margin-bottom:6px;">🔮 Tiện Ích</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;">
           <button id="btnReplayTutorial" type="button" class="brass-btn gold-cta">
             📖 Hướng Dẫn
           </button>
-          <button id="btnPreview100" type="button" class="brass-btn gold-cta">
-            ${hud.sim.isHeadmasterPreview ? '↩️ Về Save' : '🌾 Xem Lv.100'}
-          </button>
+          ${
+            Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV) ||
+            (typeof window !== 'undefined' && isLocalDevelopmentHost(window.location.hostname))
+              ? `<button id="btnPreview100" type="button" class="brass-btn gold-cta">
+                  ${hud.sim.isHeadmasterPreview ? '↩️ Về Save' : '🌾 Xem Lv.100'}
+                </button>`
+              : ''
+          }
           <button id="btnTestFireworks" type="button" class="brass-btn">
             🎆 Pháo Hoa
           </button>
-          <button id="btnTestEscape" type="button" class="brass-btn">
-            🐾 Thả Niffler
-          </button>
+          ${
+            Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV) ||
+            (typeof window !== 'undefined' && isLocalDevelopmentHost(window.location.hostname))
+              ? `<button id="btnTestEscape" type="button" class="brass-btn">
+                  🐾 Thả Niffler
+                </button>`
+              : ''
+          }
         </div>
       </div>
 
@@ -914,11 +1319,16 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
         <div style="font-size:13.5px;font-weight:800;margin-bottom:6px;">💾 Dữ Liệu</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;">
           <button id="btnExportSave" type="button" class="brass-btn">📥 Xuất (.json)</button>
-          <label class="brass-btn" style="cursor:pointer;">
-            📤 Nhập (.json)
-            <input id="inpImportSave" type="file" accept=".json" style="display:none;" />
-          </label>
-          <button id="btnResetPark" type="button" class="brass-btn" style="border-color:#ef4444;color:#fecaca;">
+          ${
+            Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV) ||
+            (typeof window !== 'undefined' && isLocalDevelopmentHost(window.location.hostname))
+              ? `<label class="brass-btn" style="cursor:pointer;">
+                  📤 Nhập (.json)
+                  <input id="inpImportSave" type="file" accept=".json" style="display:none;" />
+                </label>`
+              : ''
+          }
+          <button id="btnResetPark" type="button" class="brass-btn" style="border-color:var(--aaa-danger-border);color:var(--aaa-danger-ink);">
             🌱 Chơi Lại
           </button>
         </div>
@@ -953,7 +1363,14 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
     });
 
     box.querySelector('#swSandbox')?.addEventListener('change', (e) => {
+      const devAllowed =
+        Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV) ||
+        (typeof window !== 'undefined' && isLocalDevelopmentHost(window.location.hostname));
+      if (!devAllowed) return;
       st.sandboxMode = (e.currentTarget as HTMLInputElement).checked;
+      if (st.sandboxMode) {
+        st.sandboxTainted = true;
+      }
       hud.sim.saveToStorage();
       hud.refreshAll();
     });
@@ -1015,6 +1432,7 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
 
     box.querySelector('#btnPreview100')?.addEventListener('click', () => {
       hud.match3Modal?.resetSession();
+      hud.puzzleArcadeModal?.resetSession();
       hud.sim.toggleHeadmasterPreview(100);
       hud.refreshAll();
       questsUiRenderSettingsDialog(hud);
@@ -1038,6 +1456,7 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
       reader.onload = () => {
         if (hud.sim.importSaveJson(String(reader.result))) {
           hud.match3Modal?.resetSession();
+          hud.puzzleArcadeModal?.resetSession();
           hud.showToast('Đã khôi phục công viên thành công!', '✨');
           (hud.root.querySelector('#settingsDialog') as HTMLDialogElement).close();
         } else {
@@ -1050,10 +1469,113 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
     box.querySelector('#btnResetPark')?.addEventListener('click', () => {
       if (window.confirm('Bạn có chắc muốn khởi tạo lại Trang Trại Hang Sóc từ đầu không?')) {
         hud.match3Modal?.resetSession();
+        hud.puzzleArcadeModal?.resetSession();
         hud.sim.resetNewGame();
         centerCameraOnGrid(hud.cam, 16.0, 18.0);
         (hud.root.querySelector('#settingsDialog') as HTMLDialogElement).close();
         hud.showToast('Chào mừng trở lại Trang Trại Hang Sóc bình yên!', '🏡');
       }
+    });
+
+    // Wire 4-Bus Audio Sliders, Colorblind, Font Scale, High Contrast, Layout Presets & Save Slots
+    box.querySelectorAll<HTMLInputElement>('[data-vol-bus]').forEach((inp) => {
+      inp.addEventListener('input', () => {
+        const bus = inp.dataset.volBus as 'master' | 'music' | 'sfx' | 'voice';
+        const val = Math.max(0, Math.min(1, Number(inp.value) / 100));
+        const cur = hud.getEffectiveA11ySettings();
+        cur.volumes[bus] = val;
+        st.a11ySettings = cur;
+        const lbl = box.querySelector(`[data-vol-val="${bus}"]`);
+        if (lbl) lbl.textContent = `${Math.round(val * 100)}%`;
+        hud.applyStoredA11ySettings();
+        hud.sim.saveToStorage();
+      });
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-cb-mode]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const cur = hud.getEffectiveA11ySettings();
+        cur.colorblindMode = btn.dataset.cbMode as typeof cur.colorblindMode;
+        st.a11ySettings = cur;
+        hud.applyStoredA11ySettings();
+        hud.sim.saveToStorage();
+        questsUiRenderSettingsDialog(hud);
+      });
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-font-scale]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const cur = hud.getEffectiveA11ySettings();
+        cur.fontScale = Number(btn.dataset.fontScale) as 100 | 125 | 150;
+        st.a11ySettings = cur;
+        hud.applyStoredA11ySettings();
+        hud.sim.saveToStorage();
+        questsUiRenderSettingsDialog(hud);
+      });
+    });
+
+    box.querySelector('#swHighContrast')?.addEventListener('change', (e) => {
+      const cur = hud.getEffectiveA11ySettings();
+      cur.highContrast = (e.currentTarget as HTMLInputElement).checked;
+      st.a11ySettings = cur;
+      hud.applyStoredA11ySettings();
+      hud.sim.saveToStorage();
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-save-layout]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const pid = btn.dataset.saveLayout as LayoutPresetId;
+        const entry = hud.sim.saveLayoutPreset(pid);
+        hud.showToast(`📐 Đã lưu "${entry.label}" (${entry.placements.length} công trình)!`, '📐');
+        questsUiRenderSettingsDialog(hud);
+      });
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-load-layout]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const pid = btn.dataset.loadLayout as LayoutPresetId;
+        const res = hud.sim.applyLayoutPreset(pid);
+        hud.showToast(res.msg, res.ok ? '📐' : '⚠️');
+        hud.refreshAll();
+        questsUiRenderSettingsDialog(hud);
+      });
+    });
+
+    box.querySelector('#btnStashDecor')?.addEventListener('click', () => {
+      const res = hud.sim.stashAllDecorItems();
+      hud.showToast(res.msg, res.ok ? '📦' : '⚠️');
+      hud.refreshAll();
+      questsUiRenderSettingsDialog(hud);
+    });
+
+    box.querySelector('#btnRestoreDecor')?.addEventListener('click', () => {
+      const res = hud.sim.restoreAllStashedDecor();
+      hud.showToast(res.msg, res.ok ? '🌸' : '⚠️');
+      hud.refreshAll();
+      questsUiRenderSettingsDialog(hud);
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-save-slot]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const sid = btn.dataset.saveSlot as SaveSlotId;
+        const meta = hud.sim.saveNamedProfileSlot(sid);
+        hud.showToast(`💾 Đã ghi ${meta.label} (Cấp ${meta.level})!`, '💾');
+        questsUiRenderSettingsDialog(hud);
+      });
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-load-slot]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const sid = btn.dataset.loadSlot as SaveSlotId;
+        const res = hud.sim.loadNamedProfileSlot(sid);
+        if (res.ok) {
+          hud.match3Modal?.resetSession();
+          hud.puzzleArcadeModal?.resetSession();
+          hud.applyStoredA11ySettings();
+          hud.refreshAll();
+          (hud.root.querySelector('#settingsDialog') as HTMLDialogElement).close();
+        }
+        hud.showToast(res.msg, res.ok ? '📂' : '⚠️');
+      });
     });
 }

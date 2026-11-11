@@ -714,6 +714,7 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
           .join('');
 
       const talCount = hud.sim.getPhoenixTalismanCount();
+      const talDaily = hud.sim.getPhoenixTalismanDailyStatus();
       const craftGood = hud.sim.getCraftablePhoenixBarnGood();
       const craftMeta = craftGood ? getFarmItemMeta(craftGood) : null;
       const canForgeTalisman =
@@ -744,6 +745,9 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
           <div class="barn-talisman-forge-meta">
             <div class="barn-talisman-forge-title">
               🔥 Bùa Phượng Hoàng (${st.sandboxMode ? '∞' : `${talCount}/${MAX_PHOENIX_TALISMANS}`})
+            </div>
+            <div style="font-size:11.5px;font-weight:700;opacity:0.84;margin-top:2px;">
+              Dùng tối đa 1 lần/môn/ngày • Hôm nay: ${talDaily.usedCount}/${talDaily.maxDaily} môn
             </div>
           </div>
           <button

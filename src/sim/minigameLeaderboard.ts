@@ -9,6 +9,7 @@ import {
   NeighborProfileState,
 } from '../types/game';
 import { isNpcNeighborProfile } from './neighborSocial';
+import { getCachedSessionBearerToken } from '../ui/cloudSave';
 
 export const SCORED_LEADERBOARD_GAMES: ReadonlyArray<LeaderboardGameId> = [
   'match3',
@@ -47,10 +48,10 @@ export interface LeaderboardGameMeta {
 export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMeta> = {
   match3: {
     id: 'match3',
-    icon: '🍓',
+    icon: '🍬',
     spriteIcon: '/sprites/m3_farm_pinwheel.png',
     shortVi: 'Bùa Gặt Honeydukes',
-    titleVi: 'Gác Xép Bùa Gặt Honeydukes',
+    titleVi: 'Bùa Gặt Honeydukes',
     cupTitleVi: 'Cúp Đại Sư Bùa Gặt Honeydukes (777 Màn)',
     subtitleVi: 'Xếp hạng theo Màn Đỉnh vượt qua, Điểm Bùa Gặt & Chuỗi Thắng Liên Tiếp',
     primaryColVi: 'Màn Đỉnh',
@@ -62,8 +63,8 @@ export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMet
     icon: '🗺️',
     spriteIcon: '/paintings/caro/phoenix_seal.png',
     shortVi: 'Ngũ Ấn Đạo Tặc',
-    titleVi: 'Trận Pháp Ngũ Ấn Đạo Tặc 13×13',
-    cupTitleVi: 'Cúp Chiến Lược Bản Đồ Đạo Tặc (777 Màn)',
+    titleVi: 'Ngũ Ấn Đạo Tặc',
+    cupTitleVi: 'Cúp Chiến Lược Ngũ Ấn Đạo Tặc (777 Màn)',
     subtitleVi: 'Xếp hạng theo Màn Đỉnh, Điểm Trận Pháp & Nước Thắng Nhanh Nhất',
     primaryColVi: 'Màn Đỉnh',
     secondaryColVi: 'Điểm Trận Pháp',
@@ -71,11 +72,11 @@ export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMet
   },
   sudoku: {
     id: 'sudoku',
-    icon: '🔮',
-    spriteIcon: '/paintings/sudoku/relic_1.png',
-    shortVi: 'Cửu Bảo Bối',
-    titleVi: 'Ma Trận Cửu Bảo Bối 9×9',
-    cupTitleVi: 'Cúp Bậc Thầy Giả Kim & Bảo Bối (777 Màn)',
+    icon: '🔢',
+    spriteIcon: '/sprites/m3_piece_scroll.png',
+    shortVi: 'Số Học Huyền Bí',
+    titleVi: 'Số Học Huyền Bí',
+    cupTitleVi: 'Cúp Bậc Thầy Số Học Huyền Bí (777 Màn)',
     subtitleVi: 'Xếp hạng theo Màn Đỉnh, Điểm Chuẩn Xác & Ván Không Sai Sót',
     primaryColVi: 'Màn Đỉnh',
     secondaryColVi: 'Điểm Chuẩn Xác',
@@ -86,8 +87,8 @@ export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMet
     icon: '🏰',
     spriteIcon: '/paintings/chess/wk.png',
     shortVi: 'Cờ Phù Thủy',
-    titleVi: 'Cờ Phù Thủy Đại Sảnh Đường 8×8',
-    cupTitleVi: 'Cúp Đại Kiện Tướng McGonagall (777 Màn)',
+    titleVi: 'Cờ Phù Thủy',
+    cupTitleVi: 'Cúp Đại Kiện Tướng Cờ Phù Thủy (777 Màn)',
     subtitleVi: 'Xếp hạng theo Màn Đỉnh, Điểm Kiện Tướng & Tốc Độ Chiếu Bí',
     primaryColVi: 'Màn Đỉnh',
     secondaryColVi: 'Điểm Kiện Tướng',
@@ -97,12 +98,12 @@ export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMet
     id: 'blocks',
     icon: '🦄',
     spriteIcon: '/sprites/beast_niffler.png',
-    shortVi: 'Nối Sinh Vật',
-    titleVi: 'Nối Hình Sinh Vật Huyền Bí',
-    cupTitleVi: 'Cúp Bảo Tồn Sinh Vật Huyền Bí (777 Màn Cổ Điển)',
+    shortVi: 'Sinh Vật Huyền Bí',
+    titleVi: 'Sinh Vật Huyền Bí',
+    cupTitleVi: 'Cúp Kiện Tướng Sinh Vật Huyền Bí (777 Màn)',
     subtitleVi: 'Xếp hạng theo Màn Đỉnh, Điểm Ghép Cặp & Kỷ Lục Chuỗi Combo',
     primaryColVi: 'Màn Đỉnh',
-    secondaryColVi: 'Điểm Linh Thú',
+    secondaryColVi: 'Điểm Sinh Vật',
     detailColVi: 'Thắng & Đỉnh Combo',
   },
   seedquiz: {
@@ -110,8 +111,8 @@ export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMet
     icon: '🪄',
     spriteIcon: '/sprites/ui_icon_accio.png',
     shortVi: 'Học Viện Thần Chú',
-    titleVi: 'Học Viện Thần Chú Đa Ngữ Hogwarts',
-    cupTitleVi: 'Cúp Thủ Khoa Cổ Ngữ 5 Bộ Môn (EN • KO • ZH • ES • JA)',
+    titleVi: 'Học Viện Thần Chú',
+    cupTitleVi: 'Cúp Thủ Khoa Học Viện Thần Chú (EN • KO • ZH • ES • JA)',
     subtitleVi: 'Xếp hạng theo Tổng Câu Thần Chú Đúng, Điểm Thông Thạo & Từ Thuộc Hộp 5 SRS',
     primaryColVi: 'Thần Chú Đúng',
     secondaryColVi: 'Điểm Thông Thạo',
@@ -715,14 +716,12 @@ export function buildHouseCupStandings(
   }));
 }
 
-export function buildMinigameLeaderboard(
+function buildRawPoolForScoredGame(
   state: GameState,
-  rawGameId: LeaderboardGameId,
-  scope: Exclude<LeaderboardScope, 'personal'> = 'valley',
-  extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>,
-  houseFilter: 'all' | HouseName = 'all'
-): LeaderboardStandingResult {
-  const gameId = normalizeScoredLeaderboardGame(rawGameId);
+  gameId: LeaderboardGameId,
+  scope: Exclude<LeaderboardScope, 'personal'>,
+  extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>
+): Array<Omit<LeaderboardRowEntry, 'rank'>> {
   const playerRaw = buildPlayerLeaderboardEntry(state, gameId);
   const neighbors = (state.neighborSocial?.neighbors ?? []).filter(
     (n) => !isNpcNeighborProfile(n)
@@ -787,9 +786,118 @@ export function buildMinigameLeaderboard(
     }
   }
 
+  return pool;
+}
+
+function buildUnifiedHouseCupStandings(
+  state: GameState,
+  scope: Exclude<LeaderboardScope, 'personal'>,
+  activeGameId: LeaderboardGameId,
+  extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>
+): HouseCupStanding[] {
+  const playerHouse = getPlayerHogwartsHouse(state);
+  const map = new Map<
+    HouseName,
+    {
+      house: HouseName;
+      memberKeys: Set<string>;
+      totalPrimaryValue: number;
+      totalWins: number;
+      points: number;
+    }
+  >();
+
+  for (const h of ALL_HOGWARTS_HOUSES) {
+    const valleyBonus = Math.max(0, Math.floor(state.housePoints?.[h] ?? 0));
+    map.set(h, {
+      house: h,
+      memberKeys: new Set<string>(),
+      totalPrimaryValue: 0,
+      totalWins: 0,
+      points: valleyBonus,
+    });
+  }
+
+  for (const gid of SCORED_LEADERBOARD_GAMES) {
+    const gPool = buildRawPoolForScoredGame(
+      state,
+      gid,
+      scope,
+      gid === activeGameId ? extraCloudEntries : undefined
+    );
+    for (const row of gPool) {
+      const h: HouseName = ALL_HOGWARTS_HOUSES.includes(row.house) ? row.house : 'Gryffindor';
+      const rec = map.get(h)!;
+      const memberKey = row.isPlayer
+        ? 'self'
+        : (row.friendCode || row.id).trim().toUpperCase();
+      rec.memberKeys.add(memberKey);
+      rec.totalPrimaryValue += Math.max(0, row.primaryValue);
+      rec.totalWins += Math.max(0, row.totalWins);
+      rec.points +=
+        Math.round(Math.max(0, row.ratingScore) / 10) +
+        Math.max(0, row.primaryValue) * 35 +
+        Math.max(0, row.totalWins) * 15 +
+        Math.max(0, row.bestStreak) * 10;
+    }
+  }
+
+  const rawList = ALL_HOGWARTS_HOUSES.map((h) => {
+    const item = map.get(h)!;
+    return {
+      house: item.house,
+      members: item.memberKeys.size,
+      totalPrimaryValue: item.totalPrimaryValue,
+      totalWins: item.totalWins,
+      points: item.points,
+    };
+  }).sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    if (b.totalPrimaryValue !== a.totalPrimaryValue) {
+      return b.totalPrimaryValue - a.totalPrimaryValue;
+    }
+    if (b.members !== a.members) return b.members - a.members;
+    if ((a.house === playerHouse) !== (b.house === playerHouse)) {
+      return a.house === playerHouse ? -1 : 1;
+    }
+    return ALL_HOGWARTS_HOUSES.indexOf(a.house) - ALL_HOGWARTS_HOUSES.indexOf(b.house);
+  });
+
+  const maxPts = Math.max(100, ...rawList.map((r) => r.points));
+
+  return rawList.map((item, idx) => ({
+    house: item.house,
+    rank: idx + 1,
+    meta: HOGWARTS_HOUSE_META[item.house],
+    members: item.members,
+    totalPrimaryValue: item.totalPrimaryValue,
+    totalWins: item.totalWins,
+    points: item.points,
+    fillPercent:
+      item.points <= 0
+        ? 10
+        : Math.max(12, Math.min(100, Math.round((item.points / maxPts) * 100))),
+    isPlayerHouse: item.house === playerHouse,
+  }));
+}
+
+export function buildMinigameLeaderboard(
+  state: GameState,
+  rawGameId: LeaderboardGameId,
+  scope: Exclude<LeaderboardScope, 'personal'> = 'valley',
+  extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>,
+  houseFilter: 'all' | HouseName = 'all'
+): LeaderboardStandingResult {
+  const gameId = normalizeScoredLeaderboardGame(rawGameId);
+  const pool = buildRawPoolForScoredGame(state, gameId, scope, extraCloudEntries);
   pool.sort(compareEntries);
 
-  const houseStandings = buildHouseCupStandings(state, pool);
+  const houseStandings = buildUnifiedHouseCupStandings(
+    state,
+    scope,
+    gameId,
+    extraCloudEntries
+  );
   const fullEntries: LeaderboardRowEntry[] = pool.map((item, idx) => ({
     ...item,
     rank: idx + 1,
@@ -891,7 +999,14 @@ export function recordMinigameSessionResult(
   const previousRank = previousRankFromSnapshot ?? beforeStanding?.playerRank ?? 1;
 
   const baseAfter = deriveBaseRecordFromState(state, gameId);
-  rec.bestStage = Math.max(rec.bestStage, baseAfter.bestStage, Math.floor(input.clearedStage ?? 0));
+  const prevBestStage = rec.bestStage;
+  const nextBestStage = Math.max(
+    rec.bestStage,
+    baseAfter.bestStage,
+    Math.floor(input.clearedStage ?? 0)
+  );
+  const advancedStage = nextBestStage > prevBestStage;
+  rec.bestStage = nextBestStage;
   rec.totalWins = Math.max(rec.totalWins, baseAfter.totalWins);
   rec.bestStreak = Math.max(
     rec.bestStreak,
@@ -918,21 +1033,26 @@ export function recordMinigameSessionResult(
   }
 
   // Recompute authoritative composite rating score for the 3 scored games (match3, sudoku, blocks)
+  // Cap effectiveWins relative to bestStage so spamming Stage 1 cannot farm infinite rating points!
   const effBonus =
     gameId === 'sudoku'
       ? rec.bestEfficiency !== undefined
         ? Math.max(0, (5 - rec.bestEfficiency) * 90)
         : 0
       : Math.round((rec.bestEfficiency ?? 0) * 0.25);
+  const effectiveWins = Math.min(rec.totalWins, rec.bestStage * 2 + 10);
   const computedRating = Math.max(
     baseAfter.highScore,
     rec.bestStage * 155 +
-      rec.totalWins * 28 +
+      effectiveWins * 28 +
       rec.bestStreak * 40 +
       Math.round(rec.bestSessionScore * 0.18) +
       effBonus
   );
-  rec.highScore = Math.max(rec.highScore + (sessionScore > 0 ? 15 : 8), computedRating);
+  rec.highScore = Math.max(
+    advancedStage ? rec.highScore + (sessionScore > 0 ? 15 : 8) : rec.highScore,
+    computedRating
+  );
   rec.updatedAt = input.nowMs ?? Date.now();
 
   const playerHouse = getPlayerHogwartsHouse(state);
@@ -1042,6 +1162,7 @@ export async function submitPlayerCloudLeaderboardEntry(
   endpoint = '/api/leaderboard'
 ): Promise<void> {
   if (!isScoredLeaderboardGame(gameId)) return;
+  if (state.sandboxMode || state.sandboxTainted) return;
   if (typeof window === 'undefined' || typeof fetch === 'undefined') return;
   // Avoid noisy network calls in Vitest / headless JSDOM
   if (typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent || '')) return;
@@ -1049,6 +1170,7 @@ export async function submitPlayerCloudLeaderboardEntry(
   try {
     const player = buildPlayerLeaderboardEntry(state, gameId);
     const userId = getClientLeaderboardUserId();
+    const bearer = getCachedSessionBearerToken();
     const payload = {
       gameId,
       entry: {
@@ -1068,12 +1190,16 @@ export async function submitPlayerCloudLeaderboardEntry(
     };
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 3500);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-User-Id': userId,
+    };
+    if (bearer) {
+      headers.Authorization = `Bearer ${bearer}`;
+    }
     const res = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-User-Id': userId,
-      },
+      headers,
       body: JSON.stringify(payload),
       signal: controller.signal,
     });

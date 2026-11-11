@@ -4,17 +4,28 @@
 // 3. Lịch trình NPC theo buổi (dawn/day/dusk/night), tâm trạng, hội thoại 2 lựa chọn, Tình Bạn (Lv.1..10),
 //    3 Chương Cốt Truyện kèm Canvas Cutscene nhẹ & Vòng lặp Điểm Danh Ngày 1 → Ngày 7
 
-import { GameState, ValleyVillagerId } from '../types/game';
+import { getCatalogItem } from '../data/catalog';
+import { CREATURE_SPECIES_PROFILES } from '../data/suitcase';
+import { getLocalCalendarResetKey } from './neighborSocial';
+import {
+  AchievementCategory,
+  AchievementProgressEntry,
+  GameState,
+  NpcFriendshipEntry,
+  RetentionNarrativeState,
+  SaveSlotId,
+  ValleyVillagerId,
+} from '../types/game';
+
+export type {
+  AchievementCategory,
+  AchievementProgressEntry,
+  NpcFriendshipEntry,
+  RetentionNarrativeState,
+  SaveSlotId,
+};
 
 export type VillagerId = ValleyVillagerId;
-
-export type AchievementCategory =
-  | 'farm'
-  | 'building'
-  | 'puzzle'
-  | 'language'
-  | 'social'
-  | 'collection';
 
 export interface AchievementDef {
   id: string;
@@ -26,30 +37,6 @@ export interface AchievementDef {
   rewardGalleons: number;
   rewardStars: number;
 }
-
-export interface AchievementProgressEntry {
-  unlockedAt?: number;
-  claimedAt?: number;
-}
-
-export interface NpcFriendshipEntry {
-  villagerId: VillagerId;
-  level: number; // 1..10
-  xp: number;
-  lastTalkedDayKey?: string;
-}
-
-export interface RetentionNarrativeState {
-  schemaVersion: number;
-  achievements: Record<string, AchievementProgressEntry>;
-  pendingToasts: string[];
-  npcFriendship: Record<string, NpcFriendshipEntry>;
-  unlockedStoryChapters: string[];
-  claimedLoginDays: number[]; // [1..7]
-  activeSaveSlotId: SaveSlotId;
-}
-
-export type SaveSlotId = 'slot_1' | 'slot_2' | 'slot_3' | 'autosave';
 
 export interface SaveSlotMetadata {
   slotId: SaveSlotId;
@@ -63,7 +50,18 @@ export interface SaveSlotMetadata {
 
 export type CloudConflictPolicy = 'newest' | 'highest_progress' | 'local' | 'remote';
 
-export const CURRENT_SAVE_SCHEMA_VERSION = 12;
+export const CURRENT_SAVE_SCHEMA_VERSION = 13;
+
+const STARTER_PLOT_UIDS = new Set<string>([
+  'burrow_plot_wheat',
+  'burrow_plot_empty',
+  'burrow_pasture_hen',
+  'burrow_pasture_empty',
+]);
+
+const MAGICAL_CREATURE_HABITAT_IDS = new Set<string>(
+  CREATURE_SPECIES_PROFILES.map((sp) => sp.habitatItemId)
+);
 
 const CATEGORY_SPECS: Array<{
   cat: AchievementCategory;
@@ -75,14 +73,14 @@ const CATEGORY_SPECS: Array<{
   {
     cat: 'farm',
     prefixVi: 'Bậc Thầy Mùa Vụ',
-    descTemplateVi: 'Thu hoạch nông sản & chăm sóc đồng cỏ đạt mốc',
+    descTemplateVi: 'Thu hoạch ruộng vườn, đồng cỏ & chăm thú đạt mốc',
     icon: '🌾',
     targets: [10, 30, 75, 150, 300, 600, 1000, 2000, 4000],
   },
   {
     cat: 'building',
     prefixVi: 'Kiến Trúc Sư Hang Sóc',
-    descTemplateVi: 'Xây dựng & nâng cấp sao công trình đạt mốc',
+    descTemplateVi: 'Hoàn thành xây dựng công trình & nâng cấp sao đạt mốc',
     icon: '🏰',
     targets: [2, 5, 10, 16, 24, 35, 50, 70, 100],
   },
@@ -96,21 +94,21 @@ const CATEGORY_SPECS: Array<{
   {
     cat: 'language',
     prefixVi: 'Học Giả Đa Ngữ',
-    descTemplateVi: 'Thuộc lòng cổ ngữ trong Học Viện Thần Chú đạt mốc',
+    descTemplateVi: 'Giải đúng câu hỏi tại Học Viện Thần Chú đạt mốc',
     icon: '📖',
     targets: [3, 10, 25, 50, 90, 140, 210, 300, 420],
   },
   {
     cat: 'social',
     prefixVi: 'Đại Sứ Thung Lũng',
-    descTemplateVi: 'Tương trợ hàng xóm & hoàn thành Đơn Hàng Cú đạt mốc',
+    descTemplateVi: 'Tương trợ hàng xóm & giao Đơn Hàng Cú đạt mốc',
     icon: '🦉',
     targets: [1, 4, 10, 20, 40, 75, 120, 200],
   },
   {
     cat: 'collection',
     prefixVi: 'Nhà Sưu Tập Phép Thuật',
-    descTemplateVi: 'Sưu tầm thẻ Ếch Sô-cô-la & sinh vật huyền bí đạt mốc',
+    descTemplateVi: 'Sưu tầm sinh vật huyền bí, tranh kỷ niệm & giống cây thông thạo đạt mốc',
     icon: '🐸',
     targets: [1, 3, 6, 10, 16, 24, 35, 50],
   },
@@ -141,6 +139,7 @@ function buildAchievementRegistry(): AchievementDef[] {
 }
 
 export const ACHIEVEMENT_REGISTRY: ReadonlyArray<AchievementDef> = buildAchievementRegistry();
+const VALID_ACHIEVEMENT_IDS = new Set<string>(ACHIEVEMENT_REGISTRY.map((a) => a.id));
 
 export function createDefaultRetentionState(): RetentionNarrativeState {
   const npcFriendship: Record<string, NpcFriendshipEntry> = {};
@@ -160,13 +159,23 @@ export function createDefaultRetentionState(): RetentionNarrativeState {
 }
 
 export function ensureRetentionState(state: GameState): RetentionNarrativeState {
-  const holder = state as GameState & { retention?: RetentionNarrativeState };
-  if (!holder.retention) {
-    holder.retention = createDefaultRetentionState();
-  } else {
-    holder.retention = migrateRetentionState(holder.retention);
+  if (!state.retention) {
+    state.retention = createDefaultRetentionState();
+    return state.retention;
   }
-  return holder.retention;
+  if (
+    state.retention.schemaVersion !== CURRENT_SAVE_SCHEMA_VERSION ||
+    !state.retention.achievements ||
+    typeof state.retention.achievements !== 'object' ||
+    !Array.isArray(state.retention.pendingToasts) ||
+    !state.retention.npcFriendship ||
+    typeof state.retention.npcFriendship !== 'object' ||
+    !Array.isArray(state.retention.unlockedStoryChapters) ||
+    !Array.isArray(state.retention.claimedLoginDays)
+  ) {
+    state.retention = migrateRetentionState(state.retention);
+  }
+  return state.retention;
 }
 
 export function migrateRetentionState(
@@ -174,68 +183,244 @@ export function migrateRetentionState(
 ): RetentionNarrativeState {
   const base = createDefaultRetentionState();
   if (!raw || typeof raw !== 'object') return base;
+
+  const cleanAchievements: Record<string, AchievementProgressEntry> = {};
+  if (raw.achievements && typeof raw.achievements === 'object') {
+    for (const [achId, val] of Object.entries(raw.achievements)) {
+      if (!VALID_ACHIEVEMENT_IDS.has(achId) || !val || typeof val !== 'object') continue;
+      const rec = val as AchievementProgressEntry;
+      const entry: AchievementProgressEntry = {};
+      if (typeof rec.unlockedAt === 'number' && Number.isFinite(rec.unlockedAt) && rec.unlockedAt > 0) {
+        entry.unlockedAt = Math.round(rec.unlockedAt);
+      }
+      if (typeof rec.claimedAt === 'number' && Number.isFinite(rec.claimedAt) && rec.claimedAt > 0) {
+        entry.claimedAt = Math.round(rec.claimedAt);
+      }
+      if (typeof rec.notifiedAt === 'number' && Number.isFinite(rec.notifiedAt) && rec.notifiedAt > 0) {
+        entry.notifiedAt = Math.round(rec.notifiedAt);
+      }
+      if (entry.unlockedAt || entry.claimedAt) {
+        cleanAchievements[achId] = entry;
+      }
+    }
+  }
+
+  const cleanToasts = Array.isArray(raw.pendingToasts)
+    ? Array.from(
+        new Set(
+          raw.pendingToasts.filter(
+            (id): id is string =>
+              typeof id === 'string' &&
+              VALID_ACHIEVEMENT_IDS.has(id) &&
+              !cleanAchievements[id]?.notifiedAt
+          )
+        )
+      )
+    : [];
+
+  const validSlots: SaveSlotId[] = ['slot_1', 'slot_2', 'slot_3', 'autosave'];
+  const slotId: SaveSlotId =
+    typeof raw.activeSaveSlotId === 'string' && validSlots.includes(raw.activeSaveSlotId as SaveSlotId)
+      ? (raw.activeSaveSlotId as SaveSlotId)
+      : 'slot_1';
+
   return {
     schemaVersion: CURRENT_SAVE_SCHEMA_VERSION,
-    achievements: raw.achievements && typeof raw.achievements === 'object' ? { ...raw.achievements } : {},
-    pendingToasts: Array.isArray(raw.pendingToasts) ? [...raw.pendingToasts] : [],
+    achievements: cleanAchievements,
+    pendingToasts: cleanToasts,
     npcFriendship: {
       ...base.npcFriendship,
       ...(raw.npcFriendship && typeof raw.npcFriendship === 'object' ? raw.npcFriendship : {}),
     },
-    unlockedStoryChapters: Array.isArray(raw.unlockedStoryChapters) && raw.unlockedStoryChapters.length > 0
-      ? [...raw.unlockedStoryChapters]
-      : ['chap_1_burrow_dawn'],
-    claimedLoginDays: Array.isArray(raw.claimedLoginDays) ? [...raw.claimedLoginDays] : [],
-    activeSaveSlotId: raw.activeSaveSlotId ?? 'slot_1',
+    unlockedStoryChapters:
+      Array.isArray(raw.unlockedStoryChapters) && raw.unlockedStoryChapters.length > 0
+        ? Array.from(
+            new Set(raw.unlockedStoryChapters.filter((c): c is string => typeof c === 'string'))
+          )
+        : ['chap_1_burrow_dawn'],
+    claimedLoginDays: Array.isArray(raw.claimedLoginDays)
+      ? Array.from(
+          new Set(
+            raw.claimedLoginDays.filter(
+              (d): d is number => typeof d === 'number' && Number.isInteger(d) && d >= 1 && d <= 7
+            )
+          )
+        )
+      : [],
+    ...(typeof raw.lastLoginClaimDayKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.lastLoginClaimDayKey)
+      ? { lastLoginClaimDayKey: raw.lastLoginClaimDayKey }
+      : {}),
+    activeSaveSlotId: slotId,
   };
 }
 
-export function getCategoryMetricValue(state: GameState, category: AchievementCategory): number {
+export function getCategoryMetricValue(
+  state: GameState,
+  category: AchievementCategory,
+  now = Date.now()
+): number {
   switch (category) {
-    case 'farm':
-      return Math.floor((state.stats?.totalGalleonsHarvested ?? 0) / 10) + (state.stats?.creaturesFed ?? 0);
-    case 'building':
-      return (state.buildings?.length ?? 0) + (state.stats?.starUpgradesDone ?? 0);
-    case 'puzzle':
-      return (
-        (state.stats?.minigamesWon ?? 0) +
-        (state.match3?.maxClearedLevel ?? state.match3?.levelsWon ?? 0)
+    case 'farm': {
+      const masteryHarvests = state.cropMastery
+        ? Object.values(state.cropMastery).reduce(
+            (acc, cnt) => acc + (typeof cnt === 'number' && Number.isFinite(cnt) && cnt > 0 ? Math.floor(cnt) : 0),
+            0
+          )
+        : 0;
+      const realHarvests = Math.max(
+        Math.max(0, Math.floor(state.stats?.farmHarvestsCount ?? 0)),
+        masteryHarvests
       );
+      const harvestProgress =
+        realHarvests > 0
+          ? realHarvests
+          : Math.floor(Math.max(0, state.stats?.totalGalleonsHarvested ?? 0) / 40);
+      return harvestProgress + Math.max(0, Math.floor(state.stats?.creaturesFed ?? 0));
+    }
+    case 'building': {
+      let completedArchBuildings = 0;
+      for (const b of state.buildings ?? []) {
+        if (!b || STARTER_PLOT_UIDS.has(b.uid)) continue;
+        if (!state.sandboxMode && b.builtInSandbox) continue;
+        if (b.awaitingUnveil) continue;
+        if (typeof b.constructEndsAt === 'number' && b.constructEndsAt > now) continue;
+        const item = getCatalogItem(b.itemId);
+        if (!item || item.isFarmlandPlot || item.isAnimalPasturePlot) continue;
+        completedArchBuildings++;
+      }
+      return completedArchBuildings + Math.max(0, Math.floor(state.stats?.starUpgradesDone ?? 0));
+    }
+    case 'puzzle': {
+      const clearedStagesSum =
+        Math.max(0, Math.floor(state.match3?.maxClearedLevel ?? 0)) +
+        Math.max(0, Math.floor(state.puzzleArcade?.sudokuCleared ?? 0)) +
+        Math.max(0, Math.floor(state.puzzleArcade?.caroCleared ?? 0)) +
+        Math.max(0, Math.floor(state.puzzleArcade?.chessCleared ?? 0)) +
+        Math.max(0, Math.floor(state.puzzleArcade?.blockCleared ?? 0));
+      return Math.max(Math.max(0, Math.floor(state.stats?.minigamesWon ?? 0)), clearedStagesSum);
+    }
     case 'language': {
       const profiles = state.languageQuiz?.profiles;
       if (!profiles) return 0;
-      return Object.values(profiles).reduce((acc, p) => acc + (p?.totalCorrect ?? 0), 0);
+      return Object.values(profiles).reduce(
+        (acc, p) => acc + Math.max(0, Math.floor(p?.totalCorrect ?? 0)),
+        0
+      );
     }
-    case 'social':
-      return (
-        (state.neighborSocial?.friendshipTokens ?? 0) +
-        (state.farmBarn?.ordersDelivered ?? 0)
+    case 'social': {
+      const legacyHelps =
+        Math.max(0, Math.floor(state.neighborSocial?.chestsOpened ?? 0)) * 5 +
+        Math.max(0, Math.floor(state.neighborSocial?.dailyGardenHelpsCount ?? 0)) +
+        (Array.isArray(state.neighborSocial?.dailyRescuesGivenIds)
+          ? state.neighborSocial.dailyRescuesGivenIds.length
+          : 0);
+      const helpsDone = Math.max(
+        Math.max(0, Math.floor(state.stats?.neighborHelpsDone ?? 0)),
+        legacyHelps
       );
-    case 'collection':
-      return (
-        Object.keys(state.collectedCards ?? {}).length +
-        (state.suitcase?.discoveredMorphs?.length ?? 0)
-      );
+      return helpsDone + Math.max(0, Math.floor(state.farmBarn?.ordersDelivered ?? 0));
+    }
+    case 'collection': {
+      const uniqueCards = Object.values(state.collectedCards ?? {}).filter(
+        (qty) => typeof qty === 'number' && qty > 0
+      ).length;
+      const magicalMorphs = Array.isArray(state.suitcase?.discoveredMorphs)
+        ? new Set(
+            state.suitcase.discoveredMorphs.filter((m) => {
+              if (typeof m !== 'string') return false;
+              const prefix = m.split(':')[0] ?? '';
+              return MAGICAL_CREATURE_HABITAT_IDS.has(prefix);
+            })
+          ).size
+        : 0;
+      const restoredPaintings = Array.isArray(state.puzzleArcade?.restoredPaintings)
+        ? new Set(
+            state.puzzleArcade.restoredPaintings.filter(
+              (pid): pid is string => typeof pid === 'string' && pid.length > 0
+            )
+          ).size
+        : 0;
+      const masteredCrops = state.cropMastery
+        ? Object.values(state.cropMastery).filter(
+            (cnt) => typeof cnt === 'number' && Number.isFinite(cnt) && cnt >= 5
+          ).length
+        : 0;
+      return uniqueCards + magicalMorphs + restoredPaintings + masteredCrops;
+    }
   }
 }
 
-export function evaluateAchievements(state: GameState, now = Date.now()): string[] {
+export function evaluateAchievements(
+  state: GameState,
+  now = Date.now(),
+  options?: { silent?: boolean }
+): string[] {
   const ret = ensureRetentionState(state);
+  const silent = Boolean(options?.silent);
   const newlyUnlocked: string[] = [];
   for (const def of ACHIEVEMENT_REGISTRY) {
     const existing = ret.achievements[def.id];
     if (existing?.unlockedAt) continue;
-    const val = getCategoryMetricValue(state, def.category);
+    const val = getCategoryMetricValue(state, def.category, now);
     if (val >= def.target) {
       ret.achievements[def.id] = {
         ...existing,
         unlockedAt: now,
+        ...(silent ? { notifiedAt: now } : {}),
       };
-      ret.pendingToasts.push(def.id);
+      if (!silent && !existing?.notifiedAt && !ret.pendingToasts.includes(def.id)) {
+        ret.pendingToasts.push(def.id);
+      }
       newlyUnlocked.push(def.id);
     }
   }
   return newlyUnlocked;
+}
+
+/**
+ * Chuẩn hoá `retention` khi tải save từ localStorage / CloudSave:
+ * - Gỡ các thành tựu chưa nhận thưởng bị mở khoá nhầm do công thức cũ (`schemaVersion < 13`).
+ * - Đánh dấu `notifiedAt` cho toàn bộ thành tựu đã mở khoá từ phiên trước để không bao giờ hiện lại toast khi reload.
+ * - Với save cũ từng bị thiếu trường `retention`, đồng bộ im lặng (`silent: true`) các mốc đã thực sự đạt được.
+ */
+export function reconcileRetentionStateOnLoad(
+  state: GameState,
+  rawRetention: Partial<RetentionNarrativeState> | undefined,
+  hadPriorSave: boolean,
+  now = Date.now()
+): RetentionNarrativeState {
+  const rawSchema =
+    rawRetention && typeof rawRetention === 'object' && typeof rawRetention.schemaVersion === 'number'
+      ? rawRetention.schemaVersion
+      : 0;
+  const ret = migrateRetentionState(rawRetention);
+
+  for (const [achId, entry] of Object.entries(ret.achievements)) {
+    const def = ACHIEVEMENT_REGISTRY.find((a) => a.id === achId);
+    if (!def) {
+      delete ret.achievements[achId];
+      continue;
+    }
+    if (!entry.claimedAt && rawSchema < CURRENT_SAVE_SCHEMA_VERSION) {
+      const currentVal = getCategoryMetricValue(state, def.category, now);
+      if (currentVal < def.target) {
+        delete ret.achievements[achId];
+        continue;
+      }
+    }
+    if (entry.unlockedAt && !entry.notifiedAt) {
+      entry.notifiedAt = entry.unlockedAt;
+    }
+  }
+
+  // Không bao giờ bắn lại toast của phiên trước khi tải trang / đồng bộ đám mây
+  ret.pendingToasts = [];
+  state.retention = ret;
+
+  if (hadPriorSave && !rawRetention) {
+    evaluateAchievements(state, now, { silent: true });
+  }
+  return ret;
 }
 
 export function claimAchievementReward(
@@ -566,14 +751,21 @@ export const DAY_1_TO_7_REWARDS: ReadonlyArray<{
 
 export function claimDailyRetentionReward(
   state: GameState,
-  dayNumber: number
+  dayNumber: number,
+  todayKey = getLocalCalendarResetKey()
 ): { ok: boolean; reward?: (typeof DAY_1_TO_7_REWARDS)[number] } {
   const ret = ensureRetentionState(state);
   const def = DAY_1_TO_7_REWARDS.find((d) => d.day === dayNumber);
-  if (!def || ret.claimedLoginDays.includes(dayNumber)) {
+  if (
+    !def ||
+    ret.claimedLoginDays.includes(dayNumber) ||
+    ret.lastLoginClaimDayKey === todayKey ||
+    dayNumber !== ret.claimedLoginDays.length + 1
+  ) {
     return { ok: false };
   }
   ret.claimedLoginDays.push(dayNumber);
+  ret.lastLoginClaimDayKey = todayKey;
   state.galleons += def.galleons;
   state.phoenixTalismans = Math.min(12, (state.phoenixTalismans ?? 0) + def.phoenixTalismans);
   return { ok: true, reward: def };

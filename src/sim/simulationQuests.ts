@@ -168,7 +168,7 @@ import {
   createInitialPuzzleArcadeState,
   JIGSAW_PAINTINGS,
   PuzzleRewardSpec,
-} from './puzzleArcadeEngine';
+} from './puzzleShared';
 import {
   ActiveQuizChallenge,
   createInitialLanguageQuizState,
@@ -276,6 +276,7 @@ export function questsGrantBuildingIngredientDrop(sim: ParkSimulation,
 
 export function questsHarvestBuildingBubble(sim: ParkSimulation, uid: string): boolean {
     if (sim.isVisitingNeighbor) return false;
+    if (sim.isVisitingNeighbor || sim.isHeadmasterPreview) return false;
     const b = sim.state.buildings.find((x) => x.uid === uid);
     if (!b || b.itemId === 'burrow_honeydukes_canon') return false;
     const item = getCatalogItem(b.itemId);
@@ -297,24 +298,43 @@ export function questsHarvestBuildingBubble(sim: ParkSimulation, uid: string): b
     const hasGoods = Boolean(b.readyFarmGoods && b.readyFarmGoods.length > 0);
     if (b.storedGalleons <= 0 && !hasGoods) return false;
 
-    const g = b.storedGalleons;
-    const x = b.storedXp;
-    b.storedGalleons = 0;
-    b.storedXp = 0;
-    b.readyBubbles = 0;
-    b.harvestCycleCount = (b.harvestCycleCount ?? 0) + 1;
-    b.lastTickAt = Date.now();
-
-    let goodsLabel = '';
+    const counts = new Map<FarmGoodId, number>();
+    const remainingGoods: FarmGoodId[] = [];
     if (b.readyFarmGoods && b.readyFarmGoods.length > 0) {
-      const counts = new Map<FarmGoodId, number>();
       for (const gid of b.readyFarmGoods) {
         const added = sim.addFarmItemToBarn(gid, 1);
         if (added > 0) {
           counts.set(gid, (counts.get(gid) ?? 0) + added);
+        } else {
+          remainingGoods.push(gid);
         }
       }
-      b.readyFarmGoods = [];
+      if (counts.size === 0 && b.storedGalleons <= 0) {
+        sim.onToast?.(
+          '📦 Kho Nông Sản Đỏ đã đầy! Hãy giao Đơn Hàng Cú hoặc nâng cấp Kho trước khi thu hàng xưởng nhé.',
+          '📦'
+        );
+        return false;
+      }
+      b.readyFarmGoods = remainingGoods;
+      if (remainingGoods.length > 0) {
+        sim.onToast?.(
+          `📦 Kho Nông Sản đã đầy — còn ${remainingGoods.length} sản phẩm chờ lấy trên mái xưởng!`,
+          '📦'
+        );
+      }
+    }
+
+    const g = b.storedGalleons;
+    const x = b.storedXp;
+    b.storedGalleons = 0;
+    b.storedXp = 0;
+    b.readyBubbles = remainingGoods.length > 0 ? Math.min(8, remainingGoods.length) : 0;
+    b.harvestCycleCount = (b.harvestCycleCount ?? 0) + 1;
+    b.lastTickAt = Date.now();
+
+    let goodsLabel = '';
+    if (counts.size > 0) {
       const parts: string[] = [];
       for (const [gid, qty] of counts.entries()) {
         parts.push(`+${qty} ${FARM_GOODS[gid].emoji}`);
@@ -476,7 +496,17 @@ export function questsClaimQuest(sim: ParkSimulation, questId: string): boolean 
       sim.state.timeSand += q.rewardTimeSand;
       questsAddXp(sim, q.rewardXp);
       sim.owlSeedCounter++;
-      sim.state.owlQuests[owlIdx] = createOwlOrderQuest(sim.state.level, sim.owlSeedCounter);
+      const canFeedCreatures = sim.state.buildings.some((b) => {
+        const it = getCatalogItem(b.itemId);
+        return Boolean((it?.isCreatureHabitat || it?.isAnimalPasturePlot) && Date.now() >= b.constructEndsAt);
+      });
+      const canUpgradeStar =
+        sim.state.match3.stars > 0 &&
+        sim.state.buildings.some((b) => b.stars < 5 && Date.now() >= b.constructEndsAt);
+      sim.state.owlQuests[owlIdx] = createOwlOrderQuest(sim.state.level, sim.owlSeedCounter, {
+        canFeedCreatures,
+        canUpgradeStar,
+      });
       sim.audio.playHarvestBubble();
       sim.onRewardFly?.('galleons', q.rewardGalleons);
       if (q.rewardTimeSand > 0) sim.onRewardFly?.('sand', q.rewardTimeSand);
@@ -607,23 +637,25 @@ export function questsCompleteStoryStepWithStar(sim: ParkSimulation): {
       return { ok: true, msg: `🎁 Đã nhận thưởng "${story.title}"!` };
     }
 
-    // 1. Auto-lay cobblestone paths (`place_paths`) for 1 Puzzle Star!
+    // 1. Auto-lay cobblestone paths (`place_paths`) using Gold only (0 Magic Stars burned!)
     if (story.objectiveType === 'place_paths') {
-      const starCost = 1;
-      if (!sim.state.sandboxMode && sim.state.match3.stars < starCost) {
+      const needed = Math.max(1, story.targetAmount - story.progress);
+      const pathItem = getCatalogItem('path_cobble');
+      const unitGold = pathItem?.cost ?? 10;
+      if (!sim.state.sandboxMode && sim.state.galleons < unitGold) {
         return {
           ok: false,
-          reason: 'missing_stars',
-          msg: `Cần 1 🌟 Sao Phép Thuật để lát đường tự động — Hãy vượt Màn ${sim.state.match3.currentLevel}!`,
+          reason: 'missing_gold',
+          msg: `Cần ít nhất ${unitGold} 🪙 Galleon để lát Đường Đá tự động!`,
         };
       }
-      const needed = Math.max(1, story.targetAmount - story.progress);
       const unlockedSet = new Set(sim.state.unlockedZones);
       let laid = 0;
       let lastGx = 7;
       let lastGy = 17;
 
       while (laid < needed) {
+        if (!sim.state.sandboxMode && sim.state.galleons < unitGold) break;
         let bestTile: [number, number] | null = null;
         let bestScore = -9999;
         for (const pk of sim.connectedPathTiles) {
@@ -649,6 +681,9 @@ export function questsCompleteStoryStepWithStar(sim: ParkSimulation): {
         }
         if (!bestTile) break;
         const [tx, ty] = bestTile;
+        if (!sim.state.sandboxMode) {
+          sim.state.galleons -= unitGold;
+        }
         sim.grid[ty][tx].path = 'cobble';
         sim.state.tileOverrides[`${tx},${ty}`] = {
           ...sim.state.tileOverrides[`${tx},${ty}`],
@@ -663,15 +698,14 @@ export function questsCompleteStoryStepWithStar(sim: ParkSimulation): {
         laid++;
       }
 
-      if (!sim.state.sandboxMode) {
-        sim.state.match3.stars -= starCost;
-      }
       sim.recomputeAllCoastersAndBiomes();
-      questsClaimQuest(sim, story.id);
-      sim.launchFireworksShow(4);
-      const msg = `🌟 Đã dùng 1 Sao lát tự động ${laid} ô Đường Đá & hoàn thành "${story.title}" (+${story.rewardGalleons}G)!`;
-      sim.onToast?.(msg, '🌟');
-      return { ok: true, msg, placedGx: lastGx, placedGy: lastGy };
+      const claimed = questsClaimQuest(sim, story.id);
+      if (claimed) sim.launchFireworksShow(4);
+      const msg = claimed
+        ? `🪨 Đã lát tự động ${laid} ô Đường Đá & hoàn thành "${story.title}" (+${story.rewardGalleons}G)!`
+        : `🪨 Đã lát thêm ${laid} ô Đường Đá cho "${story.title}"!`;
+      sim.onToast?.(msg, '🪨');
+      return { ok: laid > 0, msg, placedGx: lastGx, placedGy: lastGy };
     }
 
     // 2. Unlock fogged zone (`unlock_zone`) cleanly respecting level, Star, and Gold costs!
@@ -730,16 +764,15 @@ export function questsCompleteStoryStepWithStar(sim: ParkSimulation): {
         };
       }
 
-      const baseItemStars = getItemPuzzleStarCost(item);
-      const requiredStars = Math.max(1, baseItemStars);
-      if (!sim.state.sandboxMode && sim.state.match3.stars < requiredStars) {
+      const effectiveStars = sim.getEffectiveItemStarCost(item);
+      if (!sim.state.sandboxMode && effectiveStars > 0 && sim.state.match3.stars < effectiveStars) {
         return {
           ok: false,
           reason: 'missing_stars',
-          msg: `Cần ${requiredStars} 🌟 Sao Phép Thuật để kiến tạo "${item.name}" — Hãy chơi Giải Đố nhận thêm Sao!`,
+          msg: `Cần ${effectiveStars} 🌟 Sao Phép Thuật để kiến tạo "${item.name}" — Hãy chơi Giải Đố nhận thêm Sao!`,
         };
       }
-      if (!sim.state.sandboxMode && baseItemStars === 0 && sim.state.galleons < item.cost) {
+      if (!sim.state.sandboxMode && effectiveStars === 0 && sim.state.galleons < item.cost) {
         return {
           ok: false,
           reason: 'missing_gold',
@@ -747,27 +780,28 @@ export function questsCompleteStoryStepWithStar(sim: ParkSimulation): {
         };
       }
 
-      const spot = sim.findSmartSpotForStoryBuilding(item);
-      if (!spot) {
+      const neededCount = Math.max(1, story.targetAmount - story.progress);
+      let placedCount = 0;
+      let lastSpot: { gx: number; gy: number } | null = null;
+      while (placedCount < neededCount) {
+        const nextStars = sim.getEffectiveItemStarCost(item);
+        if (!sim.state.sandboxMode) {
+          if (nextStars > 0 && sim.state.match3.stars < nextStars) break;
+          if (nextStars === 0 && sim.state.galleons < item.cost) break;
+        }
+        const spot = sim.findSmartSpotForStoryBuilding(item);
+        if (!spot) break;
+        if (!sim.placeItem(item, spot.gx, spot.gy, 0)) break;
+        lastSpot = spot;
+        placedCount++;
+      }
+
+      if (placedCount === 0 || !lastSpot) {
         return {
           ok: false,
           reason: 'no_space',
           msg: `Chưa có ô đất trống phù hợp cạnh đường đi để đặt "${item.name}" — Hãy mở thêm khu đất mới hoặc dọn chỗ nhé!`,
         };
-      }
-
-      const placedOk = sim.placeItem(item, spot.gx, spot.gy, 0);
-      if (!placedOk) {
-        return {
-          ok: false,
-          reason: 'no_space',
-          msg: `Hãy chọn vị trí trên bản đồ để đặt "${item.name}" nhé!`,
-        };
-      }
-
-      // Deduct 1 Puzzle Star if the item was a 0-star landmark decor auto-built via Story
-      if (!sim.state.sandboxMode && baseItemStars === 0) {
-        sim.state.match3.stars = Math.max(0, sim.state.match3.stars - 1);
       }
 
       const built = sim.state.buildings[sim.state.buildings.length - 1];
@@ -777,15 +811,17 @@ export function questsCompleteStoryStepWithStar(sim: ParkSimulation): {
           : 0;
       const waitTag = waitSec > 0 ? ` (⏳ hoàn tất sau ${formatDurationCompactVi(waitSec)} thực tế)` : '';
 
-      questsClaimQuest(sim, story.id);
-      sim.launchFireworksShow(4);
-      const msg = `🔨 Đã khởi công "${item.name}"${waitTag} & hoàn thành "${story.title}" (+${story.rewardGalleons}G)!`;
+      const claimed = questsClaimQuest(sim, story.id);
+      if (claimed) sim.launchFireworksShow(4);
+      const msg = claimed
+        ? `🔨 Đã khởi công "${item.name}"${waitTag} & hoàn thành "${story.title}" (+${story.rewardGalleons}G)!`
+        : `🔨 Đã đặt ${placedCount} "${item.name}"${waitTag} cho nhiệm vụ "${story.title}"!`;
       sim.onToast?.(msg, '🔨');
       return {
         ok: true,
         msg,
-        placedGx: spot.gx + item.width * 0.5,
-        placedGy: spot.gy + item.height * 0.5,
+        placedGx: lastSpot.gx + item.width * 0.5,
+        placedGy: lastSpot.gy + item.height * 0.5,
       };
     }
 
@@ -1023,6 +1059,7 @@ export function questsFulfillFarmOwlOrder(sim: ParkSimulation, orderId: string):
     const msg = `🦉 Cú ${order.owlName} giao đơn cho ${order.senderName}! Nhận +${order.rewardGalleons}G${sandTag}${talismanTag}${boosterTag}${plugTag}!`;
     sim.onToast?.(msg, '🦉');
     sim.advanceTutorialStep('build_and_owl_order');
+    sim.checkAndToastAchievements?.();
     sim.saveToStorage();
     sim.onUiChange?.();
     return { ok: true, msg };
@@ -1046,10 +1083,11 @@ export function questsRefreshFarmOwlOrder(sim: ParkSimulation, orderId: string):
 }
 
 export function questsGetBrewDurationSec(sim: ParkSimulation, recipe: CraftRecipeDef): number {
-    const hasWorkshop = sim.state.buildings.some(
+    const ownBuildings = (sim.homeStateWhileVisiting ?? sim.state).buildings;
+    const hasWorkshop = ownBuildings.some(
       (b) => getCatalogItem(b.itemId)?.isWorkshopBrewery && Date.now() >= b.constructEndsAt
     );
-    const hasSynergy = sim.activeSynergies.activeIds.has('combo_herb_brewery');
+    const hasSynergy = !sim.isVisitingNeighbor && sim.activeSynergies.activeIds.has('combo_herb_brewery');
     let sec = computeEconomicCycleSeconds(sim.state.supply?.brewCompletedCount ?? 0, recipe.brewSec);
     if (hasWorkshop) sec *= 0.55;
     if (hasSynergy) sec *= 0.78;
@@ -1057,6 +1095,9 @@ export function questsGetBrewDurationSec(sim: ParkSimulation, recipe: CraftRecip
 }
 
 export function questsQuickHarvestHerbs(sim: ParkSimulation): { ok: boolean; msg: string } {
+    if (sim.isVisitingNeighbor || sim.isHeadmasterPreview) {
+      return { ok: false, msg: 'Chỉ có thể thu hoạch luống thảo dược tại vườn nhà của bạn!' };
+    }
     const now = Date.now();
     const waitMs = 20_000;
     const elapsed = now - (sim.state.supply.lastHerbPlotHarvestAt || 0);
@@ -1315,6 +1356,7 @@ export function questsUnveilBuilding(sim: ParkSimulation, uid: string): RibbonUn
     };
 
     sim.onRibbonUnveiled?.(celebration);
+    sim.checkAndToastAchievements?.();
     sim.saveToStorage();
     sim.onUiChange?.();
     return celebration;

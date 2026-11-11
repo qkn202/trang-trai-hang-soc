@@ -114,8 +114,8 @@ export const RADIAL_QUICK_SLICES: ReadonlyArray<{
   { index: 1, actionId: 'barn', labelVi: 'Kho Nông Sản Đỏ', icon: '🏚️' },
   { index: 2, actionId: 'orders', labelVi: 'Đơn Hàng Cú', icon: '🦉' },
   { index: 3, actionId: 'match3', labelVi: 'Bùa Gặt Honeydukes', icon: '🍬' },
-  { index: 4, actionId: 'arcade', labelVi: 'Đại Sảnh Khảo Thí', icon: '♟️' },
-  { index: 5, actionId: 'seedquiz', labelVi: 'Học Viện Thần Chú', icon: '📖' },
+  { index: 4, actionId: 'arcade', labelVi: 'Ngũ Ấn Đạo Tặc', icon: '🗺️' },
+  { index: 5, actionId: 'seedquiz', labelVi: 'Học Viện Thần Chú', icon: '🪄' },
   { index: 6, actionId: 'neighbors', labelVi: 'Sổ Hàng Xóm', icon: '🏡' },
   { index: 7, actionId: 'feast', labelVi: 'Đại Tiệc Mùa Gặt', icon: '🥧' },
 ];

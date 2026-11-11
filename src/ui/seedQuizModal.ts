@@ -118,6 +118,9 @@ export class SeedQuizModalController {
     }
 
     this.pendingPlotUid = pendingPlotUid ?? null;
+    if (!this.pendingPlotUid) {
+      this.sim.setLastPlayedMinigame('seedquiz');
+    }
 
     const quiz = this.sim.ensureLanguageQuiz();
     let needFreshChallenge = !this.challenge || this.answeredOutcome !== null;
@@ -151,6 +154,7 @@ export class SeedQuizModalController {
     if (dlg && !dlg.open) {
       dlg.showModal();
     }
+    this.onRefreshHud();
   }
 
   private ensureActiveLangPackLoaded(lang: QuizLanguageId): void {

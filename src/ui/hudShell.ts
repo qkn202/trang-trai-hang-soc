@@ -129,94 +129,81 @@ export function shellMountDOM(hud: GameHUD): void {
     hudWrap.className = 'hud-shell-root';
     hudWrap.innerHTML = `
       <div id="hudFrameTop" class="hud-frame-top">
-        <!-- STYLE #5 PLAYRIX TOWNSHIP 2026 TOP HUD -->
-        <header class="ts-top-hud">
-          <!-- 1. TOP-LEFT: Star Level Crest + Progress Bars + 2 Blue Utility Buttons -->
-          <div class="ts-hud-topleft">
-            <div class="ts-level-cluster">
-              <button id="btnOpenRoadmap" type="button" class="ts-star-crest-btn" aria-label="Xem lộ trình 100 cấp và 10 vùng đất" title="Cấp Độ Trang Trại & Đại Bản Đồ">
-                <svg class="ts-star-svg" viewBox="0 0 100 100" aria-hidden="true">
-                  <defs>
-                    <linearGradient id="tsStarRim" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stop-color="#f7da8c"/>
-                      <stop offset="55%" stop-color="#cfa044"/>
-                      <stop offset="100%" stop-color="#8c5c1d"/>
-                    </linearGradient>
-                    <linearGradient id="tsStarFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stop-color="#84e6ff"/>
-                      <stop offset="52%" stop-color="#3aa2f0"/>
-                      <stop offset="100%" stop-color="#1d6dc2"/>
-                    </linearGradient>
-                  </defs>
-                  <path d="M50 5 C54 5 57 12 62 24 C74 25 89 27 91 32 C93 37 83 47 74 56 C77 69 81 84 77 88 C73 91 60 84 50 78 C40 84 27 91 23 88 C19 84 23 69 26 56 C17 47 7 37 9 32 C11 27 26 25 38 24 C43 12 46 5 50 5 Z" fill="url(#tsStarRim)" stroke="#3a2212" stroke-width="4.2" stroke-linejoin="round"/>
-                  <path d="M50 12 C53 12 56 18 60 28 C70 29 82 31 84 35 C85 39 77 47 69 55 C72 66 75 78 72 81 C69 84 58 78 50 73 C42 78 31 84 28 81 C25 78 28 66 31 55 C23 47 15 39 16 35 C18 31 30 29 40 28 C44 18 47 12 50 12 Z" fill="url(#tsStarFill)" stroke="#174c87" stroke-width="2" stroke-linejoin="round"/>
-                  <ellipse cx="45" cy="31" rx="14" ry="7" transform="rotate(-18 45 31)" fill="rgba(255,255,255,0.42)"/>
-                </svg>
-                <span id="lblLevelNum" data-fly-target="xp" class="ts-star-num">12</span>
-                <span id="lblTitle" class="sr-only-hud">Kiến Trúc Sư Hẻm Xéo</span>
+        <!-- KHU VƯỜN HAGRID × HANG SÓC COMPACT SINGLE-ROW TOP HUD -->
+        <header class="ts-top-hud hg-top-hud">
+          <!-- 1. TOP-LEFT: Level Ring + Unified Supplies Pill -->
+          <div class="ts-hud-topleft hg-top-left">
+            <button
+              id="btnOpenRoadmap"
+              type="button"
+              class="hg-level-btn"
+              aria-label="Hồ sơ cấp độ và lộ trình 100 cấp"
+              title="Cấp Độ Điền Trang &amp; Lộ Trình 100 Cấp"
+            >
+              <span class="hg-level-ring" aria-hidden="true">
+                <span id="lblLevelNum" data-fly-target="xp" class="hg-level-num">1</span>
+              </span>
+              <span class="sr-only-hud">
+                <span id="lblTitle">Người Khai Hoang</span>
+                <span id="barLevelTopFill"></span>
+                <span id="xpBarShell"><span id="barXpFill"></span><span id="lblXpFraction">0/200</span></span>
+              </span>
+            </button>
+
+            <div class="hg-supplies-pill" role="group" aria-label="Tài nguyên điền trang">
+              <button
+                id="chipHudGalleons"
+                data-fly-target="galleons"
+                type="button"
+                class="hg-res-item"
+                aria-label="Vàng Galleon — Chạm để chơi kiếm thêm Vàng"
+                title="Vàng Galleon — Chạm quay lại game vừa chơi"
+              >
+                <span class="hg-res-glyph hg-glyph-coin" aria-hidden="true">G</span>
+                <span id="lblGalleons" class="hg-res-val">1.450</span>
+                <span id="btnPlusGalleons" class="sr-only-hud">+</span>
               </button>
 
-              <div class="ts-bars-stack">
-                <div class="ts-wood-bar ts-lvl-bar-shell">
-                  <div id="barLevelTopFill" class="ts-lvl-bar-fill" style="width:42%"></div>
-                </div>
-                <div class="ts-xp-row">
-                  <div class="ts-xp-shield" aria-hidden="true">
-                    <svg viewBox="0 0 44 42">
-                      <defs>
-                        <linearGradient id="tsXpBadge" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stop-color="#e88cff"/>
-                          <stop offset="55%" stop-color="#b23fe3"/>
-                          <stop offset="100%" stop-color="#761da8"/>
-                        </linearGradient>
-                      </defs>
-                      <polygon points="22,3 39,12 39,30 22,39 5,30 5,12" fill="url(#tsXpBadge)" stroke="#3a2212" stroke-width="3.2" stroke-linejoin="round"/>
-                      <polygon points="22,7 35,14 35,28 22,35 9,28 9,14" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.6"/>
-                    </svg>
-                    <span>XP</span>
-                  </div>
-                  <div id="xpBarShell" class="ts-wood-bar ts-xp-bar-shell" title="Tiến độ Rương Mùa Gặt Điền Trang (mỗi 200 XP tặng +65G +1⏳) — Nhấp xem Lộ trình Bản Vẽ Cấp 1 → 100">
-                    <div id="barXpFill" class="ts-xp-fill" style="width:10%"></div>
-                    <span id="lblXpFraction" class="ts-xp-fraction">🎁 0/200</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+              <button
+                id="btnHudSandChip"
+                data-fly-target="sand"
+                type="button"
+                class="hg-res-item"
+                aria-label="Ngọc Thời Gian — Chạm mở Đại Sảnh Khảo Thí"
+                title="Ngọc &amp; Cát Thời Gian"
+              >
+                <span class="hg-res-glyph hg-glyph-gem" aria-hidden="true">◆</span>
+                <span id="lblSand" class="hg-res-val">28</span>
+                <span id="btnPlusSand" class="sr-only-hud">+</span>
+              </button>
 
-            <div class="ts-utility-row">
-              <button id="btnOpenSettings" type="button" class="ts-blue-sq-btn" aria-label="Cài đặt, âm nhạc và quản lý file lưu" title="Cài đặt Âm nhạc, Thời tiết & Lưu Game">
-                <svg viewBox="0 0 36 36" aria-hidden="true">
-                  <path d="M15.4 4h5.2l.8 3.3a10.4 10.4 0 0 1 2.7 1.1l3-1.7 3.7 3.7-1.7 3a10.4 10.4 0 0 1 1.1 2.7l3.3.8v5.2l-3.3.8a10.4 10.4 0 0 1-1.1 2.7l1.7 3-3.7 3.7-3-1.7a10.4 10.4 0 0 1-2.7 1.1l-.8 3.3h-5.2l-.8-3.3a10.4 10.4 0 0 1-2.7-1.1l-3 1.7-3.7-3.7 1.7-3a10.4 10.4 0 0 1-1.1-2.7L2.5 20.6v-5.2l3.3-.8a10.4 10.4 0 0 1 1.1-2.7l-1.7-3 3.7-3.7 3 1.7a10.4 10.4 0 0 1 2.7-1.1L15.4 4Z" fill="#eef4fa" stroke="#3a2212" stroke-width="2.4" stroke-linejoin="round"/>
-                  <circle cx="18" cy="18" r="5" fill="#428ad4" stroke="#3a2212" stroke-width="2.3"/>
-                </svg>
+              <button
+                id="btnHudMinigameHub"
+                data-fly-target="stars"
+                type="button"
+                class="hg-res-item"
+                aria-label="Sao Phép Thuật — Chạm tiếp tục game vừa chơi"
+                title="Sao Phép Thuật dùng mở đất &amp; xây công trình"
+              >
+                <img src="/sprites/m3_icon_star.png" alt="" class="hg-res-star-img" aria-hidden="true" />
+                <strong id="lblHudHubStars" class="hg-res-val">3</strong>
+                <span id="lblHudHubTrial" class="sr-only-hud"></span>
               </button>
-              <button id="btnToggleManageMenu" type="button" class="ts-blue-sq-btn" aria-label="Quản lý" aria-expanded="false" aria-controls="managePopoverMenu" title="Mở Hòm Quản Lý: Bùa Gặt Honeydukes, Đại Sảnh Khảo Thí Hogwarts, Vali Thú, Sổ Tài Chính &amp; Công Cụ">
-                <svg viewBox="0 0 36 36" aria-hidden="true">
-                  <path d="M6 14 L18 8 L30 14 L30 26 L18 31 L6 26 Z" fill="#c97b36" stroke="#3a2212" stroke-width="2.4" stroke-linejoin="round"/>
-                  <path d="M6 14 L18 19 L30 14 L18 8 Z" fill="#e59c52" stroke="#3a2212" stroke-width="2" stroke-linejoin="round"/>
-                  <path d="M18 19 L18 31" stroke="#3a2212" stroke-width="2"/>
-                  <rect x="15.5" y="16.5" width="5" height="6" rx="1.2" fill="#ffd966" stroke="#3a2212" stroke-width="1.8"/>
-                </svg>
-                <span id="badgeManageMenuDot" class="badge-dot hidden">!</span>
+
+              <button
+                id="btnHudActiveBuilds"
+                type="button"
+                class="hg-res-item hg-res-build hidden"
+                aria-label="Công trình đang xây dựng"
+                title="Xem công trình đang thi công"
+              >
+                <span aria-hidden="true">🔨</span>
+                <span id="lblActiveBuilds" class="hg-res-val">0</span>
               </button>
-              <button id="btnToggleHudRollup" type="button" class="ts-blue-sq-btn ts-hud-rollup-btn" aria-pressed="false" aria-label="Cuộn gọn hoặc mở rộng các thanh HUD" title="Cuộn gọn các thanh HUD quanh màn hình để nhìn thoáng nông trại (Phím H)">
-                <svg viewBox="0 0 36 36" aria-hidden="true">
-                  <rect x="5.5" y="7" width="25" height="6.5" rx="3.2" fill="#ffd966" stroke="#3a2212" stroke-width="2.2"/>
-                  <path d="M8.5 13.5 H27.5 V24.5 C27.5 27.2 25.3 29.2 22.6 29.2 H13.4 C10.7 29.2 8.5 27.2 8.5 24.5 Z" fill="#fdf4dc" stroke="#3a2212" stroke-width="2.2" stroke-linejoin="round"/>
-                  <path id="svgHudRollupChevron" d="M13.5 23 L18 18.5 L22.5 23" fill="none" stroke="#92400e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
-              <button id="btnHudMinigameHub" data-fly-target="stars" type="button" class="ts-minigame-hub-pill" title="Vượt Khảo Thí Pháp Thuật tăng trực tiếp Cấp Độ mở khóa bản vẽ nhà &amp; nhận x2 🌟 Sao ở Môn Đề Cử!">
-                <img src="/sprites/m3_icon_star.png" alt="" class="m3-inline-icon" />
-                <strong id="lblHudHubStars">3</strong>
-                <span class="ts-hub-sep">•</span>
-                <span id="lblHudHubTrial">🔥 🍓</span>
-              </button>
-              <button id="btnHudActiveBuilds" type="button" class="stat-chip stat-chip-btn hidden" title="Các công trình đang xây theo thời gian thực">🔨 <span id="lblActiveBuilds">0</span></button>
             </div>
           </div>
 
-          <!-- 2. TOP-CENTER: Warm Curved Parchment Scroll Ribbon -->
+          <!-- 2. TOP-CENTER: Warm Curved Parchment Scroll Ribbon (Wide Desktop Only) -->
           <div id="tsParchmentBanner" class="ts-parchment-ribbon">
             <div class="ts-ribbon-tail ts-ribbon-tail-left" aria-hidden="true"></div>
             <div class="ts-ribbon-body">
@@ -225,135 +212,169 @@ export function shellMountDOM(hud: GameHUD): void {
             <div class="ts-ribbon-tail ts-ribbon-tail-right" aria-hidden="true"></div>
           </div>
 
-          <!-- 3. TOP-RIGHT: Galleon Bar, Emerald Gem Bar, Red Storage Barn & Smiley -->
-          <div class="ts-hud-topright">
-            <div class="ts-currency-row">
-              <div id="chipHudGalleons" data-fly-target="galleons" class="ts-res-pill" title="Vàng Galleon hiện có">
-                <span class="ts-res-medal" aria-hidden="true">
-                  <svg viewBox="0 0 40 40">
-                    <defs>
-                      <radialGradient id="tsGoldCoin" cx="35%" cy="30%" r="70%">
-                        <stop offset="0%" stop-color="#fff49c"/>
-                        <stop offset="55%" stop-color="#f5b316"/>
-                        <stop offset="100%" stop-color="#bd6e04"/>
-                      </radialGradient>
-                    </defs>
-                    <circle cx="20" cy="20" r="16.5" fill="url(#tsGoldCoin)" stroke="#3a2212" stroke-width="2.8"/>
-                    <circle cx="20" cy="20" r="12.2" fill="none" stroke="#fff3b0" stroke-width="1.6"/>
-                    <text x="20" y="25.5" text-anchor="middle" font-size="16" font-weight="900" fill="#7c3f00" stroke="#fff6cc" stroke-width="0.6">G</text>
-                  </svg>
-                </span>
-                <span id="lblGalleons" class="ts-res-val">1.450</span>
-                <button id="btnPlusGalleons" type="button" class="ts-plus-btn" aria-label="Kiếm thêm Vàng" title="Chơi Giải Đố kiếm thêm Vàng Galleon">+</button>
-              </div>
+          <!-- 3. TOP-RIGHT: Hagrid's Farm Round Brass Buttons (Kho · Floo/Bạn Bè · Menu Vườn) -->
+          <div class="ts-hud-topright hg-top-actions">
+            <button
+              id="chipHudBarn"
+              type="button"
+              class="hg-round-btn"
+              aria-label="Mở Kho Nông Sản và Xưởng Chế Biến"
+              title="Kho Nông Sản &amp; Xưởng Chế Biến Hang Sóc"
+            >
+              <span class="hg-round-frame" aria-hidden="true">
+                <svg viewBox="0 0 42 42" class="hg-round-svg" aria-hidden="true">
+                  <path d="M5 18 L21 6 L37 18 L34 18 L34 36 L8 36 L8 18 Z" fill="#d94632" stroke="#231f2e" stroke-width="2.6" stroke-linejoin="round"/>
+                  <path d="M4 19 L21 6 L38 19" fill="none" stroke="#f7e6c4" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+                  <rect x="14" y="21" width="14" height="15" fill="#992315" stroke="#f7e6c4" stroke-width="1.8"/>
+                  <path d="M14 21 L28 36 M28 21 L14 36" stroke="#f7e6c4" stroke-width="1.8"/>
+                </svg>
+              </span>
+              <small id="lblStorageBarn" class="hg-round-count">42/60</small>
+              <span id="btnOpenStorageBarn" class="sr-only-hud">Kho</span>
+            </button>
 
-              <div id="btnHudSandChip" data-fly-target="sand" class="ts-res-pill ts-res-gem" title="Ngọc & Cát Thời Gian — Tăng tốc sản xuất & xây dựng">
-                <span class="ts-res-medal" aria-hidden="true">
-                  <svg viewBox="0 0 40 40">
-                    <defs>
-                      <linearGradient id="tsEmerald" x1="0" y1="0" x2="1" y2="1">
-                        <stop offset="0%" stop-color="#8aff9e"/>
-                        <stop offset="50%" stop-color="#22c55e"/>
-                        <stop offset="100%" stop-color="#0d7a31"/>
-                      </linearGradient>
-                    </defs>
-                    <polygon points="13,6 27,6 35,16 28,34 12,34 5,16" fill="url(#tsEmerald)" stroke="#3a2212" stroke-width="2.8" stroke-linejoin="round"/>
-                    <polygon points="15,10 25,10 30,17 20,29 10,17" fill="rgba(255,255,255,0.28)"/>
-                  </svg>
-                </span>
-                <span id="lblSand" class="ts-res-val">28</span>
-                <button id="btnPlusSand" type="button" class="ts-plus-btn" aria-label="Kiếm thêm Ngọc Thời Gian" title="Mở Sảnh Bàn Cờ &amp; Cổ Ngữ kiếm thêm Ngọc Thời Gian">+</button>
-              </div>
-            </div>
+            <button
+              id="btnOpenNeighbors"
+              data-fly-target="friendship"
+              type="button"
+              class="hg-round-btn"
+              aria-label="Mạng Floo và Thăm Vườn Bạn Bè"
+              title="Mạng Floo &amp; Thăm Vườn Bạn Bè (Phím N)"
+            >
+              <span class="hg-round-frame" aria-hidden="true">
+                <img src="/sprites/ui_icon_staff.png" alt="" class="hg-round-img" aria-hidden="true" />
+              </span>
+              <span id="badgeNeighborCount" class="hg-round-badge hidden">1</span>
+            </button>
 
-            <div class="ts-barn-row">
-              <div id="chipHudBarn" class="ts-res-pill ts-res-barn" title="Kho Nông Sản & Xưởng Chế Biến Hang Sóc">
-                <span class="ts-res-medal" aria-hidden="true">
-                  <svg viewBox="0 0 42 42">
-                    <path d="M5 18 L21 6 L37 18 L34 18 L34 36 L8 36 L8 18 Z" fill="#d94632" stroke="#3a2212" stroke-width="2.6" stroke-linejoin="round"/>
-                    <path d="M4 19 L21 6 L38 19" fill="none" stroke="#f7e6c4" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
-                    <rect x="14" y="21" width="14" height="15" fill="#992315" stroke="#f7e6c4" stroke-width="1.8"/>
-                    <path d="M14 21 L28 36 M28 21 L14 36" stroke="#f7e6c4" stroke-width="1.8"/>
-                  </svg>
-                </span>
-                <span id="lblStorageBarn" class="ts-res-val">42/60</span>
-                <button id="btnOpenStorageBarn" type="button" class="ts-plus-btn" aria-label="Mở Kho Nông Sản" title="Mở Kho Nông Sản & Tàu Hàng Tốc Hành">+</button>
-              </div>
-            </div>
-
-            <button id="btnHappySmiley" type="button" class="ts-smiley-btn" aria-label="Sổ Cái Tài Chính" title="Chỉ Số Hạnh Phúc & Sổ Cái Trang Trại">
-              <svg viewBox="0 0 36 36" aria-hidden="true">
-                <path d="M10.5 14.5 Q12.5 11.5 14.5 14.5" fill="none" stroke="#4a2810" stroke-width="2.6" stroke-linecap="round"/>
-                <path d="M21.5 14.5 Q23.5 11.5 25.5 14.5" fill="none" stroke="#4a2810" stroke-width="2.6" stroke-linecap="round"/>
-                <path d="M10.5 21 Q18 28.5 25.5 21" fill="#7c2d12" stroke="#4a2810" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
+            <button
+              id="btnToggleManageMenu"
+              type="button"
+              class="hg-round-btn hg-menu-btn"
+              aria-label="Menu khu vườn"
+              aria-expanded="false"
+              aria-controls="managePopoverMenu"
+              title="Menu Khu Vườn (Bản Đồ, Lễ Hội, Cúp Nhà, Sổ Tay, Đổi Game &amp; Cài Đặt)"
+            >
+              <span class="hg-round-frame" aria-hidden="true">
+                <svg viewBox="0 0 36 36" class="hg-round-svg" aria-hidden="true">
+                  <rect x="8" y="10" width="20" height="3.4" rx="1.7" fill="#f5d69a"/>
+                  <rect x="8" y="16.3" width="20" height="3.4" rx="1.7" fill="#f5d69a"/>
+                  <rect x="8" y="22.6" width="20" height="3.4" rx="1.7" fill="#f5d69a"/>
+                </svg>
+              </span>
+              <span id="badgeManageMenuDot" class="hg-round-badge hidden">!</span>
             </button>
           </div>
         </header>
 
-        <!-- COZY PROGRESSIVE-DISCLOSURE POPOVER 1: PARK MANAGEMENT & MINIGAMES DRAWER -->
-        <div id="managePopoverMenu" class="hud-floating-popover hidden" role="region" aria-label="Hòm quản lý trang trại">
-          <div class="hud-popover-title">
-            <span>🧰 Quản Lý</span>
-          </div>
-          <div class="manage-status-strip">
-            <button id="btnHudStarChip" type="button" class="stat-chip stat-chip-btn" title="Sao Phép Thuật"><img src="/sprites/m3_icon_star.png" alt="" class="m3-inline-icon" /> <span id="lblPuzzleStars">3</span></button>
-            <button id="btnHudHeartChip" type="button" class="stat-chip stat-chip-btn" title="Tim Giải Đố"><img src="/sprites/m3_icon_heart.png" alt="" class="m3-inline-icon" /> <span id="lblPuzzleHearts">5/5</span></button>
-            <span class="stat-chip">★ <span id="lblWonder">4.5</span></span>
+        <!-- MENU KHU VƯỜN (PHONG CÁCH VƯỜN HAGRID — GỌN GÀNG, RÕ RÀNG, ĐẦY ĐỦ BẢN ĐỒ & ĐỔI GAME) -->
+        <nav id="managePopoverMenu" class="hud-floating-popover hg-garden-menu hidden" aria-label="Menu khu vườn">
+          <div class="hg-menu-head">
+            <div class="hg-menu-brand">
+              <span class="hg-menu-seal" aria-hidden="true">🌿</span>
+              <div>
+                <strong class="hg-menu-title">Menu Khu Vườn</strong>
+                <small class="hg-menu-sub">Hang Sóc &amp; Hogsmeade</small>
+              </div>
+            </div>
             <button id="lblClock" type="button" class="stat-chip stat-chip-btn chip-clock chip-clock-btn" aria-expanded="false" aria-controls="weatherPopoverMenu">🕒 --:--</button>
+          </div>
+
+          <div class="manage-status-strip hg-menu-status">
+            <button id="btnHudStarChip" type="button" class="stat-chip stat-chip-btn" title="Sao Phép Thuật"><img src="/sprites/m3_icon_star.png" alt="" class="m3-inline-icon" /> <span id="lblPuzzleStars">3</span></button>
+            <button id="btnHudHeartChip" type="button" class="stat-chip stat-chip-btn" title="Tim Bùa Gặt Honeydukes"><img src="/sprites/m3_icon_heart.png" alt="" class="m3-inline-icon" /> <span id="lblPuzzleHearts">5/5</span></button>
+            <button id="btnHappySmiley" type="button" class="stat-chip stat-chip-btn" title="Độ Hạnh Phúc &amp; Sổ Cái">😊 <span id="lblWonder">4.5</span></button>
             <span id="lblFestival" class="stat-chip chip-fest hidden">🎃</span>
           </div>
-          <div class="manage-menu-grid">
-            <button id="btnOpenMatch3" type="button" class="brass-btn m3-play-cta" title="Gác Xép Bùa Gặt Honeydukes — 777 Màn (Phím J)">
-              <img src="/sprites/m3_farm_pinwheel.png" alt="" class="m3-inline-icon" /> Match-3 <span id="lblMatch3Lv">1/777</span>
+
+          <!-- Lưới điểm đến chuẩn Vườn Hagrid: Bản đồ, Thăm vườn, Hồ sơ/Cúp Nhà, Lễ hội, Sổ tay, Vali, Kho, Việc quê, Cài đặt -->
+          <div class="hg-menu-grid">
+            <button id="btnOpenWorldMap" type="button" class="hg-menu-node" title="Đại Bản Đồ 10 Vùng Đất &amp; Lộ Trình 100 Cấp">
+              <span class="hg-menu-medal" aria-hidden="true"><img src="/sprites/ui_icon_world_map.png" alt="" class="hg-menu-node-img" /></span>
+              <span class="hg-menu-label">Bản Đồ</span>
             </button>
-            <button id="btnOpenPuzzleArcade" type="button" class="brass-btn pa-hud-cta" title="Đại Sảnh Khảo Thí Hogwarts (Phím K)">
-              <img src="/sprites/ui_icon_jigsaw.png" alt="" class="hud-3d-icon" /> Khảo Thí <span id="lblArcadeTowerLv">0/3108</span>
+            <button id="btnManageOpenNeighbors" type="button" class="hg-menu-node" title="Cổng Floo &amp; Thăm Vườn Bạn Bè (Phím N)">
+              <span class="hg-menu-medal" aria-hidden="true"><img src="/sprites/ui_icon_staff.png" alt="" class="hg-menu-node-img" /></span>
+              <span class="hg-menu-label">Thăm Vườn</span>
+              <span id="badgeManageNeighborCount" class="badge-dot hidden">!</span>
             </button>
-            <button id="btnAccioAll" type="button" class="brass-btn gold-cta" title="Phép Accio gom toàn bộ nông sản, bánh & vàng">
-              <img src="/sprites/ui_icon_accio.png" alt="" class="hud-3d-icon" /> Accio
+            <button id="btnOpenAlbum" type="button" class="hg-menu-node" title="Hồ Sơ &amp; Cúp 4 Nhà Hogwarts">
+              <span class="hg-menu-medal" aria-hidden="true">🏆</span>
+              <span class="hg-menu-label">Hồ Sơ &amp; Cúp</span>
+              <span id="badgeCardCount" class="badge-dot hidden">!</span>
             </button>
-            <button id="btnManageOpenNeighbors" type="button" class="brass-btn gold-cta" title="Sổ Hàng Xóm (Phím N)">
-              🤝 Bạn Bè <span id="badgeManageNeighborCount" class="badge-dot hidden">!</span>
+            <button id="btnOpenHarvestFeast" type="button" class="hg-menu-node" title="Đại Tiệc Mùa Gặt Hang Sóc (30 Bậc)">
+              <span class="hg-menu-medal" aria-hidden="true"><img src="/sprites/prop_ribbon_unveil.png" alt="" class="hg-menu-node-img" /></span>
+              <span class="hg-menu-label">Lễ Hội</span>
+              <span id="badgeFeastCount" class="badge-dot hidden">1</span>
+              <span id="badgeManageFeastCount" class="sr-only-hud hidden">0</span>
             </button>
-            <button id="btnManageOpenFeast" type="button" class="brass-btn gold-cta" title="Đại Tiệc Mùa Gặt Hang Sóc">
-              🍁 Lễ Hội <span id="badgeManageFeastCount" class="badge-dot hidden">0</span>
+            <button id="btnOpenMenuSeedQuiz" type="button" class="hg-menu-node" title="Sổ Tay Cổ Ngữ &amp; Học Viện Thần Chú Đa Ngữ">
+              <span class="hg-menu-medal" aria-hidden="true">📖</span>
+              <span class="hg-menu-label">Sổ Tay</span>
             </button>
-            <button id="btnOpenLeaderboard" type="button" class="brass-btn gold-cta" title="Bảng Xếp Hạng &amp; Cúp 4 Nhà">
-              🏆 BXH
+            <button id="btnOpenSuitcase" type="button" class="hg-menu-node" title="Vali Bảo Tồn Sinh Vật Huyền Bí (Phím B)">
+              <span class="hg-menu-medal" aria-hidden="true"><img src="/sprites/ui_icon_suitcase.png" alt="" class="hg-menu-node-img" /></span>
+              <span class="hg-menu-label">Vali Thú</span>
+              <span id="badgeSuitcaseCount" class="badge-dot hidden">0</span>
             </button>
-            <button id="btnOpenSuitcase" type="button" class="brass-btn" title="Vali Bảo Tồn Sinh Vật Huyền Bí (Phím B)">
-              <img src="/sprites/ui_icon_suitcase.png" alt="" class="hud-3d-icon" /> Vali <span id="badgeSuitcaseCount" class="badge-dot hidden">0</span>
+            <button id="btnOpenWorkshop" type="button" class="hg-menu-node" title="Kho Nông Sản, Xưởng Chế Biến &amp; Tàu Hàng">
+              <span class="hg-menu-medal" aria-hidden="true">🏡</span>
+              <span class="hg-menu-label">Kho Xưởng</span>
+              <span id="badgeWorkshopCount" class="badge-dot hidden">!</span>
             </button>
-            <button id="btnOpenWorkshop" type="button" class="brass-btn" title="Kho Nông Sản Hang Sóc, Xưởng Chế Biến & Tàu Hàng">
-              🏡 Kho <span id="badgeWorkshopCount" class="badge-dot hidden">!</span>
+            <button id="btnOpenFinance" type="button" class="hg-menu-node" title="Sổ Cái Tài Chính &amp; Việc Quê">
+              <span class="hg-menu-medal" aria-hidden="true">📊</span>
+              <span class="hg-menu-label">Sổ Cái</span>
             </button>
-            <button id="btnOpenZones" type="button" class="brass-btn" title="Đại Bản Đồ 10 Phân Khu &amp; Lộ Trình 100 Cấp">
-              🗺️ Bản Đồ
-            </button>
-            <button id="btnOpenFinance" type="button" class="brass-btn" title="Sổ Cái Tài Chính &amp; Giá Vé">
-              📊 Sổ Cái
-            </button>
-            <button id="btnOpenAlbum" type="button" class="brass-btn" title="Cúp 4 Nhà Hogwarts &amp; Bảng Điểm Các Nhà">
-              🏆 Cúp Nhà <span id="badgeCardCount" class="badge-dot hidden">!</span>
-            </button>
-            <button id="btnToggleMinimapHud" type="button" class="brass-btn" title="Hiện hoặc ẩn Radar thu nhỏ">
-              🧭 Radar
-            </button>
-            <button id="btnToggleQuestTrackerHud" type="button" class="brass-btn" title="Ghim bảng nhiệm vụ lên màn hình">
-              📌 Nhiệm Vụ
-            </button>
-            <button id="btnCycleHeatmap" type="button" class="brass-btn span-2" aria-pressed="false" title="Bật lớp màu Bản Đồ Nhiệt">
-              🌡️ Nhiệt
-            </button>
-            <button id="btnManageToggleHudRollup" type="button" class="brass-btn span-2" title="Cuộn gọn các thanh HUD quanh màn hình (Phím H)">
-              📜 Ẩn/Hiện HUD
-            </button>
-            <button id="btnPhotoMode" type="button" class="brass-btn span-2" aria-label="Chế độ chụp ảnh (Phím P)" title="Ẩn giao diện để ngắm cảnh &amp; chụp ảnh (Phím P)">
-              📷 Chụp Ảnh
+            <button id="btnOpenSettings" type="button" class="hg-menu-node" title="Cài Đặt Âm Nhạc, Thời Tiết &amp; Lưu Game">
+              <span class="hg-menu-medal" aria-hidden="true">⚙️</span>
+              <span class="hg-menu-label">Cài Đặt</span>
             </button>
           </div>
-        </div>
+
+          <!-- Chọn trực tiếp môn Mini-game (tự động nhớ làm game mặc định cho nút Chơi góc phải) -->
+          <div class="hg-menu-games-box">
+            <div class="hg-menu-games-head">
+              <span>🎮 Chọn Môn Chơi</span>
+              <button id="btnOpenLeaderboard" type="button" class="hg-bxh-chip" title="Bảng Xếp Hạng 3 Môn Tính Điểm (Phím L)">🥇 BXH</button>
+            </div>
+            <div class="hg-menu-games-pills" role="group" aria-label="Đổi trò chơi">
+              <button id="btnOpenMatch3" type="button" data-switch-minigame="match3" class="hg-game-pill" title="Bùa Gặt Honeydukes — 777 Màn (Phím J)">
+                🍬 Bùa Gặt Honeydukes <small id="lblMatch3Lv" class="sr-only-hud">1/777</small>
+              </button>
+              <button id="btnOpenPuzzleArcade" type="button" data-switch-minigame="caro" class="hg-game-pill" title="Ngũ Ấn Đạo Tặc (Phím K)">
+                🗺️ Ngũ Ấn Đạo Tặc <small id="lblArcadeTowerLv" class="sr-only-hud">0/3108</small>
+              </button>
+              <button type="button" data-switch-minigame="sudoku" class="hg-game-pill" title="Số Học Huyền Bí">
+                🔢 Số Học Huyền Bí
+              </button>
+              <button type="button" data-switch-minigame="blocks" class="hg-game-pill" title="Sinh Vật Huyền Bí">
+                🦄 Sinh Vật Huyền Bí
+              </button>
+              <button type="button" data-switch-minigame="chess" class="hg-game-pill" title="Cờ Phù Thủy">
+                🏰 Cờ Phù Thủy
+              </button>
+              <button type="button" data-switch-minigame="seedquiz" class="hg-game-pill" title="Học Viện Thần Chú">
+                🪄 Học Viện Thần Chú
+              </button>
+            </div>
+          </div>
+
+          <div class="hg-menu-tools-row">
+            <button id="btnAccioAll" type="button" class="brass-btn gold-cta" title="Phép Accio gom toàn bộ nông sản, bánh &amp; vàng">⚡ Accio</button>
+            <button id="btnToggleQuestTrackerHud" type="button" class="brass-btn" title="Ghim bảng nhiệm vụ">📌 Ghim NV</button>
+            <button id="btnToggleMinimapHud" type="button" class="brass-btn" title="Hiện/ẩn Radar thu nhỏ">🧭 Radar</button>
+            <button id="btnCycleHeatmap" type="button" class="brass-btn" aria-pressed="false" title="Bật lớp màu Bản Đồ Nhiệt">🌡️ Nhiệt</button>
+            <button id="btnPhotoMode" type="button" class="brass-btn" aria-label="Chế độ chụp ảnh (Phím P)" title="Ẩn giao diện để chụp ảnh (Phím P)">📷 Ảnh</button>
+            <button id="btnManageToggleHudRollup" type="button" class="brass-btn" title="Cuộn gọn thanh HUD quanh màn hình (Phím H)">📜 Ẩn HUD</button>
+            <button id="btnOpenLegalFromMenu" type="button" class="brass-btn" title="Pháp lý, Quyền riêng tư &amp; Bản quyền">⚖️ Pháp Lý</button>
+            <button id="btnOpenZones" type="button" class="sr-only-hud" tabindex="-1" aria-hidden="true">Bản Đồ</button>
+            <button id="btnToggleHudRollup" type="button" class="sr-only-hud" tabindex="-1" aria-hidden="true"><svg><path id="svgHudRollupChevron" d="M13.5 23 L18 18.5 L22.5 23"/></svg></button>
+            <button id="btnManageOpenFeast" type="button" class="sr-only-hud" tabindex="-1" aria-hidden="true">Lễ Hội</button>
+          </div>
+        </nav>
 
         <!-- COZY PROGRESSIVE-DISCLOSURE POPOVER 2: LIVE WEATHER FORECAST & PARK SPEED -->
         <div id="weatherPopoverMenu" class="hud-floating-popover hidden" role="region" aria-label="Dự báo thời tiết và tốc độ công viên"></div>
@@ -452,48 +473,44 @@ export function shellMountDOM(hud: GameHUD): void {
       <!-- FLY-TO-HUD WEB ANIMATIONS LAYER -->
       <div id="flyRewardLayer" class="fly-reward-layer" aria-hidden="true"></div>
 
-      <!-- 4. BOTTOM-LEFT TOWNSHIP CARDS: Đơn Hàng Cú, Kho Hạt, Chăn Thả, Hàng Xóm & Tiệc Mùa Gặt -->
-      <div id="tsCornerLeft" class="ts-corner-left">
-        <button id="btnOpenQuests" type="button" class="ts-card-btn ts-card-lg" title="Sổ Đơn Hàng Cú Đưa Thư & Cốt Truyện Hang Sóc">
-          <img src="/sprites/ui_icon_owl_orders.png" alt="" class="ts-card-art" />
-          <span class="ts-card-label">Đơn Cú</span>
+      <!-- 4. BOTTOM-LEFT UNIFIED 4-CARD FARM & BUILD DOCK: Đơn Hàng Cú, Kho Hạt, Chăn Thả, Xây Dựng -->
+      <div id="tsCornerLeft" class="ts-corner-left hg-farm-dock" role="toolbar" aria-label="Nông trại và xây dựng">
+        <button id="btnOpenQuests" type="button" class="ts-card-btn hg-dock-card" title="Đơn Hàng Cú &amp; Nhiệm Vụ Cốt Truyện">
+          <img src="/sprites/ui_icon_owl_orders.png" alt="" class="ts-card-art" aria-hidden="true" />
+          <span class="ts-card-label">Đơn Hàng Cú</span>
           <span id="badgeQuestCount" class="ts-red-badge">3</span>
         </button>
-        <button id="btnOpenSeedSilo" type="button" aria-pressed="false" class="ts-card-btn ts-card-md" title="Túi Hạt Giống &amp; Hoa Hang Sóc">
-          <img src="/sprites/ui_icon_seed_sack.png" alt="" class="ts-card-art" />
-          <span class="ts-card-label">Hạt</span>
+        <button id="btnOpenSeedSilo" type="button" aria-pressed="false" class="ts-card-btn hg-dock-card" title="Kho Hạt Giống &amp; Hoa Hang Sóc">
+          <img src="/sprites/ui_icon_seed_sack.png" alt="" class="ts-card-art" aria-hidden="true" />
+          <span class="ts-card-label">Kho Hạt</span>
         </button>
-        <button id="btnOpenPastureTray" type="button" aria-pressed="false" class="ts-card-btn ts-card-md" title="Đồng Cỏ Chăn Thả">
-          <img src="/sprites/ui_icon_pasture_bell.png" alt="" class="ts-card-art" />
-          <span class="ts-card-label">Thú</span>
+        <button id="btnOpenPastureTray" type="button" aria-pressed="false" class="ts-card-btn hg-dock-card" title="Đồng Cỏ Chăn Thả">
+          <img src="/sprites/ui_icon_pasture_bell.png" alt="" class="ts-card-art" aria-hidden="true" />
+          <span class="ts-card-label">Chăn Thả</span>
         </button>
-        <button id="btnOpenNeighbors" data-fly-target="friendship" type="button" class="ts-card-btn ts-card-md" title="Sổ Hàng Xóm (Phím N)">
-          <img src="/sprites/ui_icon_staff.png" alt="" class="ts-card-art" />
-          <span class="ts-card-label">Bạn Bè</span>
-          <span id="badgeNeighborCount" class="ts-red-badge hidden">1</span>
-        </button>
-        <button id="btnOpenHarvestFeast" type="button" class="ts-card-btn ts-card-md" title="Đại Tiệc Mùa Gặt Hang Sóc">
-          <img src="/sprites/prop_ribbon_unveil.png" alt="" class="ts-card-art" />
-          <span class="ts-card-label">Lễ Hội</span>
-          <span id="badgeFeastCount" class="ts-red-badge hidden">1</span>
+        <button id="btnToggleBuildDock" type="button" aria-pressed="false" class="ts-card-btn hg-dock-card" title="Kho Xây Dựng Bản Vẽ Công Trình">
+          <img src="/sprites/ui_icon_hammer_wand.png" alt="" class="ts-card-art" aria-hidden="true" />
+          <span class="ts-card-label">Xây Dựng</span>
+          <span id="badgeBuildReadyCount" class="ts-red-badge is-ready-green hidden">1</span>
         </button>
       </div>
 
-      <!-- 5. BOTTOM-RIGHT TOWNSHIP × GARDENSCAPES CARDS: Chơi Lên Cấp (Tháp 5×777), Xây Dựng & Bản Đồ -->
-      <div id="tsCornerRight" class="ts-corner-right">
-        <button id="btnCornerPlayPuzzle" type="button" class="ts-card-btn ts-card-lg ts-card-play-stage" title="Chinh phục Tháp 5 Môn × 777 Màn">
-          <img src="/sprites/m3_farm_pinwheel.png" alt="" class="ts-card-art" />
-          <span id="lblCornerPlayStage" class="ts-card-label">▶️ Cấp 2</span>
-          <span id="badgeCornerPlayBonus" class="ts-red-badge ts-bonus-x2-badge">🔥 +🌟</span>
-        </button>
-        <button id="btnToggleBuildDock" type="button" aria-pressed="false" class="ts-card-btn ts-card-md-plus" title="Mở Kho Xây Dựng Bản Vẽ Công Trình">
-          <img src="/sprites/ui_icon_hammer_wand.png" alt="" class="ts-card-art" />
-          <span class="ts-card-label">Xây</span>
-          <span id="badgeBuildReadyCount" class="ts-red-badge is-ready-green hidden">1</span>
-        </button>
-        <button id="btnOpenWorldMap" type="button" class="ts-card-btn ts-card-md" title="Mở Đại Bản Đồ 10 Vùng Đất">
-          <img src="/sprites/ui_icon_world_map.png" alt="" class="ts-card-art" />
-          <span class="ts-card-label">Bản Đồ</span>
+      <!-- 5. BOTTOM-RIGHT HERO PLAY BUTTON: Mở lại ngay trò chơi cuối cùng vừa được chơi -->
+      <div id="tsCornerRight" class="ts-corner-right hg-play-corner">
+        <button
+          id="btnCornerPlayPuzzle"
+          type="button"
+          class="ts-card-btn ts-card-lg ts-card-play-stage hg-hero-play-btn"
+          aria-label="Chơi tiếp trò chơi vừa chơi"
+          title="Chạm để quay lại ngay trò chơi cuối cùng vừa được chơi"
+        >
+          <span id="badgeCornerPlayBonus" class="hg-play-game-tag">🍬 Bùa Gặt</span>
+          <span class="hg-play-emblem" aria-hidden="true">
+            <img id="imgCornerPlayIcon" src="/sprites/m3_farm_pinwheel.png" alt="" class="ts-card-art hg-play-art" />
+            <span class="hg-play-triangle">▶</span>
+          </span>
+          <span id="lblCornerPlayStage" class="ts-card-label hg-play-stage">Màn 1</span>
+          <small id="lblCornerPlaySub" class="hg-play-sub">Cấp 1 → 2</small>
         </button>
       </div>
 
@@ -640,7 +657,7 @@ export function shellMountDOM(hud: GameHUD): void {
       <dialog id="match3Dialog" closedby="any" aria-labelledby="match3DialogTitle">
         <div class="parchment-panel modal-inner m3-modal-inner">
           <div class="modal-header">
-            <h2 id="match3DialogTitle" class="modal-title"><img src="/sprites/m3_farm_pinwheel.png" alt="" style="width:26px;height:26px;vertical-align:-6px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Match-3</h2>
+            <h2 id="match3DialogTitle" class="modal-title"><img src="/sprites/m3_farm_pinwheel.png" alt="" style="width:26px;height:26px;vertical-align:-6px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Bùa Gặt Honeydukes</h2>
             <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
           </div>
           <div id="match3DialogContent"></div>
@@ -651,7 +668,7 @@ export function shellMountDOM(hud: GameHUD): void {
       <dialog id="puzzleArcadeDialog" closedby="any" aria-labelledby="puzzleArcadeDialogTitle">
         <div class="parchment-panel modal-inner pa-modal-inner">
           <div class="modal-header">
-            <h2 id="puzzleArcadeDialogTitle" class="modal-title"><img src="/sprites/m3_piece_scroll.png" alt="" style="width:26px;height:26px;vertical-align:-6px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Khảo Thí</h2>
+            <h2 id="puzzleArcadeDialogTitle" class="modal-title"><img src="/sprites/m3_piece_scroll.png" alt="" style="width:26px;height:26px;vertical-align:-6px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Ngũ Ấn Đạo Tặc</h2>
             <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
           </div>
           <div id="puzzleArcadeDialogContent"></div>
@@ -662,7 +679,7 @@ export function shellMountDOM(hud: GameHUD): void {
       <dialog id="seedQuizDialog" closedby="any" aria-labelledby="seedQuizDialogTitle">
         <div class="parchment-panel modal-inner sq-modal-inner">
           <div class="modal-header">
-            <h2 id="seedQuizDialogTitle" class="modal-title">🪄 Học Viện</h2>
+            <h2 id="seedQuizDialogTitle" class="modal-title">🪄 Học Viện Thần Chú</h2>
             <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
           </div>
           <div id="seedQuizDialogContent"></div>
@@ -673,7 +690,7 @@ export function shellMountDOM(hud: GameHUD): void {
       <dialog id="neighborDialog" closedby="any" aria-labelledby="neighborDialogTitle">
         <div class="parchment-panel modal-inner neighbor-modal-inner">
           <div class="modal-header">
-            <h2 id="neighborDialogTitle" class="modal-title">🤝 Bạn Bè</h2>
+            <h2 id="neighborDialogTitle" class="modal-title">🔥 Cổng Floo &amp; Hàng Xóm</h2>
             <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
           </div>
           <div id="neighborDialogContent"></div>
@@ -711,29 +728,55 @@ export function shellBindEvents(hud: GameHUD): void {
       hud.closeHudPopovers();
       hud.openMatch3Dialog();
     };
-    const handleOpenTrialOrHub = () => {
-      hud.openTrialMinigame();
+    const handleOpenLastGame = () => {
+      hud.openLastPlayedMinigame();
     };
-    hud.root.querySelector('#btnOpenMatch3')?.addEventListener('click', handleOpenMatch3);
-    hud.root.querySelector('#btnHudStarChip')?.addEventListener('click', handleOpenTrialOrHub);
-    hud.root.querySelector('#btnHudMinigameHub')?.addEventListener('click', handleOpenTrialOrHub);
-    hud.root.querySelector('#btnCornerPlayPuzzle')?.addEventListener('click', handleOpenTrialOrHub);
+    hud.root.querySelectorAll<HTMLButtonElement>('[data-switch-minigame]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const g = btn.dataset.switchMinigame as LeaderboardGameId | undefined;
+        hud.closeHudPopovers();
+        if (!g || g === 'match3') {
+          hud.openMatch3Dialog();
+        } else if (g === 'seedquiz') {
+          hud.openSeedQuizDialog();
+        } else {
+          hud.openPuzzleArcadeDialog(g);
+        }
+      });
+    });
+    hud.root.querySelector('#btnHudStarChip')?.addEventListener('click', handleOpenLastGame);
+    hud.root.querySelector('#btnHudMinigameHub')?.addEventListener('click', handleOpenLastGame);
+    hud.root.querySelector('#btnCornerPlayPuzzle')?.addEventListener('click', handleOpenLastGame);
+    hud.root.querySelector('#chipHudGalleons')?.addEventListener('click', handleOpenLastGame);
     hud.root.querySelector('#xpBarShell')?.addEventListener('click', () => {
       hud.closeHudPopovers();
       hud.renderRoadmapDialog();
       (hud.root.querySelector('#roadmapDialog') as HTMLDialogElement)?.showModal();
     });
     hud.root.querySelector('#btnHudHeartChip')?.addEventListener('click', handleOpenMatch3);
-    hud.root.querySelector('#btnPlusGalleons')?.addEventListener('click', handleOpenTrialOrHub);
+    hud.root.querySelector('#btnPlusGalleons')?.addEventListener('click', handleOpenLastGame);
     const handleOpenPuzzleArcade = () => {
       hud.closeHudPopovers();
-      hud.openPuzzleArcadeDialog();
+      const last = hud.sim.getLastPlayedMinigame();
+      if (last === 'caro' || last === 'sudoku' || last === 'chess' || last === 'blocks') {
+        hud.openPuzzleArcadeDialog(last);
+      } else {
+        hud.openPuzzleArcadeDialog('caro');
+      }
     };
-    hud.root.querySelector('#btnOpenPuzzleArcade')?.addEventListener('click', handleOpenPuzzleArcade);
+    hud.root.querySelector('#btnHudSandChip')?.addEventListener('click', handleOpenPuzzleArcade);
+    hud.root.querySelector('#btnPlusSand')?.addEventListener('click', handleOpenPuzzleArcade);
     hud.root.querySelector('#btnOpenLeaderboard')?.addEventListener('click', () => {
       hud.openLeaderboardDialog();
     });
-    hud.root.querySelector('#btnPlusSand')?.addEventListener('click', handleOpenPuzzleArcade);
+    hud.root.querySelector('#btnOpenMenuSeedQuiz')?.addEventListener('click', () => {
+      hud.closeHudPopovers();
+      hud.openSeedQuizDialog(undefined, null, undefined, undefined, undefined, 'codex');
+    });
+    hud.root.querySelector('#btnOpenLegalFromMenu')?.addEventListener('click', () => {
+      hud.closeHudPopovers();
+      (document.querySelector('.legal-trigger-btn') as HTMLButtonElement | null)?.click();
+    });
     const handleOpenBarn = (e?: Event) => {
       e?.stopPropagation();
       hud.closeHudPopovers();
@@ -1366,6 +1409,10 @@ export function shellBindEvents(hud: GameHUD): void {
         }
         hud.refreshAll();
       } else if (e.key === 'b' || e.key === 'B') {
+        if (hud.sim.isVisitingNeighbor || hud.sim.isHeadmasterPreview) {
+          hud.showToast('🦉 Đang tham quan vườn bạn — hãy về vườn nhà để mở Vali Thú nhé!', '🧳');
+          return;
+        }
         hud.openSuitcaseDialog();
       } else if (e.key === 'j' || e.key === 'J') {
         hud.openMatch3Dialog();

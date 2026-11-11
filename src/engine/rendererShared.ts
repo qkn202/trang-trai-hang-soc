@@ -305,11 +305,11 @@ export function rotTileToWorldTile(
  * while night keeps the Hogsmeade candlelight mood.
  */
 export const TERRAIN_PALETTE: Record<TerrainType, { day: string; night: string; border: string }> = {
-  grass: { day: '#6bc238', night: '#2b5241', border: 'rgba(54, 102, 42, 0.24)' },
-  snow: { day: '#f2f7fd', night: '#8ea7c4', border: 'rgba(130, 158, 188, 0.24)' },
-  stone: { day: '#cfc3b2', night: '#56505e', border: 'rgba(92, 76, 62, 0.24)' },
-  forest: { day: '#539e49', night: '#214034', border: 'rgba(34, 72, 42, 0.26)' },
-  water: { day: '#45b5c4', night: '#154b6b', border: 'rgba(176, 240, 252, 0.28)' },
+  grass: { day: '#6ba832', night: '#244a3d', border: 'rgba(54, 102, 42, 0.24)' },
+  snow: { day: '#f3f8fe', night: '#8ea7c4', border: 'rgba(130, 158, 188, 0.24)' },
+  stone: { day: '#dfc9a6', night: '#58515f', border: 'rgba(92, 76, 62, 0.24)' },
+  forest: { day: '#4c9439', night: '#1f3d32', border: 'rgba(34, 72, 42, 0.26)' },
+  water: { day: '#2db7cc', night: '#124668', border: 'rgba(176, 240, 252, 0.32)' },
   volcanic: { day: '#886e74', night: '#33263a', border: 'rgba(249, 145, 62, 0.28)' },
 };
 

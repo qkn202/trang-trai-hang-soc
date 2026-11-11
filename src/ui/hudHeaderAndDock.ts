@@ -132,7 +132,9 @@ export function headerTogglePhotoMode(hud: GameHUD, force?: boolean): void {
       'hidden',
       hud.photoModeActive || isVisiting
     );
-    hud.root.querySelector('#tsCornerLeft')?.classList.toggle('hidden', hud.photoModeActive);
+    hud.root
+      .querySelector('#tsCornerLeft')
+      ?.classList.toggle('hidden', hud.photoModeActive || isVisiting);
     hud.root
       .querySelector('#tsCornerRight')
       ?.classList.toggle('hidden', hud.photoModeActive || isVisiting);
@@ -202,7 +204,7 @@ export function headerSyncHudFocusVisibility(hud: GameHUD): void {
     }
     const roundOrb = hud.root.querySelector('#btnHudRoundOrb') as HTMLButtonElement | null;
     if (roundOrb) {
-      roundOrb.classList.toggle('hidden', hud.photoModeActive || focused);
+      roundOrb.classList.toggle('hidden', !hud.hudRolledUp || hud.photoModeActive || focused);
       roundOrb.setAttribute('aria-pressed', String(hud.hudRolledUp));
       roundOrb.dataset.rolled = String(hud.hudRolledUp);
     }
@@ -274,15 +276,21 @@ export function headerHideOpenFloatingTrays(hud: GameHUD): void {
 export function headerPositionFloatingPopover(hud: GameHUD, triggerEl: HTMLElement | null, popoverEl: HTMLElement | null): void {
     if (!triggerEl || !popoverEl) return;
     const rect = triggerEl.getBoundingClientRect();
-    const popW = Math.max(248, popoverEl.offsetWidth || 280);
+    const popW = Math.min(window.innerWidth - 16, Math.max(248, popoverEl.offsetWidth || 336));
+    const popH = Math.min(popoverEl.offsetHeight || 420, window.innerHeight - 16);
     const preferredLeft = rect.left < window.innerWidth * 0.5 ? rect.left : rect.right - popW;
-    const left = Math.max(10, Math.min(preferredLeft, window.innerWidth - popW - 10));
-    const top = Math.min(rect.bottom + 8, window.innerHeight - 280);
+    const left = Math.max(8, Math.min(preferredLeft, window.innerWidth - popW - 8));
+    const top = Math.max(8, Math.min(rect.bottom + 8, window.innerHeight - popH - 8));
     popoverEl.style.left = `${Math.round(left)}px`;
-    popoverEl.style.top = `${Math.round(Math.max(8, top))}px`;
+    popoverEl.style.top = `${Math.round(top)}px`;
 }
 
 export function headerToggleManagePopover(hud: GameHUD, force?: boolean): void {
+    if (hud.sim.isVisitingNeighbor) {
+      headerCloseHudPopovers(hud);
+      hud.showToast('🦉 Đang tham quan vườn bạn — hãy về vườn nhà để mở Menu Khu Vườn nhé!', '🦉');
+      return;
+    }
     const next = typeof force === 'boolean' ? force : !hud.manageMenuOpen;
     headerCloseHudPopovers(hud);
     if (!next) return;
@@ -521,8 +529,36 @@ export function headerSpawnFlyReward(hud: GameHUD,
 }
 
 export function headerShowToast(hud: GameHUD, msg: string, icon = '🦉'): void {
-    const stack = hud.root.querySelector('#toastStack');
+    const stack =
+      hud.root.querySelector<HTMLElement>('#toastStack') ??
+      (typeof document !== 'undefined' ? document.getElementById('toastStack') : null);
     if (!stack) return;
+
+    // Promote #toastStack into the topmost open <dialog> (#top-layer) so toasts never hide behind showModal()!
+    const openDialogs = Array.from(hud.root.querySelectorAll<HTMLDialogElement>('dialog[open]'));
+    const topDialog = openDialogs.length > 0 ? openDialogs[openDialogs.length - 1] : null;
+    if (topDialog) {
+      if (stack.parentElement !== topDialog) {
+        topDialog.appendChild(stack);
+        topDialog.addEventListener(
+          'close',
+          () => {
+            const remaining = Array.from(
+              hud.root.querySelectorAll<HTMLDialogElement>('dialog[open]')
+            );
+            const nextHost =
+              remaining.length > 0 ? remaining[remaining.length - 1] : hud.root;
+            if (stack.parentElement !== nextHost) {
+              nextHost.appendChild(stack);
+            }
+          },
+          { once: true }
+        );
+      }
+    } else if (stack.parentElement !== hud.root) {
+      hud.root.appendChild(stack);
+    }
+
     const item = document.createElement('div');
     item.className = 'parchment-dark owl-toast';
     item.textContent = `${icon} ${msg}`;
@@ -703,6 +739,9 @@ export function headerRefreshAll(hud: GameHUD): void {
       .querySelector('#bottomDockWrap')
       ?.classList.toggle('hidden', hud.photoModeActive || isVisiting);
     hud.root
+      .querySelector('#tsCornerLeft')
+      ?.classList.toggle('hidden', hud.photoModeActive || isVisiting);
+    hud.root
       .querySelector('#tsCornerRight')
       ?.classList.toggle('hidden', hud.photoModeActive || isVisiting);
     hud.root
@@ -821,15 +860,23 @@ export function headerRefreshHeader(hud: GameHUD): void {
     hud.refreshNeighborBadges();
     const winsProg = hud.sim.getWinsProgressForCurrentLevel();
     const towerProg = hud.sim.getTotalTowerClearedStages();
+    const lvPct =
+      st.level >= MAX_LEVEL
+        ? 100
+        : Math.min(
+            100,
+            Math.max(8, Math.round((winsProg.current / Math.max(1, winsProg.required)) * 100))
+          );
+    const btnRoadmap = hud.root.querySelector('#btnOpenRoadmap') as HTMLElement | null;
+    if (btnRoadmap) {
+      btnRoadmap.style.setProperty('--hg-lvl-pct', String(lvPct));
+      btnRoadmap.title =
+        st.level >= MAX_LEVEL
+          ? `👑 Cấp Tối Đa ${MAX_LEVEL} • Rương XP: ${chestXp}/${FARM_HARVEST_CHEST_XP} • Tháp 5 Môn: ${towerProg.cleared.toLocaleString('vi-VN')}/${towerProg.total.toLocaleString('vi-VN')} Màn`
+          : `Cấp ${st.level} → ${st.level + 1}: Đã thắng ${winsProg.current}/${winsProg.required} màn • Rương XP: ${chestXp}/${FARM_HARVEST_CHEST_XP}`;
+    }
     const barLvlTop = hud.root.querySelector('#barLevelTopFill') as HTMLElement | null;
     if (barLvlTop) {
-      const lvPct =
-        st.level >= MAX_LEVEL
-          ? 100
-          : Math.min(
-              100,
-              Math.max(8, Math.round((winsProg.current / Math.max(1, winsProg.required)) * 100))
-            );
       barLvlTop.style.width = `${lvPct}%`;
       if (barLvlTop.parentElement) {
         barLvlTop.parentElement.title =
@@ -869,23 +916,70 @@ export function headerRefreshHeader(hud: GameHUD): void {
     }
     hud.root.querySelector('#btnHudMinigameHub')?.classList.remove('trial-urgent');
 
-    // Update Bottom-Right Gardenscapes Play CTA + Build Ready Badge
-    const lblCornerStage = hud.root.querySelector('#lblCornerPlayStage') as HTMLElement | null;
-    if (lblCornerStage) {
-      lblCornerStage.textContent =
-        st.level >= MAX_LEVEL
-          ? `▶️ ${towerProg.cleared}/${towerProg.total}`
-          : `▶️ Cấp ${st.level + 1}`;
+    // Update Bottom-Right Hero Play CTA -> Always reflects lastPlayedMinigame (never forces Chess)
+    const m3Info = hud.sim.getDisciplineStageInfo('match3');
+    const lastGame = hud.sim.getLastPlayedMinigame();
+    let playTag = '🍬 Bùa Gặt';
+    let playIcon = '/sprites/m3_farm_pinwheel.png';
+    let playStageText = m3Info.isMaxed ? `👑 ${MAX_MINIGAME_STAGE}` : `Màn ${m3Info.currentStage}`;
+    if (lastGame === 'caro') {
+      const info = hud.sim.getDisciplineStageInfo('caro');
+      playTag = '🗺️ Ngũ Ấn';
+      playIcon = '/sprites/ui_icon_jigsaw.png';
+      playStageText = info.isMaxed ? `👑 ${MAX_MINIGAME_STAGE}` : `Màn ${info.currentStage}`;
+    } else if (lastGame === 'sudoku') {
+      const info = hud.sim.getDisciplineStageInfo('sudoku');
+      playTag = '🔢 Số Học';
+      playIcon = '/sprites/m3_piece_scroll.png';
+      playStageText = info.isMaxed ? `👑 ${MAX_MINIGAME_STAGE}` : `Màn ${info.currentStage}`;
+    } else if (lastGame === 'blocks') {
+      const info = hud.sim.getDisciplineStageInfo('blocks');
+      playTag = '🦄 Sinh Vật';
+      playIcon = '/sprites/beast_niffler.png';
+      playStageText = info.isMaxed ? `👑 ${MAX_MINIGAME_STAGE}` : `Màn ${info.currentStage}`;
+    } else if (lastGame === 'chess') {
+      const info = hud.sim.getDisciplineStageInfo('chess');
+      playTag = '🏰 Cờ Phù Thủy';
+      playIcon = '/sprites/ui_icon_jigsaw.png';
+      playStageText = info.isMaxed ? `👑 ${MAX_MINIGAME_STAGE}` : `Màn ${info.currentStage}`;
+    } else if (lastGame === 'seedquiz') {
+      playTag = '🪄 Thần Chú';
+      playIcon = '/sprites/ui_icon_seed_sack.png';
+      playStageText = 'Ôn Tập';
+    }
+
+    const imgCornerPlay = hud.root.querySelector('#imgCornerPlayIcon') as HTMLImageElement | null;
+    if (imgCornerPlay && imgCornerPlay.getAttribute('src') !== playIcon) {
+      imgCornerPlay.setAttribute('src', playIcon);
     }
     const badgeCornerBonus = hud.root.querySelector('#badgeCornerPlayBonus') as HTMLElement | null;
     if (badgeCornerBonus) {
-      if (reqTrial && !st.sandboxMode && !hud.sim.isHeadmasterPreview && st.level < MAX_LEVEL) {
-        badgeCornerBonus.textContent = `🔥${reqTrial.icon}+🌟`;
-        badgeCornerBonus.classList.remove('hidden');
-      } else {
-        badgeCornerBonus.classList.add('hidden');
-      }
+      badgeCornerBonus.textContent = playTag;
+      badgeCornerBonus.classList.remove('hidden');
     }
+    const lblCornerStage = hud.root.querySelector('#lblCornerPlayStage') as HTMLElement | null;
+    if (lblCornerStage) {
+      lblCornerStage.textContent = playStageText;
+    }
+    const lblCornerSub = hud.root.querySelector('#lblCornerPlaySub') as HTMLElement | null;
+    if (lblCornerSub) {
+      lblCornerSub.textContent =
+        st.level >= MAX_LEVEL
+          ? `👑 Cấp ${MAX_LEVEL}`
+          : `Cấp ${st.level + 1} (${winsProg.current}/${winsProg.required})`;
+    }
+    const btnCornerPlay = hud.root.querySelector('#btnCornerPlayPuzzle') as HTMLButtonElement | null;
+    if (btnCornerPlay) {
+      const playSummary = `Chơi tiếp ${playTag} — ${playStageText}`;
+      btnCornerPlay.title = playSummary;
+      btnCornerPlay.setAttribute('aria-label', playSummary);
+    }
+    hud.root.querySelectorAll<HTMLButtonElement>('[data-switch-minigame]').forEach((pill) => {
+      const isCurrent = pill.dataset.switchMinigame === lastGame;
+      pill.dataset.active = String(isCurrent);
+      pill.setAttribute('aria-pressed', String(isCurrent));
+    });
+
     const badgeBuildReady = hud.root.querySelector('#badgeBuildReadyCount') as HTMLElement | null;
     if (badgeBuildReady) {
       const builtSet = new Set(st.buildings.map((b) => b.itemId));
@@ -904,7 +998,6 @@ export function headerRefreshHeader(hud: GameHUD): void {
         badgeBuildReady.classList.add('hidden');
       }
     }
-    const m3Info = hud.sim.getDisciplineStageInfo('match3');
     const lblM3Lv = hud.root.querySelector('#lblMatch3Lv') as HTMLElement | null;
     if (lblM3Lv && st.match3) {
       lblM3Lv.textContent = m3Info.isMaxed
@@ -959,9 +1052,18 @@ export function headerRefreshHeader(hud: GameHUD): void {
     const cardBadge = hud.root.querySelector('#badgeCardCount') as HTMLElement;
     cardBadge.classList.toggle('hidden', !cupReady);
 
+    hud.refreshSuitcaseBadge();
+    const suitcaseBadgeEl = hud.root.querySelector('#badgeSuitcaseCount') as HTMLElement | null;
+    const suitcaseReadyCount =
+      suitcaseBadgeEl && !suitcaseBadgeEl.classList.contains('hidden')
+        ? Math.max(0, Number.parseInt(suitcaseBadgeEl.textContent || '0', 10) || 0)
+        : 0;
+    const feastClaimableCount = hud.sim.getClaimableHarvestFeastCount();
+
     const manageDot = hud.root.querySelector('#badgeManageMenuDot') as HTMLElement | null;
     if (manageDot) {
-      const manageCount = crateReadyCount + (cupReady ? 1 : 0);
+      const manageCount =
+        crateReadyCount + (cupReady ? 1 : 0) + feastClaimableCount + suitcaseReadyCount;
       if (manageCount > 0) {
         manageDot.textContent = String(manageCount);
         manageDot.classList.remove('hidden');
@@ -970,7 +1072,6 @@ export function headerRefreshHeader(hud: GameHUD): void {
       }
     }
 
-    hud.refreshSuitcaseBadge();
     headerSyncProgressiveHudVisibility(hud);
     headerRefreshHeaderClock(hud);
 

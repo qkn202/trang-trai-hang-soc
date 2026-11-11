@@ -1094,7 +1094,11 @@ const OWL_GIVERS = [
   { name: 'Bà Rosmerta', title: 'Quán Ba Cây Chổi', emoji: '🍺' },
 ];
 
-export function createOwlOrderQuest(level: number, seedIdx: number): QuestDef {
+export function createOwlOrderQuest(
+  level: number,
+  seedIdx: number,
+  options?: { canFeedCreatures?: boolean; canUpgradeStar?: boolean }
+): QuestDef {
   const giver = OWL_GIVERS[seedIdx % OWL_GIVERS.length];
   const scale = Math.max(1, Math.floor(1 + level * 0.45));
   const rewardG = Math.round(45 + level * 22 + Math.pow(level, 1.35) * 4);
@@ -1109,24 +1113,24 @@ export function createOwlOrderQuest(level: number, seedIdx: number): QuestDef {
         giverName: 'Ron Weasley',
         giverTitle: 'Bàn Đạo Tặc Phòng Khách Hang Sóc',
         giverEmoji: '🗺️',
-        title: 'Thắng 1 ván Trận Pháp Ngũ Ấn Đạo Tặc',
-        dialogue: 'Ngồi xuống uống tách ca-cao nóng và đấu với mình 1 ván Ngũ Ấn Phượng Hoàng trên Bản Đồ Đạo Tặc nhé!',
+        title: 'Thắng 1 ván Ngũ Ấn Đạo Tặc',
+        dialogue: 'Ngồi xuống uống tách ca-cao nóng và đấu với mình 1 ván Ngũ Ấn Đạo Tặc nhé!',
       },
       {
         targetId: 'sudoku',
         giverName: 'Hermione Granger',
-        giverTitle: 'Sổ Cổ Ngữ Thư Viện Hogwarts',
-        giverEmoji: '🔮',
-        title: 'Giải hoàn chỉnh 1 bảng Ma Trận Cửu Bảo Bối 9×9',
-        dialogue: 'Mình vừa chép lại Ma Trận Cửu Bảo Bối 9×9 này, bồ thử khảm đủ 9 bảo bối phép thuật từ 1 đến 9 xem!',
+        giverTitle: 'Lớp Số Học Huyền Bí Hogwarts',
+        giverEmoji: '🔢',
+        title: 'Giải hoàn chỉnh 1 bảng Số Học Huyền Bí',
+        dialogue: 'Mình vừa chép lại bảng Số Học Huyền Bí 9×9 này, bồ thử suy luận điền đủ các con số từ 1 đến 9 xem!',
       },
       {
         targetId: 'chess',
         giverName: 'Giáo Sư McGonagall',
         giverTitle: 'Câu Lạc Bộ Cờ Phù Thủy Hogwarts',
         giverEmoji: '🏰',
-        title: 'Chiến thắng 1 ván Cờ Phù Thủy Đại Sảnh Đường',
-        dialogue: 'Một người quản lý điền trang xuất sắc luôn biết tính trước 2 nước trên bàn Cờ Phù Thủy Đại Sảnh Đường!',
+        title: 'Chiến thắng 1 ván Cờ Phù Thủy',
+        dialogue: 'Một người quản lý điền trang xuất sắc luôn biết tính trước 2 nước trên bàn Cờ Phù Thủy!',
       },
     ][(seedIdx >>> 1) % 3];
     return {
@@ -1189,7 +1193,7 @@ export function createOwlOrderQuest(level: number, seedIdx: number): QuestDef {
       claimed: false,
     };
   }
-  if (templateIdx === 2 && level >= 2) {
+  if (templateIdx === 2 && level >= 3 && (options?.canFeedCreatures ?? true)) {
     const amt = Math.max(1, Math.min(8, 1 + Math.floor(level / 15)));
     return {
       id: `owl_${Date.now()}_${seedIdx}`,
@@ -1204,6 +1208,26 @@ export function createOwlOrderQuest(level: number, seedIdx: number): QuestDef {
       progress: 0,
       rewardGalleons: Math.max(1, Math.round(farmRewardG * 1.15)),
       rewardXp: Math.round(rewardXp * 1.15),
+      rewardTimeSand: 1,
+      completed: false,
+      claimed: false,
+    };
+  }
+  if (options?.canUpgradeStar === false) {
+    const amt = Math.max(5, Math.round((60 + scale * 35) / 5));
+    return {
+      id: `owl_${Date.now()}_${seedIdx}`,
+      kind: 'owl_order',
+      giverName: giver.name,
+      giverTitle: giver.title,
+      giverEmoji: giver.emoji,
+      title: `Thu hoạch nông sản đạt ${amt} Vàng Galleon`,
+      dialogue: 'Lướt chuột qua các bong bóng bánh táo, áo len và nông sản chín để gom doanh thu nhé!',
+      objectiveType: 'harvest_galleons',
+      targetAmount: amt,
+      progress: 0,
+      rewardGalleons: farmRewardG,
+      rewardXp,
       rewardTimeSand: 1,
       completed: false,
       claimed: false,
@@ -1291,7 +1315,7 @@ export function createDailyQuests(level: number, dateKey: string): QuestDef[] {
       giverName: 'Ron & Hermione',
       giverTitle: 'Đại Sảnh Khảo Thí Pháp Thuật (Làm mới 00:00)',
       giverEmoji: '♟️',
-      title: 'Thắng 2 màn Khảo Thí Pháp Thuật (Bùa Gặt, Ngũ Ấn, Cửu Bảo Bối, Cờ Phù Thủy hoặc Cổ Ngữ)',
+      title: 'Thắng 2 màn Khảo Thí Pháp Thuật (Bùa Gặt Honeydukes, Ngũ Ấn Đạo Tặc, Số Học Huyền Bí, Cờ Phù Thủy hoặc Sinh Vật Huyền Bí)',
       dialogue: 'Chinh phục các trò chơi phép thuật vừa tích 🌟 Sao mở khóa công trình, vừa vượt thử thách thăng cấp đó!',
       objectiveType: 'win_minigame',
       targetAmount: 2,
@@ -1362,10 +1386,10 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
     id: 'seed_quiz_or_buy',
     pose: 'npc_molly_guide',
     speakerName: 'Bà Molly Weasley',
-    speakerTitle: 'Học Viện Thần Chú Đa Ngữ Hogwarts',
+    speakerTitle: 'Học Viện Thần Chú',
     title: 'Bước 4/6 • Niệm Thần Chú Đa Ngữ Lấy Hạt 0G',
     dialogue:
-      'Bí quyết của Hang Sóc đây: mỗi khi cần hạt giống hoa hay nông sản, con có thể niệm nhanh 1 câu Thần Chú Đa Ngữ (Anh, Hàn, Trung, Tây Ban Nha, Nhật) để nhận hạt 0 Vàng, hoặc mua nhanh bằng Vàng!',
+      'Bí quyết của Hang Sóc đây: mỗi khi cần hạt giống hoa hay nông sản, con có thể niệm nhanh 1 câu tại Học Viện Thần Chú (Anh, Hàn, Trung, Tây Ban Nha, Nhật) để nhận hạt 0 Vàng, hoặc mua nhanh bằng Vàng!',
     hintVi: '🪄 Mở Học Viện Thần Chú trả lời đúng 1 câu lấy hạt 0G (hoặc mua nhanh 1 mẻ hạt bằng Vàng)',
     ctaLabel: '🪄 Mở Học Viện Thần Chú 0G',
     rewardLabel: '+8 🪙 Vàng • +1 ⏳ Cát Thời Gian • +20 ⭐',
@@ -1381,9 +1405,9 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
     speakerTitle: 'Bùa Gặt Honeydukes & Đại Sảnh Khảo Thí',
     title: 'Bước 5/6 • Khảo Thí Pháp Thuật Nhận Sao 🌟',
     dialogue:
-      'Để dựng Tổ Ấm Hang Sóc và Lò Bánh Táo (cũng như rút ngắn thời gian chờ xây công trình!), con cần Sao Phép Thuật 🌟 từ Gác Xép Bùa Gặt Honeydukes hoặc Đại Sảnh Khảo Thí (Ngũ Ấn Đạo Tặc, Ma Trận Bảo Bối, Cờ Phù Thủy, Nối Hình Sinh Vật). Thắng ngay 1 màn đầu tiên nhé!',
-    hintVi: '🍓 Bấm "▶️ Chơi Lên Cấp" góc phải (hoặc nút bên dưới) và chiến thắng 1 màn bất kỳ',
-    ctaLabel: '🍓 Vượt Khảo Thí Nhận Sao',
+      'Để dựng Tổ Ấm Hang Sóc và Lò Bánh Táo (cũng như rút ngắn thời gian chờ xây công trình!), con cần Sao Phép Thuật 🌟 từ Bùa Gặt Honeydukes, Ngũ Ấn Đạo Tặc, Số Học Huyền Bí, Cờ Phù Thủy hoặc Sinh Vật Huyền Bí. Thắng ngay 1 màn đầu tiên nhé!',
+    hintVi: '🍬 Bấm nút Chơi góc phải (hoặc nút bên dưới) và chiến thắng 1 màn bất kỳ',
+    ctaLabel: '🍬 Vượt Khảo Thí Nhận Sao',
     rewardLabel: '+2 🌟 Sao Phép Thuật • +50 🪙 Vàng • +25 ⭐',
     rewardGalleons: 50,
     rewardXp: 25,

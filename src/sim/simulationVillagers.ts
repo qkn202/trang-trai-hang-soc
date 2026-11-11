@@ -167,7 +167,7 @@ import {
   createInitialPuzzleArcadeState,
   JIGSAW_PAINTINGS,
   PuzzleRewardSpec,
-} from './puzzleArcadeEngine';
+} from './puzzleShared';
 import {
   ActiveQuizChallenge,
   createInitialLanguageQuizState,
@@ -209,6 +209,7 @@ import {
   starIncomeMultiplier,
   VALLEY_VILLAGER_PROFILES,
 } from './simulationData';
+import { ensureRetentionState } from './retentionAndNarrative';
 import type { ParkSimulation } from './simulation';
 
 export function villagersHireStaff(sim: ParkSimulation, role: keyof GameState['staffHired']): boolean {
@@ -514,10 +515,17 @@ export function villagersUpdateStaff(sim: ParkSimulation, dt: number, unlockedSe
         }
       }
 
-      // 3. House Elf: auto-harvest bubbles!
+      // 3. House Elf: auto-harvest bubbles (skipping workshops when barn is full so goods are never lost!)
       if (s.role === 'house_elf') {
+        const barnFree = Math.max(
+          0,
+          (sim.state.farmBarn?.capacity ?? 60) - sim.getBarnTotalUsed()
+        );
         const readyB = sim.state.buildings.find(
-          (b) => b.readyBubbles >= 2 && inPatrol(b.gx, b.gy)
+          (b) =>
+            b.readyBubbles >= 2 &&
+            inPatrol(b.gx, b.gy) &&
+            !(b.readyFarmGoods && b.readyFarmGoods.length > 0 && barnFree <= 0)
         );
         if (readyB) {
           if (Math.hypot(readyB.gx - s.gx, readyB.gy - s.gy) < 2.5) {
@@ -776,8 +784,45 @@ export function villagersAdvanceTutorialStep(sim: ParkSimulation, expectedStepId
       const nextStep = TUTORIAL_STEPS[nextIdx];
       tut.stepIndex = nextIdx;
       tut.stepId = nextStep.id;
-      if (nextStep.id === 'pasture_harvest_and_stock') {
+      const now = Date.now();
+      if (nextStep.id === 'sow_and_merge_plot') {
+        const hasEmptyPlot = sim.state.buildings.some(
+          (b) => getCatalogItem(b.itemId)?.isFarmlandPlot && !b.cropId
+        );
+        if (!hasEmptyPlot) {
+          const growing = sim.state.buildings.find(
+            (b) => getCatalogItem(b.itemId)?.isFarmlandPlot && Boolean(b.cropId)
+          );
+          if (growing) {
+            growing.cropReadyAt = Math.min(growing.cropReadyAt ?? now - 1000, now - 1000);
+          }
+        }
+      } else if (nextStep.id === 'pasture_harvest_and_stock') {
         tut.pastureHarvestedInStep3 = false;
+        const hasRipePasture = sim.state.buildings.some(
+          (b) =>
+            getCatalogItem(b.itemId)?.isAnimalPasturePlot &&
+            b.pastureAnimalId &&
+            b.pastureReadyAt &&
+            now >= b.pastureReadyAt
+        );
+        if (!hasRipePasture) {
+          const stockedPasture = sim.state.buildings.find(
+            (b) => getCatalogItem(b.itemId)?.isAnimalPasturePlot && Boolean(b.pastureAnimalId)
+          );
+          if (stockedPasture) {
+            stockedPasture.pastureReadyAt = now - 1000;
+          } else {
+            const emptyPasture = sim.state.buildings.find(
+              (b) => getCatalogItem(b.itemId)?.isAnimalPasturePlot && !b.pastureAnimalId
+            );
+            if (emptyPasture) {
+              emptyPasture.pastureAnimalId = 'burrow_hen';
+              emptyPasture.pastureStockedAt = now - 30_000;
+              emptyPasture.pastureReadyAt = now - 1000;
+            }
+          }
+        }
       }
       sim.audio.playMatchPop(2);
       if (!alreadyClaimed) {
@@ -846,6 +891,32 @@ export function villagersRestartTutorial(sim: ParkSimulation): void {
           emptyPlot.cropPlantedAt = now - 30_000;
           emptyPlot.cropReadyAt = now - 1000;
           emptyPlot.cropWateredBoost = false;
+        }
+      }
+    }
+
+    // Also ensure Step 3 always has a ripe animal pasture ready when replaying tutorial at any level!
+    const hasRipePasture = sim.state.buildings.some(
+      (b) =>
+        getCatalogItem(b.itemId)?.isAnimalPasturePlot &&
+        b.pastureAnimalId &&
+        b.pastureReadyAt &&
+        now >= b.pastureReadyAt
+    );
+    if (!hasRipePasture) {
+      const stockedPasture = sim.state.buildings.find(
+        (b) => getCatalogItem(b.itemId)?.isAnimalPasturePlot && Boolean(b.pastureAnimalId)
+      );
+      if (stockedPasture) {
+        stockedPasture.pastureReadyAt = now - 1000;
+      } else {
+        const emptyPasture = sim.state.buildings.find(
+          (b) => getCatalogItem(b.itemId)?.isAnimalPasturePlot && !b.pastureAnimalId
+        );
+        if (emptyPasture) {
+          emptyPasture.pastureAnimalId = 'burrow_hen';
+          emptyPasture.pastureStockedAt = now - 30_000;
+          emptyPasture.pastureReadyAt = now - 1000;
         }
       }
     }
@@ -953,11 +1024,22 @@ export function villagersUpdateValleyVillagers(sim: ParkSimulation, dt: number, 
       villagersSyncValleyVillagers(sim);
     }
     let cachedSpots: Array<{ gx: number; gy: number; isPoi: boolean }> | null = null;
+    const weatherKind = sim.getCurrentWeather().kind;
+    const isRainy = weatherKind === 'rain' || weatherKind === 'storm';
+    const nowMs = Date.now();
+    const unveilBuilding = sim.state.buildings.find((b) => b.awaitingUnveil);
 
     for (let i = 0; i < sim.villagers.length; i++) {
       const v = sim.villagers[i];
+      const prof = VALLEY_VILLAGER_PROFILES.find((p) => p.id === v.id);
       if (v.bubbleTimer > 0) {
         v.bubbleTimer = Math.max(0, v.bubbleTimer - dt);
+      }
+      if (isRainy) {
+        v.moodBubble = '☔';
+        if (v.bubbleTimer <= 0.25) v.bubbleTimer = 2.6;
+      } else if (v.moodBubble === '☔') {
+        v.moodBubble = prof?.moodBubble ?? '✨';
       }
       if (v.greetCooldownSec > 0) {
         v.greetCooldownSec = Math.max(0, v.greetCooldownSec - dt);
@@ -993,7 +1075,55 @@ export function villagersUpdateValleyVillagers(sim: ParkSimulation, dt: number, 
         continue;
       }
 
-      // Pick next cozy stroll destination along paths or building doorsteps!
+      // Goal 1: Gather joyfully around a newly finished building awaiting Ribbon Unveil!
+      if (unveilBuilding) {
+        if (!cachedSpots) cachedSpots = villagersCollectVillagerWalkSpots(sim);
+        const gatherSpots = cachedSpots.filter(
+          (s) => Math.hypot(s.gx - (unveilBuilding.gx + 1), s.gy - (unveilBuilding.gy + 1)) <= 4.8
+        );
+        if (gatherSpots.length > 0) {
+          const gPick = gatherSpots[(i + Math.floor(nowMs / 3000)) % gatherSpots.length];
+          v.targetGx = gPick.gx;
+          v.targetGy = gPick.gy;
+          v.state = 'walking';
+          v.pauseTimer = 3.2;
+          if (!isRainy) {
+            v.moodBubble = i % 2 === 0 ? '🎉' : '👏';
+            v.bubbleTimer = 3.8;
+          }
+          continue;
+        }
+      }
+
+      // Goal 2: Goal-Oriented Routine — visit their signature built workstation / pasture!
+      if (v.favoriteItemIds.length > 0 && Math.random() < 0.48) {
+        const favBuildings = sim.state.buildings.filter(
+          (b) => v.favoriteItemIds.includes(b.itemId) && nowMs >= b.constructEndsAt
+        );
+        if (favBuildings.length > 0) {
+          if (!cachedSpots) cachedSpots = villagersCollectVillagerWalkSpots(sim);
+          const favB = favBuildings[Math.floor(Math.random() * favBuildings.length)];
+          const favSpots = cachedSpots.filter(
+            (s) =>
+              Math.hypot(s.gx - (favB.gx + 1), s.gy - (favB.gy + 1)) <= 3.8 &&
+              Math.hypot(s.gx - v.gx, s.gy - v.gy) >= 1.0
+          );
+          if (favSpots.length > 0) {
+            const fPick = favSpots[Math.floor(Math.random() * favSpots.length)];
+            v.targetGx = fPick.gx;
+            v.targetGy = fPick.gy;
+            v.state = 'walking';
+            v.pauseTimer = 3.4 + (i % 3) * 0.6;
+            if (!isRainy && prof) {
+              v.moodBubble = prof.moodBubble;
+              v.bubbleTimer = 3.2;
+            }
+            continue;
+          }
+        }
+      }
+
+      // Goal 3: Stroll naturally along cobblestone/dirt paths or nearby courtyard spots!
       const curGx = Math.floor(v.gx);
       const curGy = Math.floor(v.gy);
       const curCell = sim.grid[curGy]?.[curGx];
@@ -1062,6 +1192,7 @@ export function villagersGreetVillager(sim: ParkSimulation, id: ValleyVillagerId
     v.bubbleTimer = 4.8;
 
     let bonusGalleons = 0;
+    let friendLevelUpNote = '';
     if (canReward) {
       sim.villagerGreetCooldown.set(id, now + 45_000);
       v.greetCooldownSec = 45;
@@ -1071,6 +1202,20 @@ export function villagersGreetVillager(sim: ParkSimulation, id: ValleyVillagerId
       sim.addXp(4);
       sim.addHarvestFeastPoints(3);
       sim.recordQuestProgress('cast_spells', undefined, 1);
+      // Award +15 NPC Friendship XP in P3 Retention & Narrative system!
+      const ret = ensureRetentionState(sim.state);
+      const fEntry = ret.npcFriendship[id] ?? { villagerId: id, level: 1, xp: 0 };
+      fEntry.xp += 15;
+      const prevLv = fEntry.level;
+      while (fEntry.level < 10 && fEntry.xp >= fEntry.level * 60) {
+        fEntry.xp -= fEntry.level * 60;
+        fEntry.level++;
+      }
+      ret.npcFriendship[id] = fEntry;
+      if (fEntry.level > prevLv) {
+        friendLevelUpNote = ` • 💝 Thân Thiết Cấp ${fEntry.level}!`;
+      }
+      sim.checkAndToastAchievements?.();
       sim.audio.playHarvestBubble();
       sim.onRewardFly?.('galleons', bonusGalleons, v.gx, v.gy);
       sim.spawnFloatingText(v.gx, v.gy, `${prof.moodBubble} +${bonusGalleons}G +4⭐`, '#fde047');
@@ -1080,7 +1225,7 @@ export function villagersGreetVillager(sim: ParkSimulation, id: ValleyVillagerId
     }
 
     const msg = canReward
-      ? `${prof.moodBubble} ${prof.nameVi}: "${quote}" (+${bonusGalleons}G, +4 ⭐, +3 🍁)`
+      ? `${prof.moodBubble} ${prof.nameVi}: "${quote}" (+${bonusGalleons}G, +4 ⭐, +3 🍁${friendLevelUpNote})`
       : `${prof.moodBubble} ${prof.nameVi}: "${quote}"`;
     sim.onToast?.(msg, prof.moodBubble);
     if (canReward) {

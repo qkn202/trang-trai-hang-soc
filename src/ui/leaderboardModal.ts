@@ -128,9 +128,11 @@ export class LeaderboardModalController {
     const targetGame = this.activeGameId;
     void submitPlayerCloudLeaderboardEntry(this.sim.state, targetGame)
       .catch(() => {})
-      .then(() => fetchCloudLeaderboardEntries(targetGame))
-      .then((cloudList) => {
-        if (dlg.open && cloudList.length > 0 && this.activeGameId === targetGame) {
+      .then(() =>
+        Promise.all(ALL_LEADERBOARD_GAMES.map((gid) => fetchCloudLeaderboardEntries(gid)))
+      )
+      .then((lists) => {
+        if (dlg.open && lists.some((list) => list.length > 0)) {
           this.render();
         }
       });
@@ -233,7 +235,7 @@ export class LeaderboardModalController {
         <div class="house-cup-header-bar">
           <div class="house-cup-heading-copy">
             <h3 class="house-cup-heading">🏆 Cúp 4 Nhà Hogwarts</h3>
-            <p class="house-cup-quote">🍓 Match-3 • 🔮 Sudoku • 🦄 Pikachu</p>
+            <p class="house-cup-quote">🍬 Bùa Gặt Honeydukes • 🔢 Số Học Huyền Bí • 🦄 Sinh Vật Huyền Bí</p>
           </div>
           <div class="lb-sorting-hat-box">
             <div class="lb-sorting-hat-label">
@@ -349,7 +351,7 @@ export class LeaderboardModalController {
 
     const bodyContentHtml =
       this.activeScope === 'personal'
-        ? this.renderPersonalSixGamesTableHtml()
+        ? this.renderPersonalThreeGamesTableHtml()
         : this.renderStandingViewHtml(this.activeScope);
 
     container.innerHTML = `
@@ -524,7 +526,7 @@ export class LeaderboardModalController {
     `;
   }
 
-  private renderPersonalSixGamesTableHtml(): string {
+  private renderPersonalThreeGamesTableHtml(): string {
     const summaries = this.sim.getAllPersonalLeaderboardSummaries();
     const rowsHtml = summaries
       .map(
@@ -571,7 +573,7 @@ export class LeaderboardModalController {
         <img src="/sprites/m3_icon_star.png" alt="" class="lb-cup-icon" />
         <div class="lb-cup-copy">
           <div class="lb-cup-title">📜 Kỷ Lục 3 Môn Tính Điểm</div>
-          <div class="lb-cup-sub">🍓 Match-3 • 🔮 Sudoku • 🦄 Pikachu</div>
+          <div class="lb-cup-sub">🍬 Bùa Gặt Honeydukes • 🔢 Số Học Huyền Bí • 🦄 Sinh Vật Huyền Bí</div>
         </div>
       </div>
 

@@ -10,9 +10,21 @@ interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
 }
 
+interface NavigatorWithWebInstall extends Navigator {
+  install?: () => Promise<void>;
+  standalone?: boolean;
+}
+
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 let installBtn: HTMLButtonElement | null = null;
 let isInitialized = false;
+
+function supportsWebInstallApi(): boolean {
+  return (
+    typeof navigator !== 'undefined' &&
+    typeof (navigator as NavigatorWithWebInstall).install === 'function'
+  );
+}
 
 function isMobileDevice(): boolean {
   if (typeof window === 'undefined') return false;
@@ -26,7 +38,7 @@ function isStandaloneApp(): boolean {
   if (typeof window === 'undefined') return false;
   return (
     window.matchMedia('(display-mode: standalone)').matches ||
-    Boolean((navigator as unknown as { standalone?: boolean }).standalone)
+    Boolean((navigator as NavigatorWithWebInstall).standalone)
   );
 }
 
@@ -42,21 +54,38 @@ function createInstallButton(): HTMLButtonElement {
   btn.innerHTML = '<span class="ips-icon" aria-hidden="true">💾</span><span class="ips-label">Cài Game</span>';
 
   btn.addEventListener('click', async () => {
-    if (!deferredPrompt) {
+    if (btn.getAttribute('aria-disabled') === 'true') return;
+    const nav = navigator as NavigatorWithWebInstall;
+    const canUseWebInstall = typeof nav.install === 'function';
+    if (!canUseWebInstall && !deferredPrompt) {
       btn.classList.add('hidden');
       return;
     }
+
+    // Dùng aria-disabled thay vì disabled để không làm rơi focus bàn phím/trợ năng khi kích hoạt
+    btn.setAttribute('aria-disabled', 'true');
     try {
-      await deferredPrompt.prompt();
-      const choice = await deferredPrompt.userChoice;
-      if (choice.outcome === 'accepted') {
+      if (canUseWebInstall && nav.install) {
+        await nav.install();
+        btn.classList.add('hidden');
+      } else if (deferredPrompt) {
+        // Sự kiện beforeinstallprompt chỉ dùng được 1 lần: xóa biến lưu trước khi await lựa chọn
+        const promptEvent = deferredPrompt;
+        deferredPrompt = null;
+        await promptEvent.prompt();
+        const choice = await promptEvent.userChoice;
+        if (choice.outcome === 'accepted' || !deferredPrompt) {
+          btn.classList.add('hidden');
+        }
+      }
+    } catch (err) {
+      // Nếu người dùng chủ động hủy qua AbortError trên Web Install API, giữ nút để họ có thể bấm lại sau
+      const isAbort = err instanceof DOMException && err.name === 'AbortError';
+      if (!isAbort && !deferredPrompt) {
         btn.classList.add('hidden');
       }
-    } catch {
-      // User cancelled or prompt failed gracefully
     } finally {
-      deferredPrompt = null;
-      btn.classList.add('hidden');
+      btn.removeAttribute('aria-disabled');
     }
   });
 
@@ -89,10 +118,14 @@ export function initInstallPrompt(): void {
 
   installBtn = createInstallButton();
 
+  if (supportsWebInstallApi() && isMobileDevice()) {
+    showInstallButton();
+  }
+
   window.addEventListener('beforeinstallprompt', (e: Event) => {
     e.preventDefault();
     deferredPrompt = e as BeforeInstallPromptEvent;
-    if (isMobileDevice() && !isStandaloneApp()) {
+    if (!supportsWebInstallApi() && isMobileDevice() && !isStandaloneApp()) {
       showInstallButton();
     }
   });

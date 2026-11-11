@@ -1,4 +1,5 @@
 // Tách tự động từ src/sim/puzzleArcadeEngine.ts (P0.5 — tách puzzle engine theo môn).
+import { SavedChessHistoryItem, SavedChessPiece, SavedChessSession } from "../types/game";
 import {
   MAX_MINIGAME_STAGE,
   MilestoneBossMeta,
@@ -137,19 +138,19 @@ export class WizardChessEngine {
           name: 'Ron Weasley',
           emoji: '🦁',
           portrait: 'ron',
-          sub: 'Đại chiến 8×8 Hội Phượng Hoàng đấu Slytherin — Nhập thành & phong Hậu đầy đủ!',
+          sub: 'Đại chiến Cờ Phù Thủy 8×8 — Tượng Ngà Vàng đấu Đá Đen, nhập thành & phong Hậu đầy đủ!',
         },
         {
           name: 'Ông Arthur Weasley',
           emoji: '🔧',
           portrait: 'arthur',
-          sub: 'Điều Bằng Mã Buckbeak, Harry Potter & Dobby kiểm soát trung tâm bàn cờ!',
+          sub: 'Điều Chiến Mã, Tượng Giám Mục & Lính Khiên Đá kiểm soát trung tâm bàn cờ!',
         },
         {
           name: 'Bác Rubeus Hagrid',
           emoji: '🎃',
           portrait: 'hagrid',
-          sub: 'Cẩn thận Vong Mã Thestral & Tháp Azkaban của phe Slytherin phản kích!',
+          sub: 'Cẩn thận Song Xe & Thiết Mã Đá Đen phản kích từ cánh hậu!',
         },
         {
           name: 'Giáo Sư Severus Snape',
@@ -1192,6 +1193,50 @@ export class WizardChessEngine {
     return this.cachedTurningPoint;
   }
 
+  /**
+   * Hiển thị gợi ý nước đi tối ưu (`this.hintMove` + chọn sẵn quân gợi ý) mà KHÔNG tự động đi thay người chơi,
+   * đảm bảo bấm "💡 Gợi Ý" không bao giờ tự động qua màn ở các thế cờ chiếu bí 1 nước.
+   */
+  public useBestMoveHint(): {
+    ok: boolean;
+    move: ChessMove | null;
+    labelVi: string;
+  } {
+    if (this.status !== 'playing' || this.turn !== 'w') {
+      return { ok: false, move: null, labelVi: '' };
+    }
+    const legal = this.getAllLegalMovesForState(this.board, 'w', this.castling, this.enPassant);
+    if (legal.length === 0) {
+      return { ok: false, move: null, labelVi: '' };
+    }
+    const depth = legal.length <= 24 ? 4 : 3;
+    const res = this.searchAlphaBeta(
+      this.board,
+      'w',
+      this.castling,
+      this.enPassant,
+      depth,
+      -Infinity,
+      Infinity
+    );
+    const chosen = res.move ?? legal[0];
+    if (!chosen) {
+      return { ok: false, move: null, labelVi: '' };
+    }
+    this.hintMove = {
+      fromR: chosen.fromR,
+      fromC: chosen.fromC,
+      toR: chosen.toR,
+      toC: chosen.toC,
+    };
+    this.selected = { r: chosen.fromR, c: chosen.fromC };
+    return {
+      ok: true,
+      move: chosen,
+      labelVi: formatChessMoveReviewVi(this.board, chosen),
+    };
+  }
+
   public useBestMoveAssist(): {
     ok: boolean;
     move: ChessMove | null;
@@ -1301,6 +1346,197 @@ export class WizardChessEngine {
       aiThinking: nextStatus === 'ai_thinking',
       msg: '🔥 Phượng Hoàng Fawkes dẫn lối: Đã đi nước cờ Kiện Tướng & tặng thêm +1 Gợi Ý!',
     };
+  }
+
+  public exportSession(extra?: {
+    companionCharge?: number;
+    snackPieUsed?: boolean;
+  }): SavedChessSession | null {
+    if (this.status === 'won') return null;
+    const historyTail = this.history.slice(-40).map(
+      (snap): SavedChessHistoryItem => ({
+        board: cloneChessBoard(snap.board),
+        turn: snap.turn,
+        castling: { ...snap.castling },
+        enPassant: snap.enPassant ? { ...snap.enPassant } : null,
+        capturedByWhite: [...snap.capturedByWhite],
+        capturedByBlack: [...snap.capturedByBlack],
+        lastMove: snap.lastMove ? { ...snap.lastMove } : null,
+        halfMoveClock: snap.halfMoveClock,
+      })
+    );
+    return {
+      stage: this.stage,
+      subMode: this.subMode,
+      loadedFen: this.loadedFen,
+      board: cloneChessBoard(this.board),
+      turn: this.turn,
+      castling: { ...this.castling },
+      enPassant: this.enPassant ? { ...this.enPassant } : null,
+      capturedByWhite: [...this.capturedByWhite],
+      capturedByBlack: [...this.capturedByBlack],
+      lastMove: this.lastMove ? { ...this.lastMove } : null,
+      hintMove: this.hintMove ? { ...this.hintMove } : null,
+      selected: this.selected ? { ...this.selected } : null,
+      halfMoveClock: this.halfMoveClock,
+      moveCount: this.moveCount,
+      freeUndosLeft: this.freeUndosLeft,
+      paidUndosLeft: this.paidUndosLeft,
+      freeHintsLeft: this.freeHintsLeft,
+      paidAssistsLeft: this.paidAssistsLeft,
+      talismanUsed: this.talismanUsed,
+      status: this.status,
+      history: historyTail,
+      companionCharge: extra?.companionCharge,
+      snackPieUsed: extra?.snackPieUsed,
+      savedAt: Date.now(),
+    };
+  }
+
+  private static validateSavedChessBoard(
+    raw: unknown
+  ): Array<Array<SavedChessPiece | null>> | null {
+    if (!Array.isArray(raw) || raw.length !== 8) return null;
+    const validTypes = new Set<ChessPieceType>(['p', 'n', 'b', 'r', 'q', 'k']);
+    let whiteKings = 0;
+    let blackKings = 0;
+    const out: Array<Array<SavedChessPiece | null>> = [];
+    for (let r = 0; r < 8; r++) {
+      const row = raw[r];
+      if (!Array.isArray(row) || row.length !== 8) return null;
+      const outRow: Array<SavedChessPiece | null> = [];
+      for (let c = 0; c < 8; c++) {
+        const cell = row[c];
+        if (cell === null || cell === undefined) {
+          outRow.push(null);
+          continue;
+        }
+        if (
+          typeof cell !== 'object' ||
+          ((cell as SavedChessPiece).color !== 'w' && (cell as SavedChessPiece).color !== 'b') ||
+          !validTypes.has((cell as SavedChessPiece).type)
+        ) {
+          return null;
+        }
+        const piece: SavedChessPiece = {
+          color: (cell as SavedChessPiece).color,
+          type: (cell as SavedChessPiece).type,
+        };
+        if (piece.type === 'k') {
+          if (piece.color === 'w') whiteKings++;
+          else blackKings++;
+        }
+        outRow.push(piece);
+      }
+      out.push(outRow);
+    }
+    if (whiteKings !== 1 || blackKings !== 1) return null;
+    return out;
+  }
+
+  public restoreSession(snap: SavedChessSession | null | undefined): boolean {
+    if (!snap || snap.stage !== this.stage || snap.subMode !== this.subMode) return false;
+    if (
+      snap.status !== 'playing' &&
+      snap.status !== 'ai_thinking' &&
+      snap.status !== 'lost' &&
+      snap.status !== 'draw'
+    ) {
+      return false;
+    }
+    if (snap.turn !== 'w' && snap.turn !== 'b') return false;
+    const cleanBoard = WizardChessEngine.validateSavedChessBoard(snap.board);
+    if (!cleanBoard) return false;
+
+    const validTypes = new Set<ChessPieceType>(['p', 'n', 'b', 'r', 'q', 'k']);
+    const sanitizeMove = (
+      m: { fromR: number; fromC: number; toR: number; toC: number } | null | undefined
+    ): { fromR: number; fromC: number; toR: number; toC: number } | null =>
+      m &&
+      Number.isInteger(m.fromR) &&
+      m.fromR >= 0 &&
+      m.fromR < 8 &&
+      Number.isInteger(m.fromC) &&
+      m.fromC >= 0 &&
+      m.fromC < 8 &&
+      Number.isInteger(m.toR) &&
+      m.toR >= 0 &&
+      m.toR < 8 &&
+      Number.isInteger(m.toC) &&
+      m.toC >= 0 &&
+      m.toC < 8
+        ? { fromR: m.fromR, fromC: m.fromC, toR: m.toR, toC: m.toC }
+        : null;
+    const sanitizeSquare = (
+      sq: { r: number; c: number } | null | undefined
+    ): { r: number; c: number } | null =>
+      sq &&
+      Number.isInteger(sq.r) &&
+      sq.r >= 0 &&
+      sq.r < 8 &&
+      Number.isInteger(sq.c) &&
+      sq.c >= 0 &&
+      sq.c < 8
+        ? { r: sq.r, c: sq.c }
+        : null;
+
+    this.loadedFen = typeof snap.loadedFen === 'string' && snap.loadedFen ? snap.loadedFen : this.loadedFen;
+    this.board = cleanBoard;
+    this.turn = snap.turn;
+    this.castling = {
+      wK: Boolean(snap.castling?.wK),
+      wQ: Boolean(snap.castling?.wQ),
+      bK: Boolean(snap.castling?.bK),
+      bQ: Boolean(snap.castling?.bQ),
+    };
+    this.enPassant = sanitizeSquare(snap.enPassant);
+    this.capturedByWhite = Array.isArray(snap.capturedByWhite)
+      ? snap.capturedByWhite.filter((t): t is ChessPieceType => validTypes.has(t))
+      : [];
+    this.capturedByBlack = Array.isArray(snap.capturedByBlack)
+      ? snap.capturedByBlack.filter((t): t is ChessPieceType => validTypes.has(t))
+      : [];
+    this.lastMove = sanitizeMove(snap.lastMove);
+    this.hintMove = sanitizeMove(snap.hintMove);
+    this.selected = sanitizeSquare(snap.selected);
+    this.halfMoveClock = Math.max(0, Math.min(200, Math.floor(snap.halfMoveClock || 0)));
+    this.moveCount = Math.max(0, Math.min(500, Math.floor(snap.moveCount || 0)));
+    this.freeUndosLeft = Math.max(0, Math.min(10, Math.floor(snap.freeUndosLeft ?? 0)));
+    this.paidUndosLeft = Math.max(0, Math.min(10, Math.floor(snap.paidUndosLeft ?? 0)));
+    this.freeHintsLeft = Math.max(0, Math.min(10, Math.floor(snap.freeHintsLeft ?? 0)));
+    this.paidAssistsLeft = Math.max(0, Math.min(5, Math.floor(snap.paidAssistsLeft ?? 0)));
+    this.talismanUsed = Boolean(snap.talismanUsed);
+    this.status = snap.status;
+
+    this.history = [];
+    if (Array.isArray(snap.history)) {
+      for (const h of snap.history.slice(-40)) {
+        const hb = WizardChessEngine.validateSavedChessBoard(h?.board);
+        if (!hb || (h.turn !== 'w' && h.turn !== 'b')) continue;
+        this.history.push({
+          board: hb,
+          turn: h.turn,
+          castling: {
+            wK: Boolean(h.castling?.wK),
+            wQ: Boolean(h.castling?.wQ),
+            bK: Boolean(h.castling?.bK),
+            bQ: Boolean(h.castling?.bQ),
+          },
+          enPassant: sanitizeSquare(h.enPassant),
+          capturedByWhite: Array.isArray(h.capturedByWhite)
+            ? h.capturedByWhite.filter((t): t is ChessPieceType => validTypes.has(t))
+            : [],
+          capturedByBlack: Array.isArray(h.capturedByBlack)
+            ? h.capturedByBlack.filter((t): t is ChessPieceType => validTypes.has(t))
+            : [],
+          lastMove: sanitizeMove(h.lastMove),
+          halfMoveClock: Math.max(0, Math.min(200, Math.floor(h.halfMoveClock || 0))),
+        });
+      }
+    }
+    this.whiteTurnReviews = [];
+    this.cachedTurningPoint = null;
+    return true;
   }
 }
 

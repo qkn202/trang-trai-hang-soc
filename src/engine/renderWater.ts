@@ -97,18 +97,18 @@ export function waterDrawOrganicWaterShorelines(self: IsometricRenderer,
 
     const passes: Array<{ color: string; width: (z: number) => number; offset: number }> = [
       {
-        color: isNight ? 'rgba(42, 68, 52, 0.65)' : 'rgba(84, 138, 44, 0.88)',
-        width: (z) => Math.max(3.5, 7.5 * z),
+        color: isNight ? 'rgba(34, 62, 48, 0.76)' : 'rgba(72, 134, 38, 0.92)',
+        width: (z) => Math.max(4.5, 9.2 * z),
         offset: 0,
       },
       {
-        color: isNight ? 'rgba(74, 118, 86, 0.45)' : 'rgba(138, 188, 68, 0.72)',
-        width: (z) => Math.max(1.4, 3.0 * z),
+        color: isNight ? 'rgba(84, 118, 92, 0.52)' : 'rgba(214, 192, 146, 0.78)',
+        width: (z) => Math.max(2.2, 4.4 * z),
         offset: 0,
       },
       {
-        color: isNight ? 'rgba(186, 230, 253, 0.34)' : 'rgba(198, 244, 246, 0.55)',
-        width: (z) => Math.max(1, 1.6 * z),
+        color: isNight ? 'rgba(186, 230, 253, 0.50)' : 'rgba(240, 253, 255, 0.85)',
+        width: (z) => Math.max(1.3, 2.4 * z),
         offset: 1,
       },
     ];
@@ -216,41 +216,95 @@ export function waterDrawSeamlessWaterDetails(self: IsometricRenderer,
       isLand(gx - 1, gy) || isLand(gx + 1, gy) || isLand(gx, gy - 1) || isLand(gx, gy + 1);
     const hash = Math.abs((gx * 73 + gy * 137) % 17);
 
-    // 1. Soft water shimmer ripples
-    if ((gx + gy) % 2 === 0) {
-      const wave = Math.sin(self.tick * 0.05 + gx + gy) * 3 * zoom;
-      ctx.strokeStyle = isNight ? 'rgba(148, 212, 238, 0.28)' : 'rgba(210, 250, 252, 0.48)';
-      ctx.lineWidth = 1.2 * zoom;
+    // 0. AAA River Ottery Depth Gradient & Submerged Shallows Boulders (Mockup 1 & 2)
+    if (!nearBank) {
+      // Deeper jewel sapphire-teal mid-channel core
+      ctx.fillStyle = isNight ? 'rgba(6, 30, 56, 0.52)' : 'rgba(10, 96, 126, 0.42)';
       ctx.beginPath();
-      ctx.moveTo(sx - 7 * zoom + wave, sy + hh);
-      ctx.lineTo(sx + 7 * zoom + wave, sy + hh);
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + hw, sy + hh);
+      ctx.lineTo(sx, sy + hh * 2);
+      ctx.lineTo(sx - hw, sy + hh);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      // Sunlit crystal-turquoise bankside shallows + smooth submerged river boulders
+      ctx.fillStyle = isNight ? 'rgba(56, 189, 248, 0.14)' : 'rgba(134, 244, 254, 0.34)';
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + hw, sy + hh);
+      ctx.lineTo(sx, sy + hh * 2);
+      ctx.lineTo(sx - hw, sy + hh);
+      ctx.closePath();
+      ctx.fill();
+
+      if (hash % 3 === 1 && zoom >= 0.5) {
+        ctx.fillStyle = isNight ? 'rgba(51, 65, 85, 0.55)' : 'rgba(120, 113, 108, 0.48)';
+        ctx.beginPath();
+        ctx.ellipse(sx - 5.4 * zoom, sy + hh + 2.2 * zoom, 3.6 * zoom, 1.8 * zoom, 0.2, 0, Math.PI * 2);
+        ctx.ellipse(sx + 4.6 * zoom, sy + hh - 1.6 * zoom, 2.8 * zoom, 1.4 * zoom, -0.2, 0, Math.PI * 2);
+        ctx.fill();
+        if (!isNight) {
+          ctx.fillStyle = 'rgba(245, 245, 244, 0.42)';
+          ctx.beginPath();
+          ctx.ellipse(sx - 6.0 * zoom, sy + hh + 1.7 * zoom, 1.8 * zoom, 0.85 * zoom, 0.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    // 1. Refractive Golden Sunlight / Moonlight Caustic Webs & Shimmer Ripples
+    const wavePhase = self.reducedMotion ? 0 : self.tick * 0.05;
+    if ((gx + gy) % 2 === 0) {
+      const wave = Math.sin(wavePhase + gx * 0.8 + gy * 0.6) * 3.8 * zoom;
+      ctx.strokeStyle = isNight ? 'rgba(165, 243, 252, 0.44)' : 'rgba(255, 252, 214, 0.72)';
+      ctx.lineWidth = Math.max(1.1, 1.65 * zoom);
+      ctx.beginPath();
+      ctx.moveTo(sx - 9.8 * zoom + wave, sy + hh - 1.6 * zoom);
+      ctx.quadraticCurveTo(sx + wave * 0.5, sy + hh - 3.8 * zoom, sx + 9.8 * zoom + wave, sy + hh - 0.8 * zoom);
+      ctx.moveTo(sx - 5.2 * zoom - wave * 0.6, sy + hh + 2.4 * zoom);
+      ctx.quadraticCurveTo(sx, sy + hh + 4.0 * zoom, sx + 6.4 * zoom - wave * 0.6, sy + hh + 1.8 * zoom);
+      ctx.stroke();
+    } else if (hash % 3 === 1) {
+      const glint = self.reducedMotion ? 0.6 : 0.42 + 0.52 * Math.abs(Math.sin(wavePhase * 1.3 + hash));
+      ctx.strokeStyle = isNight
+        ? `rgba(186, 230, 253, ${(glint * 0.48).toFixed(2)})`
+        : `rgba(240, 253, 255, ${(glint * 0.78).toFixed(2)})`;
+      ctx.lineWidth = Math.max(1.0, 1.35 * zoom);
+      ctx.beginPath();
+      ctx.moveTo(sx - 6.8 * zoom, sy + hh + 2.2 * zoom);
+      ctx.lineTo(sx + 6.8 * zoom, sy + hh + 1.2 * zoom);
       ctx.stroke();
     }
 
-    // 2. Round notched green lily pads, lotus blossoms & little green marsh frogs!
+    // 2. Round notched green lily pads, layered pink-cream lotus blossoms & marsh frogs!
     if (hash % 3 === 0) {
-      const lx = sx + ((hash % 5) - 2) * 3.5 * zoom;
+      const lx = sx + ((hash % 5) - 2) * 3.6 * zoom;
       const ly = sy + hh + ((hash % 3) - 1) * 2.2 * zoom;
       ctx.save();
-      ctx.fillStyle = isNight ? '#216e39' : '#58b947';
-      ctx.strokeStyle = '#25521b';
-      ctx.lineWidth = Math.max(0.9, 1.1 * zoom);
+      ctx.fillStyle = isNight ? '#1e6b38' : '#52be42';
+      ctx.strokeStyle = '#1f4d18';
+      ctx.lineWidth = Math.max(1.0, 1.25 * zoom);
       ctx.beginPath();
-      ctx.ellipse(lx, ly, 5.8 * zoom, 3.2 * zoom, 0, 0.25, Math.PI * 1.92);
+      ctx.ellipse(lx, ly, 6.8 * zoom, 3.8 * zoom, 0, 0.25, Math.PI * 1.92);
       ctx.lineTo(lx, ly);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
 
-      if (hash === 3 || hash === 12) {
-        // Blooming white-pink marsh water lily
-        ctx.fillStyle = '#fef3c7';
+      if (hash === 3 || hash === 9 || hash === 12) {
+        // Blooming layered pink-and-cream marsh water lily
+        ctx.fillStyle = '#fbcfe8';
         ctx.beginPath();
-        ctx.arc(lx + 1 * zoom, ly - 1.4 * zoom, 2.4 * zoom, 0, Math.PI * 2);
+        ctx.ellipse(lx + 0.8 * zoom, ly - 1.2 * zoom, 3.6 * zoom, 2.1 * zoom, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fffbeb';
+        ctx.beginPath();
+        ctx.arc(lx + 0.8 * zoom, ly - 1.6 * zoom, 2.2 * zoom, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = '#f472b6';
         ctx.beginPath();
-        ctx.arc(lx + 1 * zoom, ly - 1.6 * zoom, 1.2 * zoom, 0, Math.PI * 2);
+        ctx.arc(lx + 0.8 * zoom, ly - 1.8 * zoom, 1.15 * zoom, 0, Math.PI * 2);
         ctx.fill();
       } else if (hash === 6 && !isNight) {
         // Cute little green frog perched on lily pad!
@@ -270,46 +324,46 @@ export function waterDrawSeamlessWaterDetails(self: IsometricRenderer,
       ctx.restore();
     }
 
-    // 3. Tall swaying Devon Cattail Reeds (`đầm lau sậy` Canon Hang Sóc!) along marsh banks
-    if (nearBank && hash % 2 === 0) {
-      const sway = self.reducedMotion ? 0 : Math.sin(self.tick * 0.045 + gx * 0.9 + gy * 1.3) * 2.2 * zoom;
-      const baseX = sx + ((hash % 3) - 1) * 6 * zoom;
-      const baseY = sy + hh + 1 * zoom;
+    // 3. Tall swaying Devon Cattail Reeds (`đầm lau sậy` Canon Hang Sóc!) along marsh & river banks
+    if (nearBank && (hash % 2 === 0 || hash % 5 === 1)) {
+      const sway = self.reducedMotion ? 0 : Math.sin(self.tick * 0.048 + gx * 0.9 + gy * 1.3) * 2.6 * zoom;
+      const baseX = sx + ((hash % 3) - 1) * 6.2 * zoom;
+      const baseY = sy + hh + 1.2 * zoom;
       ctx.save();
       ctx.lineCap = 'round';
       for (const [dxBlade, hBlade, hasHead] of [
-        [-4.5, 19, true],
-        [-1.2, 23, true],
-        [2.6, 17, false],
-        [5.0, 21, hash % 4 === 0],
+        [-5.2, 22, true],
+        [-1.4, 27, true],
+        [2.8, 20, false],
+        [5.6, 24, hash % 3 === 0],
       ] as Array<[number, number, boolean]>) {
         const bx1 = baseX + dxBlade * 0.35 * zoom;
         const tx1 = baseX + dxBlade * zoom + sway;
         const ty1 = baseY - hBlade * zoom;
-        ctx.strokeStyle = '#2b4d16';
-        ctx.lineWidth = Math.max(1.4, 2.3 * zoom);
+        ctx.strokeStyle = '#244612';
+        ctx.lineWidth = Math.max(1.6, 2.7 * zoom);
         ctx.beginPath();
         ctx.moveTo(bx1, baseY);
         ctx.quadraticCurveTo(bx1 + sway * 0.4, baseY - hBlade * 0.55 * zoom, tx1, ty1);
         ctx.stroke();
 
-        ctx.strokeStyle = isNight ? '#3d6e29' : '#6aa832';
-        ctx.lineWidth = Math.max(1.0, 1.5 * zoom);
+        ctx.strokeStyle = isNight ? '#3c782a' : '#74ba36';
+        ctx.lineWidth = Math.max(1.1, 1.75 * zoom);
         ctx.stroke();
 
         if (hasHead) {
-          // Warm chocolate-brown cattail sausage spike (`bông sậy nâu`)
+          // Plump chocolate-brown cattail sausage spike (`bông sậy nâu`)
           const hx = baseX + dxBlade * 0.82 * zoom + sway * 0.82;
           const hy = baseY - hBlade * 0.76 * zoom;
-          ctx.strokeStyle = '#2d180a';
-          ctx.lineWidth = Math.max(2.4, 4.2 * zoom);
+          ctx.strokeStyle = '#291508';
+          ctx.lineWidth = Math.max(2.8, 4.9 * zoom);
           ctx.beginPath();
-          ctx.moveTo(hx, hy + 2.5 * zoom);
-          ctx.lineTo(hx + sway * 0.14, hy - 3.6 * zoom);
+          ctx.moveTo(hx, hy + 2.8 * zoom);
+          ctx.lineTo(hx + sway * 0.14, hy - 4.2 * zoom);
           ctx.stroke();
 
-          ctx.strokeStyle = '#7c471e';
-          ctx.lineWidth = Math.max(1.6, 2.8 * zoom);
+          ctx.strokeStyle = '#8a4f20';
+          ctx.lineWidth = Math.max(1.9, 3.3 * zoom);
           ctx.stroke();
         }
       }
