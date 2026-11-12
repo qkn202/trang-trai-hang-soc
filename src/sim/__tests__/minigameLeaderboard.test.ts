@@ -18,6 +18,18 @@ import {
   getOnetStageConfig,
 } from '../puzzleArcadeEngine';
 import { ParkSimulation } from '../simulation';
+import {
+  clampMinigamePan,
+  clampMinigameZoom,
+  clientToLocalNormalized,
+  combineQuarterTurns,
+  computeBoardFitScale,
+  MINIGAME_ZOOM_MAX,
+  MINIGAME_ZOOM_MIN,
+  MinigameViewportManager,
+  resolveMinigameOrientation,
+  screenDeltaToViewportDelta,
+} from '../../ui/minigameViewControls';
 
 const storageMap = new Map<string, string>();
 const mockLocalStorage = {
@@ -525,5 +537,61 @@ describe('Per-Mini-Game Leaderboards (3 Scored Games: Match-3, Sudoku & Pikachu 
     const afterHat = sim.rollPlayerSortingHat();
     expect(ALL_HOGWARTS_HOUSES).toContain(afterHat);
     expect(afterHat).not.toBe('Slytherin');
+  });
+
+  it('supports zoom in/out, pan clamping, portrait/landscape orientation, and inverse pointer rotation across all 6 mini-games', () => {
+    expect(clampMinigameZoom(0.2)).toBe(MINIGAME_ZOOM_MIN);
+    expect(clampMinigameZoom(5.0)).toBe(MINIGAME_ZOOM_MAX);
+    expect(clampMinigameZoom(1.3)).toBe(1.3);
+
+    // Portrait-locked phone (390×844) switched to Landscape rotates modal 90° CW
+    const mobLand = resolveMinigameOrientation('landscape', 390, 844, false, false);
+    expect(mobLand.effectiveLayout).toBe('landscape');
+    expect(mobLand.dialogQuarterTurn).toBe(1);
+
+    // Landscape phone (844×390) switched to Portrait rotates modal 270° CW (-90°)
+    const mobPort = resolveMinigameOrientation('portrait', 844, 390, false, false);
+    expect(mobPort.effectiveLayout).toBe('portrait');
+    expect(mobPort.dialogQuarterTurn).toBe(3);
+
+    // Wide desktop (1440×900) switched to Portrait keeps upright frame (0°) and switches layout to portrait
+    const deskPort = resolveMinigameOrientation('portrait', 1440, 900, false, false);
+    expect(deskPort.effectiveLayout).toBe('portrait');
+    expect(deskPort.dialogQuarterTurn).toBe(0);
+
+    // Inverse pointer mapping for 0°, 90°, 180°, 270°
+    // Local point (lu=0.25, lv=0.75) inside a 200×100 element rotated 90° CW (visual rect 100×200 at (10, 20)):
+    // Forward 90° CW maps (lu, lv) -> visual (u = 1 - lv = 0.25, v = lu = 0.25) -> screen (10 + 25, 20 + 50) = (35, 70)
+    const inv90 = clientToLocalNormalized(35, 70, { left: 10, top: 20, width: 100, height: 200 }, 1);
+    expect(inv90.lu).toBeCloseTo(0.25, 5);
+    expect(inv90.lv).toBeCloseTo(0.75, 5);
+
+    const inv180 = clientToLocalNormalized(160, 45, { left: 10, top: 20, width: 200, height: 100 }, 2);
+    expect(inv180.lu).toBeCloseTo(0.25, 5);
+    expect(inv180.lv).toBeCloseTo(0.75, 5);
+
+    const inv270 = clientToLocalNormalized(85, 170, { left: 10, top: 20, width: 100, height: 200 }, 3);
+    expect(inv270.lu).toBeCloseTo(0.25, 5);
+    expect(inv270.lv).toBeCloseTo(0.75, 5);
+
+    expect(screenDeltaToViewportDelta(12, -8, 1)).toEqual({ vx: -8, vy: -12 });
+    expect(combineQuarterTurns(1, 3)).toBe(0);
+    expect(computeBoardFitScale(600, 400, 600, 400, 1)).toBeCloseTo(400 / 600, 4);
+    expect(clampMinigamePan(999, -999, 500, 500, 500, 500, 1, 0)).toEqual({ panX: 0, panY: 0 });
+
+    const mgr = new MinigameViewportManager();
+    const allSix = ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'seedquiz'] as const;
+    for (const gid of allSix) {
+      expect(mgr.getState(gid).zoom).toBe(1);
+      mgr.stepZoom(gid, 0.3);
+      expect(mgr.getState(gid).zoom).toBe(1.3);
+      mgr.rotate90(gid);
+      const html = mgr.renderToolbarHtml(gid);
+      expect(html).toContain(`data-mg-toolbar="${gid}"`);
+      expect(html).toContain('130%');
+      mgr.resetView(gid);
+      expect(mgr.getState(gid).zoom).toBe(1);
+      expect(mgr.getState(gid).boardQuarterTurns).toBe(0);
+    }
   });
 });

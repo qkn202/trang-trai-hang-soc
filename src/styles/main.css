@@ -14859,6 +14859,498 @@ dialog.bulldoze-confirm-dialog[open] {
   }
 }
 
+@media (max-width: 640px) {
+  .sq-view-bar-hint {
+    display: none;
+  }
+
+  .sq-view-bar-row {
+    justify-content: flex-end;
+  }
+}
+
+/* ============================================================
+   Unified Mini-Game Zoom, Pan & Portrait/Landscape Orientation
+   (All 6 Mini-Games: Match-3, Caro, Sudoku, Chess, Pikachu, Quiz)
+   ============================================================ */
+
+#seedQuizDialog[data-mg-rotate='90'],
+#seedQuizDialog[data-mg-rotate='270'] {
+  width: 100vw;
+  width: 100dvw;
+  height: 100vh;
+  height: 100dvh;
+  max-width: 100vw;
+  max-width: 100dvw;
+  max-height: 100vh;
+  max-height: 100dvh;
+  margin: 0;
+  padding: 0;
+}
+
+#puzzleArcadeDialog .pa-modal-inner[data-mg-rotate='90'],
+#match3Dialog .m3-modal-inner[data-mg-rotate='90'],
+#seedQuizDialog .sq-modal-inner[data-mg-rotate='90'] {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 100vh;
+  width: 100dvh;
+  height: 100vw;
+  height: 100dvw;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border-radius: 0;
+  contain: none;
+  transform-origin: center center;
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+#puzzleArcadeDialog .pa-modal-inner[data-mg-rotate='270'],
+#match3Dialog .m3-modal-inner[data-mg-rotate='270'],
+#seedQuizDialog .sq-modal-inner[data-mg-rotate='270'] {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 100vh;
+  width: 100dvh;
+  height: 100vw;
+  height: 100dvw;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border-radius: 0;
+  contain: none;
+  transform-origin: center center;
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+
+/* --- Explicit LANDSCAPE mode (including portrait-locked phones rotated 90°) --- */
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] #puzzleArcadeDialogContent,
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] #match3DialogContent {
+  flex: 1 1 0;
+  block-size: 100%;
+  min-block-size: 0;
+  max-block-size: 100%;
+  overflow: hidden;
+  gap: 0;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell {
+  position: relative;
+  display: grid;
+  grid-template-columns: clamp(204px, 24%, 272px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'dock stage'
+    'controls stage';
+  row-gap: 0;
+  column-gap: clamp(8px, 1.2%, 14px);
+  align-items: stretch;
+  block-size: 100%;
+  min-block-size: 0;
+  max-block-size: 100%;
+  overflow: hidden;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell.m3-empty-shell {
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: 'dock stage';
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell::before {
+  content: '';
+  display: block;
+  grid-column: 1;
+  grid-row: 1 / -1;
+  border-radius: 16px;
+  background: linear-gradient(
+    180deg,
+    var(--farm-wood-warm) 0%,
+    var(--farm-wood-mid) 48%,
+    var(--farm-wood-dark) 100%
+  );
+  border: 2.5px solid var(--farm-brass-bright);
+  box-shadow:
+    0 4px 0 var(--farm-wood-darkest),
+    0 10px 24px var(--farm-shadow-deep),
+    inset 0 1.5px 0 var(--ts-gloss-soft),
+    inset 0 0 0 1.5px var(--farm-wood-darkest);
+  pointer-events: none;
+  z-index: 0;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock {
+  grid-area: dock;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 6px 4px;
+  block-size: 100%;
+  min-block-size: 0;
+  max-block-size: 100%;
+  overflow-y: auto;
+  overflow-x: clip;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--hud-scrollbar-thumb-brass) var(--hud-scrollbar-track-wood);
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell > .pa-stage-viewport {
+  grid-area: stage;
+  block-size: 100%;
+  min-block-size: 0;
+  max-block-size: 100%;
+  overflow: hidden;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .pa-top-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 11px;
+  background: var(--ts-wood-track-inner);
+  border: 1.5px solid var(--border-brass-soft);
+  box-shadow: inset 0 1.5px 3px var(--farm-shadow-deep);
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .pa-dock-head-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  inline-size: 100%;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .pa-currencies,
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .pa-inline-close-form {
+  display: contents;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .pa-inline-close-btn {
+  inline-size: 100%;
+  min-block-size: 23px;
+  justify-content: center;
+  padding: 2px 6px;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .pa-mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  inline-size: 100%;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .pa-mode-tab {
+  inline-size: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 4px;
+  font-size: 9.8px;
+  gap: 1.5px;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .pa-mode-tab:last-child {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  justify-content: center;
+  gap: 6px;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell > .pa-controls-bar {
+  grid-area: controls;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  align-items: stretch;
+  padding: 5px 6px 6px;
+  border-top: 1.5px solid var(--border-brass-soft);
+  background: linear-gradient(180deg, transparent 0%, var(--ts-wood-track-inner) 100%);
+  border-radius: 0 0 14px 14px;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell > .pa-controls-bar .pa-submode-switch,
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell > .pa-controls-bar .m3-booster-row {
+  grid-column: 1 / -1;
+  inline-size: 100%;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-canvas-shell[data-pa-board-mode='sudoku'] {
+  aspect-ratio: 662 / 502;
+  width: min(100cqw, calc((100cqh - 4px) * 662 / 502));
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-canvas-shell[data-pa-board-mode='sudoku'] #paBoardCanvas {
+  aspect-ratio: 662 / 502;
+}
+
+/* --- Explicit PORTRAIT mode (including wide desktop switched to Portrait & rotated landscape phones) --- */
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] #puzzleArcadeDialogContent,
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] #match3DialogContent {
+  flex: 1 1 0;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+  gap: 4px;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-layout-shell {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  max-width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  margin: 0 auto;
+  gap: 4px;
+  overflow: hidden;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-layout-shell::before {
+  display: none;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0;
+  block-size: auto;
+  max-block-size: none;
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-top-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 4px 7px;
+  border-radius: 12px;
+  background: linear-gradient(
+    180deg,
+    var(--farm-wood-warm) 0%,
+    var(--farm-wood-mid) 58%,
+    var(--farm-wood-dark) 100%
+  );
+  border: 2px solid var(--farm-brass-bright);
+  box-shadow: 0 3px 0 var(--farm-wood-darkest);
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-dock-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-currencies {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-inline-close-form {
+  display: inline-flex;
+  margin-left: auto;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-inline-close-btn {
+  inline-size: auto;
+  padding: 2px 9px;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-mode-tabs {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-auto-rows: auto;
+  gap: 3px;
+  width: 100%;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-mode-tab,
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-mode-tab:last-child {
+  grid-column: auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 2px;
+  font-size: 9.6px;
+  gap: 1px;
+  border-radius: 9px;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-tab-name-full {
+  display: none;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-tab-name-short {
+  display: inline;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-stage-banner {
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 8px;
+  gap: 6px;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-stage-banner::before,
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-stage-banner::after {
+  display: none;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-stage-meta {
+  flex: 1 1 auto;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-stage-title {
+  font-size: 11.8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-stage-sub {
+  inline-size: auto;
+  padding: 1px 6px;
+  font-size: 10.4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+
+#match3Dialog[data-mg-layout='portrait'] .pa-side-dock .m3-dock-hud {
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+}
+
+#match3Dialog[data-mg-layout='portrait'] .pa-side-dock .m3-dock-hud .m3-moves-crest {
+  width: auto;
+  flex: 0 0 auto;
+  min-block-size: 28px;
+  padding: 2px 7px;
+}
+
+#match3Dialog[data-mg-layout='portrait'] .pa-side-dock .m3-dock-hud .m3-score-sub,
+#match3Dialog[data-mg-layout='portrait'] .pa-side-dock .m3-dock-hud .m3-goal-name {
+  display: none;
+}
+
+#match3Dialog[data-mg-layout='portrait'] .pa-side-dock .m3-dock-hud .m3-goals-list {
+  flex: 1 1 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .aaa-synergy-dock {
+  margin-block-start: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  padding: 3px 6px;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-layout-shell > .pa-stage-viewport {
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-layout-shell > .pa-controls-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--ts-wood-track-top) 0%, var(--ts-wood-track-bot) 100%);
+  border: 2px solid var(--farm-brass-bright);
+  flex-shrink: 0;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-layout-shell > .pa-controls-bar .pa-submode-switch {
+  inline-size: auto;
+  display: inline-flex;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-layout-shell > .pa-controls-bar .pa-tool-btn {
+  inline-size: auto;
+  min-block-size: 28px;
+  padding: 3px 9px;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-layout-shell > .pa-controls-bar .m3-booster-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-canvas-shell[data-pa-board-mode='sudoku'] {
+  aspect-ratio: 502 / 568;
+  width: min(100cqw, calc((100cqh - 4px) * 502 / 568));
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-canvas-shell[data-pa-board-mode='sudoku'] #paBoardCanvas {
+  aspect-ratio: 502 / 568;
+}
+
+/* --- Seed Quiz (Học Viện Thần Chú Đa Ngữ) explicit Portrait / Landscape overrides --- */
+#seedQuizDialog[data-mg-layout='portrait']:not([data-mg-rotate='90']):not([data-mg-rotate='270']) {
+  max-width: min(580px, 96vw);
+  max-width: min(580px, 96dvw);
+}
+
+#seedQuizDialog[data-mg-layout='portrait'] .sq-options-layout {
+  grid-template-columns: 1fr;
+}
+
+#seedQuizDialog[data-mg-layout='portrait'] .sq-lang-tabs {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+#seedQuizDialog[data-mg-layout='landscape'] .sq-options-layout {
+  grid-template-columns: clamp(208px, 27%, 256px) minmax(0, 1fr);
+}
+
+#seedQuizDialog[data-mg-layout='landscape'] .sq-lang-tabs {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+
 
 
 
