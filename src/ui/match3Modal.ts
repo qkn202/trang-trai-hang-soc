@@ -39,6 +39,7 @@ import {
   MinigameRescueContext,
   PuzzleArcadeMode,
 } from '../types/game';
+import { MINIGAME_ZOOM_STEP, sharedMinigameViewport } from './minigameViewControls';
 
 const VIRTUAL_W = 468;
 
@@ -369,6 +370,11 @@ export class Match3ModalController {
         if (typeof document === 'undefined' || !document.hidden) {
           this.clearActiveModalResumeMarker();
         }
+        const modalInner =
+          typeof dlg.querySelector === 'function'
+            ? (dlg.querySelector('.m3-modal-inner') as HTMLElement | null)
+            : null;
+        sharedMinigameViewport.clearDialogOrientation(dlg, modalInner);
         this.onParentRefresh();
       });
     }
@@ -401,7 +407,54 @@ export class Match3ModalController {
           this.renderDOM();
         }
       });
+      window.addEventListener('resize', () => {
+        if (!this.isOpen()) return;
+        const openDlg = this.getDialog();
+        const modalInner =
+          typeof openDlg?.querySelector === 'function'
+            ? (openDlg.querySelector('.m3-modal-inner') as HTMLElement | null)
+            : null;
+        const prevLayout = openDlg?.dataset?.mgLayout;
+        const res = sharedMinigameViewport.applyDialogOrientation(openDlg, modalInner, false);
+        if (prevLayout && prevLayout !== res.effectiveLayout) {
+          this.renderDOM();
+          return;
+        }
+        this.syncMatch3ViewportTransform();
+      });
+      window.addEventListener('keydown', (ev) => {
+        if (!this.isOpen()) return;
+        const tag = (ev.target as HTMLElement | null)?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (ev.key === '+' || ev.key === '=') {
+          ev.preventDefault();
+          sharedMinigameViewport.stepZoom('match3', MINIGAME_ZOOM_STEP);
+          this.syncMatch3ViewportTransform();
+        } else if (ev.key === '-' || ev.key === '_') {
+          ev.preventDefault();
+          sharedMinigameViewport.stepZoom('match3', -MINIGAME_ZOOM_STEP);
+          this.syncMatch3ViewportTransform();
+        } else if (ev.key === '0' && (ev.ctrlKey || ev.metaKey)) {
+          ev.preventDefault();
+          sharedMinigameViewport.resetView('match3');
+          this.syncMatch3ViewportTransform();
+        }
+      });
     }
+  }
+
+  private syncMatch3ViewportTransform(): void {
+    const box = this.root.querySelector('#match3DialogContent') as HTMLElement | null;
+    if (!box) return;
+    const panArea = box.querySelector('.mg-stage-pan-area') as HTMLElement | null;
+    const shell = box.querySelector('.pa-canvas-shell') as HTMLElement | null;
+    const { effectiveScale, netQuarterTurns } = sharedMinigameViewport.applyCanvasStageTransform(
+      'match3',
+      panArea,
+      shell
+    );
+    sharedMinigameViewport.syncToolbarDOM(box, 'match3');
+    this.engine?.syncViewTransform(effectiveScale, netQuarterTurns);
   }
 
   private persistActiveModalResumeMarker(): void {
@@ -1165,6 +1218,12 @@ export class Match3ModalController {
   public renderDOM(): void {
     const box = this.root.querySelector('#match3DialogContent') as HTMLElement | null;
     if (!box) return;
+    const dlg = this.getDialog();
+    const modalInner =
+      typeof dlg?.querySelector === 'function'
+        ? (dlg.querySelector('.m3-modal-inner') as HTMLElement | null)
+        : null;
+    sharedMinigameViewport.applyDialogOrientation(dlg, modalInner, false);
 
     const st = this.sim.state;
     const m3 = st.match3;
@@ -1323,26 +1382,31 @@ export class Match3ModalController {
             ${topStripHtml}
           </aside>
           <div class="pa-stage-viewport">
-            <div class="m3-empty-hearts-card">
-              <img src="/sprites/m3_icon_heart.png" alt="Tim" style="width:52px;height:52px;object-fit:contain;filter:grayscale(0.25) drop-shadow(0 6px 10px rgba(0,0,0,0.3));" />
-              <h3 style="font-size:18px;font-weight:900;color:#451a03;">Hết Tim Giải Đố!</h3>
-              <p style="font-size:12.5px;max-width:440px;line-height:1.45;color:#78350f;margin:0;">
-                <strong>+1 ❤️</strong> sau <strong id="m3NoHeartsCountdown" style="color:#b45309;">${mm}:${ss}</strong>
-              </p>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:4px;">
-                <button id="btnM3RefillHeartsNow" type="button" class="brass-btn gold-cta" style="padding:8px 16px;font-size:13px;">
-                  ${
-                    butterbeerQty > 0
-                      ? `🍻 Hồi 5 ❤️ (×${butterbeerQty})`
-                      : `❤️ Hồi 5/5 (🪙 ${REFILL_HEARTS_GOLD_COST}G)`
-                  }
-                </button>
-                <button id="btnM3EmptyGoArcade" type="button" class="brass-btn pa-hud-cta" style="padding:8px 14px;font-size:12.5px;">
-                  ♟️ 4 Môn Khảo Thí
-                </button>
-                <button id="btnM3BackToPark" type="button" class="brass-btn" style="padding:8px 14px;font-size:12.5px;">
-                  🏡 Về Vườn
-                </button>
+            <div class="mg-stage-top-strip">
+              ${sharedMinigameViewport.renderToolbarHtml('match3', { showPanToggle: false })}
+            </div>
+            <div class="mg-stage-pan-area">
+              <div class="m3-empty-hearts-card">
+                <img src="/sprites/m3_icon_heart.png" alt="Tim" style="width:52px;height:52px;object-fit:contain;filter:grayscale(0.25) drop-shadow(0 6px 10px rgba(0,0,0,0.3));" />
+                <h3 style="font-size:18px;font-weight:900;color:#451a03;">Hết Tim Giải Đố!</h3>
+                <p style="font-size:12.5px;max-width:440px;line-height:1.45;color:#78350f;margin:0;">
+                  <strong>+1 ❤️</strong> sau <strong id="m3NoHeartsCountdown" style="color:#b45309;">${mm}:${ss}</strong>
+                </p>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:4px;">
+                  <button id="btnM3RefillHeartsNow" type="button" class="brass-btn gold-cta" style="padding:8px 16px;font-size:13px;">
+                    ${
+                      butterbeerQty > 0
+                        ? `🍻 Hồi 5 ❤️ (×${butterbeerQty})`
+                        : `❤️ Hồi 5/5 (🪙 ${REFILL_HEARTS_GOLD_COST}G)`
+                    }
+                  </button>
+                  <button id="btnM3EmptyGoArcade" type="button" class="brass-btn pa-hud-cta" style="padding:8px 14px;font-size:12.5px;">
+                    ♟️ 4 Môn Khảo Thí
+                  </button>
+                  <button id="btnM3BackToPark" type="button" class="brass-btn" style="padding:8px 14px;font-size:12.5px;">
+                    🏡 Về Vườn
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1378,6 +1442,18 @@ export class Match3ModalController {
       });
       box.querySelector('#btnM3BackToPark')?.addEventListener('click', () => {
         this.getDialog()?.close();
+      });
+      sharedMinigameViewport.bindCanvasStageInteractions({
+        gameId: 'match3',
+        rootScope: box,
+        panAreaEl: box.querySelector('.mg-stage-pan-area') as HTMLElement | null,
+        canvasShellEl: box.querySelector('.m3-empty-hearts-card') as HTMLElement | null,
+        canvasEl: null,
+        onTransformUpdated: () => {},
+        onOrientationToggled: () => {
+          this.renderDOM();
+        },
+        onPlayClick: () => this.sim.audio.playClick(),
       });
       return;
     }
@@ -1524,14 +1600,19 @@ export class Match3ModalController {
         </aside>
 
         <div class="pa-stage-viewport">
-          <div class="pa-canvas-shell" data-pa-board-mode="match3">
-            <canvas
-              id="match3Canvas"
-              width="${VIRTUAL_W}"
-              height="${VIRTUAL_W}"
-              tabindex="0"
-              aria-label="Bàn kẹo phép thuật Hang Sóc ${lv.size} nhân ${lv.size}, mũi tên di chuyển, Enter chọn"
-            ></canvas>
+          <div class="mg-stage-top-strip">
+            ${sharedMinigameViewport.renderToolbarHtml('match3')}
+          </div>
+          <div class="mg-stage-pan-area">
+            <div class="pa-canvas-shell" data-pa-board-mode="match3">
+              <canvas
+                id="match3Canvas"
+                width="${VIRTUAL_W}"
+                height="${VIRTUAL_W}"
+                tabindex="0"
+                aria-label="Bàn kẹo phép thuật Hang Sóc ${lv.size} nhân ${lv.size}, mũi tên di chuyển, Enter chọn"
+              ></canvas>
+            </div>
           </div>
         </div>
 
@@ -1679,6 +1760,26 @@ export class Match3ModalController {
     if (canvas && this.engine) {
       this.engine.attachCanvas(canvas);
     }
+    const panArea = box.querySelector('.mg-stage-pan-area') as HTMLElement | null;
+    const shell = box.querySelector('.pa-canvas-shell') as HTMLElement | null;
+    sharedMinigameViewport.bindCanvasStageInteractions({
+      gameId: 'match3',
+      rootScope: box,
+      panAreaEl: panArea,
+      canvasShellEl: shell,
+      canvasEl: canvas,
+      onTransformUpdated: () => {
+        if (!this.engine) return;
+        const { effectiveScale, netQuarterTurns } =
+          sharedMinigameViewport.applyCanvasStageTransform('match3', panArea, shell);
+        this.engine.syncViewTransform(effectiveScale, netQuarterTurns);
+      },
+      onOrientationToggled: () => {
+        this.renderDOM();
+      },
+      onPlayClick: () => this.sim.audio.playClick(),
+    });
+    this.syncMatch3ViewportTransform();
 
     // Booster buttons
     box.querySelectorAll<HTMLButtonElement>('[data-m3-booster]').forEach((btn) => {

@@ -2027,31 +2027,40 @@ export function socialUiUpdateTutorialHudSpotlight(hud: GameHUD): void {
     spot.classList.remove('hidden');
 }
 
-export function socialUiHideTutorialPopover(hud: GameHUD, card: HTMLElement): void {
-    if (typeof (card as HTMLElement & { hidePopover?: () => void }).hidePopover === 'function') {
-      try {
-        if (card.matches(':popover-open')) {
-          (card as HTMLElement & { hidePopover: () => void }).hidePopover();
-        }
-      } catch {
-        // Ignore if not currently open
-      }
-    }
-    card.classList.remove('is-legacy-open');
+export function hasNativePopoverSupport(): boolean {
+  return (
+    typeof HTMLElement !== 'undefined' &&
+    Object.prototype.hasOwnProperty.call(HTMLElement.prototype, 'popover') &&
+    typeof (HTMLElement.prototype as HTMLElement & { showPopover?: unknown }).showPopover ===
+      'function'
+  );
 }
 
-export function socialUiShowTutorialPopover(hud: GameHUD, card: HTMLElement): void {
-    if (typeof (card as HTMLElement & { showPopover?: () => void }).showPopover === 'function') {
-      try {
-        if (!card.matches(':popover-open')) {
-          (card as HTMLElement & { showPopover: () => void }).showPopover();
-        }
-        return;
-      } catch {
-        // Fall through to legacy fixed class fallback
+export function socialUiHideTutorialPopover(_hud: GameHUD, card: HTMLElement): void {
+  if (hasNativePopoverSupport()) {
+    try {
+      if (card.matches(':popover-open')) {
+        (card as HTMLElement & { hidePopover: () => void }).hidePopover();
       }
+    } catch {
+      // Ignore if not currently open
     }
-    card.classList.add('is-legacy-open');
+  }
+  card.classList.remove('is-legacy-open');
+}
+
+export function socialUiShowTutorialPopover(_hud: GameHUD, card: HTMLElement): void {
+  if (hasNativePopoverSupport()) {
+    try {
+      if (!card.matches(':popover-open')) {
+        (card as HTMLElement & { showPopover: () => void }).showPopover();
+      }
+      return;
+    } catch {
+      // Fall through to legacy fixed class fallback
+    }
+  }
+  card.classList.add('is-legacy-open');
 }
 
 export function socialUiRenderTutorialCoach(hud: GameHUD): void {

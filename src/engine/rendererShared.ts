@@ -46,6 +46,108 @@ import { JuiceFX } from './juiceFx';
 export type JuiceEventKind = 'harvest' | 'levelup' | 'victory';
 export { JuiceFX };
 
+/**
+ * Installs a lightweight spec-compliant `CanvasRenderingContext2D.prototype.roundRect`
+ * fallback when running in older WebKit / embedded iOS WebViews where `roundRect`
+ * may be missing or partial. Native Safari 16+ `roundRect` is preserved untouched.
+ */
+export function ensureCanvasRoundRectPolyfill(): void {
+  if (typeof CanvasRenderingContext2D === 'undefined') return;
+  const proto = CanvasRenderingContext2D.prototype as CanvasRenderingContext2D & {
+    roundRect?: (
+      x: number,
+      y: number,
+      w: number,
+      h: number,
+      radii?: number | DOMPointInit | Array<number | DOMPointInit>
+    ) => void;
+  };
+  if (typeof proto.roundRect === 'function') return;
+  proto.roundRect = function roundRectFallback(
+    this: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    radii?: number | DOMPointInit | Array<number | DOMPointInit>
+  ): void {
+    if (w < 0) {
+      x += w;
+      w = -w;
+    }
+    if (h < 0) {
+      y += h;
+      h = -h;
+    }
+    let r = 0;
+    if (typeof radii === 'number') {
+      r = radii;
+    } else if (Array.isArray(radii)) {
+      if (radii.length > 0) {
+        const first = radii[0];
+        r = typeof first === 'number' ? first : first?.x ?? 0;
+      }
+    } else if (radii && typeof radii === 'object') {
+      r = radii.x ?? 0;
+    }
+    r = Math.max(0, Math.min(r, w * 0.5, h * 0.5));
+    if (r <= 0.01) {
+      this.rect(x, y, w, h);
+      return;
+    }
+    this.moveTo(x + r, y);
+    this.arcTo(x + w, y, x + w, y + h, r);
+    this.arcTo(x + w, y + h, x, y + h, r);
+    this.arcTo(x, y + h, x, y, r);
+    this.arcTo(x, y, x + w, y, r);
+    this.closePath();
+  };
+}
+
+ensureCanvasRoundRectPolyfill();
+
+export interface VisibleRotatedTileWindow {
+  sumMin: number;
+  sumMax: number;
+  diffMin: number;
+  diffMax: number;
+}
+
+/**
+ * Analytically projects the screen viewport `[-margin, viewW + margin] × [-margin, viewH + margin]`
+ * into rotated isometric diamond bounds `(rx0 + ry0)` and `(rx0 - ry0)` so tile passes visit only
+ * on-screen tiles (~350–650 tiles) instead of scanning all `72 × 72 = 5,184` tiles per frame.
+ */
+export function computeVisibleRotatedTileWindow(
+  cam: Camera,
+  viewW: number,
+  viewH: number,
+  margin: number
+): VisibleRotatedTileWindow {
+  const invZoom = 1 / Math.max(0.05, cam.zoom);
+  const wxMin = (-margin - viewW * 0.5) * invZoom + cam.x;
+  const wxMax = (viewW + margin - viewW * 0.5) * invZoom + cam.x;
+  const wyMin = (-margin - viewH * 0.5) * invZoom + cam.y;
+  const wyMax = (viewH + margin - viewH * 0.5) * invZoom + cam.y + 3 * ELEV_PX;
+
+  const diffMin = wxMin / (TILE_W * 0.5);
+  const diffMax = wxMax / (TILE_W * 0.5);
+  const sumMin = Math.max(0, Math.floor(wyMin / (TILE_H * 0.5)) - 1);
+  const sumMax = Math.min((GRID_SIZE - 1) * 2, Math.ceil(wyMax / (TILE_H * 0.5)) + 1);
+  return { sumMin, sumMax, diffMin, diffMax };
+}
+
+export function isTouchOrIOSDevice(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  if (/iPad|iPhone|iPod/.test(ua)) return true;
+  if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
+  if (typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches) {
+    return true;
+  }
+  return navigator.maxTouchPoints > 0;
+}
+
 export const MAX_WEATHER_PARTICLES = 400;
 
 export function computeWeatherParticleBudget(

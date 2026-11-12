@@ -52,6 +52,7 @@ import {
   TERRAIN_PALETTE,
   TopologicalDrawCmd,
   buildLockedSceneryCatalog,
+  computeVisibleRotatedTileWindow,
   computeWeatherParticleBudget,
   resolveBuildingInWorldTimerInfo,
   rotTileToWorldTile,
@@ -202,7 +203,8 @@ export function waterDrawSeamlessWaterDetails(self: IsometricRenderer,
     hw: number,
     hh: number,
     zoom: number,
-    isNight: boolean
+    isNight: boolean,
+    forStaticCache = false
   ): void {
     const ctx = self.ctx;
     const cell = sim.grid[gy]?.[gx];
@@ -254,27 +256,29 @@ export function waterDrawSeamlessWaterDetails(self: IsometricRenderer,
     }
 
     // 1. Refractive Golden Sunlight / Moonlight Caustic Webs & Shimmer Ripples
-    const wavePhase = self.reducedMotion ? 0 : self.tick * 0.05;
-    if ((gx + gy) % 2 === 0) {
-      const wave = Math.sin(wavePhase + gx * 0.8 + gy * 0.6) * 3.8 * zoom;
-      ctx.strokeStyle = isNight ? 'rgba(165, 243, 252, 0.44)' : 'rgba(255, 252, 214, 0.72)';
-      ctx.lineWidth = Math.max(1.1, 1.65 * zoom);
-      ctx.beginPath();
-      ctx.moveTo(sx - 9.8 * zoom + wave, sy + hh - 1.6 * zoom);
-      ctx.quadraticCurveTo(sx + wave * 0.5, sy + hh - 3.8 * zoom, sx + 9.8 * zoom + wave, sy + hh - 0.8 * zoom);
-      ctx.moveTo(sx - 5.2 * zoom - wave * 0.6, sy + hh + 2.4 * zoom);
-      ctx.quadraticCurveTo(sx, sy + hh + 4.0 * zoom, sx + 6.4 * zoom - wave * 0.6, sy + hh + 1.8 * zoom);
-      ctx.stroke();
-    } else if (hash % 3 === 1) {
-      const glint = self.reducedMotion ? 0.6 : 0.42 + 0.52 * Math.abs(Math.sin(wavePhase * 1.3 + hash));
-      ctx.strokeStyle = isNight
-        ? `rgba(186, 230, 253, ${(glint * 0.48).toFixed(2)})`
-        : `rgba(240, 253, 255, ${(glint * 0.78).toFixed(2)})`;
-      ctx.lineWidth = Math.max(1.0, 1.35 * zoom);
-      ctx.beginPath();
-      ctx.moveTo(sx - 6.8 * zoom, sy + hh + 2.2 * zoom);
-      ctx.lineTo(sx + 6.8 * zoom, sy + hh + 1.2 * zoom);
-      ctx.stroke();
+    if (!forStaticCache) {
+      const wavePhase = self.reducedMotion ? 0 : self.tick * 0.05;
+      if ((gx + gy) % 2 === 0) {
+        const wave = Math.sin(wavePhase + gx * 0.8 + gy * 0.6) * 3.8 * zoom;
+        ctx.strokeStyle = isNight ? 'rgba(165, 243, 252, 0.44)' : 'rgba(255, 252, 214, 0.72)';
+        ctx.lineWidth = Math.max(1.1, 1.65 * zoom);
+        ctx.beginPath();
+        ctx.moveTo(sx - 9.8 * zoom + wave, sy + hh - 1.6 * zoom);
+        ctx.quadraticCurveTo(sx + wave * 0.5, sy + hh - 3.8 * zoom, sx + 9.8 * zoom + wave, sy + hh - 0.8 * zoom);
+        ctx.moveTo(sx - 5.2 * zoom - wave * 0.6, sy + hh + 2.4 * zoom);
+        ctx.quadraticCurveTo(sx, sy + hh + 4.0 * zoom, sx + 6.4 * zoom - wave * 0.6, sy + hh + 1.8 * zoom);
+        ctx.stroke();
+      } else if (hash % 3 === 1) {
+        const glint = self.reducedMotion ? 0.6 : 0.42 + 0.52 * Math.abs(Math.sin(wavePhase * 1.3 + hash));
+        ctx.strokeStyle = isNight
+          ? `rgba(186, 230, 253, ${(glint * 0.48).toFixed(2)})`
+          : `rgba(240, 253, 255, ${(glint * 0.78).toFixed(2)})`;
+        ctx.lineWidth = Math.max(1.0, 1.35 * zoom);
+        ctx.beginPath();
+        ctx.moveTo(sx - 6.8 * zoom, sy + hh + 2.2 * zoom);
+        ctx.lineTo(sx + 6.8 * zoom, sy + hh + 1.2 * zoom);
+        ctx.stroke();
+      }
     }
 
     // 2. Round notched green lily pads, layered pink-cream lotus blossoms & marsh frogs!
@@ -326,7 +330,10 @@ export function waterDrawSeamlessWaterDetails(self: IsometricRenderer,
 
     // 3. Tall swaying Devon Cattail Reeds (`đầm lau sậy` Canon Hang Sóc!) along marsh & river banks
     if (nearBank && (hash % 2 === 0 || hash % 5 === 1)) {
-      const sway = self.reducedMotion ? 0 : Math.sin(self.tick * 0.048 + gx * 0.9 + gy * 1.3) * 2.6 * zoom;
+      const sway =
+        forStaticCache || self.reducedMotion
+          ? 0
+          : Math.sin(self.tick * 0.048 + gx * 0.9 + gy * 1.3) * 2.6 * zoom;
       const baseX = sx + ((hash % 3) - 1) * 6.2 * zoom;
       const baseY = sy + hh + 1.2 * zoom;
       ctx.save();
@@ -369,4 +376,98 @@ export function waterDrawSeamlessWaterDetails(self: IsometricRenderer,
       }
       ctx.restore();
     }
+}
+
+/**
+ * Lightweight 60fps overlay drawn on top of the cached static ground layer:
+ * batches River Ottery shimmering caustic ripples into a single stroke path and
+ * renders dynamic litter puddles without re-drawing 5,184 terrain tiles.
+ */
+export function waterDrawAnimatedGroundOverlays(
+  self: IsometricRenderer,
+  sim: ParkSimulation,
+  cam: Camera,
+  viewW: number,
+  viewH: number,
+  isNight: boolean,
+  unlockedSet: Set<string>
+): void {
+  const ctx = self.ctx;
+  const zoom = cam.zoom;
+  const viewRot = cam.viewRot ?? 0;
+  const hh = TILE_H * 0.5 * zoom;
+  const margin = Math.max(64, 110 * zoom);
+  const win = computeVisibleRotatedTileWindow(cam, viewW, viewH, margin);
+  const wavePhase = self.reducedMotion ? 0 : self.tick * 0.05;
+  const sandbox = sim.state.sandboxMode;
+
+  let hasRipples = false;
+  ctx.save();
+  ctx.strokeStyle = isNight ? 'rgba(165, 243, 252, 0.44)' : 'rgba(255, 252, 214, 0.72)';
+  ctx.lineWidth = Math.max(1.1, 1.65 * zoom);
+  ctx.beginPath();
+
+  for (let sum = win.sumMin; sum <= win.sumMax; sum++) {
+    const rxStart = Math.max(0, sum - (GRID_SIZE - 1), Math.floor((sum + win.diffMin) * 0.5) - 1);
+    const rxEnd = Math.min(GRID_SIZE - 1, sum, Math.ceil((sum + win.diffMax) * 0.5) + 1);
+    for (let rx0 = rxStart; rx0 <= rxEnd; rx0++) {
+      const ry0 = sum - rx0;
+      const { gx, gy } = rotTileToWorldTile(rx0, ry0, viewRot);
+      const cell = sim.grid[gy]?.[gx];
+      if (!cell) continue;
+      if (cell.terrain !== 'water' && !cell.hasLitter) continue;
+      if (!sandbox && !unlockedSet.has(cell.zoneId)) continue;
+
+      const sx = viewW * 0.5 + ((rx0 - ry0) * (TILE_W * 0.5) - cam.x) * zoom;
+      const sy = viewH * 0.5 + (sum * (TILE_H * 0.5) - cell.elevation * ELEV_PX - cam.y) * zoom;
+
+      if (cell.terrain === 'water' && (!cell.path || cell.path === 'none') && (gx + gy) % 2 === 0) {
+        const wave = Math.sin(wavePhase + gx * 0.8 + gy * 0.6) * 3.8 * zoom;
+        ctx.moveTo(sx - 9.8 * zoom + wave, sy + hh - 1.6 * zoom);
+        ctx.quadraticCurveTo(
+          sx + wave * 0.5,
+          sy + hh - 3.8 * zoom,
+          sx + 9.8 * zoom + wave,
+          sy + hh - 0.8 * zoom
+        );
+        ctx.moveTo(sx - 5.2 * zoom - wave * 0.6, sy + hh + 2.4 * zoom);
+        ctx.quadraticCurveTo(
+          sx,
+          sy + hh + 4.0 * zoom,
+          sx + 6.4 * zoom - wave * 0.6,
+          sy + hh + 1.8 * zoom
+        );
+        hasRipples = true;
+      }
+    }
+  }
+
+  if (hasRipples) {
+    ctx.stroke();
+  }
+
+  // Second lightweight pass only if any visible tile has litter
+  for (let sum = win.sumMin; sum <= win.sumMax; sum++) {
+    const rxStart = Math.max(0, sum - (GRID_SIZE - 1), Math.floor((sum + win.diffMin) * 0.5) - 1);
+    const rxEnd = Math.min(GRID_SIZE - 1, sum, Math.ceil((sum + win.diffMax) * 0.5) + 1);
+    for (let rx0 = rxStart; rx0 <= rxEnd; rx0++) {
+      const ry0 = sum - rx0;
+      const { gx, gy } = rotTileToWorldTile(rx0, ry0, viewRot);
+      const cell = sim.grid[gy]?.[gx];
+      if (!cell || !cell.hasLitter) continue;
+      if (!sandbox && !unlockedSet.has(cell.zoneId)) continue;
+      const sx = viewW * 0.5 + ((rx0 - ry0) * (TILE_W * 0.5) - cam.x) * zoom;
+      const sy = viewH * 0.5 + (sum * (TILE_H * 0.5) - cell.elevation * ELEV_PX - cam.y) * zoom;
+      ctx.fillStyle = '#a855f7';
+      ctx.beginPath();
+      ctx.ellipse(sx, sy + hh, 7 * zoom, 4 * zoom, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#4ade80';
+      ctx.beginPath();
+      ctx.arc(sx + 2 * zoom, sy + hh - 2 * zoom, 2.6 * zoom, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  ctx.restore();
 }

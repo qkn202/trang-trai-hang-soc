@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FARM_CROPS, getCatalogItem, getFarmItemIconSrc } from '../../data/catalog';
+import { GRID_SIZE } from '../../data/zones';
 import { PlacedBuilding } from '../../types/game';
+import { auditIos16SourceCompatibility } from '../../ui/hpvnBridge';
+import { Camera, rotateGridRect, worldIso } from '../isometric';
+import {
+  computeVisibleRotatedTileWindow,
+  ensureCanvasRoundRectPolyfill,
+} from '../rendererShared';
 import { SPRITE_KEYS } from '../spriteLoader';
 import {
   computeWeatherParticleBudget,
@@ -222,5 +229,151 @@ describe('renderer.ts - On-Device Performance & Weather Particles Budget', () =>
     expect(resolveBuildingInWorldTimerInfo(readyCoop, coopItem, now, 'none', true)?.kind).toBe(
       'passive_cycle'
     );
+  });
+
+  it('computeVisibleRotatedTileWindow cắt tỉa lưới 72x72 (5.184 ô) xuống vùng nhìn thấy thực tế ở cả 4 góc xoay camera', () => {
+    const fullGridTiles = GRID_SIZE * GRID_SIZE; // 5184
+    for (const viewRot of [0, 1, 2, 3] as const) {
+      const { wx, wy } = worldIso(36, 36, viewRot);
+      const camMobile: Camera = { x: wx, y: wy, zoom: 0.82, viewRot };
+      const winMobile = computeVisibleRotatedTileWindow(camMobile, 390, 844, 48);
+      const centerRot = rotateGridRect(36, 36, 1, 1, viewRot);
+      const centerSum = centerRot.rx0 + centerRot.ry0;
+      const centerDiff = centerRot.rx0 - centerRot.ry0;
+
+      expect(centerSum).toBeGreaterThanOrEqual(winMobile.sumMin);
+      expect(centerSum).toBeLessThanOrEqual(winMobile.sumMax);
+      expect(centerDiff).toBeGreaterThanOrEqual(winMobile.diffMin);
+      expect(centerDiff).toBeLessThanOrEqual(winMobile.diffMax);
+
+      let visitedMobile = 0;
+      for (let sum = winMobile.sumMin; sum <= winMobile.sumMax; sum++) {
+        const rxLo = Math.max(0, Math.ceil((sum + winMobile.diffMin) * 0.5));
+        const rxHi = Math.min(GRID_SIZE - 1, Math.floor((sum + winMobile.diffMax) * 0.5));
+        for (let rx = rxLo; rx <= rxHi; rx++) {
+          const ry = sum - rx;
+          if (ry >= 0 && ry < GRID_SIZE) visitedMobile++;
+        }
+      }
+      expect(visitedMobile).toBeGreaterThan(20);
+      expect(visitedMobile).toBeLessThan(700); // ~13% so với 5.184 ô
+
+      const camDesktop: Camera = { x: wx, y: wy, zoom: 0.82, viewRot };
+      const winDesktop = computeVisibleRotatedTileWindow(camDesktop, 1280, 800, 120);
+      let visitedDesktop = 0;
+      for (let sum = winDesktop.sumMin; sum <= winDesktop.sumMax; sum++) {
+        const rxLo = Math.max(0, Math.ceil((sum + winDesktop.diffMin) * 0.5));
+        const rxHi = Math.min(GRID_SIZE - 1, Math.floor((sum + winDesktop.diffMax) * 0.5));
+        for (let rx = rxLo; rx <= rxHi; rx++) {
+          const ry = sum - rx;
+          if (ry >= 0 && ry < GRID_SIZE) visitedDesktop++;
+        }
+      }
+      expect(visitedDesktop).toBeLessThan(fullGridTiles * 0.45);
+    }
+  });
+
+  it('ensureCanvasRoundRectPolyfill cung cấp fallback an toàn cho WebView thiếu CanvasRenderingContext2D.roundRect', () => {
+    class MockLegacy2DContext {
+      public calls: string[] = [];
+      moveTo() {
+        this.calls.push('moveTo');
+      }
+      arcTo() {
+        this.calls.push('arcTo');
+      }
+      closePath() {
+        this.calls.push('closePath');
+      }
+      rect() {
+        this.calls.push('rect');
+      }
+    }
+    const prevDesc = Object.getOwnPropertyDescriptor(globalThis, 'CanvasRenderingContext2D');
+    try {
+      Object.defineProperty(globalThis, 'CanvasRenderingContext2D', {
+        value: MockLegacy2DContext,
+        configurable: true,
+        writable: true,
+      });
+      ensureCanvasRoundRectPolyfill();
+      const inst = new MockLegacy2DContext() as unknown as CanvasRenderingContext2D & {
+        calls: string[];
+      };
+      expect(typeof inst.roundRect).toBe('function');
+      inst.roundRect(10, 20, 120, 60, [8]);
+      expect(inst.calls).toEqual(['moveTo', 'arcTo', 'arcTo', 'arcTo', 'arcTo', 'closePath']);
+    } finally {
+      if (prevDesc) {
+        Object.defineProperty(globalThis, 'CanvasRenderingContext2D', prevDesc);
+      } else {
+        delete (globalThis as Record<string, unknown>).CanvasRenderingContext2D;
+      }
+    }
+  });
+
+  it('Toàn bộ mã nguồn TS và main.css tuân thủ nghiêm ngặt tương thích iOS Safari 16.0+', async () => {
+    const fsMod = (await import(/* @vite-ignore */ 'node:' + 'fs')) as {
+      readdirSync: (
+        p: string,
+        o: { withFileTypes: true }
+      ) => Array<{ name: string; isDirectory: () => boolean; isFile: () => boolean }>;
+      readFileSync: (p: string, enc: string) => string;
+    };
+    const pathMod = (await import(/* @vite-ignore */ 'node:' + 'path')) as {
+      join: (...parts: string[]) => string;
+      relative: (from: string, to: string) => string;
+      resolve: (...parts: string[]) => string;
+    };
+    const proc = (globalThis as unknown as { process: { cwd: () => string } }).process;
+    const srcDir = pathMod.resolve(proc.cwd(), 'src');
+
+    const collectTs = (dir: string, acc: string[] = []): string[] => {
+      for (const ent of fsMod.readdirSync(dir, { withFileTypes: true })) {
+        if (ent.name === '__tests__') continue;
+        const full = pathMod.join(dir, ent.name);
+        if (ent.isDirectory()) collectTs(full, acc);
+        else if (ent.isFile() && ent.name.endsWith('.ts')) acc.push(full);
+      }
+      return acc;
+    };
+
+    const tsFiles = collectTs(srcDir);
+    expect(tsFiles.length).toBeGreaterThan(20);
+
+    for (const file of tsFiles) {
+      if (file.endsWith('hpvnBridge.ts')) continue;
+      const code = fsMod.readFileSync(file, 'utf8');
+      const res = auditIos16SourceCompatibility(code);
+      expect(res.issues, `Lỗi tương thích iOS 16 trong ${pathMod.relative(srcDir, file)}`).toEqual(
+        []
+      );
+    }
+
+    const cssRaw = fsMod.readFileSync(pathMod.join(srcDir, 'styles/main.css'), 'utf8');
+    const cssLines: string[] = cssRaw.split(/\r?\n/);
+
+    // 1. Không còn nested @media bên trong selector rule (Safari 16.0–16.4 không hỗ trợ CSS Nesting)
+    const nestedMediaLines = cssLines
+      .map((line: string, idx: number) => ({ line, num: idx + 1 }))
+      .filter((item: { line: string; num: number }) => /^  +@media\b/.test(item.line));
+    expect(nestedMediaLines).toEqual([]);
+
+    // 2. Mọi khai báo `safe center` (Safari 17.2+) đều phải có dòng fallback `center` đứng ngay trước cho iOS 16
+    for (let i = 0; i < cssLines.length; i++) {
+      const m = cssLines[i].match(/^\s*(align-items|align-content|justify-content):\s*safe center;/);
+      if (m) {
+        const prop = m[1];
+        const prevLine = cssLines[i - 1] ?? '';
+        expect(
+          new RegExp(`^\\s*${prop}:\\s*center;`).test(prevLine),
+          `Thiếu fallback '${prop}: center;' trước dòng ${i + 1} trong main.css`
+        ).toBe(true);
+      }
+    }
+
+    // 3. `.tutorial-coach-card.is-legacy-open` đứng độc lập, không bị gộp trực tiếp với `:popover-open` ngoài `:is()`
+    const fullCss = cssLines.join('\n');
+    expect(fullCss).toContain('.tutorial-coach-card.is-legacy-open {\n  display: flex;\n}');
   });
 });

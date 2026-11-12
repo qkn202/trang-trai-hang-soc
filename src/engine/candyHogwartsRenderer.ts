@@ -154,6 +154,9 @@ export class CandyHogwartsBoardRenderer {
   private observedCssSize = 0;
   private currentGridSize = 0;
   private currentCssSize = 0;
+  private currentZoomStep = 100;
+  public viewZoom = 1;
+  public netQuarterTurns: 0 | 1 | 2 | 3 = 0;
   private bgCanvas: HTMLCanvasElement | null = null;
   private bgCtx: CanvasRenderingContext2D | null = null;
   private bgDirty = true;
@@ -170,7 +173,7 @@ export class CandyHogwartsBoardRenderer {
       ('ontouchstart' in window || navigator.maxTouchPoints > 0);
     this.dpr =
       typeof window !== 'undefined'
-        ? Math.min(window.devicePixelRatio || 1, isMobile ? 1.85 : 2.25)
+        ? Math.min(window.devicePixelRatio || 1, isMobile ? 1.6 : 2.0)
         : 1;
 
     if (typeof Image !== 'undefined') {
@@ -250,24 +253,39 @@ export class CandyHogwartsBoardRenderer {
 
   public resize(gridSize: number): void {
     let rawCssSize = this.observedCssSize;
-    if ((!rawCssSize || rawCssSize <= 0) && typeof this.canvas?.getBoundingClientRect === 'function') {
-      const rect = this.canvas.getBoundingClientRect();
-      rawCssSize = Math.floor(Math.min(rect.width, rect.height || rect.width));
+    if (!rawCssSize || rawCssSize <= 0) {
+      const cw = this.canvas?.clientWidth ?? 0;
+      const ch = this.canvas?.clientHeight ?? 0;
+      if (cw > 0) {
+        rawCssSize = Math.floor(Math.min(cw, ch || cw));
+      } else if (typeof this.canvas?.getBoundingClientRect === 'function') {
+        const rect = this.canvas.getBoundingClientRect();
+        const z = Math.max(0.25, this.viewZoom || 1);
+        rawCssSize = Math.floor(Math.min(rect.width, rect.height || rect.width) / z);
+      }
     }
     const cssSize = Math.max(240, rawCssSize || 468);
-    if (this.currentGridSize === gridSize && this.currentCssSize === cssSize) {
+    const zoomStep = Math.round(Math.max(1, Math.min(1.8, this.viewZoom || 1)) * 100);
+    if (
+      this.currentGridSize === gridSize &&
+      this.currentCssSize === cssSize &&
+      this.currentZoomStep === zoomStep
+    ) {
       return;
     }
     this.currentGridSize = gridSize;
     this.currentCssSize = cssSize;
+    this.currentZoomStep = zoomStep;
 
     const isMobile =
       typeof window !== 'undefined' &&
       ('ontouchstart' in window || navigator.maxTouchPoints > 0);
-    this.dpr =
+    const baseDpr =
       typeof window !== 'undefined'
-        ? Math.min(window.devicePixelRatio || 1, isMobile ? 1.85 : 2.25)
+        ? Math.min(window.devicePixelRatio || 1, isMobile ? 1.6 : 2.0)
         : 1;
+    const maxCanvasPx = isMobile ? 1280 : 1680;
+    this.dpr = Math.min(maxCanvasPx / cssSize, baseDpr * (zoomStep / 100));
     const targetW = Math.round(cssSize * this.dpr);
     if (this.canvas && (this.canvas.width !== targetW || this.canvas.height !== targetW)) {
       this.canvas.width = targetW;
@@ -279,15 +297,39 @@ export class CandyHogwartsBoardRenderer {
     this.cellSize = (cssSize - this.padding * 2) / gridSize;
   }
 
+  public screenToBoardPoint(clientX: number, clientY: number): { x: number; y: number } | null {
+    if (typeof this.canvas?.getBoundingClientRect !== 'function') return null;
+    const rect = this.canvas.getBoundingClientRect();
+    const u = (clientX - rect.left) / Math.max(1, rect.width);
+    const v = (clientY - rect.top) / Math.max(1, rect.height);
+    let lu = u;
+    let lv = v;
+    if (this.netQuarterTurns === 1) {
+      lu = v;
+      lv = 1 - u;
+    } else if (this.netQuarterTurns === 2) {
+      lu = 1 - u;
+      lv = 1 - v;
+    } else if (this.netQuarterTurns === 3) {
+      lu = 1 - v;
+      lv = u;
+    }
+    const boardDim = this.boardPx > 0 ? this.boardPx : Math.max(1, rect.width);
+    return {
+      x: lu * boardDim,
+      y: lv * boardDim,
+    };
+  }
+
   public screenToCell(
     clientX: number,
     clientY: number,
     gridSize: number
   ): { r: number; c: number } | null {
-    if (typeof this.canvas?.getBoundingClientRect !== 'function') return null;
-    const rect = this.canvas.getBoundingClientRect();
-    const x = clientX - rect.left - this.padding;
-    const y = clientY - rect.top - this.padding;
+    const pt = this.screenToBoardPoint(clientX, clientY);
+    if (!pt) return null;
+    const x = pt.x - this.padding;
+    const y = pt.y - this.padding;
     const c = Math.floor(x / this.cellSize);
     const r = Math.floor(y / this.cellSize);
     if (r < 0 || r >= gridSize || c < 0 || c >= gridSize) return null;

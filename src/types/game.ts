@@ -791,6 +791,9 @@ export interface SavedOnetSession {
   paidHintsLeft: number;
   paidShufflesLeft: number;
   talismanUsed: boolean;
+  timeLimitSec?: number;
+  timeRemainingSec?: number;
+  lossReason?: 'deadlock' | 'timeout' | null;
   status: 'playing' | 'lost';
   companionCharge?: number;
   snackPieUsed?: boolean;

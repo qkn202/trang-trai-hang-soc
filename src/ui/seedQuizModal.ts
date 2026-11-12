@@ -33,6 +33,7 @@ import {
   QuizLanguageId,
   QuizProficiencyTier,
 } from '../types/game';
+import { MINIGAME_ZOOM_STEP, sharedMinigameViewport } from './minigameViewControls';
 
 function escapeHtml(val: unknown): string {
   return String(val ?? '')
@@ -80,6 +81,7 @@ export class SeedQuizModalController {
   private sessionShownQids = new Set<string>();
   private skipFormatOffset = 0;
   private starterChallengePendingPack = false;
+  private dialogCloseBound = false;
   public onOpenLeaderboard?: () => void;
 
   constructor(
@@ -94,6 +96,56 @@ export class SeedQuizModalController {
     this.onRefreshHud = onRefreshHud;
     this.onToast = onToast;
     this.onEquipAndSow = onEquipAndSow;
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', () => {
+        if (!this.isOpen()) return;
+        const dlg = this.getDialog();
+        const modalInner =
+          typeof dlg?.querySelector === 'function'
+            ? (dlg.querySelector('.sq-modal-inner') as HTMLElement | null)
+            : null;
+        sharedMinigameViewport.applyDialogOrientation(dlg, modalInner, true);
+        this.syncSeedQuizViewportTransform();
+      });
+
+      window.addEventListener('keydown', (ev) => {
+        if (!this.isOpen()) return;
+        const tag = (ev.target as HTMLElement | null)?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (ev.key === '+' || ev.key === '=') {
+          ev.preventDefault();
+          sharedMinigameViewport.stepZoom('seedquiz', MINIGAME_ZOOM_STEP);
+          this.syncSeedQuizViewportTransform();
+        } else if (ev.key === '-' || ev.key === '_') {
+          ev.preventDefault();
+          sharedMinigameViewport.stepZoom('seedquiz', -MINIGAME_ZOOM_STEP);
+          this.syncSeedQuizViewportTransform();
+        } else if (ev.key === '0' && (ev.ctrlKey || ev.metaKey)) {
+          ev.preventDefault();
+          sharedMinigameViewport.resetView('seedquiz');
+          this.syncSeedQuizViewportTransform();
+        }
+      });
+    }
+  }
+
+  private getDialog(): HTMLDialogElement | null {
+    return this.root.querySelector('#seedQuizDialog') as HTMLDialogElement | null;
+  }
+
+  private isOpen(): boolean {
+    return Boolean(this.getDialog()?.open);
+  }
+
+  private syncSeedQuizViewportTransform(): void {
+    const container = this.root.querySelector('#seedQuizDialogContent') as HTMLElement | null;
+    if (!container) return;
+    const scrollViewportEl = container.querySelector('#sqScrollViewport') as HTMLElement | null;
+    const sizerEl = container.querySelector('#sqZoomSizer') as HTMLElement | null;
+    const contentStageEl = container.querySelector('#sqZoomStage') as HTMLElement | null;
+    sharedMinigameViewport.applyDomScrollStageTransform(scrollViewportEl, sizerEl, contentStageEl);
+    sharedMinigameViewport.syncToolbarDOM(container, 'seedquiz');
   }
 
   public open(
@@ -356,6 +408,23 @@ export class SeedQuizModalController {
     const container = this.root.querySelector('#seedQuizDialogContent') as HTMLElement | null;
     if (!container) return;
 
+    const dlg = this.getDialog();
+    const modalInner =
+      typeof dlg?.querySelector === 'function'
+        ? (dlg.querySelector('.sq-modal-inner') as HTMLElement | null)
+        : null;
+    if (dlg && typeof dlg.addEventListener === 'function' && !this.dialogCloseBound) {
+      this.dialogCloseBound = true;
+      dlg.addEventListener('close', () => {
+        sharedMinigameViewport.clearDialogOrientation(dlg, modalInner);
+      });
+    }
+    sharedMinigameViewport.applyDialogOrientation(dlg, modalInner, true);
+
+    const prevScrollEl = container.querySelector('#sqScrollViewport') as HTMLElement | null;
+    const prevScrollTop = prevScrollEl ? prevScrollEl.scrollTop : 0;
+    const prevScrollLeft = prevScrollEl ? prevScrollEl.scrollLeft : 0;
+
     const quiz = this.sim.ensureLanguageQuiz();
     const activeLang = quiz.activeLang;
     const langMeta = QUIZ_LANGUAGES[activeLang];
@@ -521,7 +590,17 @@ export class SeedQuizModalController {
     const challengeHtml = this.challenge ? this.renderChallengeStage(this.challenge) : '';
 
     container.innerHTML = `
-      <div class="sq-root">
+      <div class="sq-view-bar-row">
+        <span class="sq-view-bar-hint">🔍 Phóng to / thu nhỏ &amp; xoay dọc ngang</span>
+        ${sharedMinigameViewport.renderToolbarHtml('seedquiz', {
+          showPanToggle: false,
+          extraClass: 'sq-view-toolbar',
+        })}
+      </div>
+      <div class="sq-scroll-viewport" id="sqScrollViewport">
+        <div class="sq-zoom-sizer" id="sqZoomSizer">
+          <div class="sq-zoom-stage" id="sqZoomStage">
+            <div class="sq-root">
         ${plotContextBanner}
 
         <!-- CROP SELECTOR BAR -->
@@ -681,9 +760,18 @@ export class SeedQuizModalController {
           </section>
         </div>
       </div>
+          </div>
+        </div>
+      </div>
     `;
 
     this.bindRenderedEvents(container);
+
+    const nextScrollEl = container.querySelector('#sqScrollViewport') as HTMLElement | null;
+    if (nextScrollEl && (prevScrollTop > 0 || prevScrollLeft > 0)) {
+      nextScrollEl.scrollTop = prevScrollTop;
+      nextScrollEl.scrollLeft = prevScrollLeft;
+    }
   }
 
   private getLexiconEntrySrsInfo(
@@ -1563,6 +1651,18 @@ export class SeedQuizModalController {
           this.render();
         }
       });
+    });
+
+    const scrollViewportEl = container.querySelector('#sqScrollViewport') as HTMLElement | null;
+    const sizerEl = container.querySelector('#sqZoomSizer') as HTMLElement | null;
+    const contentStageEl = container.querySelector('#sqZoomStage') as HTMLElement | null;
+    sharedMinigameViewport.bindDomScrollStageInteractions({
+      rootScope: container,
+      scrollViewportEl,
+      sizerEl,
+      contentStageEl,
+      onOrientationToggled: () => this.render(),
+      onPlayClick: () => this.sim.audio.playClick(),
     });
   }
 }

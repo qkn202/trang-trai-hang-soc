@@ -1418,6 +1418,14 @@ export function sanitizeSavedOnetSession(
     paidHintsLeft: Math.round(clampFinite(rec.paidHintsLeft, 0, 15, 1)),
     paidShufflesLeft: Math.round(clampFinite(rec.paidShufflesLeft, 0, 15, 1)),
     talismanUsed: Boolean(rec.talismanUsed),
+    ...(typeof rec.timeLimitSec === 'number' && Number.isFinite(rec.timeLimitSec)
+      ? { timeLimitSec: Math.round(clampFinite(rec.timeLimitSec, 30, 1200, 180)) }
+      : {}),
+    ...(typeof rec.timeRemainingSec === 'number' && Number.isFinite(rec.timeRemainingSec)
+      ? { timeRemainingSec: Math.round(clampFinite(rec.timeRemainingSec, 0, 1200, 180) * 100) / 100 }
+      : {}),
+    lossReason:
+      rec.lossReason === 'timeout' || rec.lossReason === 'deadlock' ? rec.lossReason : null,
     status: rec.status,
     companionCharge: Math.round(clampFinite(rec.companionCharge, 0, 20, 0)),
     snackPieUsed: Boolean(rec.snackPieUsed),

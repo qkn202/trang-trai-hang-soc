@@ -94,42 +94,62 @@ export function shouldGroundBlend(key: string): boolean {
   return GROUND_BLEND_KEYS.has(key);
 }
 
+let sharedBlendReadCanvas: HTMLCanvasElement | null = null;
+let sharedBlendReadCtx: CanvasRenderingContext2D | null = null;
+
+function getSharedBlendReadCtx(w: number, h: number): CanvasRenderingContext2D | null {
+  if (typeof document === 'undefined') return null;
+  if (!sharedBlendReadCanvas) {
+    sharedBlendReadCanvas = document.createElement('canvas');
+    sharedBlendReadCtx = sharedBlendReadCanvas.getContext('2d', { willReadFrequently: true });
+  }
+  if (!sharedBlendReadCanvas || !sharedBlendReadCtx) return null;
+  if (sharedBlendReadCanvas.width < w) sharedBlendReadCanvas.width = w;
+  if (sharedBlendReadCanvas.height < h) sharedBlendReadCanvas.height = h;
+  sharedBlendReadCtx.clearRect(0, 0, w, h);
+  return sharedBlendReadCtx;
+}
+
+/**
+ * Releases the temporary CPU readback scratch buffer after bulk sprite loading
+ * so mobile/iOS WebKit recovers software canvas memory immediately.
+ */
+export function releaseGroundBlendScratch(): void {
+  if (sharedBlendReadCanvas) {
+    sharedBlendReadCanvas.width = 1;
+    sharedBlendReadCanvas.height = 1;
+  }
+}
+
 /**
  * Fades the bottom edge of a sprite image or already-tooned sprite canvas so it
  * blends into the terrain instead of sitting on a hard cut-out line.
  *
- * `key` is the sprite key, used to pick the deeper plinth dissolve for the
- * handful of sprites that ship with a baked-in grass plate (see PLINTH_KEYS).
+ * Uses a single shared `willReadFrequently` scratch canvas for pixel readback and
+ * writes the final pixels onto a standard GPU-accelerated `<canvas>` so 60fps
+ * `drawImage()` calls on iOS Safari / mobile browsers stay on the GPU fast path.
  */
 export function applyGroundBlend(
   source: HTMLCanvasElement | HTMLImageElement,
   key: string
 ): HTMLCanvasElement | HTMLImageElement {
-  let canvas: HTMLCanvasElement;
-  if (source instanceof HTMLCanvasElement) {
-    canvas = source;
-  } else {
-    const sw = source.naturalWidth || source.width;
-    const sh = source.naturalHeight || source.height;
-    if (!sw || !sh) return source;
-    canvas = document.createElement('canvas');
-    canvas.width = sw;
-    canvas.height = sh;
-    const drawCtx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!drawCtx) return source;
-    drawCtx.drawImage(source, 0, 0, sw, sh);
-  }
-
-  const w = canvas.width;
-  const h = canvas.height;
+  const w =
+    source instanceof HTMLCanvasElement
+      ? source.width
+      : source.naturalWidth || source.width;
+  const h =
+    source instanceof HTMLCanvasElement
+      ? source.height
+      : source.naturalHeight || source.height;
   if (!w || !h) return source;
 
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) return source;
+  const readCtx = getSharedBlendReadCtx(w, h);
+  if (!readCtx) return source;
 
   let data: ImageData;
   try {
-    data = ctx.getImageData(0, 0, w, h);
+    readCtx.drawImage(source, 0, 0, w, h);
+    data = readCtx.getImageData(0, 0, w, h);
   } catch {
     return source; // tainted canvas — leave the artwork alone
   }
@@ -152,7 +172,7 @@ export function applyGroundBlend(
       break;
     }
   }
-  if (lowest < 0) return canvas;
+  if (lowest < 0) return source;
 
   const depth = PLINTH_KEYS.has(key)
     ? Math.max(6, Math.round(h * PLINTH_DEPTH))
@@ -174,10 +194,16 @@ export function applyGroundBlend(
     }
   }
 
+  const outCanvas = document.createElement('canvas');
+  outCanvas.width = w;
+  outCanvas.height = h;
+  const outCtx = outCanvas.getContext('2d');
+  if (!outCtx) return source;
+
   try {
-    ctx.putImageData(data, 0, 0);
+    outCtx.putImageData(data, 0, 0);
   } catch {
-    /* ignore */
+    return source;
   }
-  return canvas;
+  return outCanvas;
 }

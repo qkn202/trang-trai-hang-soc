@@ -1100,134 +1100,165 @@ export function entitiesDrawAndTickOwlPostEvent(self: IsometricRenderer,
     }
 }
 
+function paintGoldenAtmosphereAndVignetteToCtx(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  period: 'dawn' | 'day' | 'dusk' | 'night',
+  weather: WeatherForecastSlot
+): void {
+  const isOvercast = weather.kind === 'rain' || weather.kind === 'storm';
+
+  // 1. Diagonal Golden Hour Sunbeams & Warm Honey Sun-Bloom
+  if (!isOvercast && (period === 'day' || period === 'dawn' || period === 'dusk')) {
+    const sunX = w * (period === 'dawn' ? 0.2 : period === 'dusk' ? 0.8 : 0.76);
+    const sunY = Math.max(29, h * 0.14);
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+
+    const bloomR = Math.max(w, h) * 0.56;
+    const bloom = ctx.createRadialGradient(sunX, sunY, 6, sunX, sunY, bloomR);
+    if (period === 'dusk') {
+      bloom.addColorStop(0, 'rgba(255, 206, 138, 0.28)');
+      bloom.addColorStop(0.42, 'rgba(251, 164, 116, 0.11)');
+      bloom.addColorStop(1, 'rgba(251, 146, 60, 0)');
+    } else {
+      bloom.addColorStop(0, 'rgba(255, 248, 196, 0.30)');
+      bloom.addColorStop(0.38, 'rgba(254, 235, 148, 0.12)');
+      bloom.addColorStop(1, 'rgba(254, 240, 138, 0)');
+    }
+    ctx.fillStyle = bloom;
+    ctx.fillRect(0, 0, w, h);
+
+    const rayAngles = period === 'dawn' ? [0.52, 0.74, 0.98] : [2.08, 2.30, 2.54];
+    const rayLen = Math.hypot(w, h) * 0.92;
+
+    for (let i = 0; i < rayAngles.length; i++) {
+      const ang = rayAngles[i];
+      const halfSpread = 0.055 + i * 0.012;
+      const endX1 = sunX + Math.cos(ang - halfSpread) * rayLen;
+      const endY1 = sunY + Math.sin(ang - halfSpread) * rayLen;
+      const endX2 = sunX + Math.cos(ang + halfSpread) * rayLen;
+      const endY2 = sunY + Math.sin(ang + halfSpread) * rayLen;
+
+      const rayGrad = ctx.createLinearGradient(
+        sunX,
+        sunY,
+        sunX + Math.cos(ang) * rayLen * 0.85,
+        sunY + Math.sin(ang) * rayLen * 0.85
+      );
+      const peakAlpha = period === 'dusk' ? 0.13 : 0.145 - i * 0.02;
+      rayGrad.addColorStop(0, `rgba(255, 250, 214, ${peakAlpha})`);
+      rayGrad.addColorStop(0.5, `rgba(254, 236, 162, ${peakAlpha * 0.56})`);
+      rayGrad.addColorStop(1, 'rgba(254, 240, 138, 0)');
+
+      ctx.fillStyle = rayGrad;
+      ctx.beginPath();
+      ctx.moveTo(sunX, sunY);
+      ctx.lineTo(endX1, endY1);
+      ctx.lineTo(endX2, endY2);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  // 1b. AAA Soft Painterly Foreground Cloud Banks framing the outer viewport edges
+  if (weather.kind !== 'storm') {
+    ctx.save();
+    const cloudAnchors: Array<[number, number, number]> = [
+      [w * 0.67, h * 0.03, 1.05],
+      [w * 0.96, h * 0.27, 0.92],
+      [w * 0.04, h * 0.77, 0.96],
+      [w * 0.63, h * 0.97, 1.12],
+    ];
+    const baseR = Math.max(34, Math.min(w, h) * 0.115);
+    for (const [bx, by, sc] of cloudAnchors) {
+      const puffs: Array<[number, number, number]> = [
+        [-baseR * 0.62 * sc, baseR * 0.1 * sc, baseR * 0.76 * sc],
+        [0, -baseR * 0.08 * sc, baseR * 0.96 * sc],
+        [baseR * 0.66 * sc, baseR * 0.12 * sc, baseR * 0.78 * sc],
+      ];
+      for (const [ox, oy, pr] of puffs) {
+        const cg = ctx.createRadialGradient(bx + ox, by + oy, pr * 0.12, bx + ox, by + oy, pr);
+        if (period === 'night') {
+          cg.addColorStop(0, 'rgba(148, 163, 198, 0.24)');
+          cg.addColorStop(0.58, 'rgba(100, 116, 158, 0.10)');
+          cg.addColorStop(1, 'rgba(30, 41, 59, 0)');
+        } else if (period === 'dusk') {
+          cg.addColorStop(0, 'rgba(255, 228, 205, 0.46)');
+          cg.addColorStop(0.58, 'rgba(251, 182, 148, 0.20)');
+          cg.addColorStop(1, 'rgba(251, 146, 60, 0)');
+        } else {
+          cg.addColorStop(0, 'rgba(255, 253, 246, 0.58)');
+          cg.addColorStop(0.56, 'rgba(254, 249, 232, 0.26)');
+          cg.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        }
+        ctx.fillStyle = cg;
+        ctx.beginPath();
+        ctx.ellipse(bx + ox, by + oy, pr * 1.28, pr * 0.78, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  // 2. Cozy Storybook Vignette framing the viewport corners toward the village heart
+  const cx = w * 0.5;
+  const cy = h * 0.48;
+  const outerR = Math.hypot(w, h) * 0.58;
+  const innerR = outerR * 0.56;
+  const vig = ctx.createRadialGradient(cx, cy, innerR, cx, cy, outerR);
+  vig.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  if (period === 'night') {
+    vig.addColorStop(1, 'rgba(10, 14, 34, 0.30)');
+  } else if (period === 'dusk') {
+    vig.addColorStop(1, 'rgba(68, 30, 40, 0.22)');
+  } else {
+    vig.addColorStop(1, 'rgba(92, 52, 18, 0.16)');
+  }
+  ctx.save();
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+}
+
 export function entitiesDrawGoldenAtmosphereAndVignette(self: IsometricRenderer, 
     viewW: number,
     viewH: number,
     period: 'dawn' | 'day' | 'dusk' | 'night',
     weather: WeatherForecastSlot
   ): void {
-    const ctx = self.ctx;
-    const isOvercast = weather.kind === 'rain' || weather.kind === 'storm';
-
-    // 1. Diagonal Golden Hour Sunbeams & Warm Honey Sun-Bloom
-    if (!isOvercast && (period === 'day' || period === 'dawn' || period === 'dusk')) {
-      const sunX = viewW * (period === 'dawn' ? 0.2 : period === 'dusk' ? 0.8 : 0.76);
-      const sunY = Math.max(58, viewH * 0.14);
-
-      ctx.save();
-      ctx.globalCompositeOperation = 'screen';
-
-      // Broad warm honey sun-bloom bathing the upper sky & village rooftops
-      const bloomR = Math.max(viewW, viewH) * 0.56;
-      const bloom = ctx.createRadialGradient(sunX, sunY, 12, sunX, sunY, bloomR);
-      if (period === 'dusk') {
-        bloom.addColorStop(0, 'rgba(255, 206, 138, 0.30)');
-        bloom.addColorStop(0.42, 'rgba(251, 164, 116, 0.12)');
-        bloom.addColorStop(1, 'rgba(251, 146, 60, 0)');
-      } else {
-        bloom.addColorStop(0, 'rgba(255, 248, 196, 0.32)');
-        bloom.addColorStop(0.38, 'rgba(254, 235, 148, 0.13)');
-        bloom.addColorStop(1, 'rgba(254, 240, 138, 0)');
-      }
-      ctx.fillStyle = bloom;
-      ctx.fillRect(0, 0, viewW, viewH);
-
-      // Three gentle diagonal god-ray ribbons slanting across the meadow
-      const rayAngles =
-        period === 'dawn' ? [0.52, 0.74, 0.98] : [2.08, 2.30, 2.54];
-      const rayLen = Math.hypot(viewW, viewH) * 0.92;
-      const shimmer = self.reducedMotion ? 0 : Math.sin(self.tick * 0.016) * 0.015;
-
-      for (let i = 0; i < rayAngles.length; i++) {
-        const ang = rayAngles[i] + shimmer * (i % 2 === 0 ? 1 : -1);
-        const halfSpread = 0.055 + i * 0.012;
-        const endX1 = sunX + Math.cos(ang - halfSpread) * rayLen;
-        const endY1 = sunY + Math.sin(ang - halfSpread) * rayLen;
-        const endX2 = sunX + Math.cos(ang + halfSpread) * rayLen;
-        const endY2 = sunY + Math.sin(ang + halfSpread) * rayLen;
-
-        const rayGrad = ctx.createLinearGradient(
-          sunX,
-          sunY,
-          sunX + Math.cos(ang) * rayLen * 0.85,
-          sunY + Math.sin(ang) * rayLen * 0.85
-        );
-        const peakAlpha = period === 'dusk' ? 0.135 : 0.155 - i * 0.022;
-        rayGrad.addColorStop(0, `rgba(255, 250, 214, ${peakAlpha})`);
-        rayGrad.addColorStop(0.5, `rgba(254, 236, 162, ${peakAlpha * 0.58})`);
-        rayGrad.addColorStop(1, 'rgba(254, 240, 138, 0)');
-
-        ctx.fillStyle = rayGrad;
-        ctx.beginPath();
-        ctx.moveTo(sunX, sunY);
-        ctx.lineTo(endX1, endY1);
-        ctx.lineTo(endX2, endY2);
-        ctx.closePath();
-        ctx.fill();
-      }
-
-      ctx.restore();
+    if (viewW <= 4 || viewH <= 4) return;
+    if (typeof document === 'undefined') {
+      paintGoldenAtmosphereAndVignetteToCtx(self.ctx, viewW, viewH, period, weather);
+      return;
     }
 
-    // 1b. AAA Soft Painterly Foreground Cloud Banks framing the outer viewport edges (Mockup 1 aerial valley look!)
-    if (weather.kind !== 'storm') {
-      ctx.save();
-      const driftX = self.reducedMotion ? 0 : Math.sin(self.tick * 0.0045) * 18;
-      const cloudAnchors: Array<[number, number, number]> = [
-        [viewW * 0.67 + driftX, viewH * 0.03, 1.05],
-        [viewW * 0.96 - driftX * 0.7, viewH * 0.27, 0.92],
-        [viewW * 0.04 + driftX * 0.8, viewH * 0.77, 0.96],
-        [viewW * 0.63 - driftX * 0.6, viewH * 0.97, 1.12],
-      ];
-      const baseR = Math.max(68, Math.min(viewW, viewH) * 0.115);
-      for (const [bx, by, sc] of cloudAnchors) {
-        const puffs: Array<[number, number, number]> = [
-          [-baseR * 0.62 * sc, baseR * 0.1 * sc, baseR * 0.76 * sc],
-          [0, -baseR * 0.08 * sc, baseR * 0.96 * sc],
-          [baseR * 0.66 * sc, baseR * 0.12 * sc, baseR * 0.78 * sc],
-        ];
-        for (const [ox, oy, pr] of puffs) {
-          const cg = ctx.createRadialGradient(bx + ox, by + oy, pr * 0.12, bx + ox, by + oy, pr);
-          if (period === 'night') {
-            cg.addColorStop(0, 'rgba(148, 163, 198, 0.24)');
-            cg.addColorStop(0.58, 'rgba(100, 116, 158, 0.10)');
-            cg.addColorStop(1, 'rgba(30, 41, 59, 0)');
-          } else if (period === 'dusk') {
-            cg.addColorStop(0, 'rgba(255, 228, 205, 0.46)');
-            cg.addColorStop(0.58, 'rgba(251, 182, 148, 0.20)');
-            cg.addColorStop(1, 'rgba(251, 146, 60, 0)');
-          } else {
-            cg.addColorStop(0, 'rgba(255, 253, 246, 0.58)');
-            cg.addColorStop(0.56, 'rgba(254, 249, 232, 0.26)');
-            cg.addColorStop(1, 'rgba(255, 255, 255, 0)');
-          }
-          ctx.fillStyle = cg;
-          ctx.beginPath();
-          ctx.ellipse(bx + ox, by + oy, pr * 1.28, pr * 0.78, 0, 0, Math.PI * 2);
-          ctx.fill();
-        }
+    // Bake soft atmospheric gradients at 0.5x resolution once per (viewport, period, weather)
+    // so 60fps rendering uses a single GPU-accelerated source-over blit instead of 16 gradients/frame.
+    const cw = Math.max(16, Math.min(960, Math.round(viewW * 0.5)));
+    const ch = Math.max(16, Math.min(640, Math.round(viewH * 0.5)));
+    const key = `${cw}|${ch}|${period}|${weather.kind}`;
+    if (!self.atmosCacheCanvas || self.atmosCacheKey !== key) {
+      if (!self.atmosCacheCanvas) {
+        self.atmosCacheCanvas = document.createElement('canvas');
       }
-      ctx.restore();
+      self.atmosCacheCanvas.width = cw;
+      self.atmosCacheCanvas.height = ch;
+      const aCtx = self.atmosCacheCanvas.getContext('2d');
+      if (!aCtx) {
+        paintGoldenAtmosphereAndVignetteToCtx(self.ctx, viewW, viewH, period, weather);
+        return;
+      }
+      aCtx.clearRect(0, 0, cw, ch);
+      paintGoldenAtmosphereAndVignetteToCtx(aCtx, cw, ch, period, weather);
+      self.atmosCacheKey = key;
     }
 
-    // 2. Cozy Storybook Vignette framing the viewport corners toward the village heart
-    const cx = viewW * 0.5;
-    const cy = viewH * 0.48;
-    const outerR = Math.hypot(viewW, viewH) * 0.58;
-    const innerR = outerR * 0.56;
-    const vig = ctx.createRadialGradient(cx, cy, innerR, cx, cy, outerR);
-    vig.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    if (period === 'night') {
-      vig.addColorStop(1, 'rgba(10, 14, 34, 0.30)');
-    } else if (period === 'dusk') {
-      vig.addColorStop(1, 'rgba(68, 30, 40, 0.22)');
-    } else {
-      vig.addColorStop(1, 'rgba(92, 52, 18, 0.16)');
-    }
-    ctx.save();
-    ctx.fillStyle = vig;
-    ctx.fillRect(0, 0, viewW, viewH);
-    ctx.restore();
+    self.ctx.drawImage(self.atmosCacheCanvas, 0, 0, viewW, viewH);
 }
 
 export function entitiesDrawHarvestBloom(self: IsometricRenderer, now: number, zoom: number): void {
@@ -1264,37 +1295,32 @@ export function entitiesDrawDayNightLightLayer(self: IsometricRenderer,
     viewH: number,
     period: 'dawn' | 'day' | 'dusk' | 'night'
   ): void {
+    // Daylight tint is 0.02..0.04 yellow already covered by sun-bloom; skip fullscreen overdraw in day!
+    if (period === 'day') return;
+
     const ctx = self.ctx;
+    const gradKey = `${Math.round(viewH)}|${period}`;
+    if (!self.dayNightGradCache || self.dayNightGradCache.key !== gradKey) {
+      const grad = ctx.createLinearGradient(0, 0, 0, viewH);
+      if (period === 'night') {
+        grad.addColorStop(0, 'rgba(20, 42, 108, 0.15)');
+        grad.addColorStop(0.55, 'rgba(18, 30, 74, 0.13)');
+        grad.addColorStop(1, 'rgba(12, 19, 38, 0.17)');
+      } else if (period === 'dusk') {
+        grad.addColorStop(0, 'rgba(249, 115, 22, 0.09)');
+        grad.addColorStop(0.6, 'rgba(234, 88, 12, 0.075)');
+        grad.addColorStop(1, 'rgba(180, 83, 9, 0.10)');
+      } else {
+        grad.addColorStop(0, 'rgba(251, 191, 36, 0.065)');
+        grad.addColorStop(1, 'rgba(244, 114, 182, 0.05)');
+      }
+      self.dayNightGradCache = { key: gradKey, grad };
+    }
+
+    // Hardware-accelerated source-over instead of soft-light (which triggers slow CPU readback on iOS WebKit)
     ctx.save();
-
-    try {
-      ctx.globalCompositeOperation = 'soft-light';
-    } catch {
-      ctx.globalCompositeOperation = 'source-over';
-    }
-    if (ctx.globalCompositeOperation !== 'soft-light') {
-      ctx.globalCompositeOperation = 'source-over';
-    }
-
-    const grad = ctx.createLinearGradient(0, 0, 0, viewH);
-
-    if (period === 'night') {
-      grad.addColorStop(0, 'rgba(30, 58, 138, 0.16)');
-      grad.addColorStop(0.55, 'rgba(23, 37, 84, 0.14)');
-      grad.addColorStop(1, 'rgba(15, 23, 42, 0.18)');
-    } else if (period === 'dusk') {
-      grad.addColorStop(0, 'rgba(249, 115, 22, 0.11)');
-      grad.addColorStop(0.6, 'rgba(234, 88, 12, 0.09)');
-      grad.addColorStop(1, 'rgba(180, 83, 9, 0.12)');
-    } else if (period === 'dawn') {
-      grad.addColorStop(0, 'rgba(251, 191, 36, 0.08)');
-      grad.addColorStop(1, 'rgba(244, 114, 182, 0.06)');
-    } else {
-      grad.addColorStop(0, 'rgba(254, 240, 138, 0.04)');
-      grad.addColorStop(1, 'rgba(253, 224, 71, 0.02)');
-    }
-
-    ctx.fillStyle = grad;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = self.dayNightGradCache.grad;
     ctx.fillRect(0, 0, viewW, viewH);
     ctx.restore();
 }
@@ -1304,39 +1330,87 @@ export function entitiesRenderMinimap(self: IsometricRenderer, minimapCanvas: HT
     if (!mCtx) return;
     const w = minimapCanvas.width;
     const h = minimapCanvas.height;
+    if (w <= 0 || h <= 0) return;
     mCtx.clearRect(0, 0, w, h);
 
     const rot = cam.viewRot ?? 0;
-    const unlockedSet = new Set(sim.state.unlockedZones);
     const scaleX = (w * 0.46) / GRID_SIZE;
     const scaleY = (h * 0.44) / GRID_SIZE;
     const originX = w * 0.5;
     const originY = 8;
 
-    for (let gy = 0; gy < GRID_SIZE; gy++) {
-      for (let gx = 0; gx < GRID_SIZE; gx++) {
-        const c = sim.grid[gy][gx];
-        const unlocked = sim.state.sandboxMode || unlockedSet.has(c.zoneId);
-        const { rx, ry } = rotateGridPoint(gx + 0.5, gy + 0.5, rot);
-        const mx = originX + (rx - ry) * scaleX;
-        const my = originY + (rx + ry) * scaleY;
-
-        if (!unlocked) {
-          mCtx.fillStyle = 'rgba(84, 136, 92, 0.72)';
-        } else if (c.buildingUid) {
-          mCtx.fillStyle = '#fbbf24';
-        } else if (c.coasterTrack) {
-          mCtx.fillStyle = '#f97316';
-        } else if (c.path !== 'none') {
-          mCtx.fillStyle = '#d6d3d1';
-        } else if (c.terrain === 'water') {
-          mCtx.fillStyle = '#38bdf8';
-        } else if (c.terrain === 'snow') {
-          mCtx.fillStyle = '#e2e8f0';
-        } else {
-          mCtx.fillStyle = '#4ade80';
+    const cacheKey = `${w}|${h}|${rot}|${sim.stateRevision}|${sim.state.sandboxMode ? 1 : 0}|${sim.state.unlockedZones.length}`;
+    if (typeof document !== 'undefined') {
+      if (!self.minimapCacheCanvas || self.minimapCacheKey !== cacheKey) {
+        if (!self.minimapCacheCanvas) {
+          self.minimapCacheCanvas = document.createElement('canvas');
         }
-        mCtx.fillRect(mx - 1.5, my - 1, 3.2, 2.2);
+        self.minimapCacheCanvas.width = w;
+        self.minimapCacheCanvas.height = h;
+        const cCtx = self.minimapCacheCanvas.getContext('2d');
+        if (cCtx) {
+          cCtx.clearRect(0, 0, w, h);
+          const unlockedSet = new Set(sim.state.unlockedZones);
+          for (let gy = 0; gy < GRID_SIZE; gy++) {
+            for (let gx = 0; gx < GRID_SIZE; gx++) {
+              const c = sim.grid[gy][gx];
+              const unlocked = sim.state.sandboxMode || unlockedSet.has(c.zoneId);
+              const { rx, ry } = rotateGridPoint(gx + 0.5, gy + 0.5, rot);
+              const mx = originX + (rx - ry) * scaleX;
+              const my = originY + (rx + ry) * scaleY;
+
+              if (!unlocked) {
+                cCtx.fillStyle = 'rgba(84, 136, 92, 0.72)';
+              } else if (c.buildingUid) {
+                cCtx.fillStyle = '#fbbf24';
+              } else if (c.coasterTrack) {
+                cCtx.fillStyle = '#f97316';
+              } else if (c.path !== 'none') {
+                cCtx.fillStyle = '#d6d3d1';
+              } else if (c.terrain === 'water') {
+                cCtx.fillStyle = '#38bdf8';
+              } else if (c.terrain === 'snow') {
+                cCtx.fillStyle = '#e2e8f0';
+              } else {
+                cCtx.fillStyle = '#4ade80';
+              }
+              cCtx.fillRect(mx - 1.5, my - 1, 3.2, 2.2);
+            }
+          }
+          self.minimapCacheKey = cacheKey;
+        }
+      }
+    }
+
+    if (self.minimapCacheCanvas && self.minimapCacheKey === cacheKey) {
+      mCtx.drawImage(self.minimapCacheCanvas, 0, 0);
+    } else {
+      const unlockedSet = new Set(sim.state.unlockedZones);
+      for (let gy = 0; gy < GRID_SIZE; gy++) {
+        for (let gx = 0; gx < GRID_SIZE; gx++) {
+          const c = sim.grid[gy][gx];
+          const unlocked = sim.state.sandboxMode || unlockedSet.has(c.zoneId);
+          const { rx, ry } = rotateGridPoint(gx + 0.5, gy + 0.5, rot);
+          const mx = originX + (rx - ry) * scaleX;
+          const my = originY + (rx + ry) * scaleY;
+
+          if (!unlocked) {
+            mCtx.fillStyle = 'rgba(84, 136, 92, 0.72)';
+          } else if (c.buildingUid) {
+            mCtx.fillStyle = '#fbbf24';
+          } else if (c.coasterTrack) {
+            mCtx.fillStyle = '#f97316';
+          } else if (c.path !== 'none') {
+            mCtx.fillStyle = '#d6d3d1';
+          } else if (c.terrain === 'water') {
+            mCtx.fillStyle = '#38bdf8';
+          } else if (c.terrain === 'snow') {
+            mCtx.fillStyle = '#e2e8f0';
+          } else {
+            mCtx.fillStyle = '#4ade80';
+          }
+          mCtx.fillRect(mx - 1.5, my - 1, 3.2, 2.2);
+        }
       }
     }
 

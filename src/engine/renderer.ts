@@ -50,7 +50,9 @@ import {
   TERRAIN_PALETTE,
   TopologicalDrawCmd,
   buildLockedSceneryCatalog,
+  computeVisibleRotatedTileWindow,
   computeWeatherParticleBudget,
+  isTouchOrIOSDevice,
   resolveBuildingInWorldTimerInfo,
   rotTileToWorldTile,
 } from "./rendererShared";
@@ -58,7 +60,9 @@ export {
   JuiceFX,
   MAX_WEATHER_PARTICLES,
   buildLockedSceneryCatalog,
+  computeVisibleRotatedTileWindow,
   computeWeatherParticleBudget,
+  isTouchOrIOSDevice,
   resolveBuildingInWorldTimerInfo,
   rotTileToWorldTile,
   TERRAIN_PALETTE,
@@ -160,7 +164,12 @@ export class IsometricRenderer {
   public sprites: SpriteRegistry;
   public presentation = new PresentationCeilingController();
   public dpr = 1;
-  public adaptiveDprCap = 2;
+  public adaptiveDprCap = isTouchOrIOSDevice() ? 1.5 : 2;
+  private resizeObserver: ResizeObserver | null = null;
+  private observedCssW = 0;
+  private observedCssH = 0;
+  private viewCssW = 0;
+  private viewCssH = 0;
   public hotspots: ScreenHotspot[] = [];
   public particles: Array<{ x: number; y: number; r: number; vy: number; vx: number; hue: string }> = [];
   public rainStreaks: Array<{ x: number; y: number; len: number; speed: number }> = [];
@@ -175,7 +184,10 @@ export class IsometricRenderer {
   public juiceFx: JuiceFX;
   public harvestBloom: { x: number; y: number; startedAt: number } | null = null;
   private prevRipePlots = new Set<string>();
+  private nextRipePlots = new Set<string>();
   private prevRipeSceneKey = '';
+  private cachedUnlockedZonesSet = new Set<string>();
+  private cachedUnlockedZonesSig = '';
   public activeSeedBrushCropId: FarmCropId | null = null;
   public activePastureBrushAnimalId: PastureAnimalId | null = null;
   public activeMovingUid: string | null = null;
@@ -198,9 +210,24 @@ export class IsometricRenderer {
   // moment a construction site turns into a working building.
   public completionPopMap = new Map<string, number>();
 
-  // Offscreen Static Ground Cache for 60fps zoomed-out rendering
+  // Offscreen Viewport-Overscan Static Ground Cache for 60fps rendering at ALL zoom levels
   public groundCacheCanvas: HTMLCanvasElement | null = null;
   public groundCacheKey = '';
+  public groundCacheCamX = 0;
+  public groundCacheCamY = 0;
+  public groundCacheZoom = 0;
+  public groundCacheLogicalW = 0;
+  public groundCacheLogicalH = 0;
+  public groundCacheReqDpr = 1;
+  public groundCacheLastLiveZoom = 0;
+  public groundCacheZoomStableFrames = 10;
+
+  // Offscreen static caches for corner minimap & 0.5x golden atmosphere/vignette
+  public minimapCacheCanvas: HTMLCanvasElement | null = null;
+  public minimapCacheKey = '';
+  public atmosCacheCanvas: HTMLCanvasElement | null = null;
+  public atmosCacheKey = '';
+  public dayNightGradCache: { key: string; grad: CanvasGradient } | null = null;
 
   // Pre-smoothed organic lake shoreline loops (recomputed only when the
   // map layout changes, keyed by state revision).
@@ -249,6 +276,23 @@ export class IsometricRenderer {
     }
 
     this.juiceFx = new JuiceFX({ reducedMotion: this.reducedMotion });
+
+    if (
+      typeof ResizeObserver !== 'undefined' &&
+      typeof Element !== 'undefined' &&
+      canvas instanceof Element
+    ) {
+      this.resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const cr = entry.contentRect;
+          if (cr.width > 0 && cr.height > 0) {
+            this.observedCssW = cr.width;
+            this.observedCssH = cr.height;
+          }
+        }
+      });
+      this.resizeObserver.observe(canvas);
+    }
 
     for (let i = 0; i < MAX_WEATHER_PARTICLES; i++) {
       this.particles.push({
@@ -371,11 +415,30 @@ export class IsometricRenderer {
   public getSquashScale(id: string, now: number): { sx: number; sy: number } { return entitiesGetSquashScale(this, id, now); }
 
   public resize(): void {
-    const rect = this.canvas.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, this.adaptiveDprCap);
+    let cssW = this.observedCssW;
+    let cssH = this.observedCssH;
+    if ((cssW <= 0 || cssH <= 0) && typeof this.canvas.getBoundingClientRect === 'function') {
+      const rect = this.canvas.getBoundingClientRect();
+      cssW = rect.width;
+      cssH = rect.height;
+      if (cssW > 0 && cssH > 0) {
+        this.observedCssW = cssW;
+        this.observedCssH = cssH;
+      }
+    }
+    if (cssW <= 0 || cssH <= 0) {
+      cssW = this.canvas.clientWidth || 1;
+      cssH = this.canvas.clientHeight || 1;
+    }
+    this.viewCssW = cssW;
+    this.viewCssH = cssH;
+    const dpr = Math.min(
+      typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1,
+      this.adaptiveDprCap
+    );
     this.dpr = dpr;
-    const w = Math.max(1, Math.floor(rect.width * dpr));
-    const h = Math.max(1, Math.floor(rect.height * dpr));
+    const w = Math.max(1, Math.floor(cssW * dpr));
+    const h = Math.max(1, Math.floor(cssH * dpr));
     if (this.canvas.width !== w || this.canvas.height !== h) {
       this.canvas.width = w;
       this.canvas.height = h;
@@ -475,8 +538,8 @@ export class IsometricRenderer {
       this.buildingMap.set(b.uid, b);
     }
 
-    const viewW = this.canvas.clientWidth;
-    const viewH = this.canvas.clientHeight;
+    const viewW = this.viewCssW || this.canvas.clientWidth;
+    const viewH = this.viewCssH || this.canvas.clientHeight;
     const ctx = this.ctx;
 
     this.juiceFx.tick(1 / 60);
@@ -494,7 +557,15 @@ export class IsometricRenderer {
     const weather = sim.getCurrentWeather(now);
     const isNightLike = period === 'night' || period === 'dusk';
     const shadowVec = this.getSunShadowVector(period);
-    const unlockedSet = new Set(sim.state.unlockedZones);
+    const zonesSig = `${sim.stateRevision}|${sim.state.unlockedZones.length}|${sim.state.unlockedZones[sim.state.unlockedZones.length - 1] ?? ''}`;
+    if (this.cachedUnlockedZonesSig !== zonesSig) {
+      this.cachedUnlockedZonesSet.clear();
+      for (const zid of sim.state.unlockedZones) {
+        this.cachedUnlockedZonesSet.add(zid);
+      }
+      this.cachedUnlockedZonesSig = zonesSig;
+    }
+    const unlockedSet = this.cachedUnlockedZonesSet;
 
     if (
       sim.heatmapMode !== 'none' &&
@@ -522,13 +593,8 @@ export class IsometricRenderer {
     const margin = Math.max(130, 280 * cam.zoom);
     this.activeMovingUid = movingBuildingUid ?? null;
 
-    // 2. Render 3D Floating Island Rim + Isometric Ground Tiles (Offscreen cached when zoomed out!)
+    // 2. Render 3D Floating Island Rim + Isometric Ground Tiles + Organic Shorelines (Offscreen cached at all zooms!)
     this.drawCachedOrLiveGround(sim, cam, viewW, viewH, isNightLike, showGridLines, unlockedSet);
-
-    // 2g. Organic lake shorelines: one continuous rounded shore per water
-    //     body, drawn over the tiled water so lakes stop looking like
-    //     stacked hard-cornered squares.
-    this.drawOrganicWaterShorelines(sim, cam, viewW, viewH, isNightLike, unlockedSet);
 
     // 2h. Soft scrolling cloud shadows gliding over sunlit terrain
     this.drawScrollingCloudShadows(cam, viewW, viewH, period, weather);
@@ -537,14 +603,19 @@ export class IsometricRenderer {
     const drawList: TopologicalDrawCmd[] = [];
     const timeSec = now / 1000;
 
-    // 3a. Zoo Fences & Custom Coaster Track Tiles (rotation-aware!)
-    for (let gy = 0; gy < GRID_SIZE; gy++) {
-      for (let gx = 0; gx < GRID_SIZE; gx++) {
+    // 3a. Zoo Fences & Custom Coaster Track Tiles (frustum-culled & rotation-aware!)
+    const trackWin = computeVisibleRotatedTileWindow(cam, viewW, viewH, margin);
+    for (let sum = trackWin.sumMin; sum <= trackWin.sumMax; sum++) {
+      const rxStart = Math.max(0, sum - (GRID_SIZE - 1), Math.floor((sum + trackWin.diffMin) * 0.5) - 1);
+      const rxEnd = Math.min(GRID_SIZE - 1, sum, Math.ceil((sum + trackWin.diffMax) * 0.5) + 1);
+      for (let rx0 = rxStart; rx0 <= rxEnd; rx0++) {
+        const ry0 = sum - rx0;
+        const { gx, gy } = rotTileToWorldTile(rx0, ry0, viewRot);
         const c = sim.grid[gy][gx];
         if (!c.zooFence && !c.coasterTrack) continue;
-        const p = rotatedTileDiamondToScreen(gx, gy, cam, viewW, viewH, c.elevation * ELEV_PX);
-        if (p.sx < -margin || p.sx > viewW + margin || p.sy < -margin || p.sy > viewH + margin) continue;
-        const { rx0, ry0 } = rotateGridRect(gx, gy, 1, 1, viewRot);
+        const sx = viewW * 0.5 + ((rx0 - ry0) * (TILE_W * 0.5) - cam.x) * cam.zoom;
+        const sy = viewH * 0.5 + (sum * (TILE_H * 0.5) - c.elevation * ELEV_PX - cam.y) * cam.zoom;
+        if (sx < -margin || sx > viewW + margin || sy < -margin || sy > viewH + margin) continue;
 
         if (c.zooFence) {
           drawList.push({
@@ -553,7 +624,7 @@ export class IsometricRenderer {
             rxMax: rx0 + 0.92,
             ryMax: ry0 + 0.92,
             depth: rx0 + ry0 + 1.05,
-            draw: () => this.drawAutoTiledZooFence(sim, rx0, ry0, viewRot, p.sx, p.sy, hw, hh, cam.zoom),
+            draw: () => this.drawAutoTiledZooFence(sim, rx0, ry0, viewRot, sx, sy, hw, hh, cam.zoom),
           });
         }
         if (c.coasterTrack) {
@@ -563,7 +634,7 @@ export class IsometricRenderer {
             rxMax: rx0 + 0.92,
             ryMax: ry0 + 0.92,
             depth: rx0 + ry0 + 1.12,
-            draw: () => this.drawCoasterTrackPiece(sim, rx0, ry0, viewRot, c.elevation, p.sx, p.sy, hw, hh, cam.zoom),
+            draw: () => this.drawCoasterTrackPiece(sim, rx0, ry0, viewRot, c.elevation, sx, sy, hw, hh, cam.zoom),
           });
         }
       }
@@ -997,7 +1068,8 @@ export class IsometricRenderer {
 
     // 6b. Internal Juice Hook: Track harvested plots automatically (reset cleanly on scene switch)
     const sceneKey = `${sim.isVisitingNeighbor ? sim.getActiveVisitingNeighbor()?.id ?? 'visit' : 'home'}|${sim.isHeadmasterPreview ? 'preview' : 'live'}`;
-    const currentRipePlots = new Set<string>();
+    const currentRipePlots = this.nextRipePlots;
+    currentRipePlots.clear();
     for (const b of sim.state.buildings) {
       const item = getCatalogItem(b.itemId);
       if (
@@ -1022,6 +1094,7 @@ export class IsometricRenderer {
       }
     }
     this.prevRipeSceneKey = sceneKey;
+    this.nextRipePlots = this.prevRipePlots;
     this.prevRipePlots = currentRipePlots;
 
     // 7. Floating Text Feedback
@@ -1099,8 +1172,9 @@ export class IsometricRenderer {
     hw: number,
     hh: number,
     zoom: number,
-    isNight: boolean
-  ): void { return waterDrawSeamlessWaterDetails(this, sim, rx0, ry0, viewRot, gx, gy, sx, sy, hw, hh, zoom, isNight); }
+    isNight: boolean,
+    forStaticCache = false
+  ): void { return waterDrawSeamlessWaterDetails(this, sim, rx0, ry0, viewRot, gx, gy, sx, sy, hw, hh, zoom, isNight, forStaticCache); }
 
   private drawAutoTiledPath(
     sim: ParkSimulation,

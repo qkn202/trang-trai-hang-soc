@@ -36,6 +36,11 @@ import {
   MinigameRescueContext,
   PuzzleArcadeMode,
 } from '../types/game';
+import {
+  clientToLocalNormalized,
+  MINIGAME_ZOOM_STEP,
+  sharedMinigameViewport,
+} from './minigameViewControls';
 
 const PA_VIRTUAL_W = JIGSAW_VIRTUAL_W; // 692
 const PA_VIRTUAL_H = JIGSAW_VIRTUAL_H; // 504
@@ -401,6 +406,7 @@ export class PuzzleArcadeModalController {
   private chessShakeTimer = 0;
   private chessShakeAmp = 0;
   private chessWorker: Worker | null = null;
+  private chessWorkerDisabled = false;
   private chessWorkerReqSeq = 0;
   private pendingChessWorkerReqId: number | null = null;
   private hitStopTimer = 0;
@@ -451,6 +457,11 @@ export class PuzzleArcadeModalController {
   } | null = null;
 
   private canvas: HTMLCanvasElement | null = null;
+  private canvasResizeObserver: ResizeObserver | null = null;
+  private observedCanvasCssW = 0;
+  private observedCanvasCssH = 0;
+  private forceImmediateRedraw = true;
+  private idleDrawAccumSec = 0;
   private rafId = 0;
   private lastFrameTs = 0;
   private particles: ArcadeParticle[] = [];
@@ -477,6 +488,7 @@ export class PuzzleArcadeModalController {
     { fromR: number; fromC: number; age: number; duration: number }
   >();
   private onetWinRevealTimer = 0;
+  private onetAutoSaveAccumSec = 0;
   private hoveredTileUid: number | null = null;
 
   constructor(
@@ -530,6 +542,11 @@ export class PuzzleArcadeModalController {
       if (typeof document === 'undefined' || !document.hidden) {
         this.clearActiveModalResumeMarker();
       }
+      const modalInner =
+        typeof dlg.querySelector === 'function'
+          ? (dlg.querySelector('.pa-modal-inner') as HTMLElement | null)
+          : null;
+      sharedMinigameViewport.clearDialogOrientation(dlg, modalInner);
       this.stopLoop();
       this.onParentRefresh();
     });
@@ -570,12 +587,48 @@ export class PuzzleArcadeModalController {
           this.drawFrame();
         }
       });
+      window.addEventListener('resize', () => {
+        const openDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
+        if (!openDlg?.open) return;
+        const modalInner =
+          typeof openDlg.querySelector === 'function'
+            ? (openDlg.querySelector('.pa-modal-inner') as HTMLElement | null)
+            : null;
+        const prevLayout = openDlg.dataset?.mgLayout;
+        const res = sharedMinigameViewport.applyDialogOrientation(openDlg, modalInner, false);
+        if (prevLayout && prevLayout !== res.effectiveLayout) {
+          this.renderDOM();
+          return;
+        }
+        this.syncArcadeViewportTransform();
+      });
     }
 
     if (typeof window !== 'undefined') {
       window.addEventListener('keydown', (e) => {
       const openDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
       if (!openDlg?.open || this.victoryClaimed) return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.key === '+' || e.key === '=') {
+        e.preventDefault();
+        sharedMinigameViewport.stepZoom(this.mode, MINIGAME_ZOOM_STEP);
+        this.syncArcadeViewportTransform();
+        return;
+      }
+      if (e.key === '-' || e.key === '_') {
+        e.preventDefault();
+        sharedMinigameViewport.stepZoom(this.mode, -MINIGAME_ZOOM_STEP);
+        this.syncArcadeViewportTransform();
+        return;
+      }
+      if (e.key === '0' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        sharedMinigameViewport.resetView(this.mode);
+        this.syncArcadeViewportTransform();
+        return;
+      }
+      this.forceImmediateRedraw = true;
 
       if (
         this.mode === 'blocks' &&
@@ -690,14 +743,19 @@ export class PuzzleArcadeModalController {
     }
   }
 
+  private syncArcadeViewportTransform(): void {
+    const box = this.root.querySelector('#puzzleArcadeDialogContent') as HTMLElement | null;
+    if (!box) return;
+    const panArea = box.querySelector('.mg-stage-pan-area') as HTMLElement | null;
+    const shell = box.querySelector('.pa-canvas-shell') as HTMLElement | null;
+    sharedMinigameViewport.applyCanvasStageTransform(this.mode, panArea, shell);
+    sharedMinigameViewport.syncToolbarDOM(box, this.mode);
+    this.forceImmediateRedraw = true;
+    this.drawFrame();
+  }
+
   private isMobileBoardLayout(): boolean {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-      return false;
-    }
-    if (window.matchMedia('(orientation: landscape) and (max-height: 620px)').matches) {
-      return false;
-    }
-    return window.matchMedia('(max-width: 979px)').matches;
+    return sharedMinigameViewport.getEffectiveLayout(false) === 'portrait';
   }
 
   private getVirtualCanvasSize(): { w: number; h: number } {
@@ -711,10 +769,24 @@ export class PuzzleArcadeModalController {
           ? { w: SUDOKU_MOBILE_W, h: SUDOKU_MOBILE_H }
           : { w: SUDOKU_DESKTOP_W, h: SUDOKU_DESKTOP_H };
       case 'blocks': {
-        if (this.canvas && typeof this.canvas.getBoundingClientRect === 'function') {
-          const r = this.canvas.getBoundingClientRect();
-          if (r.width >= 60 && r.height >= 60) {
-            return { w: Math.round(r.width), h: Math.round(r.height) };
+        if (this.observedCanvasCssW >= 60 && this.observedCanvasCssH >= 60) {
+          return { w: Math.round(this.observedCanvasCssW), h: Math.round(this.observedCanvasCssH) };
+        }
+        if (this.canvas) {
+          const cw = this.canvas.clientWidth;
+          const ch = this.canvas.clientHeight;
+          if (cw >= 60 && ch >= 60) {
+            return { w: Math.round(cw), h: Math.round(ch) };
+          }
+          if (typeof this.canvas.getBoundingClientRect === 'function') {
+            const r = this.canvas.getBoundingClientRect();
+            const netRot = sharedMinigameViewport.getNetQuarterTurns('blocks');
+            const z = Math.max(0.25, sharedMinigameViewport.getState('blocks').zoom);
+            const rw = (netRot % 2 === 1 ? r.height : r.width) / z;
+            const rh = (netRot % 2 === 1 ? r.width : r.height) / z;
+            if (rw >= 60 && rh >= 60) {
+              return { w: Math.round(rw), h: Math.round(rh) };
+            }
           }
         }
         return this.isMobileBoardLayout() ? { w: 540, h: 810 } : { w: 864, h: 540 };
@@ -880,6 +952,7 @@ export class PuzzleArcadeModalController {
     this.onetBeams = [];
     this.onetSlideAnims.clear();
     this.onetWinRevealTimer = 0;
+    this.onetAutoSaveAccumSec = 0;
     this.sudokuHoverCell = null;
     this.sudokuHoverPadDigit = null;
     this.sudokuHoverAction = null;
@@ -902,7 +975,7 @@ export class PuzzleArcadeModalController {
   }
 
   private ensureChessWorker(): Worker | null {
-    if (typeof Worker === 'undefined') return null;
+    if (this.chessWorkerDisabled || typeof Worker === 'undefined') return null;
     if (!this.chessWorker) {
       try {
         const w = new Worker(new URL('../sim/chessAi.worker.ts', import.meta.url), {
@@ -912,11 +985,18 @@ export class PuzzleArcadeModalController {
           this.handleChessWorkerMessage(ev.data);
         };
         w.onerror = () => {
+          this.chessWorkerDisabled = true;
           this.pendingChessWorkerReqId = null;
           this.chessWorker = null;
+          try {
+            w.terminate();
+          } catch {
+            // Ignore termination errors
+          }
         };
         this.chessWorker = w;
       } catch {
+        this.chessWorkerDisabled = true;
         this.chessWorker = null;
       }
     }
@@ -1587,9 +1667,11 @@ export class PuzzleArcadeModalController {
     const box = this.root.querySelector('#puzzleArcadeDialogContent') as HTMLElement | null;
     if (!box) return;
 
+    const dlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
     const modalInner = this.root.querySelector(
       '#puzzleArcadeDialog .pa-modal-inner'
     ) as HTMLElement | null;
+    sharedMinigameViewport.applyDialogOrientation(dlg, modalInner, false);
     modalInner?.classList.toggle('pa-great-hall-mode', this.mode === 'chess');
     modalInner?.classList.remove('pa-potions-sudoku-mode');
     modalInner?.classList.toggle('pa-marauder-caro-mode', this.mode === 'caro');
@@ -1854,12 +1936,12 @@ export class PuzzleArcadeModalController {
       }
     } else if (this.mode === 'blocks' && this.onetEngine) {
       const oe = this.onetEngine;
-      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${oe.stage}/${MAX_MINIGAME_STAGE}`;
-      stageSubtitle = `❤️ <strong id="paOnetLives" class="${oe.lives <= 2 ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : oe.lives}</strong> • 🧩 <strong id="paOnetProgress">${oe.matchedPairs}/${oe.totalPairs}</strong> cặp • <strong>${escapeHtml(oe.shiftBadgeVi)}</strong>`;
+      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${oe.stage}/${MAX_MINIGAME_STAGE} • ${oe.rows}×${oe.cols} (${oe.rows * oe.cols} ô)`;
+      stageSubtitle = `⏱ <strong id="paOnetTimer" class="${!st.sandboxMode && oe.isTimeCritical ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : oe.formatRemainingTime()}</strong> • ❤️ <strong id="paOnetLives" class="${!st.sandboxMode && oe.lives <= 2 ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : oe.lives}</strong> • 🧩 <strong id="paOnetProgress">${oe.matchedPairs}/${oe.totalPairs}</strong> • <strong>${escapeHtml(oe.shiftBadgeVi)}</strong>`;
       const canHint =
         oe.status === 'playing' && (st.sandboxMode || oe.freeHintsLeft + oe.paidHintsLeft > 0);
       const canShuffle =
-        (oe.status === 'playing' || oe.status === 'lost') &&
+        (oe.status === 'playing' || (oe.status === 'lost' && oe.lossReason !== 'timeout')) &&
         (st.sandboxMode || oe.lives + oe.paidShufflesLeft > 0);
       const talismanLocked = oe.talismanUsed || usedTodayInMode;
       const canTalisman =
@@ -1895,9 +1977,13 @@ export class PuzzleArcadeModalController {
         </button>
       `;
       if (oe.status === 'lost') {
+        const lostMsgHtml =
+          oe.lossReason === 'timeout'
+            ? `<span>⏰ Hết thời gian (<strong>00:00</strong>) — còn <strong>${oe.remainingPairs}</strong> cặp chưa nối!</span>`
+            : `<span>💔 Hết đường nối &amp; hết lượt đổi vị trí (<strong>0 ❤️</strong>)!</span>`;
         statusBannerHtml += `
           <div class="pa-alert-strip">
-            <span>💔 Hết đường nối &amp; hết lượt đổi vị trí (<strong>0 ❤️</strong>)!</span>
+            ${lostMsgHtml}
             ${canTalisman ? `<button id="btnPaRescuePhoenixTalisman" type="button" class="pa-tool-btn talisman">🔥 Bùa (×${talismanDisp})</button>` : ''}
           </div>
         `;
@@ -2139,9 +2225,14 @@ export class PuzzleArcadeModalController {
         </aside>
 
         <div class="pa-stage-viewport">
-          <div class="pa-canvas-shell" data-pa-board-mode="${this.mode}">
-            <canvas id="paBoardCanvas" width="${this.getVirtualCanvasSize().w}" height="${this.getVirtualCanvasSize().h}" aria-label="Bàn chơi Sảnh Bàn Cờ &amp; Cổ Ngữ Phép Thuật"></canvas>
-            ${inspectReturnBarHtml}
+          <div class="mg-stage-top-strip">
+            ${sharedMinigameViewport.renderToolbarHtml(this.mode)}
+          </div>
+          <div class="mg-stage-pan-area">
+            <div class="pa-canvas-shell" data-pa-board-mode="${this.mode}">
+              <canvas id="paBoardCanvas" width="${this.getVirtualCanvasSize().w}" height="${this.getVirtualCanvasSize().h}" aria-label="Bàn chơi Sảnh Bàn Cờ &amp; Cổ Ngữ Phép Thuật"></canvas>
+              ${inspectReturnBarHtml}
+            </div>
           </div>
         </div>
 
@@ -2245,6 +2336,11 @@ export class PuzzleArcadeModalController {
       }
     } else if (this.mode === 'blocks' && this.onetEngine) {
       const oe = this.onetEngine;
+      const timerEl = box.querySelector('#paOnetTimer');
+      if (timerEl) {
+        timerEl.textContent = st.sandboxMode ? '∞' : oe.formatRemainingTime();
+        timerEl.classList.toggle('pa-err-inline', !st.sandboxMode && oe.isTimeCritical);
+      }
       const livesEl = box.querySelector('#paOnetLives');
       if (livesEl) {
         livesEl.textContent = st.sandboxMode ? '∞' : String(oe.lives);
@@ -2273,7 +2369,7 @@ export class PuzzleArcadeModalController {
       const shufBtn = box.querySelector('#btnPaOnetShuffle') as HTMLButtonElement | null;
       if (shufBtn) {
         const canShuf =
-          (oe.status === 'playing' || oe.status === 'lost') &&
+          (oe.status === 'playing' || (oe.status === 'lost' && oe.lossReason !== 'timeout')) &&
           (st.sandboxMode || oe.lives + oe.paidShufflesLeft > 0);
         shufBtn.disabled = !canShuf;
         const pill = shufBtn.querySelector('.pa-cost-pill');
@@ -2595,7 +2691,12 @@ export class PuzzleArcadeModalController {
 
     box.querySelector('#btnPaOnetShuffle')?.addEventListener('click', () => {
       const oe = this.onetEngine;
-      if (!oe || (oe.status !== 'playing' && oe.status !== 'lost')) return;
+      if (
+        !oe ||
+        (oe.status !== 'playing' && !(oe.status === 'lost' && oe.lossReason !== 'timeout'))
+      ) {
+        return;
+      }
       if (this.sim.state.sandboxMode) {
         const res = oe.useManualShuffle(true);
         if (res.ok) {
@@ -2787,8 +2888,9 @@ export class PuzzleArcadeModalController {
         this.chessEngine.freeHintsLeft += 1;
       } else if (this.mode === 'blocks' && this.onetEngine) {
         this.onetEngine.freeHintsLeft += 1;
+        this.onetEngine.addBonusTime(20);
         if (
-          this.onetEngine.lives < CreatureOnetEngine.INITIAL_LIVES ||
+          this.onetEngine.lives < this.onetEngine.maxLives ||
           this.onetEngine.status === 'lost'
         ) {
           this.onetEngine.reviveWithExtraLives(1);
@@ -2801,7 +2903,7 @@ export class PuzzleArcadeModalController {
       this.sim.saveToStorage();
       this.onParentRefresh();
       this.showToast(
-        `${comp.emoji} ${comp.nameVi} trợ chiến: +1 Lượt Gợi Ý miễn phí & +15G!`,
+        `${comp.emoji} ${comp.nameVi} trợ chiến: +1 Lượt Gợi Ý miễn phí${this.mode === 'blocks' ? ', +20s giờ' : ''} & +15G!`,
         comp.emoji
       );
       this.renderDOM();
@@ -2828,12 +2930,17 @@ export class PuzzleArcadeModalController {
         this.chessEngine.freeUndosLeft += 1;
         this.chessEngine.freeHintsLeft += 1;
       } else if (this.mode === 'blocks' && this.onetEngine) {
-        this.onetEngine.reviveWithExtraLives(2);
+        this.onetEngine.reviveWithExtraLives(2, 35);
         this.onetEngine.freeHintsLeft += 1;
       }
       this.persistModeSession(this.mode, true);
       this.onParentRefresh();
-      this.showToast('🥧 Bánh Táo Quế Bà Molly: hồi phục lượt trợ giúp & +1 Gợi Ý!', '🥧');
+      this.showToast(
+        this.mode === 'blocks'
+          ? '🥧 Bánh Táo Quế Bà Molly: +35s giờ, +2 ❤️ Đổi Bàn & +1 🔍 Dò Cặp!'
+          : '🥧 Bánh Táo Quế Bà Molly: hồi phục lượt trợ giúp & +1 Gợi Ý!',
+        '🥧'
+      );
       this.renderDOM();
     });
 
@@ -2879,18 +2986,65 @@ export class PuzzleArcadeModalController {
     const cvs = box.querySelector('#paBoardCanvas') as HTMLCanvasElement | null;
     if (!cvs) return;
     this.canvas = cvs;
+    this.observedCanvasCssW = 0;
+    this.observedCanvasCssH = 0;
+    this.forceImmediateRedraw = true;
+    if (this.canvasResizeObserver) {
+      this.canvasResizeObserver.disconnect();
+      this.canvasResizeObserver = null;
+    }
+    if (
+      typeof ResizeObserver !== 'undefined' &&
+      typeof Element !== 'undefined' &&
+      cvs instanceof Element
+    ) {
+      this.canvasResizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+            this.observedCanvasCssW = entry.contentRect.width;
+            this.observedCanvasCssH = entry.contentRect.height;
+            this.forceImmediateRedraw = true;
+          }
+        }
+      });
+      this.canvasResizeObserver.observe(cvs);
+    }
+
+    const panArea = box.querySelector('.mg-stage-pan-area') as HTMLElement | null;
+    const shell = box.querySelector('.pa-canvas-shell') as HTMLElement | null;
+    sharedMinigameViewport.bindCanvasStageInteractions({
+      gameId: this.mode,
+      rootScope: box,
+      panAreaEl: panArea,
+      canvasShellEl: shell,
+      canvasEl: cvs,
+      onTransformUpdated: () => {
+        this.forceImmediateRedraw = true;
+        this.drawFrame();
+      },
+      onOrientationToggled: () => {
+        this.renderDOM();
+        this.drawFrame();
+      },
+      onPlayClick: () => this.sim.audio.playClick(),
+    });
 
     const toVirtual = (ev: PointerEvent): { vx: number; vy: number } => {
       const rect = cvs.getBoundingClientRect();
+      if (cvs.clientWidth > 0 && cvs.clientHeight > 0) {
+        this.observedCanvasCssW = cvs.clientWidth;
+        this.observedCanvasCssH = cvs.clientHeight;
+      }
       const virt = this.getVirtualCanvasSize();
-      const vx = ((ev.clientX - rect.left) / Math.max(1, rect.width)) * virt.w;
-      const vy = ((ev.clientY - rect.top) / Math.max(1, rect.height)) * virt.h;
-      return { vx, vy };
+      const netRot = sharedMinigameViewport.getNetQuarterTurns(this.mode);
+      const { lu, lv } = clientToLocalNormalized(ev.clientX, ev.clientY, rect, netRot);
+      return { vx: lu * virt.w, vy: lv * virt.h };
     };
 
     cvs.addEventListener('pointerdown', (ev) => {
       if (ev.button !== 0 && ev.pointerType === 'mouse') return;
       if (this.victoryClaimed) return;
+      this.forceImmediateRedraw = true;
       const pos = toVirtual(ev);
       this.activePointerId = ev.pointerId;
       this.pointerDownPos = pos;
@@ -2905,6 +3059,7 @@ export class PuzzleArcadeModalController {
     });
 
     cvs.addEventListener('pointermove', (ev) => {
+      this.forceImmediateRedraw = true;
       const pos = toVirtual(ev);
       this.pointerCurrPos = pos;
       if (this.activePointerId === ev.pointerId && this.pointerDownPos) {
@@ -2919,6 +3074,13 @@ export class PuzzleArcadeModalController {
 
     const finishPointer = (ev: PointerEvent) => {
       if (this.activePointerId !== ev.pointerId) return;
+      this.forceImmediateRedraw = true;
+      if (ev.type === 'pointercancel') {
+        this.chessDragFrom = null;
+        this.activePointerId = null;
+        this.pointerDownPos = null;
+        return;
+      }
       const pos = toVirtual(ev);
       this.pointerCurrPos = pos;
       this.handlePointerUp(pos.vx, pos.vy);
@@ -2929,6 +3091,7 @@ export class PuzzleArcadeModalController {
     cvs.addEventListener('pointerup', finishPointer);
     cvs.addEventListener('pointercancel', finishPointer);
     cvs.addEventListener('pointerleave', () => {
+      this.forceImmediateRedraw = true;
       this.hoveredTileUid = null;
       this.sudokuHoverCell = null;
       this.sudokuHoverPadDigit = null;
@@ -3411,6 +3574,10 @@ export class PuzzleArcadeModalController {
   }
 
   private computeOnetBoardMetrics(engine: CreatureOnetEngine): {
+    timerBarX: number;
+    timerBarY: number;
+    timerBarW: number;
+    timerBarH: number;
     frameX: number;
     frameY: number;
     frameW: number;
@@ -3427,8 +3594,9 @@ export class PuzzleArcadeModalController {
     transposed: boolean;
   } {
     const virt = this.getVirtualCanvasSize();
-    // Auto-orient 16 rows × 9 cols whenever canvas is taller than wide so all 144 tiles fill the viewport!
-    const transposed = virt.h > virt.w * 1.02 && engine.cols > engine.rows;
+    // Auto-orient cols × rows vertically whenever layout is Portrait or canvas is taller than wide
+    const transposed =
+      (this.isMobileBoardLayout() || virt.h > virt.w * 1.02) && engine.cols > engine.rows;
     const dispRows = transposed ? engine.cols : engine.rows;
     const dispCols = transposed ? engine.rows : engine.cols;
 
@@ -3436,22 +3604,39 @@ export class PuzzleArcadeModalController {
       9,
       Math.min(13, Math.round(Math.min(virt.w, virt.h) * 0.018))
     );
-    const boxPad = 2;
+    const timerHeaderGap = 6;
+    const timerBarH = 18;
+    const timerHeaderTotal = timerBarH + timerHeaderGap;
+    const boxPad = 3;
     const availW = Math.max(180, virt.w - (outerTrackMargin + boxPad) * 2);
-    const availH = Math.max(180, virt.h - (outerTrackMargin + boxPad) * 2);
-    const rawCellW = availW / dispCols;
-    const rawCellH = availH / dispRows;
-    const cellW = Math.min(rawCellW, rawCellH * 1.75);
-    const cellH = Math.min(rawCellH, rawCellW * 1.75);
+    const availH = Math.max(150, virt.h - (outerTrackMargin + boxPad) * 2 - timerHeaderTotal);
+    const maxTileSide = this.isMobileBoardLayout() ? 66 : 76;
+    const rawCellW = Math.min(maxTileSide, availW / dispCols);
+    const rawCellH = Math.min(maxTileSide * 1.06, availH / dispRows);
+    const cellW = Math.min(rawCellW, rawCellH * 1.28);
+    const cellH = Math.min(rawCellH, rawCellW * 1.28);
     const boardW = dispCols * cellW;
     const boardH = dispRows * cellH;
-    const originX = (virt.w - boardW) * 0.5;
-    const originY = (virt.h - boardH) * 0.5;
+    const frameW = boardW + outerTrackMargin * 2;
+    const frameH = boardH + outerTrackMargin * 2;
+    const totalUnitH = timerHeaderTotal + frameH;
+    const unitTopY = (virt.h - totalUnitH) * 0.5;
+    const frameX = (virt.w - frameW) * 0.5;
+    const frameY = unitTopY + timerHeaderTotal;
+    const originX = frameX + outerTrackMargin;
+    const originY = frameY + outerTrackMargin;
+    const timerBarW = Math.min(virt.w - 16, Math.max(230, frameW));
+    const timerBarX = (virt.w - timerBarW) * 0.5;
+    const timerBarY = unitTopY;
     return {
-      frameX: originX - outerTrackMargin,
-      frameY: originY - outerTrackMargin,
-      frameW: boardW + outerTrackMargin * 2,
-      frameH: boardH + outerTrackMargin * 2,
+      timerBarX,
+      timerBarY,
+      timerBarW,
+      timerBarH,
+      frameX,
+      frameY,
+      frameW,
+      frameH,
       originX,
       originY,
       cellW,
@@ -3605,10 +3790,37 @@ export class PuzzleArcadeModalController {
   // 60FPS ANIMATION & HIGH-DPI CANVAS RENDERING
   // ==========================================================================
 
+  private hasActiveVisualAnimations(): boolean {
+    return (
+      this.hitStopTimer > 0 ||
+      this.activePointerId !== null ||
+      this.caroLastMoveAnim !== null ||
+      this.caroWinRevealTimer > 0 ||
+      this.chessMoveAnim !== null ||
+      this.chessSpellBeams.length > 0 ||
+      this.chessShakeTimer > 0 ||
+      this.onetWinRevealTimer > 0 ||
+      this.onetBlockedFlash !== null ||
+      this.onetBeams.length > 0 ||
+      this.onetSlideAnims.size > 0 ||
+      this.particles.length > 0 ||
+      this.flyingTiles.length > 0 ||
+      this.caroEngine?.status === 'ai_thinking' ||
+      this.chessEngine?.status === 'ai_thinking'
+    );
+  }
+
   private startLoop(): void {
     this.stopLoop();
     this.lastFrameTs = performance.now();
+    this.forceImmediateRedraw = true;
+    this.idleDrawAccumSec = 0;
     const step = (now: number) => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        this.lastFrameTs = now;
+        this.rafId = requestAnimationFrame(step);
+        return;
+      }
       const dt = Math.min(0.05, Math.max(0.001, (now - this.lastFrameTs) / 1000));
       this.lastFrameTs = now;
       if (!this.rescueContext) {
@@ -3618,8 +3830,15 @@ export class PuzzleArcadeModalController {
           this.renderDOM();
         }
       }
+      const hadAnimsBefore = this.hasActiveVisualAnimations();
       this.tickAnimations(dt);
-      this.drawFrame();
+      const hasAnimsNow = this.hasActiveVisualAnimations();
+      this.idleDrawAccumSec += dt;
+      if (this.forceImmediateRedraw || hadAnimsBefore || hasAnimsNow || this.idleDrawAccumSec >= 0.125) {
+        this.forceImmediateRedraw = false;
+        this.idleDrawAccumSec = 0;
+        this.drawFrame();
+      }
       this.rafId = requestAnimationFrame(step);
     };
     this.rafId = requestAnimationFrame(step);
@@ -3629,6 +3848,10 @@ export class PuzzleArcadeModalController {
     if (this.rafId) {
       cancelAnimationFrame(this.rafId);
       this.rafId = 0;
+    }
+    if (this.canvasResizeObserver) {
+      this.canvasResizeObserver.disconnect();
+      this.canvasResizeObserver = null;
     }
   }
 
@@ -3655,11 +3878,40 @@ export class PuzzleArcadeModalController {
             this.persistActiveModalResumeMarker();
           }
         }
-      } else if (this.mode === 'blocks' && this.onetWinRevealTimer > 0) {
-        this.onetWinRevealTimer -= dt;
-        if (this.onetWinRevealTimer <= 0) {
-          this.onetWinRevealTimer = 0;
-          this.checkAndClaimVictory();
+      } else if (this.mode === 'blocks') {
+        if (this.onetWinRevealTimer > 0) {
+          this.onetWinRevealTimer -= dt;
+          if (this.onetWinRevealTimer <= 0) {
+            this.onetWinRevealTimer = 0;
+            this.checkAndClaimVictory();
+          }
+        } else if (this.onetEngine && this.onetEngine.status === 'playing') {
+          const isPageHidden = typeof document !== 'undefined' && document.hidden;
+          const openDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
+          if (!isPageHidden && openDlg?.open) {
+            const tick = this.onetEngine.tickTimer(dt, Boolean(this.sim.state.sandboxMode));
+            if (tick.timedOut) {
+              this.onetAutoSaveAccumSec = 0;
+              this.persistModeSession('blocks', true);
+              this.sim.audio.playCheekyAlert();
+              if (this.onetEngine.lastAutoShuffleNotice) {
+                this.showToast(this.onetEngine.lastAutoShuffleNotice, '⏰');
+              }
+              this.renderDOM();
+            } else {
+              if (tick.wholeSecondChanged) {
+                this.updateLiveCountersOnly();
+              }
+              if (!this.rescueContext) {
+                this.onetAutoSaveAccumSec += dt;
+                if (this.onetAutoSaveAccumSec >= 5) {
+                  this.onetAutoSaveAccumSec = 0;
+                  this.persistModeSession('blocks', true);
+                  this.persistActiveModalResumeMarker();
+                }
+              }
+            }
+          }
         }
       } else if (this.mode === 'caro' && this.caroWinRevealTimer > 0) {
         this.caroWinRevealTimer -= dt;
@@ -3783,12 +4035,40 @@ export class PuzzleArcadeModalController {
   private drawFrame(): void {
     const cvs = this.canvas;
     if (!cvs) return;
-    const rect = cvs.getBoundingClientRect();
-    if (rect.width < 10 || rect.height < 10) return;
+    let cssW = this.observedCanvasCssW;
+    let cssH = this.observedCanvasCssH;
+    if (cssW < 10 || cssH < 10) {
+      if (cvs.clientWidth >= 10 && cvs.clientHeight >= 10) {
+        cssW = cvs.clientWidth;
+        cssH = cvs.clientHeight;
+        this.observedCanvasCssW = cssW;
+        this.observedCanvasCssH = cssH;
+      } else if (typeof cvs.getBoundingClientRect === 'function') {
+        const rect = cvs.getBoundingClientRect();
+        const netRot = sharedMinigameViewport.getNetQuarterTurns(this.mode);
+        const z = Math.max(0.25, sharedMinigameViewport.getState(this.mode).zoom);
+        cssW = (netRot % 2 === 1 ? rect.height : rect.width) / z;
+        cssH = (netRot % 2 === 1 ? rect.width : rect.height) / z;
+        if (cssW >= 10 && cssH >= 10) {
+          this.observedCanvasCssW = cssW;
+          this.observedCanvasCssH = cssH;
+        }
+      }
+    }
+    if (cssW < 10 || cssH < 10) return;
 
-    const dpr = Math.min(2.5, window.devicePixelRatio || 1);
-    const targetW = Math.round(rect.width * dpr);
-    const targetH = Math.round(rect.height * dpr);
+    const isTouch =
+      typeof window !== 'undefined' &&
+      ('ontouchstart' in window || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0));
+    const baseDpr = Math.min(
+      isTouch ? 1.65 : 2.0,
+      typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+    );
+    const viewZoom = Math.max(1, Math.min(1.85, sharedMinigameViewport.getState(this.mode).zoom));
+    const maxCanvasDim = isTouch ? 1320 : 1760;
+    const dpr = Math.min(maxCanvasDim / Math.max(1, cssW, cssH), baseDpr * viewZoom);
+    const targetW = Math.round(cssW * dpr);
+    const targetH = Math.round(cssH * dpr);
     if (cvs.width !== targetW || cvs.height !== targetH) {
       cvs.width = targetW;
       cvs.height = targetH;
@@ -3869,28 +4149,100 @@ export class PuzzleArcadeModalController {
   ): void {
     const m = this.computeOnetBoardMetrics(engine);
     const now = performance.now();
+    const isSandbox = Boolean(this.sim.state.sandboxMode);
 
-    // 1. Classic Pikachu Dark Recessed Board Tray (makes ivory 3D tiles & crimson lightning pop!)
+    // 0. Classic Pikachu Sharp Rectangular Countdown Timer Bar right above the Board Tray
     ctx.save();
-    drawRoundedRect(ctx, m.frameX, m.frameY, m.frameW, m.frameH, 14);
+    const barBg = ctx.createLinearGradient(0, m.timerBarY, 0, m.timerBarY + m.timerBarH);
+    barBg.addColorStop(0, 'rgba(20, 29, 25, 0.95)');
+    barBg.addColorStop(1, 'rgba(10, 15, 13, 0.98)');
+    ctx.fillStyle = barBg;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+    ctx.shadowBlur = 5;
+    ctx.shadowOffsetY = 1.5;
+    ctx.fillRect(m.timerBarX, m.timerBarY, m.timerBarW, m.timerBarH);
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.lineWidth = 0.85;
+    ctx.strokeStyle =
+      !isSandbox && engine.isTimeCritical ? 'rgba(239, 68, 68, 0.9)' : 'rgba(217, 119, 6, 0.72)';
+    ctx.strokeRect(m.timerBarX + 0.5, m.timerBarY + 0.5, m.timerBarW - 1, m.timerBarH - 1);
+
+    const ratio = isSandbox ? 1 : engine.timeProgressRatio;
+    const timeText = isSandbox ? '⏱ ∞' : `⏱ ${engine.formatRemainingTime()}`;
+    const sizeText = `${engine.rows}×${engine.cols}`;
+    ctx.font = '700 11px "Be Vietnam Pro", system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    const leftLabelW = Math.ceil(ctx.measureText(timeText).width) + 14;
+    const rightLabelW = Math.ceil(ctx.measureText(sizeText).width) + 12;
+
+    ctx.fillStyle =
+      !isSandbox && engine.isTimeCritical
+        ? 0.5 + 0.5 * Math.sin(now * 0.014) > 0.45
+          ? '#fecaca'
+          : '#ef4444'
+        : '#fef3c7';
+    ctx.textAlign = 'left';
+    ctx.fillText(timeText, m.timerBarX + 7, m.timerBarY + m.timerBarH * 0.5 + 0.5);
+
+    ctx.fillStyle = 'rgba(253, 230, 138, 0.88)';
+    ctx.textAlign = 'right';
+    ctx.fillText(sizeText, m.timerBarX + m.timerBarW - 7, m.timerBarY + m.timerBarH * 0.5 + 0.5);
+
+    const trackX = m.timerBarX + leftLabelW;
+    const trackW = Math.max(48, m.timerBarW - leftLabelW - rightLabelW);
+    const trackH = 8;
+    const trackY = m.timerBarY + (m.timerBarH - trackH) * 0.5;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.58)';
+    ctx.fillRect(trackX, trackY, trackW, trackH);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+    ctx.lineWidth = 0.6;
+    ctx.strokeRect(trackX, trackY, trackW, trackH);
+
+    if (ratio > 0.004) {
+      const fillW = Math.max(2, Math.min(trackW, trackW * ratio));
+      const fillGrad = ctx.createLinearGradient(trackX, trackY, trackX, trackY + trackH);
+      if (!isSandbox && (ratio <= 0.2 || engine.timeRemainingSec <= 20)) {
+        const pulseRed = 0.72 + 0.28 * Math.sin(now * 0.016);
+        fillGrad.addColorStop(0, `rgba(252, 165, 165, ${pulseRed.toFixed(2)})`);
+        fillGrad.addColorStop(1, `rgba(220, 38, 38, ${pulseRed.toFixed(2)})`);
+      } else if (ratio <= 0.5) {
+        fillGrad.addColorStop(0, '#fde047');
+        fillGrad.addColorStop(1, '#d97706');
+      } else {
+        fillGrad.addColorStop(0, '#4ade80');
+        fillGrad.addColorStop(1, '#16a34a');
+      }
+      ctx.fillStyle = fillGrad;
+      ctx.fillRect(trackX, trackY, fillW, trackH);
+
+      // Crisp top highlight strip
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.24)';
+      ctx.fillRect(trackX, trackY, fillW, trackH * 0.38);
+    }
+    ctx.restore();
+
+    // 1. Classic Pikachu Sharp Rectangular Dark Recessed Board Tray (thin border, zero rounded corners)
+    ctx.save();
     const trayGrad = ctx.createLinearGradient(0, m.frameY, 0, m.frameY + m.frameH);
     trayGrad.addColorStop(0, 'rgba(17, 25, 22, 0.94)');
     trayGrad.addColorStop(0.5, 'rgba(12, 18, 16, 0.95)');
     trayGrad.addColorStop(1, 'rgba(8, 13, 12, 0.97)');
     ctx.fillStyle = trayGrad;
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
-    ctx.shadowBlur = 14;
-    ctx.shadowOffsetY = 4;
-    ctx.fill();
-    ctx.lineWidth = 2.2;
-    ctx.strokeStyle = '#d97706';
-    ctx.stroke();
-
-    // Subtle inner corridor guide along the 1-cell walkable outer border
-    drawRoundedRect(ctx, m.originX - 3, m.originY - 3, m.boardW + 6, m.boardH + 6, 6);
-    ctx.strokeStyle = 'rgba(251, 191, 36, 0.22)';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.48)';
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 3;
+    ctx.fillRect(m.frameX, m.frameY, m.frameW, m.frameH);
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
     ctx.lineWidth = 1;
-    ctx.stroke();
+    ctx.strokeStyle = 'rgba(217, 119, 6, 0.78)';
+    ctx.strokeRect(m.frameX + 0.5, m.frameY + 0.5, m.frameW - 1, m.frameH - 1);
+
+    // Subtle hairline inner corridor guide along the 1-cell walkable outer border
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.16)';
+    ctx.lineWidth = 0.65;
+    ctx.strokeRect(m.originX - 2, m.originY - 2, m.boardW + 4, m.boardH + 4);
     ctx.restore();
 
     const activeRev =
@@ -3898,7 +4250,7 @@ export class PuzzleArcadeModalController {
         ? engine.getTurningPointReview()
         : null;
 
-    // 2. Classic 9 × 16 Rectangular 3D Tiles (with smooth gravity/shift sliding)
+    // 2. Classic Sharp-Cornered Rectangular 3D Tiles (with smooth gravity/shift sliding)
     for (let r = 0; r < engine.rows; r++) {
       for (let c = 0; c < engine.cols; c++) {
         const dr = m.transposed ? c : r;
@@ -3965,12 +4317,11 @@ export class PuzzleArcadeModalController {
         const dc = m.transposed ? hc.r : hc.c;
         const hx = m.originX + dc * m.cellW;
         const hy = m.originY + dr * m.cellH;
-        drawRoundedRect(ctx, hx + 2, hy + 2, m.cellW - 4, m.cellH - 4, 6);
-        ctx.fillStyle = 'rgba(250, 204, 21, 0.28)';
-        ctx.fill();
-        ctx.lineWidth = 2.4;
+        ctx.fillStyle = 'rgba(250, 204, 21, 0.25)';
+        ctx.fillRect(hx + 1, hy + 1, m.cellW - 2, m.cellH - 2);
+        ctx.lineWidth = 1.4;
         ctx.strokeStyle = '#fde047';
-        ctx.stroke();
+        ctx.strokeRect(hx + 1, hy + 1, m.cellW - 2, m.cellH - 2);
       }
       ctx.restore();
     }
@@ -3980,11 +4331,11 @@ export class PuzzleArcadeModalController {
       const hPts = engine.hintPath.map((wp) => this.onetPointToPixel(wp, engine, m));
       const pulse = 0.6 + 0.35 * Math.sin(now * 0.009);
       ctx.save();
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.setLineDash([7, 5]);
+      ctx.lineCap = 'square';
+      ctx.lineJoin = 'miter';
+      ctx.setLineDash([6, 4]);
       ctx.lineDashOffset = -(now * 0.032);
-      ctx.lineWidth = 3.8;
+      ctx.lineWidth = 2.6;
       ctx.strokeStyle = `rgba(239, 68, 68, ${pulse.toFixed(2)})`;
       ctx.beginPath();
       ctx.moveTo(hPts[0].x, hPts[0].y);
@@ -3995,21 +4346,21 @@ export class PuzzleArcadeModalController {
       ctx.restore();
     }
 
-    // 4. Iconic Classic Pikachu 2003 Crimson-Red Electric Connection Line (<= 3 segments)
+    // 4. Iconic Classic Pikachu 2003 Crimson-Red Electric Connection Line (<= 3 orthogonal segments)
     for (const beam of this.onetBeams) {
       if (beam.points.length < 2) continue;
       const t = Math.min(1, beam.age / beam.duration);
       const alpha = Math.max(0, 1 - t * t);
       ctx.save();
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+      ctx.lineCap = 'square';
+      ctx.lineJoin = 'miter';
 
       // Outer crimson-red electric glow
       ctx.shadowColor = '#dc2626';
-      ctx.shadowBlur = 14;
+      ctx.shadowBlur = 10;
       ctx.strokeStyle = '#dc2626';
-      ctx.globalAlpha = alpha * 0.92;
-      ctx.lineWidth = 8.5 * (1 - t * 0.3);
+      ctx.globalAlpha = alpha * 0.9;
+      ctx.lineWidth = 6.2 * (1 - t * 0.3);
       ctx.beginPath();
       ctx.moveTo(beam.points[0].x, beam.points[0].y);
       for (let i = 1; i < beam.points.length; i++) {
@@ -4021,25 +4372,23 @@ export class PuzzleArcadeModalController {
       ctx.shadowBlur = 0;
       ctx.strokeStyle = '#ef4444';
       ctx.globalAlpha = alpha;
-      ctx.lineWidth = 5 * (1 - t * 0.25);
+      ctx.lineWidth = 3.6 * (1 - t * 0.25);
       ctx.stroke();
 
       // Hot white-rose lightning core
       ctx.strokeStyle = '#fff1f2';
       ctx.globalAlpha = alpha;
-      ctx.lineWidth = 2.1 * (1 - t * 0.25);
+      ctx.lineWidth = 1.5 * (1 - t * 0.25);
       ctx.stroke();
 
-      // Electric spark nodes at endpoints & 90° turns
+      // Crisp square spark nodes at endpoints & 90° turns
       for (const pt of beam.points) {
+        const outerR = 3.6 * (1 - t * 0.35);
+        const innerR = 1.7 * (1 - t * 0.35);
         ctx.fillStyle = '#ef4444';
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, 4.8 * (1 - t * 0.35), 0, Math.PI * 2);
-        ctx.fill();
+        ctx.fillRect(pt.x - outerR, pt.y - outerR, outerR * 2, outerR * 2);
         ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, 2.2 * (1 - t * 0.35), 0, Math.PI * 2);
-        ctx.fill();
+        ctx.fillRect(pt.x - innerR, pt.y - innerR, innerR * 2, innerR * 2);
       }
       ctx.restore();
     }
@@ -4058,14 +4407,14 @@ export class PuzzleArcadeModalController {
     isBlockedFlash: boolean,
     nowMs: number
   ): void {
-    // Classic Pikachu 2003 tightly-packed 3D bevelled rectangular domino tile
-    const seam = 0.75;
+    // Classic Pikachu 2003 sharp-cornered rectangular tile with thin hairline border & subtle bevel
+    const seam = 0.25;
     let bx = x + seam;
     const by = y + seam;
     const bw = cellW - seam * 2;
     const bh = cellH - seam * 2;
-    const rad = 3.5;
-    const lipDepth = 3.2;
+    const lipRight = 1.1;
+    const lipBottom = 1.6;
 
     if (isBlockedFlash) {
       bx += Math.sin(nowMs * 0.065) * 2.5;
@@ -4073,27 +4422,24 @@ export class PuzzleArcadeModalController {
 
     ctx.save();
 
-    // 1. Extruded 3D bottom-right block shadow lip (classic Pikachu 3D button feel)
-    drawRoundedRect(ctx, bx, by, bw, bh, rad);
+    // 1. Subtle 3D bottom-right bevel base (sharp 90° rectangle, zero rounded corners)
     ctx.fillStyle = isBlockedFlash
       ? '#991b1b'
       : isSelected
         ? '#15803d'
         : isHinted
           ? '#b45309'
-          : '#988158';
-    ctx.fill();
+          : '#b09a72';
+    ctx.fillRect(bx, by, bw, bh);
 
-    // 2. Top-left raised ivory-cream tile face
-    const faceW = bw - 1.8;
-    const faceH = bh - lipDepth;
-    drawRoundedRect(ctx, bx + 0.4, by + 0.4, faceW, faceH, Math.max(2, rad - 0.5));
+    // 2. Top-left ivory-cream tile face (sharp 90° rectangle)
+    const faceW = Math.max(4, bw - lipRight);
+    const faceH = Math.max(4, bh - lipBottom);
     const faceGrad = ctx.createLinearGradient(bx, by, bx, by + faceH);
     if (isBlockedFlash) {
       faceGrad.addColorStop(0, '#fee2e2');
       faceGrad.addColorStop(1, '#fecaca');
     } else if (isSelected) {
-      // Classic Pikachu emerald-lime active tile highlight
       faceGrad.addColorStop(0, '#dcfce7');
       faceGrad.addColorStop(1, '#86efac');
     } else if (isHinted) {
@@ -4102,26 +4448,25 @@ export class PuzzleArcadeModalController {
       faceGrad.addColorStop(1, p > 0.5 ? '#fde047' : '#fef08a');
     } else if (isHovered) {
       faceGrad.addColorStop(0, '#ffffff');
-      faceGrad.addColorStop(1, '#f7eed8');
+      faceGrad.addColorStop(1, '#f8f0dc');
     } else {
       faceGrad.addColorStop(0, spDef.bgTop);
       faceGrad.addColorStop(1, spDef.bgBot);
     }
     ctx.fillStyle = faceGrad;
-    ctx.fill();
+    ctx.fillRect(bx, by, faceW, faceH);
 
-    // 3. Crisp top & left white 3D bevel highlight
+    // 3. Delicate 0.8px top & left white bevel highlight
     ctx.beginPath();
-    ctx.moveTo(bx + 1.5, by + faceH - 1.5);
-    ctx.lineTo(bx + 1.5, by + 1.5);
-    ctx.lineTo(bx + faceW - 1.5, by + 1.5);
-    ctx.strokeStyle = isSelected ? 'rgba(255, 255, 255, 0.92)' : 'rgba(255, 255, 255, 0.88)';
-    ctx.lineWidth = 1.3;
+    ctx.moveTo(bx + 0.6, by + faceH - 0.6);
+    ctx.lineTo(bx + 0.6, by + 0.6);
+    ctx.lineTo(bx + faceW - 0.6, by + 0.6);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = 0.8;
     ctx.stroke();
 
-    // 4. Crisp outer tile seam border
-    drawRoundedRect(ctx, bx, by, bw, bh, rad);
-    ctx.lineWidth = isSelected || isHinted ? 2.1 : isHovered ? 1.5 : 1;
+    // 4. Thin crisp outer tile border (square corners)
+    ctx.lineWidth = isSelected || isHinted ? 1.35 : isHovered ? 0.95 : 0.6;
     ctx.strokeStyle = isBlockedFlash
       ? '#dc2626'
       : isSelected
@@ -4130,14 +4475,14 @@ export class PuzzleArcadeModalController {
           ? '#dc2626'
           : isHovered
             ? '#d97706'
-            : '#4a3723';
-    ctx.stroke();
+            : '#7c6848';
+    ctx.strokeRect(bx, by, bw, bh);
 
-    // 5. Crisp Hang Sóc Creature / Magical Item Sprite centered cleanly on the ivory tile
+    // 5. Crisp Hang Sóc Creature / Magical Item Sprite centered cleanly on the sharp tile
     const spr = this.getSpriteImage(spDef.spriteKey);
     if (spr) {
-      const maxW = (faceW - 2) * 0.92;
-      const maxH = (faceH - 2) * 0.92;
+      const maxW = (faceW - 1.6) * 0.9;
+      const maxH = (faceH - 1.6) * 0.9;
       const aspect = spr.naturalWidth / Math.max(1, spr.naturalHeight);
       let dw = maxW;
       let dh = dw / Math.max(0.2, aspect);
@@ -4147,8 +4492,8 @@ export class PuzzleArcadeModalController {
       }
       ctx.drawImage(
         spr,
-        bx + 0.4 + (faceW - dw) * 0.5,
-        by + 0.4 + (faceH - dh) * 0.5,
+        bx + (faceW - dw) * 0.5,
+        by + (faceH - dh) * 0.5,
         dw,
         dh
       );

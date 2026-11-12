@@ -341,6 +341,16 @@ export class CandyHogwartsEngine {
     }
   }
 
+  public syncViewTransform(viewZoom: number, netQuarterTurns: 0 | 1 | 2 | 3): void {
+    if (!this.renderer) return;
+    this.renderer.viewZoom = viewZoom;
+    this.renderer.netQuarterTurns = netQuarterTurns;
+    if (this.level) {
+      this.renderer.resize(this.size);
+      this.renderer.render(this.getRenderState(), nowMs());
+    }
+  }
+
   public destroy(): void {
     this.stopLoop();
     this.unbindInput();
@@ -516,6 +526,10 @@ export class CandyHogwartsEngine {
       this.canvas.focus({ preventScroll: true });
       const cell = this.renderer.screenToCell(e.clientX, e.clientY, this.size);
       if (!cell || this.mask[cell.r]?.[cell.c] === 0) return;
+      const startPt = this.renderer.screenToBoardPoint(e.clientX, e.clientY) ?? {
+        x: e.clientX,
+        y: e.clientY,
+      };
 
       this.kbCursor = null;
       try {
@@ -525,8 +539,8 @@ export class CandyHogwartsEngine {
       }
       this.pointerState = {
         pointerId: e.pointerId,
-        startX: e.clientX,
-        startY: e.clientY,
+        startX: startPt.x,
+        startY: startPt.y,
         cell,
         swiped: false,
       };
@@ -544,8 +558,12 @@ export class CandyHogwartsEngine {
       }
       if (this.busy || this.ended) return;
 
-      const dx = e.clientX - this.pointerState.startX;
-      const dy = e.clientY - this.pointerState.startY;
+      const curPt = this.renderer.screenToBoardPoint(e.clientX, e.clientY) ?? {
+        x: e.clientX,
+        y: e.clientY,
+      };
+      const dx = curPt.x - this.pointerState.startX;
+      const dy = curPt.y - this.pointerState.startY;
       const threshold =
         e.pointerType === 'touch'
           ? Math.max(9, this.renderer.cellSize * 0.18)
@@ -569,6 +587,10 @@ export class CandyHogwartsEngine {
 
     this.onPointerUpBound = (e: PointerEvent) => {
       if (this.pointerState && e.pointerId === this.pointerState.pointerId) {
+        if (e.type === 'pointercancel') {
+          this.selected = null;
+          this.emitHudState();
+        }
         this.pointerState = null;
       }
     };

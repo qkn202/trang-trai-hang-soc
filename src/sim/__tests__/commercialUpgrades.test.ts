@@ -958,6 +958,9 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
       sim1.state.puzzleArcade.blockStage = 9;
 
       const onet1 = new CreatureOnetEngine(9);
+      expect(onet1.rows).toBe(5);
+      expect(onet1.cols).toBe(8);
+      onet1.tickTimer(24.5);
       const hintRes = onet1.useHint();
       expect(hintRes.ok).toBe(true);
       expect(hintRes.pair).toBeTruthy();
@@ -980,6 +983,8 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
       const loaded = sim2.state.puzzleArcade.onetSession;
       expect(loaded).toBeTruthy();
       expect(loaded?.stage).toBe(9);
+      expect(loaded?.rows).toBe(5);
+      expect(loaded?.cols).toBe(8);
 
       const onet2 = new CreatureOnetEngine(9);
       expect(onet2.restoreSession(loaded)).toBe(true);
@@ -987,6 +992,7 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
       expect(onet2.matchedPairs).toBe(1);
       expect(onet2.score).toBe(onet1.score);
       expect(onet2.lives).toBe(onet1.lives);
+      expect(onet2.timeRemainingSec).toBeCloseTo(onet1.timeRemainingSec, 1);
 
       sim2.completePuzzleArcadeVictory('blocks', onet2.reward, { sessionScore: onet2.score });
       expect(sim2.state.puzzleArcade.onetSession).toBeNull();

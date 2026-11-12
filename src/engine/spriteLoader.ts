@@ -1,5 +1,18 @@
 import { DEFAULT_TOON, isGlossyUntoonedSprite, shouldOutline, toonSprite } from './toon';
-import { applyGroundBlend, shouldGroundBlend } from './groundBlend';
+import { applyGroundBlend, releaseGroundBlendScratch, shouldGroundBlend } from './groundBlend';
+
+const MAX_CONNECTED_FARMLAND_CACHE = 96;
+
+async function yieldToMainThread(): Promise<void> {
+  const g = globalThis as unknown as {
+    scheduler?: { yield?: () => Promise<void> };
+  };
+  if (g.scheduler && typeof g.scheduler.yield === 'function') {
+    await g.scheduler.yield();
+    return;
+  }
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
 
 export const SPRITE_KEYS = [
   // Magical Creature Sanctuaries, Rural Lake, Owlery & Scenery (15)
@@ -210,7 +223,30 @@ export class SpriteRegistry {
   private connectedFarmlandCache = new Map<string, SpriteSource>();
   private connectedFarmlandMips = new Map<string, HTMLCanvasElement>();
   private farmlandRawPixels = new Map<string, { w: number; h: number; data: Uint8ClampedArray }>();
+  private readScratchCanvas: HTMLCanvasElement | null = null;
+  private readScratchCtx: CanvasRenderingContext2D | null = null;
   private toonEnabled = false;
+
+  private getReadScratchCtx(w: number, h: number): CanvasRenderingContext2D | null {
+    if (typeof document === 'undefined') return null;
+    if (!this.readScratchCanvas) {
+      this.readScratchCanvas = document.createElement('canvas');
+      this.readScratchCtx = this.readScratchCanvas.getContext('2d', { willReadFrequently: true });
+    }
+    if (!this.readScratchCanvas || !this.readScratchCtx) return null;
+    if (this.readScratchCanvas.width < w) this.readScratchCanvas.width = w;
+    if (this.readScratchCanvas.height < h) this.readScratchCanvas.height = h;
+    this.readScratchCtx.clearRect(0, 0, w, h);
+    return this.readScratchCtx;
+  }
+
+  private releaseReadScratch(): void {
+    if (this.readScratchCanvas) {
+      this.readScratchCanvas.width = 1;
+      this.readScratchCanvas.height = 1;
+    }
+    releaseGroundBlendScratch();
+  }
 
   /**
    * When false the raw painterly art is served untouched (photo mode,
@@ -226,6 +262,7 @@ export class SpriteRegistry {
       this.images.set(key, built);
       this.rebuildMip(key, built);
     }
+    this.releaseReadScratch();
   }
 
   public isToonEnabled(): boolean {
@@ -246,8 +283,7 @@ export class SpriteRegistry {
       if (!out) return wantsBlend ? applyGroundBlend(img, key) : img;
       // Melt the hard bottom cut so the structure sits in the ground
       // instead of reading as a sticker on a pedestal.
-      if (wantsBlend) applyGroundBlend(out, key);
-      return out;
+      return wantsBlend ? applyGroundBlend(out, key) : out;
     } catch {
       return wantsBlend ? applyGroundBlend(img, key) : img;
     }
@@ -282,10 +318,7 @@ export class SpriteRegistry {
     const mw = Math.max(8, Math.round(sw * 0.25));
     const mh = Math.max(8, Math.round(sh * 0.25));
     try {
-      const canvas = document.createElement('canvas');
-      canvas.width = mw;
-      canvas.height = mh;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      const ctx = this.getReadScratchCtx(mw, mh);
       if (!ctx) return;
       ctx.drawImage(img, 0, 0, mw, mh);
       const data = ctx.getImageData(0, 0, mw, mh).data;
@@ -302,26 +335,45 @@ export class SpriteRegistry {
     }
   }
 
-  loadAll(): Promise<void> {
-    const promises = SPRITE_KEYS.map(
-      (key) =>
-        new Promise<void>((resolve) => {
-          const img = new Image();
-          img.onload = () => {
-            this.raw.set(key, img);
-            const built = this.buildSprite(key, img);
-            this.images.set(key, built);
-            this.rebuildMip(key, built);
-            this.buildAlphaMask(key, img);
-            resolve();
-          };
-          img.onerror = () => {
-            resolve();
-          };
-          img.src = `/sprites/${key}.png`;
-        })
+  async loadAll(): Promise<void> {
+    const decoded: Array<{ key: string; img: HTMLImageElement }> = [];
+    await Promise.all(
+      SPRITE_KEYS.map(
+        (key) =>
+          new Promise<void>((resolve) => {
+            const img = new Image();
+            img.decoding = 'async';
+            img.onload = () => {
+              this.raw.set(key, img);
+              decoded.push({ key, img });
+              resolve();
+            };
+            img.onerror = () => {
+              resolve();
+            };
+            img.src = `/sprites/${key}.png`;
+          })
+      )
     );
-    return Promise.all(promises).then(() => undefined);
+
+    const nowFn = () =>
+      typeof performance !== 'undefined' ? performance.now() : Date.now();
+    let deadline = nowFn() + 36;
+
+    for (let i = 0; i < decoded.length; i++) {
+      const { key, img } = decoded[i];
+      const built = this.buildSprite(key, img);
+      this.images.set(key, built);
+      this.rebuildMip(key, built);
+      this.buildAlphaMask(key, img);
+
+      if (nowFn() >= deadline && i + 1 < decoded.length) {
+        await yieldToMainThread();
+        deadline = nowFn() + 36;
+      }
+    }
+
+    this.releaseReadScratch();
   }
 
   get(key?: string): SpriteSource | undefined {
@@ -397,13 +449,11 @@ export class SpriteRegistry {
     const h = img.naturalHeight || img.height;
     if (!w || !h) return null;
     try {
-      const c = document.createElement('canvas');
-      c.width = w;
-      c.height = h;
-      const ctx = c.getContext('2d', { willReadFrequently: true });
+      const ctx = this.getReadScratchCtx(w, h);
       if (!ctx) return null;
       ctx.drawImage(img, 0, 0, w, h);
-      const data = ctx.getImageData(0, 0, w, h).data;
+      const data = new Uint8ClampedArray(ctx.getImageData(0, 0, w, h).data);
+      this.releaseReadScratch();
       const rec = { w, h, data };
       this.farmlandRawPixels.set(key, rec);
       return rec;
@@ -816,6 +866,23 @@ export class SpriteRegistry {
         }
       }
 
+      if (this.connectedFarmlandCache.size >= MAX_CONNECTED_FARMLAND_CACHE) {
+        const oldestKey = this.connectedFarmlandCache.keys().next().value;
+        if (oldestKey !== undefined) {
+          const evicted = this.connectedFarmlandCache.get(oldestKey);
+          if (evicted instanceof HTMLCanvasElement) {
+            evicted.width = 1;
+            evicted.height = 1;
+          }
+          const evictedMip = this.connectedFarmlandMips.get(oldestKey);
+          if (evictedMip) {
+            evictedMip.width = 1;
+            evictedMip.height = 1;
+          }
+          this.connectedFarmlandCache.delete(oldestKey);
+          this.connectedFarmlandMips.delete(oldestKey);
+        }
+      }
       this.connectedFarmlandCache.set(cacheKey, finalBuilt);
       built = finalBuilt;
 

@@ -52,10 +52,16 @@ import {
   TERRAIN_PALETTE,
   TopologicalDrawCmd,
   buildLockedSceneryCatalog,
+  computeVisibleRotatedTileWindow,
   computeWeatherParticleBudget,
+  isTouchOrIOSDevice,
   resolveBuildingInWorldTimerInfo,
   rotTileToWorldTile,
 } from "./rendererShared";
+import {
+  waterDrawAnimatedGroundOverlays,
+  waterDrawOrganicWaterShorelines,
+} from './renderWater';
 import type { IsometricRenderer } from './renderer';
 
 export function terrainDrawSkyBackdrop(self: IsometricRenderer, 
@@ -344,7 +350,8 @@ export function terrainRenderGroundTilesLayer(self: IsometricRenderer,
     isNightLike: boolean,
     showGridLines: boolean,
     unlockedSet: Set<string>,
-    skipCull = false
+    skipCull = false,
+    forStaticCache = false
   ): void {
     const ctx = self.ctx;
     const viewRot = cam.viewRot ?? 0;
@@ -360,15 +367,25 @@ export function terrainRenderGroundTilesLayer(self: IsometricRenderer,
       return sim.grid[ngy]?.[ngx]?.elevation ?? 0;
     };
 
-    for (let sum = 0; sum <= (GRID_SIZE - 1) * 2; sum++) {
-      const rxStart = Math.max(0, sum - (GRID_SIZE - 1));
-      const rxEnd = Math.min(GRID_SIZE - 1, sum);
+    const win = skipCull
+      ? { sumMin: 0, sumMax: (GRID_SIZE - 1) * 2, diffMin: -GRID_SIZE, diffMax: GRID_SIZE }
+      : computeVisibleRotatedTileWindow(cam, viewW, viewH, margin);
+    const p = { sx: 0, sy: 0 };
+
+    for (let sum = win.sumMin; sum <= win.sumMax; sum++) {
+      const rxStart = skipCull
+        ? Math.max(0, sum - (GRID_SIZE - 1))
+        : Math.max(0, sum - (GRID_SIZE - 1), Math.floor((sum + win.diffMin) * 0.5) - 1);
+      const rxEnd = skipCull
+        ? Math.min(GRID_SIZE - 1, sum)
+        : Math.min(GRID_SIZE - 1, sum, Math.ceil((sum + win.diffMax) * 0.5) + 1);
       for (let rx0 = rxStart; rx0 <= rxEnd; rx0++) {
         const ry0 = sum - rx0;
         const { gx, gy } = rotTileToWorldTile(rx0, ry0, viewRot);
         const cell = sim.grid[gy][gx];
         const zOff = cell.elevation * ELEV_PX;
-        const p = rotatedTileDiamondToScreen(gx, gy, cam, viewW, viewH, zOff);
+        p.sx = viewW * 0.5 + ((rx0 - ry0) * (TILE_W * 0.5) - cam.x) * cam.zoom;
+        p.sy = viewH * 0.5 + (sum * (TILE_H * 0.5) - zOff - cam.y) * cam.zoom;
         if (
           !skipCull &&
           (p.sx < -margin || p.sx > viewW + margin || p.sy < -margin || p.sy > viewH + margin)
@@ -508,7 +525,10 @@ export function terrainRenderGroundTilesLayer(self: IsometricRenderer,
             }
             // Sculpted 3-blade grass tufts with sunlit tips
             if (cam.zoom >= 0.52 && hVal % 2 === 0) {
-              const bladeSway = self.reducedMotion ? 0 : Math.sin(self.tick * 0.045 + gx * 0.6 + gy * 0.4) * 1.4 * cam.zoom;
+              const bladeSway =
+                forStaticCache || self.reducedMotion
+                  ? 0
+                  : Math.sin(self.tick * 0.045 + gx * 0.6 + gy * 0.4) * 1.4 * cam.zoom;
               const bx = p.sx + ((hVal % 5) - 2) * 3.4 * cam.zoom;
               const by = p.sy + hh + ((hVal % 3) - 1) * 1.8 * cam.zoom;
               ctx.strokeStyle = isNightLike ? '#3c7a57' : '#357822';
@@ -735,7 +755,8 @@ export function terrainRenderGroundTilesLayer(self: IsometricRenderer,
             hw,
             hh,
             cam.zoom,
-            isNightLike
+            isNightLike,
+            forStaticCache
           );
         }
 
@@ -760,8 +781,8 @@ export function terrainRenderGroundTilesLayer(self: IsometricRenderer,
           );
         }
 
-        // 2e. Litter / Spell Backfire puddle
-        if (cell.hasLitter && unlocked) {
+        // 2e. Litter / Spell Backfire puddle (rendered dynamically via overlay when using static ground cache)
+        if (!forStaticCache && cell.hasLitter && unlocked) {
           ctx.fillStyle = '#a855f7';
           ctx.beginPath();
           ctx.ellipse(p.sx, p.sy + hh, 7 * cam.zoom, 4 * cam.zoom, 0, 0, Math.PI * 2);
@@ -818,59 +839,171 @@ export function terrainDrawCachedOrLiveGround(self: IsometricRenderer,
     showGridLines: boolean,
     unlockedSet: Set<string>
   ): void {
-    const useStaticCache =
-      cam.zoom <= 0.56 && sim.heatmapMode === 'none' && !showGridLines;
+    const canUseViewportCache =
+      sim.heatmapMode === 'none' &&
+      !showGridLines &&
+      viewW > 4 &&
+      viewH > 4 &&
+      typeof document !== 'undefined';
 
-    if (!useStaticCache) {
-      terrainRenderGroundTilesLayer(self, sim, cam, viewW, viewH, isNightLike, showGridLines, unlockedSet, false);
+    if (!canUseViewportCache) {
+      terrainRenderGroundTilesLayer(
+        self,
+        sim,
+        cam,
+        viewW,
+        viewH,
+        isNightLike,
+        showGridLines,
+        unlockedSet,
+        false,
+        false
+      );
+      waterDrawOrganicWaterShorelines(self, sim, cam, viewW, viewH, isNightLike, unlockedSet);
       return;
     }
 
     const viewRot = cam.viewRot ?? 0;
-    const key = `aaa_v4|${viewRot}|${isNightLike ? 1 : 0}|${sim.stateRevision}|${sim.state.sandboxMode ? 1 : 0}`;
-    const worldSpanW = GRID_SIZE * TILE_W + 140;
-    const worldSpanH = GRID_SIZE * TILE_H + 260;
-    const wyCenter = GRID_SIZE * TILE_H * 0.5 + 16;
-    // Kẹp diện tích bộ đệm mặt đất <= 12.5M px (an toàn tuyệt đối dưới ngưỡng 16.7M px của iOS Safari)
-    const maxSafeCacheZoom = Math.sqrt(12_500_000 / Math.max(1, worldSpanW * worldSpanH));
-    const cacheZoom = Math.min(0.9, maxSafeCacheZoom);
-    const cacheW = Math.max(1, Math.ceil(worldSpanW * cacheZoom));
-    const cacheH = Math.max(1, Math.ceil(worldSpanH * cacheZoom));
+    const stateKey = `aaa_v5|${viewRot}|${isNightLike ? 1 : 0}|${sim.stateRevision}|${sim.state.sandboxMode ? 1 : 0}|${self.activeMovingUid ?? ''}`;
+    const zoomChanged = Math.abs(cam.zoom - self.groundCacheLastLiveZoom) > 1e-4;
+    self.groundCacheLastLiveZoom = cam.zoom;
+    self.groundCacheZoomStableFrames = zoomChanged
+      ? 0
+      : Math.min(10, self.groundCacheZoomStableFrames + 1);
 
-    if (!self.groundCacheCanvas || self.groundCacheKey !== key) {
-      if (!self.groundCacheCanvas) {
-        self.groundCacheCanvas = document.createElement('canvas');
+    if (
+      self.groundCacheCanvas &&
+      self.groundCacheKey === stateKey &&
+      self.groundCacheLogicalW > 0 &&
+      self.groundCacheZoom > 0
+    ) {
+      const scaleRatio = cam.zoom / self.groundCacheZoom;
+      const destW = self.groundCacheLogicalW * scaleRatio;
+      const destH = self.groundCacheLogicalH * scaleRatio;
+      const destX =
+        viewW * 0.5 +
+        (-self.groundCacheLogicalW * 0.5 / self.groundCacheZoom + self.groundCacheCamX - cam.x) *
+          cam.zoom;
+      const destY =
+        viewH * 0.5 +
+        (-self.groundCacheLogicalH * 0.5 / self.groundCacheZoom + self.groundCacheCamY - cam.y) *
+          cam.zoom;
+
+      const coversViewport =
+        destX <= 0.5 &&
+        destY <= 0.5 &&
+        destX + destW >= viewW - 0.5 &&
+        destY + destH >= viewH - 0.5;
+      const exactZoomAndDpr =
+        Math.abs(cam.zoom - self.groundCacheZoom) < 1e-4 &&
+        Math.abs(self.dpr - self.groundCacheReqDpr) < 0.05;
+      const allowTransientZoomScale =
+        self.groundCacheZoomStableFrames < 3 && scaleRatio >= 0.62 && scaleRatio <= 1.55;
+
+      if (coversViewport && (exactZoomAndDpr || allowTransientZoomScale)) {
+        self.ctx.drawImage(self.groundCacheCanvas, destX, destY, destW, destH);
+        waterDrawAnimatedGroundOverlays(self, sim, cam, viewW, viewH, isNightLike, unlockedSet);
+        return;
       }
+    }
+
+    // While actively pinch-zooming out beyond cached bounds, draw culled 1x viewport until zoom settles
+    if (self.groundCacheZoomStableFrames < 2 && zoomChanged) {
+      terrainRenderGroundTilesLayer(
+        self,
+        sim,
+        cam,
+        viewW,
+        viewH,
+        isNightLike,
+        false,
+        unlockedSet,
+        false,
+        false
+      );
+      waterDrawOrganicWaterShorelines(self, sim, cam, viewW, viewH, isNightLike, unlockedSet);
+      return;
+    }
+
+    const padCssX = Math.round(Math.min(340, Math.max(128, viewW * 0.26)));
+    const padCssY = Math.round(Math.min(300, Math.max(128, viewH * 0.26)));
+    const logicalW = Math.max(1, Math.ceil(viewW + padCssX * 2));
+    const logicalH = Math.max(1, Math.ceil(viewH + padCssY * 2));
+
+    // Keep offscreen backing store well below iOS 16 Safari's 16.77M-pixel single-canvas limit
+    // and tight on mobile VRAM (<= 4.5M px on touch/iOS, <= 8.5M px on desktop).
+    const maxSafeArea = isTouchOrIOSDevice() ? 4_500_000 : 8_500_000;
+    const reqDpr = Math.max(1, self.dpr || 1);
+    const rawArea = logicalW * logicalH * reqDpr * reqDpr;
+    const cacheDpr = rawArea > maxSafeArea ? reqDpr * Math.sqrt(maxSafeArea / rawArea) : reqDpr;
+    const cacheW = Math.max(1, Math.round(logicalW * cacheDpr));
+    const cacheH = Math.max(1, Math.round(logicalH * cacheDpr));
+
+    if (!self.groundCacheCanvas) {
+      self.groundCacheCanvas = document.createElement('canvas');
+    }
+    if (self.groundCacheCanvas.width !== cacheW || self.groundCacheCanvas.height !== cacheH) {
       self.groundCacheCanvas.width = cacheW;
       self.groundCacheCanvas.height = cacheH;
-      const cCtx = self.groundCacheCanvas.getContext('2d');
-      if (cCtx) {
-        cCtx.clearRect(0, 0, cacheW, cacheH);
-        const savedCtx = self.ctx;
-        self.ctx = cCtx;
-        const cacheCam: Camera = { x: 0, y: wyCenter, zoom: cacheZoom, viewRot };
-        terrainRenderGroundTilesLayer(self, 
-          sim,
-          cacheCam,
-          cacheW,
-          cacheH,
-          isNightLike,
-          false,
-          unlockedSet,
-          true
-        );
-        self.ctx = savedCtx;
-        self.groundCacheKey = key;
-      }
     }
 
-    if (self.groundCacheCanvas) {
-      const destX = viewW * 0.5 + (-worldSpanW * 0.5 - cam.x) * cam.zoom;
-      const destY = viewH * 0.5 + (wyCenter - worldSpanH * 0.5 - cam.y) * cam.zoom;
-      const destW = worldSpanW * cam.zoom;
-      const destH = worldSpanH * cam.zoom;
-      self.ctx.drawImage(self.groundCacheCanvas, destX, destY, destW, destH);
+    const cCtx = self.groundCacheCanvas.getContext('2d');
+    if (!cCtx) {
+      terrainRenderGroundTilesLayer(
+        self,
+        sim,
+        cam,
+        viewW,
+        viewH,
+        isNightLike,
+        false,
+        unlockedSet,
+        false,
+        false
+      );
+      waterDrawOrganicWaterShorelines(self, sim, cam, viewW, viewH, isNightLike, unlockedSet);
+      return;
     }
+
+    cCtx.setTransform(cacheDpr, 0, 0, cacheDpr, 0, 0);
+    cCtx.clearRect(0, 0, logicalW, logicalH);
+
+    const savedCtx = self.ctx;
+    self.ctx = cCtx;
+    const cacheCam: Camera = {
+      x: cam.x,
+      y: cam.y,
+      zoom: cam.zoom,
+      viewRot,
+    };
+    try {
+      terrainRenderGroundTilesLayer(
+        self,
+        sim,
+        cacheCam,
+        logicalW,
+        logicalH,
+        isNightLike,
+        false,
+        unlockedSet,
+        false,
+        true
+      );
+      waterDrawOrganicWaterShorelines(self, sim, cacheCam, logicalW, logicalH, isNightLike, unlockedSet);
+    } finally {
+      self.ctx = savedCtx;
+    }
+
+    self.groundCacheKey = stateKey;
+    self.groundCacheCamX = cam.x;
+    self.groundCacheCamY = cam.y;
+    self.groundCacheZoom = cam.zoom;
+    self.groundCacheLogicalW = logicalW;
+    self.groundCacheLogicalH = logicalH;
+    self.groundCacheReqDpr = reqDpr;
+
+    self.ctx.drawImage(self.groundCacheCanvas, -padCssX, -padCssY, logicalW, logicalH);
+    waterDrawAnimatedGroundOverlays(self, sim, cam, viewW, viewH, isNightLike, unlockedSet);
 }
 
 export function terrainDrawScrollingCloudShadows(self: IsometricRenderer, 

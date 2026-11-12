@@ -234,7 +234,19 @@ export class MagicalAudio {
     this.sfxAtlasLoading = true;
     fetch(SFX_ATLAS_URL)
       .then((res) => (res.ok ? res.arrayBuffer() : Promise.reject(new Error('sfx 404'))))
-      .then((buf) => ctx.decodeAudioData(buf))
+      .then(
+        (buf) =>
+          new Promise<AudioBuffer>((resolve, reject) => {
+            try {
+              const maybePromise = ctx.decodeAudioData(buf, resolve, reject);
+              if (maybePromise && typeof maybePromise.then === 'function') {
+                maybePromise.then(resolve, reject);
+              }
+            } catch (err) {
+              reject(err);
+            }
+          })
+      )
       .then((decoded) => {
         this.sfxAtlasBuffer = decoded;
       })
@@ -340,7 +352,11 @@ export class MagicalAudio {
         this.ctx = new AudioCtor();
       }
     }
-    if (this.ctx && this.ctx.state === 'suspended' && this.unlocked) {
+    if (
+      this.ctx &&
+      (this.ctx.state === 'suspended' || (this.ctx.state as string) === 'interrupted') &&
+      this.unlocked
+    ) {
       this.ctx.resume().catch(() => {});
     }
     return this.ctx;

@@ -12,7 +12,7 @@ import {
   screenToGrid,
   worldIso,
 } from './engine/isometric';
-import { IsometricRenderer } from './engine/renderer';
+import { IsometricRenderer, isTouchOrIOSDevice } from './engine/renderer';
 import { SpriteRegistry } from './engine/spriteLoader';
 import { sampleCoasterTrainPositions } from './sim/coaster';
 import { ParkSimulation } from './sim/simulation';
@@ -1540,20 +1540,54 @@ async function bootstrap(): Promise<void> {
     }
   };
 
+  const isTouchDevice = isTouchOrIOSDevice();
+  const match3DlgEl = hud.root.querySelector('#match3Dialog') as HTMLDialogElement | null;
+  const puzzleArcadeDlgEl = hud.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
+  const seedQuizDlgEl = hud.root.querySelector('#seedQuizDialog') as HTMLDialogElement | null;
+  const allModalDialogs = Array.from(hud.root.querySelectorAll<HTMLDialogElement>('dialog'));
+  let cachedFullscreenModalOpen = false;
+  let cachedAnyDialogOpen = false;
+  const syncOpenDialogFlags = (): void => {
+    cachedFullscreenModalOpen = Boolean(
+      match3DlgEl?.open || puzzleArcadeDlgEl?.open || seedQuizDlgEl?.open
+    );
+    cachedAnyDialogOpen =
+      cachedFullscreenModalOpen || allModalDialogs.some((d) => d.open);
+  };
+  syncOpenDialogFlags();
+  if (typeof MutationObserver !== 'undefined') {
+    const dlgObserver = new MutationObserver(() => {
+      syncOpenDialogFlags();
+    });
+    for (const d of allModalDialogs) {
+      dlgObserver.observe(d, { attributes: true, attributeFilter: ['open'] });
+    }
+  }
+  hud.root.addEventListener('close', syncOpenDialogFlags, true);
+
+  let mainRafId = 0;
+  let lastWorldRenderMs = 0;
+
   function frame(now: number): void {
+    mainRafId = 0;
     if (document.hidden) {
       lastTime = now;
-      requestAnimationFrame(frame);
       return;
     }
     const dt = (now - lastTime) / 1000;
     lastTime = now;
 
-    if (dt > 0.002 && dt < 0.5) {
+    if (!cachedAnyDialogOpen && dt > 0.002 && dt < 0.5) {
       telemetry.recordFrameFps(1 / dt);
       if (minimapFrame % 90 === 0 && minimapFrame > 0) {
         const health = telemetry.getHealthReport();
-        renderer.adaptiveDprCap = health.p5LowFps < 46 ? 1.25 : health.p5LowFps < 54 ? 1.5 : 2;
+        if (isTouchDevice) {
+          renderer.adaptiveDprCap =
+            health.p5LowFps < 46 ? 1.15 : health.p5LowFps < 54 ? 1.35 : 1.5;
+        } else {
+          renderer.adaptiveDprCap =
+            health.p5LowFps < 46 ? 1.25 : health.p5LowFps < 54 ? 1.5 : 2;
+        }
       }
     }
 
@@ -1591,7 +1625,7 @@ async function bootstrap(): Promise<void> {
         }
       }
       if (gp.cancelJustPressed) {
-        const openDlgs = Array.from(hud.root.querySelectorAll<HTMLDialogElement>('dialog[open]'));
+        const openDlgs = allModalDialogs.filter((d) => d.open);
         if (openDlgs.length > 0) {
           openDlgs[openDlgs.length - 1]?.close();
         } else if (hud.hasOpenFloatingTray()) {
@@ -1624,7 +1658,7 @@ async function bootstrap(): Promise<void> {
     }
 
     const panSpeed = (340 / cam.zoom) * Math.min(0.05, dt);
-    if (keysPressed.size > 0 && document.querySelector('dialog[open]')) {
+    if (keysPressed.size > 0 && cachedAnyDialogOpen) {
       keysPressed.clear();
     }
     if (keysPressed.has('w') || keysPressed.has('arrowup')) {
@@ -1647,7 +1681,7 @@ async function bootstrap(): Promise<void> {
     sim.update(dt);
 
     // V3 Ride Cam Lock-On (Smoothly tracks lead coaster car or Gringotts minecart!)
-    if (hud.rideCamUid) {
+    if (hud.rideCamUid && !cachedFullscreenModalOpen) {
       const rideB = sim.state.buildings.find((x) => x.uid === hud.rideCamUid);
       const circuit = sim.coasterCircuits.get(hud.rideCamUid);
       if (circuit && circuit.waypoints.length >= 3) {
@@ -1698,41 +1732,56 @@ async function bootstrap(): Promise<void> {
       sim.getActiveFestival() !== 'none'
     );
 
-    const effectiveHoverTile = hud.pendingTouchTile
-      ? { gx: hud.pendingTouchTile.gx, gy: hud.pendingTouchTile.gy }
-      : hoverTile;
+    // Pause background world canvas completely behind fullscreen minigame halls,
+    // and throttle to ~12fps behind smaller modal dialogs so UI & minigames stay silky-smooth.
+    const shouldRenderWorld =
+      !cachedFullscreenModalOpen && (!cachedAnyDialogOpen || now - lastWorldRenderMs >= 80);
 
-    renderer.activeSeedBrushCropId = hud.activeSeedCropId;
-    renderer.activePastureBrushAnimalId = hud.activePastureAnimalId;
-    renderer.render(
-      sim,
-      cam,
-      effectiveHoverTile,
-      hud.selectedCatalogItem,
-      hud.rotation,
-      hud.bulldozerActive,
-      hud.inspectSelection?.kind === 'building' ? hud.inspectSelection.uid : null,
-      hud.movingBuildingUid,
-      hud.pincerPicked?.label ?? null
-    );
+    if (shouldRenderWorld) {
+      lastWorldRenderMs = now;
+      const effectiveHoverTile = hud.pendingTouchTile
+        ? { gx: hud.pendingTouchTile.gx, gy: hud.pendingTouchTile.gy }
+        : hoverTile;
 
-    minimapFrame++;
-    if (minimapFrame % 4 === 0 && !hud.photoModeActive) {
-      renderer.renderMinimap(hud.minimapCanvas, sim, cam);
+      renderer.activeSeedBrushCropId = hud.activeSeedCropId;
+      renderer.activePastureBrushAnimalId = hud.activePastureAnimalId;
+      renderer.render(
+        sim,
+        cam,
+        effectiveHoverTile,
+        hud.selectedCatalogItem,
+        hud.rotation,
+        hud.bulldozerActive,
+        hud.inspectSelection?.kind === 'building' ? hud.inspectSelection.uid : null,
+        hud.movingBuildingUid,
+        hud.pincerPicked?.label ?? null
+      );
+
+      minimapFrame++;
+      if (!cachedAnyDialogOpen && minimapFrame % 6 === 0 && !hud.photoModeActive) {
+        renderer.renderMinimap(hud.minimapCanvas, sim, cam);
+      }
     }
 
-    requestAnimationFrame(frame);
+    mainRafId = requestAnimationFrame(frame);
   }
 
-  requestAnimationFrame(frame);
+  mainRafId = requestAnimationFrame(frame);
 
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
+      if (mainRafId) {
+        cancelAnimationFrame(mainRafId);
+        mainRafId = 0;
+      }
       sim.saveToStorage();
       audio.pause();
     } else {
       lastTime = performance.now();
       audio.resume();
+      if (!mainRafId) {
+        mainRafId = requestAnimationFrame(frame);
+      }
     }
   });
 
