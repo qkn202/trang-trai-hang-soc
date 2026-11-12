@@ -863,6 +863,7 @@ export function villagersRestartTutorial(sim: ParkSimulation): void {
     const tut = villagersEnsureTutorialState(sim);
     tut.active = true;
     tut.skipped = false;
+    tut.minimized = false;
     tut.stepIndex = 0;
     tut.stepId = TUTORIAL_STEPS[0].id;
     tut.pastureHarvestedInStep3 = false;

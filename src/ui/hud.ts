@@ -327,6 +327,7 @@ export class GameHUD {
     this.gameCanvas = gameCanvas;
     this.sprites = sprites;
     this.questCollapsed = window.innerHeight <= 520 || window.innerWidth <= 640;
+    this.tutorialMinimized = Boolean(this.sim.state.tutorial?.minimized);
     this.minimapCollapsed =
       !this.sim.isHeadmasterPreview && this.sim.state.unlockedZones.length < 3;
 
@@ -753,9 +754,9 @@ export class GameHUD {
     this.leaderboardModal.open(fallbackGame, scope);
   }
 
-  public openMatch3Dialog(overrideLevel?: number): void {
+  public openMatch3Dialog(overrideLevel?: number, allowDevJump = false): void {
     this.sim.setLastPlayedMinigame('match3');
-    void this.getMatch3Modal().then((m) => m.open(overrideLevel));
+    void this.getMatch3Modal().then((m) => m.open(overrideLevel, allowDevJump));
   }
 
   public openPuzzleArcadeDialog(mode?: PuzzleArcadeMode): void {

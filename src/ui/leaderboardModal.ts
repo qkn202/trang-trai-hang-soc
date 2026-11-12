@@ -4,6 +4,7 @@ import {
   fetchCloudLeaderboardEntries,
   HOGWARTS_HOUSE_META,
   HouseCupStanding,
+  isScoredLeaderboardGame,
   LEADERBOARD_GAME_META,
   LeaderboardRowEntry,
   normalizeScoredLeaderboardGame,
@@ -41,6 +42,7 @@ export class LeaderboardModalController {
   public activeGameId: LeaderboardGameId = 'match3';
   public activeScope: LeaderboardScope = 'valley';
   public activeHouseFilter: 'all' | HouseName = 'all';
+  private redirectedFromUnscored: LeaderboardGameId | null = null;
   public onJumpToGame?: (gameId: LeaderboardGameId) => void;
   public onVisitNeighbor?: (neighborId: string) => void;
   public onOpenNeighborBook?: () => void;
@@ -105,9 +107,20 @@ export class LeaderboardModalController {
     houseFilter?: 'all' | HouseName
   ): void {
     if (gameId) {
-      this.activeGameId = normalizeScoredLeaderboardGame(gameId);
-    } else if (!ALL_LEADERBOARD_GAMES.includes(this.activeGameId)) {
-      this.activeGameId = 'match3';
+      if (isScoredLeaderboardGame(gameId)) {
+        this.redirectedFromUnscored = null;
+        this.activeGameId = gameId;
+      } else {
+        this.redirectedFromUnscored = gameId;
+        this.activeGameId = ALL_LEADERBOARD_GAMES.includes(this.activeGameId)
+          ? this.activeGameId
+          : normalizeScoredLeaderboardGame(gameId);
+      }
+    } else {
+      this.redirectedFromUnscored = null;
+      if (!ALL_LEADERBOARD_GAMES.includes(this.activeGameId)) {
+        this.activeGameId = 'match3';
+      }
     }
     if (scope === 'valley' || scope === 'friends' || scope === 'personal') {
       this.activeScope = scope;
@@ -354,8 +367,15 @@ export class LeaderboardModalController {
         ? this.renderPersonalThreeGamesTableHtml()
         : this.renderStandingViewHtml(this.activeScope);
 
+    const unscoredNoticeHtml = this.redirectedFromUnscored
+      ? `<div class="lb-unscored-note" role="note">
+          📌 <strong>${escapeHtml(LEADERBOARD_GAME_META[this.redirectedFromUnscored]?.shortVi ?? '')}</strong> là môn rèn luyện tự do không xếp hạng — dưới đây là Bảng Xếp Hạng <strong>3 môn tính điểm</strong> (Bùa Gặt • Số Học • Sinh Vật).
+        </div>`
+      : '';
+
     container.innerHTML = `
       <div class="lb-shell">
+        ${unscoredNoticeHtml}
         <div class="lb-game-tabs" role="tablist" aria-label="Chọn bảng xếp hạng từng mini game">
           ${gameTabsHtml}
         </div>

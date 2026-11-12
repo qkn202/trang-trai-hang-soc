@@ -234,6 +234,7 @@ export function headerSyncHudFocusVisibility(hud: GameHUD): void {
 }
 
 export function headerCloseHudPopovers(hud: GameHUD): void {
+    const wasOpen = hud.manageMenuOpen || hud.weatherPopoverOpen;
     hud.manageMenuOpen = false;
     hud.weatherPopoverOpen = false;
     const managePop = hud.root.querySelector('#managePopoverMenu') as HTMLElement | null;
@@ -248,6 +249,9 @@ export function headerCloseHudPopovers(hud: GameHUD): void {
     }
     if (btnClock) {
       btnClock.setAttribute('aria-expanded', 'false');
+    }
+    if (wasOpen) {
+      hud.renderTutorialCoach();
     }
 }
 
@@ -305,6 +309,7 @@ export function headerToggleManagePopover(hud: GameHUD, force?: boolean): void {
       btn.setAttribute('data-active', 'true');
       headerPositionFloatingPopover(hud, btn, pop);
     }
+    hud.renderTutorialCoach();
 }
 
 export function headerToggleWeatherPopover(hud: GameHUD, force?: boolean): void {
@@ -320,6 +325,7 @@ export function headerToggleWeatherPopover(hud: GameHUD, force?: boolean): void 
       btn.setAttribute('aria-expanded', 'true');
       headerPositionFloatingPopover(hud, btn, pop);
     }
+    hud.renderTutorialCoach();
 }
 
 export function headerRenderWeatherPopover(hud: GameHUD): void {
@@ -608,6 +614,7 @@ export function headerRefreshFloatingBanner(hud: GameHUD): void {
     const btnSec = hud.root.querySelector('#btnFloatingSecondary') as HTMLButtonElement | null;
     const btnSwap = hud.root.querySelector('#btnFloatingSwap') as HTMLButtonElement | null;
     const btnExit = hud.root.querySelector('#btnFloatingExit') as HTMLButtonElement | null;
+    hud.root.classList.toggle('is-pincer-mode', hud.pincerActive && !hud.photoModeActive);
     if (!banner || !txt || !btnSec || !btnSwap || !btnExit) return;
 
     btnSwap.classList.add('hidden');
@@ -635,8 +642,8 @@ export function headerRefreshFloatingBanner(hud: GameHUD): void {
     if (hud.pincerActive) {
       banner.classList.remove('hidden');
       txt.textContent = hud.pincerPicked
-        ? `🤏 ${hud.pincerPicked.label}`
-        : '🤏 Gắp nhân sự';
+        ? `🤏 Đang gắp ${hud.pincerPicked.label} — Nhấp ô để thả`
+        : '🤏 Điều phối nhân sự (G) — Nhấp ô cử tới • G/Esc thoát';
       btnSec.classList.add('hidden');
       btnExit.textContent = '✕';
       return;

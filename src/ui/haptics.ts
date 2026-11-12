@@ -16,6 +16,11 @@ export function haptic(type: HapticType): boolean {
   if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') {
     return false;
   }
+  const ua = (navigator as Navigator & { userActivation?: { hasBeenActive?: boolean } })
+    .userActivation;
+  if (ua && !ua.hasBeenActive) {
+    return false;
+  }
   try {
     const pattern = HAPTIC_PATTERNS[type] ?? 15;
     return navigator.vibrate(pattern);

@@ -1984,9 +1984,13 @@ export class PuzzleArcadeModalController {
                 <button id="btnPaNextStage" type="button" class="brass-btn gold-cta" style="padding:9px 18px;font-size:13.5px;">
                   ${vs.isMasterReplay || curInfo.isMaxed ? `👑 Chơi Lại` : `▶️ Màn ${vs.nextStage}`}
                 </button>
-                <button id="btnPaVictoryLeaderboard" type="button" class="brass-btn" style="padding:9px 14px;font-size:13px;">
-                  ${isScoredMode ? `🏆 #${activeModeRank}` : '🏆 BXH'}
-                </button>
+                ${
+                  isScoredMode
+                    ? `<button id="btnPaVictoryLeaderboard" type="button" class="brass-btn" style="padding:9px 14px;font-size:13px;">
+                        🏆 #${activeModeRank}
+                      </button>`
+                    : ''
+                }
                 <button id="btnPaBackToPark" type="button" class="brass-btn" style="padding:9px 14px;font-size:13px;">
                   🏡 Về Vườn (${st.sandboxMode ? '∞' : st.match3.stars} 🌟)
                 </button>
@@ -2094,9 +2098,9 @@ export class PuzzleArcadeModalController {
                   <span>🔥</span>
                   <strong id="paTalismanText">${talismanDisp}</strong>
                 </span>
-                <button id="btnPaOpenLeaderboard" type="button" class="m3-res-chip minigame-lb-chip" title="${isScoredMode ? 'Bảng Xếp Hạng' : 'Bảng Xếp Hạng 3 Môn Tính Điểm'}">
+                <button id="btnPaOpenLeaderboard" type="button" class="m3-res-chip minigame-lb-chip" title="${isScoredMode ? 'Bảng Xếp Hạng môn này' : 'Bảng Xếp Hạng 3 Môn Tính Điểm (Bùa Gặt • Số Học • Sinh Vật)'}">
                   <span>🏆</span>
-                  <strong id="paRankText">${isScoredMode ? `#${activeModeRank}` : 'BXH'}</strong>
+                  <strong id="paRankText">${isScoredMode ? `#${activeModeRank}` : '3 Môn'}</strong>
                 </button>
               </div>
               <form method="dialog" class="pa-inline-close-form">

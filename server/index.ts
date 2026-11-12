@@ -658,7 +658,10 @@ export async function handleAuthoritativeHttpRequest(
       if (request.method === 'GET') {
         const rawSave = await store.get(kvKey, 'text');
         if (!rawSave) {
-          return jsonResponse({ error: 'Save not found', userId }, 404, request, env);
+          return new Response(null, {
+            status: 204,
+            headers: buildCorsHeaders(request, env),
+          });
         }
         // Đính kèm danh sách `helpers` hôm nay & khóa ngày VN từ server vào bản tải về
         try {

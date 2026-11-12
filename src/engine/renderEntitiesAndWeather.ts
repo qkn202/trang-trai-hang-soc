@@ -800,21 +800,32 @@ export function entitiesDrawAndTickOwlPostEvent(self: IsometricRenderer,
     }
 
     if (!self.owlFlight && !self.owlParcel && now >= self.nextOwlSpawnAt) {
-      // Pick a cozy sunlit meadow tile near the center of the Level 1 valley (or any nearby path tile)
+      // Pick a cozy sunlit meadow tile near the center of the Level 1 valley, avoiding any active tutorial highlight plot
+      const tutTarget = sim.getTutorialWorldTarget();
       let dropGx = 16.5;
       let dropGy = 23.5;
-      for (let r = 0; r <= 5; r++) {
+      for (let r = 0; r <= 9; r++) {
         let found = false;
         for (let dy = -r; dy <= r && !found; dy++) {
           for (let dx = -r; dx <= r && !found; dx++) {
             const tx = 16 + dx;
             const ty = 23 + dy;
             const cell = sim.grid[ty]?.[tx];
-            if (cell && cell.path !== 'none' && !cell.buildingUid && cell.terrain !== 'water') {
-              dropGx = tx + 0.5;
-              dropGy = ty + 0.5;
-              found = true;
+            if (!cell || cell.path === 'none' || cell.buildingUid || cell.terrain === 'water') {
+              continue;
             }
+            if (
+              tutTarget &&
+              Math.hypot(
+                tx + 0.5 - (tutTarget.gx + tutTarget.bw * 0.5),
+                ty + 0.5 - (tutTarget.gy + tutTarget.bh * 0.5)
+              ) < 4.2
+            ) {
+              continue;
+            }
+            dropGx = tx + 0.5;
+            dropGy = ty + 0.5;
+            found = true;
           }
         }
         if (found) break;
@@ -911,9 +922,24 @@ export function entitiesDrawAndTickOwlPostEvent(self: IsometricRenderer,
         ctx.arc(pt.sx, by + bh * 0.5, 2.4 * zoom, 0, Math.PI * 2);
         ctx.fill();
 
-        // Cozy floating invite badge above parcel
+        // Cozy floating invite badge above parcel (auto-deoverlapped from active tutorial world callout)
         if (!hideInteractive) {
-          const pillY = by - 13 * zoom;
+          let pillY = by - 13 * zoom;
+          const tutTarget = sim.getTutorialWorldTarget();
+          if (tutTarget) {
+            const tElev = sim.grid[tutTarget.gy]?.[tutTarget.gx]?.elevation ?? 0;
+            const tutPin = gridToScreen(
+              tutTarget.gx + tutTarget.bw * 0.5,
+              tutTarget.gy + tutTarget.bh * 0.5,
+              cam,
+              viewW,
+              viewH,
+              tElev * ELEV_PX + 98
+            );
+            if (Math.abs(pt.sx - tutPin.sx) < 155 && Math.abs(pillY - tutPin.sy) < 48) {
+              pillY = by + bh + 13 * zoom;
+            }
+          }
           const label = '🦉 Quà Thư Cú!';
           ctx.font = `800 ${Math.max(10.5, Math.round(11 * zoom))}px "Be Vietnam Pro", sans-serif`;
           const tw = ctx.measureText(label).width;

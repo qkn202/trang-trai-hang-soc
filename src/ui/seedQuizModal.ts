@@ -640,14 +640,6 @@ export class SeedQuizModalController {
               >
                 📖 Từ Điển (${srsSummary.masteredCount}/${poolStats.lexiconCount})
               </button>
-              <button
-                id="btnSqOpenLeaderboard"
-                type="button"
-                class="sq-view-tab minigame-lb-chip"
-                title="Bảng Xếp Hạng 3 Môn Tính Điểm"
-              >
-                🏆 BXH
-              </button>
             </div>
 
             ${
@@ -1291,10 +1283,6 @@ export class SeedQuizModalController {
     });
 
     // Sub-view switch (Practice vs SRS Lexicon Codex)
-    container.querySelector('#btnSqOpenLeaderboard')?.addEventListener('click', () => {
-      this.sim.audio.playClick();
-      this.onOpenLeaderboard?.();
-    });
     container.querySelectorAll<HTMLButtonElement>('[data-sq-subview]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const sv = btn.dataset.sqSubview as 'practice' | 'codex';

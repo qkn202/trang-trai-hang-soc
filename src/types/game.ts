@@ -1334,6 +1334,7 @@ export interface TutorialState {
   stepIndex: number;
   stepId: TutorialStepId;
   skipped: boolean;
+  minimized?: boolean;
   completedAt?: number;
   pastureHarvestedInStep3?: boolean;
   claimedSteps: number[];

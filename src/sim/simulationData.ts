@@ -1946,6 +1946,7 @@ export function migrateLoadedState(parsed: GameState): GameState {
         stepIndex: safeStepId === 'completed' ? maxIdx : safeIdx,
         stepId: safeStepId,
         skipped,
+        minimized: Boolean(rawTut.minimized),
         completedAt: typeof rawTut.completedAt === 'number' ? rawTut.completedAt : undefined,
         pastureHarvestedInStep3: Boolean(rawTut.pastureHarvestedInStep3),
         claimedSteps: Array.from(new Set(safeClaimed)),

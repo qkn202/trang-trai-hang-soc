@@ -321,6 +321,7 @@ export class Match3ModalController {
   private prevObjectiveRemaining: number[] = [];
   private companionCharge = 0;
   private snackPieUsedThisAttempt = false;
+  private devJumpReturnLevel: number | null = null;
 
   constructor(
     root: HTMLElement,
@@ -349,6 +350,19 @@ export class Match3ModalController {
           this.rescueVictoryOutcome = null;
           this.engine?.destroy();
           this.engine = null;
+        } else if (this.devJumpReturnLevel !== null) {
+          const maxNormal = Math.min(
+            MAX_MINIGAME_STAGE,
+            (this.sim.state.match3.maxClearedLevel ?? 0) + 1
+          );
+          if (this.sim.state.match3.currentLevel > maxNormal) {
+            this.sim.state.match3.currentLevel = Math.min(maxNormal, this.devJumpReturnLevel);
+            this.sim.state.match3.activeSession = null;
+            this.engine?.destroy();
+            this.engine = null;
+          }
+          this.devJumpReturnLevel = null;
+          this.sim.saveToStorage();
         } else {
           this.persistMatch3Session(true);
         }
@@ -515,20 +529,33 @@ export class Match3ModalController {
     if (dlg?.open) dlg.close();
   }
 
-  public open(overrideLevel?: number): void {
+  public open(overrideLevel?: number, allowDevJump = false): void {
     const dlg = this.getDialog();
     if (!dlg) return;
 
     this.rescueContext = null;
     this.rescueVictoryOutcome = null;
+    this.devJumpReturnLevel = null;
     this.sim.setLastPlayedMinigame('match3');
     this.sim.tickMatch3Hearts(Date.now());
     if (typeof overrideLevel === 'number' && Number.isFinite(overrideLevel) && overrideLevel >= 1) {
+      const normalMaxAllowed = Math.min(
+        MAX_MINIGAME_STAGE,
+        (this.sim.state.match3.maxClearedLevel ?? 0) + 1
+      );
       const maxAllowed =
-        this.sim.state.sandboxMode || this.sim.isHeadmasterPreview
+        this.sim.state.sandboxMode || this.sim.isHeadmasterPreview || allowDevJump
           ? MAX_MINIGAME_STAGE
-          : Math.min(MAX_MINIGAME_STAGE, (this.sim.state.match3.maxClearedLevel ?? 0) + 1);
+          : normalMaxAllowed;
       const clampedLv = Math.min(maxAllowed, Math.floor(overrideLevel));
+      if (
+        allowDevJump &&
+        !this.sim.state.sandboxMode &&
+        !this.sim.isHeadmasterPreview &&
+        clampedLv > normalMaxAllowed
+      ) {
+        this.devJumpReturnLevel = Math.min(normalMaxAllowed, this.sim.state.match3.currentLevel);
+      }
       if (clampedLv !== this.sim.state.match3.currentLevel) {
         this.sim.state.match3.activeSession = null;
       }

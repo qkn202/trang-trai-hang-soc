@@ -693,6 +693,19 @@ export function socialUiExitVisitFromHud(hud: GameHUD): void {
     hud.rideCamUid = null;
     hud.onCameraJump?.();
     centerCameraOnGrid(hud.cam, res.focusGx, res.focusGy);
+    if (typeof window !== 'undefined' && window.location?.search) {
+      const p = new URLSearchParams(window.location.search);
+      if (p.has('visit') || p.has('tour')) {
+        p.delete('visit');
+        p.delete('tour');
+        const nextQuery = p.toString();
+        window.history.replaceState(
+          null,
+          '',
+          `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`
+        );
+      }
+    }
   }
   hud.refreshAll();
 }
@@ -2046,8 +2059,9 @@ export function socialUiRenderTutorialCoach(hud: GameHUD): void {
     if (!card) return;
 
     const anyModalOpen = Boolean(document.querySelector('dialog[open]'));
+    const anyTopPopoverOpen = hud.manageMenuOpen || hud.weatherPopoverOpen;
     const step = hud.sim.getCurrentTutorialStep();
-    if (hud.photoModeActive || anyModalOpen || !step) {
+    if (hud.photoModeActive || anyModalOpen || anyTopPopoverOpen || !step) {
       socialUiHideTutorialPopover(hud, card);
       socialUiUpdateTutorialHudSpotlight(hud);
       return;
@@ -2165,10 +2179,14 @@ export function socialUiRenderTutorialCoach(hud: GameHUD): void {
 
       card.querySelector('#btnTutorialExpand')?.addEventListener('click', () => {
         hud.tutorialMinimized = false;
+        hud.sim.ensureTutorialState().minimized = false;
+        hud.sim.saveToStorage();
         socialUiRenderTutorialCoach(hud);
       });
       card.querySelector('#btnTutorialMinimize')?.addEventListener('click', () => {
         hud.tutorialMinimized = true;
+        hud.sim.ensureTutorialState().minimized = true;
+        hud.sim.saveToStorage();
         socialUiRenderTutorialCoach(hud);
       });
       card.querySelector('#btnTutorialSkip')?.addEventListener('click', () => {

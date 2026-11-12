@@ -10,6 +10,9 @@ import { getMatch3LevelDef, MATCH3_BOARD_SIZE } from '../../data/match3Levels';
 import { MagicalAudio } from '../../engine/audio';
 import { FarmCropId, QuizLanguageId } from '../../types/game';
 import { CloudSave } from '../../ui/cloudSave';
+import { haptic } from '../../ui/haptics';
+import { MemoryBackendKVStore } from '../../../server/burrowBackendCore';
+import { handleAuthoritativeHttpRequest } from '../../../server/index';
 import { CandyHogwartsEngine } from '../candyHogwartsEngine';
 import {
   createInitialLanguageQuizState,
@@ -1084,6 +1087,54 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
 
       m3Eng1.destroy();
       m3Eng2.destroy();
+    });
+  });
+
+  describe('QA Bugfix Regressions (Haptics Activation Guard, Tutorial Minimize Persistence & 204 Empty CloudSave)', () => {
+    it('blocks navigator.vibrate before user activation and allows it once activated', () => {
+      const vibrateSpy = vi.fn(() => true);
+      try {
+        vi.stubGlobal('navigator', {
+          vibrate: vibrateSpy,
+          userActivation: { hasBeenActive: false },
+        });
+        expect(haptic('light')).toBe(false);
+        expect(vibrateSpy).not.toHaveBeenCalled();
+
+        vi.stubGlobal('navigator', {
+          vibrate: vibrateSpy,
+          userActivation: { hasBeenActive: true },
+        });
+        expect(haptic('harvest')).toBe(true);
+        expect(vibrateSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.unstubAllGlobals();
+        vi.stubGlobal('localStorage', mockLocalStorage);
+      }
+    });
+
+    it('persists tutorial.minimized across save/reload and resets minimized on restartTutorial()', () => {
+      const sim1 = new ParkSimulation(createMockAudio());
+      sim1.ensureTutorialState().minimized = true;
+      sim1.saveToStorage();
+
+      const sim2 = new ParkSimulation(createMockAudio());
+      expect(sim2.state.tutorial?.minimized).toBe(true);
+
+      sim2.restartTutorial();
+      expect(sim2.state.tutorial?.minimized).toBe(false);
+    });
+
+    it('returns 204 No Content instead of 404 on GET /api/save for brand-new users without cloud save', async () => {
+      const kv = new MemoryBackendKVStore();
+      const res = await handleAuthoritativeHttpRequest(
+        new Request('http://127.0.0.1:5173/api/save?userId=brand_new_qa_user', {
+          method: 'GET',
+          headers: { 'X-User-Id': 'brand_new_qa_user' },
+        }),
+        { SAVE_KV: kv, ENVIRONMENT: 'development' }
+      );
+      expect(res.status).toBe(204);
     });
   });
 });

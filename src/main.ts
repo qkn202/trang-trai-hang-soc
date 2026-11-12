@@ -151,6 +151,7 @@ async function bootstrap(): Promise<void> {
   const tutorialParam = params.get('tutorial');
   if (tutorialParam === '1' || tutorialParam === 'reset') {
     sim.restartTutorial();
+    hud.tutorialMinimized = false;
   } else if (tutorialParam === '0' || tutorialParam === 'off') {
     if (sim.isTutorialActive()) {
       sim.skipTutorial();
@@ -248,6 +249,7 @@ async function bootstrap(): Promise<void> {
     if (bakeryB) {
       hud.inspectSelection = { kind: 'building', uid: bakeryB.uid };
     }
+    hud.openWorkshopDialog('brew');
   } else if (dlgParam === 'workshop') {
     const tabParam =
       (params.get('tab') as 'barn' | 'brew' | 'cargo' | 'synergy' | null) ?? 'barn';
@@ -262,10 +264,10 @@ async function bootstrap(): Promise<void> {
       : Math.min(777, (sim.state.match3.maxClearedLevel ?? 0) + 1);
     const safeM3Lv =
       Number.isFinite(m3LvParam) && m3LvParam >= 1 ? Math.min(maxAllowedM3, Math.floor(m3LvParam)) : undefined;
-    if (isDevHostAllowed && safeM3Lv && safeM3Lv > (sim.state.match3.maxClearedLevel ?? 0) + 1) {
-      sim.state.sandboxMode = true;
-    }
-    hud.openMatch3Dialog(safeM3Lv);
+    const allowDevJump = Boolean(
+      isDevHostAllowed && safeM3Lv && safeM3Lv > (sim.state.match3.maxClearedLevel ?? 0) + 1
+    );
+    hud.openMatch3Dialog(safeM3Lv, allowDevJump);
   } else if (
     dlgParam === 'puzzle' ||
     dlgParam === 'caro' ||
@@ -384,6 +386,35 @@ async function bootstrap(): Promise<void> {
   const tourOrVisitParam = params.get('tour') || params.get('visit');
   if (tourOrVisitParam) {
     routeGardenTourOrVisit(tourOrVisitParam);
+  }
+
+  // Strip one-shot action/modal query params after consuming them so pressing F5 or returning
+  // from a visit does not re-open stale dialogs or re-trigger tutorial resets.
+  const TRANSIENT_BOOT_PARAMS = [
+    'dialog',
+    'm3level',
+    'pmode',
+    'lbgame',
+    'lbscope',
+    'sqtab',
+    'crop',
+    'lang',
+    'tier',
+    'qformat',
+    'sfilter',
+    'tab',
+    'fireworks',
+    'tutorial',
+    'tstep',
+  ];
+  if (TRANSIENT_BOOT_PARAMS.some((k) => params.has(k))) {
+    const cleanedParams = new URLSearchParams(params);
+    for (const k of TRANSIENT_BOOT_PARAMS) {
+      cleanedParams.delete(k);
+    }
+    const nextQuery = cleanedParams.toString();
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`;
+    window.history.replaceState(null, '', nextUrl);
   }
   if (sim.isTutorialActive() && !hasExplicitCamParam) {
     hud.panCameraToTutorialTarget();
