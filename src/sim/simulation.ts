@@ -248,8 +248,10 @@ export { FARM_HARVEST_CHEST_XP } from './simulationData';
 export type { ValleyVillagerProfile } from './simulationData';
 
 import {
+  BarnUpgradeCostInfo,
   farmEnsureFarmBarn,
   farmGetBarnTotalUsed,
+  farmGetBarnUpgradeCostInfo,
   farmGetFarmItemCount,
   farmAddFarmItemToBarn,
   farmConsumeFarmItemFromBarn,
@@ -285,6 +287,7 @@ import {
 } from './simulationEconomy';
 
 import {
+  BulldozeHazardWarning,
   worldRebuildGrid,
   worldIsBuildingConnected,
   worldRecomputeAllCoastersAndBiomes,
@@ -296,8 +299,11 @@ import {
   worldUnlockZone,
   worldBridgeZoneWithCobblePath,
   worldFindSmartSpotForStoryBuilding,
+  worldGetBulldozeHazardWarning,
   worldRemoveAtTile,
 } from './simulationWorld';
+export type { BarnUpgradeCostInfo } from './simulationFarm';
+export type { BulldozeHazardWarning } from './simulationWorld';
 
 import {
   creaturesFeedCreature,
@@ -533,6 +539,7 @@ export class ParkSimulation {
   public onBuildingCompleted: ((uid: string) => void) | null = null;
   public onRibbonUnveiled: ((info: RibbonUnveilCelebration) => void) | null = null;
   public onTutorialStepChanged: ((stepId: TutorialStepId) => void) | null = null;
+  public onRequestBulldozeConfirm: ((warning: BulldozeHazardWarning) => void) | null = null;
   public villagerGreetCooldown = new Map<ValleyVillagerId, number>();
 
   constructor(audio: MagicalAudio) {
@@ -627,7 +634,13 @@ export class ParkSimulation {
 
   public placeItem(item: CatalogItem, gx: number, gy: number, rotation: 0 | 1 | 2 | 3): boolean { return worldPlaceItem(this, item, gx, gy, rotation); }
 
-  public removeAtTile(gx: number, gy: number): boolean { return worldRemoveAtTile(this, gx, gy); }
+  public getBulldozeHazardWarning(gx: number, gy: number): BulldozeHazardWarning | null {
+    return worldGetBulldozeHazardWarning(this, gx, gy);
+  }
+
+  public removeAtTile(gx: number, gy: number, force = false): boolean {
+    return worldRemoveAtTile(this, gx, gy, force);
+  }
 
   public tryDropWizardCard(_gx: number, _gy: number, _baseChance = 0.08): void { return questsTryDropWizardCard(this, _gx, _gy, _baseChance); }
 
@@ -1146,6 +1159,8 @@ export class ParkSimulation {
   public addFarmItemToBarn(itemId: FarmItemId, qty: number): number { return farmAddFarmItemToBarn(this, itemId, qty); }
 
   public consumeFarmItemFromBarn(itemId: FarmItemId, qty: number): void { return farmConsumeFarmItemFromBarn(this, itemId, qty); }
+
+  public getBarnUpgradeCostInfo(): BarnUpgradeCostInfo { return farmGetBarnUpgradeCostInfo(this); }
 
   public upgradeFarmBarn(): { ok: boolean; msg: string } { return farmUpgradeFarmBarn(this); }
 

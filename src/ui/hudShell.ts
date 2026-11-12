@@ -525,6 +525,14 @@ export function shellMountDOM(hud: GameHUD): void {
 
       <!-- BOTTOM BUILD DOCK SHEET (Pops open cleanly above corner cards when "Xây Dựng" is active) -->
       <section id="bottomDockWrap" class="bottom-dock-wrap ts-build-sheet" aria-label="Thanh công cụ xây dựng">
+        <div id="buildDrawerSwipeBar" class="build-drawer-swipe-bar hidden">
+          <span id="buildDrawerCatLabel" class="build-drawer-cat-label">🏗️ Danh Mục Xây Dựng</span>
+          <div class="build-drawer-scroll-ctrls">
+            <span id="buildDrawerSwipeHint" class="build-drawer-swipe-hint" aria-hidden="true">↔ Vuốt ngang</span>
+            <button id="btnDrawerScrollPrev" type="button" class="drawer-nav-pill" aria-label="Cuộn sang trái">‹</button>
+            <button id="btnDrawerScrollNext" type="button" class="drawer-nav-pill" aria-label="Cuộn sang phải">›</button>
+          </div>
+        </div>
         <div id="buildDrawer" class="parchment-panel build-drawer hidden"></div>
 
         <div id="secondaryMapToolsBar" class="parchment-dark secondary-map-tools-bar hidden" role="region" aria-label="Công cụ chỉnh sửa và bản đồ">
@@ -547,7 +555,7 @@ export function shellMountDOM(hud: GameHUD): void {
 
           <span class="dock-divider" aria-hidden="true">|</span>
 
-          <button id="btnToggleMapTools" type="button" aria-pressed="false" aria-expanded="false" aria-controls="secondaryMapToolsBar" class="brass-btn" title="Công cụ Sửa &amp; Góc Nhìn">🛠️ Công Cụ</button>
+          <button id="btnToggleMapTools" type="button" aria-pressed="false" aria-expanded="false" aria-controls="secondaryMapToolsBar" class="brass-btn" title="Công cụ Sửa &amp; Góc Nhìn"><span class="dock-tool-icon" aria-hidden="true">🛠️</span> Công Cụ</button>
         </div>
       </section>
 
@@ -718,6 +726,21 @@ export function shellMountDOM(hud: GameHUD): void {
           <div id="leaderboardDialogContent"></div>
         </div>
       </dialog>
+
+      <!-- DIALOG 15: DESTRUCTIVE BULLDOZE CONFIRMATION (CROPS / PASTURES / ACTIVE WORKSHOPS) -->
+      <dialog id="bulldozeConfirmDialog" aria-labelledby="bulldozeConfirmTitle" class="bulldoze-confirm-dialog">
+        <div class="parchment-panel modal-inner bulldoze-confirm-inner">
+          <div class="modal-header">
+            <h2 id="bulldozeConfirmTitle" class="modal-title">⚠️ Xác Nhận Phá Dỡ</h2>
+            <form method="dialog"><button type="submit" value="cancel" class="brass-btn" aria-label="Đóng">✕</button></form>
+          </div>
+          <div id="bulldozeConfirmBody" class="bulldoze-confirm-body"></div>
+          <form method="dialog" class="bulldoze-confirm-actions">
+            <button type="submit" value="cancel" class="brass-btn" autofocus>Giữ lại</button>
+            <button type="submit" value="confirm" class="brass-btn bulldoze-confirm-danger-btn">🧹 Vẫn phá dỡ</button>
+          </form>
+        </div>
+      </dialog>
     `;
     hud.root.appendChild(hudWrap);
     hud.minimapCanvas = hud.root.querySelector('#minimapCanvas') as HTMLCanvasElement;
@@ -823,6 +846,7 @@ export function shellBindEvents(hud: GameHUD): void {
         hud.pendingTouchTile = null;
         hud.inspectSelection = null;
         hud.buildSheetOpen = true;
+        hud.mapToolsExpanded = window.innerWidth > 680;
         const selCat = hud.selectedCatalogItem?.category;
         hud.activeCategory =
           selCat && BUILD_HUD_CATEGORIES.includes(selCat) ? selCat : 'shop';
@@ -948,6 +972,22 @@ export function shellBindEvents(hud: GameHUD): void {
     hud.root.querySelector('#btnToggleMapTools')?.addEventListener('click', () => {
       hud.mapToolsExpanded = !hud.mapToolsExpanded;
       hud.refreshDock();
+    });
+
+    const scrollBuildDrawerBy = (dir: -1 | 1) => {
+      const drawer = hud.root.querySelector('#buildDrawer') as HTMLElement | null;
+      if (!drawer) return;
+      const step = Math.max(180, Math.round(drawer.clientWidth * 0.68)) * dir;
+      const reduceMotion =
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      drawer.scrollBy({ left: step, behavior: reduceMotion ? 'auto' : 'smooth' });
+    };
+    hud.root.querySelector('#btnDrawerScrollPrev')?.addEventListener('click', () => {
+      scrollBuildDrawerBy(-1);
+    });
+    hud.root.querySelector('#btnDrawerScrollNext')?.addEventListener('click', () => {
+      scrollBuildDrawerBy(1);
     });
 
     window.addEventListener('pointerdown', (e) => {

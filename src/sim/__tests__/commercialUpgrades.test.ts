@@ -15,7 +15,10 @@ import {
   createInitialLanguageQuizState,
   generateNextQuizChallenge,
   getProfileSrsSummary,
+  markQuizChallengeSkipped,
+  normalizeQuizConceptKey,
   recordQuizAttempt,
+  sanitizeLanguageQuizState,
 } from '../languageQuizEngine';
 import { Match3BoardEngine } from '../match3Engine';
 import {
@@ -326,6 +329,79 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
       recordQuizAttempt(qState, { ...ch, qId: 'other_q_2' }, true);
       const summaryDue = getProfileSrsSummary(qState.profiles.en);
       expect(summaryDue.dueCount).toBeGreaterThanOrEqual(1);
+    });
+
+    it('không bị lặp câu hỏi hay lặp từ gốc suốt chuỗi dài ở cả 5 ngôn ngữ, mọi chế độ đơn lẻ và khi bấm Đổi liên tục', async () => {
+      const langs: QuizLanguageId[] = ['en', 'ko', 'zh', 'es', 'ja'];
+
+      for (const lang of langs) {
+        await loadLanguageQuizPack(lang);
+        const qState = createInitialLanguageQuizState();
+        qState.activeLang = lang;
+        qState.preferredFormat = 'all';
+
+        const seenQids = new Set<string>();
+        const seenConcepts = new Set<string>();
+        const streakLen = 80;
+
+        for (let step = 0; step < streakLen; step++) {
+          const ch = generateNextQuizChallenge(qState, 20, { excludeIds: seenQids });
+          expect(seenQids.has(ch.qId)).toBe(false);
+          const concept = normalizeQuizConceptKey(lang, ch.heroWord ?? ch.stemText);
+          expect(seenConcepts.has(concept)).toBe(false);
+
+          seenQids.add(ch.qId);
+          seenConcepts.add(concept);
+          // Trộn cả trả lời đúng lẫn trả lời sai (mỗi câu thứ 4 sai) để chắc chắn reviewQueue không ép lặp sớm
+          recordQuizAttempt(qState, ch, step % 4 !== 1);
+        }
+
+        expect(seenQids.size).toBe(streakLen);
+        expect(seenConcepts.size).toBe(streakLen);
+
+        // Reload / sanitize không làm cắt cụt recentIds xuống 24 như trước
+        const reloaded = sanitizeLanguageQuizState(JSON.parse(JSON.stringify(qState)));
+        expect(reloaded.profiles[lang].recentIds.length).toBe(streakLen);
+        const nextAfterReload = generateNextQuizChallenge(reloaded, 20);
+        expect(seenQids.has(nextAfterReload.qId)).toBe(false);
+      }
+
+      // Kiểm tra khoá cứng từng định dạng đơn lẻ (đặc biệt grammar_cloze, dialogue_reply, sentence_builder)
+      for (const fmt of [
+        'grammar_cloze',
+        'dialogue_reply',
+        'sentence_builder',
+        'vocab_context',
+        'match_pairs',
+      ] as const) {
+        const singleState = createInitialLanguageQuizState();
+        singleState.activeLang = 'ja';
+        singleState.preferredFormat = fmt;
+        const fmtSeen = new Set<string>();
+        for (let i = 0; i < 60; i++) {
+          const ch = generateNextQuizChallenge(singleState, 15, { excludeIds: fmtSeen });
+          expect(ch.format).toBe(fmt);
+          expect(fmtSeen.has(ch.qId)).toBe(false);
+          fmtSeen.add(ch.qId);
+          recordQuizAttempt(singleState, ch, true);
+        }
+        expect(fmtSeen.size).toBe(60);
+      }
+
+      // Kiểm tra bấm nút "🔀 Đổi" (Skip) 40 lần liên tiếp không bao giờ lặp lại câu cũ
+      const skipState = createInitialLanguageQuizState();
+      skipState.activeLang = 'ko';
+      const skipSeen = new Set<string>();
+      for (let skipIdx = 0; skipIdx < 40; skipIdx++) {
+        const ch = generateNextQuizChallenge(skipState, 10, {
+          excludeIds: skipSeen,
+          formatOffset: skipIdx,
+        });
+        expect(skipSeen.has(ch.qId)).toBe(false);
+        skipSeen.add(ch.qId);
+        markQuizChallengeSkipped(skipState, ch);
+      }
+      expect(skipSeen.size).toBe(40);
     });
   });
 

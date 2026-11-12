@@ -88,12 +88,15 @@ export interface QuizAttemptOutcome {
   leaderboardRankUp?: LeaderboardRankChange;
 }
 
+const MAX_RECENT_QUIZ_IDS = 400;
+const RECENT_CONCEPT_COOLDOWN = 35;
+
 const LEITNER_INTERVALS: Record<number, number> = {
   1: 2,
-  2: 5,
-  3: 12,
-  4: 28,
-  5: 65,
+  2: 30,
+  3: 65,
+  4: 110,
+  5: 200,
 };
 
 export function getProfileSrsSummary(profile: LanguageProfileState): {
@@ -207,7 +210,9 @@ export function sanitizeLanguageQuizState(
       totalAnswered: Math.max(0, Math.round(Number(p.totalAnswered) || 0)),
       totalCorrect: Math.max(0, Math.round(Number(p.totalCorrect) || 0)),
       seedsEarned: Math.max(0, Math.round(Number(p.seedsEarned) || 0)),
-      recentIds: Array.isArray(p.recentIds) ? p.recentIds.slice(-24).map(String) : [],
+      recentIds: Array.isArray(p.recentIds)
+        ? p.recentIds.slice(-MAX_RECENT_QUIZ_IDS).map(String)
+        : [],
       reviewQueue: Array.isArray(p.reviewQueue)
         ? p.reviewQueue
             .filter((r) => r && typeof r.qId === 'string')
@@ -223,7 +228,7 @@ export function sanitizeLanguageQuizState(
         p.srsBoxes && typeof p.srsBoxes === 'object'
           ? Object.fromEntries(
               Object.entries(p.srsBoxes)
-                .slice(0, 800)
+                .slice(0, 2500)
                 .map(([k, v]) => [
                   String(k),
                   {
@@ -470,16 +475,46 @@ function getDistractorLexiconEntries(
   excludeWord: string,
   excludeMeaningVi: string,
   levelBand: number,
-  count = 3
+  count = 3,
+  excludeId?: string
 ): QuizLexiconEntry[] {
-  const pool = QUIZ_LEXICON_BANK.filter(
+  const targetShortVi = formatShortKidMeaningVi(excludeMeaningVi).toLowerCase();
+  const targetWordLower = excludeWord.trim().toLowerCase();
+  const sameLang = QUIZ_LEXICON_BANK.filter(
     (e) =>
       e.lang === lang &&
-      e.word.toLowerCase() !== excludeWord.toLowerCase() &&
-      formatShortKidMeaningVi(e.meaningVi).toLowerCase() !==
-        formatShortKidMeaningVi(excludeMeaningVi).toLowerCase()
-  ).sort((a, b) => Math.abs(a.levelBand - levelBand) - Math.abs(b.levelBand - levelBand));
-  return shuffleArray(pool.slice(0, Math.max(count * 3, 10))).slice(0, count);
+      e.id !== excludeId &&
+      e.word.trim().toLowerCase() !== targetWordLower
+  );
+  const strictPool = sameLang
+    .filter((e) => formatShortKidMeaningVi(e.meaningVi).toLowerCase() !== targetShortVi)
+    .sort((a, b) => Math.abs(a.levelBand - levelBand) - Math.abs(b.levelBand - levelBand));
+
+  const picked = shuffleArray(strictPool.slice(0, Math.max(count * 4, 12))).slice(0, count);
+  if (picked.length < count) {
+    const pickedIds = new Set(picked.map((p) => p.id));
+    for (const fallback of shuffleArray(sameLang)) {
+      if (!pickedIds.has(fallback.id)) {
+        picked.push(fallback);
+        pickedIds.add(fallback.id);
+        if (picked.length >= count) break;
+      }
+    }
+  }
+  return picked;
+}
+
+export function normalizeQuizConceptKey(lang: QuizLanguageId, rawWord: string): string {
+  const cleaned = rawWord
+    .replace(/\s*\([^)]*\)/g, '')
+    .replace(/^(to|a|an|the|el|la|los|las|un|una)\s+/i, '')
+    .trim()
+    .toLowerCase();
+  return `${lang}:${cleaned || rawWord.trim().toLowerCase()}`;
+}
+
+function getCuratedPrimaryWord(item: CuratedQuizItem): string {
+  return item.vocabNotes[0]?.word ?? item.choices?.[item.correctIndex ?? 0] ?? item.stemText;
 }
 
 function buildFromCurated(item: CuratedQuizItem, isReview: boolean): ActiveQuizChallenge {
@@ -607,18 +642,18 @@ function buildFromCurated(item: CuratedQuizItem, isReview: boolean): ActiveQuizC
 
 function buildVocabContextChallenge(
   target: QuizLexiconEntry,
-  langPool: QuizLexiconEntry[],
   isReview: boolean
 ): ActiveQuizChallenge {
   const usedSprites = new Set<string>();
   const heroVisual = getQuizVisualCardMeta(target.meaningVi, target.word, target.id, usedSprites);
-  const others = shuffleArray(
-    langPool.filter(
-      (e) =>
-        e.id !== target.id &&
-        formatShortKidMeaningVi(e.meaningVi).toLowerCase() !== heroVisual.shortVi.toLowerCase()
-    )
-  ).slice(0, 3);
+  const others = getDistractorLexiconEntries(
+    target.lang,
+    target.word,
+    target.meaningVi,
+    target.levelBand,
+    3,
+    target.id
+  );
 
   const tagged = [
     {
@@ -683,23 +718,178 @@ function buildVocabContextChallenge(
   };
 }
 
+function buildLexiconWordChoiceChallenge(
+  target: QuizLexiconEntry,
+  format: 'grammar_cloze' | 'dialogue_reply',
+  isReview: boolean
+): ActiveQuizChallenge {
+  const usedSprites = new Set<string>();
+  const heroVisual = getQuizVisualCardMeta(target.meaningVi, target.word, target.id, usedSprites);
+  const distractors = getDistractorLexiconEntries(
+    target.lang,
+    target.word,
+    target.meaningVi,
+    target.levelBand,
+    3,
+    target.id
+  );
+
+  const tagged = [
+    {
+      word: target.word,
+      ph: target.phonetic,
+      shortVi: heroVisual.shortVi,
+      sprite: heroVisual.spriteSrc,
+      isCorrect: true,
+    },
+    ...distractors.map((d) => {
+      const vis = getQuizVisualCardMeta(d.meaningVi, d.word, d.id, usedSprites);
+      return {
+        word: d.word,
+        ph: d.phonetic,
+        shortVi: vis.shortVi,
+        sprite: vis.spriteSrc,
+        isCorrect: false,
+      };
+    }),
+  ];
+  const mixed = shuffleArray(tagged);
+  const isBubble = format === 'dialogue_reply';
+
+  return {
+    qId: `${isBubble ? 'bubble' : 'cloze'}:${target.id}`,
+    lang: target.lang,
+    tier: target.tier,
+    levelBand: target.levelBand,
+    chapterTitleVi: getChapterTitle(target.levelBand),
+    format,
+    visualGameKind: isBubble ? 'bubble_pop' : 'word_flashcard',
+    isReview,
+    promptVi: isBubble
+      ? `🫧 Chạm nổ bong bóng mang từ "${heroVisual.shortVi}":`
+      : `🔊 Nhìn tranh "${heroVisual.shortVi}" — chọn đúng từ:`,
+    stemText: heroVisual.shortVi,
+    stemPhonetic: target.phonetic,
+    ttsPromptText: target.word,
+    heroSpriteSrc: heroVisual.spriteSrc,
+    heroWord: target.word,
+    heroPhonetic: target.phonetic,
+    heroShortVi: heroVisual.shortVi,
+    choices: mixed.map((m) => m.word),
+    choicePhonetics: mixed.map((m) => m.ph),
+    choiceSprites: mixed.map((m) => m.sprite),
+    choiceSubtitles: mixed.map((m) => m.shortVi),
+    correctIndex: Math.max(0, mixed.findIndex((m) => m.isCorrect)),
+    fullSentence: target.word,
+    fullPhonetic: target.phonetic,
+    translationVi: heroVisual.shortVi,
+    grammarTitleVi: `${target.word} (${target.phonetic}) = ${heroVisual.shortVi}`,
+    grammarExplainVi: `${target.exampleSentence} (${target.exampleVi})`,
+    vocabNotes: [
+      {
+        word: target.word,
+        phonetic: target.phonetic,
+        posVi: target.posVi,
+        meaningVi: heroVisual.shortVi,
+      },
+      ...distractors.slice(0, 2).map((d) => ({
+        word: d.word,
+        phonetic: d.phonetic,
+        posVi: d.posVi,
+        meaningVi: formatShortKidMeaningVi(d.meaningVi),
+      })),
+    ],
+  };
+}
+
+function buildLexiconTilesChallenge(
+  target: QuizLexiconEntry,
+  isReview: boolean
+): ActiveQuizChallenge {
+  const usedSprites = new Set<string>();
+  const heroVisual = getQuizVisualCardMeta(target.meaningVi, target.word, target.id, usedSprites);
+
+  let expectedTiles = splitWordIntoKidTiles(target.word, target.lang);
+  let promptVi = `🧩 Nhìn tranh "${heroVisual.shortVi}" và ghép các mảnh chữ:`;
+  let stemText = heroVisual.shortVi;
+  let stemPhonetic = target.phonetic;
+  let fullSentence = target.word;
+  let fullPhonetic = target.phonetic;
+  let ttsPromptText = target.word;
+  let translationVi = heroVisual.shortVi;
+
+  if (expectedTiles.length < 2) {
+    expectedTiles = splitWordIntoKidTiles(target.exampleSentence, target.lang);
+    if (expectedTiles.length < 2) {
+      expectedTiles = [target.word, target.exampleSentence];
+    }
+    promptVi = `🧩 Nhìn tranh "${heroVisual.shortVi}" và ghép câu "${target.exampleVi}":`;
+    stemText = target.exampleVi;
+    stemPhonetic = target.examplePhonetic;
+    fullSentence = target.exampleSentence;
+    fullPhonetic = target.examplePhonetic;
+    ttsPromptText = target.exampleSentence;
+    translationVi = target.exampleVi;
+  }
+
+  const indexed = expectedTiles.map((text, idx) => ({ idx, text }));
+  const shuffled = shuffleArray(indexed);
+  if (
+    shuffled.length > 1 &&
+    shuffled.every((t, i) => t.text === expectedTiles[i])
+  ) {
+    [shuffled[0], shuffled[1]] = [shuffled[1], shuffled[0]];
+  }
+
+  return {
+    qId: `tiles:${target.id}`,
+    lang: target.lang,
+    tier: target.tier,
+    levelBand: target.levelBand,
+    chapterTitleVi: getChapterTitle(target.levelBand),
+    format: 'sentence_builder',
+    visualGameKind: 'word_tiles',
+    isReview,
+    promptVi,
+    stemText,
+    stemPhonetic,
+    ttsPromptText,
+    heroSpriteSrc: heroVisual.spriteSrc,
+    heroWord: target.word,
+    heroPhonetic: target.phonetic,
+    heroShortVi: heroVisual.shortVi,
+    shuffledTokens: shuffled,
+    expectedSentenceTokens: expectedTiles,
+    fullSentence,
+    fullPhonetic,
+    translationVi,
+    grammarTitleVi: `${target.word} (${target.phonetic}) = ${heroVisual.shortVi}`,
+    grammarExplainVi: `${target.exampleSentence} (${target.exampleVi})`,
+    vocabNotes: [
+      {
+        word: target.word,
+        phonetic: target.phonetic,
+        posVi: target.posVi,
+        meaningVi: heroVisual.shortVi,
+      },
+    ],
+  };
+}
+
 function buildMatchPairsChallenge(
   anchor: QuizLexiconEntry,
-  langPool: QuizLexiconEntry[],
   isReview: boolean
 ): ActiveQuizChallenge {
   const usedSprites = new Set<string>();
   const anchorVis = getQuizVisualCardMeta(anchor.meaningVi, anchor.word, anchor.id, usedSprites);
-  const peers = shuffleArray(
-    langPool
-      .filter(
-        (e) =>
-          e.id !== anchor.id &&
-          formatShortKidMeaningVi(e.meaningVi).toLowerCase() !== anchorVis.shortVi.toLowerCase()
-      )
-      .sort((a, b) => Math.abs(a.levelBand - anchor.levelBand) - Math.abs(b.levelBand - anchor.levelBand))
-      .slice(0, 6)
-  ).slice(0, 2);
+  const peers = getDistractorLexiconEntries(
+    anchor.lang,
+    anchor.word,
+    anchor.meaningVi,
+    anchor.levelBand,
+    2,
+    anchor.id
+  );
 
   const trio = [anchor, ...peers];
   const cards: QuizMatchPairCard[] = trio.map((e, idx) => {
@@ -718,7 +908,7 @@ function buildMatchPairsChallenge(
   });
 
   const leftCards = shuffleArray(cards);
-  let rightCards = shuffleArray(cards);
+  const rightCards = shuffleArray(cards);
   if (rightCards.length > 1 && rightCards.every((c, idx) => c.pairId === leftCards[idx].pairId)) {
     [rightCards[0], rightCards[1]] = [rightCards[1], rightCards[0]];
   }
@@ -777,104 +967,324 @@ function reconstructChallengeById(
 ): ActiveQuizChallenge | null {
   if (qId.startsWith('vocab:')) {
     const lexId = qId.slice('vocab:'.length);
-    const entry = QUIZ_LEXICON_BANK.find((e) => e.id === lexId);
-    if (!entry) return null;
-    const pool = QUIZ_LEXICON_BANK.filter((e) => e.lang === entry.lang);
-    return buildVocabContextChallenge(entry, pool, isReview);
+    const entry = QUIZ_LEXICON_BANK.find((e) => e.id === lexId && e.lang === lang);
+    return entry ? buildVocabContextChallenge(entry, isReview) : null;
   }
   if (qId.startsWith('pairs:')) {
     const lexId = qId.slice('pairs:'.length);
-    const entry = QUIZ_LEXICON_BANK.find((e) => e.id === lexId);
-    if (!entry) return null;
-    const pool = QUIZ_LEXICON_BANK.filter((e) => e.lang === entry.lang);
-    return buildMatchPairsChallenge(entry, pool, isReview);
+    const entry = QUIZ_LEXICON_BANK.find((e) => e.id === lexId && e.lang === lang);
+    return entry ? buildMatchPairsChallenge(entry, isReview) : null;
+  }
+  if (qId.startsWith('cloze:')) {
+    const lexId = qId.slice('cloze:'.length);
+    const entry = QUIZ_LEXICON_BANK.find((e) => e.id === lexId && e.lang === lang);
+    return entry ? buildLexiconWordChoiceChallenge(entry, 'grammar_cloze', isReview) : null;
+  }
+  if (qId.startsWith('bubble:')) {
+    const lexId = qId.slice('bubble:'.length);
+    const entry = QUIZ_LEXICON_BANK.find((e) => e.id === lexId && e.lang === lang);
+    return entry ? buildLexiconWordChoiceChallenge(entry, 'dialogue_reply', isReview) : null;
+  }
+  if (qId.startsWith('tiles:')) {
+    const lexId = qId.slice('tiles:'.length);
+    const entry = QUIZ_LEXICON_BANK.find((e) => e.id === lexId && e.lang === lang);
+    return entry ? buildLexiconTilesChallenge(entry, isReview) : null;
   }
   const curated = CURATED_QUIZ_BANK.find((c) => c.id === qId && c.lang === lang);
   return curated ? buildFromCurated(curated, isReview) : null;
 }
 
+interface QuizChallengeCandidate {
+  qId: string;
+  format: QuizFormatKind;
+  levelBand: number;
+  tier: QuizProficiencyTier;
+  conceptKey: string;
+  build: (isReview: boolean) => ActiveQuizChallenge;
+}
+
+function buildCandidatesForFormat(
+  lang: QuizLanguageId,
+  format: QuizFormatKind,
+  langLexicon: QuizLexiconEntry[],
+  langCurated: CuratedQuizItem[]
+): QuizChallengeCandidate[] {
+  const candidates: QuizChallengeCandidate[] = [];
+  const usedConcepts = new Set<string>();
+
+  if (format === 'vocab_context') {
+    for (const entry of langLexicon) {
+      const conceptKey = normalizeQuizConceptKey(lang, entry.word);
+      if (usedConcepts.has(conceptKey)) continue;
+      usedConcepts.add(conceptKey);
+      candidates.push({
+        qId: `vocab:${entry.id}`,
+        format,
+        levelBand: entry.levelBand,
+        tier: entry.tier,
+        conceptKey,
+        build: (isReview) => buildVocabContextChallenge(entry, isReview),
+      });
+    }
+    return candidates;
+  }
+
+  if (format === 'match_pairs') {
+    for (const entry of langLexicon) {
+      const conceptKey = normalizeQuizConceptKey(lang, entry.word);
+      if (usedConcepts.has(conceptKey)) continue;
+      usedConcepts.add(conceptKey);
+      candidates.push({
+        qId: `pairs:${entry.id}`,
+        format,
+        levelBand: entry.levelBand,
+        tier: entry.tier,
+        conceptKey,
+        build: (isReview) => buildMatchPairsChallenge(entry, isReview),
+      });
+    }
+    return candidates;
+  }
+
+  // Curated items for grammar_cloze / dialogue_reply / sentence_builder first
+  for (const item of langCurated) {
+    if (item.format !== format) continue;
+    const conceptKey = normalizeQuizConceptKey(lang, getCuratedPrimaryWord(item));
+    if (usedConcepts.has(conceptKey)) continue;
+    usedConcepts.add(conceptKey);
+    candidates.push({
+      qId: item.id,
+      format,
+      levelBand: item.levelBand,
+      tier: item.tier,
+      conceptKey,
+      build: (isReview) => buildFromCurated(item, isReview),
+    });
+  }
+
+  // Expand with full lexicon bank so every format has 80..150+ unique words without repetition
+  for (const entry of langLexicon) {
+    const conceptKey = normalizeQuizConceptKey(lang, entry.word);
+    if (usedConcepts.has(conceptKey)) continue;
+    usedConcepts.add(conceptKey);
+    if (format === 'grammar_cloze') {
+      candidates.push({
+        qId: `cloze:${entry.id}`,
+        format,
+        levelBand: entry.levelBand,
+        tier: entry.tier,
+        conceptKey,
+        build: (isReview) => buildLexiconWordChoiceChallenge(entry, 'grammar_cloze', isReview),
+      });
+    } else if (format === 'dialogue_reply') {
+      candidates.push({
+        qId: `bubble:${entry.id}`,
+        format,
+        levelBand: entry.levelBand,
+        tier: entry.tier,
+        conceptKey,
+        build: (isReview) => buildLexiconWordChoiceChallenge(entry, 'dialogue_reply', isReview),
+      });
+    } else {
+      candidates.push({
+        qId: `tiles:${entry.id}`,
+        format,
+        levelBand: entry.levelBand,
+        tier: entry.tier,
+        conceptKey,
+        build: (isReview) => buildLexiconTilesChallenge(entry, isReview),
+      });
+    }
+  }
+
+  return candidates;
+}
+
+function resolveQidConceptKey(
+  qId: string,
+  lang: QuizLanguageId,
+  lexById: Map<string, QuizLexiconEntry>,
+  curById: Map<string, CuratedQuizItem>
+): string | null {
+  for (const prefix of ['vocab:', 'pairs:', 'cloze:', 'bubble:', 'tiles:'] as const) {
+    if (qId.startsWith(prefix)) {
+      const entry = lexById.get(qId.slice(prefix.length));
+      return entry ? normalizeQuizConceptKey(lang, entry.word) : null;
+    }
+  }
+  const cur = curById.get(qId);
+  return cur ? normalizeQuizConceptKey(lang, getCuratedPrimaryWord(cur)) : null;
+}
+
+export interface NextQuizChallengeOptions {
+  excludeIds?: Iterable<string>;
+  formatOffset?: number;
+}
+
 export function generateNextQuizChallenge(
   quizState: LanguageQuizState,
-  parkLevel: number
+  parkLevel: number,
+  options?: NextQuizChallengeOptions
 ): ActiveQuizChallenge {
   const lang = quizState.activeLang;
   const profile = quizState.profiles[lang];
   const pref = quizState.preferredFormat;
   if (!profile.srsBoxes) profile.srsBoxes = {};
 
-  // 1. Urgent Box 1 Lapses: Check due reviewQueue items first!
-  const dueReview = profile.reviewQueue.find((r) => r.dueAtTurn <= profile.totalAnswered);
-  if (dueReview) {
-    const rebuilt = reconstructChallengeById(dueReview.qId, lang, true);
-    if (rebuilt && (pref === 'all' || rebuilt.format === pref)) {
-      rebuilt.srsBox = profile.srsBoxes[dueReview.qId]?.box ?? dueReview.box ?? 1;
-      return rebuilt;
-    }
-  }
-
-  // 1b. Leitner 5-Box SRS (~30% cadence: every 3rd turn, surface due SRS Box 1..4 items!)
-  if (profile.totalAnswered % 3 === 2) {
-    const dueSrsEntries = Object.entries(profile.srsBoxes)
-      .filter(([qId, e]) => e.box < 5 && e.dueAtTurn <= profile.totalAnswered && !profile.recentIds.slice(-3).includes(qId))
-      .sort((a, b) => a[1].box - b[1].box || a[1].dueAtTurn - b[1].dueAtTurn);
-    for (const [qId, srs] of dueSrsEntries) {
-      const rebuilt = reconstructChallengeById(qId, lang, true);
-      if (rebuilt && (pref === 'all' || rebuilt.format === pref)) {
-        rebuilt.srsBox = srs.box;
-        return rebuilt;
-      }
-    }
-  }
-
   const targetBand = computeTargetBand(profile, parkLevel);
-  const desiredFormat: QuizFormatKind =
-    pref !== 'all'
-      ? pref
-      : ROTATING_FORMATS[profile.totalAnswered % ROTATING_FORMATS.length];
-
   const langLexicon = QUIZ_LEXICON_BANK.filter((e) => e.lang === lang);
   const langCurated = CURATED_QUIZ_BANK.filter((c) => c.lang === lang);
+  const lexById = new Map(langLexicon.map((e) => [e.id, e]));
+  const curById = new Map(langCurated.map((c) => [c.id, c]));
 
-  // 2. Fresh 70% Pool: Prioritize unseen items (!srsBoxes[qId]) near targetBand, then non-recent items!
-  if (desiredFormat === 'vocab_context' || desiredFormat === 'match_pairs') {
-    const prefix = desiredFormat === 'vocab_context' ? 'vocab:' : 'pairs:';
-    const candidates = [...langLexicon].sort((a, b) => {
-      const aQid = `${prefix}${a.id}`;
-      const bQid = `${prefix}${b.id}`;
-      const aRecent = profile.recentIds.includes(aQid) ? 120 : 0;
-      const bRecent = profile.recentIds.includes(bQid) ? 120 : 0;
-      const aSeenPenalty = profile.srsBoxes![aQid] ? profile.srsBoxes![aQid].box * 3.5 : 0;
-      const bSeenPenalty = profile.srsBoxes![bQid] ? profile.srsBoxes![bQid].box * 3.5 : 0;
-      const aDist = Math.abs(a.levelBand - targetBand) * 2.2 + (a.tier === profile.tier ? 0 : 2.5) + aSeenPenalty + aRecent;
-      const bDist = Math.abs(b.levelBand - targetBand) * 2.2 + (b.tier === profile.tier ? 0 : 2.5) + bSeenPenalty + bRecent;
-      return aDist - bDist + (Math.random() - 0.5) * 0.9;
-    });
-    const chosen = candidates[0] ?? langLexicon[0];
-    const qId = `${prefix}${chosen.id}`;
-    const built =
-      desiredFormat === 'vocab_context'
-        ? buildVocabContextChallenge(chosen, langLexicon, false)
-        : buildMatchPairsChallenge(chosen, langLexicon, false);
-    if (profile.srsBoxes[qId]) built.srsBox = profile.srsBoxes[qId].box;
-    return built;
+  const sessionExcludedIds = new Set<string>(options?.excludeIds ?? []);
+  const recentIndexMap = new Map<string, number>();
+  profile.recentIds.forEach((id, idx) => {
+    recentIndexMap.set(id, idx);
+  });
+  const srsBoxes = profile.srsBoxes;
+  const reviewMap = new Map(profile.reviewQueue.map((r) => [r.qId, r]));
+
+  const seenQids = new Set<string>(sessionExcludedIds);
+  for (const id of profile.recentIds) seenQids.add(id);
+  for (const id of Object.keys(srsBoxes)) seenQids.add(id);
+  for (const r of profile.reviewQueue) seenQids.add(r.qId);
+
+  const allSeenConcepts = new Set<string>();
+  for (const qId of seenQids) {
+    const ck = resolveQidConceptKey(qId, lang, lexById, curById);
+    if (ck) allSeenConcepts.add(ck);
   }
 
-  // 3. Curated format (grammar_cloze, dialogue_reply, sentence_builder)
-  const formatMatches = langCurated.filter((c) => c.format === desiredFormat);
-  const pool = formatMatches.length > 0 ? formatMatches : langCurated;
-  const sorted = [...pool].sort((a, b) => {
-    const aRecent = profile.recentIds.includes(a.id) ? 120 : 0;
-    const bRecent = profile.recentIds.includes(b.id) ? 120 : 0;
-    const aSeenPenalty = profile.srsBoxes![a.id] ? profile.srsBoxes![a.id].box * 3.5 : 0;
-    const bSeenPenalty = profile.srsBoxes![b.id] ? profile.srsBoxes![b.id].box * 3.5 : 0;
-    const aDist = Math.abs(a.levelBand - targetBand) * 2.2 + (a.tier === profile.tier ? 0 : 2.5) + aSeenPenalty + aRecent;
-    const bDist = Math.abs(b.levelBand - targetBand) * 2.2 + (b.tier === profile.tier ? 0 : 2.5) + bSeenPenalty + bRecent;
-    return aDist - bDist + (Math.random() - 0.5) * 0.9;
-  });
+  const recentConcepts = new Set<string>();
+  for (const qId of profile.recentIds.slice(-RECENT_CONCEPT_COOLDOWN)) {
+    const ck = resolveQidConceptKey(qId, lang, lexById, curById);
+    if (ck) recentConcepts.add(ck);
+  }
+  const sessionTail = Array.from(sessionExcludedIds).slice(-3);
+  for (const qId of sessionTail) {
+    const ck = resolveQidConceptKey(qId, lang, lexById, curById);
+    if (ck) recentConcepts.add(ck);
+  }
 
-  const built = buildFromCurated(sorted[0], false);
-  if (profile.srsBoxes[built.qId]) built.srsBox = profile.srsBoxes[built.qId].box;
+  const orderedFormats: QuizFormatKind[] =
+    pref !== 'all'
+      ? [pref]
+      : ROTATING_FORMATS.map(
+          (_, i) =>
+            ROTATING_FORMATS[
+              (profile.totalAnswered + Math.max(0, options?.formatOffset ?? 0) + i) %
+                ROTATING_FORMATS.length
+            ]
+        );
+
+  const candidatesByFormat = new Map<QuizFormatKind, QuizChallengeCandidate[]>();
+  for (const fmt of orderedFormats) {
+    candidatesByFormat.set(fmt, buildCandidatesForFormat(lang, fmt, langLexicon, langCurated));
+  }
+
+  const pickBestFresh = (list: QuizChallengeCandidate[]): QuizChallengeCandidate => {
+    const scored = list.map((c) => ({
+      c,
+      score:
+        Math.abs(c.levelBand - targetBand) * 2.2 +
+        (c.tier === profile.tier ? 0 : 2.5) +
+        Math.random() * 1.35,
+    }));
+    scored.sort((a, b) => a.score - b.score);
+    return scored[0].c;
+  };
+
+  // Bucket 0: Unseen qId AND unseen root word/concept across all formats
+  for (const fmt of orderedFormats) {
+    const bucket0 = (candidatesByFormat.get(fmt) ?? []).filter(
+      (c) => !seenQids.has(c.qId) && !allSeenConcepts.has(c.conceptKey)
+    );
+    if (bucket0.length > 0) {
+      return pickBestFresh(bucket0).build(false);
+    }
+  }
+
+  // Bucket 1: Unseen qId whose root word/concept is outside the recent cooldown window
+  for (const fmt of orderedFormats) {
+    const bucket1 = (candidatesByFormat.get(fmt) ?? []).filter(
+      (c) => !seenQids.has(c.qId) && !recentConcepts.has(c.conceptKey)
+    );
+    if (bucket1.length > 0) {
+      return pickBestFresh(bucket1).build(false);
+    }
+  }
+
+  // Bucket 2: Any remaining unseen qId before wrapping around
+  for (const fmt of orderedFormats) {
+    const bucket2 = (candidatesByFormat.get(fmt) ?? []).filter((c) => !seenQids.has(c.qId));
+    if (bucket2.length > 0) {
+      return pickBestFresh(bucket2).build(false);
+    }
+  }
+
+  // Bucket 3: 100% of candidate qIds in active scope have been seen -> Least-Recently-Seen + SRS wrap-around
+  const allCandidates: QuizChallengeCandidate[] = [];
+  for (const fmt of orderedFormats) {
+    allCandidates.push(...(candidatesByFormat.get(fmt) ?? []));
+  }
+
+  if (allCandidates.length === 0) {
+    const fallbackCur = langCurated[0] ?? CURATED_QUIZ_BANK[0];
+    return buildFromCurated(fallbackCur, false);
+  }
+
+  const lastRecentQid = profile.recentIds[profile.recentIds.length - 1] ?? null;
+  let wrapPool = allCandidates.filter(
+    (c) => !sessionExcludedIds.has(c.qId) && c.qId !== lastRecentQid
+  );
+  if (wrapPool.length === 0) {
+    wrapPool = allCandidates.filter((c) => c.qId !== lastRecentQid);
+  }
+  if (wrapPool.length === 0) {
+    wrapPool = allCandidates;
+  }
+
+  const minCooldownIdx = Math.max(
+    0,
+    profile.recentIds.length - Math.min(15, Math.floor(allCandidates.length / 2))
+  );
+  const wrapScored = wrapPool.map((c) => {
+    const recentIdx = recentIndexMap.get(c.qId) ?? -1;
+    const srs = srsBoxes[c.qId];
+    const isDue =
+      reviewMap.has(c.qId) || Boolean(srs && srs.box < 5 && srs.dueAtTurn <= profile.totalAnswered);
+    const dueBonus = isDue && recentIdx < minCooldownIdx ? -8 : 0;
+    const recencyScore = recentIdx < 0 ? -1000 + Math.random() * 6 : recentIdx * 10;
+    const bandScore = Math.abs(c.levelBand - targetBand) * 0.6;
+    return {
+      c,
+      isReview: Boolean(srs || reviewMap.has(c.qId)),
+      score: recencyScore + dueBonus + bandScore,
+    };
+  });
+  wrapScored.sort((a, b) => a.score - b.score);
+
+  const winner = wrapScored[0];
+  const built = winner.c.build(winner.isReview);
+  const existingBox = srsBoxes[built.qId]?.box ?? reviewMap.get(built.qId)?.box;
+  if (existingBox) {
+    built.srsBox = existingBox;
+  }
   return built;
+}
+
+export function markQuizChallengeSkipped(
+  quizState: LanguageQuizState,
+  challenge: ActiveQuizChallenge | null | undefined
+): void {
+  if (!challenge) return;
+  const prof = quizState.profiles[challenge.lang];
+  if (!prof) return;
+  prof.recentIds = [
+    ...prof.recentIds.filter((id) => id !== challenge.qId),
+    challenge.qId,
+  ].slice(-MAX_RECENT_QUIZ_IDS);
 }
 
 export function recordQuizAttempt(
@@ -885,7 +1295,10 @@ export function recordQuizAttempt(
   const prof = quizState.profiles[challenge.lang];
   if (!prof.srsBoxes) prof.srsBoxes = {};
   prof.totalAnswered += 1;
-  prof.recentIds = [...prof.recentIds.filter((id) => id !== challenge.qId), challenge.qId].slice(-24);
+  prof.recentIds = [
+    ...prof.recentIds.filter((id) => id !== challenge.qId),
+    challenge.qId,
+  ].slice(-MAX_RECENT_QUIZ_IDS);
 
   if (correct) {
     prof.totalCorrect += 1;

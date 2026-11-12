@@ -93,7 +93,7 @@ export const EXTRA_LEXICON: QuizLexiconEntry[] = [
   ]),
   ...buildPackLexicon('ja', 8, 'advanced', [
     ['myoushu', '妙手 (みょうしゅ)', 'myōshu', 'danh từ', 'nước cờ diệu kỳ', '鮮やかな妙手によって形勢が一気に逆転した。', 'Azayaka na myōshu ni yotte keisei ga ikki ni gyakuten shita.', 'Nhờ một nước cờ diệu kỳ sắc sảo, thế trận đã đảo ngược tức khắc.'],
-    ['seiritsu', '精巧 (せいこう)', 'seikō', 'tính từ -na', 'tinh xảo, tỉ mỉ chuẩn xác', '古代ルーンの石盤は驚くほど精巧に彫られている。', 'Kodai rūn no sekiban wa odoroku hodo seikō ni horarete iru.', 'Phiến đá cổ ngữ được chạm khắc tinh xảo đến kinh ngạc.'],
+    ['seizen', '整然 (せいぜん)', 'seizen', 'tính từ -na', 'ngay ngắn, trật tự ngăn nắp', '果樹園の木々が整然と並んでいる。', 'Kajuen no kigi ga seizen to narande iru.', 'Hàng cây trong vườn quả xếp hàng ngay ngắn trật tự.'],
   ]),
 ];
 

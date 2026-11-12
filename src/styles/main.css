@@ -13928,6 +13928,219 @@ body:has(.hud-shell-root) .legal-trigger-btn {
   }
 }
 
+/* ============================================================
+   9. Bulldoze Confirmation Dialog & Mobile Build Dock Affordance
+   ============================================================ */
+
+dialog.bulldoze-confirm-dialog[open] {
+  max-width: min(440px, 92dvw);
+}
+
+.bulldoze-confirm-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bulldoze-confirm-card {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  background: var(--surface-panel-solid);
+  border: 1.5px solid var(--border-brass-soft);
+}
+
+.bulldoze-confirm-lead {
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.bulldoze-confirm-hazard {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--berry-deep);
+}
+
+.bulldoze-confirm-note {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
+.bulldoze-confirm-refund {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--brand-strong);
+  padding-top: 4px;
+  border-top: 1px dashed var(--border-brass-soft);
+}
+
+.bulldoze-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bulldoze-confirm-actions .brass-btn {
+  min-block-size: 42px;
+  padding-inline: 16px;
+}
+
+.bulldoze-confirm-danger-btn {
+  background: linear-gradient(180deg, var(--berry) 0%, var(--berry-deep) 100%);
+  color: var(--ink-cream);
+  border-color: var(--border-cream);
+}
+
+/* Build Drawer Swipe Header & Overflow Affordance */
+.build-drawer-swipe-bar {
+  pointer-events: auto;
+  width: min(1040px, 100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, var(--dock-surface-top) 0%, var(--dock-surface-bot) 100%);
+  border: 1.5px solid var(--border-cream);
+  box-shadow: 0 3px 0 var(--shadow-color);
+  color: var(--ink);
+}
+
+.build-drawer-cat-label {
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--brand-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.build-drawer-scroll-ctrls {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.build-drawer-swipe-hint {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--ink-soft);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--quest-accent-bg);
+  border: 1px solid var(--border-brass-soft);
+  white-space: nowrap;
+}
+
+.drawer-nav-pill {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-brass);
+  background: linear-gradient(180deg, var(--surface-chip-top) 0%, var(--surface-chip-bot) 100%);
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.drawer-nav-pill:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.bottom-bar .dock-tool-icon {
+  display: inline-block;
+  line-height: 1;
+}
+
+/* Mobile Portrait Build Dock: Fit ALL 6 category/tool buttons & ALL 8 map tools 100% on-screen without clipping */
+@media (max-width: 680px) {
+  .bottom-bar {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 4px;
+    padding: 5px;
+    overflow: visible;
+    mask: none;
+    animation: none;
+  }
+
+  .bottom-bar .dock-divider {
+    display: none;
+  }
+
+  .bottom-bar .brass-btn {
+    min-width: 0;
+    min-block-size: 46px;
+    padding: 4px 2px;
+    gap: 2px;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    font-size: 10.5px;
+    font-weight: 800;
+    line-height: 1.1;
+    border-radius: 11px;
+    white-space: nowrap;
+    text-align: center;
+  }
+
+  .bottom-bar .hud-3d-icon {
+    width: 21px;
+    height: 21px;
+  }
+
+  .bottom-bar .dock-tool-icon {
+    font-size: 17px;
+    line-height: 21px;
+  }
+
+  .secondary-map-tools-bar:not(.hidden) {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px;
+    padding: 6px;
+    overflow: visible;
+    mask: none;
+    animation: none;
+  }
+
+  .secondary-map-tools-bar .brass-btn {
+    min-width: 0;
+    min-block-size: 40px;
+    padding: 5px 4px;
+    font-size: 11.5px;
+    justify-content: center;
+    white-space: nowrap;
+  }
+
+  .build-drawer {
+    padding: 9px 10px;
+    gap: 9px;
+  }
+}
+
+@media (max-width: 339px) {
+  .bottom-bar {
+    display: flex;
+    overflow-x: auto;
+  }
+}
+
 @layer dialogs {
   .aaa-codex-scroll {
     max-height: 52vh;

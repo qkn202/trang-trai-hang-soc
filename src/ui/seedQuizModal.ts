@@ -20,6 +20,7 @@ import {
   generateNextQuizChallenge,
   getProfileSrsSummary,
   getQuizVisualCardMeta,
+  markQuizChallengeSkipped,
   QuizAttemptOutcome,
   setProfileTier,
   speakQuizText,
@@ -76,6 +77,9 @@ export class SeedQuizModalController {
   private activeSubView: 'practice' | 'codex' = 'practice';
   private codexQuery = '';
   private codexBoxFilter: 'all' | 'mastered' | 'learning' | 'unseen' = 'all';
+  private sessionShownQids = new Set<string>();
+  private skipFormatOffset = 0;
+  private starterChallengePendingPack = false;
   public onOpenLeaderboard?: () => void;
 
   constructor(
@@ -144,11 +148,14 @@ export class SeedQuizModalController {
     }
 
     if (needFreshChallenge || this.challenge?.lang !== quiz.activeLang) {
+      if (this.challenge && !this.answeredOutcome) {
+        markQuizChallengeSkipped(quiz, this.challenge);
+      }
       this.loadNextQuestion(true);
     } else {
+      this.ensureActiveLangPackLoaded(quiz.activeLang, false);
       this.render();
     }
-    this.ensureActiveLangPackLoaded(quiz.activeLang);
 
     const dlg = this.root.querySelector('#seedQuizDialog') as HTMLDialogElement | null;
     if (dlg && !dlg.open) {
@@ -157,13 +164,80 @@ export class SeedQuizModalController {
     this.onRefreshHud();
   }
 
-  private ensureActiveLangPackLoaded(lang: QuizLanguageId): void {
+  private recordSessionShownQid(qId: string): void {
+    this.sessionShownQids.delete(qId);
+    this.sessionShownQids.add(qId);
+    while (this.sessionShownQids.size > 350) {
+      const oldest = this.sessionShownQids.values().next().value;
+      if (oldest === undefined) break;
+      this.sessionShownQids.delete(oldest);
+    }
+  }
+
+  private hasUserInteractedWithCurrentQuestion(): boolean {
+    return (
+      this.answeredOutcome !== null ||
+      this.selectedChoiceIdx !== null ||
+      this.placedTokenIndices.length > 0 ||
+      this.matchedPairIds.size > 0 ||
+      this.selectedLeftPairId !== null
+    );
+  }
+
+  private ensureActiveLangPackLoaded(lang: QuizLanguageId, autoSpeakWhenReady = false): void {
     if (isLanguageQuizPackLoaded(lang)) return;
     void loadLanguageQuizPack(lang).then((loaded) => {
-      if (!loaded) return;
       const quiz = this.sim.ensureLanguageQuiz();
-      if (quiz.activeLang === lang && !this.answeredOutcome) {
-        this.render();
+      if (quiz.activeLang !== lang) return;
+
+      if (loaded) {
+        if (this.starterChallengePendingPack && !this.hasUserInteractedWithCurrentQuestion()) {
+          this.starterChallengePendingPack = false;
+          this.challenge = generateNextQuizChallenge(quiz, this.sim.state.level, {
+            excludeIds: this.sessionShownQids,
+            formatOffset: this.skipFormatOffset,
+          });
+          this.recordSessionShownQid(this.challenge.qId);
+          this.render();
+          if (
+            autoSpeakWhenReady &&
+            quiz.autoSpeak &&
+            this.challenge &&
+            this.activeSubView === 'practice'
+          ) {
+            const textToRead = this.challenge.ttsPromptText || this.challenge.fullSentence;
+            if (textToRead) {
+              speakQuizText(textToRead, this.challenge.lang, 0.94);
+            }
+          }
+          return;
+        }
+        this.starterChallengePendingPack = false;
+        if (this.challenge) {
+          this.recordSessionShownQid(this.challenge.qId);
+        }
+        if (!this.answeredOutcome) {
+          this.render();
+        }
+        return;
+      }
+
+      // Offline fallback: keep starter challenge, record it, and speak if requested
+      this.starterChallengePendingPack = false;
+      if (this.challenge) {
+        this.recordSessionShownQid(this.challenge.qId);
+      }
+      if (
+        autoSpeakWhenReady &&
+        quiz.autoSpeak &&
+        this.challenge &&
+        !this.answeredOutcome &&
+        this.activeSubView === 'practice'
+      ) {
+        const textToRead = this.challenge.ttsPromptText || this.challenge.fullSentence;
+        if (textToRead) {
+          speakQuizText(textToRead, this.challenge.lang, 0.94);
+        }
       }
     });
   }
@@ -188,8 +262,21 @@ export class SeedQuizModalController {
   private loadNextQuestion(autoSpeakIfEnabled = true): void {
     this.resetInteractiveQuestionState();
     const quiz = this.sim.ensureLanguageQuiz();
-    this.ensureActiveLangPackLoaded(quiz.activeLang);
-    this.challenge = generateNextQuizChallenge(quiz, this.sim.state.level);
+    const packReady = isLanguageQuizPackLoaded(quiz.activeLang);
+
+    this.challenge = generateNextQuizChallenge(quiz, this.sim.state.level, {
+      excludeIds: this.sessionShownQids,
+      formatOffset: this.skipFormatOffset,
+    });
+
+    if (packReady) {
+      this.starterChallengePendingPack = false;
+      this.recordSessionShownQid(this.challenge.qId);
+    } else {
+      this.starterChallengePendingPack = true;
+      this.ensureActiveLangPackLoaded(quiz.activeLang, autoSpeakIfEnabled);
+    }
+
     this.sim.saveToStorage();
     this.render();
     const modalInner = this.root.querySelector(
@@ -199,7 +286,7 @@ export class SeedQuizModalController {
       modalInner.scrollTop = 0;
     }
 
-    if (autoSpeakIfEnabled && quiz.autoSpeak && this.challenge) {
+    if (packReady && autoSpeakIfEnabled && quiz.autoSpeak && this.challenge) {
       const textToRead = this.challenge.ttsPromptText || this.challenge.fullSentence;
       if (textToRead) {
         speakQuizText(textToRead, this.challenge.lang, 0.94);
@@ -612,13 +699,16 @@ export class SeedQuizModalController {
     entryId: string
   ): { box: number; due: boolean } {
     const boxes = profile.srsBoxes ?? {};
-    const vRec = boxes[`vocab:${entryId}`];
-    const pRec = boxes[`pairs:${entryId}`];
-    const box = Math.max(vRec?.box ?? 0, pRec?.box ?? 0);
-    const due = Boolean(
-      (vRec && vRec.box < 5 && vRec.dueAtTurn <= profile.totalAnswered) ||
-        (pRec && pRec.box < 5 && pRec.dueAtTurn <= profile.totalAnswered)
-    );
+    let box = 0;
+    let due = false;
+    for (const prefix of ['vocab:', 'pairs:', 'cloze:', 'bubble:', 'tiles:'] as const) {
+      const rec = boxes[`${prefix}${entryId}`];
+      if (!rec) continue;
+      if (rec.box > box) box = rec.box;
+      if (rec.box < 5 && rec.dueAtTurn <= profile.totalAnswered) {
+        due = true;
+      }
+    }
     return { box, due };
   }
 
@@ -1185,9 +1275,12 @@ export class SeedQuizModalController {
         const lid = btn.dataset.sqLang as QuizLanguageId;
         const quiz = this.sim.ensureLanguageQuiz();
         if (lid && ALL_LANG_IDS.includes(lid) && quiz.activeLang !== lid) {
+          if (this.challenge && !this.answeredOutcome) {
+            markQuizChallengeSkipped(quiz, this.challenge);
+          }
           quiz.activeLang = lid;
           if (this.activeSubView === 'codex') {
-            this.ensureActiveLangPackLoaded(lid);
+            this.ensureActiveLangPackLoaded(lid, false);
             this.sim.saveToStorage();
             this.render();
           } else {
@@ -1253,6 +1346,9 @@ export class SeedQuizModalController {
         const tier = btn.dataset.sqTier as QuizProficiencyTier;
         const quiz = this.sim.ensureLanguageQuiz();
         if (tier === 'beginner' || tier === 'intermediate' || tier === 'advanced') {
+          if (this.challenge && !this.answeredOutcome) {
+            markQuizChallengeSkipped(quiz, this.challenge);
+          }
           setProfileTier(quiz, quiz.activeLang, tier);
           this.loadNextQuestion(true);
         }
@@ -1265,6 +1361,9 @@ export class SeedQuizModalController {
         const fk = btn.dataset.sqFormat as 'all' | QuizFormatKind;
         const quiz = this.sim.ensureLanguageQuiz();
         if (ALL_FORMAT_KEYS.includes(fk) && quiz.preferredFormat !== fk) {
+          if (this.challenge && !this.answeredOutcome) {
+            markQuizChallengeSkipped(quiz, this.challenge);
+          }
           quiz.preferredFormat = fk;
           this.loadNextQuestion(true);
         }
@@ -1307,6 +1406,9 @@ export class SeedQuizModalController {
 
     // Skip / Next question
     container.querySelector('#btnSqSkipQuestion')?.addEventListener('click', () => {
+      const quiz = this.sim.ensureLanguageQuiz();
+      markQuizChallengeSkipped(quiz, this.challenge);
+      this.skipFormatOffset += 1;
       this.loadNextQuestion(true);
     });
     container.querySelector('#btnSqNextQuestion')?.addEventListener('click', () => {

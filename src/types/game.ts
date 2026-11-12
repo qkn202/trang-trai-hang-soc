@@ -1235,6 +1235,8 @@ export interface GameState {
   examWinStreak?: number; // Consecutive minigame stage wins (x1 -> x3 timer reduction)
   stashedDecorInventory?: Record<string, number>; // Quick-stashed decor items ready to re-place for 0G
   stashedDecorStars?: Record<string, number[]>; // Preserves 1★–5★ upgrade tiers for stashed decor items
+  unveiledItemIds?: string[]; // Building types that have already claimed their one-time Ribbon Unveil reward
+  finishXpItemIds?: string[]; // Building types that have already claimed their one-time construction finish XP
   layoutPresets?: Partial<Record<LayoutPresetId, LayoutPresetEntry>>;
   a11ySettings?: {
     colorblindMode: 'none' | 'protanopia' | 'deuteranopia' | 'tritanopia';

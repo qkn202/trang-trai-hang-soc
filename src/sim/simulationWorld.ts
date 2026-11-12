@@ -1057,7 +1057,125 @@ export function worldFindSmartSpotForStoryBuilding(sim: ParkSimulation, item: Ca
     return { gx: best.gx, gy: best.gy };
 }
 
-export function worldRemoveAtTile(sim: ParkSimulation, gx: number, gy: number): boolean {
+export interface BulldozeHazardWarning {
+  uid: string;
+  gx: number;
+  gy: number;
+  buildingName: string;
+  hazardSummaryVi: string;
+  refundSummaryVi: string;
+}
+
+function computeBuildingBulldozeRefund(
+  sim: ParkSimulation,
+  b: PlacedBuilding,
+  item: CatalogItem | undefined
+): { refund: number; starRefund: number } {
+  if (b.builtInSandbox) {
+    return { refund: 0, starRefund: 0 };
+  }
+  if (!item) {
+    return { refund: 15, starRefund: 0 };
+  }
+  const sameItemCount = sim.state.buildings.filter((x) => x.itemId === b.itemId).length;
+  const baseStars =
+    (item.connectableGroup || item.isFlooPortal) && sameItemCount > 1
+      ? 0
+      : getItemPuzzleStarCost(item);
+  let totalGoldInvested = baseStars > 0 ? 0 : item.cost;
+  let totalStarsInvested = baseStars;
+  for (let s = 1; s < b.stars; s++) {
+    totalGoldInvested += getUpgradeCost(item, s);
+    totalStarsInvested += getUpgradePuzzleStarCost(s, item);
+  }
+  return {
+    refund: Math.round(totalGoldInvested * 0.65),
+    starRefund: totalStarsInvested,
+  };
+}
+
+export function worldGetBulldozeHazardWarning(
+  sim: ParkSimulation,
+  gx: number,
+  gy: number
+): BulldozeHazardWarning | null {
+  if (gx < 0 || gy < 0 || gx >= GRID_SIZE || gy >= GRID_SIZE) return null;
+  const cell = sim.grid[gy]?.[gx];
+  if (!cell?.buildingUid) return null;
+  const b = sim.state.buildings.find((x) => x.uid === cell.buildingUid);
+  if (!b || b.isIndestructible) return null;
+
+  const item = getCatalogItem(b.itemId);
+  const now = Date.now();
+  const hazards: string[] = [];
+
+  if (b.cropId && b.cropId in FARM_CROPS) {
+    const cropMeta = FARM_CROPS[b.cropId];
+    const isRipe = b.cropReadyAt !== undefined && now >= b.cropReadyAt;
+    if (isRipe) {
+      hazards.push(`vụ mùa chín ${cropMeta.emoji} ${cropMeta.name} chưa thu hoạch`);
+    } else {
+      const leftSec = Math.max(1, Math.ceil(((b.cropReadyAt ?? now) - now) / 1000));
+      hazards.push(
+        `luống ${cropMeta.emoji} ${cropMeta.name} đang lớn (còn ${formatDurationCompactVi(leftSec)})`
+      );
+    }
+  }
+
+  if (b.pastureAnimalId && b.pastureAnimalId in PASTURE_ANIMALS) {
+    const aniMeta = PASTURE_ANIMALS[b.pastureAnimalId];
+    const isReady = b.pastureReadyAt !== undefined && now >= b.pastureReadyAt;
+    if (isReady) {
+      hazards.push(`sản vật từ ${aniMeta.emoji} ${aniMeta.name} đang chờ thu hoạch`);
+    } else {
+      const leftSec = Math.max(1, Math.ceil(((b.pastureReadyAt ?? now) - now) / 1000));
+      hazards.push(
+        `đàn ${aniMeta.emoji} ${aniMeta.name} đang chăn thả (còn ${formatDurationCompactVi(leftSec)})`
+      );
+    }
+  }
+
+  const readyGoodsCount = b.readyFarmGoods?.length ?? 0;
+  if (readyGoodsCount > 0) {
+    hazards.push(`${readyGoodsCount} thành phẩm ra lò chưa cất vào Kho Đỏ`);
+  }
+
+  const queueCount = b.workshopQueue?.length ?? 0;
+  if (queueCount > 0) {
+    hazards.push(`${queueCount} mẻ xưởng đang chế biến (sẽ mất nguyên liệu đã đưa vào lò)`);
+  }
+
+  if (b.awaitingUnveil) {
+    hazards.push('lễ cắt băng khánh thành 🎀 chưa thực hiện');
+  }
+
+  if (hazards.length === 0) return null;
+
+  const { refund, starRefund } = computeBuildingBulldozeRefund(sim, b, item);
+  const refundSummaryVi = b.builtInSandbox
+    ? 'Công trình Sandbox (không hoàn tài nguyên)'
+    : starRefund > 0 && refund > 0
+      ? `Hoàn +${starRefund} 🌟 Sao & +${refund} 🪙 Sickle`
+      : starRefund > 0
+        ? `Hoàn +${starRefund} 🌟 Sao Phép Thuật`
+        : `Hoàn +${refund} 🪙 Sickle (65%)`;
+
+  return {
+    uid: b.uid,
+    gx,
+    gy,
+    buildingName: item?.name ?? 'Công trình',
+    hazardSummaryVi: hazards.join('; '),
+    refundSummaryVi,
+  };
+}
+
+export function worldRemoveAtTile(
+  sim: ParkSimulation,
+  gx: number,
+  gy: number,
+  force = false
+): boolean {
     if (sim.isVisitingNeighbor) {
       sim.onToast?.('Chế độ Khách Tham Quan — không thể ủi/dọn vườn bạn bè!', '🛡️');
       return false;
@@ -1112,26 +1230,15 @@ export function worldRemoveAtTile(sim: ParkSimulation, gx: number, gy: number): 
         sim.onToast?.('Nhà Hang Sóc 6 Tầng là tổ ấm trung tâm của gia đình Weasley!', '🏠');
         return false;
       }
-      const item = getCatalogItem(b.itemId);
-      let refund = 0;
-      let starRefund = 0;
-      if (!b.builtInSandbox) {
-        if (item) {
-          const sameItemCount = sim.state.buildings.filter((x) => x.itemId === b.itemId).length;
-          const baseStars =
-            item.connectableGroup && sameItemCount > 1 ? 0 : getItemPuzzleStarCost(item);
-          let totalGoldInvested = baseStars > 0 ? 0 : item.cost;
-          let totalStarsInvested = baseStars;
-          for (let s = 1; s < b.stars; s++) {
-            totalGoldInvested += getUpgradeCost(item, s);
-            totalStarsInvested += getUpgradePuzzleStarCost(s, item);
-          }
-          refund = Math.round(totalGoldInvested * 0.65);
-          starRefund = totalStarsInvested;
-        } else {
-          refund = 15;
+      if (!force && sim.onRequestBulldozeConfirm) {
+        const hazard = worldGetBulldozeHazardWarning(sim, gx, gy);
+        if (hazard) {
+          sim.onRequestBulldozeConfirm(hazard);
+          return false;
         }
       }
+      const item = getCatalogItem(b.itemId);
+      const { refund, starRefund } = computeBuildingBulldozeRefund(sim, b, item);
       sim.state.buildings.splice(idx, 1);
       sim.rideQueues.delete(b.uid);
       sim.escapedCreatures = sim.escapedCreatures.filter((e) => e.buildingUid !== b.uid);

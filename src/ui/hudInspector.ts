@@ -369,6 +369,11 @@ export function inspectorRenderInspector(hud: GameHUD): void {
               const recipeCardsHtml = recipes
                 .map((rec) => {
                   const outMeta = FARM_GOODS[rec.goodId];
+                  const recipeTitle = rec.name ?? outMeta.name;
+                  const altGoodHint =
+                    rec.name && rec.name !== outMeta.name
+                      ? `title="Ra lò thành phẩm: ${escapeHtml(outMeta.name)}"`
+                      : '';
                   const lockedRec =
                     !hud.sim.state.sandboxMode && hud.sim.state.level < rec.unlockLevel;
                   const canCraft =
@@ -388,11 +393,12 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                       type="button"
                       class="ws-recipe-card ${canCraft ? 'craftable' : ''} ${lockedRec ? 'locked' : ''}"
                       data-ws-enqueue="${rec.id}"
+                      ${altGoodHint}
                       ${lockedRec ? 'disabled' : ''}
                     >
-                      <div class="ws-recipe-name">${escapeHtml(outMeta.name)}</div>
+                      <div class="ws-recipe-name">${escapeHtml(recipeTitle)}</div>
                       <div class="ws-recipe-art-wrap">
-                        <img src="/sprites/${outMeta.iconKey}.png" alt="${escapeHtml(outMeta.name)}" class="ws-recipe-img" />
+                        <img src="/sprites/${outMeta.iconKey}.png" alt="${escapeHtml(recipeTitle)}" class="ws-recipe-img" />
                         ${canCraft ? '<span class="ws-check-dot">✓</span>' : ''}
                       </div>
                       <div class="ws-recipe-ings">

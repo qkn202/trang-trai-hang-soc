@@ -292,35 +292,77 @@ export function farmConsumeFarmItemFromBarn(sim: ParkSimulation, itemId: FarmIte
     }
 }
 
+export interface BarnUpgradeCostInfo {
+  plugCost: number;
+  plugsInBarn: number;
+  hasPlug: boolean;
+  baseGoldCost: number;
+  plugShortageBuyout: number;
+  effectiveGoldCost: number;
+  canAfford: boolean;
+}
+
+export function farmGetBarnUpgradeCostInfo(sim: ParkSimulation): BarnUpgradeCostInfo {
+  const barn = sim.ensureFarmBarn();
+  const tier = Math.max(1, Math.round((barn.capacity - 40) / 20));
+  const baseGoldCost = 160 + tier * 90;
+  const plugCost = 1;
+  const plugShortageBuyout = 120;
+  const plugsInBarn = Math.max(0, barn.goods.muggle_plug_kit ?? 0);
+  const hasPlug = plugsInBarn >= plugCost;
+  const effectiveGoldCost = hasPlug ? baseGoldCost : baseGoldCost + plugShortageBuyout;
+  const canAfford = Boolean(sim.state.sandboxMode) || sim.state.galleons >= effectiveGoldCost;
+  return {
+    plugCost,
+    plugsInBarn,
+    hasPlug,
+    baseGoldCost,
+    plugShortageBuyout,
+    effectiveGoldCost,
+    canAfford,
+  };
+}
+
 export function farmUpgradeFarmBarn(sim: ParkSimulation): { ok: boolean; msg: string } {
     const barn = sim.ensureFarmBarn();
-    const tier = Math.max(1, Math.round((barn.capacity - 40) / 20));
-    const goldCost = 160 + tier * 90;
-    const plugCost = 1;
-    const curPlugs = barn.goods.muggle_plug_kit ?? 0;
+    const costInfo = farmGetBarnUpgradeCostInfo(sim);
+    const {
+      plugCost,
+      plugsInBarn,
+      hasPlug,
+      baseGoldCost,
+      plugShortageBuyout,
+      effectiveGoldCost,
+    } = costInfo;
 
+    let spentDetail = '';
     if (!sim.state.sandboxMode) {
-      if (curPlugs < plugCost && sim.state.galleons < goldCost + 120) {
-        return {
-          ok: false,
-          msg: `Cần ${plugCost} 🔌 Bộ Phích Cắm Muggle (từ Chòi Ông Arthur / Đơn Cú) & ${goldCost}G để nới rộng Kho!`,
-        };
-      }
-      if (curPlugs >= plugCost) {
-        if (sim.state.galleons < goldCost) {
-          return { ok: false, msg: `Cần ${goldCost} Galleon để nâng cấp Kho Nông Sản (+20 ô)!` };
+      if (hasPlug) {
+        if (sim.state.galleons < baseGoldCost) {
+          return {
+            ok: false,
+            msg: `Cần ${plugCost} 🔌 Bộ Phích Cắm Muggle & ${baseGoldCost}G để nâng cấp Kho Nông Sản (+20 ô)!`,
+          };
         }
-        barn.goods.muggle_plug_kit = Math.max(0, curPlugs - plugCost);
-        sim.state.galleons -= goldCost;
+        barn.goods.muggle_plug_kit = Math.max(0, plugsInBarn - plugCost);
+        sim.state.galleons -= baseGoldCost;
+        spentDetail = ` (-${plugCost}🔌, -${baseGoldCost}G)`;
       } else {
-        sim.state.galleons -= goldCost + 120;
+        if (sim.state.galleons < effectiveGoldCost) {
+          return {
+            ok: false,
+            msg: `Chưa có 🔌 Bộ Phích Cắm Muggle: cần ${effectiveGoldCost}G (${baseGoldCost}G + ${plugShortageBuyout}G bù 1🔌) hoặc chế 1🔌 ở Kho Ông Arthur để nâng với ${baseGoldCost}G!`,
+          };
+        }
+        sim.state.galleons -= effectiveGoldCost;
+        spentDetail = ` (-${effectiveGoldCost}G gồm ${baseGoldCost}G + ${plugShortageBuyout}G bù 1🔌)`;
       }
     }
 
     barn.capacity += 20;
     sim.addXp(45);
     sim.audio.playLevelUp();
-    const msg = `🏡 Kho Nông Sản Hang Sóc đã mở rộng lên ${barn.capacity} ô chứa (+45 ⭐)!`;
+    const msg = `Kho Nông Sản Hang Sóc đã mở rộng lên ${barn.capacity} ô chứa${spentDetail} (+45 ⭐)!`;
     sim.onToast?.(msg, '🏡');
     sim.saveToStorage();
     sim.onUiChange?.();

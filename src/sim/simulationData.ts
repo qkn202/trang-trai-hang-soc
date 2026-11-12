@@ -1866,6 +1866,33 @@ export function migrateLoadedState(parsed: GameState): GameState {
     unlockedZoneSet.add(getZoneAt(b.gx, b.gy).id);
   }
 
+  const unveiledSeedSet = new Set<string>(
+    Array.isArray(parsed.unveiledItemIds)
+      ? parsed.unveiledItemIds.filter((id): id is string => typeof id === 'string').slice(0, 200)
+      : []
+  );
+  const finishXpSeedSet = new Set<string>(
+    Array.isArray(parsed.finishXpItemIds)
+      ? parsed.finishXpItemIds.filter((id): id is string => typeof id === 'string').slice(0, 200)
+      : []
+  );
+  const loadNowMs = Date.now();
+  for (const b of safeBuildings) {
+    if (b.builtInSandbox) continue;
+    const it = getCatalogItem(b.itemId);
+    if (!it) continue;
+    if (loadNowMs >= b.constructEndsAt && b.constructionNotified !== false) {
+      finishXpSeedSet.add(it.id);
+      const isCeremonial =
+        !it.isFarmlandPlot &&
+        !it.isAnimalPasturePlot &&
+        (getItemPuzzleStarCost(it) > 0 || it.category !== 'decor');
+      if (isCeremonial && !b.awaitingUnveil) {
+        unveiledSeedSet.add(it.id);
+      }
+    }
+  }
+
   const migratedState: GameState = {
     ...def,
     ...parsed,
@@ -1879,6 +1906,8 @@ export function migrateLoadedState(parsed: GameState): GameState {
     timeSand: Math.round(clampFinite(parsed.timeSand, 0, 999999, 4)),
     parkEntryFee: 0,
     buildings: safeBuildings,
+    unveiledItemIds: Array.from(unveiledSeedSet),
+    finishXpItemIds: Array.from(finishXpSeedSet),
     storyClaimedIds: claimedList,
     storyQuestIndex: syncedStoryIdx,
     owlQuests: sanitizeQuestList(parsed.owlQuests, def.owlQuests),

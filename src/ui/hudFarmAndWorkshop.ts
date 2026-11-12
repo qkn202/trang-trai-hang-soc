@@ -623,7 +623,7 @@ export function farmUiUpdateWorkshopLiveTimers(hud: GameHUD): void {
         herbBtn.classList.toggle('gold-cta', ready);
         herbBtn.textContent = ready
           ? '🌿 Hái Thảo Dược'
-          : `🌱 (${herbWait}s)`;
+          : `🌱 (${formatDurationCompactVi(herbWait)})`;
       }
 
       const brewLbl = box.querySelector('[data-ws-brew-left]') as HTMLElement | null;
@@ -631,7 +631,7 @@ export function farmUiUpdateWorkshopLiveTimers(hud: GameHUD): void {
         const brewRec = CRAFT_RECIPES.find((r) => r.id === st.supply.activeBrew?.goodId);
         const brewLeftSec = Math.max(0, Math.ceil((st.supply.activeBrew.endsAt - now) / 1000));
         if (brewRec) {
-          brewLbl.textContent = `🔥 ${brewRec.emoji} ${brewRec.name} (${brewLeftSec}s)`;
+          brewLbl.textContent = `🔥 ${brewRec.emoji} ${brewRec.name} (còn ${formatDurationCountdownVi(brewLeftSec)})`;
         }
       }
 
@@ -644,8 +644,8 @@ export function farmUiUpdateWorkshopLiveTimers(hud: GameHUD): void {
         } else {
           buffBox.classList.remove('hidden');
           const parts: string[] = [];
-          if (bbLeft > 0) parts.push(`🍻 +85%G (${bbLeft}s)`);
-          if (fxLeft > 0) parts.push(`🧪 +35%XP (${fxLeft}s)`);
+          if (bbLeft > 0) parts.push(`🍻 +85%G (${formatDurationCountdownVi(bbLeft)})`);
+          if (fxLeft > 0) parts.push(`🧪 +35%XP (${formatDurationCountdownVi(fxLeft)})`);
           buffBox.textContent = `✨ ${parts.join(' • ')}`;
         }
       }
@@ -685,9 +685,15 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
 
     if (hud.activeWorkshopTab === 'barn') {
       const capPct = Math.min(100, Math.round((barnUsed / Math.max(1, barn.capacity)) * 100));
-      const tier = Math.max(1, Math.round((barn.capacity - 40) / 20));
-      const upgGold = 160 + tier * 90;
-      const plugs = barn.goods.muggle_plug_kit ?? 0;
+      const upgInfo = hud.sim.getBarnUpgradeCostInfo();
+      const upgBtnLabel = st.sandboxMode
+        ? '🏡 +20 Ô (Miễn phí Sandbox)'
+        : upgInfo.hasPlug
+          ? `🔌 +20 Ô (1🔌 + 🪙${upgInfo.baseGoldCost})`
+          : `🏡 +20 Ô (🪙${upgInfo.effectiveGoldCost} • bù 1🔌)`;
+      const plugStatusLabel = upgInfo.hasPlug
+        ? `🔌 ×${upgInfo.plugsInBarn}`
+        : `🔌 ×0 (thiếu 1🔌 → bù +${upgInfo.plugShortageBuyout}G)`;
 
       const renderStockCards = (ids: FarmItemId[]) =>
         ids
@@ -729,11 +735,17 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
             <div>
               <div style="font-size:15px;font-weight:900;">🏡 Kho Đỏ (${barnUsed}/${barn.capacity})</div>
               <div style="font-size:12px;font-weight:700;opacity:0.86;">
-                🦉 ${barn.ordersDelivered} • 🔌 ×${plugs}
+                🦉 ${barn.ordersDelivered} • ${plugStatusLabel}
               </div>
             </div>
-            <button id="btnUpgradeFarmBarn" type="button" class="owl-green-send-btn" style="padding:7px 14px;font-size:12.5px;">
-              🔌 +20 Ô (1🔌 + 🪙${upgGold})
+            <button
+              id="btnUpgradeFarmBarn"
+              type="button"
+              class="owl-green-send-btn"
+              ${!upgInfo.canAfford ? 'disabled' : ''}
+              style="padding:7px 14px;font-size:12.5px;${!upgInfo.canAfford ? 'opacity:0.55;cursor:not-allowed;' : ''}"
+            >
+              ${upgBtnLabel}
             </button>
           </div>
           <div class="quest-bar" style="height:10px;margin-top:8px;">
@@ -781,6 +793,20 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
       const activeBrew = st.supply.activeBrew;
       const brewRec = activeBrew ? CRAFT_RECIPES.find((r) => r.id === activeBrew.goodId) : undefined;
       const brewLeftSec = activeBrew ? Math.max(0, Math.ceil((activeBrew.endsAt - now) / 1000)) : 0;
+      const completedBrews = Math.max(0, st.supply.brewCompletedCount ?? 0);
+      const nextBatchIdx = completedBrews + 1;
+      const hasWorkshopBrewery = st.buildings.some(
+        (b) => getCatalogItem(b.itemId)?.isWorkshopBrewery && now >= b.constructEndsAt
+      );
+      const hasHerbSynergy = hud.sim.activeSynergies.activeIds.has('combo_herb_brewery');
+      const cycleStageLabel =
+        completedBrews === 0
+          ? 'Mẻ #1 (khởi động: 1 giờ)'
+          : completedBrews === 1
+            ? 'Mẻ #2 (tăng nhiệt ×2: 2 giờ)'
+            : completedBrews === 2
+              ? 'Mẻ #3 (tăng nhiệt ×4: 4 giờ)'
+              : `Mẻ #${nextBatchIdx} (đạt trần tối đa: 6 giờ)`;
 
       const ingKeys: RawIngredientId[] = [
         'mandrake_leaf',
@@ -790,11 +816,22 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
       ];
 
       bodyHtml = `
-        <div class="quest-card-mini" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div class="quest-card-mini" style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
           <div style="font-size:13.5px;font-weight:800;color:#7c2d12;">🌿 Luống Thảo Dược</div>
           <button id="btnWsQuickHerb" type="button" class="brass-btn ${herbWait === 0 || st.sandboxMode ? 'gold-cta' : ''}">
-            ${herbWait > 0 && !st.sandboxMode ? `🌱 (${herbWait}s)` : '🌿 Hái Thảo Dược'}
+            ${herbWait > 0 && !st.sandboxMode ? `🌱 (${formatDurationCompactVi(herbWait)})` : '🌿 Hái Thảo Dược'}
           </button>
+        </div>
+
+        <div class="quest-card-mini" style="margin-bottom:12px;padding:9px 11px;font-size:12px;line-height:1.45;">
+          <div style="font-weight:900;color:var(--brand-strong);">
+            🔥 Nhiệt Vạc Phép — ${cycleStageLabel}
+          </div>
+          <div style="font-weight:700;color:var(--ink-soft);margin-top:2px;">
+            Mỗi mẻ ủ hoàn tất làm vạc tăng nhiệt: <strong>1 giờ → 2 giờ → 4 giờ → tối đa 6 giờ</strong>.
+            ${hasWorkshopBrewery ? '✅ Đang giảm 45% nhờ Xưởng Chế Biến.' : '💡 Dựng Xưởng Chế Biến để giảm 45% giờ ủ.'}
+            ${hasHerbSynergy ? ' ✅ Combo Thảo Dược giảm thêm 22%.' : ''}
+          </div>
         </div>
 
         <div class="ingredient-bar">
@@ -818,7 +855,7 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
           bbLeft > 0 || fxLeft > 0
             ? `
               <div data-ws-buff-banner="1" class="quest-card-mini" style="margin-bottom:12px;background:rgba(220,252,231,0.75);border-color:#16a34a;font-size:12.5px;font-weight:800;color:#15803d;">
-                ✨ ${bbLeft > 0 ? `🍻 +85%G (${bbLeft}s) ` : ''}${fxLeft > 0 ? `• 🧪 +35%XP (${fxLeft}s)` : ''}
+                ✨ ${bbLeft > 0 ? `🍻 +85%G (${formatDurationCountdownVi(bbLeft)}) ` : ''}${fxLeft > 0 ? `• 🧪 +35%XP (${formatDurationCountdownVi(fxLeft)})` : ''}
               </div>
             `
             : ''
@@ -830,7 +867,7 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
               <div class="quest-card-mini" style="margin-bottom:12px;border-color:#9333ea;background:rgba(243,232,255,0.82);">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
                   <div data-ws-brew-left="1" style="font-size:13.5px;font-weight:800;color:#6b21a8;">
-                    🔥 ${brewRec.emoji} ${escapeHtml(brewRec.name)} (${brewLeftSec}s)
+                    🔥 ${brewRec.emoji} ${escapeHtml(brewRec.name)} (còn ${formatDurationCountdownVi(brewLeftSec)})
                   </div>
                   <button id="btnWsSpeedBrew" type="button" class="brass-btn gold-cta" style="padding:4px 10px;">
                     ⏳ 1 Cát
@@ -845,6 +882,7 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
           ${CRAFT_RECIPES.map((rec) => {
             const stock = st.supply.goods[rec.id] ?? 0;
             const dur = hud.sim.getBrewDurationSec(rec);
+            const durLabel = formatDurationCompactVi(dur);
             const reqText = Object.entries(rec.inputs)
               .map(([k, q]) => {
                 const inf = RAW_INGREDIENTS_INFO[k as RawIngredientId];
@@ -865,7 +903,7 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
                 </div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;">
                   <button type="button" data-brew-good="${rec.id}" class="brass-btn gold-cta" style="flex:1;">
-                    🔥 Nấu (${dur}s)
+                    🔥 Nấu (${durLabel})
                   </button>
                   <button type="button" data-use-good="${rec.id}" class="brass-btn" style="flex:1;">
                     ${rec.directUseLabel}

@@ -53,6 +53,7 @@ export interface FarmGoodMeta {
 
 export interface FarmWorkshopRecipe {
   id: string;
+  name?: string;
   goodId: FarmGoodId;
   workshopGroupId: string;
   craftSec: number;
@@ -664,6 +665,7 @@ export const FARM_WORKSHOP_RECIPES: FarmWorkshopRecipe[] = [
   },
   {
     id: 'rcp_glow_mushroom_pot',
+    name: 'Súp Nấm Phát Sáng',
     goodId: 'cream_mushroom_soup',
     workshopGroupId: 'molly_kitchen',
     craftSec: 259200,
@@ -707,6 +709,7 @@ export const FARM_WORKSHOP_RECIPES: FarmWorkshopRecipe[] = [
   },
   {
     id: 'rcp_corn_flour',
+    name: 'Bột Ngô Vàng Nghiền Mịn',
     goodId: 'fine_wheat_flour',
     workshopGroupId: 'windmill',
     craftSec: 28800,
@@ -724,6 +727,7 @@ export const FARM_WORKSHOP_RECIPES: FarmWorkshopRecipe[] = [
   },
   {
     id: 'rcp_sunflower_honey',
+    name: 'Mật Ong Hướng Dương',
     goodId: 'blossom_honey_jar',
     workshopGroupId: 'cider_apiary',
     craftSec: 259200,
@@ -767,6 +771,7 @@ export const FARM_WORKSHOP_RECIPES: FarmWorkshopRecipe[] = [
   },
   {
     id: 'rcp_blueberry_choc',
+    name: 'Ếch Sô-cô-la Việt Quất',
     goodId: 'choc_frog_sweet',
     workshopGroupId: 'honeydukes',
     craftSec: 259200,
@@ -790,6 +795,7 @@ export const FARM_WORKSHOP_RECIPES: FarmWorkshopRecipe[] = [
   },
   {
     id: 'rcp_tomato_pub_feast',
+    name: 'Bia Bơ Thảo Mộc Quán Trọ',
     goodId: 'frothy_butterbeer',
     workshopGroupId: 'broomsticks',
     craftSec: 259200,
@@ -813,6 +819,7 @@ export const FARM_WORKSHOP_RECIPES: FarmWorkshopRecipe[] = [
   },
   {
     id: 'rcp_lavender_elixir',
+    name: 'Tinh Dược Oải Hương',
     goodId: 'sprout_growth_elixir',
     workshopGroupId: 'greenhouse',
     craftSec: 259200,
@@ -835,6 +842,7 @@ export const FARM_WORKSHOP_RECIPES: FarmWorkshopRecipe[] = [
   },
   {
     id: 'rcp_royal_peony_bouquet',
+    name: 'Bó Mẫu Đơn Hoàng Gia',
     goodId: 'floral_bouquet_gift',
     workshopGroupId: 'greenhouse',
     craftSec: 259200,
@@ -846,6 +854,7 @@ export const FARM_WORKSHOP_RECIPES: FarmWorkshopRecipe[] = [
   },
   {
     id: 'rcp_dairy_custard_pie',
+    name: 'Bánh Kem Sữa Bò Ấm',
     goodId: 'cinnamon_apple_pie',
     workshopGroupId: 'molly_kitchen',
     craftSec: 57600,
@@ -857,6 +866,7 @@ export const FARM_WORKSHOP_RECIPES: FarmWorkshopRecipe[] = [
   },
   {
     id: 'rcp_wildflower_honey',
+    name: 'Mật Ong Hoa Đồng Nội',
     goodId: 'blossom_honey_jar',
     workshopGroupId: 'cider_apiary',
     craftSec: 259200,

@@ -675,12 +675,23 @@ export function economyTickProductionToTimestamp(sim: ParkSimulation, now: numbe
           !item.isCreatureHabitat &&
           !item.isCoasterTrackPiece &&
           item.category !== 'decor' &&
-          b.constructEndsAt > (b.placedAt || 0);
-        if (canCeremonialUnveil && !sim.state.sandboxMode && !sim.isHeadmasterPreview) {
+          (item.buildDurationSec > 0 || b.constructEndsAt > (b.placedAt || 0));
+        const unveiledSet = new Set(sim.state.unveiledItemIds ?? []);
+        const finishXpSet = new Set(sim.state.finishXpItemIds ?? []);
+        const alreadyUnveiledType = unveiledSet.has(item.id);
+        const alreadyClaimedFinishXp = finishXpSet.has(item.id);
+
+        if (canCeremonialUnveil && !alreadyUnveiledType && !sim.state.sandboxMode && !sim.isHeadmasterPreview) {
           b.awaitingUnveil = true;
         }
-        const finishXp = Math.max(4, item.xpPerCollect);
-        sim.addXp(finishXp);
+        const finishXp = alreadyClaimedFinishXp ? 0 : Math.max(4, item.xpPerCollect);
+        if (finishXp > 0) {
+          sim.addXp(finishXp);
+          if (!sim.state.sandboxMode && !sim.isHeadmasterPreview && (canCeremonialUnveil || getItemPuzzleStarCost(item) > 0)) {
+            finishXpSet.add(item.id);
+            sim.state.finishXpItemIds = Array.from(finishXpSet);
+          }
+        }
         if (!silent) {
           sim.audio.playBuildComplete();
           sim.onBuildingCompleted?.(b.uid);
@@ -689,18 +700,26 @@ export function economyTickProductionToTimestamp(sim: ParkSimulation, now: numbe
             b.gx + item.width * 0.5,
             b.gy + item.height * 0.5,
             item.isCreatureHabitat
-              ? `🐣 Trứng nở! +${finishXp} ⭐`
+              ? finishXp > 0
+                ? `🐣 Trứng nở! +${finishXp} ⭐`
+                : '🐣 Trứng nở!'
               : b.awaitingUnveil
-                ? `🎀 Sẵn sàng Cắt Băng Khánh Thành! +${finishXp} ⭐`
-                : `✨ Xây xong! +${finishXp} ⭐`,
+                ? finishXp > 0
+                  ? `🎀 Sẵn sàng Cắt Băng Khánh Thành! +${finishXp} ⭐`
+                  : '🎀 Sẵn sàng Cắt Băng Khánh Thành!'
+                : finishXp > 0
+                  ? `✨ Xây xong! +${finishXp} ⭐`
+                  : '✨ Xây lại hoàn tất!',
             '#fde047'
           );
           sim.onToast?.(
             item.isCreatureHabitat
-              ? `🐣 ${item.creatureName ?? item.name} vừa nở sau thời gian ấp trứng!`
+              ? `${item.creatureName ?? item.name} vừa nở sau thời gian ấp trứng!`
               : b.awaitingUnveil
-                ? `🎀 Công trình "${item.name}" đã hoàn tất — nhấp vào dải băng đỏ trên bản đồ để Cắt Băng Khánh Thành!`
-                : `🏗️ Công trình "${item.name}" đã hoàn tất xây dựng & sẵn sàng hoạt động!`,
+                ? `Công trình "${item.name}" đã hoàn tất — nhấp vào dải băng đỏ trên bản đồ để Cắt Băng Khánh Thành!`
+                : alreadyUnveiledType
+                  ? `Công trình "${item.name}" đã xây lại xong & sẵn sàng hoạt động!`
+                  : `Công trình "${item.name}" đã hoàn tất xây dựng & sẵn sàng hoạt động!`,
             item.isCreatureHabitat ? '🐣' : b.awaitingUnveil ? '🎀' : '🏗️'
           );
         }

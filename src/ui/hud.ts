@@ -58,6 +58,7 @@ import {
 } from '../engine/isometric';
 import { SpriteRegistry } from '../engine/spriteLoader';
 import {
+  BulldozeHazardWarning,
   FARM_HARVEST_CHEST_XP,
   formatHarvestFeastRewardVi,
   getItemPriceBounds,
@@ -133,6 +134,7 @@ export {
   HEATMAP_CYCLE,
   escapeHtml,
 } from "./hudShared";
+export { formatToastMessage };
 export type { InspectSelection } from "./hudShared";
 
 import {
@@ -141,6 +143,7 @@ import {
 } from './hudShell';
 
 import {
+  formatToastMessage,
   headerTogglePhotoMode,
   headerIsBuildingFocusMode,
   headerToggleHudRollup,
@@ -298,6 +301,8 @@ export class GameHUD {
   public lastRenderedTutorialSig = '';
   public lastFocusedTutorialStepKey = '';
   public ribbonBannerTimer = 0;
+  public pendingBulldozeWarning: BulldozeHazardWarning | null = null;
+  public drawerEdgeObserver: IntersectionObserver | null = null;
   private dialogOpenObserver: MutationObserver | null = null;
   public match3Modal: Match3ModalController | null = null;
   public puzzleArcadeModal: PuzzleArcadeModalController | null = null;
@@ -408,6 +413,7 @@ export class GameHUD {
     this.leaderboardModal.onOpenNeighborBook = () => {
       this.openNeighborDialog('friends');
     };
+    this.wireBulldozeConfirmDialog();
     this.wireDraggableBanner();
     this.bindEvents();
     this.applyStoredA11ySettings();
@@ -452,6 +458,56 @@ export class GameHUD {
   }
 
   private mountDOM(): void { return shellMountDOM(this); }
+
+  private wireBulldozeConfirmDialog(): void {
+    const dlg = this.root.querySelector('#bulldozeConfirmDialog') as HTMLDialogElement | null;
+    if (!dlg) return;
+
+    dlg.addEventListener('close', () => {
+      const action = dlg.returnValue;
+      dlg.returnValue = '';
+      const pending = this.pendingBulldozeWarning;
+      this.pendingBulldozeWarning = null;
+      if (action === 'confirm' && pending) {
+        this.sim.removeAtTile(pending.gx, pending.gy, true);
+        this.refreshAll();
+      }
+    });
+
+    this.sim.onRequestBulldozeConfirm = (warning) => {
+      this.openBulldozeConfirmDialog(warning);
+    };
+  }
+
+  public openBulldozeConfirmDialog(warning: BulldozeHazardWarning): void {
+    const dlg = this.root.querySelector('#bulldozeConfirmDialog') as HTMLDialogElement | null;
+    const body = this.root.querySelector('#bulldozeConfirmBody') as HTMLElement | null;
+    if (!dlg || !body) {
+      this.sim.removeAtTile(warning.gx, warning.gy, true);
+      return;
+    }
+    this.pendingBulldozeWarning = warning;
+    body.innerHTML = `
+      <div class="quest-card-mini bulldoze-confirm-card">
+        <div class="bulldoze-confirm-lead">
+          <strong>${escapeHtml(warning.buildingName)}</strong> hiện có:
+        </div>
+        <div class="bulldoze-confirm-hazard">
+          🌾 ${escapeHtml(warning.hazardSummaryVi)}
+        </div>
+        <div class="bulldoze-confirm-note">
+          Nếu phá dỡ ngay bây giờ, phần vụ mùa / sản vật / mẻ đang chạy trên ô này sẽ bị mất vĩnh viễn.
+        </div>
+        <div class="bulldoze-confirm-refund">
+          💰 Khi xóa: <strong>${escapeHtml(warning.refundSummaryVi)}</strong>
+        </div>
+      </div>
+    `;
+    dlg.returnValue = '';
+    if (!dlg.open) {
+      dlg.showModal();
+    }
+  }
 
   private wireDraggableBanner(): void {
     const draggable = this.root.querySelector('#floatingModeBanner') as HTMLElement | null;

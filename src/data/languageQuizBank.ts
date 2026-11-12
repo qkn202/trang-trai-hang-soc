@@ -1281,7 +1281,7 @@ export function getLanguagePoolStats(lang: QuizLanguageId): {
   return {
     lexiconCount,
     curatedCount,
-    totalQuestionsEstimate: lexiconCount * 3 + curatedCount,
+    totalQuestionsEstimate: lexiconCount * 5 + curatedCount,
     packLoaded: loadedQuizPacks.has(lang),
   };
 }
@@ -1312,10 +1312,15 @@ export async function loadLanguageQuizPack(lang: QuizLanguageId): Promise<boolea
           break;
       }
       const existingLexIds = new Set(QUIZ_LEXICON_BANK.map((e) => e.id));
+      const existingLangWords = new Set(
+        QUIZ_LEXICON_BANK.map((e) => `${e.lang}:${e.word.trim().toLowerCase()}`)
+      );
       for (const lex of mod.EXTRA_LEXICON) {
-        if (!existingLexIds.has(lex.id)) {
+        const wordKey = `${lex.lang}:${lex.word.trim().toLowerCase()}`;
+        if (!existingLexIds.has(lex.id) && !existingLangWords.has(wordKey)) {
           QUIZ_LEXICON_BANK.push(lex);
           existingLexIds.add(lex.id);
+          existingLangWords.add(wordKey);
         }
       }
       const existingCuratedIds = new Set(CURATED_QUIZ_BANK.map((c) => c.id));

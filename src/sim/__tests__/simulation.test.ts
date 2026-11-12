@@ -23,7 +23,7 @@ import {
   TOTAL_WINS_FOR_MAX_LEVEL,
 } from '../../data/levels';
 import { STORY_QUESTS } from '../../data/quests';
-import { BUILD_HUD_CATEGORIES } from '../../ui/hud';
+import { BUILD_HUD_CATEGORIES, formatToastMessage } from '../../ui/hud';
 import { MagicalAudio } from '../../engine/audio';
 import {
   FRIENDSHIP_CHEST_TOKEN_COST,
@@ -1204,6 +1204,185 @@ describe('ParkSimulation & Progression Tests', () => {
       }
       expect(sim.restoreAllStashedDecor().ok).toBe(false);
       sim.exitNeighborVisit();
+    });
+  });
+
+  describe('(l) Kiểm chứng 5 nhóm lỗi QA Playtest (Khóa lặp thưởng cắt băng, Xác nhận xóa vụ mùa, Nhãn nâng Kho Đỏ, Tên công thức & Vạc Phép)', () => {
+    it('1. Mỗi loại công trình tốn Sao chỉ thưởng XP hoàn thành & Lễ Cắt Băng Khánh Thành đúng 1 lần duy nhất (vẫn hoàn đủ Sao khi dỡ)', () => {
+      const sim = new ParkSimulation(createMockAudio());
+      sim.state.match3.stars = 10;
+      sim.state.galleons = 500;
+
+      const bakeryItem = getCatalogItem('molly_apple_bakery')!;
+      expect(getItemPuzzleStarCost(bakeryItem)).toBe(2);
+
+      // Vòng 1: Xây Lò Nướng (trừ 2 🌟), hết giờ xây -> nhận finishXp + chờ cắt băng -> cắt băng nhận Vàng, XP & 25🍁 Tiệc Mùa Gặt
+      expect(sim.placeItem(bakeryItem, 22, 24, 0)).toBe(true);
+      expect(sim.state.match3.stars).toBe(8);
+      const b1 = sim.state.buildings.find((b) => b.itemId === 'molly_apple_bakery')!;
+      const xpBeforeFinish1 = sim.state.xp;
+      b1.constructEndsAt = Date.now() - 1000;
+      sim.tickProductionToTimestamp(Date.now());
+      expect(b1.awaitingUnveil).toBe(true);
+      const xpAfterFinish1 = sim.state.xp;
+      expect(xpAfterFinish1).toBeGreaterThan(xpBeforeFinish1);
+
+      const goldBeforeUnveil1 = sim.state.galleons;
+      const feastBefore1 = sim.ensureHarvestFeast().points;
+      const unveil1 = sim.unveilBuilding(b1.uid);
+      expect(unveil1).not.toBeNull();
+      expect(sim.state.galleons).toBe(goldBeforeUnveil1 + unveil1!.bonusGalleons);
+      expect(sim.ensureHarvestFeast().points).toBe(feastBefore1 + 25);
+
+      // Xóa Lò Nướng: hoàn đủ 2 🌟 Sao để không bao giờ khóa tiến độ 100%
+      expect(sim.removeAtTile(22, 24, true)).toBe(true);
+      expect(sim.state.match3.stars).toBe(10);
+
+      // Vòng 2: Xây lại Lò Nướng cùng loại -> KHÔNG cộng lại finishXp, KHÔNG bật awaitingUnveil, KHÔNG nhận thêm Vàng/XP/Điểm Tiệc Mùa Gặt!
+      expect(sim.placeItem(bakeryItem, 22, 24, 0)).toBe(true);
+      const b2 = sim.state.buildings.find((b) => b.itemId === 'molly_apple_bakery')!;
+      const xpBeforeFinish2 = sim.state.xp;
+      const goldBeforeFinish2 = sim.state.galleons;
+      const feastBefore2 = sim.ensureHarvestFeast().points;
+      b2.constructEndsAt = Date.now() - 1000;
+      sim.tickProductionToTimestamp(Date.now());
+
+      expect(b2.awaitingUnveil).toBeUndefined();
+      expect(sim.state.xp).toBe(xpBeforeFinish2);
+      expect(sim.unveilBuilding(b2.uid)).toBeNull();
+      expect(sim.state.galleons).toBe(goldBeforeFinish2);
+      expect(sim.ensureHarvestFeast().points).toBe(feastBefore2);
+
+      // Kể cả khi lưu & F5 (loadFromStorage), cờ unveiledItemIds vẫn được bảo toàn
+      sim.saveToStorage();
+      const reloaded = new ParkSimulation(createMockAudio());
+      expect(reloaded.state.unveiledItemIds).toContain('molly_apple_bakery');
+
+      // Cổng Floo thứ 2 (mua bằng Vàng, không tốn Sao) khi xóa chỉ hoàn 65% Vàng, 0 Sao
+      const flooItem = getCatalogItem('floo_fireplace_gate')!;
+      sim.state.level = 100;
+      sim.state.unlockedZones = ZONES.map((z) => z.id);
+      sim.rebuildGrid();
+      sim.state.galleons = 50_000;
+      sim.state.match3.stars = 500;
+      const findValidSpot = () => {
+        for (let gy = 14; gy < 40; gy++) {
+          for (let gx = 10; gx < 40; gx++) {
+            if (sim.canPlaceItem(flooItem, gx, gy, 0).ok) return { gx, gy };
+          }
+        }
+        throw new Error('No valid spot');
+      };
+      const spot1 = findValidSpot();
+      expect(sim.placeItem(flooItem, spot1.gx, spot1.gy, 0)).toBe(true);
+      const starsAfterFirstFloo = sim.state.match3.stars;
+      const spot2 = findValidSpot();
+      expect(sim.placeItem(flooItem, spot2.gx, spot2.gy, 0)).toBe(true);
+      expect(sim.state.match3.stars).toBe(starsAfterFirstFloo);
+      const goldBeforeRemove2 = sim.state.galleons;
+      expect(sim.removeAtTile(spot2.gx, spot2.gy, true)).toBe(true);
+      expect(sim.state.match3.stars).toBe(starsAfterFirstFloo);
+      expect(sim.state.galleons).toBe(goldBeforeRemove2 + Math.round(flooItem.cost * 0.65));
+    });
+
+    it('2. Xóa ô đất đang có cây chín/đang lớn, đồng cỏ có thú hoặc xưởng đang chạy bắt buộc qua xác nhận trước khi xóa', () => {
+      const sim = new ParkSimulation(createMockAudio());
+      const warnings: string[] = [];
+      sim.onRequestBulldozeConfirm = (w) => {
+        warnings.push(w.hazardSummaryVi);
+      };
+
+      // Ô đất khởi đầu đang có Lúa Mì chín (burrow_plot_wheat tại 17,25)
+      const ripePlot = sim.state.buildings.find((b) => b.uid === 'burrow_plot_wheat')!;
+      expect(ripePlot.cropId).toBe('ottery_wheat');
+      expect(sim.removeAtTile(ripePlot.gx, ripePlot.gy)).toBe(false);
+      expect(warnings.length).toBe(1);
+      expect(warnings[0]).toContain('Lúa Mì');
+      expect(sim.state.buildings.some((b) => b.uid === 'burrow_plot_wheat')).toBe(true);
+
+      // Ô đồng cỏ đang có Gà Mái Đỏ (burrow_pasture_hen tại 12,25)
+      const stockedPasture = sim.state.buildings.find((b) => b.uid === 'burrow_pasture_hen')!;
+      expect(sim.removeAtTile(stockedPasture.gx, stockedPasture.gy)).toBe(false);
+      expect(warnings.length).toBe(2);
+      expect(sim.state.buildings.some((b) => b.uid === 'burrow_pasture_hen')).toBe(true);
+
+      // Chỉ khi người chơi bấm xác nhận (force = true) thì mới thực sự xóa
+      expect(sim.removeAtTile(ripePlot.gx, ripePlot.gy, true)).toBe(true);
+      expect(sim.state.buildings.some((b) => b.uid === 'burrow_plot_wheat')).toBe(false);
+
+      // Ngược lại, ô đất trống (burrow_plot_empty tại 19,25) xóa ngay không làm phiền hỏi xác nhận
+      const emptyPlot = sim.state.buildings.find((b) => b.uid === 'burrow_plot_empty')!;
+      expect(sim.getBulldozeHazardWarning(emptyPlot.gx, emptyPlot.gy)).toBeNull();
+      expect(sim.removeAtTile(emptyPlot.gx, emptyPlot.gy)).toBe(true);
+      expect(warnings.length).toBe(2);
+    });
+
+    it('3. Thông tin chi phí nâng cấp Kho Đỏ đồng bộ 100% giữa khi có Phích Cắm (1🔌 + 250G) và khi thiếu Phích Cắm (370G bù 1🔌)', () => {
+      const sim = new ParkSimulation(createMockAudio());
+      const barn = sim.ensureFarmBarn();
+      barn.goods.muggle_plug_kit = 0;
+      sim.state.galleons = 300;
+
+      // Chưa có 🔌 và mới có 300G (< 370G) -> canAfford = false, báo rõ cần 370G (250G + 120G bù 1🔌)
+      const infoNoPlugShort = sim.getBarnUpgradeCostInfo();
+      expect(infoNoPlugShort.hasPlug).toBe(false);
+      expect(infoNoPlugShort.baseGoldCost).toBe(250);
+      expect(infoNoPlugShort.plugShortageBuyout).toBe(120);
+      expect(infoNoPlugShort.effectiveGoldCost).toBe(370);
+      expect(infoNoPlugShort.canAfford).toBe(false);
+      const failNoPlug = sim.upgradeFarmBarn();
+      expect(failNoPlug.ok).toBe(false);
+      expect(failNoPlug.msg).toContain('370');
+
+      // Đủ 370G khi không có 🔌 -> nâng thành công, trừ đúng 370G và báo rõ bù 1🔌
+      sim.state.galleons = 400;
+      expect(sim.getBarnUpgradeCostInfo().canAfford).toBe(true);
+      const okBuyout = sim.upgradeFarmBarn();
+      expect(okBuyout.ok).toBe(true);
+      expect(sim.state.galleons).toBe(30);
+      expect(okBuyout.msg).toContain('370');
+
+      // Có sẵn 1🔌 ở bậc tiếp theo (tier 2: baseGoldCost = 160 + 2*90 = 340G) -> trừ đúng 1🔌 và 340G
+      barn.goods.muggle_plug_kit = 1;
+      sim.state.galleons = 350;
+      const infoWithPlug = sim.getBarnUpgradeCostInfo();
+      expect(infoWithPlug.hasPlug).toBe(true);
+      expect(infoWithPlug.baseGoldCost).toBe(340);
+      expect(infoWithPlug.effectiveGoldCost).toBe(340);
+      const okWithPlug = sim.upgradeFarmBarn();
+      expect(okWithPlug.ok).toBe(true);
+      expect(barn.goods.muggle_plug_kit).toBe(0);
+      expect(sim.state.galleons).toBe(10);
+    });
+
+    it('4. Mọi công thức trong từng xưởng có tên riêng biệt, Toast không lặp đôi emoji và Vạc Phép định dạng thời gian tiếng Việt', () => {
+      // 4a. Không có 2 công thức nào trong cùng workshopGroupId trùng tên hiển thị
+      const namesByGroup = new Map<string, Set<string>>();
+      for (const rec of FARM_WORKSHOP_RECIPES) {
+        const displayTitle = rec.name ?? FARM_GOODS[rec.goodId].name;
+        const set = namesByGroup.get(rec.workshopGroupId) ?? new Set<string>();
+        expect(set.has(displayTitle)).toBe(false);
+        set.add(displayTitle);
+        namesByGroup.set(rec.workshopGroupId, set);
+      }
+
+      // 4b. formatToastMessage khử sạch lặp đôi emoji ở đầu thông báo
+      expect(formatToastMessage('🎀 Đã cắt băng khánh thành!', '🎀')).toBe('🎀 Đã cắt băng khánh thành!');
+      expect(formatToastMessage('🎀 🎀 Đã cắt băng khánh thành!', '🎀')).toBe('🎀 Đã cắt băng khánh thành!');
+      expect(formatToastMessage('🏡 Đã nâng cấp Kho Đỏ!', '🏡')).toBe('🏡 Đã nâng cấp Kho Đỏ!');
+      expect(formatToastMessage('🌸 Đã bày lại trang trí!')).toBe('🌸 Đã bày lại trang trí!');
+      expect(formatToastMessage('Đã lưu ảnh công viên!', '📸')).toBe('📸 Đã lưu ảnh công viên!');
+
+      // 4c. Vạc Phép thông báo bằng đơn vị giờ/phút dễ hiểu thay vì "3600s" thô
+      const sim = new ParkSimulation(createMockAudio());
+      sim.state.supply.ingredients.mandrake_leaf = 10;
+      sim.state.supply.ingredients.sweet_pumpkin = 10;
+      sim.state.supply.ingredients.starlight_dust = 10;
+      sim.state.supply.ingredients.magic_cacao = 10;
+      const brewRes = sim.startBrewing('aged_butterbeer');
+      expect(brewRes.ok).toBe(true);
+      expect(brewRes.msg).not.toMatch(/\b3600s\b/);
+      expect(brewRes.msg).toContain('1 giờ');
     });
   });
 });

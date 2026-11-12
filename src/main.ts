@@ -996,7 +996,22 @@ async function bootstrap(): Promise<void> {
 
     // 1. Bulldozer / Scourgify mode
     if (hud.bulldozerActive) {
-      sim.removeAtTile(gPos.gx, gPos.gy);
+      let bGx = gPos.gx;
+      let bGy = gPos.gy;
+      const directCell = sim.grid[bGy]?.[bGx];
+      if (!directCell?.buildingUid && (!directCell || directCell.path === 'none')) {
+        for (const hs of renderer.hotspots) {
+          if (hs.kind === 'building' && Math.hypot(sx - hs.sx, sy - hs.sy) <= hs.radius) {
+            const hb = sim.state.buildings.find((x) => x.uid === hs.id);
+            if (hb) {
+              bGx = hb.gx;
+              bGy = hb.gy;
+            }
+            break;
+          }
+        }
+      }
+      sim.removeAtTile(bGx, bGy);
       return;
     }
 

@@ -913,19 +913,21 @@ export function questsEnqueueWorkshopRecipe(sim: ParkSimulation, uid: string, re
     b.workshopQueue = [...curQueue, nextSlot];
 
     const outMeta = FARM_GOODS[recipe.goodId];
+    const recipeTitle = recipe.name ?? outMeta.name;
+    const durLabel = formatDurationCompactVi(Math.ceil(durMs / 1000));
     sim.audio.playPlace();
     sim.onBuildingTactile?.(b.uid);
     sim.spawnFloatingText(
       b.gx + item.width * 0.5,
       b.gy + item.height * 0.5,
-      `🔥 Lên khay ${outMeta.emoji} ${outMeta.name}!`,
+      `🔥 Lên khay ${outMeta.emoji} ${recipeTitle}!`,
       '#fde047'
     );
     sim.saveToStorage();
     sim.onUiChange?.();
     return {
       ok: true,
-      msg: `🔥 Đã đưa ${outMeta.emoji} ${outMeta.name} vào lò (${Math.ceil(durMs / 1000)}s)!`,
+      msg: `🔥 Đã đưa ${outMeta.emoji} ${recipeTitle} vào lò (${durLabel})!`,
     };
 }
 
@@ -1168,7 +1170,7 @@ export function questsStartBrewing(sim: ParkSimulation, goodId: CraftedGoodId): 
     sim.audio.playSpell();
     sim.saveToStorage();
     sim.onUiChange?.();
-    return { ok: true, msg: `🧪 Bắt đầu ủ ${recipe.name} (${durSec}s)!` };
+    return { ok: true, msg: `🧪 Bắt đầu ủ ${recipe.name} (${formatDurationCompactVi(durSec)})!` };
 }
 
 export function questsSpeedUpBrewing(sim: ParkSimulation): boolean {
@@ -1285,6 +1287,24 @@ export function questsUnveilBuilding(sim: ParkSimulation, uid: string): RibbonUn
     }
 
     target.awaitingUnveil = undefined;
+    const unveiledSet = new Set(sim.state.unveiledItemIds ?? []);
+    if (unveiledSet.has(item.id)) {
+      sim.saveToStorage();
+      sim.onUiChange?.();
+      sim.onToast?.(
+        `Công trình "${item.name}" xây lại đã mở hoạt động (thưởng cắt băng mỗi loại chỉ nhận 1 lần)!`,
+        '🎀'
+      );
+      return null;
+    }
+    unveiledSet.add(item.id);
+    sim.state.unveiledItemIds = Array.from(unveiledSet);
+    const finishXpSet = new Set(sim.state.finishXpItemIds ?? []);
+    if (!finishXpSet.has(item.id)) {
+      finishXpSet.add(item.id);
+      sim.state.finishXpItemIds = Array.from(finishXpSet);
+    }
+
     const bonusGalleons = Math.max(
       6,
       Math.round((item.baseIncome || 5) * 1.6 + Math.max(1, item.unlockLevel) * 0.8)

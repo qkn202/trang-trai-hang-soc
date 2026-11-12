@@ -226,6 +226,8 @@ export function headerSyncHudFocusVisibility(hud: GameHUD): void {
       dockWrap?.classList.remove('ts-dock-open');
       const drawer = hud.root.querySelector('#buildDrawer') as HTMLElement | null;
       drawer?.classList.add('hidden');
+      const swipeBar = hud.root.querySelector('#buildDrawerSwipeBar') as HTMLElement | null;
+      swipeBar?.classList.add('hidden');
       const secBar = hud.root.querySelector('#secondaryMapToolsBar') as HTMLElement | null;
       secBar?.classList.add('hidden');
     }
@@ -528,6 +530,26 @@ export function headerSpawnFlyReward(hud: GameHUD,
     }
 }
 
+export function formatToastMessage(msg: string, icon = '🦉'): string {
+  const trimmed = msg.trim();
+  if (!trimmed) return icon.trim();
+  const cleanIcon = icon.trim();
+  if (!cleanIcon) return trimmed;
+  const stripVs = (s: string) => s.replace(/\uFE0F/g, '');
+  const normIcon = stripVs(cleanIcon);
+  let body = trimmed;
+  while (normIcon && stripVs(body).startsWith(`${normIcon} ${normIcon}`)) {
+    body = body.slice(cleanIcon.length).trimStart();
+  }
+  if (normIcon && stripVs(body).startsWith(normIcon)) {
+    return body;
+  }
+  if (cleanIcon === '🦉' && /^\p{Extended_Pictographic}/u.test(body)) {
+    return body;
+  }
+  return `${cleanIcon} ${body}`;
+}
+
 export function headerShowToast(hud: GameHUD, msg: string, icon = '🦉'): void {
     const stack =
       hud.root.querySelector<HTMLElement>('#toastStack') ??
@@ -561,7 +583,7 @@ export function headerShowToast(hud: GameHUD, msg: string, icon = '🦉'): void 
 
     const item = document.createElement('div');
     item.className = 'parchment-dark owl-toast';
-    item.textContent = `${icon} ${msg}`;
+    item.textContent = formatToastMessage(msg, icon);
     stack.appendChild(item);
     window.setTimeout(() => item.remove(), 3500);
 }
@@ -1240,7 +1262,7 @@ export function headerRefreshDock(hud: GameHUD): void {
     );
     syncToggle(hud.root.querySelector('#btnGrid') as HTMLElement | null, hud.sim.state.settings.showGrid);
 
-    const secToolsActive = hud.mapToolsExpanded || Boolean(hud.activeCategory);
+    const secToolsActive = hud.mapToolsExpanded;
     const secBar = hud.root.querySelector('#secondaryMapToolsBar') as HTMLElement | null;
     const btnMapTools = hud.root.querySelector('#btnToggleMapTools') as HTMLButtonElement | null;
     if (secBar) {
@@ -1267,10 +1289,14 @@ export function headerRefreshDock(hud: GameHUD): void {
     );
 
     const drawer = hud.root.querySelector('#buildDrawer') as HTMLElement;
+    const swipeBar = hud.root.querySelector('#buildDrawerSwipeBar') as HTMLElement | null;
     const minimap = hud.root.querySelector('#minimapWrap') as HTMLElement;
     if (!hud.activeCategory || !BUILD_HUD_CATEGORIES.includes(hud.activeCategory)) {
       hud.activeCategory = null;
+      hud.drawerEdgeObserver?.disconnect();
+      hud.drawerEdgeObserver = null;
       drawer.classList.add('hidden');
+      swipeBar?.classList.add('hidden');
       minimap.classList.toggle('hidden', hud.photoModeActive || !hud.minimapHudVisible);
       return;
     }
@@ -1279,6 +1305,7 @@ export function headerRefreshDock(hud: GameHUD): void {
 
     if (hud.activeCategory === 'staff') {
       headerRenderStaffDrawer(hud, drawer);
+      headerSyncBuildDrawerScrollAffordance(hud, drawer);
       return;
     }
 
@@ -1385,6 +1412,8 @@ export function headerRefreshDock(hud: GameHUD): void {
         headerRefreshAll(hud);
       });
     });
+
+    headerSyncBuildDrawerScrollAffordance(hud, drawer);
 }
 
 export function headerRenderStaffDrawer(hud: GameHUD, drawer: HTMLElement): void {
@@ -1516,8 +1545,93 @@ export function headerRenderStaffDrawer(hud: GameHUD, drawer: HTMLElement): void
     });
 }
 
+const BUILD_CATEGORY_TITLES_VI: Partial<Record<BuildingCategory, string>> = {
+  path: '🛣️ Đường Đá & Lối Dạo',
+  shop: '🏭 Xưởng & Cửa Tiệm',
+  creature: '🦄 Đồng Cỏ & Thú Phép',
+  decor: '🌸 Vườn Hoa & Cảnh Quan',
+  staff: '🧙 Phụ Tá Điền Trang',
+};
+
+export function headerSyncBuildDrawerScrollAffordance(hud: GameHUD, drawer: HTMLElement): void {
+    const swipeBar = hud.root.querySelector('#buildDrawerSwipeBar') as HTMLElement | null;
+    const catLbl = hud.root.querySelector('#buildDrawerCatLabel') as HTMLElement | null;
+    const prevBtn = hud.root.querySelector('#btnDrawerScrollPrev') as HTMLButtonElement | null;
+    const nextBtn = hud.root.querySelector('#btnDrawerScrollNext') as HTMLButtonElement | null;
+    const hintPill = hud.root.querySelector('#buildDrawerSwipeHint') as HTMLElement | null;
+
+    hud.drawerEdgeObserver?.disconnect();
+    hud.drawerEdgeObserver = null;
+
+    const cards = Array.from(drawer.querySelectorAll<HTMLElement>('.catalog-card'));
+    if (!swipeBar || cards.length === 0 || !hud.activeCategory) {
+      swipeBar?.classList.add('hidden');
+      return;
+    }
+
+    if (catLbl) {
+      const titleVi = BUILD_CATEGORY_TITLES_VI[hud.activeCategory] ?? '🏗️ Danh Mục Xây Dựng';
+      catLbl.textContent = `${titleVi} (${cards.length})`;
+    }
+    swipeBar.classList.remove('hidden');
+
+    const selectedCard = drawer.querySelector<HTMLElement>('.catalog-card[data-selected="true"]');
+    if (selectedCard && typeof selectedCard.scrollIntoView === 'function') {
+      selectedCard.scrollIntoView({
+        block: 'nearest',
+        inline: 'nearest',
+        container: 'nearest',
+      } as ScrollIntoViewOptions);
+    }
+
+    const firstCard = cards[0];
+    const lastCard = cards[cards.length - 1];
+    let firstVisible = true;
+    let lastVisible = cards.length <= 2;
+
+    const applyEdgeState = () => {
+      const hasOverflow = !firstVisible || !lastVisible || drawer.scrollWidth > drawer.clientWidth + 6;
+      if (prevBtn) {
+        prevBtn.disabled = firstVisible;
+        prevBtn.classList.toggle('hidden', !hasOverflow);
+      }
+      if (nextBtn) {
+        nextBtn.disabled = lastVisible;
+        nextBtn.classList.toggle('hidden', !hasOverflow);
+      }
+      if (hintPill) {
+        hintPill.classList.toggle('hidden', !hasOverflow);
+      }
+      drawer.dataset.scrollStart = String(!firstVisible);
+      drawer.dataset.scrollEnd = String(!lastVisible);
+    };
+
+    if (typeof IntersectionObserver !== 'undefined') {
+      const obs = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (entry.target === firstCard) {
+              firstVisible = entry.intersectionRatio >= 1;
+            }
+            if (entry.target === lastCard) {
+              lastVisible = entry.intersectionRatio >= 1;
+            }
+          }
+          applyEdgeState();
+        },
+        { root: drawer, threshold: 1, rootMargin: '2px' }
+      );
+      obs.observe(firstCard);
+      if (lastCard !== firstCard) {
+        obs.observe(lastCard);
+      }
+      hud.drawerEdgeObserver = obs;
+    }
+    applyEdgeState();
+}
+
 export function headerSyncContextualMapToolsBar(hud: GameHUD): void {
-    const secToolsActive = hud.mapToolsExpanded || Boolean(hud.activeCategory);
+    const secToolsActive = hud.mapToolsExpanded;
     const secBar = hud.root.querySelector('#secondaryMapToolsBar') as HTMLElement | null;
     const btnMapTools = hud.root.querySelector('#btnToggleMapTools') as HTMLButtonElement | null;
     if (secBar) {
