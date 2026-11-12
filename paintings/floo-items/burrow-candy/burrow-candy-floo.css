@@ -1,0 +1,127 @@
+/* ==========================================================================
+   Mạng Floo HPVN — Khung Bong Bóng Độc Quyền (username: kimchi)
+   Phiên bản: Vàng Hổ Phách Hoàng Kim + Kẹo Vàng Đơn ("burrow-candy-amber")
+   Đường dẫn ảnh trên repo hpvn-archive.net:
+     public/images/floo-items/burrow-candy/ -> /images/floo-items/burrow-candy/*
+   ========================================================================== */
+
+/* 1. Nền Vàng Hổ Phách Hoàng Kim trơn mượt ("burrow-candy-amber" — không sọc) */
+.shout-message-row[data-store-frame="burrow-candy-amber"] {
+  --sf-oklab: ;
+  --sf-edge: #f5c84c;
+  --sf-shadow:
+    0 0 0 1.5px #381e04,
+    0 0 0 3.5px #f7ca4d,
+    0 0 0 5px #4d2905,
+    0 4px 16px rgba(247, 189, 42, 0.32),
+    inset 0 1px 0 rgba(255, 240, 184, 0.45);
+  --sf-paper:
+    radial-gradient(90% 80% at 20% 10%, rgba(255, 212, 94, 0.28), rgba(255, 212, 94, 0) 65%),
+    linear-gradient(180deg var(--sf-oklab), #75480a 0%, #523006 58%, #381f03 100%);
+}
+
+@supports (background: linear-gradient(in oklab, white, black)) {
+  .shout-message-row[data-store-frame="burrow-candy-amber"] {
+    --sf-oklab: in oklab;
+  }
+}
+
+.shout-message-row[data-store-frame="burrow-candy-amber"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack)) {
+  color: #fff7e2;
+  padding: 12px 30px 10px 16px;
+}
+
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="burrow-candy-amber"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack)) {
+  padding: 12px 16px 10px 30px;
+}
+
+.shout-message-row[data-store-frame="burrow-candy-amber"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack))
+  .shout-message-author {
+  color: #ffe07d !important;
+  text-shadow: 0 1px 1px rgba(28, 14, 2, 0.75);
+}
+
+.shout-message-row[data-store-frame="burrow-candy-amber"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack))
+  .shout-message-meta-time {
+  color: #f0cfa0;
+}
+
+.shout-message-row[data-store-frame="burrow-candy-amber"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack))
+  .shout-rich-text
+  a {
+  color: #ffd978;
+  text-decoration-color: rgba(255, 217, 120, 0.55);
+}
+
+.shout-message-row[data-store-frame="burrow-candy-amber"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack))
+  .shout-quote-preview {
+  background: rgba(255, 216, 117, 0.12);
+  border-left-color: #f5c84c;
+  color: #fff3d1;
+}
+
+/* 2. Hoa văn góc xoáy caramen (::before — 22x22px) & Kẹo Vàng Đơn (::after — 36x36px) */
+.shout-message-row[data-store-frame="burrow-candy-amber"]:not(.is-sonorus)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack))::before {
+  content: "";
+  z-index: 2;
+  pointer-events: none;
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  top: 2px;
+  left: 2px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  /* Fallback tiêu chuẩn cho trình duyệt cũ trước image-set() */
+  background-image: url("/images/floo-items/burrow-candy/corner-tl.png");
+  background-image: image-set(
+    url("/images/floo-items/burrow-candy/corner-tl.webp") type("image/webp") 1x,
+    url("/images/floo-items/burrow-candy/corner-tl-2x.webp") type("image/webp") 2x,
+    url("/images/floo-items/burrow-candy/corner-tl.png") type("image/png") 1x
+  );
+}
+
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="burrow-candy-amber"]:not(.is-sonorus)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack))::before {
+  left: auto;
+  right: 2px;
+  transform: scaleX(-1);
+}
+
+.shout-message-row[data-store-frame="burrow-candy-amber"]
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack))::after {
+  content: "";
+  z-index: 3;
+  pointer-events: none;
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  top: -12px;
+  right: -9px;
+  transform: rotate(8deg);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  /* Fallback tiêu chuẩn cho trình duyệt cũ trước image-set() */
+  background-image: url("/images/floo-items/burrow-candy/candy-charm-gold.png");
+  background-image: image-set(
+    url("/images/floo-items/burrow-candy/candy-charm-gold.webp") type("image/webp") 1x,
+    url("/images/floo-items/burrow-candy/candy-charm-gold-2x.webp") type("image/webp") 2x,
+    url("/images/floo-items/burrow-candy/candy-charm-gold.png") type("image/png") 1x
+  );
+}
+
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="burrow-candy-amber"]
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack))::after {
+  right: auto;
+  left: -9px;
+  transform: rotate(-8deg) scaleX(-1);
+}
