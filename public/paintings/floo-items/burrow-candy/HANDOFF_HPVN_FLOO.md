@@ -7,7 +7,7 @@ Tài liệu này đóng gói trọn bộ tài nguyên đồ họa (`1x`/`2x` Web
 ## 1. Thông số & danh mục file bàn giao (trong thư mục `burrow-candy/`)
 
 - **Tài khoản nhận độc quyền**: username **`kimchi`** *(không mở bán trên Hẻm Xéo)*.
-- **Mã khung (`data-store-frame`)**: **`"burrow-candy-amber"`** *(nền Vàng Hổ Phách Hoàng Kim + Kẹo Vàng Đơn)*.
+- **Mã khung (`data-store-frame`)**: **`"burrow-candy-amber"`** *(nền Vàng Hổ Phách trơn mượt không sọc + Kẹo Vàng Đơn)*.
 
 Toàn bộ file cần dùng nằm gọn trong thư mục này:
 
@@ -17,7 +17,7 @@ Toàn bộ file cần dùng nằm gọn trong thư mục này:
 | `candy-charm-gold-2x.webp` | `112×112` (`2x`) | `4.6 KB` | Bản Retina `2x` sắc nét của **Kẹo Vàng Đơn**. |
 | `candy-charm-gold.png` | `56×56` (`1x`) | `5.8 KB` | Bản PNG dự phòng cho trình duyệt cũ. |
 | `corner-tl.webp` / `corner-tl-2x.webp` / `corner-tl.png` | `22×22` (`1x`) / `44×44` (`2x`) | `0.6 KB – 1.3 KB` | Hoa văn góc xoáy vàng caramen bên trong bong bóng `::before` (`22×22 px`). |
-| `burrow-candy-floo.css` | — | `~3.8 KB` | Stylesheet hoàn chỉnh cho `data-store-frame="burrow-candy-amber"` (nền Vàng Hổ Phách + Kẹo Vàng Đơn). Đã xử lý đầy đủ `.is-self`, `.is-self-shared-direction`, `.is-sonorus`, `.is-prisoner-censored`, `.shout-image-album.is-stack`, link & trích dẫn. |
+| `burrow-candy-floo.css` | — | `~3.6 KB` | Stylesheet hoàn chỉnh cho `data-store-frame="burrow-candy-amber"` (nền Vàng Hổ Phách trơn mượt không sọc + Kẹo Vàng Đơn). Đã xử lý đầy đủ `.is-self`, `.is-self-shared-direction`, `.is-sonorus`, `.is-prisoner-censored`, `.shout-image-album.is-stack`, link & trích dẫn. |
 | `preview.html` | — | — | Trang xem trước độc lập (hiển thị mẫu tin nhắn của `kimchi`) để kiểm tra trực tiếp trước khi deploy. |
 
 ---
@@ -89,7 +89,7 @@ decorateRow: (uid, props) => {
 
 Bạn có thể copy nguyên đoạn dưới đây gửi kèm thư mục `burrow-candy/`:
 
-> Nhờ bạn gắn giúp mình 1 khung bong bóng tin nhắn Mạng Floo thiết kế riêng (**Vàng Hổ Phách & Kẹo Vàng Đơn — `burrow-candy-amber`**) chỉ định độc quyền cho duy nhất tài khoản có **username: `kimchi`** (không mở bán ở Hẻm Xéo):
+> Nhờ bạn gắn giúp mình 1 khung bong bóng tin nhắn Mạng Floo thiết kế riêng (**Vàng Hổ Phách trơn không sọc & Kẹo Vàng Đơn — `burrow-candy-amber`**) chỉ định độc quyền cho duy nhất tài khoản có **username: `kimchi`** (không mở bán ở Hẻm Xéo):
 > 1. Copy 6 file ảnh (`candy-charm-gold*` và `corner-tl*`) trong gói `burrow-candy/` vào `public/images/floo-items/burrow-candy/`.
 > 2. Dán file `burrow-candy-floo.css` vào stylesheet `data-store-frame` của Shoutbox/Floo.
 > 3. Tra `uid` của tài khoản `username: kimchi`, thêm `"burrow-candy-amber"` vào `Set` whitelist frame và gán riêng cho `uid` của `kimchi` trong `decorateRow` (chi tiết 3 dòng code có sẵn ở Mục 2 – Phương án A trong file `HANDOFF_HPVN_FLOO.md`, kèm `preview.html` để mở xem trước). Cảm ơn bạn nhiều!
