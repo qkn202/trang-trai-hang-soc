@@ -265,7 +265,7 @@ export class CandyHogwartsBoardRenderer {
       }
     }
     const cssSize = Math.max(240, rawCssSize || 468);
-    const zoomStep = Math.round(Math.max(1, Math.min(1.8, this.viewZoom || 1)) * 100);
+    const zoomStep = Math.round(Math.max(1, Math.min(2.4, this.viewZoom || 1)) * 100);
     if (
       this.currentGridSize === gridSize &&
       this.currentCssSize === cssSize &&
@@ -282,9 +282,9 @@ export class CandyHogwartsBoardRenderer {
       ('ontouchstart' in window || navigator.maxTouchPoints > 0);
     const baseDpr =
       typeof window !== 'undefined'
-        ? Math.min(window.devicePixelRatio || 1, isMobile ? 1.6 : 2.0)
+        ? Math.min(window.devicePixelRatio || 1, isMobile ? 1.65 : 2.0)
         : 1;
-    const maxCanvasPx = isMobile ? 1280 : 1680;
+    const maxCanvasPx = isMobile ? 1480 : 1840;
     this.dpr = Math.min(maxCanvasPx / cssSize, baseDpr * (zoomStep / 100));
     const targetW = Math.round(cssSize * this.dpr);
     if (this.canvas && (this.canvas.width !== targetW || this.canvas.height !== targetW)) {
@@ -293,7 +293,7 @@ export class CandyHogwartsBoardRenderer {
       this.bgDirty = true;
     }
     this.boardPx = cssSize;
-    this.padding = Math.max(8, Math.round(cssSize * 0.013));
+    this.padding = Math.max(4, Math.round(cssSize * 0.008));
     this.cellSize = (cssSize - this.padding * 2) / gridSize;
   }
 

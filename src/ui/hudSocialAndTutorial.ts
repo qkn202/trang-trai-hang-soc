@@ -70,6 +70,12 @@ import {
   PHOENIX_FORGE_GOLD_COST,
 } from '../sim/simulation';
 import {
+  hydrateCloudLeaderboardsFromSnapshot,
+  normalizeClientHogwartsHouse,
+  setPlayerHogwartsHouse,
+  syncAllPlayerCloudLeaderboards,
+} from '../sim/minigameLeaderboard';
+import {
   canHelpFlooVisitRow,
   detectFreshFlooHelpersToast,
   FLOO_VISIT_UNLOCK_LEVEL,
@@ -164,18 +170,7 @@ const HOUSE_CREST_MAP: Record<HouseName, string> = {
 };
 
 function getPlayerPrimaryHouse(hud: GameHUD): HouseName {
-  const pts = hud.sim.state.housePoints;
-  const houses: HouseName[] = ['Gryffindor', 'Ravenclaw', 'Hufflepuff', 'Slytherin'];
-  let best: HouseName = 'Gryffindor';
-  let bestVal = -1;
-  for (const h of houses) {
-    const v = Number(pts?.[h] ?? 0);
-    if (v > bestVal) {
-      bestVal = v;
-      best = h;
-    }
-  }
-  return best;
+  return hud.sim.getPlayerHouse();
 }
 
 function buildAvatarBadgeHtml(
@@ -246,6 +241,8 @@ function clearHudActiveMapTools(hud: GameHUD): void {
   hud.closeHudPopovers();
 }
 
+const initialLeaderboardSyncedUids = new Set<string>();
+
 export function socialUiApplyAuthoritativeSnapshotIdentity(
   hud: GameHUD,
   rawSnap: unknown
@@ -253,10 +250,15 @@ export function socialUiApplyAuthoritativeSnapshotIdentity(
   if (!rawSnap || typeof rawSnap !== 'object') return;
   const snap = rawSnap as Partial<AuthoritativeSnapshot>;
   const social = hud.sim.ensureNeighborSocial();
+  const homeOrActive = hud.sim.homeStateWhileVisiting ?? hud.sim.state;
   let changed = false;
 
   if (typeof snap.uid === 'string' && snap.uid.trim()) {
     setAuthenticatedUserId(snap.uid);
+  }
+
+  if (hydrateCloudLeaderboardsFromSnapshot(snap.leaderboards)) {
+    changed = true;
   }
 
   const serverFriendCode =
@@ -278,7 +280,6 @@ export function socialUiApplyAuthoritativeSnapshotIdentity(
     typeof snap.wallet.spendable === 'number' &&
     Number.isFinite(snap.wallet.spendable)
   ) {
-    const homeOrActive = hud.sim.homeStateWhileVisiting ?? hud.sim.state;
     const nextGalleons = Math.max(0, Math.floor(snap.wallet.spendable));
     onlineServices.syncWalletBaseline(nextGalleons);
     if (
@@ -308,6 +309,33 @@ export function socialUiApplyAuthoritativeSnapshotIdentity(
     snap.profile && typeof snap.profile === 'object'
       ? (snap.profile as Record<string, unknown>)
       : null;
+  const serverHouse = normalizeClientHogwartsHouse(
+    profile?.house ?? snap.garden?.progression?.house
+  );
+  const houseSource = String(
+    profile?.houseSource ?? snap.garden?.progression?.houseSource ?? ''
+  );
+  if (serverHouse) {
+    const isHpvnHouse = houseSource === 'hpvn';
+    const currentLb = homeOrActive.minigameLeaderboard;
+    if (isHpvnHouse || !currentLb?.playerHouseExplicit) {
+      if (
+        currentLb?.playerHouse !== serverHouse ||
+        Boolean(currentLb?.playerHouseLockedByServer) !== isHpvnHouse
+      ) {
+        setPlayerHogwartsHouse(homeOrActive, serverHouse, {
+          lockedByServer: isHpvnHouse,
+        });
+        if (hud.sim.homeStateWhileVisiting) {
+          setPlayerHogwartsHouse(hud.sim.state, serverHouse, {
+            lockedByServer: isHpvnHouse,
+          });
+        }
+        changed = true;
+      }
+    }
+  }
+
   if (profile) {
     const serverName = typeof profile.username === 'string' ? profile.username.trim() : '';
     if (
@@ -323,6 +351,27 @@ export function socialUiApplyAuthoritativeSnapshotIdentity(
     if (serverAvatar && social.playerAvatarUrl !== serverAvatar) {
       social.playerAvatarUrl = serverAvatar;
       changed = true;
+    }
+  }
+
+  // Tự động đẩy các kỷ lục màn đã vượt sẵn có từ local lên BXH máy chủ ngay lần đồng bộ đầu tiên trong phiên
+  if (
+    typeof snap.uid === 'string' &&
+    snap.uid.trim() &&
+    !initialLeaderboardSyncedUids.has(snap.uid) &&
+    !homeOrActive.sandboxMode &&
+    !homeOrActive.sandboxTainted &&
+    !hud.sim.isHeadmasterPreview
+  ) {
+    initialLeaderboardSyncedUids.add(snap.uid);
+    const m3Cleared = Math.max(
+      0,
+      homeOrActive.match3?.maxClearedLevel ?? Math.max(0, (homeOrActive.match3?.currentLevel ?? 1) - 1)
+    );
+    const sudokuCleared = Math.max(0, homeOrActive.puzzleArcade?.sudokuCleared ?? 0);
+    const blockCleared = Math.max(0, homeOrActive.puzzleArcade?.blockCleared ?? 0);
+    if (m3Cleared > 0 || sudokuCleared > 0 || blockCleared > 0) {
+      void syncAllPlayerCloudLeaderboards(homeOrActive).catch(() => {});
     }
   }
 
@@ -412,13 +461,16 @@ export async function socialUiRefreshFlooDirectory(
     }
 
     if (!hud.sim.isVisitingNeighbor && !isSandboxOrPreview) {
+      const lbState = hud.sim.state.minigameLeaderboard;
+      const shouldSendExplicitHouse =
+        Boolean(lbState?.playerHouseExplicit) && !lbState?.playerHouseLockedByServer;
       await onlineServices.authoritativeClient
         .syncProfile({
           playerName: displayName,
           parkName: hud.sim.state.parkName || 'Trang Trại Hang Sóc',
           avatarUrl: social.playerAvatarUrl || '',
           avatarEmoji: HOUSE_CREST_MAP[house],
-          house,
+          ...(shouldSendExplicitHouse ? { house, houseExplicit: true } : {}),
           level: hud.sim.state.level,
           scene: {
             weather:

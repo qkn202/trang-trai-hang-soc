@@ -6,6 +6,7 @@ import {
   MemoryBackendKVStore,
 } from '../../../server/burrowBackendCore';
 import {
+  createFirebaseGardenCallables,
   DEFAULT_BURROW_FIRESTORE_DATABASE_ID,
   type FirestoreDbLike,
   type FirestoreDocRefLike,
@@ -13,8 +14,21 @@ import {
   resolveBurrowFirestoreDatabaseId,
 } from '../../../server/firebaseCallableAdapter';
 import { handleAuthoritativeHttpRequest } from '../../../server/index';
+import { MagicalAudio } from '../../engine/audio';
+import {
+  clearCachedCloudLeaderboards,
+  fetchCloudLeaderboardEntries,
+  hydrateCloudLeaderboardsFromSnapshot,
+  registerAuthoritativeLeaderboardTransport,
+  setPlayerHogwartsHouse,
+} from '../minigameLeaderboard';
+import { ParkSimulation } from '../simulation';
 import { Analytics } from '../../ui/analytics';
-import { createHpvnEmbedClient } from '../../ui/authoritativeClient';
+import {
+  createBurrowGardenClient,
+  createHpvnEmbedClient,
+} from '../../ui/authoritativeClient';
+import { bindAuthoritativeLeaderboardClient } from '../../ui/onlineBootstrap';
 import {
   CloudSave,
   SAVE_KEY,
@@ -744,5 +758,228 @@ describe('HPVN Online Production Hardening Suite (P0–P3)', () => {
     expect(isTrustedHpvnOrigin('https://hpvnn-archive.web.app')).toBe(true);
     expect(isTrustedHpvnOrigin('https://hpvnn-burrow.web.app')).toBe(true);
     expect(isTrustedHpvnOrigin('https://attacker-random-site.web.app')).toBe(false);
+  });
+
+  it('HPVN House & Leaderboard Fix: resolves real HPVN houses (lowercase claims + (default) DB users/galleons_accounts), auto-heals stuck Gryffindor states, and syncs multi-player leaderboards over RPC without friendship', async () => {
+    const burrowDocs = new Map<string, Record<string, unknown>>();
+    const forumDefaultDocs = new Map<string, Record<string, unknown>>();
+    let forumUsersWriteCount = 0;
+
+    // Seed HPVN forum `(default)` DB profiles where Firebase Auth tokens have NO custom `house` claim
+    forumDefaultDocs.set('users/cho_uid', {
+      displayName: 'Cho Chang HPVN',
+      house: 'ravenclaw', // lowercase in HPVN forum DB
+      photoURL: 'https://hpvn-archive.net/avatars/cho.png',
+    });
+    forumDefaultDocs.set('galleons_accounts/cedric_uid', {
+      uid: 'cedric_uid',
+      balance: 250,
+      bankBalance: 0,
+      spendable: 250,
+      hogwartsHouse: 'Hufflepuff',
+      username: 'Cedric Diggory HPVN',
+    });
+
+    const makeMockDb = (
+      backing: Map<string, Record<string, unknown>>,
+      trackUsersWrites = false
+    ): FirestoreDbLike => ({
+      collection(colName: string) {
+        return {
+          doc(docId: string): FirestoreDocRefLike {
+            const key = `${colName}/${docId}`;
+            return {
+              async get() {
+                const d = backing.get(key);
+                return {
+                  exists: Boolean(d),
+                  data: () => (d ? { ...d } : undefined),
+                };
+              },
+              async set(data: Record<string, unknown>) {
+                if (trackUsersWrites && colName === 'users') {
+                  forumUsersWriteCount += 1;
+                }
+                backing.set(key, { ...data });
+              },
+              async delete() {
+                if (trackUsersWrites && colName === 'users') {
+                  forumUsersWriteCount += 1;
+                }
+                backing.delete(key);
+              },
+            };
+          },
+        };
+      },
+    });
+
+    const burrowDb = makeMockDb(burrowDocs, false);
+    const walletDb = makeMockDb(forumDefaultDocs, true);
+    const store = new FirestoreBackendStore(burrowDb, { walletDb });
+    const backend = new BurrowAuthoritativeBackend({ store });
+    const callables = createFirebaseGardenCallables(backend);
+
+    // Pre-seed Cho's old `burrow_states/cho_uid` as stuck in 'Gryffindor' (from the old bug)
+    await store.put(
+      'burrow_states:cho_uid',
+      JSON.stringify({
+        uid: 'cho_uid',
+        revision: 2,
+        level: 5,
+        xp: 480,
+        magicStars: 4,
+        timeSand: 1,
+        phoenixTalismans: 1,
+        friendshipTokens: 0,
+        house: 'Gryffindor',
+        parkName: 'Thung Lũng Cho',
+        playerName: 'Phù Thủy Hang Sóc',
+        friendCode: 'HS-CHOC-01',
+        avatarEmoji: '🧙‍♀️',
+        inventory: { wheat: 4 },
+        supplies: { seeds: { wheat: 5 }, water: 10, boost: 1 },
+        decorations: {
+          owned: ['decor_burrow_lantern'],
+          placements: ['decor_burrow_lantern', null, null, null, null, null],
+          rotations: {},
+          scene: { weather: 'clear', atmosphere: 'day', event: 'harvest_feast' },
+        },
+        flooFrames: { unlocked: ['starter_wood'], worn: 'starter_wood' },
+        economicCycles: { crop: 0, pasture: 0, workshop: 0, brew: 0, construction: 0 },
+        timers: [],
+        builtIds: [],
+        guideDone: [],
+        festival: { seasonKey: 'harvest_feast@2026', points: 0, claimedMilestones: [] },
+        achievementsClaimed: [],
+        clearanceUsed: false,
+        minigameRecords: {},
+      })
+    );
+
+    const memStorage = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => memStorage.get(k) ?? null,
+      setItem: (k: string, v: string) => memStorage.set(k, String(v)),
+      removeItem: (k: string) => memStorage.delete(k),
+      clear: () => memStorage.clear(),
+    });
+
+    try {
+      clearCachedCloudLeaderboards();
+
+      // 1. Draco logs in with lowercase custom claim `house: 'slytherin'`
+      const dracoClient = createBurrowGardenClient((name, data) =>
+        callables[name]({
+          data,
+          auth: {
+            uid: 'draco_uid',
+            token: { house: 'slytherin', name: 'Draco Malfoy HPVN' },
+          },
+        })
+      );
+      const dracoSnap = await dracoClient.read();
+      expect(dracoSnap.garden.progression.house).toBe('Slytherin');
+      expect((dracoSnap.profile as Record<string, unknown>).house).toBe('Slytherin');
+      expect((dracoSnap.profile as Record<string, unknown>).houseSource).toBe('hpvn');
+
+      // 2. Cho logs in with NO custom `house` claim -> auto-heals from stuck 'Gryffindor' to 'Ravenclaw' via `users/cho_uid`!
+      const choClient = createBurrowGardenClient((name, data) =>
+        callables[name]({
+          data,
+          auth: {
+            uid: 'cho_uid',
+            token: {}, // No house claim on Firebase Auth token!
+          },
+        })
+      );
+      const choSnap = await choClient.read();
+      expect(choSnap.garden.progression.house).toBe('Ravenclaw');
+      expect((choSnap.profile as Record<string, unknown>).house).toBe('Ravenclaw');
+      expect((choSnap.profile as Record<string, unknown>).username).toBe('Cho Chang HPVN');
+      expect(forumUsersWriteCount).toBe(0); // Strictly 0 writes to forum `users` collection!
+
+      // Client calling `syncProfile` with un-explicit 'Gryffindor' CANNOT clobber Cho's HPVN house!
+      const choAfterSync = await choClient.syncProfile({
+        playerName: 'Cho Chang HPVN',
+        parkName: 'Tháp Ravenclaw',
+        house: 'Gryffindor',
+      });
+      expect(choAfterSync.garden.progression.house).toBe('Ravenclaw');
+
+      // 3. Cedric logs in with NO custom claim -> resolves 'Hufflepuff' from `galleons_accounts/cedric_uid`!
+      const cedricClient = createBurrowGardenClient((name, data) =>
+        callables[name]({
+          data,
+          auth: {
+            uid: 'cedric_uid',
+            token: {},
+          },
+        })
+      );
+      const cedricSnap = await cedricClient.read();
+      expect(cedricSnap.garden.progression.house).toBe('Hufflepuff');
+      expect((cedricSnap.profile as Record<string, unknown>).username).toBe('Cedric Diggory HPVN');
+
+      // Even BEFORE anyone clears a minigame stage, `cedricSnap.leaderboards.match3` already lists all 3 real players!
+      expect((cedricSnap.leaderboards?.match3 ?? []).length).toBe(3);
+
+      // 4. Draco clears Match-3 Stages 1..2 & Cho clears Stage 1 via RPC leaderboard transport (Mode A compatible, zero HTTP `/api/leaderboard` needed!)
+      setAuthenticatedUserId('draco_uid');
+      bindAuthoritativeLeaderboardClient(dracoClient);
+      const dracoSim = new ParkSimulation(new MagicalAudio());
+      dracoSim.ensureNeighborSocial().playerDisplayName = 'Draco Malfoy HPVN';
+      dracoSim.ensureNeighborSocial().playerFriendCode = dracoSnap.garden.progression.friendCode;
+      setPlayerHogwartsHouse(dracoSim.state, 'Slytherin', { lockedByServer: true });
+      dracoSim.completeMatch3LevelVictory(10, { sessionScore: 2800 });
+      dracoSim.completeMatch3LevelVictory(14, { sessionScore: 3400 });
+      // Wait for queued authoritative submission
+      await dracoClient.getLeaderboard('match3');
+
+      memStorage.clear();
+      setAuthenticatedUserId('cho_uid');
+      bindAuthoritativeLeaderboardClient(choClient);
+      const choSim = new ParkSimulation(new MagicalAudio());
+      choSim.ensureNeighborSocial().playerDisplayName = 'Cho Chang HPVN';
+      choSim.ensureNeighborSocial().playerFriendCode = choSnap.garden.progression.friendCode;
+      setPlayerHogwartsHouse(choSim.state, 'Ravenclaw', { lockedByServer: true });
+      choSim.completeMatch3LevelVictory(8, { sessionScore: 2500 });
+      await choClient.getLeaderboard('match3');
+
+      // 5. Cedric (who has NOT added Draco or Cho as friends!) opens Leaderboard -> sees everyone with real houses & scores!
+      memStorage.clear();
+      setAuthenticatedUserId('cedric_uid');
+      clearCachedCloudLeaderboards();
+      bindAuthoritativeLeaderboardClient(cedricClient);
+      const cedricSim = new ParkSimulation(new MagicalAudio());
+      cedricSim.ensureNeighborSocial().playerDisplayName = 'Cedric Diggory HPVN';
+      cedricSim.ensureNeighborSocial().playerFriendCode = cedricSnap.garden.progression.friendCode;
+      setPlayerHogwartsHouse(cedricSim.state, 'Hufflepuff', { lockedByServer: true });
+
+      const fetched = await fetchCloudLeaderboardEntries('match3');
+      expect(fetched.length).toBe(3);
+      hydrateCloudLeaderboardsFromSnapshot({ match3: fetched });
+
+      const standing = cedricSim.getMinigameLeaderboard('match3', 'valley');
+      expect(standing.playerHouse).toBe('Hufflepuff');
+      expect(standing.totalEntries).toBe(3);
+      expect(standing.entries.map((e) => ({ name: e.name, house: e.house, stage: e.primaryValue }))).toEqual([
+        { name: 'Draco Malfoy HPVN', house: 'Slytherin', stage: 2 },
+        { name: 'Cho Chang HPVN', house: 'Ravenclaw', stage: 1 },
+        { name: 'Cedric Diggory HPVN (Bạn)', house: 'Hufflepuff', stage: 0 },
+      ]);
+
+      const slythCup = standing.houseStandings.find((h) => h.house === 'Slytherin')!;
+      const ravenCup = standing.houseStandings.find((h) => h.house === 'Ravenclaw')!;
+      const huffCup = standing.houseStandings.find((h) => h.house === 'Hufflepuff')!;
+      expect(slythCup.members).toBe(1);
+      expect(ravenCup.members).toBe(1);
+      expect(huffCup.members).toBe(1);
+      expect(slythCup.rank).toBe(1);
+    } finally {
+      registerAuthoritativeLeaderboardTransport(null);
+      clearCachedCloudLeaderboards();
+      vi.unstubAllGlobals();
+    }
   });
 });

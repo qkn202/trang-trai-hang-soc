@@ -590,13 +590,6 @@ export class SeedQuizModalController {
     const challengeHtml = this.challenge ? this.renderChallengeStage(this.challenge) : '';
 
     container.innerHTML = `
-      <div class="sq-view-bar-row">
-        <span class="sq-view-bar-hint">🔍 Phóng to / thu nhỏ &amp; xoay dọc ngang</span>
-        ${sharedMinigameViewport.renderToolbarHtml('seedquiz', {
-          showPanToggle: false,
-          extraClass: 'sq-view-toolbar',
-        })}
-      </div>
       <div class="sq-scroll-viewport" id="sqScrollViewport">
         <div class="sq-zoom-sizer" id="sqZoomSizer">
           <div class="sq-zoom-stage" id="sqZoomStage">

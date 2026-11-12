@@ -11,6 +11,12 @@
  *  8. Bộ Callable RPC riêng miền `Burrow` (`*Burrow*`), hoàn toàn độc lập và không chạm tới backend Hagrid Farm.
  */
 
+export interface MemberIdentityProfile {
+  house?: HogwartsHouseName;
+  username?: string;
+  avatarUrl?: string;
+}
+
 export interface BackendKVStore {
   get(key: string, type?: 'text'): Promise<string | null>;
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
@@ -31,6 +37,7 @@ export interface BackendKVStore {
     nowMs: number,
     rewardMin: number
   ): Promise<HouseCupWeekDoc>;
+  resolveMemberIdentityProfile?(uid: string): Promise<MemberIdentityProfile | null>;
 }
 
 export class MemoryBackendKVStore implements BackendKVStore {
@@ -483,6 +490,7 @@ export interface BurrowAuthoritativeStateDoc {
   avatarEmoji: string;
   avatarUrl?: string;
   house: HogwartsHouseName;
+  houseSource?: 'hpvn' | 'player' | 'default';
   level: number;
   xp: number;
   magicStars: number;
@@ -644,6 +652,7 @@ export interface CoopAssistanceRequestDoc {
 export interface VerifiedSessionIdentity {
   uid: string;
   house: HogwartsHouseName;
+  houseExplicit?: boolean;
   role: 'member' | 'saleAdmin';
   authenticatedVia:
     | 'hmac-jwt'
@@ -771,6 +780,124 @@ const VALID_HOUSES = new Set<HogwartsHouseName>([
   'Ravenclaw',
   'Slytherin',
 ]);
+
+/**
+ * Chuẩn hóa tên Nhà Hogwarts không phân biệt hoa/thường, slug viết tắt hoặc tên tiếng Việt.
+ * Trả về `null` khi không có giá trị hoặc không khớp 4 nhà (không tự ý ép sang Gryffindor sớm).
+ */
+export function normalizeHogwartsHouse(raw: unknown): HogwartsHouseName | null {
+  if (typeof raw !== 'string') return null;
+  const s = raw.trim().toLowerCase();
+  if (!s) return null;
+  if (
+    s === 'hufflepuff' ||
+    s === 'huff' ||
+    s.includes('hufflepuff') ||
+    s.includes('lửng')
+  ) {
+    return 'Hufflepuff';
+  }
+  if (
+    s === 'ravenclaw' ||
+    s === 'raven' ||
+    s.includes('ravenclaw') ||
+    s.includes('ưng') ||
+    s.includes('quạ')
+  ) {
+    return 'Ravenclaw';
+  }
+  if (
+    s === 'slytherin' ||
+    s === 'slyth' ||
+    s.includes('slytherin') ||
+    s.includes('rắn')
+  ) {
+    return 'Slytherin';
+  }
+  if (
+    s === 'gryffindor' ||
+    s === 'gryff' ||
+    s.includes('gryffindor') ||
+    s.includes('sư tử')
+  ) {
+    return 'Gryffindor';
+  }
+  return null;
+}
+
+const HOUSE_CANDIDATE_KEYS = [
+  'house',
+  'hogwartsHouse',
+  'hogwarts_house',
+  'houseName',
+  'house_name',
+  'houseId',
+  'house_id',
+  'sortedHouse',
+  'sorted_house',
+  'faction',
+] as const;
+
+export function extractHouseFromRecord(
+  obj: Record<string, unknown> | undefined | null
+): HogwartsHouseName | null {
+  if (!obj || typeof obj !== 'object') return null;
+  for (const key of HOUSE_CANDIDATE_KEYS) {
+    const parsed = normalizeHogwartsHouse(obj[key]);
+    if (parsed) return parsed;
+  }
+  for (const nestedKey of ['profile', 'member', 'character', 'claims', 'customClaims'] as const) {
+    const nested = obj[nestedKey];
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      const nObj = nested as Record<string, unknown>;
+      for (const key of HOUSE_CANDIDATE_KEYS) {
+        const parsed = normalizeHogwartsHouse(nObj[key]);
+        if (parsed) return parsed;
+      }
+    }
+  }
+  return null;
+}
+
+export function extractMemberProfileFields(
+  obj: Record<string, unknown> | undefined | null
+): MemberIdentityProfile {
+  if (!obj || typeof obj !== 'object') return {};
+  const house = extractHouseFromRecord(obj) ?? undefined;
+  const pickString = (
+    source: Record<string, unknown>,
+    keys: ReadonlyArray<string>,
+    maxLen: number
+  ): string | undefined => {
+    for (const k of keys) {
+      const val = source[k];
+      if (typeof val === 'string' && val.trim()) {
+        return val.trim().slice(0, maxLen);
+      }
+    }
+    return undefined;
+  };
+  const nameKeys = ['username', 'displayName', 'name', 'characterName', 'nickname', 'fullName'];
+  const avatarKeys = ['avatarUrl', 'photoURL', 'photoUrl', 'avatar', 'picture'];
+
+  let username = pickString(obj, nameKeys, 42);
+  let avatarUrl = pickString(obj, avatarKeys, 260);
+
+  for (const nestedKey of ['profile', 'member', 'character'] as const) {
+    const nested = obj[nestedKey];
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      const nObj = nested as Record<string, unknown>;
+      if (!username) username = pickString(nObj, nameKeys, 42);
+      if (!avatarUrl) avatarUrl = pickString(nObj, avatarKeys, 260);
+    }
+  }
+
+  return {
+    ...(house ? { house } : {}),
+    ...(username ? { username } : {}),
+    ...(avatarUrl ? { avatarUrl } : {}),
+  };
+}
 
 const FEAST_MILESTONES = Object.freeze([
   {
@@ -999,6 +1126,7 @@ interface VisitDirectorySummaryRow {
   username: string;
   parkName: string;
   house: HogwartsHouseName;
+  houseVerified?: boolean;
   avatarEmoji: string;
   avatarUrl?: string;
   level: number;
@@ -1153,7 +1281,7 @@ export class BurrowAuthoritativeBackend {
     if (!timingSafeEqualStr(expectedSig, parts[1])) {
       throw new BurrowServerError('unauthorized', 'Chữ ký vé phiên HPVN không hợp lệ.', {}, 401);
     }
-    let payload: {
+    let payload: Record<string, unknown> & {
       uid?: string;
       sub?: string;
       house?: string;
@@ -1178,18 +1306,16 @@ export class BurrowAuthoritativeBackend {
     if (typeof rawUid !== 'string' || !rawUid.trim()) {
       throw new BurrowServerError('unauthorized', 'Vé phiên HPVN thiếu định danh uid.', {}, 401);
     }
-    const house: HogwartsHouseName = VALID_HOUSES.has(payload.house as HogwartsHouseName)
-      ? (payload.house as HogwartsHouseName)
-      : 'Gryffindor';
-    const uname = (payload.username || payload.name || '').trim().slice(0, 42) || undefined;
-    const avatar = (payload.avatarUrl || payload.picture || '').trim().slice(0, 260) || undefined;
+    const memberFields = extractMemberProfileFields(payload);
+    const house: HogwartsHouseName = memberFields.house ?? 'Gryffindor';
     return {
       uid: sanitizeBackendUid(rawUid),
       house,
+      houseExplicit: Boolean(memberFields.house),
       role: payload.saleAdmin === true || payload.role === 'saleAdmin' ? 'saleAdmin' : 'member',
       authenticatedVia: 'hpvn-ticket',
-      ...(uname ? { username: uname } : {}),
-      ...(avatar ? { avatarUrl: avatar } : {}),
+      ...(memberFields.username ? { username: memberFields.username } : {}),
+      ...(memberFields.avatarUrl ? { avatarUrl: memberFields.avatarUrl } : {}),
     };
   }
 
@@ -1199,15 +1325,17 @@ export class BurrowAuthoritativeBackend {
   public async issueSessionToken(params: {
     uid: string;
     house?: string;
+    houseExplicit?: boolean;
     role?: 'member' | 'saleAdmin';
     username?: string;
     avatarUrl?: string;
     ttlSec?: number;
   }): Promise<{ token: string; uid: string; expiresAt: number }> {
     const uid = sanitizeBackendUid(params.uid);
-    const house: HogwartsHouseName = VALID_HOUSES.has(params.house as HogwartsHouseName)
-      ? (params.house as HogwartsHouseName)
-      : 'Gryffindor';
+    const parsedHouse = normalizeHogwartsHouse(params.house);
+    const house: HogwartsHouseName = parsedHouse ?? 'Gryffindor';
+    const houseExplicit =
+      params.houseExplicit !== undefined ? params.houseExplicit : Boolean(parsedHouse);
     const role = params.role === 'saleAdmin' ? 'saleAdmin' : 'member';
     const username = typeof params.username === 'string' ? params.username.trim().slice(0, 42) : undefined;
     const avatarUrl = typeof params.avatarUrl === 'string' ? params.avatarUrl.trim().slice(0, 260) : undefined;
@@ -1222,6 +1350,7 @@ export class BurrowAuthoritativeBackend {
         sub: uid,
         user_id: uid,
         house,
+        houseExplicit,
         role,
         ...(username ? { name: username } : {}),
         ...(avatarUrl ? { picture: avatarUrl } : {}),
@@ -1267,11 +1396,12 @@ export class BurrowAuthoritativeBackend {
       }
 
       const parts = rawToken.split('.');
-      type DecodedJwtPayload = {
+      type DecodedJwtPayload = Record<string, unknown> & {
         iss?: string;
         sub?: string;
         user_id?: string;
         house?: string;
+        houseExplicit?: boolean;
         role?: string;
         name?: string;
         username?: string;
@@ -1298,29 +1428,23 @@ export class BurrowAuthoritativeBackend {
           throw new BurrowServerError('unauthorized', 'Phiên đăng nhập đã hết hạn.', {}, 401);
         }
 
-        const tokenUsername =
-          typeof payloadObj.name === 'string' && payloadObj.name.trim()
-            ? payloadObj.name.trim().slice(0, 42)
-            : typeof payloadObj.username === 'string' && payloadObj.username.trim()
-              ? payloadObj.username.trim().slice(0, 42)
-              : headerUsername;
-        const tokenAvatarUrl =
-          typeof payloadObj.picture === 'string' && payloadObj.picture.trim()
-            ? payloadObj.picture.trim().slice(0, 260)
-            : typeof payloadObj.avatarUrl === 'string' && payloadObj.avatarUrl.trim()
-              ? payloadObj.avatarUrl.trim().slice(0, 260)
-              : headerAvatarUrl;
+        const memberFields = extractMemberProfileFields(payloadObj);
+        const tokenUsername = memberFields.username || headerUsername;
+        const tokenAvatarUrl = memberFields.avatarUrl || headerAvatarUrl;
 
         if (headerObj.alg === 'HS256') {
           const expectedSig = await hmacSha256Base64Url(this.hmacSecret, `${parts[0]}.${parts[1]}`);
           if (timingSafeEqualStr(expectedSig, parts[2])) {
             const uid = sanitizeBackendUid(payloadObj.user_id || payloadObj.sub);
-            const house: HogwartsHouseName = VALID_HOUSES.has(payloadObj.house as HogwartsHouseName)
-              ? (payloadObj.house as HogwartsHouseName)
-              : 'Gryffindor';
+            const house: HogwartsHouseName = memberFields.house ?? 'Gryffindor';
+            const houseExplicit =
+              typeof payloadObj.houseExplicit === 'boolean'
+                ? payloadObj.houseExplicit
+                : Boolean(memberFields.house);
             return {
               uid,
               house,
+              houseExplicit,
               role: isAdminHeader || payloadObj.role === 'saleAdmin' ? 'saleAdmin' : 'member',
               authenticatedVia: 'hmac-jwt',
               username: tokenUsername,
@@ -1342,7 +1466,8 @@ export class BurrowAuthoritativeBackend {
           const uid = sanitizeBackendUid(payloadObj.user_id || payloadObj.sub);
           return {
             uid,
-            house: 'Gryffindor',
+            house: memberFields.house ?? 'Gryffindor',
+            houseExplicit: Boolean(memberFields.house),
             role: isAdminHeader ? 'saleAdmin' : 'member',
             authenticatedVia: 'emulator-jwt',
             username: tokenUsername,
@@ -1381,6 +1506,7 @@ export class BurrowAuthoritativeBackend {
       return {
         uid: sanitizeBackendUid(hpvnUid),
         house: 'Gryffindor',
+        houseExplicit: false,
         role: isAdminHeader ? 'saleAdmin' : 'member',
         authenticatedVia: 'hpvn-header',
         username: headerUsername,
@@ -1393,6 +1519,7 @@ export class BurrowAuthoritativeBackend {
     return {
       uid: sanitizeBackendUid(legacyUid),
       house: 'Gryffindor',
+      houseExplicit: false,
       role: isAdminHeader ? 'saleAdmin' : 'member',
       authenticatedVia: 'legacy-header',
       username: headerUsername,
@@ -1433,7 +1560,8 @@ export class BurrowAuthoritativeBackend {
 
   public async getOrCreateState(
     uid: string,
-    defaultHouse: HogwartsHouseName = 'Gryffindor'
+    defaultHouse: HogwartsHouseName = 'Gryffindor',
+    defaultHouseSource: 'hpvn' | 'player' | 'default' = 'default'
   ): Promise<BurrowAuthoritativeStateDoc> {
     const key = `burrow_states:${uid}`;
     const existing = await this.readJson<BurrowAuthoritativeStateDoc>(key);
@@ -1452,6 +1580,7 @@ export class BurrowAuthoritativeBackend {
       friendCode: `HS-${codeHash}-${codeNum}`,
       avatarEmoji: '🧙‍♂️',
       house: defaultHouse,
+      houseSource: defaultHouseSource,
       level: 1,
       xp: 0,
       magicStars: 2,
@@ -1755,13 +1884,119 @@ export class BurrowAuthoritativeBackend {
     await this.withScopeLocks(['visit_dir'], () => this.registerVisitDirectoryEntry(state));
   }
 
+  public async syncIdentityProfileForState(
+    state: BurrowAuthoritativeStateDoc,
+    identity: VerifiedSessionIdentity
+  ): Promise<void> {
+    await this.applyIdentityProfileToState(state, identity);
+  }
+
+  private async resolveEffectiveIdentityProfile(
+    identity: VerifiedSessionIdentity,
+    skipExternalLookup = false
+  ): Promise<{ house: HogwartsHouseName | null; username?: string; avatarUrl?: string }> {
+    let house: HogwartsHouseName | null = null;
+    const hasKnownNonDefaultHouse =
+      VALID_HOUSES.has(identity.house) && identity.house !== 'Gryffindor';
+    if (identity.houseExplicit === true || hasKnownNonDefaultHouse) {
+      house = normalizeHogwartsHouse(identity.house);
+    } else if (
+      identity.houseExplicit === undefined &&
+      identity.authenticatedVia !== 'emulator-jwt' &&
+      identity.authenticatedVia !== 'hpvn-header' &&
+      identity.authenticatedVia !== 'legacy-header' &&
+      VALID_HOUSES.has(identity.house)
+    ) {
+      house = identity.house;
+    }
+
+    let username = identity.username?.trim() ? identity.username.trim().slice(0, 42) : undefined;
+    let avatarUrl = identity.avatarUrl?.trim() ? identity.avatarUrl.trim().slice(0, 260) : undefined;
+
+    if (
+      !skipExternalLookup &&
+      typeof this.store.resolveMemberIdentityProfile === 'function' &&
+      (!house || !username)
+    ) {
+      try {
+        const docProfile = await this.store.resolveMemberIdentityProfile(identity.uid);
+        if (docProfile) {
+          if (docProfile.house && !house) {
+            house = docProfile.house;
+          }
+          if (!username && docProfile.username) {
+            username = docProfile.username.trim().slice(0, 42);
+          }
+          if (!avatarUrl && docProfile.avatarUrl) {
+            avatarUrl = docProfile.avatarUrl.trim().slice(0, 260);
+          }
+        }
+      } catch {
+        // Fallback an toàn nếu kết nối đọc hồ sơ phụ tạm gián đoạn
+      }
+    }
+
+    return { house, username, avatarUrl };
+  }
+
+  private async refreshUserMetadataInLeaderboards(
+    state: BurrowAuthoritativeStateDoc
+  ): Promise<void> {
+    for (const gameId of SCORED_SERVER_LEADERBOARD_GAMES) {
+      const kvKey = `burrow_lb:${gameId}`;
+      const existing = (await this.readJson<Array<Record<string, unknown>>>(kvKey)) ?? [];
+      if (existing.length === 0) continue;
+      let modified = false;
+      for (const item of existing) {
+        if (item && item.userId === state.uid) {
+          if (item.house !== state.house) {
+            item.house = state.house;
+            modified = true;
+          }
+          if (
+            state.playerName &&
+            state.playerName !== 'Phù Thủy Hang Sóc' &&
+            (item.name === 'Trang Trại Hang Sóc' || item.name === 'Phù Thủy Hang Sóc' || !item.name)
+          ) {
+            item.name = state.playerName;
+            modified = true;
+          }
+          if (state.friendCode && item.friendCode !== state.friendCode) {
+            item.friendCode = state.friendCode;
+            modified = true;
+          }
+        }
+      }
+      if (modified) {
+        await this.writeJson(kvKey, existing, 86_400 * 180);
+      }
+    }
+  }
+
   private async applyIdentityProfileToState(
     state: BurrowAuthoritativeStateDoc,
     identity: VerifiedSessionIdentity
   ): Promise<void> {
+    const alreadyComplete =
+      state.houseSource === 'hpvn' &&
+      Boolean(state.playerName) &&
+      state.playerName !== 'Phù Thủy Hang Sóc' &&
+      state.playerName !== 'Trang Trại Hang Sóc';
+    const resolved = await this.resolveEffectiveIdentityProfile(identity, alreadyComplete);
     let changed = false;
-    if (identity.username && identity.username.trim()) {
-      const nextName = identity.username.trim().slice(0, 42);
+    let leaderboardMetaChanged = false;
+
+    if (resolved.house) {
+      if (state.house !== resolved.house || state.houseSource !== 'hpvn') {
+        state.house = resolved.house;
+        state.houseSource = 'hpvn';
+        changed = true;
+        leaderboardMetaChanged = true;
+      }
+    }
+
+    if (resolved.username && resolved.username.trim()) {
+      const nextName = resolved.username.trim().slice(0, 42);
       if (
         state.playerName === 'Phù Thủy Hang Sóc' ||
         state.playerName === 'Trang Trại Hang Sóc' ||
@@ -1770,11 +2005,12 @@ export class BurrowAuthoritativeBackend {
         if (state.playerName !== nextName) {
           state.playerName = nextName;
           changed = true;
+          leaderboardMetaChanged = true;
         }
       }
     }
-    if (identity.avatarUrl && identity.avatarUrl.trim()) {
-      const nextAvatar = identity.avatarUrl.trim().slice(0, 260);
+    if (resolved.avatarUrl && resolved.avatarUrl.trim()) {
+      const nextAvatar = resolved.avatarUrl.trim().slice(0, 260);
       if (state.avatarUrl !== nextAvatar) {
         state.avatarUrl = nextAvatar;
         changed = true;
@@ -1784,7 +2020,54 @@ export class BurrowAuthoritativeBackend {
       state.updatedAt = this.now();
       await this.writeJson(`burrow_states:${state.uid}`, state);
       await this.registerVisitDirectoryEntry(state);
+      if (leaderboardMetaChanged) {
+        await this.refreshUserMetadataInLeaderboards(state);
+      }
     }
+  }
+
+  private async getHealedVisitDirectory(): Promise<VisitDirectorySummaryRow[]> {
+    const indexKey = 'burrow_visit_directory';
+    const current = (await this.readJson<VisitDirectorySummaryRow[]>(indexKey)) ?? [];
+    if (current.length === 0 || typeof this.store.resolveMemberIdentityProfile !== 'function') {
+      return current;
+    }
+
+    let modified = false;
+    const toCheck = current
+      .filter((r) => !r.houseVerified && r.house === 'Gryffindor')
+      .slice(0, 8);
+    await Promise.all(
+      toCheck.map(async (row) => {
+        try {
+          const prof = await this.store.resolveMemberIdentityProfile!(row.uid);
+          row.houseVerified = true;
+          modified = true;
+          if (!prof) return;
+          if (prof.house && row.house !== prof.house) {
+            row.house = prof.house;
+          }
+          if (
+            prof.username &&
+            (row.username === 'Phù Thủy Hang Sóc' ||
+              row.username === 'Trang Trại Hang Sóc' ||
+              !row.username)
+          ) {
+            row.username = prof.username;
+          }
+          if (prof.avatarUrl && !row.avatarUrl) {
+            row.avatarUrl = prof.avatarUrl;
+          }
+        } catch {
+          // Bỏ qua lỗi đọc đơn lẻ
+        }
+      })
+    );
+
+    if (modified) {
+      await this.writeJson(indexKey, current, 86_400 * 60);
+    }
+    return current;
   }
 
   private async registerVisitDirectoryEntry(
@@ -1827,6 +2110,11 @@ export class BurrowAuthoritativeBackend {
       username: state.playerName,
       parkName: state.parkName,
       house: state.house,
+      ...(state.houseSource === 'hpvn' || state.houseSource === 'player'
+        ? { houseVerified: true }
+        : prevRow?.houseVerified
+          ? { houseVerified: true }
+          : {}),
       avatarEmoji: state.avatarEmoji,
       ...(state.avatarUrl ? { avatarUrl: state.avatarUrl } : {}),
       level: state.level,
@@ -1970,6 +2258,11 @@ export class BurrowAuthoritativeBackend {
 
     const omitCatalog =
       typeof params.knownCatalogHash === 'string' && params.knownCatalogHash === catalogHash;
+    const [lbMatch3, lbSudoku, lbBlocks] = await Promise.all([
+      this.getLeaderboardEntries('match3'),
+      this.getLeaderboardEntries('sudoku'),
+      this.getLeaderboardEntries('blocks'),
+    ]);
 
     return {
       uid: state.uid,
@@ -1983,6 +2276,7 @@ export class BurrowAuthoritativeBackend {
           phoenixTalismans: state.phoenixTalismans,
           friendshipTokens: state.friendshipTokens,
           house: state.house,
+          houseSource: state.houseSource ?? 'default',
           parkName: state.parkName,
           friendCode: state.friendCode,
           inventory: state.inventory,
@@ -2090,8 +2384,14 @@ export class BurrowAuthoritativeBackend {
         parkName: state.parkName,
         friendCode: state.friendCode,
         house: state.house,
+        houseSource: state.houseSource ?? 'default',
         avatarEmoji: state.avatarEmoji,
         ...(state.avatarUrl ? { avatarUrl: state.avatarUrl } : {}),
+      },
+      leaderboards: {
+        match3: lbMatch3,
+        sudoku: lbSudoku,
+        blocks: lbBlocks,
       },
       ...(params.receipt ? { receipt: params.receipt } : {}),
     };
@@ -2112,7 +2412,11 @@ export class BurrowAuthoritativeBackend {
 
     switch (callableName) {
       case 'getBurrowGarden': {
-        const state = await this.getOrCreateState(identity.uid, identity.house);
+        const state = await this.getOrCreateState(
+          identity.uid,
+          identity.house,
+          identity.houseExplicit ? 'hpvn' : 'default'
+        );
         await this.applyIdentityProfileToState(state, identity);
         const wallet = await this.getOrCreateWallet(identity.uid);
         const daily = await this.getOrCreateDaily(identity.uid);
@@ -2128,11 +2432,53 @@ export class BurrowAuthoritativeBackend {
         });
       }
 
-      case 'performBurrowAction':
+      case 'performBurrowAction': {
+        const actName = typeof data.action === 'string' ? data.action : '';
+        const touchesLb =
+          actName === 'submitLeaderboard' ||
+          actName === 'minigameClear' ||
+          actName === 'syncProfile' ||
+          actName === 'syncSaveSnapshot';
         return this.withScopeLocks(
-          [`user:${identity.uid}`, `cup:${vnWeekKey(this.now())}`, 'visit_dir'],
+          [
+            `user:${identity.uid}`,
+            `cup:${vnWeekKey(this.now())}`,
+            'visit_dir',
+            ...(touchesLb ? ['lb:match3', 'lb:sudoku', 'lb:blocks'] : []),
+          ],
           () => this.performAction(data, identity)
         );
+      }
+
+      case 'getBurrowLeaderboard': {
+        const gameId = typeof data.gameId === 'string' ? data.gameId : 'match3';
+        const entries = await this.getLeaderboardEntries(gameId);
+        return {
+          ok: true,
+          gameId: SCORED_SERVER_LEADERBOARD_GAMES.has(gameId) ? gameId : 'match3',
+          entries,
+        };
+      }
+
+      case 'submitBurrowLeaderboard': {
+        const gameId = typeof data.gameId === 'string' ? data.gameId : 'match3';
+        const entry =
+          data.entry && typeof data.entry === 'object'
+            ? (data.entry as Record<string, unknown>)
+            : {};
+        const state = await this.getOrCreateState(
+          identity.uid,
+          identity.house,
+          identity.houseExplicit ? 'hpvn' : 'default'
+        );
+        await this.applyIdentityProfileToState(state, identity);
+        const res = await this.submitLeaderboardScore({
+          uid: identity.uid,
+          gameId,
+          entry,
+        });
+        return { ok: true, ...res };
+      }
 
       case 'buyBurrowSupplies':
         return this.withScopeLocks([`user:${identity.uid}`], () =>
@@ -2222,7 +2568,12 @@ export class BurrowAuthoritativeBackend {
     data: Record<string, unknown>,
     identity: VerifiedSessionIdentity
   ): Promise<Record<string, unknown>> {
-    const state = await this.getOrCreateState(identity.uid, identity.house);
+    const state = await this.getOrCreateState(
+      identity.uid,
+      identity.house,
+      identity.houseExplicit ? 'hpvn' : 'default'
+    );
+    await this.applyIdentityProfileToState(state, identity);
     const wallet = await this.getOrCreateWallet(identity.uid);
     const daily = await this.getOrCreateDaily(identity.uid);
     const salesConfig = await this.getOrCreateSalesConfig();
@@ -2252,6 +2603,8 @@ export class BurrowAuthoritativeBackend {
       'setScene',
       'owlSeen',
       'syncProfile',
+      'submitLeaderboard',
+      'getLeaderboard',
     ]);
     if (!nonRevisionActions.has(action)) {
       if (data.expectedRevision !== state.revision) {
@@ -2275,6 +2628,11 @@ export class BurrowAuthoritativeBackend {
     const prevLedgerLength = nextLedger.length;
     const nowMs = this.now();
     const extraReceipt: Record<string, unknown> = {};
+    const pendingLeaderboardSubmissions: Array<{
+      gameId: string;
+      entry: Record<string, unknown>;
+      awardImprovementCup?: boolean;
+    }> = [];
     let galleonsToCharge = 0;
 
     const recordQuestProgress = (trigger: string, amount = 1) => {
@@ -2373,19 +2731,38 @@ export class BurrowAuthoritativeBackend {
           bestStreak: 0,
           updatedAt: nowMs,
         };
-        nextState.minigameRecords[gameId] = {
+        const updatedRec = {
           bestStage: Math.max(prevRec.bestStage, stage),
           ratingScore: Math.max(prevRec.ratingScore, score),
           totalWins: prevRec.totalWins + 1,
           bestStreak: Math.max(prevRec.bestStreak, Number(data.streak) || 1),
           updatedAt: nowMs,
         };
+        nextState.minigameRecords[gameId] = updatedRec;
         nextState.magicStars += 1;
         nextState.xp += 25;
         nextState.level = Math.min(100, Math.max(nextState.level, 1 + Math.floor(nextState.xp / 120)));
         nextState.festival.points += 10;
         nextState.revision += 1;
         recordQuestProgress('minigameClear', 1);
+
+        if (SCORED_SERVER_LEADERBOARD_GAMES.has(gameId)) {
+          pendingLeaderboardSubmissions.push({
+            gameId,
+            entry: {
+              name: nextState.playerName,
+              parkName: nextState.parkName,
+              friendCode: nextState.friendCode,
+              avatarEmoji: nextState.avatarEmoji,
+              house: nextState.house,
+              primaryValue: updatedRec.bestStage,
+              ratingScore: updatedRec.ratingScore,
+              totalWins: updatedRec.totalWins,
+              bestStreak: updatedRec.bestStreak,
+            },
+            awardImprovementCup: false,
+          });
+        }
 
         const cupRes = await this.addHouseCupPoints(nextState.house, nextDaily, 10);
         extraReceipt.spedTimersCount = spedCount;
@@ -2874,8 +3251,22 @@ export class BurrowAuthoritativeBackend {
         if (typeof data.avatarEmoji === 'string' && data.avatarEmoji.trim()) {
           nextState.avatarEmoji = data.avatarEmoji.trim().slice(0, 8);
         }
-        if (typeof data.house === 'string' && VALID_HOUSES.has(data.house as HogwartsHouseName)) {
-          nextState.house = data.house as HogwartsHouseName;
+        const incomingHouse = normalizeHogwartsHouse(data.house);
+        if (incomingHouse) {
+          if (nextState.houseSource === 'hpvn') {
+            // Giữ nguyên Nhà Hogwarts chính thức từ hồ sơ diễn đàn HPVN (chỉ cho phép đổi khi có cờ allowOverrideHpvnHouse)
+            if (data.allowOverrideHpvnHouse === true) {
+              nextState.house = incomingHouse;
+            }
+          } else if (data.houseExplicit === true) {
+            nextState.house = incomingHouse;
+            nextState.houseSource = 'player';
+          } else if (
+            (!nextState.houseSource || nextState.houseSource === 'default') &&
+            incomingHouse !== 'Gryffindor'
+          ) {
+            nextState.house = incomingHouse;
+          }
         }
         if (typeof data.level === 'number' && Number.isFinite(data.level)) {
           nextState.level = Math.max(nextState.level, Math.min(100, Math.floor(data.level)));
@@ -2892,14 +3283,96 @@ export class BurrowAuthoritativeBackend {
           const rawSave = data.rawClientSave as Record<string, unknown>;
           if (typeof rawSave.version === 'number' && rawSave.version > 0) {
             this.reconcileClientSaveIntoState(rawSave, nextState, nextDaily);
+            for (const item of this.extractScoredLeaderboardEntriesFromSave(rawSave, nextState)) {
+              pendingLeaderboardSubmissions.push({ ...item, awardImprovementCup: true });
+            }
+          }
+        }
+        if (data.leaderboardEntries && typeof data.leaderboardEntries === 'object') {
+          for (const [gid, rawEntry] of Object.entries(
+            data.leaderboardEntries as Record<string, unknown>
+          )) {
+            if (
+              SCORED_SERVER_LEADERBOARD_GAMES.has(gid) &&
+              rawEntry &&
+              typeof rawEntry === 'object'
+            ) {
+              pendingLeaderboardSubmissions.push({
+                gameId: gid,
+                entry: rawEntry as Record<string, unknown>,
+                awardImprovementCup: true,
+              });
+            }
           }
         }
         extraReceipt.syncedProfile = {
           playerName: nextState.playerName,
           parkName: nextState.parkName,
+          house: nextState.house,
           avatarUrl: nextState.avatarUrl ?? null,
           level: nextState.level,
         };
+        break;
+      }
+
+      case 'submitLeaderboard': {
+        if (
+          data.sandboxMode === true ||
+          data.sandboxTainted === true ||
+          data.isHeadmasterPreview === true ||
+          (data.entry &&
+            typeof data.entry === 'object' &&
+            ((data.entry as Record<string, unknown>).sandboxMode === true ||
+              (data.entry as Record<string, unknown>).sandboxTainted === true ||
+              (data.entry as Record<string, unknown>).isHeadmasterPreview === true))
+        ) {
+          throw new BurrowServerError(
+            'sandbox-forbidden',
+            'Không cho phép gửi điểm từ Chế Độ Thử Nghiệm (Sandbox)!',
+            {},
+            403
+          );
+        }
+        if (data.houseExplicit === true && nextState.houseSource !== 'hpvn') {
+          const explicitHouse = normalizeHogwartsHouse(data.house);
+          if (explicitHouse) {
+            nextState.house = explicitHouse;
+            nextState.houseSource = 'player';
+          }
+        }
+        if (data.entriesByGame && typeof data.entriesByGame === 'object') {
+          for (const [gid, rawEntry] of Object.entries(
+            data.entriesByGame as Record<string, unknown>
+          )) {
+            if (
+              SCORED_SERVER_LEADERBOARD_GAMES.has(gid) &&
+              rawEntry &&
+              typeof rawEntry === 'object'
+            ) {
+              pendingLeaderboardSubmissions.push({
+                gameId: gid,
+                entry: rawEntry as Record<string, unknown>,
+                awardImprovementCup: true,
+              });
+            }
+          }
+        }
+        if (typeof data.gameId === 'string' && data.entry && typeof data.entry === 'object') {
+          if (SCORED_SERVER_LEADERBOARD_GAMES.has(data.gameId)) {
+            pendingLeaderboardSubmissions.push({
+              gameId: data.gameId,
+              entry: data.entry as Record<string, unknown>,
+              awardImprovementCup: true,
+            });
+          }
+        }
+        extraReceipt.submittedGames = pendingLeaderboardSubmissions.map((s) => s.gameId);
+        break;
+      }
+
+      case 'getLeaderboard': {
+        const reqGame = typeof data.gameId === 'string' ? data.gameId : 'match3';
+        extraReceipt.gameId = SCORED_SERVER_LEADERBOARD_GAMES.has(reqGame) ? reqGame : 'match3';
         break;
       }
 
@@ -2912,6 +3385,9 @@ export class BurrowAuthoritativeBackend {
           throw new BurrowServerError('invalid-action-input', 'Bản lưu đồng bộ không hợp lệ.');
         }
         this.reconcileClientSaveIntoState(rawSave, nextState, nextDaily);
+        for (const item of this.extractScoredLeaderboardEntriesFromSave(rawSave, nextState)) {
+          pendingLeaderboardSubmissions.push({ ...item, awardImprovementCup: true });
+        }
         nextState.revision += 1;
         extraReceipt.syncedRevision = nextState.revision;
         break;
@@ -2938,6 +3414,24 @@ export class BurrowAuthoritativeBackend {
       extraReceipt.balance = nextWallet.spendable;
     }
 
+    if (pendingLeaderboardSubmissions.length > 0) {
+      let totalLbCupAdded = 0;
+      for (const sub of pendingLeaderboardSubmissions) {
+        const lbRes = await this.upsertLeaderboardEntryUnlocked({
+          uid: identity.uid,
+          gameId: sub.gameId,
+          entry: sub.entry,
+          state: nextState,
+          daily: nextDaily,
+          awardImprovementCup: sub.awardImprovementCup !== false,
+        });
+        totalLbCupAdded += lbRes.cupPointsAdded;
+      }
+      if (totalLbCupAdded > 0) {
+        extraReceipt.leaderboardCupPointsAdded = totalLbCupAdded;
+      }
+    }
+
     nextState.updatedAt = nowMs;
     const receipt: Record<string, unknown> = {
       ...extraReceipt,
@@ -2956,6 +3450,9 @@ export class BurrowAuthoritativeBackend {
       await this.persistWalletAndLedger(identity.uid, nextWallet, nextLedger, prevLedgerLength);
     }
     await this.registerVisitDirectoryEntry(nextState);
+    if (action === 'syncProfile' || action === 'submitLeaderboard') {
+      await this.refreshUserMetadataInLeaderboards(nextState);
+    }
 
     return this.buildSnapshotResponse({
       identity,
@@ -3480,8 +3977,11 @@ export class BurrowAuthoritativeBackend {
     // Chế độ danh sách: chỉ tốn đúng 3 lượt đọc (visitorState + visitorDaily + burrow_visit_directory),
     // thay vì 1 + 48 × 3 = 145 lượt đọc Firestore rời rạc!
     if (!data.hostUid && !data.friendCode) {
-      const visitorState = await this.getOrCreateState(identity.uid, identity.house);
-      await this.applyIdentityProfileToState(visitorState, identity);
+      const visitorState = await this.getOrCreateState(
+        identity.uid,
+        identity.house,
+        identity.houseExplicit || identity.house !== 'Gryffindor' ? 'hpvn' : 'default'
+      );
       const visitorDaily = await this.getOrCreateDaily(identity.uid);
       const nowMs = this.now();
       const directory = (await this.readJson<VisitDirectorySummaryRow[]>('burrow_visit_directory')) ?? [];
@@ -4070,8 +4570,395 @@ export class BurrowAuthoritativeBackend {
     saveBody.lastDailyResetKey = daily.dayKey;
     saveBody.serverRevision = state.revision;
     saveBody.serverDayKey = daily.dayKey;
+
+    const lbObj =
+      saveBody.minigameLeaderboard && typeof saveBody.minigameLeaderboard === 'object'
+        ? (saveBody.minigameLeaderboard as Record<string, unknown>)
+        : null;
+    if (lbObj) {
+      const saveHouse = normalizeHogwartsHouse(lbObj.playerHouse);
+      if (state.houseSource === 'hpvn') {
+        lbObj.playerHouse = state.house;
+        lbObj.playerHouseLockedByServer = true;
+      } else if (saveHouse && lbObj.playerHouseExplicit === true) {
+        state.house = saveHouse;
+        state.houseSource = 'player';
+      } else if (
+        saveHouse &&
+        saveHouse !== 'Gryffindor' &&
+        (!state.houseSource || state.houseSource === 'default')
+      ) {
+        state.house = saveHouse;
+      }
+    }
+
     state.rawClientSave = extractSanitizedPublicValleySave(saveBody);
     return saveBody;
+  }
+
+  /**
+   * Trích xuất kỷ lục 3 bộ môn tính điểm (`match3`, `sudoku`, `blocks`) từ bản lưu client
+   * để tự động điền lên Bảng Xếp Hạng máy chủ ngay cả khi người chơi lưu qua `/api/save` hoặc `syncProfile`.
+   */
+  public extractScoredLeaderboardEntriesFromSave(
+    saveBody: Record<string, unknown>,
+    state: BurrowAuthoritativeStateDoc
+  ): Array<{ gameId: string; entry: Record<string, unknown> }> {
+    const out: Array<{ gameId: string; entry: Record<string, unknown> }> = [];
+    const lbObj =
+      saveBody.minigameLeaderboard && typeof saveBody.minigameLeaderboard === 'object'
+        ? (saveBody.minigameLeaderboard as Record<string, unknown>)
+        : null;
+    const recordsObj =
+      lbObj?.records && typeof lbObj.records === 'object'
+        ? (lbObj.records as Record<string, unknown>)
+        : null;
+    const m3Obj =
+      saveBody.match3 && typeof saveBody.match3 === 'object'
+        ? (saveBody.match3 as Record<string, unknown>)
+        : null;
+    const paObj =
+      saveBody.puzzleArcade && typeof saveBody.puzzleArcade === 'object'
+        ? (saveBody.puzzleArcade as Record<string, unknown>)
+        : null;
+    const sharedStreak = Math.max(0, Math.floor(Number(m3Obj?.winStreak) || 0));
+
+    for (const gameId of ['match3', 'sudoku', 'blocks'] as const) {
+      const rec =
+        recordsObj?.[gameId] && typeof recordsObj[gameId] === 'object'
+          ? (recordsObj[gameId] as Record<string, unknown>)
+          : null;
+      let fallbackCleared = 0;
+      let fallbackWins = 0;
+      let fallbackRating = 0;
+      if (gameId === 'match3') {
+        fallbackCleared = Math.max(
+          0,
+          Math.min(
+            777,
+            Math.floor(
+              Number(
+                m3Obj?.maxClearedLevel ?? Math.max(0, (Number(m3Obj?.currentLevel) || 1) - 1)
+              ) || 0
+            )
+          )
+        );
+        fallbackWins = Math.max(fallbackCleared, Math.floor(Number(m3Obj?.levelsWon) || 0));
+        fallbackRating = fallbackCleared * 150 + fallbackWins * 25 + sharedStreak * 40;
+      } else if (gameId === 'sudoku') {
+        fallbackCleared = Math.max(
+          0,
+          Math.min(
+            777,
+            Math.floor(
+              Number(
+                paObj?.sudokuCleared ?? Math.max(0, (Number(paObj?.sudokuStage) || 1) - 1)
+              ) || 0
+            )
+          )
+        );
+        fallbackWins = fallbackCleared;
+        fallbackRating = fallbackCleared * 155 + fallbackCleared * 22 + sharedStreak * 35;
+      } else {
+        fallbackCleared = Math.max(
+          0,
+          Math.min(
+            777,
+            Math.floor(
+              Number(paObj?.blockCleared ?? Math.max(0, (Number(paObj?.blockStage) || 1) - 1)) || 0
+            )
+          )
+        );
+        fallbackWins = fallbackCleared;
+        fallbackRating = fallbackCleared * 155 + fallbackCleared * 22 + sharedStreak * 35;
+      }
+
+      const bestStage = Math.max(
+        fallbackCleared,
+        Math.min(777, Math.floor(Number(rec?.bestStage) || 0))
+      );
+      const ratingScore = Math.max(
+        fallbackRating,
+        Math.floor(Number(rec?.highScore ?? rec?.ratingScore) || 0)
+      );
+      const totalWins = Math.max(fallbackWins, Math.floor(Number(rec?.totalWins) || 0));
+      const bestStreak = Math.max(sharedStreak, Math.floor(Number(rec?.bestStreak) || 0));
+
+      if (bestStage <= 0 && totalWins <= 0) continue;
+
+      out.push({
+        gameId,
+        entry: {
+          name: state.playerName,
+          parkName: state.parkName,
+          friendCode: state.friendCode,
+          avatarEmoji: state.avatarEmoji,
+          house: state.house,
+          primaryValue: bestStage,
+          ratingScore,
+          totalWins,
+          bestStreak,
+        },
+      });
+    }
+    return out;
+  }
+
+  public async syncSaveLeaderboardsForState(
+    saveBody: Record<string, unknown>,
+    state: BurrowAuthoritativeStateDoc,
+    daily: BurrowDailyDoc
+  ): Promise<void> {
+    const items = this.extractScoredLeaderboardEntriesFromSave(saveBody, state);
+    if (items.length === 0) return;
+    await this.withScopeLocks(['lb:match3', 'lb:sudoku', 'lb:blocks'], async () => {
+      for (const item of items) {
+        await this.upsertLeaderboardEntryUnlocked({
+          uid: state.uid,
+          gameId: item.gameId,
+          entry: item.entry,
+          state,
+          daily,
+          awardImprovementCup: false,
+        });
+      }
+    });
+  }
+
+  /**
+   * Đọc danh sách Bảng Xếp Hạng của một bộ môn trực tuyến (`match3`, `sudoku`, `blocks`),
+   * tự động kết hợp các kỷ lục điểm đã nộp với danh bạ người chơi thật trong Thung Lũng (`burrow_visit_directory`)
+   * và đối chiếu hồ sơ Nhà Hogwarts thực tế từ HPVN để người chơi luôn thấy đầy đủ cộng đồng!
+   */
+  public async getLeaderboardEntries(
+    gameId: string
+  ): Promise<Array<Record<string, unknown>>> {
+    if (!SCORED_SERVER_LEADERBOARD_GAMES.has(gameId)) {
+      return [];
+    }
+
+    const kvKey = `burrow_lb:${gameId}`;
+    const [existingRaw, directory] = await Promise.all([
+      this.readJson<Array<Record<string, unknown>>>(kvKey),
+      this.getHealedVisitDirectory(),
+    ]);
+    const existing = Array.isArray(existingRaw) ? existingRaw : [];
+    const dirByUid = new Map<string, VisitDirectorySummaryRow>();
+    for (const row of directory) {
+      if (row && typeof row.uid === 'string' && row.uid) {
+        dirByUid.set(row.uid, row);
+      }
+    }
+
+    const byUser = new Map<string, Record<string, unknown>>();
+    for (const item of existing) {
+      if (!item || typeof item.userId !== 'string' || !item.userId) continue;
+      const dirRow = dirByUid.get(item.userId);
+      const resolvedHouse =
+        (dirRow?.houseVerified ? normalizeHogwartsHouse(dirRow.house) : null) ??
+        normalizeHogwartsHouse(item.house) ??
+        normalizeHogwartsHouse(dirRow?.house) ??
+        'Gryffindor';
+      const rawItemName = typeof item.name === 'string' ? item.name.trim() : '';
+      const resolvedName =
+        dirRow?.username &&
+        dirRow.username !== 'Phù Thủy Hang Sóc' &&
+        (!rawItemName || rawItemName === 'Trang Trại Hang Sóc' || rawItemName === 'Phù Thủy Hang Sóc')
+          ? dirRow.username
+          : rawItemName || dirRow?.username || dirRow?.parkName || 'Phù Thủy Hang Sóc';
+      const resolvedFriendCode =
+        dirRow?.friendCode || sanitizeFriendCode(item.friendCode) || 'HS-CLUD-01';
+
+      byUser.set(item.userId, {
+        ...item,
+        userId: item.userId,
+        name: String(resolvedName).slice(0, 42),
+        parkName: String(item.parkName || dirRow?.parkName || 'Trang Trại Hang Sóc').slice(0, 42),
+        friendCode: resolvedFriendCode,
+        avatarEmoji: String(item.avatarEmoji || dirRow?.avatarEmoji || '🧙‍♂️').slice(0, 8),
+        house: resolvedHouse,
+        primaryValue: Math.max(0, Math.floor(Number(item.primaryValue) || 0)),
+        ratingScore: Math.max(0, Math.floor(Number(item.ratingScore) || 0)),
+        totalWins: Math.max(0, Math.floor(Number(item.totalWins) || 0)),
+        bestStreak: Math.max(0, Math.floor(Number(item.bestStreak) || 0)),
+        detailLabelVi: String(item.detailLabelVi || '').slice(0, 64),
+        updatedAt: Math.floor(Number(item.updatedAt) || 0),
+      });
+    }
+
+    // Bổ sung thành viên thật trong thung lũng chưa có bản ghi ở bộ môn này để mọi người chơi đều thấy nhau trong BXH Toàn Thung Lũng & Cúp 4 Nhà
+    for (const row of directory) {
+      if (!row || !row.uid || byUser.has(row.uid)) continue;
+      const resolvedHouse = normalizeHogwartsHouse(row.house) ?? 'Gryffindor';
+      const displayName =
+        row.username && row.username !== 'Phù Thủy Hang Sóc'
+          ? row.username
+          : row.parkName || row.username || 'Phù Thủy Hang Sóc';
+      byUser.set(row.uid, {
+        userId: row.uid,
+        name: String(displayName).slice(0, 42),
+        parkName: String(row.parkName || 'Trang Trại Hang Sóc').slice(0, 42),
+        friendCode: row.friendCode || 'HS-CLUD-01',
+        avatarEmoji: String(row.avatarEmoji || '🧙‍♂️').slice(0, 8),
+        house: resolvedHouse,
+        primaryValue: 0,
+        ratingScore: 0,
+        totalWins: 0,
+        bestStreak: 0,
+        detailLabelVi: 'Chưa có kỷ lục môn này',
+        updatedAt: Math.floor(Number(row.updatedAt) || 0),
+      });
+    }
+
+    return Array.from(byUser.values())
+      .sort(
+        (a, b) =>
+          Number(b.primaryValue || 0) - Number(a.primaryValue || 0) ||
+          Number(b.ratingScore || 0) - Number(a.ratingScore || 0) ||
+          Number(b.totalWins || 0) - Number(a.totalWins || 0) ||
+          Number(b.updatedAt || 0) - Number(a.updatedAt || 0)
+      )
+      .slice(0, 50);
+  }
+
+  private async upsertLeaderboardEntryUnlocked(params: {
+    uid: string;
+    gameId: string;
+    entry: Record<string, unknown>;
+    state?: BurrowAuthoritativeStateDoc | null;
+    daily?: BurrowDailyDoc | null;
+    awardImprovementCup?: boolean;
+  }): Promise<{ improved: boolean; cupPointsAdded: number }> {
+    const { uid, gameId, state } = params;
+    if (!SCORED_SERVER_LEADERBOARD_GAMES.has(gameId)) {
+      return { improved: false, cupPointsAdded: 0 };
+    }
+
+    const maxPrimary = 777;
+    const entryHouse = normalizeHogwartsHouse(params.entry.house);
+    const house: HogwartsHouseName =
+      state?.houseSource === 'hpvn'
+        ? state.house
+        : entryHouse && (entryHouse !== 'Gryffindor' || !state?.house)
+          ? entryHouse
+          : state?.house ?? entryHouse ?? 'Gryffindor';
+
+    const rawEntryName = typeof params.entry.name === 'string' ? params.entry.name.trim() : '';
+    const resolvedName =
+      state?.playerName &&
+      state.playerName !== 'Phù Thủy Hang Sóc' &&
+      (!rawEntryName || rawEntryName === 'Trang Trại Hang Sóc' || rawEntryName === 'Phù Thủy Hang Sóc')
+        ? state.playerName
+        : rawEntryName || state?.playerName || state?.parkName || 'Trang Trại Hang Sóc';
+
+    const resolvedParkName = String(
+      params.entry.parkName || state?.parkName || 'Trang Trại Hang Sóc'
+    ).slice(0, 42);
+
+    const rawEntryCode = sanitizeFriendCode(params.entry.friendCode);
+    const isPlaceholderCode =
+      !rawEntryCode ||
+      rawEntryCode === 'HS-YOU1-01' ||
+      rawEntryCode === 'HS-CLUD-01' ||
+      rawEntryCode === 'HS-CLUD-00';
+    const resolvedFriendCode =
+      state?.friendCode || (!isPlaceholderCode ? rawEntryCode : '') || `HS-${fnv1aHashHex(uid).slice(0, 4).toUpperCase()}-01`;
+
+    const nowMs = this.now();
+    const incomingPrimary = Math.max(
+      0,
+      Math.min(maxPrimary, Math.floor(Number(params.entry.primaryValue) || 0))
+    );
+    const incomingRating = Math.max(
+      0,
+      Math.min(9_999_999, Math.floor(Number(params.entry.ratingScore) || 0))
+    );
+    const incomingWins = Math.max(
+      0,
+      Math.min(999_999, Math.floor(Number(params.entry.totalWins) || 0))
+    );
+    const incomingStreak = Math.max(
+      0,
+      Math.min(99_999, Math.floor(Number(params.entry.bestStreak) || 0))
+    );
+
+    const kvKey = `burrow_lb:${gameId}`;
+    const existing = (await this.readJson<Array<Record<string, unknown>>>(kvKey)) ?? [];
+    const byUser = new Map<string, Record<string, unknown>>();
+    for (const item of existing) {
+      if (item && typeof item.userId === 'string') {
+        byUser.set(item.userId, item);
+      }
+    }
+
+    const prev = byUser.get(uid);
+    const prevPrimary = Math.max(0, Math.floor(Number(prev?.primaryValue) || 0));
+    const prevRating = Math.max(0, Math.floor(Number(prev?.ratingScore) || 0));
+    const prevWins = Math.max(0, Math.floor(Number(prev?.totalWins) || 0));
+    const prevStreak = Math.max(0, Math.floor(Number(prev?.bestStreak) || 0));
+
+    const improved = (!prev && incomingPrimary > 0) || incomingPrimary > prevPrimary;
+    const bestPrimary = Math.max(prevPrimary, incomingPrimary);
+    const bestRating =
+      incomingPrimary > prevPrimary ? incomingRating : Math.max(prevRating, incomingRating);
+    const bestWins = Math.max(prevWins, incomingWins);
+    const bestStreak = Math.max(prevStreak, incomingStreak);
+
+    const mergedEntry = {
+      userId: uid,
+      name: String(resolvedName).slice(0, 42),
+      parkName: resolvedParkName,
+      friendCode: resolvedFriendCode,
+      avatarEmoji: String(params.entry.avatarEmoji || state?.avatarEmoji || prev?.avatarEmoji || '🧙‍♂️').slice(
+        0,
+        8
+      ),
+      house,
+      primaryValue: bestPrimary,
+      ratingScore: bestRating,
+      totalWins: bestWins,
+      bestStreak: bestStreak,
+      detailLabelVi: String(params.entry.detailLabelVi || prev?.detailLabelVi || '').slice(0, 64),
+      updatedAt: nowMs,
+    };
+
+    byUser.set(uid, mergedEntry);
+
+    if (state) {
+      const prevStateRec = state.minigameRecords[gameId] ?? {
+        bestStage: 0,
+        ratingScore: 0,
+        totalWins: 0,
+        bestStreak: 0,
+        updatedAt: nowMs,
+      };
+      state.minigameRecords[gameId] = {
+        bestStage: Math.max(prevStateRec.bestStage, bestPrimary),
+        ratingScore: Math.max(prevStateRec.ratingScore, bestRating),
+        totalWins: Math.max(prevStateRec.totalWins, bestWins),
+        bestStreak: Math.max(prevStateRec.bestStreak, bestStreak),
+        updatedAt: nowMs,
+      };
+    }
+
+    const topEntries = Array.from(byUser.values())
+      .sort(
+        (a, b) =>
+          Number(b.primaryValue || 0) - Number(a.primaryValue || 0) ||
+          Number(b.ratingScore || 0) - Number(a.ratingScore || 0) ||
+          Number(b.totalWins || 0) - Number(a.totalWins || 0)
+      )
+      .slice(0, 50);
+
+    await this.writeJson(kvKey, topEntries, 86_400 * 180);
+
+    let cupPointsAdded = 0;
+    if (improved && bestPrimary > 0 && params.awardImprovementCup !== false && params.daily) {
+      const cupRes = await this.addHouseCupPoints(house, params.daily, 5);
+      cupPointsAdded = cupRes.added;
+    }
+
+    return { improved, cupPointsAdded };
   }
 
   /**
@@ -4091,84 +4978,39 @@ export class BurrowAuthoritativeBackend {
     }
 
     return this.withScopeLocks(
-      [`lb:${gameId}`, `user:${params.uid}`, `cup:${vnWeekKey(this.now())}`],
+      [`lb:${gameId}`, `user:${params.uid}`, `cup:${vnWeekKey(this.now())}`, 'visit_dir'],
       async () => {
-        const maxPrimary = 777;
-
-        const houseRaw = String(params.entry.house || 'Gryffindor');
-        const house: HogwartsHouseName = VALID_HOUSES.has(houseRaw as HogwartsHouseName)
-          ? (houseRaw as HogwartsHouseName)
-          : 'Gryffindor';
-
-        const nowMs = this.now();
-        const sanitized = {
-          userId: params.uid,
-          name: String(params.entry.name || 'Trang Trại Hang Sóc').slice(0, 42),
-          parkName: String(params.entry.parkName || 'Trang Trại Hang Sóc').slice(0, 42),
-          friendCode: sanitizeFriendCode(params.entry.friendCode) || 'HS-CLUD-01',
-          avatarEmoji: String(params.entry.avatarEmoji || '🧙‍♂️').slice(0, 8),
-          house,
-          primaryValue: Math.max(
-            0,
-            Math.min(maxPrimary, Math.floor(Number(params.entry.primaryValue) || 0))
-          ),
-          ratingScore: Math.max(
-            0,
-            Math.min(9_999_999, Math.floor(Number(params.entry.ratingScore) || 0))
-          ),
-          totalWins: Math.max(
-            0,
-            Math.min(999_999, Math.floor(Number(params.entry.totalWins) || 0))
-          ),
-          bestStreak: Math.max(
-            0,
-            Math.min(99_999, Math.floor(Number(params.entry.bestStreak) || 0))
-          ),
-          detailLabelVi: String(params.entry.detailLabelVi || '').slice(0, 64),
-          updatedAt: nowMs,
-        };
-
-        const kvKey = `burrow_lb:${gameId}`;
-        const existing = (await this.readJson<Array<typeof sanitized>>(kvKey)) ?? [];
-        const byUser = new Map<string, typeof sanitized>();
-        for (const item of existing) {
-          if (item && typeof item.userId === 'string') {
-            byUser.set(item.userId, item);
-          }
+        const entryHouse = normalizeHogwartsHouse(params.entry.house);
+        const state = await this.getOrCreateState(
+          params.uid,
+          entryHouse ?? 'Gryffindor',
+          'default'
+        );
+        if (typeof this.store.resolveMemberIdentityProfile === 'function') {
+          await this.applyIdentityProfileToState(state, {
+            uid: params.uid,
+            house: state.house,
+            houseExplicit: state.houseSource === 'hpvn',
+            role: 'member',
+            authenticatedVia: 'hmac-jwt',
+          });
         }
-
-        const prev = byUser.get(params.uid);
-        let improved = false;
-        if (
-          !prev ||
-          sanitized.primaryValue > prev.primaryValue ||
-          (sanitized.primaryValue === prev.primaryValue &&
-            sanitized.ratingScore >= prev.ratingScore)
-        ) {
-          improved = !prev || sanitized.primaryValue > prev.primaryValue;
-          byUser.set(params.uid, sanitized);
-        }
-
-        const topEntries = Array.from(byUser.values())
-          .sort(
-            (a, b) =>
-              b.primaryValue - a.primaryValue ||
-              b.ratingScore - a.ratingScore ||
-              b.totalWins - a.totalWins
-          )
-          .slice(0, 50);
-
-        await this.writeJson(kvKey, topEntries, 86_400 * 180);
-
-        let cupPointsAdded = 0;
-        if (improved && sanitized.primaryValue > 0) {
-          const daily = await this.getOrCreateDaily(params.uid);
-          const cupRes = await this.addHouseCupPoints(house, daily, 5);
-          cupPointsAdded = cupRes.added;
+        const daily = await this.getOrCreateDaily(params.uid);
+        const res = await this.upsertLeaderboardEntryUnlocked({
+          uid: params.uid,
+          gameId,
+          entry: params.entry,
+          state,
+          daily,
+          awardImprovementCup: true,
+        });
+        await this.writeJson(`burrow_states:${params.uid}`, state);
+        if (res.cupPointsAdded > 0) {
           await this.writeJson(`burrow_daily:${params.uid}:${daily.dayKey}`, daily, 86_400 * 14);
         }
-
-        return { gameId, entries: topEntries, cupPointsAdded };
+        await this.registerVisitDirectoryEntry(state);
+        const entries = await this.getLeaderboardEntries(gameId);
+        return { gameId, entries, cupPointsAdded: res.cupPointsAdded };
       }
     );
   }
@@ -4201,12 +5043,20 @@ export class BurrowAuthoritativeBackend {
     data: Record<string, unknown>,
     identity: VerifiedSessionIdentity
   ): Promise<Record<string, unknown>> {
-    const state = await this.getOrCreateState(identity.uid, identity.house);
+    const state = await this.getOrCreateState(
+      identity.uid,
+      identity.house,
+      identity.houseExplicit ? 'hpvn' : 'default'
+    );
+    await this.applyIdentityProfileToState(state, identity);
     const daily = await this.getOrCreateDaily(identity.uid);
-    const rawHouse = String(data.house || state.house || identity.house);
-    const house: HogwartsHouseName = VALID_HOUSES.has(rawHouse as HogwartsHouseName)
-      ? (rawHouse as HogwartsHouseName)
-      : state.house;
+    const requestedHouse = normalizeHogwartsHouse(data.house);
+    const house: HogwartsHouseName =
+      state.houseSource === 'hpvn'
+        ? state.house
+        : requestedHouse && (requestedHouse !== 'Gryffindor' || !state.house)
+          ? requestedHouse
+          : state.house;
     const rawPts = Math.max(1, Math.min(30, Math.floor(Number(data.points) || 5)));
     const { added, cup } = await this.addHouseCupPoints(house, daily, rawPts);
     await this.writeJson(`burrow_daily:${identity.uid}:${daily.dayKey}`, daily, 86_400 * 14);

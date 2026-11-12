@@ -44,6 +44,7 @@ export interface AuthoritativeSnapshot {
       phoenixTalismans: number;
       friendshipTokens: number;
       house: string;
+      houseSource?: string;
       parkName: string;
       friendCode: string;
       inventory: Record<string, number>;
@@ -111,6 +112,7 @@ export interface AuthoritativeSnapshot {
   saleAdmin?: boolean;
   serverNow: number;
   profile?: Record<string, unknown>;
+  leaderboards?: Partial<Record<'match3' | 'sudoku' | 'blocks', Array<Record<string, unknown>>>>;
   receipt?: Record<string, unknown>;
 }
 
@@ -322,6 +324,8 @@ export interface BurrowGardenClient {
     event: string;
   }) => Promise<AuthoritativeSnapshot>;
   syncProfile: (profile: Record<string, unknown>) => Promise<AuthoritativeSnapshot>;
+  submitLeaderboard: (payload: Record<string, unknown>) => Promise<AuthoritativeSnapshot>;
+  getLeaderboard: (gameId?: string) => Promise<AuthoritativeSnapshot>;
   visit: (data?: Record<string, unknown>) => Promise<Record<string, unknown>>;
   frame: (frameKey: string) => Promise<Record<string, unknown>>;
   sales: (data?: Record<string, unknown>) => Promise<Record<string, unknown>>;
@@ -466,6 +470,24 @@ export function createBurrowGardenClient(transport: CallableTransportFn): Burrow
         callSnapshot('performBurrowAction', {
           ...profile,
           action: 'syncProfile',
+          expectedRevision: snapshot?.garden.progression.revision ?? 0,
+          requestId: generateRequestId(),
+        })
+      ),
+    submitLeaderboard: (payload) =>
+      queue(() =>
+        callSnapshot('performBurrowAction', {
+          ...payload,
+          action: 'submitLeaderboard',
+          expectedRevision: snapshot?.garden.progression.revision ?? 0,
+          requestId: generateRequestId(),
+        })
+      ),
+    getLeaderboard: (gameId = 'match3') =>
+      queue(() =>
+        callSnapshot('performBurrowAction', {
+          action: 'getLeaderboard',
+          gameId,
           expectedRevision: snapshot?.garden.progression.revision ?? 0,
           requestId: generateRequestId(),
         })

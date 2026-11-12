@@ -19,6 +19,7 @@ import {
   BurrowServerError,
   extractSanitizedPublicValleySave,
   MemoryBackendKVStore,
+  normalizeHogwartsHouse,
   sanitizeBackendUid,
   sanitizeFriendCode,
   SCORED_SERVER_LEADERBOARD_GAMES,
@@ -409,24 +410,32 @@ function extractFriendProfileFromSave(
   if (friendCode.length < 4 || BLOCKED_NPC_CODES.has(friendCode)) return null;
 
   const parkName = String(body.parkName || 'Trang Trại Hang Sóc').slice(0, 42);
-  const name = String(body.name || parkName).slice(0, 42);
+  const displayName =
+    typeof soc?.playerDisplayName === 'string' && soc.playerDisplayName.trim()
+      ? soc.playerDisplayName.trim()
+      : String(body.name || parkName);
+  const name = displayName.slice(0, 42);
   const level = Math.max(1, Math.min(100, Math.floor(Number(body.level) || 1)));
-  const validHouses = new Set(['Gryffindor', 'Ravenclaw', 'Hufflepuff', 'Slytherin']);
-  let house = String(body.house || 'Gryffindor');
-  if (!validHouses.has(house) && body.housePoints && typeof body.housePoints === 'object') {
+  const lbObj =
+    body.minigameLeaderboard && typeof body.minigameLeaderboard === 'object'
+      ? (body.minigameLeaderboard as Record<string, unknown>)
+      : null;
+  let resolvedHouse =
+    normalizeHogwartsHouse(lbObj?.playerHouse) ?? normalizeHogwartsHouse(body.house);
+  if (!resolvedHouse && body.housePoints && typeof body.housePoints === 'object') {
     const hp = body.housePoints as Record<string, unknown>;
-    let bestH = 'Gryffindor';
-    let bestPts = -1;
-    for (const h of ['Gryffindor', 'Ravenclaw', 'Hufflepuff', 'Slytherin']) {
+    let bestH: 'Gryffindor' | 'Ravenclaw' | 'Hufflepuff' | 'Slytherin' = 'Gryffindor';
+    let bestPts = 0;
+    for (const h of ['Gryffindor', 'Ravenclaw', 'Hufflepuff', 'Slytherin'] as const) {
       const v = Number(hp[h] || 0);
       if (v > bestPts) {
         bestPts = v;
         bestH = h;
       }
     }
-    house = bestH;
+    if (bestPts > 0) resolvedHouse = bestH;
   }
-  if (!validHouses.has(house)) house = 'Gryffindor';
+  const house = resolvedHouse ?? 'Gryffindor';
   const avatarEmoji = String(body.avatarEmoji || '🧙‍♂️').slice(0, 8);
   const buildings = Array.isArray(body.buildings) ? body.buildings.slice(0, 260) : undefined;
   const tileOverrides =
@@ -552,16 +561,39 @@ export async function handleAuthoritativeHttpRequest(
       const uid = sanitizeBackendUid(rawUid);
       backend.checkRateLimit(`auth_uid:${uid}`, 20, 60_000);
 
+      const explicitBodyHouse = normalizeHogwartsHouse(body.house);
+      let resolvedDocProfile: Awaited<ReturnType<NonNullable<BackendKVStore['resolveMemberIdentityProfile']>>> =
+        null;
+      if (
+        (!verifiedIdentity || verifiedIdentity.houseExplicit !== true || !verifiedIdentity.username) &&
+        typeof store.resolveMemberIdentityProfile === 'function'
+      ) {
+        try {
+          resolvedDocProfile = await store.resolveMemberIdentityProfile(uid);
+        } catch {
+          resolvedDocProfile = null;
+        }
+      }
+      const resolvedSessionHouse =
+        (verifiedIdentity?.houseExplicit ? verifiedIdentity.house : undefined) ??
+        resolvedDocProfile?.house ??
+        explicitBodyHouse ??
+        verifiedIdentity?.house;
+      const resolvedHouseExplicit = Boolean(
+        verifiedIdentity?.houseExplicit || resolvedDocProfile?.house || explicitBodyHouse
+      );
+
       const issued = await backend.issueSessionToken({
         uid,
-        house:
-          verifiedIdentity?.house ||
-          (typeof body.house === 'string' ? body.house : undefined),
+        house: resolvedSessionHouse,
+        houseExplicit: resolvedHouseExplicit,
         username:
           verifiedIdentity?.username ||
+          resolvedDocProfile?.username ||
           (typeof body.username === 'string' ? body.username : undefined),
         avatarUrl:
           verifiedIdentity?.avatarUrl ||
+          resolvedDocProfile?.avatarUrl ||
           (typeof body.avatarUrl === 'string' ? body.avatarUrl : undefined),
         role:
           isAdmin || verifiedIdentity?.role === 'saleAdmin' ? 'saleAdmin' : 'member',
@@ -707,7 +739,12 @@ export async function handleAuthoritativeHttpRequest(
 
         const nowMs = nowFn();
         const dayKey = vnDayKey(nowMs);
-        const state = await backend.getOrCreateState(userId, identity.house);
+        const state = await backend.getOrCreateState(
+          userId,
+          identity.house,
+          identity.houseExplicit ? 'hpvn' : 'default'
+        );
+        await backend.syncIdentityProfileForState(state, identity);
         const daily = await backend.getOrCreateDaily(userId, dayKey);
 
         const timestamp = Number(body.savedAt || body.lastSavedAt || nowMs);
@@ -719,6 +756,7 @@ export async function handleAuthoritativeHttpRequest(
           state,
           daily
         );
+        await backend.syncSaveLeaderboardsForState(reconciled, state, daily);
         state.revision += 1;
         state.updatedAt = nowMs;
 
@@ -739,6 +777,10 @@ export async function handleAuthoritativeHttpRequest(
         const friendProfile = extractFriendProfileFromSave(userId, reconciled, nowMs);
         if (friendProfile) {
           friendProfile.friendCode = state.friendCode;
+          friendProfile.house = state.house;
+          if (state.playerName && state.playerName !== 'Phù Thủy Hang Sóc') {
+            friendProfile.name = state.playerName;
+          }
           let canWriteFriend = true;
           const existingFriendRaw = await store.get(`burrow_friend:${friendProfile.friendCode}`, 'text');
           if (existingFriendRaw) {
@@ -880,16 +922,7 @@ export async function handleAuthoritativeHttpRequest(
             env
           );
         }
-        const rawList = await store.get(`burrow_lb:${rawGame}`, 'text');
-        let entries: unknown[] = [];
-        if (rawList) {
-          try {
-            const parsed = JSON.parse(rawList);
-            if (Array.isArray(parsed)) entries = parsed;
-          } catch {
-            entries = [];
-          }
-        }
+        const entries = await backend.getLeaderboardEntries(rawGame);
         return jsonResponse({ ok: true, gameId: rawGame, entries }, 200, request, env);
       }
 
@@ -1004,9 +1037,26 @@ export async function handleAuthoritativeHttpRequest(
       backend.checkRateLimit(`friend_reg:${identity.uid}`, 15, 60_000);
 
       const nowMs = nowFn();
+      const state = await backend.getOrCreateState(
+        identity.uid,
+        identity.house,
+        identity.houseExplicit ? 'hpvn' : 'default'
+      );
+      await backend.syncIdentityProfileForState(state, identity);
+
       const profile = extractFriendProfileFromSave(identity.uid, body, nowMs);
       if (!profile) {
         return jsonResponse({ ok: false, error: 'Invalid friendCode' }, 400, request, env);
+      }
+      if (state.houseSource === 'hpvn') {
+        profile.house = state.house;
+      }
+      if (
+        state.playerName &&
+        state.playerName !== 'Phù Thủy Hang Sóc' &&
+        (profile.name === 'Trang Trại Hang Sóc' || !profile.name)
+      ) {
+        profile.name = state.playerName;
       }
 
       const existingFriendRaw = await store.get(`burrow_friend:${profile.friendCode}`, 'text');
@@ -1033,7 +1083,6 @@ export async function handleAuthoritativeHttpRequest(
       });
 
       // Đồng bộ hồ sơ vào `burrow_states` + `burrow_public_layout` để bạn bè thăm qua `visitBurrowGarden`
-      const state = await backend.getOrCreateState(profile.userId);
       const daily = await backend.getOrCreateDaily(profile.userId, vnDayKey(nowMs));
       state.friendCode = profile.friendCode;
       backend.reconcileClientSaveIntoState(body, state, daily);

@@ -9,7 +9,7 @@ import {
   NeighborProfileState,
 } from '../types/game';
 import { isNpcNeighborProfile } from './neighborSocial';
-import { getCachedSessionBearerToken } from '../ui/cloudSave';
+import { acquireSessionBearerToken, getCachedSessionBearerToken } from '../ui/cloudSave';
 
 export const SCORED_LEADERBOARD_GAMES: ReadonlyArray<LeaderboardGameId> = [
   'match3',
@@ -444,8 +444,27 @@ export function ensureMinigameLeaderboardState(state: GameState): MinigameLeader
   return state.minigameLeaderboard;
 }
 
+export function normalizeClientHogwartsHouse(raw: unknown): HouseName | null {
+  if (typeof raw !== 'string') return null;
+  const cleaned = raw.trim().toLowerCase();
+  if (!cleaned) return null;
+  if (cleaned === 'gryffindor' || cleaned === 'gryff' || cleaned === 'gry' || cleaned.includes('sư tử')) {
+    return 'Gryffindor';
+  }
+  if (cleaned === 'hufflepuff' || cleaned === 'huff' || cleaned === 'huf' || cleaned.includes('lửng')) {
+    return 'Hufflepuff';
+  }
+  if (cleaned === 'ravenclaw' || cleaned === 'raven' || cleaned === 'rav' || cleaned.includes('ưng')) {
+    return 'Ravenclaw';
+  }
+  if (cleaned === 'slytherin' || cleaned === 'slyth' || cleaned === 'sly' || cleaned.includes('rắn')) {
+    return 'Slytherin';
+  }
+  return null;
+}
+
 export function getPlayerHogwartsHouse(state: GameState): HouseName {
-  const chosen = state.minigameLeaderboard?.playerHouse;
+  const chosen = normalizeClientHogwartsHouse(state.minigameLeaderboard?.playerHouse);
   if (chosen && ALL_HOGWARTS_HOUSES.includes(chosen)) {
     return chosen;
   }
@@ -464,10 +483,22 @@ export function getPlayerHogwartsHouse(state: GameState): HouseName {
   return best;
 }
 
-export function setPlayerHogwartsHouse(state: GameState, house: HouseName): HouseName {
-  const safeHouse: HouseName = ALL_HOGWARTS_HOUSES.includes(house) ? house : 'Gryffindor';
+export function setPlayerHogwartsHouse(
+  state: GameState,
+  house: HouseName,
+  options?: { explicit?: boolean; lockedByServer?: boolean }
+): HouseName {
+  const normalized = normalizeClientHogwartsHouse(house);
+  const safeHouse: HouseName =
+    normalized && ALL_HOGWARTS_HOUSES.includes(normalized) ? normalized : 'Gryffindor';
   const lb = ensureMinigameLeaderboardState(state);
   lb.playerHouse = safeHouse;
+  if (options?.explicit !== undefined) {
+    lb.playerHouseExplicit = options.explicit;
+  }
+  if (options?.lockedByServer !== undefined) {
+    lb.playerHouseLockedByServer = options.lockedByServer;
+  }
   if (!state.housePoints || typeof state.housePoints !== 'object') {
     state.housePoints = {
       Gryffindor: 0,
@@ -485,7 +516,7 @@ export function rollSortingHatHouse(state: GameState, randomFn = Math.random): H
   const pick =
     candidates[Math.floor(Math.max(0, Math.min(0.9999, randomFn())) * candidates.length)] ??
     ALL_HOGWARTS_HOUSES[0];
-  return setPlayerHogwartsHouse(state, pick);
+  return setPlayerHogwartsHouse(state, pick, { explicit: true });
 }
 
 function formatPrimaryDisplayVi(gameId: LeaderboardGameId, primaryVal: number): string {
@@ -609,9 +640,14 @@ export function buildPlayerLeaderboardEntry(
           ? 'Chủ Trang Trại Đang Lên'
           : 'Tân Phù Thủy Hang Sóc';
 
+  const displayBase =
+    state.neighborSocial?.playerDisplayName?.trim() ||
+    state.parkName ||
+    'Trang Trại Hang Sóc';
+
   return {
     id: 'player:self',
-    name: `${state.parkName || 'Trang Trại Hang Sóc'} (Bạn)`,
+    name: `${displayBase} (Bạn)`,
     titleVi: `${playerTitle} • Cấp ${state.level}`,
     parkName: state.parkName || 'Trang Trại Hang Sóc',
     friendCode,
@@ -716,6 +752,13 @@ export function buildHouseCupStandings(
   }));
 }
 
+const PLACEHOLDER_FRIEND_CODES: ReadonlySet<string> = new Set([
+  '',
+  'HS-YOU1-01',
+  'HS-CLUD-00',
+  'HS-CLUD-01',
+]);
+
 function buildRawPoolForScoredGame(
   state: GameState,
   gameId: LeaderboardGameId,
@@ -731,16 +774,27 @@ function buildRawPoolForScoredGame(
   const cloudByUid = new Map<string, CloudLeaderboardEntry>();
   for (const ce of effectiveCloud) {
     if (!ce) continue;
-    if (ce.friendCode) cloudByCode.set(ce.friendCode.trim().toUpperCase(), ce);
+    const ceCode = (ce.friendCode || '').trim().toUpperCase();
+    if (ceCode && !PLACEHOLDER_FRIEND_CODES.has(ceCode)) {
+      cloudByCode.set(ceCode, ce);
+    }
     if (ce.userId) cloudByUid.set(ce.userId, ce);
   }
   const friendCodeSet = new Set<string>(
-    neighbors.map((n) => n.friendCode.trim().toUpperCase())
+    neighbors
+      .map((n) => n.friendCode.trim().toUpperCase())
+      .filter((code) => !PLACEHOLDER_FRIEND_CODES.has(code))
+  );
+  const friendUidSet = new Set<string>(
+    neighbors.map((n) => n.remoteUserId || '').filter((uid) => uid.length > 0)
   );
   const friendEntries = neighbors.map((n) => {
+    const cleanNeighborCode = n.friendCode.trim().toUpperCase();
     const cMatch =
       (n.remoteUserId ? cloudByUid.get(n.remoteUserId) : undefined) ??
-      cloudByCode.get(n.friendCode.trim().toUpperCase());
+      (!PLACEHOLDER_FRIEND_CODES.has(cleanNeighborCode)
+        ? cloudByCode.get(cleanNeighborCode)
+        : undefined);
     return buildNeighborLeaderboardEntry(n, gameId, cMatch);
   });
 
@@ -748,16 +802,21 @@ function buildRawPoolForScoredGame(
 
   if (scope === 'valley') {
     const localUid = getClientLeaderboardUserId();
+    const normPlayerCode = playerRaw.friendCode.trim().toUpperCase();
+    const hasDistinctPlayerCode = !PLACEHOLDER_FRIEND_CODES.has(normPlayerCode);
     for (const ce of effectiveCloud) {
       if (!ce || !ce.userId) continue;
       const normCode = (ce.friendCode || '').trim().toUpperCase();
+      const hasDistinctCloudCode = !PLACEHOLDER_FRIEND_CODES.has(normCode);
       if (
         ce.userId === localUid ||
-        normCode === playerRaw.friendCode.trim().toUpperCase() ||
-        friendCodeSet.has(normCode)
+        friendUidSet.has(ce.userId) ||
+        (hasDistinctPlayerCode && hasDistinctCloudCode && normCode === normPlayerCode) ||
+        (hasDistinctCloudCode && friendCodeSet.has(normCode))
       ) {
         continue;
       }
+      const normalizedHouse = normalizeClientHogwartsHouse(ce.house) ?? 'Gryffindor';
       pool.push({
         id: `cloud:${ce.userId}`,
         name: ce.name || ce.parkName || 'Người Chơi Trực Tuyến',
@@ -765,7 +824,7 @@ function buildRawPoolForScoredGame(
         parkName: ce.parkName || 'Điền Trang Phép Thuật',
         friendCode: ce.friendCode || 'HS-CLUD-00',
         avatarEmoji: ce.avatarEmoji || '🌐',
-        house: ce.house || 'Gryffindor',
+        house: normalizedHouse,
         isPlayer: false,
         isFriend: false,
         isCloudPlayer: true,
@@ -828,9 +887,12 @@ function buildUnifiedHouseCupStandings(
     for (const row of gPool) {
       const h: HouseName = ALL_HOGWARTS_HOUSES.includes(row.house) ? row.house : 'Gryffindor';
       const rec = map.get(h)!;
+      const normMemberCode = (row.friendCode || '').trim().toUpperCase();
       const memberKey = row.isPlayer
         ? 'self'
-        : (row.friendCode || row.id).trim().toUpperCase();
+        : !PLACEHOLDER_FRIEND_CODES.has(normMemberCode) && !row.id.startsWith('cloud:')
+          ? normMemberCode
+          : row.id;
       rec.memberKeys.add(memberKey);
       rec.totalPrimaryValue += Math.max(0, row.primaryValue);
       rec.totalWins += Math.max(0, row.totalWins);
@@ -1125,6 +1187,89 @@ export function getAllCachedCloudLeaderboards(): Partial<
   return cloudEntriesMemoryCache;
 }
 
+export interface AuthoritativeLeaderboardTransport {
+  fetchLeaderboards: (
+    gameId: LeaderboardGameId
+  ) => Promise<unknown>;
+  submitLeaderboard: (
+    payload: Record<string, unknown>
+  ) => Promise<unknown>;
+}
+
+let authoritativeLeaderboardTransport: AuthoritativeLeaderboardTransport | null = null;
+
+export function registerAuthoritativeLeaderboardTransport(
+  transport: AuthoritativeLeaderboardTransport | null
+): void {
+  authoritativeLeaderboardTransport = transport;
+}
+
+function sanitizeCloudEntry(raw: Record<string, unknown>): CloudLeaderboardEntry | null {
+  const userId = typeof raw.userId === 'string' ? raw.userId.trim() : '';
+  if (!userId) return null;
+  const house = normalizeClientHogwartsHouse(raw.house) ?? 'Gryffindor';
+  return {
+    userId,
+    name: String(raw.name || raw.parkName || 'Phù Thủy Hang Sóc').slice(0, 42),
+    parkName: String(raw.parkName || 'Trang Trại Hang Sóc').slice(0, 42),
+    friendCode: String(raw.friendCode || 'HS-CLUD-01').slice(0, 24),
+    avatarEmoji: String(raw.avatarEmoji || '🧙‍♂️').slice(0, 8),
+    house,
+    primaryValue: Math.max(0, Math.floor(Number(raw.primaryValue) || 0)),
+    ratingScore: Math.max(0, Math.floor(Number(raw.ratingScore) || 0)),
+    totalWins: Math.max(0, Math.floor(Number(raw.totalWins) || 0)),
+    bestStreak: Math.max(0, Math.floor(Number(raw.bestStreak) || 0)),
+    detailLabelVi: String(raw.detailLabelVi || '').slice(0, 64),
+    updatedAt: Math.floor(Number(raw.updatedAt) || 0),
+  };
+}
+
+export function hydrateCloudLeaderboardsFromSnapshot(rawLeaderboards: unknown): boolean {
+  if (!rawLeaderboards || typeof rawLeaderboards !== 'object') return false;
+  const obj = rawLeaderboards as Record<string, unknown>;
+  let updated = false;
+  for (const gid of SCORED_LEADERBOARD_GAMES) {
+    const rawList = obj[gid];
+    if (!Array.isArray(rawList)) continue;
+    const cleaned: CloudLeaderboardEntry[] = [];
+    for (const item of rawList) {
+      if (item && typeof item === 'object') {
+        const parsed = sanitizeCloudEntry(item as Record<string, unknown>);
+        if (parsed) cleaned.push(parsed);
+      }
+    }
+    cloudEntriesMemoryCache[gid] = cleaned;
+    updated = true;
+  }
+  return updated;
+}
+
+function buildCloudEntryFromPlayerState(
+  state: GameState,
+  gameId: LeaderboardGameId
+): CloudLeaderboardEntry {
+  const player = buildPlayerLeaderboardEntry(state, gameId);
+  const userId = getClientLeaderboardUserId();
+  const displayName =
+    state.neighborSocial?.playerDisplayName?.trim() ||
+    state.parkName ||
+    'Trang Trại Hang Sóc';
+  return {
+    userId,
+    name: displayName,
+    parkName: state.parkName || 'Trang Trại Hang Sóc',
+    friendCode: player.friendCode,
+    avatarEmoji: player.avatarEmoji,
+    house: player.house,
+    primaryValue: player.primaryValue,
+    ratingScore: player.ratingScore,
+    totalWins: player.totalWins,
+    bestStreak: player.bestStreak,
+    detailLabelVi: player.detailDisplayVi,
+    updatedAt: Date.now(),
+  };
+}
+
 export async function fetchCloudLeaderboardEntries(
   gameId: LeaderboardGameId,
   endpoint = '/api/leaderboard'
@@ -1132,7 +1277,34 @@ export async function fetchCloudLeaderboardEntries(
   if (!isScoredLeaderboardGame(gameId)) {
     return [];
   }
+
+  // Ưu tiên kênh RPC ủy quyền (`performBurrowAction: getLeaderboard` / `getBurrowGarden`) — hoạt động 100% trong cả iframe `#burrow-ticket` của HPVN!
+  if (endpoint === '/api/leaderboard' && authoritativeLeaderboardTransport) {
+    try {
+      const snapOrMap = await authoritativeLeaderboardTransport.fetchLeaderboards(gameId);
+      if (snapOrMap && typeof snapOrMap === 'object') {
+        const maybeSnap = snapOrMap as Record<string, unknown>;
+        const lbContainer =
+          maybeSnap.leaderboards && typeof maybeSnap.leaderboards === 'object'
+            ? maybeSnap.leaderboards
+            : maybeSnap;
+        if (hydrateCloudLeaderboardsFromSnapshot(lbContainer)) {
+          return cloudEntriesMemoryCache[gameId] ?? [];
+        }
+      }
+    } catch {
+      // Fallback sang HTTP GET `/api/leaderboard` nếu kênh RPC tạm gián đoạn
+    }
+  }
+
   if (typeof window === 'undefined' || typeof fetch === 'undefined') {
+    return cloudEntriesMemoryCache[gameId] ?? [];
+  }
+  if (
+    endpoint === '/api/leaderboard' &&
+    typeof navigator !== 'undefined' &&
+    /jsdom/i.test(navigator.userAgent || '')
+  ) {
     return cloudEntriesMemoryCache[gameId] ?? [];
   }
   try {
@@ -1145,10 +1317,13 @@ export async function fetchCloudLeaderboardEntries(
     });
     window.clearTimeout(timer);
     if (!res.ok) return cloudEntriesMemoryCache[gameId] ?? [];
-    const data = (await res.json()) as { entries?: CloudLeaderboardEntry[] };
+    const data = (await res.json()) as { entries?: Array<Record<string, unknown>> };
     if (Array.isArray(data?.entries)) {
-      cloudEntriesMemoryCache[gameId] = data.entries;
-      return data.entries;
+      const cleaned = data.entries
+        .map((r) => (r && typeof r === 'object' ? sanitizeCloudEntry(r) : null))
+        .filter((r): r is CloudLeaderboardEntry => r !== null);
+      cloudEntriesMemoryCache[gameId] = cleaned;
+      return cleaned;
     }
   } catch {
     // Offline-first fallback: silently retain local + cached leaderboard
@@ -1163,30 +1338,49 @@ export async function submitPlayerCloudLeaderboardEntry(
 ): Promise<void> {
   if (!isScoredLeaderboardGame(gameId)) return;
   if (state.sandboxMode || state.sandboxTainted) return;
+
+  const entry = buildCloudEntryFromPlayerState(state, gameId);
+  const houseExplicit = Boolean(state.minigameLeaderboard?.playerHouseExplicit);
+
+  // 1. Ưu tiên gửi qua kênh RPC ủy quyền (`performBurrowAction: submitLeaderboard`) để chạy xuyên iframe `#burrow-ticket` HPVN!
+  if (endpoint === '/api/leaderboard' && authoritativeLeaderboardTransport) {
+    try {
+      const snapOrMap = await authoritativeLeaderboardTransport.submitLeaderboard({
+        gameId,
+        entry,
+        ...(houseExplicit ? { house: entry.house, houseExplicit: true } : {}),
+      });
+      if (snapOrMap && typeof snapOrMap === 'object') {
+        const maybeSnap = snapOrMap as Record<string, unknown>;
+        const lbContainer =
+          maybeSnap.leaderboards && typeof maybeSnap.leaderboards === 'object'
+            ? maybeSnap.leaderboards
+            : maybeSnap;
+        hydrateCloudLeaderboardsFromSnapshot(lbContainer);
+      }
+      return;
+    } catch {
+      // Fallback sang HTTP POST `/api/leaderboard` nếu kênh RPC tạm gián đoạn
+    }
+  }
+
   if (typeof window === 'undefined' || typeof fetch === 'undefined') return;
-  // Avoid noisy network calls in Vitest / headless JSDOM
-  if (typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent || '')) return;
+  // Avoid noisy network calls in Vitest / headless JSDOM when no custom endpoint is set
+  if (
+    endpoint === '/api/leaderboard' &&
+    typeof navigator !== 'undefined' &&
+    /jsdom/i.test(navigator.userAgent || '')
+  ) {
+    return;
+  }
 
   try {
-    const player = buildPlayerLeaderboardEntry(state, gameId);
     const userId = getClientLeaderboardUserId();
-    const bearer = getCachedSessionBearerToken();
+    const bearer =
+      getCachedSessionBearerToken() ?? (await acquireSessionBearerToken(userId).catch(() => null));
     const payload = {
       gameId,
-      entry: {
-        userId,
-        name: state.parkName || 'Trang Trại Hang Sóc',
-        parkName: state.parkName || 'Trang Trại Hang Sóc',
-        friendCode: player.friendCode,
-        avatarEmoji: player.avatarEmoji,
-        house: player.house,
-        primaryValue: player.primaryValue,
-        ratingScore: player.ratingScore,
-        totalWins: player.totalWins,
-        bestStreak: player.bestStreak,
-        detailLabelVi: player.detailDisplayVi,
-        updatedAt: Date.now(),
-      } satisfies CloudLeaderboardEntry,
+      entry,
     };
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 3500);
@@ -1205,12 +1399,63 @@ export async function submitPlayerCloudLeaderboardEntry(
     });
     window.clearTimeout(timer);
     if (res.ok) {
-      const data = (await res.json()) as { entries?: CloudLeaderboardEntry[] };
+      const data = (await res.json()) as { entries?: Array<Record<string, unknown>> };
       if (Array.isArray(data?.entries)) {
-        cloudEntriesMemoryCache[gameId] = data.entries;
+        const cleaned = data.entries
+          .map((r) => (r && typeof r === 'object' ? sanitizeCloudEntry(r) : null))
+          .filter((r): r is CloudLeaderboardEntry => r !== null);
+        cloudEntriesMemoryCache[gameId] = cleaned;
       }
     }
   } catch {
     // Silent offline-first fallback
+  }
+}
+
+export async function syncAllPlayerCloudLeaderboards(state: GameState): Promise<void> {
+  if (state.sandboxMode || state.sandboxTainted) return;
+  ensureMinigameLeaderboardState(state);
+
+  const entriesByGame: Record<string, CloudLeaderboardEntry> = {};
+  let hasProgress = false;
+  for (const gid of SCORED_LEADERBOARD_GAMES) {
+    const entry = buildCloudEntryFromPlayerState(state, gid);
+    if (entry.primaryValue > 0 || entry.totalWins > 0) {
+      entriesByGame[gid] = entry;
+      hasProgress = true;
+    }
+  }
+
+  if (authoritativeLeaderboardTransport) {
+    try {
+      if (hasProgress) {
+        const houseExplicit = Boolean(state.minigameLeaderboard?.playerHouseExplicit);
+        const snap = await authoritativeLeaderboardTransport.submitLeaderboard({
+          entriesByGame,
+          ...(houseExplicit
+            ? { house: getPlayerHogwartsHouse(state), houseExplicit: true }
+            : {}),
+        });
+        if (snap && typeof snap === 'object') {
+          const maybeSnap = snap as Record<string, unknown>;
+          hydrateCloudLeaderboardsFromSnapshot(maybeSnap.leaderboards ?? maybeSnap);
+        }
+      } else {
+        const snap = await authoritativeLeaderboardTransport.fetchLeaderboards('match3');
+        if (snap && typeof snap === 'object') {
+          const maybeSnap = snap as Record<string, unknown>;
+          hydrateCloudLeaderboardsFromSnapshot(maybeSnap.leaderboards ?? maybeSnap);
+        }
+      }
+      return;
+    } catch {
+      // Fallback sang từng game qua HTTP
+    }
+  }
+
+  if (hasProgress) {
+    for (const gid of Object.keys(entriesByGame) as LeaderboardGameId[]) {
+      await submitPlayerCloudLeaderboardEntry(state, gid);
+    }
   }
 }

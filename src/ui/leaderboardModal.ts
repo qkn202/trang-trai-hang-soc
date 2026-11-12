@@ -9,6 +9,7 @@ import {
   LeaderboardRowEntry,
   normalizeScoredLeaderboardGame,
   submitPlayerCloudLeaderboardEntry,
+  syncAllPlayerCloudLeaderboards,
 } from '../sim/minigameLeaderboard';
 import { ParkSimulation } from '../sim/simulation';
 import { HouseName, LeaderboardGameId, LeaderboardScope } from '../types/game';
@@ -138,14 +139,13 @@ export class LeaderboardModalController {
       dlg.showModal();
     }
 
-    const targetGame = this.activeGameId;
-    void submitPlayerCloudLeaderboardEntry(this.sim.state, targetGame)
+    void syncAllPlayerCloudLeaderboards(this.sim.state)
       .catch(() => {})
       .then(() =>
         Promise.all(ALL_LEADERBOARD_GAMES.map((gid) => fetchCloudLeaderboardEntries(gid)))
       )
-      .then((lists) => {
-        if (dlg.open && lists.some((list) => list.length > 0)) {
+      .then(() => {
+        if (dlg.open) {
           this.render();
         }
       });
@@ -252,19 +252,27 @@ export class LeaderboardModalController {
           </div>
           <div class="lb-sorting-hat-box">
             <div class="lb-sorting-hat-label">
-              <span>🎩 <strong>${playerHouseMeta.mascotEmoji} ${escapeHtml(playerHouseMeta.house)}</strong></span>
-              <button
+              <span>${this.sim.state.minigameLeaderboard?.playerHouseLockedByServer ? '🏰' : '🎩'} <strong>${playerHouseMeta.mascotEmoji} ${escapeHtml(playerHouseMeta.house)}</strong></span>
+              ${
+                this.sim.state.minigameLeaderboard?.playerHouseLockedByServer
+                  ? `<span class="house-you-pill" title="Tự động đồng bộ theo tài khoản diễn đàn HPVN">Tài khoản HPVN</span>`
+                  : `<button
                 id="btnLbSortingHat"
                 type="button"
                 class="brass-btn lb-hat-roll-btn ${this.sortingHatSpinning ? 'is-spinning' : ''}"
                 title="Đội Chiếc Nón Phân Loại"
               >
                 🎩 Phân Loại
-              </button>
+              </button>`
+              }
             </div>
-            <div class="lb-my-house-pills" role="group" aria-label="Chọn Nhà Hogwarts của bạn">
+            ${
+              this.sim.state.minigameLeaderboard?.playerHouseLockedByServer
+                ? ''
+                : `<div class="lb-my-house-pills" role="group" aria-label="Chọn Nhà Hogwarts của bạn">
               ${houseSelectorBtnsHtml}
-            </div>
+            </div>`
+            }
           </div>
         </div>
 
@@ -636,8 +644,8 @@ export class LeaderboardModalController {
         void submitPlayerCloudLeaderboardEntry(this.sim.state, gid)
           .catch(() => {})
           .then(() => fetchCloudLeaderboardEntries(gid))
-          .then((cloud) => {
-            if (cloud.length > 0 && this.activeGameId === gid) {
+          .then(() => {
+            if (this.activeGameId === gid) {
               this.render();
             }
           });

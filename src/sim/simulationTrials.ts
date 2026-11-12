@@ -167,6 +167,7 @@ import {
   rollSortingHatHouse,
   setPlayerHogwartsHouse,
   submitPlayerCloudLeaderboardEntry,
+  syncAllPlayerCloudLeaderboards,
 } from './minigameLeaderboard';
 import {
   createInitialPuzzleArcadeState,
@@ -524,8 +525,17 @@ export function trialsGetPlayerHouse(sim: ParkSimulation): HouseName {
 }
 
 export function trialsSetPlayerHouse(sim: ParkSimulation, house: HouseName, activeGameId?: LeaderboardGameId): HouseName {
-    trialsEnsureMinigameLeaderboard(sim);
-    const chosen = setPlayerHogwartsHouse(sim.state, house);
+    const lb = trialsEnsureMinigameLeaderboard(sim);
+    if (lb.playerHouseLockedByServer && lb.playerHouse) {
+      const lockedMeta = HOGWARTS_HOUSE_META[lb.playerHouse];
+      sim.audio.playClick();
+      sim.onToast?.(
+        `🏰 Nhà Hogwarts của bạn được đồng bộ chính thức theo tài khoản HPVN: ${lockedMeta.mascotEmoji} ${lb.playerHouse}!`,
+        lockedMeta.mascotEmoji
+      );
+      return lb.playerHouse;
+    }
+    const chosen = setPlayerHogwartsHouse(sim.state, house, { explicit: true });
     const meta = HOGWARTS_HOUSE_META[chosen];
     sim.audio.playSpell();
     sim.onToast?.(
@@ -536,12 +546,23 @@ export function trialsSetPlayerHouse(sim: ParkSimulation, house: HouseName, acti
     sim.onUiChange?.();
     if (activeGameId && isScoredLeaderboardGame(activeGameId)) {
       void submitPlayerCloudLeaderboardEntry(sim.state, activeGameId);
+    } else {
+      void syncAllPlayerCloudLeaderboards(sim.state);
     }
     return chosen;
 }
 
 export function trialsRollPlayerSortingHat(sim: ParkSimulation, activeGameId?: LeaderboardGameId): HouseName {
-    trialsEnsureMinigameLeaderboard(sim);
+    const lb = trialsEnsureMinigameLeaderboard(sim);
+    if (lb.playerHouseLockedByServer && lb.playerHouse) {
+      const lockedMeta = HOGWARTS_HOUSE_META[lb.playerHouse];
+      sim.audio.playClick();
+      sim.onToast?.(
+        `🎩 Chiếc Nón Phân Loại mỉm cười: Hồ sơ HPVN của bạn đã thuộc về ${lockedMeta.mascotEmoji} ${lb.playerHouse}!`,
+        '🎩'
+      );
+      return lb.playerHouse;
+    }
     const chosen = rollSortingHatHouse(sim.state);
     const meta = HOGWARTS_HOUSE_META[chosen];
     sim.audio.playLevelUp();
@@ -553,6 +574,8 @@ export function trialsRollPlayerSortingHat(sim: ParkSimulation, activeGameId?: L
     sim.onUiChange?.();
     if (activeGameId && isScoredLeaderboardGame(activeGameId)) {
       void submitPlayerCloudLeaderboardEntry(sim.state, activeGameId);
+    } else {
+      void syncAllPlayerCloudLeaderboards(sim.state);
     }
     return chosen;
 }

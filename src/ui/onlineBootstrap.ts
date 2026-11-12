@@ -6,6 +6,10 @@
  *  - `cloudSave`, `analytics`, `errorMonitor`, `legalModal`.
  */
 
+import {
+  hydrateCloudLeaderboardsFromSnapshot,
+  registerAuthoritativeLeaderboardTransport,
+} from '../sim/minigameLeaderboard';
 import { Analytics } from './analytics';
 import {
   type AuthoritativeError,
@@ -40,6 +44,21 @@ export interface SimulationWalletTargetLike {
   isHeadmasterPreview?: boolean;
   saveToStorage: () => void;
   onUiChange?: (() => void) | null;
+}
+
+export function bindAuthoritativeLeaderboardClient(client: BurrowGardenClient): void {
+  registerAuthoritativeLeaderboardTransport({
+    fetchLeaderboards: async (gameId) => {
+      const snap = await client.getLeaderboard(gameId);
+      hydrateCloudLeaderboardsFromSnapshot(snap.leaderboards);
+      return snap.leaderboards ?? null;
+    },
+    submitLeaderboard: async (payload) => {
+      const snap = await client.submitLeaderboard(payload);
+      hydrateCloudLeaderboardsFromSnapshot(snap.leaderboards);
+      return snap.leaderboards ?? null;
+    },
+  });
 }
 
 export class OnlineBootstrap {
@@ -149,6 +168,7 @@ export class OnlineBootstrap {
       this.analytics.init(this.cloudSave);
       this.legalModal.mount();
       this.cloudSave.init();
+      bindAuthoritativeLeaderboardClient(this.authoritativeClient);
 
       if (typeof window !== 'undefined') {
         window.addEventListener('hpvn:sync-state', (ev: Event) => {
@@ -213,6 +233,7 @@ export class OnlineBootstrap {
         this.authoritativeClient
           .read()
           .then((snap) => {
+            hydrateCloudLeaderboardsFromSnapshot(snap.leaderboards);
             if (snap.wallet && typeof snap.wallet.spendable === 'number') {
               this.syncWalletBaseline(snap.wallet.spendable);
             }

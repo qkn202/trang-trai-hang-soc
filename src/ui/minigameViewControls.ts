@@ -1,6 +1,7 @@
 /**
- * Bộ điều khiển Phóng to / Thu nhỏ / Kéo trượt & Xoay Dọc – Ngang dùng chung
- * cho toàn bộ 6 mini game:
+ * Bộ điều khiển Phóng to / Thu nhỏ bằng ngón tay (Pinch-to-Zoom) & Kéo trượt (Pan)
+ * tự nhiên trên màn hình cảm ứng di động (iOS Safari 16+ / Android) dùng chung
+ * cho toàn bộ 6 mini game — KHÔNG dùng nút bấm phóng to/thu nhỏ trên giao diện:
  *   - match3   (Gác Xép Bùa Gặt Honeydukes)
  *   - caro     (Ngũ Ấn Đạo Tặc)
  *   - sudoku   (Số Học Huyền Bí)
@@ -8,12 +9,12 @@
  *   - blocks   (Sinh Vật Huyền Bí — Pikachu)
  *   - seedquiz (Học Viện Thần Chú Đa Ngữ)
  *
- * Hỗ trợ đầy đủ trên cả Desktop & Di động (kể cả iOS Safari 16+ khoá xoay màn hình):
- *   1. Phóng to / Thu nhỏ (65% – 220%) qua nút +/- , bánh xe chuột, chụm 2 ngón (pinch-to-zoom).
- *   2. Kéo trượt (Pan) khi đang phóng to qua 2 ngón tay, chuột phải/giữa, Alt/Space + kéo, hoặc nút ✋.
- *   3. Chuyển chế độ Dọc ↔ Ngang (tự thử Screen Orientation API nếu có + xoay khung 90° trên điện thoại
- *      đang khoá hướng màn hình + chuyển bố cục Dọc/Ngang & đảo chiều lưới Pikachu/Sudoku/Quiz).
- *   4. Xoay góc bàn chơi 90° (0° → 90° → 180° → 270°) kèm ánh xạ ngược toạ độ chạm/vuốt chính xác 100%.
+ * Cơ chế cử chỉ cảm ứng chuẩn ứng dụng di động:
+ *   1. Chụm / tách 2 ngón tay (Pinch-to-Zoom 100% – 300%) neo đúng tâm điểm giữa 2 ngón tay,
+ *      kết hợp trượt 2 ngón đồng thời mượt mà 60 FPS; khép tay về gần 100% tự căn giữa lại bàn cờ.
+ *   2. Khi đang phóng to (> 102%), kéo 1 ngón tay để dịch chuyển bàn cờ mượt trên Ngũ Ấn, Số Học,
+ *      Pikachu, và trên ô trống/quân đối phương của Cờ Phù Thủy mà không cần nút chuyển chế độ.
+ *   3. Tự động huỷ thao tác chạm nhầm của ngón thứ nhất ngay khi ngón thứ hai chạm xuống bàn cờ.
  */
 
 export type MinigameViewId = 'match3' | 'caro' | 'sudoku' | 'chess' | 'blocks' | 'seedquiz';
@@ -30,16 +31,18 @@ export interface MinigameViewState {
   panMode: boolean;
 }
 
-export const MINIGAME_ZOOM_MIN = 0.65;
-export const MINIGAME_ZOOM_MAX = 2.2;
+export const MINIGAME_ZOOM_MIN = 1;
+export const MINIGAME_ZOOM_MAX = 3;
 export const MINIGAME_ZOOM_STEP = 0.15;
 
 const ORIENT_STORAGE_KEY = 'hangsoc_minigame_orient_v1';
+const SINGLE_FINGER_PAN_THRESHOLD_PX = 8;
+const POST_PINCH_TAP_GUARD_MS = 110;
 
 export function clampMinigameZoom(zoom: number): number {
   if (!Number.isFinite(zoom)) return 1;
   const clamped = Math.min(MINIGAME_ZOOM_MAX, Math.max(MINIGAME_ZOOM_MIN, zoom));
-  return Math.round(clamped * 100) / 100;
+  return Math.round(clamped * 1000) / 1000;
 }
 
 export function combineQuarterTurns(a: number, b: number): QuarterTurn {
@@ -70,7 +73,6 @@ export function resolveMinigameOrientation(
   }
 
   if (pref === 'landscape') {
-    // Nếu cửa sổ vật lý đang dọc (như điện thoại khoá xoay dọc), xoay khung modal 90° để mở rộng toàn màn hình ngang
     if (safeW < safeH) {
       return {
         effectiveLayout: 'landscape',
@@ -83,8 +85,6 @@ export function resolveMinigameOrientation(
     };
   }
 
-  // pref === 'portrait'
-  // Nếu điện thoại đang nằm ngang thấp (safeH <= 640 và safeW > safeH), xoay khung modal -90° sang dọc
   if (safeW > safeH && safeH <= 640) {
     return {
       effectiveLayout: 'portrait',
@@ -99,7 +99,7 @@ export function resolveMinigameOrientation(
 
 /**
  * Ánh xạ toạ độ màn hình `(clientX, clientY)` về toạ độ chuẩn hoá cục bộ `(lu, lv) ∈ [0..1]`
- * bất chấp phần tử đang bị phóng to/thu nhỏ, kéo lệch hay xoay vuông góc `0° / 90° / 180° / 270°`.
+ * bất chấp phần tử đang được phóng to bằng ngón tay, kéo lệch hay xoay vuông góc.
  */
 export function clientToLocalNormalized(
   clientX: number,
@@ -110,11 +110,11 @@ export function clientToLocalNormalized(
   const u = (clientX - rect.left) / Math.max(1, rect.width);
   const v = (clientY - rect.top) / Math.max(1, rect.height);
   switch (netQuarterTurns) {
-    case 1: // 90° CW
+    case 1:
       return { lu: v, lv: 1 - u };
-    case 2: // 180°
+    case 2:
       return { lu: 1 - u, lv: 1 - v };
-    case 3: // 270° CW (-90°)
+    case 3:
       return { lu: 1 - v, lv: u };
     default:
       return { lu: u, lv: v };
@@ -122,8 +122,7 @@ export function clientToLocalNormalized(
 }
 
 /**
- * Đổi vector dịch chuyển trên màn hình `(dx, dy)` sang hệ trục của `.mg-stage-pan-area`
- * (khi bản thân hộp thoại có thể đã xoay `dialogQuarterTurn`).
+ * Đổi vector dịch chuyển trên màn hình `(dx, dy)` sang hệ trục của `.mg-stage-pan-area`.
  */
 export function screenDeltaToViewportDelta(
   dx: number,
@@ -140,6 +139,43 @@ export function screenDeltaToViewportDelta(
     default:
       return { vx: dx, vy: dy };
   }
+}
+
+/**
+ * Tính vị trí `(panX, panY)` mới khi phóng to / thu nhỏ quanh tâm điểm giữa 2 ngón tay
+ * đồng thời trượt theo chuyển động của tâm 2 ngón tay.
+ */
+export function computeFocalPinchPan(params: {
+  prevZoom: number;
+  nextZoom: number;
+  prevPanX: number;
+  prevPanY: number;
+  prevMidOffsetX: number;
+  prevMidOffsetY: number;
+  currMidOffsetX: number;
+  currMidOffsetY: number;
+}): { zoom: number; panX: number; panY: number } {
+  const {
+    prevZoom,
+    nextZoom,
+    prevPanX,
+    prevPanY,
+    prevMidOffsetX,
+    prevMidOffsetY,
+    currMidOffsetX,
+    currMidOffsetY,
+  } = params;
+  const clampedNext = nextZoom <= 1.015 ? 1 : clampMinigameZoom(nextZoom);
+  if (clampedNext <= 1.001) {
+    return { zoom: 1, panX: 0, panY: 0 };
+  }
+  const safePrev = Math.max(0.25, prevZoom || 1);
+  const ratio = clampedNext / safePrev;
+  return {
+    zoom: clampedNext,
+    panX: currMidOffsetX - (prevMidOffsetX - prevPanX) * ratio,
+    panY: currMidOffsetY - (prevMidOffsetY - prevPanY) * ratio,
+  };
 }
 
 export function computeBoardFitScale(
@@ -166,15 +202,15 @@ export function clampMinigamePan(
   effectiveScale: number,
   boardQuarterTurns: QuarterTurn
 ): { panX: number; panY: number } {
-  if (vpW <= 0 || vpH <= 0 || itemW <= 0 || itemH <= 0) {
+  if (vpW <= 0 || vpH <= 0 || itemW <= 0 || itemH <= 0 || effectiveScale <= 1.005) {
     return { panX: 0, panY: 0 };
   }
   const baseW = boardQuarterTurns % 2 === 1 ? itemH : itemW;
   const baseH = boardQuarterTurns % 2 === 1 ? itemW : itemH;
   const visW = baseW * effectiveScale;
   const visH = baseH * effectiveScale;
-  const slackX = effectiveScale > 1.01 ? 44 : 0;
-  const slackY = effectiveScale > 1.01 ? 44 : 0;
+  const slackX = 36;
+  const slackY = 36;
   const maxX = Math.max(0, (visW - vpW) * 0.5 + slackX);
   const maxY = Math.max(0, (visH - vpH) * 0.5 + slackY);
   const cx = Math.min(maxX, Math.max(-maxX, Number.isFinite(panX) ? panX : 0));
@@ -185,38 +221,24 @@ export function clampMinigamePan(
   };
 }
 
-function tryLockScreenOrientation(target: 'landscape' | 'portrait' | 'unlock'): void {
-  if (typeof screen === 'undefined') return;
-  const scrOrient = (
-    screen as Screen & {
-      orientation?: {
-        lock?: (mode: string) => Promise<void>;
-        unlock?: () => void;
-      };
-    }
-  ).orientation;
-  if (!scrOrient) return;
-  try {
-    if (target === 'unlock') {
-      scrOrient.unlock?.();
-    } else if (typeof scrOrient.lock === 'function') {
-      void scrOrient.lock(target).catch(() => {
-        // iOS Safari / desktop browser tabs không cho phép lock phần cứng: đã có CSS fallback xoay khung 90°
-      });
-    }
-  } catch {
-    // Bỏ qua an toàn trên trình duyệt không hỗ trợ
-  }
-}
-
 export class MinigameViewportManager {
   private states = new Map<MinigameViewId, MinigameViewState>();
   private orientationPref: MinigameOrientationPref = 'auto';
   private dialogFlip180 = false;
   private spacePressed = false;
+  private lastPinchEndMs = 0;
+  private activePinchCount = 0;
 
   constructor() {
-    this.loadPersistedOrientation();
+    // Xoá trạng thái khoá hướng cũ trong sessionStorage để bàn chơi luôn tự thích ứng tự nhiên
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem(ORIENT_STORAGE_KEY);
+      }
+    } catch {
+      // Ignore storage access errors
+    }
+
     if (typeof window !== 'undefined') {
       window.addEventListener('keydown', (ev) => {
         if (ev.code === 'Space') {
@@ -237,25 +259,10 @@ export class MinigameViewportManager {
     }
   }
 
-  private loadPersistedOrientation(): void {
-    try {
-      if (typeof sessionStorage === 'undefined') return;
-      const raw = sessionStorage.getItem(ORIENT_STORAGE_KEY);
-      if (raw === 'landscape' || raw === 'portrait' || raw === 'auto') {
-        this.orientationPref = raw;
-      }
-    } catch {
-      // Ignore storage access errors
-    }
-  }
-
-  private savePersistedOrientation(): void {
-    try {
-      if (typeof sessionStorage === 'undefined') return;
-      sessionStorage.setItem(ORIENT_STORAGE_KEY, this.orientationPref);
-    } catch {
-      // Ignore storage access errors
-    }
+  public isPinchOrCooldownActive(): boolean {
+    if (this.activePinchCount >= 2) return true;
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    return now - this.lastPinchEndMs < POST_PINCH_TAP_GUARD_MS;
   }
 
   public getState(gameId: MinigameViewId): MinigameViewState {
@@ -280,12 +287,6 @@ export class MinigameViewportManager {
   public setOrientationPref(pref: MinigameOrientationPref): void {
     this.orientationPref = pref;
     this.dialogFlip180 = false;
-    this.savePersistedOrientation();
-    if (pref === 'auto') {
-      tryLockScreenOrientation('unlock');
-    } else {
-      tryLockScreenOrientation(pref);
-    }
   }
 
   public getViewportResolution(isSeedQuiz = false): {
@@ -317,7 +318,6 @@ export class MinigameViewportManager {
     const cur = this.getEffectiveLayout(isSeedQuiz);
     const next: 'landscape' | 'portrait' = cur === 'landscape' ? 'portrait' : 'landscape';
     this.setOrientationPref(next);
-    // Khi đổi hướng màn hình, đặt lại lệch pan để bàn chơi luôn nằm ngay tâm khung mới
     for (const st of this.states.values()) {
       st.panX = 0;
       st.panY = 0;
@@ -358,12 +358,6 @@ export class MinigameViewportManager {
 
   public rotate90(gameId: MinigameViewId): QuarterTurn {
     const st = this.getState(gameId);
-    const { dialogQuarterTurn } = this.getViewportResolution(gameId === 'seedquiz');
-    // Nếu là Học Viện Thần Chú đang xoay khung trên di động, nút ↪️ đảo chiều cầm máy (+90° ↔ -90°) hoặc xoay tiếp 90°
-    if (gameId === 'seedquiz' && dialogQuarterTurn !== 0 && st.boardQuarterTurns === 0) {
-      this.dialogFlip180 = !this.dialogFlip180;
-      return this.getNetQuarterTurns(gameId);
-    }
     st.boardQuarterTurns = combineQuarterTurns(st.boardQuarterTurns, 1);
     st.panX = 0;
     st.panY = 0;
@@ -376,80 +370,18 @@ export class MinigameViewportManager {
     return st.panMode;
   }
 
+  /**
+   * Không hiển thị thanh nút zoom trên màn hình — toàn bộ phóng to/thu nhỏ dùng ngón tay (pinch-to-zoom).
+   */
   public renderToolbarHtml(
-    gameId: MinigameViewId,
-    opts?: { showPanToggle?: boolean; extraClass?: string }
+    _gameId: MinigameViewId,
+    _opts?: { showPanToggle?: boolean; extraClass?: string }
   ): string {
-    const st = this.getState(gameId);
-    const isSeedQuiz = gameId === 'seedquiz';
-    const showPan = opts?.showPanToggle ?? !isSeedQuiz;
-    const eff = this.getEffectiveLayout(isSeedQuiz);
-    const pct = Math.round(st.zoom * 100);
-    const orientBtnLabel = eff === 'landscape' ? '↕️ Dọc' : '↔️ Ngang';
-    const orientTitle =
-      eff === 'landscape'
-        ? 'Đang ở chế độ Ngang — bấm để xoay sang chế độ Dọc'
-        : 'Đang ở chế độ Dọc — bấm để xoay sang chế độ Ngang';
-    const rotDeg = st.boardQuarterTurns * 90;
-    const extraCls = opts?.extraClass ? ` ${opts.extraClass}` : '';
-
-    return `
-      <div class="mg-view-toolbar${extraCls}" data-mg-toolbar="${gameId}" role="toolbar" aria-label="Phóng to, thu nhỏ và xoay màn hình game">
-        <button type="button" class="mg-view-btn" data-mg-act="zoom-out" title="Thu nhỏ (-)" aria-label="Thu nhỏ" ${st.zoom <= MINIGAME_ZOOM_MIN + 0.005 ? 'disabled' : ''}>➖</button>
-        <button type="button" class="mg-view-btn mg-view-pct ${pct !== 100 || st.boardQuarterTurns !== 0 ? 'is-modified' : ''}" data-mg-act="zoom-reset" title="Đặt lại góc nhìn 100%" aria-label="Đặt lại phóng to 100 phần trăm">${pct}%</button>
-        <button type="button" class="mg-view-btn" data-mg-act="zoom-in" title="Phóng to (+)" aria-label="Phóng to" ${st.zoom >= MINIGAME_ZOOM_MAX - 0.005 ? 'disabled' : ''}>➕</button>
-        ${
-          showPan
-            ? `<button type="button" class="mg-view-btn mg-view-pan ${st.panMode ? 'active' : ''}" data-mg-act="toggle-pan" aria-pressed="${st.panMode}" title="Bật/tắt chế độ kéo trượt bàn chơi bằng 1 ngón hoặc chuột trái">✋</button>`
-            : ''
-        }
-        <span class="mg-view-sep" aria-hidden="true"></span>
-        <button type="button" class="mg-view-btn mg-view-orient ${this.orientationPref !== 'auto' ? 'active' : ''}" data-mg-act="toggle-orient" title="${orientTitle}">${orientBtnLabel}</button>
-        <button type="button" class="mg-view-btn ${st.boardQuarterTurns !== 0 ? 'active' : ''}" data-mg-act="rotate-90" title="Xoay bàn chơi 90° (hiện tại ${rotDeg}°)" aria-label="Xoay bàn chơi 90 độ">↪️${rotDeg > 0 ? `<small>${rotDeg}°</small>` : ''}</button>
-      </div>
-    `;
+    return '';
   }
 
-  public syncToolbarDOM(scope: ParentNode | null, gameId: MinigameViewId): void {
-    if (!scope || typeof scope.querySelector !== 'function') return;
-    const bar = scope.querySelector<HTMLElement>(`[data-mg-toolbar="${gameId}"]`);
-    if (!bar || typeof bar.querySelector !== 'function') return;
-    const st = this.getState(gameId);
-    const isSeedQuiz = gameId === 'seedquiz';
-    const eff = this.getEffectiveLayout(isSeedQuiz);
-    const pct = Math.round(st.zoom * 100);
-    const rotDeg = st.boardQuarterTurns * 90;
-
-    const btnOut = bar.querySelector<HTMLButtonElement>('[data-mg-act="zoom-out"]');
-    if (btnOut) btnOut.disabled = st.zoom <= MINIGAME_ZOOM_MIN + 0.005;
-
-    const btnIn = bar.querySelector<HTMLButtonElement>('[data-mg-act="zoom-in"]');
-    if (btnIn) btnIn.disabled = st.zoom >= MINIGAME_ZOOM_MAX - 0.005;
-
-    const btnPct = bar.querySelector<HTMLButtonElement>('[data-mg-act="zoom-reset"]');
-    if (btnPct) {
-      btnPct.textContent = `${pct}%`;
-      btnPct.classList.toggle('is-modified', pct !== 100 || st.boardQuarterTurns !== 0);
-    }
-
-    const btnPan = bar.querySelector<HTMLButtonElement>('[data-mg-act="toggle-pan"]');
-    if (btnPan) {
-      btnPan.classList.toggle('active', st.panMode);
-      btnPan.setAttribute('aria-pressed', String(st.panMode));
-    }
-
-    const btnOrient = bar.querySelector<HTMLButtonElement>('[data-mg-act="toggle-orient"]');
-    if (btnOrient) {
-      btnOrient.textContent = eff === 'landscape' ? '↕️ Dọc' : '↔️ Ngang';
-      btnOrient.classList.toggle('active', this.orientationPref !== 'auto');
-    }
-
-    const btnRot = bar.querySelector<HTMLButtonElement>('[data-mg-act="rotate-90"]');
-    if (btnRot) {
-      btnRot.innerHTML = `↪️${rotDeg > 0 ? `<small>${rotDeg}°</small>` : ''}`;
-      btnRot.classList.toggle('active', st.boardQuarterTurns !== 0);
-      btnRot.title = `Xoay bàn chơi 90° (hiện tại ${rotDeg}°)`;
-    }
+  public syncToolbarDOM(_scope: ParentNode | null, _gameId: MinigameViewId): void {
+    // Không có thanh nút DOM cần đồng bộ
   }
 
   public applyDialogOrientation(
@@ -529,7 +461,10 @@ export class MinigameViewportManager {
       canvasShellEl.style.transformOrigin = '';
     } else {
       canvasShellEl.style.transformOrigin = 'center center';
-      canvasShellEl.style.transform = `translate3d(${st.panX}px, ${st.panY}px, 0) scale(${effectiveScale.toFixed(4)}) rotate(${st.boardQuarterTurns * 90}deg)`;
+      canvasShellEl.style.transform =
+        st.boardQuarterTurns === 0
+          ? `translate3d(${st.panX}px, ${st.panY}px, 0) scale(${effectiveScale.toFixed(4)})`
+          : `translate3d(${st.panX}px, ${st.panY}px, 0) scale(${effectiveScale.toFixed(4)}) rotate(${st.boardQuarterTurns * 90}deg)`;
     }
 
     return { effectiveScale, netQuarterTurns };
@@ -554,9 +489,7 @@ export class MinigameViewportManager {
       return;
     }
 
-    // Đặt lại để đo kích thước tự nhiên trước khi scale
-    contentStageEl.style.width = z < 1 ? `${(100 / z).toFixed(2)}%` : '100%';
-    contentStageEl.style.transform = '';
+    contentStageEl.style.width = '100%';
     const baseW = contentStageEl.offsetWidth || scrollViewportEl.clientWidth || 640;
     const baseH = contentStageEl.offsetHeight || 480;
 
@@ -584,76 +517,54 @@ export class MinigameViewportManager {
     panAreaEl: HTMLElement | null;
     canvasShellEl: HTMLElement | null;
     canvasEl: HTMLCanvasElement | null;
+    canSingleFingerPanAt?: (clientX: number, clientY: number) => boolean;
     onTransformUpdated: () => void;
-    onOrientationToggled: () => void;
+    onOrientationToggled?: () => void;
     onPlayClick?: () => void;
   }): void {
     const {
       gameId,
-      rootScope,
       panAreaEl,
       canvasShellEl,
       canvasEl,
+      canSingleFingerPanAt,
       onTransformUpdated,
-      onOrientationToggled,
-      onPlayClick,
     } = params;
 
-    const refreshTransform = () => {
-      this.applyCanvasStageTransform(gameId, panAreaEl, canvasShellEl);
-      this.syncToolbarDOM(rootScope, gameId);
-      onTransformUpdated();
-    };
-
-    const bar =
-      typeof rootScope?.querySelector === 'function'
-        ? rootScope.querySelector<HTMLElement>(`[data-mg-toolbar="${gameId}"]`)
-        : null;
-    if (bar && typeof bar.querySelectorAll === 'function') {
-      bar.querySelectorAll<HTMLButtonElement>('[data-mg-act]').forEach((btn) => {
-        btn.addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          onPlayClick?.();
-          const act = btn.dataset.mgAct;
-          if (act === 'zoom-in') {
-            this.stepZoom(gameId, MINIGAME_ZOOM_STEP);
-            refreshTransform();
-          } else if (act === 'zoom-out') {
-            this.stepZoom(gameId, -MINIGAME_ZOOM_STEP);
-            refreshTransform();
-          } else if (act === 'zoom-reset') {
-            this.resetView(gameId);
-            refreshTransform();
-          } else if (act === 'toggle-pan') {
-            this.togglePanMode(gameId);
-            refreshTransform();
-          } else if (act === 'toggle-orient') {
-            this.toggleOrientation(false);
-            onOrientationToggled();
-          } else if (act === 'rotate-90') {
-            this.rotate90(gameId);
-            refreshTransform();
-          }
-        });
-      });
-    }
-
     if (!panAreaEl || !canvasShellEl) {
-      this.syncToolbarDOM(rootScope, gameId);
       return;
     }
 
-    // 1. Bánh xe chuột & Trackpad pinch trên vùng bàn chơi
+    const refreshTransform = () => {
+      this.applyCanvasStageTransform(gameId, panAreaEl, canvasShellEl);
+      onTransformUpdated();
+    };
+
+    // Chặn Safari iOS 16+ tự zoom trang web khi người chơi chụm 2 ngón tay trên bàn cờ
+    const blockNativeMultiTouchZoom = (ev: TouchEvent) => {
+      if (ev.touches && ev.touches.length >= 2) {
+        ev.preventDefault();
+      }
+    };
+    panAreaEl.addEventListener('touchmove', blockNativeMultiTouchZoom, { passive: false });
+    const blockSafariGesture = (ev: Event) => {
+      ev.preventDefault();
+    };
+    panAreaEl.addEventListener('gesturestart', blockSafariGesture, {
+      passive: false,
+    } as AddEventListenerOptions);
+    panAreaEl.addEventListener('gesturechange', blockSafariGesture, {
+      passive: false,
+    } as AddEventListenerOptions);
+
+    // Trackpad pinch / Ctrl+Wheel trên máy tính xách tay & desktop
     panAreaEl.addEventListener(
       'wheel',
       (ev) => {
         ev.preventDefault();
         const st = this.getState(gameId);
-        const factor = ev.ctrlKey ? 0.0085 : 0.0018;
-        const nextZoom = clampMinigameZoom(st.zoom * Math.exp(-ev.deltaY * factor));
-        if (nextZoom === st.zoom) return;
-
-        // Phóng to hướng về vị trí con trỏ trong vùng panArea
+        const factor = ev.ctrlKey ? 0.009 : 0.0018;
+        const rawNext = st.zoom * Math.exp(-ev.deltaY * factor);
         const vpRect = panAreaEl.getBoundingClientRect();
         const { dialogQuarterTurn } = this.getViewportResolution(false);
         const { lu, lv } = clientToLocalNormalized(
@@ -664,49 +575,70 @@ export class MinigameViewportManager {
         );
         const cursorOffsetX = (lu - 0.5) * panAreaEl.clientWidth;
         const cursorOffsetY = (lv - 0.5) * panAreaEl.clientHeight;
-        const ratio = nextZoom / Math.max(0.2, st.zoom);
-        st.panX = cursorOffsetX - (cursorOffsetX - st.panX) * ratio;
-        st.panY = cursorOffsetY - (cursorOffsetY - st.panY) * ratio;
-        st.zoom = nextZoom;
-        if (st.zoom <= 1.01) {
-          st.panX = 0;
-          st.panY = 0;
-          st.panMode = false;
-        }
+        const next = computeFocalPinchPan({
+          prevZoom: st.zoom,
+          nextZoom: rawNext,
+          prevPanX: st.panX,
+          prevPanY: st.panY,
+          prevMidOffsetX: cursorOffsetX,
+          prevMidOffsetY: cursorOffsetY,
+          currMidOffsetX: cursorOffsetX,
+          currMidOffsetY: cursorOffsetY,
+        });
+        if (next.zoom === st.zoom && next.panX === st.panX && next.panY === st.panY) return;
+        st.zoom = next.zoom;
+        st.panX = next.panX;
+        st.panY = next.panY;
         refreshTransform();
       },
       { passive: false }
     );
 
-    // Chặn menu chuột phải khi đang phóng to để kéo bàn mượt bằng chuột phải
     panAreaEl.addEventListener('contextmenu', (ev) => {
-      if (this.getState(gameId).zoom > 1.01 || this.getState(gameId).panMode) {
+      if (this.getState(gameId).zoom > 1.01) {
         ev.preventDefault();
       }
     });
 
-    // 2. Chụm 2 ngón (Pinch-to-Zoom + 2-finger Pan) & Kéo bàn 1 ngón/chuột (Pan Mode / Right / Middle / Space / Alt)
     const activeTouches = new Map<number, { x: number; y: number }>();
     let pinchActive = false;
     let pinchPrevDist = 0;
     let pinchPrevMidX = 0;
     let pinchPrevMidY = 0;
 
+    // Kéo bàn 1 ngón khi đang phóng to (> 102%) trên các môn chạm điểm hoặc vùng không kéo quân
+    let singleTouchCandidate: {
+      pointerId: number;
+      startX: number;
+      startY: number;
+      lastX: number;
+      lastY: number;
+      active: boolean;
+    } | null = null;
+
+    // Kéo bàn bằng chuột phải/giữa hoặc giữ Space/Alt trên desktop khi đã phóng to
     let dragPanPointerId: number | null = null;
     let dragPanLastX = 0;
     let dragPanLastY = 0;
 
     const cancelCanvasActivePointer = (pointerId: number) => {
-      if (!canvasEl || typeof PointerEvent === 'undefined') return;
+      if (!canvasEl) return;
       try {
-        canvasEl.dispatchEvent(
-          new PointerEvent('pointercancel', {
-            pointerId,
-            bubbles: true,
-          })
-        );
+        canvasEl.releasePointerCapture?.(pointerId);
       } catch {
-        // Ignore environments without PointerEvent constructor
+        // Ignore if not captured
+      }
+      if (typeof PointerEvent !== 'undefined') {
+        try {
+          canvasEl.dispatchEvent(
+            new PointerEvent('pointercancel', {
+              pointerId,
+              bubbles: true,
+            })
+          );
+        } catch {
+          // Ignore environments without PointerEvent constructor
+        }
       }
     };
 
@@ -715,28 +647,63 @@ export class MinigameViewportManager {
       (ev) => {
         if (ev.pointerType === 'touch') {
           activeTouches.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+          this.activePinchCount = activeTouches.size;
+
           if (activeTouches.size >= 2) {
+            singleTouchCandidate = null;
             const pts = Array.from(activeTouches.values());
-            pinchPrevDist = Math.max(12, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y));
+            pinchPrevDist = Math.max(10, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y));
             pinchPrevMidX = (pts[0].x + pts[1].x) * 0.5;
             pinchPrevMidY = (pts[0].y + pts[1].y) * 0.5;
             if (!pinchActive) {
               pinchActive = true;
               for (const pid of activeTouches.keys()) {
                 cancelCanvasActivePointer(pid);
+                try {
+                  panAreaEl.setPointerCapture?.(pid);
+                } catch {
+                  // Ignore synthetic events
+                }
+              }
+            } else {
+              cancelCanvasActivePointer(ev.pointerId);
+              try {
+                panAreaEl.setPointerCapture?.(ev.pointerId);
+              } catch {
+                // Ignore synthetic events
               }
             }
             ev.stopPropagation();
             ev.preventDefault();
             return;
           }
+
+          // Ngón tay đầu tiên chạm xuống: nếu bàn cờ đang phóng to và vị trí cho phép kéo 1 ngón, theo dõi ngưỡng kéo
+          const st = this.getState(gameId);
+          if (
+            st.zoom > 1.02 &&
+            canSingleFingerPanAt &&
+            canSingleFingerPanAt(ev.clientX, ev.clientY)
+          ) {
+            singleTouchCandidate = {
+              pointerId: ev.pointerId,
+              startX: ev.clientX,
+              startY: ev.clientY,
+              lastX: ev.clientX,
+              lastY: ev.clientY,
+              active: false,
+            };
+          } else {
+            singleTouchCandidate = null;
+          }
+          return;
         }
 
         const st = this.getState(gameId);
         const isAuxPanButton =
           ev.button === 1 ||
           (ev.button === 2 && st.zoom > 1.01) ||
-          (ev.button === 0 && (st.panMode || ev.altKey || this.spacePressed));
+          (ev.button === 0 && st.zoom > 1.01 && (ev.altKey || this.spacePressed));
 
         if (isAuxPanButton) {
           dragPanPointerId = ev.pointerId;
@@ -760,23 +727,42 @@ export class MinigameViewportManager {
       (ev) => {
         if (ev.pointerType === 'touch' && activeTouches.has(ev.pointerId)) {
           activeTouches.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+
           if (pinchActive && activeTouches.size >= 2) {
             const pts = Array.from(activeTouches.values());
-            const dist = Math.max(12, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y));
+            const dist = Math.max(10, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y));
             const midX = (pts[0].x + pts[1].x) * 0.5;
             const midY = (pts[0].y + pts[1].y) * 0.5;
-            const st = this.getState(gameId);
-            const scaleDelta = dist / Math.max(12, pinchPrevDist);
-            st.zoom = clampMinigameZoom(st.zoom * scaleDelta);
 
+            const st = this.getState(gameId);
+            const rawNext = st.zoom * (dist / Math.max(10, pinchPrevDist));
+            const vpRect = panAreaEl.getBoundingClientRect();
             const { dialogQuarterTurn } = this.getViewportResolution(false);
-            const dLocal = screenDeltaToViewportDelta(
-              midX - pinchPrevMidX,
-              midY - pinchPrevMidY,
+            const prevLocal = clientToLocalNormalized(
+              pinchPrevMidX,
+              pinchPrevMidY,
+              vpRect,
               dialogQuarterTurn
             );
-            st.panX += dLocal.vx;
-            st.panY += dLocal.vy;
+            const currLocal = clientToLocalNormalized(midX, midY, vpRect, dialogQuarterTurn);
+            const prevMidOffsetX = (prevLocal.lu - 0.5) * panAreaEl.clientWidth;
+            const prevMidOffsetY = (prevLocal.lv - 0.5) * panAreaEl.clientHeight;
+            const currMidOffsetX = (currLocal.lu - 0.5) * panAreaEl.clientWidth;
+            const currMidOffsetY = (currLocal.lv - 0.5) * panAreaEl.clientHeight;
+
+            const next = computeFocalPinchPan({
+              prevZoom: st.zoom,
+              nextZoom: rawNext,
+              prevPanX: st.panX,
+              prevPanY: st.panY,
+              prevMidOffsetX,
+              prevMidOffsetY,
+              currMidOffsetX,
+              currMidOffsetY,
+            });
+            st.zoom = next.zoom;
+            st.panX = next.panX;
+            st.panY = next.panY;
 
             pinchPrevDist = dist;
             pinchPrevMidX = midX;
@@ -786,10 +772,48 @@ export class MinigameViewportManager {
             ev.preventDefault();
             return;
           }
+
           if (pinchActive) {
             ev.stopPropagation();
             ev.preventDefault();
             return;
+          }
+
+          if (singleTouchCandidate && singleTouchCandidate.pointerId === ev.pointerId) {
+            const totalMove = Math.hypot(
+              ev.clientX - singleTouchCandidate.startX,
+              ev.clientY - singleTouchCandidate.startY
+            );
+            if (!singleTouchCandidate.active && totalMove >= SINGLE_FINGER_PAN_THRESHOLD_PX) {
+              singleTouchCandidate.active = true;
+              singleTouchCandidate.lastX = ev.clientX;
+              singleTouchCandidate.lastY = ev.clientY;
+              panAreaEl.dataset.mgDragging = 'true';
+              cancelCanvasActivePointer(ev.pointerId);
+              try {
+                panAreaEl.setPointerCapture?.(ev.pointerId);
+              } catch {
+                // Ignore synthetic events
+              }
+            }
+
+            if (singleTouchCandidate.active) {
+              const st = this.getState(gameId);
+              const { dialogQuarterTurn } = this.getViewportResolution(false);
+              const dLocal = screenDeltaToViewportDelta(
+                ev.clientX - singleTouchCandidate.lastX,
+                ev.clientY - singleTouchCandidate.lastY,
+                dialogQuarterTurn
+              );
+              st.panX += dLocal.vx;
+              st.panY += dLocal.vy;
+              singleTouchCandidate.lastX = ev.clientX;
+              singleTouchCandidate.lastY = ev.clientY;
+              refreshTransform();
+              ev.stopPropagation();
+              ev.preventDefault();
+              return;
+            }
           }
         }
 
@@ -816,18 +840,37 @@ export class MinigameViewportManager {
     const endGesture = (ev: PointerEvent) => {
       if (ev.pointerType === 'touch' && activeTouches.has(ev.pointerId)) {
         activeTouches.delete(ev.pointerId);
+        this.activePinchCount = activeTouches.size;
+        try {
+          panAreaEl.releasePointerCapture?.(ev.pointerId);
+        } catch {
+          // Ignore
+        }
+
         if (pinchActive) {
+          this.lastPinchEndMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
           if (activeTouches.size === 0) {
             pinchActive = false;
           } else if (activeTouches.size >= 2) {
             const pts = Array.from(activeTouches.values());
-            pinchPrevDist = Math.max(12, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y));
+            pinchPrevDist = Math.max(10, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y));
             pinchPrevMidX = (pts[0].x + pts[1].x) * 0.5;
             pinchPrevMidY = (pts[0].y + pts[1].y) * 0.5;
           }
           ev.stopPropagation();
           ev.preventDefault();
           return;
+        }
+
+        if (singleTouchCandidate && singleTouchCandidate.pointerId === ev.pointerId) {
+          const wasPanning = singleTouchCandidate.active;
+          singleTouchCandidate = null;
+          delete panAreaEl.dataset.mgDragging;
+          if (wasPanning) {
+            ev.stopPropagation();
+            ev.preventDefault();
+            return;
+          }
         }
       }
 
@@ -848,7 +891,6 @@ export class MinigameViewportManager {
     panAreaEl.addEventListener('pointercancel', endGesture, { capture: true });
 
     this.applyCanvasStageTransform(gameId, panAreaEl, canvasShellEl);
-    this.syncToolbarDOM(rootScope, gameId);
   }
 
   public bindDomScrollStageInteractions(params: {
@@ -856,105 +898,182 @@ export class MinigameViewportManager {
     scrollViewportEl: HTMLElement | null;
     sizerEl: HTMLElement | null;
     contentStageEl: HTMLElement | null;
-    onOrientationToggled: () => void;
+    onOrientationToggled?: () => void;
     onPlayClick?: () => void;
   }): void {
-    const {
-      rootScope,
-      scrollViewportEl,
-      sizerEl,
-      contentStageEl,
-      onOrientationToggled,
-      onPlayClick,
-    } = params;
+    const { scrollViewportEl, sizerEl, contentStageEl } = params;
     const gameId: MinigameViewId = 'seedquiz';
 
     const refresh = () => {
       this.applyDomScrollStageTransform(scrollViewportEl, sizerEl, contentStageEl);
-      this.syncToolbarDOM(rootScope, gameId);
     };
 
-    const bar =
-      typeof rootScope?.querySelector === 'function'
-        ? rootScope.querySelector<HTMLElement>(`[data-mg-toolbar="${gameId}"]`)
-        : null;
-    if (bar && typeof bar.querySelectorAll === 'function') {
-      bar.querySelectorAll<HTMLButtonElement>('[data-mg-act]').forEach((btn) => {
-        btn.addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          onPlayClick?.();
-          const act = btn.dataset.mgAct;
-          if (act === 'zoom-in') {
-            this.stepZoom(gameId, MINIGAME_ZOOM_STEP);
-            refresh();
-          } else if (act === 'zoom-out') {
-            this.stepZoom(gameId, -MINIGAME_ZOOM_STEP);
-            refresh();
-          } else if (act === 'zoom-reset') {
-            this.resetView(gameId);
-            refresh();
-          } else if (act === 'toggle-orient') {
-            this.toggleOrientation(true);
-            onOrientationToggled();
-          } else if (act === 'rotate-90') {
-            this.rotate90(gameId);
-            onOrientationToggled();
-          }
-        });
-      });
+    if (!scrollViewportEl || !sizerEl || !contentStageEl) {
+      return;
     }
 
-    if (scrollViewportEl) {
-      scrollViewportEl.addEventListener(
-        'wheel',
-        (ev) => {
-          if (!ev.ctrlKey && !ev.metaKey) return;
-          ev.preventDefault();
+    const blockSafariGesture = (ev: Event) => {
+      ev.preventDefault();
+    };
+    scrollViewportEl.addEventListener('gesturestart', blockSafariGesture, {
+      passive: false,
+    } as AddEventListenerOptions);
+    scrollViewportEl.addEventListener('gesturechange', blockSafariGesture, {
+      passive: false,
+    } as AddEventListenerOptions);
+
+    scrollViewportEl.addEventListener(
+      'wheel',
+      (ev) => {
+        if (!ev.ctrlKey && !ev.metaKey) return;
+        ev.preventDefault();
+        const st = this.getState(gameId);
+        const prevZoom = st.zoom;
+        const rawNext = prevZoom * Math.exp(-ev.deltaY * 0.007);
+        const nextZoom = rawNext <= 1.015 ? 1 : clampMinigameZoom(rawNext);
+        if (nextZoom === prevZoom) return;
+
+        const vpRect = scrollViewportEl.getBoundingClientRect();
+        const vx = ev.clientX - vpRect.left;
+        const vy = ev.clientY - vpRect.top;
+        const prevScrollLeft = scrollViewportEl.scrollLeft;
+        const prevScrollTop = scrollViewportEl.scrollTop;
+
+        st.zoom = nextZoom;
+        refresh();
+
+        const ratio = st.zoom / Math.max(0.25, prevZoom);
+        scrollViewportEl.scrollLeft = Math.max(0, (prevScrollLeft + vx) * ratio - vx);
+        scrollViewportEl.scrollTop = Math.max(0, (prevScrollTop + vy) * ratio - vy);
+      },
+      { passive: false }
+    );
+
+    // Xử lý chụm 2 ngón trực tiếp qua TouchEvent (ổn định 100% kể cả khi ngón 1 vừa cuộn dọc trên iOS Safari)
+    let touchPinchPrevDist = 0;
+    let touchPinchPrevVx = 0;
+    let touchPinchPrevVy = 0;
+    let handledViaTouchEvent = false;
+
+    scrollViewportEl.addEventListener(
+      'touchstart',
+      (ev) => {
+        if (ev.touches.length >= 2) {
+          handledViaTouchEvent = true;
+          this.activePinchCount = ev.touches.length;
+          const t0 = ev.touches[0];
+          const t1 = ev.touches[1];
+          touchPinchPrevDist = Math.max(
+            10,
+            Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY)
+          );
+          const vpRect = scrollViewportEl.getBoundingClientRect();
+          touchPinchPrevVx = (t0.clientX + t1.clientX) * 0.5 - vpRect.left;
+          touchPinchPrevVy = (t0.clientY + t1.clientY) * 0.5 - vpRect.top;
+        }
+      },
+      { passive: true }
+    );
+
+    scrollViewportEl.addEventListener(
+      'touchmove',
+      (ev) => {
+        if (ev.touches.length < 2) return;
+        ev.preventDefault();
+        handledViaTouchEvent = true;
+        const t0 = ev.touches[0];
+        const t1 = ev.touches[1];
+        const dist = Math.max(10, Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY));
+        const vpRect = scrollViewportEl.getBoundingClientRect();
+        const currVx = (t0.clientX + t1.clientX) * 0.5 - vpRect.left;
+        const currVy = (t0.clientY + t1.clientY) * 0.5 - vpRect.top;
+
+        if (touchPinchPrevDist > 0) {
           const st = this.getState(gameId);
-          st.zoom = clampMinigameZoom(st.zoom * Math.exp(-ev.deltaY * 0.006));
-          refresh();
-        },
-        { passive: false }
-      );
+          const prevZoom = st.zoom;
+          const rawNext = prevZoom * (dist / touchPinchPrevDist);
+          const nextZoom = rawNext <= 1.015 ? 1 : clampMinigameZoom(rawNext);
+          const prevScrollLeft = scrollViewportEl.scrollLeft;
+          const prevScrollTop = scrollViewportEl.scrollTop;
 
-      const activeTouches = new Map<number, { x: number; y: number }>();
-      let pinchPrevDist = 0;
-      scrollViewportEl.addEventListener(
-        'pointerdown',
-        (ev) => {
-          if (ev.pointerType !== 'touch') return;
-          activeTouches.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-          if (activeTouches.size >= 2) {
-            const pts = Array.from(activeTouches.values());
-            pinchPrevDist = Math.max(12, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y));
-          }
-        },
-        { passive: true }
-      );
-      scrollViewportEl.addEventListener(
-        'pointermove',
-        (ev) => {
-          if (ev.pointerType !== 'touch' || !activeTouches.has(ev.pointerId)) return;
-          activeTouches.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-          if (activeTouches.size >= 2 && pinchPrevDist > 0) {
-            const pts = Array.from(activeTouches.values());
-            const dist = Math.max(12, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y));
-            const st = this.getState(gameId);
-            st.zoom = clampMinigameZoom(st.zoom * (dist / pinchPrevDist));
-            pinchPrevDist = dist;
-            refresh();
-            ev.preventDefault();
-          }
-        },
-        { passive: false }
-      );
-      const endTouch = (ev: PointerEvent) => {
-        activeTouches.delete(ev.pointerId);
-        if (activeTouches.size < 2) pinchPrevDist = 0;
-      };
-      scrollViewportEl.addEventListener('pointerup', endTouch, { passive: true });
-      scrollViewportEl.addEventListener('pointercancel', endTouch, { passive: true });
-    }
+          st.zoom = nextZoom;
+          refresh();
+
+          const ratio = st.zoom / Math.max(0.25, prevZoom);
+          scrollViewportEl.scrollLeft = Math.max(0, (prevScrollLeft + touchPinchPrevVx) * ratio - currVx);
+          scrollViewportEl.scrollTop = Math.max(0, (prevScrollTop + touchPinchPrevVy) * ratio - currVy);
+        }
+
+        touchPinchPrevDist = dist;
+        touchPinchPrevVx = currVx;
+        touchPinchPrevVy = currVy;
+      },
+      { passive: false }
+    );
+
+    const resetTouchPinch = (ev: TouchEvent) => {
+      this.activePinchCount = ev.touches.length;
+      if (ev.touches.length < 2) {
+        if (touchPinchPrevDist > 0) {
+          this.lastPinchEndMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        }
+        touchPinchPrevDist = 0;
+      } else {
+        const t0 = ev.touches[0];
+        const t1 = ev.touches[1];
+        touchPinchPrevDist = Math.max(
+          10,
+          Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY)
+        );
+        const vpRect = scrollViewportEl.getBoundingClientRect();
+        touchPinchPrevVx = (t0.clientX + t1.clientX) * 0.5 - vpRect.left;
+        touchPinchPrevVy = (t0.clientY + t1.clientY) * 0.5 - vpRect.top;
+      }
+    };
+    scrollViewportEl.addEventListener('touchend', resetTouchPinch, { passive: true });
+    scrollViewportEl.addEventListener('touchcancel', resetTouchPinch, { passive: true });
+
+    // Dự phòng PointerEvent cho thiết bị cảm ứng không phát TouchEvent
+    const activePointers = new Map<number, { x: number; y: number }>();
+    let ptrPinchPrevDist = 0;
+    scrollViewportEl.addEventListener(
+      'pointerdown',
+      (ev) => {
+        if (ev.pointerType !== 'touch' || handledViaTouchEvent) return;
+        activePointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+        if (activePointers.size >= 2) {
+          const pts = Array.from(activePointers.values());
+          ptrPinchPrevDist = Math.max(10, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y));
+        }
+      },
+      { passive: true }
+    );
+    scrollViewportEl.addEventListener(
+      'pointermove',
+      (ev) => {
+        if (ev.pointerType !== 'touch' || handledViaTouchEvent || !activePointers.has(ev.pointerId)) {
+          return;
+        }
+        activePointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+        if (activePointers.size >= 2 && ptrPinchPrevDist > 0) {
+          const pts = Array.from(activePointers.values());
+          const dist = Math.max(10, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y));
+          const st = this.getState(gameId);
+          const rawNext = st.zoom * (dist / ptrPinchPrevDist);
+          st.zoom = rawNext <= 1.015 ? 1 : clampMinigameZoom(rawNext);
+          ptrPinchPrevDist = dist;
+          refresh();
+          ev.preventDefault();
+        }
+      },
+      { passive: false }
+    );
+    const endPtr = (ev: PointerEvent) => {
+      activePointers.delete(ev.pointerId);
+      if (activePointers.size < 2) ptrPinchPrevDist = 0;
+    };
+    scrollViewportEl.addEventListener('pointerup', endPtr, { passive: true });
+    scrollViewportEl.addEventListener('pointercancel', endPtr, { passive: true });
 
     refresh();
   }

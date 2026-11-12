@@ -2225,9 +2225,6 @@ export class PuzzleArcadeModalController {
         </aside>
 
         <div class="pa-stage-viewport">
-          <div class="mg-stage-top-strip">
-            ${sharedMinigameViewport.renderToolbarHtml(this.mode)}
-          </div>
           <div class="mg-stage-pan-area">
             <div class="pa-canvas-shell" data-pa-board-mode="${this.mode}">
               <canvas id="paBoardCanvas" width="${this.getVirtualCanvasSize().w}" height="${this.getVirtualCanvasSize().h}" aria-label="Bàn chơi Sảnh Bàn Cờ &amp; Cổ Ngữ Phép Thuật"></canvas>
@@ -3010,6 +3007,21 @@ export class PuzzleArcadeModalController {
       this.canvasResizeObserver.observe(cvs);
     }
 
+    const clientToVirtual = (clientX: number, clientY: number): { vx: number; vy: number } => {
+      const rect = cvs.getBoundingClientRect();
+      if (cvs.clientWidth > 0 && cvs.clientHeight > 0) {
+        this.observedCanvasCssW = cvs.clientWidth;
+        this.observedCanvasCssH = cvs.clientHeight;
+      }
+      const virt = this.getVirtualCanvasSize();
+      const netRot = sharedMinigameViewport.getNetQuarterTurns(this.mode);
+      const { lu, lv } = clientToLocalNormalized(clientX, clientY, rect, netRot);
+      return { vx: lu * virt.w, vy: lv * virt.h };
+    };
+
+    const toVirtual = (ev: PointerEvent): { vx: number; vy: number } =>
+      clientToVirtual(ev.clientX, ev.clientY);
+
     const panArea = box.querySelector('.mg-stage-pan-area') as HTMLElement | null;
     const shell = box.querySelector('.pa-canvas-shell') as HTMLElement | null;
     sharedMinigameViewport.bindCanvasStageInteractions({
@@ -3018,6 +3030,25 @@ export class PuzzleArcadeModalController {
       panAreaEl: panArea,
       canvasShellEl: shell,
       canvasEl: cvs,
+      canSingleFingerPanAt: (clientX, clientY) => {
+        if (this.mode !== 'chess') {
+          return true;
+        }
+        if (!this.chessEngine || this.chessEngine.status !== 'playing') return true;
+        const { vx, vy } = clientToVirtual(clientX, clientY);
+        if (
+          vx >= CHESS_BOARD_X &&
+          vx <= CHESS_BOARD_X + CHESS_BOARD_PX &&
+          vy >= CHESS_BOARD_Y &&
+          vy <= CHESS_BOARD_Y + CHESS_BOARD_PX
+        ) {
+          const c = Math.min(7, Math.max(0, Math.floor((vx - CHESS_BOARD_X) / CHESS_CELL_PX)));
+          const r = Math.min(7, Math.max(0, Math.floor((vy - CHESS_BOARD_Y) / CHESS_CELL_PX)));
+          const p = this.chessEngine.board[r]?.[c];
+          if (p && p.color === 'w') return false;
+        }
+        return true;
+      },
       onTransformUpdated: () => {
         this.forceImmediateRedraw = true;
         this.drawFrame();
@@ -3029,21 +3060,14 @@ export class PuzzleArcadeModalController {
       onPlayClick: () => this.sim.audio.playClick(),
     });
 
-    const toVirtual = (ev: PointerEvent): { vx: number; vy: number } => {
-      const rect = cvs.getBoundingClientRect();
-      if (cvs.clientWidth > 0 && cvs.clientHeight > 0) {
-        this.observedCanvasCssW = cvs.clientWidth;
-        this.observedCanvasCssH = cvs.clientHeight;
-      }
-      const virt = this.getVirtualCanvasSize();
-      const netRot = sharedMinigameViewport.getNetQuarterTurns(this.mode);
-      const { lu, lv } = clientToLocalNormalized(ev.clientX, ev.clientY, rect, netRot);
-      return { vx: lu * virt.w, vy: lv * virt.h };
-    };
+    let pendingTouchTap = false;
 
     cvs.addEventListener('pointerdown', (ev) => {
       if (ev.button !== 0 && ev.pointerType === 'mouse') return;
       if (this.victoryClaimed) return;
+      if (ev.pointerType === 'touch' && sharedMinigameViewport.isPinchOrCooldownActive()) {
+        return;
+      }
       this.forceImmediateRedraw = true;
       const pos = toVirtual(ev);
       this.activePointerId = ev.pointerId;
@@ -3055,6 +3079,33 @@ export class PuzzleArcadeModalController {
       } catch {
         // Ignore synthetic pointer events
       }
+
+      if (ev.pointerType === 'touch') {
+        this.handlePointerHover(pos.vx, pos.vy);
+        if (
+          this.mode === 'chess' &&
+          this.chessEngine &&
+          pos.vx >= CHESS_BOARD_X &&
+          pos.vx <= CHESS_BOARD_X + CHESS_BOARD_PX &&
+          pos.vy >= CHESS_BOARD_Y &&
+          pos.vy <= CHESS_BOARD_Y + CHESS_BOARD_PX
+        ) {
+          const c = Math.min(7, Math.max(0, Math.floor((pos.vx - CHESS_BOARD_X) / CHESS_CELL_PX)));
+          const r = Math.min(7, Math.max(0, Math.floor((pos.vy - CHESS_BOARD_Y) / CHESS_CELL_PX)));
+          const p = this.chessEngine.board[r]?.[c];
+          if (p && p.color === 'w') {
+            pendingTouchTap = false;
+            this.chessDragFrom = { r, c };
+            this.handleChessSquareAction(r, c);
+            return;
+          }
+          this.chessDragFrom = null;
+        }
+        pendingTouchTap = true;
+        return;
+      }
+
+      pendingTouchTap = false;
       this.handlePointerDown(pos.vx, pos.vy);
     });
 
@@ -3076,6 +3127,7 @@ export class PuzzleArcadeModalController {
       if (this.activePointerId !== ev.pointerId) return;
       this.forceImmediateRedraw = true;
       if (ev.type === 'pointercancel') {
+        pendingTouchTap = false;
         this.chessDragFrom = null;
         this.activePointerId = null;
         this.pointerDownPos = null;
@@ -3083,7 +3135,14 @@ export class PuzzleArcadeModalController {
       }
       const pos = toVirtual(ev);
       this.pointerCurrPos = pos;
-      this.handlePointerUp(pos.vx, pos.vy);
+      if (pendingTouchTap) {
+        pendingTouchTap = false;
+        if (!this.hasDragged && !sharedMinigameViewport.isPinchOrCooldownActive()) {
+          this.handlePointerDown(pos.vx, pos.vy);
+        }
+      } else {
+        this.handlePointerUp(pos.vx, pos.vy);
+      }
       this.activePointerId = null;
       this.pointerDownPos = null;
     };
@@ -3601,16 +3660,16 @@ export class PuzzleArcadeModalController {
     const dispCols = transposed ? engine.rows : engine.cols;
 
     const outerTrackMargin = Math.max(
-      9,
-      Math.min(13, Math.round(Math.min(virt.w, virt.h) * 0.018))
+      6,
+      Math.min(10, Math.round(Math.min(virt.w, virt.h) * 0.014))
     );
-    const timerHeaderGap = 6;
-    const timerBarH = 18;
+    const timerHeaderGap = 4;
+    const timerBarH = 17;
     const timerHeaderTotal = timerBarH + timerHeaderGap;
-    const boxPad = 3;
+    const boxPad = 2;
     const availW = Math.max(180, virt.w - (outerTrackMargin + boxPad) * 2);
     const availH = Math.max(150, virt.h - (outerTrackMargin + boxPad) * 2 - timerHeaderTotal);
-    const maxTileSide = this.isMobileBoardLayout() ? 66 : 76;
+    const maxTileSide = this.isMobileBoardLayout() ? 108 : 120;
     const rawCellW = Math.min(maxTileSide, availW / dispCols);
     const rawCellH = Math.min(maxTileSide * 1.06, availH / dispRows);
     const cellW = Math.min(rawCellW, rawCellH * 1.28);
@@ -4064,8 +4123,8 @@ export class PuzzleArcadeModalController {
       isTouch ? 1.65 : 2.0,
       typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
     );
-    const viewZoom = Math.max(1, Math.min(1.85, sharedMinigameViewport.getState(this.mode).zoom));
-    const maxCanvasDim = isTouch ? 1320 : 1760;
+    const viewZoom = Math.max(1, Math.min(2.4, sharedMinigameViewport.getState(this.mode).zoom));
+    const maxCanvasDim = isTouch ? 1560 : 1920;
     const dpr = Math.min(maxCanvasDim / Math.max(1, cssW, cssH), baseDpr * viewZoom);
     const targetW = Math.round(cssW * dpr);
     const targetH = Math.round(cssH * dpr);

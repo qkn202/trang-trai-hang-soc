@@ -22,6 +22,7 @@ import {
 } from 'firebase-functions/v2/https';
 import {
   BurrowAuthoritativeBackend,
+  extractMemberProfileFields,
   type HogwartsHouseName,
   sanitizeBackendUid,
   type VerifiedSessionIdentity,
@@ -80,16 +81,14 @@ async function verifyFirebaseIdTokenWithAdmin(
     if (decoded.firebase?.sign_in_provider === 'anonymous') {
       return null;
     }
-    const rawHouse = (decoded as Record<string, unknown>).house;
-    const house: HogwartsHouseName =
-      rawHouse === 'Hufflepuff' || rawHouse === 'Ravenclaw' || rawHouse === 'Slytherin'
-        ? rawHouse
-        : 'Gryffindor';
-    const rawName = (decoded.name || (decoded as Record<string, unknown>).username || '') as string;
-    const rawPic = (decoded.picture || (decoded as Record<string, unknown>).avatarUrl || '') as string;
+    const fields = extractMemberProfileFields(decoded as Record<string, unknown>);
+    const house: HogwartsHouseName = fields.house ?? 'Gryffindor';
+    const rawName = (fields.username || decoded.name || '') as string;
+    const rawPic = (fields.avatarUrl || decoded.picture || '') as string;
     return {
       uid: sanitizeBackendUid(decoded.uid),
       house,
+      houseExplicit: Boolean(fields.house),
       role:
         (decoded as Record<string, unknown>).saleAdmin === true ||
         (decoded as Record<string, unknown>).role === 'saleAdmin'
@@ -191,11 +190,7 @@ function bindCallable(callableName: string) {
         auth: req.auth
           ? {
               uid: req.auth.uid,
-              token: req.auth.token as {
-                house?: string;
-                saleAdmin?: boolean;
-                role?: string;
-              },
+              token: req.auth.token as Record<string, unknown>,
             }
           : null,
       });
@@ -206,6 +201,8 @@ function bindCallable(callableName: string) {
 // --- Callable Functions độc lập miền Burrow (100% tách biệt khỏi Hagrid Farm) ---
 export const getBurrowGarden = bindCallable('getBurrowGarden');
 export const performBurrowAction = bindCallable('performBurrowAction');
+export const getBurrowLeaderboard = bindCallable('getBurrowLeaderboard');
+export const submitBurrowLeaderboard = bindCallable('submitBurrowLeaderboard');
 export const buyBurrowSupplies = bindCallable('buyBurrowSupplies');
 export const sellBurrowGoods = bindCallable('sellBurrowGoods');
 export const settleBurrowWallet = bindCallable('settleBurrowWallet');

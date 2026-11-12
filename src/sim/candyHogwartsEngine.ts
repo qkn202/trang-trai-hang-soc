@@ -283,6 +283,7 @@ export class CandyHogwartsEngine {
     startY: number;
     cell: { r: number; c: number };
     swiped: boolean;
+    pointerType: string;
   } | null = null;
   private rafId: number | null = null;
   private loopActive = false;
@@ -513,6 +514,13 @@ export class CandyHogwartsEngine {
     return { r: 0, c: 0 };
   }
 
+  public hasPlayableCellAtScreen(clientX: number, clientY: number): boolean {
+    if (!this.renderer || !this.level) return false;
+    const cell = this.renderer.screenToCell(clientX, clientY, this.size);
+    if (!cell) return false;
+    return this.mask[cell.r]?.[cell.c] === 1;
+  }
+
   private bindInput(): void {
     if (!this.canvas) return;
 
@@ -543,8 +551,12 @@ export class CandyHogwartsEngine {
         startY: startPt.y,
         cell,
         swiped: false,
+        pointerType: e.pointerType || 'mouse',
       };
-      this.activateCellInteraction(cell);
+      // Trên màn hình cảm ứng, chỉ kích hoạt chọn/đổi kẹo theo chạm khi nhấc 1 ngón lên (không đổi nhầm khi đặt 2 ngón zoom)
+      if (e.pointerType !== 'touch') {
+        this.activateCellInteraction(cell);
+      }
     };
 
     this.onPointerMoveBound = (e: PointerEvent) => {
@@ -566,7 +578,7 @@ export class CandyHogwartsEngine {
       const dy = curPt.y - this.pointerState.startY;
       const threshold =
         e.pointerType === 'touch'
-          ? Math.max(9, this.renderer.cellSize * 0.18)
+          ? Math.max(14, this.renderer.cellSize * 0.25)
           : Math.max(14, this.renderer.cellSize * 0.28);
 
       if (Math.hypot(dx, dy) >= threshold) {
@@ -587,11 +599,21 @@ export class CandyHogwartsEngine {
 
     this.onPointerUpBound = (e: PointerEvent) => {
       if (this.pointerState && e.pointerId === this.pointerState.pointerId) {
-        if (e.type === 'pointercancel') {
-          this.selected = null;
-          this.emitHudState();
-        }
+        const prev = this.pointerState;
         this.pointerState = null;
+        if (e.type === 'pointercancel' || e.type === 'lostpointercapture') {
+          return;
+        }
+        if (
+          e.type === 'pointerup' &&
+          prev.pointerType === 'touch' &&
+          !prev.swiped &&
+          !this.busy &&
+          !this.ended &&
+          this.level
+        ) {
+          this.activateCellInteraction(prev.cell);
+        }
       }
     };
 

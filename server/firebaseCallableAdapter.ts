@@ -9,10 +9,12 @@ import {
   type BackendKVStore,
   BurrowAuthoritativeBackend,
   BurrowServerError,
+  extractMemberProfileFields,
   type GringottsLedgerEntry,
   type GringottsWalletDoc,
   type HogwartsHouseName,
   type HouseCupWeekDoc,
+  type MemberIdentityProfile,
   sanitizeBackendUid,
   type VerifiedSessionIdentity,
 } from './burrowBackendCore';
@@ -126,6 +128,11 @@ export interface FirestoreBackendStoreOptions {
    * Tên collection sổ cái giao dịch bất biến chuẩn BigQuery của Gringotts (mặc định `'galleons_ledger_rows'`).
    */
   walletLedgerRowsCollection?: string;
+  /**
+   * Danh sách collection hồ sơ thành viên chỉ-đọc trên `walletDb` (`(default)` DB của `hpvnn-archive`)
+   * dùng để tra cứu Nhà Hogwarts thực tế (`house`), `displayName` và `avatarUrl` khi Firebase Auth Token thiếu custom claim.
+   */
+  memberProfileCollections?: string[];
 }
 
 /**
@@ -144,6 +151,11 @@ export class FirestoreBackendStore implements BackendKVStore {
   private readonly walletDb: FirestoreDbLike;
   private readonly walletCollection: string;
   private readonly walletLedgerRowsCollection: string;
+  private readonly memberProfileCollections: string[];
+  private readonly memberProfileCache = new Map<
+    string,
+    { profile: MemberIdentityProfile; expiresAt: number }
+  >();
   private readonly writtenLedgerTxIds = new Set<string>();
   private readonly keyLockTails = new Map<string, Promise<void>>();
 
@@ -159,6 +171,17 @@ export class FirestoreBackendStore implements BackendKVStore {
       options.walletLedgerRowsCollection.trim()
         ? options.walletLedgerRowsCollection.trim()
         : DEFAULT_HPVN_LEDGER_ROWS_COLLECTION;
+    const rawCollections =
+      Array.isArray(options.memberProfileCollections) && options.memberProfileCollections.length > 0
+        ? options.memberProfileCollections
+        : ['users', this.walletCollection];
+    this.memberProfileCollections = Array.from(
+      new Set(
+        rawCollections
+          .map((c) => (typeof c === 'string' ? c.trim() : ''))
+          .filter((c) => c.length > 0)
+      )
+    );
   }
 
   private resolveDocPath(rawKey: string): {
@@ -617,13 +640,77 @@ export class FirestoreBackendStore implements BackendKVStore {
       return cup;
     });
   }
+
+  /**
+   * Đọc hồ sơ thành viên thực tế (chỉ-đọc 100%, KHÔNG bao giờ ghi) từ `walletDb` (`(default)` DB của diễn đàn HPVN)
+   * để lấy đúng Nhà Hogwarts (`Hufflepuff`, `Ravenclaw`, `Slytherin`, `Gryffindor`), tên hiển thị và ảnh đại diện
+   * ngay cả khi Firebase ID Token không gắn custom claim `house` hoặc viết thường.
+   */
+  public async resolveMemberIdentityProfile(uid: string): Promise<MemberIdentityProfile | null> {
+    const cleanUid = sanitizeBackendUid(uid);
+    const docId = cleanUid.replace(/:/g, '_').replace(/\//g, '_');
+    const nowMs = Date.now();
+    const cached = this.memberProfileCache.get(docId);
+    if (cached && cached.expiresAt > nowMs) {
+      return cached.profile;
+    }
+
+    let resolvedHouse: HogwartsHouseName | undefined;
+    let resolvedUsername: string | undefined;
+    let resolvedAvatarUrl: string | undefined;
+
+    for (const colName of this.memberProfileCollections) {
+      try {
+        const snap = await this.walletDb.collection(colName).doc(docId).get();
+        if (!snap.exists) continue;
+        const fields = extractMemberProfileFields(snap.data());
+        if (!resolvedHouse && fields.house) {
+          resolvedHouse = fields.house;
+        }
+        if (!resolvedUsername && fields.username) {
+          resolvedUsername = fields.username;
+        }
+        if (!resolvedAvatarUrl && fields.avatarUrl) {
+          resolvedAvatarUrl = fields.avatarUrl;
+        }
+        if (resolvedHouse && resolvedUsername) {
+          break;
+        }
+      } catch {
+        // Bỏ qua collection không tồn tại hoặc không có quyền đọc
+      }
+    }
+
+    if (!resolvedHouse && !resolvedUsername && !resolvedAvatarUrl) {
+      return null;
+    }
+
+    const profile: MemberIdentityProfile = {
+      ...(resolvedHouse ? { house: resolvedHouse } : {}),
+      ...(resolvedUsername ? { username: resolvedUsername } : {}),
+      ...(resolvedAvatarUrl ? { avatarUrl: resolvedAvatarUrl } : {}),
+    };
+
+    if (resolvedHouse) {
+      this.memberProfileCache.set(docId, {
+        profile,
+        expiresAt: nowMs + 10 * 60_000,
+      });
+      if (this.memberProfileCache.size > 2000) {
+        const oldestKey = this.memberProfileCache.keys().next().value;
+        if (oldestKey) this.memberProfileCache.delete(oldestKey);
+      }
+    }
+
+    return profile;
+  }
 }
 
 export interface FirebaseCallableRequestLike {
   data: Record<string, unknown>;
   auth?: {
     uid: string;
-    token?: {
+    token?: Record<string, unknown> & {
       house?: string;
       saleAdmin?: boolean;
       role?: string;
@@ -697,18 +784,15 @@ export function createFirebaseGardenCallables(
         throw new BurrowServerError('unauthorized', 'Cần đăng nhập tài khoản.', {}, 401);
       }
 
-      const rawHouse = req.auth.token?.house;
-      const house: HogwartsHouseName =
-        rawHouse === 'Hufflepuff' || rawHouse === 'Ravenclaw' || rawHouse === 'Slytherin'
-          ? rawHouse
-          : 'Gryffindor';
-
-      const tokenName = req.auth.token?.name || req.auth.token?.username;
-      const tokenAvatar = req.auth.token?.picture || req.auth.token?.avatarUrl;
+      const tokenFields = extractMemberProfileFields(req.auth.token);
+      const house: HogwartsHouseName = tokenFields.house ?? 'Gryffindor';
+      const tokenName = tokenFields.username;
+      const tokenAvatar = tokenFields.avatarUrl;
 
       const identity: VerifiedSessionIdentity = {
         uid: sanitizeBackendUid(req.auth.uid),
         house,
+        houseExplicit: Boolean(tokenFields.house),
         role:
           req.auth.token?.saleAdmin === true || req.auth.token?.role === 'saleAdmin'
             ? 'saleAdmin'
@@ -737,6 +821,8 @@ export function createFirebaseGardenCallables(
   return {
     getBurrowGarden: wrap('getBurrowGarden'),
     performBurrowAction: wrap('performBurrowAction'),
+    getBurrowLeaderboard: wrap('getBurrowLeaderboard'),
+    submitBurrowLeaderboard: wrap('submitBurrowLeaderboard'),
     buyBurrowSupplies: wrap('buyBurrowSupplies'),
     sellBurrowGoods: wrap('sellBurrowGoods'),
     settleBurrowWallet: wrap('settleBurrowWallet'),

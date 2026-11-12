@@ -1382,9 +1382,6 @@ export class Match3ModalController {
             ${topStripHtml}
           </aside>
           <div class="pa-stage-viewport">
-            <div class="mg-stage-top-strip">
-              ${sharedMinigameViewport.renderToolbarHtml('match3', { showPanToggle: false })}
-            </div>
             <div class="mg-stage-pan-area">
               <div class="m3-empty-hearts-card">
                 <img src="/sprites/m3_icon_heart.png" alt="Tim" style="width:52px;height:52px;object-fit:contain;filter:grayscale(0.25) drop-shadow(0 6px 10px rgba(0,0,0,0.3));" />
@@ -1600,9 +1597,6 @@ export class Match3ModalController {
         </aside>
 
         <div class="pa-stage-viewport">
-          <div class="mg-stage-top-strip">
-            ${sharedMinigameViewport.renderToolbarHtml('match3')}
-          </div>
           <div class="mg-stage-pan-area">
             <div class="pa-canvas-shell" data-pa-board-mode="match3">
               <canvas
@@ -1768,6 +1762,10 @@ export class Match3ModalController {
       panAreaEl: panArea,
       canvasShellEl: shell,
       canvasEl: canvas,
+      canSingleFingerPanAt: (clientX, clientY) => {
+        if (!this.engine) return true;
+        return !this.engine.hasPlayableCellAtScreen(clientX, clientY);
+      },
       onTransformUpdated: () => {
         if (!this.engine) return;
         const { effectiveScale, netQuarterTurns } =

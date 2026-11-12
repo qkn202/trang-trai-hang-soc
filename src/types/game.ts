@@ -920,6 +920,8 @@ export interface MinigamePersonalRecord {
 
 export interface MinigameLeaderboardState {
   playerHouse?: HouseName;
+  playerHouseExplicit?: boolean;
+  playerHouseLockedByServer?: boolean;
   records: Record<LeaderboardGameId, MinigamePersonalRecord>;
 }
 
