@@ -6,11 +6,17 @@ import {
   ALL_LEADERBOARD_GAMES,
   buildMinigameLeaderboard,
   clearCachedCloudLeaderboards,
+  computeDisciplineStars,
+  exportMinigameLeaderboardCSV,
   HOGWARTS_HOUSE_META,
   isScoredLeaderboardGame,
   LEADERBOARD_GAME_META,
+  sanitizeWizardDisplayName,
   SCORED_LEADERBOARD_GAMES,
+  SEEDED_HOGWARTS_RIVALS,
   setCachedCloudLeaderboardEntries,
+  toggleLeaderboardSeededRivals,
+  updatePlayerWizardProfile,
 } from '../minigameLeaderboard';
 import {
   CREATURE_ONET_SPECIES,
@@ -25,6 +31,7 @@ import {
   combineQuarterTurns,
   computeBoardFitScale,
   computeFocalPinchPan,
+  computeResponsiveBoardBox,
   MINIGAME_ZOOM_MAX,
   MINIGAME_ZOOM_MIN,
   MinigameViewportManager,
@@ -618,5 +625,164 @@ describe('Per-Mini-Game Leaderboards (3 Scored Games: Match-3, Sudoku & Pikachu 
       expect(mgr.getState(gid).panX).toBe(0);
       expect(mgr.getState(gid).panY).toBe(0);
     }
+  });
+
+  it('auto-adapts board box dimensions and layout orientation across mobile screen sizes', () => {
+    // Portrait phones (iPhone SE 320x568, tall 20:9 390x844) stay portrait in auto mode
+    expect(resolveMinigameOrientation('auto', 320, 568, false, false).effectiveLayout).toBe(
+      'portrait'
+    );
+    expect(resolveMinigameOrientation('auto', 390, 844, false, false).effectiveLayout).toBe(
+      'portrait'
+    );
+
+    // Landscape phones (568x320, 667x375, 844x390) and landscape foldables (828x690) switch to landscape
+    expect(resolveMinigameOrientation('auto', 568, 320, false, false).effectiveLayout).toBe(
+      'landscape'
+    );
+    expect(resolveMinigameOrientation('auto', 667, 375, false, false).effectiveLayout).toBe(
+      'landscape'
+    );
+    expect(resolveMinigameOrientation('auto', 844, 390, false, false).effectiveLayout).toBe(
+      'landscape'
+    );
+    expect(resolveMinigameOrientation('auto', 828, 690, false, false).effectiveLayout).toBe(
+      'landscape'
+    );
+    expect(resolveMinigameOrientation('auto', 667, 375, false, true).effectiveLayout).toBe(
+      'landscape'
+    );
+
+    // Near-square inner foldable (712x690, aspect < 1.06) stays portrait so vertical stacked HUD breathes
+    expect(resolveMinigameOrientation('auto', 712, 690, false, false).effectiveLayout).toBe(
+      'portrait'
+    );
+
+    // Square boards (Match-3, Caro, Wizard Chess) fill width on portrait and height on landscape
+    for (const squareGame of ['match3', 'caro', 'chess'] as const) {
+      expect(computeResponsiveBoardBox(squareGame, 374, 620, 1)).toEqual({
+        width: 374,
+        height: 374,
+      });
+      expect(computeResponsiveBoardBox(squareGame, 520, 296, 1)).toEqual({
+        width: 296,
+        height: 296,
+      });
+    }
+
+    // Dynamic-aspect Sudoku scales seamlessly across tall 2-row keypad, compact 1-row keypad, and landscape dock
+    expect(computeResponsiveBoardBox('sudoku', 374, 620, 496 / 648)).toEqual({
+      width: 374,
+      height: 489,
+    });
+    expect(computeResponsiveBoardBox('sudoku', 308, 360, 496 / 548)).toEqual({
+      width: 308,
+      height: 340,
+    });
+    expect(computeResponsiveBoardBox('sudoku', 560, 340, 662 / 502)).toEqual({
+      width: 448,
+      height: 340,
+    });
+
+    // Pikachu ('blocks') and Multilingual Academy ('seedquiz') claim 100% of available stage box
+    expect(computeResponsiveBoardBox('blocks', 374, 620, 374 / 620)).toEqual({
+      width: 374,
+      height: 620,
+    });
+    expect(computeResponsiveBoardBox('seedquiz', 560, 340, 1)).toEqual({
+      width: 560,
+      height: 340,
+    });
+  });
+
+  it('supports Candy Crush Hogwarts stars, optional 8 seeded rivals toggle, wizard profile locking, and safe CSV export', () => {
+    const sim = new ParkSimulation(new MagicalAudio());
+    sim.ensureNeighborSocial();
+
+    // 1. Stars scale cleanly with cleared stages (0 at stage 0; bounded [1..3*stage] when cleared)
+    expect(computeDisciplineStars(0, 0, 0, 0)).toBe(0);
+    expect(computeDisciplineStars(10, 10, 4, 2100)).toBeGreaterThanOrEqual(20);
+    expect(computeDisciplineStars(10, 99, 99, 99999)).toBe(30);
+
+    sim.completeMatch3LevelVictory(12, { sessionScore: 3400 });
+    sim.completeMatch3LevelVictory(15, { sessionScore: 4200 });
+    const defaultBoard = sim.getMinigameLeaderboard('match3', 'valley');
+    expect(defaultBoard.includeSeededRivals).toBe(false);
+    expect(defaultBoard.entries.some((e) => e.isSeededRival)).toBe(false);
+    expect(defaultBoard.playerEntry.stars).toBeGreaterThanOrEqual(4);
+    expect(defaultBoard.playerEntry.stars).toBeLessThanOrEqual(6);
+    const playerHouseRow = defaultBoard.houseStandings.find(
+      (h) => h.house === defaultBoard.playerHouse
+    )!;
+    expect(playerHouseRow.totalStars).toBeGreaterThanOrEqual(defaultBoard.playerEntry.stars);
+
+    // 2. Toggle 8 Candy Crush Hogwarts rivals ON: appears in 'valley', stays 0 in 'friends', persists across save/load
+    expect(SEEDED_HOGWARTS_RIVALS.length).toBe(8);
+    expect(toggleLeaderboardSeededRivals(sim.state)).toBe(true);
+    for (const gid of SCORED_LEADERBOARD_GAMES) {
+      const valleyWithRivals = sim.getMinigameLeaderboard(gid, 'valley');
+      expect(valleyWithRivals.includeSeededRivals).toBe(true);
+      expect(valleyWithRivals.entries.filter((e) => e.isSeededRival).length).toBe(8);
+      expect(valleyWithRivals.entries.some((e) => e.name === 'Minh Khôi Potter')).toBe(true);
+      expect(valleyWithRivals.entries.some((e) => e.name === 'Bảo Ngọc Granger')).toBe(true);
+
+      const friendsOnly = sim.getMinigameLeaderboard(gid, 'friends');
+      expect(friendsOnly.entries.some((e) => e.isSeededRival)).toBe(false);
+    }
+
+    sim.saveToStorage();
+    const reloaded = new ParkSimulation(new MagicalAudio());
+    expect(reloaded.loadFromStorage()).toBeTruthy();
+    // Ở bản game sạch mặc định (!isSandboxRuntimeAllowed), migrateLoadedState tự động tắt học viên mẫu để chỉ giữ người chơi thật
+    expect(reloaded.getMinigameLeaderboard('match3', 'valley').includeSeededRivals).toBe(false);
+    expect(
+      reloaded.getMinigameLeaderboard('match3', 'valley').entries.some((e) => e.isSeededRival)
+    ).toBe(false);
+
+    // Toggle OFF removes all seeded rivals immediately
+    expect(toggleLeaderboardSeededRivals(sim.state)).toBe(false);
+    expect(sim.getMinigameLeaderboard('match3', 'valley').entries.some((e) => e.isSeededRival)).toBe(
+      false
+    );
+
+    // 3. Wizard profile sanitization & HPVN server-house lock enforcement
+    expect(sanitizeWizardDisplayName('  \u0007Harry   Potter  ')).toBe('Harry   Potter');
+    expect(sanitizeWizardDisplayName('A'.repeat(40)).length).toBe(26);
+
+    const unlockedSave = updatePlayerWizardProfile(
+      sim.state,
+      '  Minh Quân Lovegood  ',
+      'Ravenclaw'
+    );
+    expect(unlockedSave).toEqual({
+      name: 'Minh Quân Lovegood',
+      house: 'Ravenclaw',
+      houseLockedByServer: false,
+    });
+    expect(sim.state.neighborSocial?.playerDisplayName).toBe('Minh Quân Lovegood');
+    expect(sim.getPlayerHouse()).toBe('Ravenclaw');
+
+    sim.state.minigameLeaderboard!.playerHouseLockedByServer = true;
+    const lockedSave = updatePlayerWizardProfile(sim.state, '=CMD("calc")', 'Slytherin');
+    expect(lockedSave).toEqual({
+      name: '=CMD("calc")',
+      house: 'Ravenclaw',
+      houseLockedByServer: true,
+    });
+    expect(sim.getPlayerHouse()).toBe('Ravenclaw');
+
+    // 4. Candy Crush 7-column CSV export + formula injection neutralization
+    toggleLeaderboardSeededRivals(sim.state, true);
+    const csv = exportMinigameLeaderboardCSV(sim.state, 'match3', 'valley', 'all');
+    const lines = csv.split('\n');
+    expect(lines[0]).toBe(
+      'Hang,Ten Phu Thuy,Nha Hogwarts,Tong Diem,Tong Sao,Man Cao Nhat,Loai'
+    );
+    expect(lines.length).toBe(1 + 1 + 8); // header + player + 8 seeded rivals
+    // Formula-prefixed name is neutralized with leading apostrophe and stripped of trailing "(Bạn)"
+    expect(csv).toContain(`"'=CMD(""calc"")",RAVENCLAW`);
+    expect(csv).not.toContain('(Bạn)');
+    expect(csv).toContain('Nguoi choi that');
+    expect(csv).toContain('Hoc vien mau');
   });
 });

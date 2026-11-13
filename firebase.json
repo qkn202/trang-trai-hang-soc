@@ -26,6 +26,7 @@
     "public": "dist",
     "ignore": [
       "firebase.json",
+      "hpvn-embed-preview.html",
       "**/.*",
       "**/node_modules/**",
       "**/*.gz",

@@ -15,7 +15,11 @@ import {
 import { IsometricRenderer, isTouchOrIOSDevice } from './engine/renderer';
 import { SpriteRegistry } from './engine/spriteLoader';
 import { sampleCoasterTrainPositions } from './sim/coaster';
-import { ParkSimulation } from './sim/simulation';
+import {
+  IS_SANDBOX_BUILD_ENABLED,
+  isSandboxRuntimeAllowed,
+  ParkSimulation,
+} from './sim/simulation';
 import {
   ACTIVE_MINIGAME_RESUME_KEY,
   ActiveMinigameResumeRecord,
@@ -34,7 +38,6 @@ import {
   ZoneId,
 } from './types/game';
 import { accessibility, announce } from './ui/accessibility';
-import { isLocalDevelopmentHost } from './ui/authoritativeClient';
 import { SAVE_KEY } from './ui/cloudSave';
 import { haptic } from './ui/haptics';
 import { GameHUD } from './ui/hud';
@@ -92,13 +95,12 @@ async function bootstrap(): Promise<void> {
 
   // URL preview parameters for instant visual verification or sharing
   const params = new URLSearchParams(window.location.search);
+  const isSandboxAllowed = IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed();
   const hasExplicitCamParam = Boolean(
-    params.get('preview') === '100' ||
+    (isSandboxAllowed && params.get('preview') === '100') ||
       params.get('visit') ||
       params.get('tour') ||
-      params.get('zoom') ||
-      params.get('cx') ||
-      params.get('cy') ||
+      (isSandboxAllowed && (params.get('zoom') || params.get('cx') || params.get('cy'))) ||
       params.get('ridecam') === '1'
   );
   let introGlide: {
@@ -131,11 +133,8 @@ async function bootstrap(): Promise<void> {
       toZoom: targetZoom,
     };
   }
-  const isDevHostAllowed =
-    Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV) ||
-    isLocalDevelopmentHost(window.location.hostname);
 
-  if (params.get('preview') === '100' && isDevHostAllowed) {
+  if (IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed() && params.get('preview') === '100') {
     sim.toggleHeadmasterPreview(100);
     if (!params.get('tutorial') && sim.isTutorialActive()) {
       sim.skipTutorial();
@@ -148,69 +147,71 @@ async function bootstrap(): Promise<void> {
     const cy = Number.isFinite(rawCy) && params.get('cy') ? rawCy : 23.0;
     centerCameraOnGrid(cam, cx, cy);
   }
-  const tutorialParam = params.get('tutorial');
-  if (tutorialParam === '1' || tutorialParam === 'reset') {
-    sim.restartTutorial();
-    hud.tutorialMinimized = false;
-  } else if (tutorialParam === '0' || tutorialParam === 'off') {
-    if (sim.isTutorialActive()) {
-      sim.skipTutorial();
+  if (IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed()) {
+    const tutorialParam = params.get('tutorial');
+    if (tutorialParam === '1' || tutorialParam === 'reset') {
+      sim.restartTutorial();
+      hud.tutorialMinimized = false;
+    } else if (tutorialParam === '0' || tutorialParam === 'off') {
+      if (sim.isTutorialActive()) {
+        sim.skipTutorial();
+      }
     }
-  }
-  const tstepParam = params.get('tstep');
-  if (tstepParam !== null && isDevHostAllowed) {
-    const idx = Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, Number(tstepParam) || 0));
-    const tut = sim.ensureTutorialState();
-    tut.active = true;
-    delete tut.completedAt;
-    tut.skipped = false;
-    tut.stepIndex = idx;
-    tut.stepId = TUTORIAL_STEPS[idx].id;
-    tut.pastureHarvestedInStep3 = false;
-  }
-  const rotParam = Number(params.get('rot') || 0);
-  if (rotParam >= 1 && rotParam <= 3) {
-    for (let i = 0; i < rotParam; i++) {
-      rotateCamera90(cam, 1);
+    const tstepParam = params.get('tstep');
+    if (tstepParam !== null) {
+      const idx = Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, Number(tstepParam) || 0));
+      const tut = sim.ensureTutorialState();
+      tut.active = true;
+      delete tut.completedAt;
+      tut.skipped = false;
+      tut.stepIndex = idx;
+      tut.stepId = TUTORIAL_STEPS[idx].id;
+      tut.pastureHarvestedInStep3 = false;
     }
-  }
-  if (params.get('cutaway') === '1') {
-    sim.state.settings.cutawayMode = true;
-  }
-  const timeParam = params.get('time');
-  if (timeParam === 'night' || timeParam === 'day' || timeParam === 'dusk' || timeParam === 'dawn') {
-    sim.state.settings.timeOverride = timeParam;
-  }
-  const weatherParam = params.get('weather');
-  if (
-    weatherParam === 'auto' ||
-    weatherParam === 'clear' ||
-    weatherParam === 'cloudy' ||
-    weatherParam === 'rain' ||
-    weatherParam === 'storm' ||
-    weatherParam === 'snow' ||
-    weatherParam === 'fog' ||
-    weatherParam === 'fireflies'
-  ) {
-    sim.state.settings.weatherOverride = weatherParam as WeatherOverride;
-  }
-  if (params.get('zoom') && params.get('preview') !== '100') {
-    const z = Number(params.get('zoom'));
-    if (Number.isFinite(z) && z >= 0.32 && z <= 2.15) cam.zoom = z;
-  }
-  if ((params.get('cx') || params.get('cy')) && params.get('preview') !== '100') {
-    const rawCx = Number(params.get('cx'));
-    const rawCy = Number(params.get('cy'));
-    const cx = Number.isFinite(rawCx) && params.get('cx') ? rawCx : 18.0;
-    const cy = Number.isFinite(rawCy) && params.get('cy') ? rawCy : 24.5;
-    centerCameraOnGrid(cam, cx, cy);
-  }
-  const hm = params.get('heatmap') as HeatmapMode | null;
-  if (hm) {
-    sim.heatmapMode = hm;
-  }
-  if (params.get('fireworks') === '1') {
-    sim.launchFireworksShow(12);
+    const rotParam = Number(params.get('rot') || 0);
+    if (rotParam >= 1 && rotParam <= 3) {
+      for (let i = 0; i < rotParam; i++) {
+        rotateCamera90(cam, 1);
+      }
+    }
+    if (params.get('cutaway') === '1') {
+      sim.state.settings.cutawayMode = true;
+    }
+    const timeParam = params.get('time');
+    if (timeParam === 'night' || timeParam === 'day' || timeParam === 'dusk' || timeParam === 'dawn') {
+      sim.state.settings.timeOverride = timeParam;
+    }
+    const weatherParam = params.get('weather');
+    if (
+      weatherParam === 'auto' ||
+      weatherParam === 'clear' ||
+      weatherParam === 'cloudy' ||
+      weatherParam === 'rain' ||
+      weatherParam === 'storm' ||
+      weatherParam === 'snow' ||
+      weatherParam === 'fog' ||
+      weatherParam === 'fireflies'
+    ) {
+      sim.state.settings.weatherOverride = weatherParam as WeatherOverride;
+    }
+    if (params.get('zoom') && params.get('preview') !== '100') {
+      const z = Number(params.get('zoom'));
+      if (Number.isFinite(z) && z >= 0.32 && z <= 2.15) cam.zoom = z;
+    }
+    if ((params.get('cx') || params.get('cy')) && params.get('preview') !== '100') {
+      const rawCx = Number(params.get('cx'));
+      const rawCy = Number(params.get('cy'));
+      const cx = Number.isFinite(rawCx) && params.get('cx') ? rawCx : 18.0;
+      const cy = Number.isFinite(rawCy) && params.get('cy') ? rawCy : 24.5;
+      centerCameraOnGrid(cam, cx, cy);
+    }
+    const hm = params.get('heatmap') as HeatmapMode | null;
+    if (hm) {
+      sim.heatmapMode = hm;
+    }
+    if (params.get('fireworks') === '1') {
+      sim.launchFireworksShow(12);
+    }
   }
   if (params.get('ridecam') === '1') {
     const coasterB = sim.state.buildings.find((b) => getCatalogItem(b.itemId)?.isCustomCoasterStation);
@@ -259,13 +260,15 @@ async function bootstrap(): Promise<void> {
     hud.openSuitcaseDialog(tabParam);
   } else if (dlgParam === 'match3') {
     const m3LvParam = Number(params.get('m3level') || 0);
-    const maxAllowedM3 = isDevHostAllowed
+    const maxAllowedM3 = isSandboxAllowed
       ? 777
       : Math.min(777, (sim.state.match3.maxClearedLevel ?? 0) + 1);
     const safeM3Lv =
-      Number.isFinite(m3LvParam) && m3LvParam >= 1 ? Math.min(maxAllowedM3, Math.floor(m3LvParam)) : undefined;
+      isSandboxAllowed && Number.isFinite(m3LvParam) && m3LvParam >= 1
+        ? Math.min(maxAllowedM3, Math.floor(m3LvParam))
+        : undefined;
     const allowDevJump = Boolean(
-      isDevHostAllowed && safeM3Lv && safeM3Lv > (sim.state.match3.maxClearedLevel ?? 0) + 1
+      isSandboxAllowed && safeM3Lv && safeM3Lv > (sim.state.match3.maxClearedLevel ?? 0) + 1
     );
     hud.openMatch3Dialog(safeM3Lv, allowDevJump);
   } else if (
@@ -448,6 +451,25 @@ async function bootstrap(): Promise<void> {
       (typeof detail?.saveJson === 'string' && detail.saveJson) ||
       (typeof localStorage !== 'undefined' ? localStorage.getItem(SAVE_KEY) : null);
     if (!rawSave) return;
+    if (!isSandboxRuntimeAllowed()) {
+      try {
+        const probe = JSON.parse(rawSave) as {
+          sandboxMode?: boolean;
+          sandboxTainted?: boolean;
+          isHeadmasterPreview?: boolean;
+        };
+        if (
+          probe &&
+          (probe.sandboxMode === true ||
+            probe.sandboxTainted === true ||
+            probe.isHeadmasterPreview === true)
+        ) {
+          return;
+        }
+      } catch {
+        return;
+      }
+    }
     createRollbackSaveBackup(sim.state);
     if (sim.importSaveJson(rawSave)) {
       if (onlineServices.authoritativeClient.snapshot) {

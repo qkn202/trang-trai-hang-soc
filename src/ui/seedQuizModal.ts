@@ -98,7 +98,7 @@ export class SeedQuizModalController {
     this.onEquipAndSow = onEquipAndSow;
 
     if (typeof window !== 'undefined') {
-      window.addEventListener('resize', () => {
+      const handleSeedQuizViewportResize = () => {
         if (!this.isOpen()) return;
         const dlg = this.getDialog();
         const modalInner =
@@ -107,7 +107,9 @@ export class SeedQuizModalController {
             : null;
         sharedMinigameViewport.applyDialogOrientation(dlg, modalInner, true);
         this.syncSeedQuizViewportTransform();
-      });
+      };
+      window.addEventListener('resize', handleSeedQuizViewportResize);
+      window.visualViewport?.addEventListener('resize', handleSeedQuizViewportResize);
 
       window.addEventListener('keydown', (ev) => {
         if (!this.isOpen()) return;

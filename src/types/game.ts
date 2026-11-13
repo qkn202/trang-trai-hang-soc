@@ -922,6 +922,7 @@ export interface MinigameLeaderboardState {
   playerHouse?: HouseName;
   playerHouseExplicit?: boolean;
   playerHouseLockedByServer?: boolean;
+  includeSeededRivals?: boolean;
   records: Record<LeaderboardGameId, MinigamePersonalRecord>;
 }
 

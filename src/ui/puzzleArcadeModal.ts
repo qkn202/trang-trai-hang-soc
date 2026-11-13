@@ -458,6 +458,8 @@ export class PuzzleArcadeModalController {
 
   private canvas: HTMLCanvasElement | null = null;
   private canvasResizeObserver: ResizeObserver | null = null;
+  private observedStageCssW = 0;
+  private observedStageCssH = 0;
   private observedCanvasCssW = 0;
   private observedCanvasCssH = 0;
   private forceImmediateRedraw = true;
@@ -546,6 +548,7 @@ export class PuzzleArcadeModalController {
         typeof dlg.querySelector === 'function'
           ? (dlg.querySelector('.pa-modal-inner') as HTMLElement | null)
           : null;
+      sharedMinigameViewport.unbindStageInteractions('arcade');
       sharedMinigameViewport.clearDialogOrientation(dlg, modalInner);
       this.stopLoop();
       this.onParentRefresh();
@@ -587,7 +590,7 @@ export class PuzzleArcadeModalController {
           this.drawFrame();
         }
       });
-      window.addEventListener('resize', () => {
+      const handleViewportResize = () => {
         const openDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
         if (!openDlg?.open) return;
         const modalInner =
@@ -601,7 +604,9 @@ export class PuzzleArcadeModalController {
           return;
         }
         this.syncArcadeViewportTransform();
-      });
+      };
+      window.addEventListener('resize', handleViewportResize);
+      window.visualViewport?.addEventListener('resize', handleViewportResize);
     }
 
     if (typeof window !== 'undefined') {
@@ -758,16 +763,195 @@ export class PuzzleArcadeModalController {
     return sharedMinigameViewport.getEffectiveLayout(false) === 'portrait';
   }
 
+  private getCaroBoardMetrics(): {
+    frameX: number;
+    frameY: number;
+    framePx: number;
+    originX: number;
+    originY: number;
+    stepPx: number;
+    stoneScale: number;
+  } {
+    const minCss =
+      this.observedCanvasCssW >= 80 && this.observedCanvasCssH >= 80
+        ? Math.min(this.observedCanvasCssW, this.observedCanvasCssH)
+        : this.isMobileBoardLayout()
+          ? 360
+          : 480;
+    const t = Math.max(0, Math.min(1, (minCss - 330) / 110));
+    const origin = Math.round(18 + 6 * t);
+    const stepPx = (CARO_VIRTUAL_PX - origin * 2) / (CARO_BOARD_SIZE - 1);
+    const frameX = Math.max(2, Math.round(2 + 4 * t));
+    const framePx = CARO_VIRTUAL_PX - frameX * 2;
+    return {
+      frameX,
+      frameY: frameX,
+      framePx,
+      originX: origin,
+      originY: origin,
+      stepPx,
+      stoneScale: stepPx / CARO_STEP_PX,
+    };
+  }
+
+  private getChessBoardMetrics(): {
+    boardX: number;
+    boardY: number;
+    cellPx: number;
+    boardPx: number;
+    coordsInsideSquares: boolean;
+  } {
+    const minCss =
+      this.observedCanvasCssW >= 80 && this.observedCanvasCssH >= 80
+        ? Math.min(this.observedCanvasCssW, this.observedCanvasCssH)
+        : this.isMobileBoardLayout()
+          ? 360
+          : 480;
+    const t = Math.max(0, Math.min(1, (minCss - 330) / 110));
+    const boardX = Math.round(2 + 4 * t) * 2; // 4, 6, 8, 10, 12
+    const boardPx = CHESS_VIRTUAL_PX - boardX * 2;
+    const cellPx = boardPx / 8;
+    return {
+      boardX,
+      boardY: boardX,
+      cellPx,
+      boardPx,
+      coordsInsideSquares: boardX < 10,
+    };
+  }
+
+  private getSudokuLayoutMetrics(
+    stageWOverride?: number,
+    stageHOverride?: number
+  ): {
+    variant: 'landscape' | 'portrait-tall' | 'portrait-compact';
+    virtW: number;
+    virtH: number;
+    boardX: number;
+    boardY: number;
+    cellPx: number;
+    boardPx: number;
+    framePad: number;
+    padX: number;
+    padY: number;
+    padW: number;
+    padH: number;
+    trayY: number;
+    trayH: number;
+  } {
+    let sw = stageWOverride && stageWOverride > 40 ? stageWOverride : this.observedStageCssW;
+    let sh = stageHOverride && stageHOverride > 40 ? stageHOverride : this.observedStageCssH;
+    if (sw <= 40 || sh <= 40) {
+      if (typeof window !== 'undefined') {
+        const winW = Math.round(window.visualViewport?.width || window.innerWidth || 390);
+        const winH = Math.round(window.visualViewport?.height || window.innerHeight || 844);
+        if (this.isMobileBoardLayout()) {
+          sw = Math.max(260, winW - 18);
+          sh = Math.max(300, winH - 188);
+        } else {
+          sw = Math.max(420, winW - 250);
+          sh = Math.max(300, winH - 24);
+        }
+      } else {
+        sw = this.isMobileBoardLayout() ? 372 : 662;
+        sh = this.isMobileBoardLayout() ? 520 : 502;
+      }
+    }
+
+    const wideRatio = sw / Math.max(1, sh);
+    const tallRatio = sh / Math.max(1, sw);
+    const cellPx = SUDOKU_CELL_PX;
+    const boardPx = SUDOKU_BOARD_PX;
+
+    if (wideRatio >= 1.18 || (!this.isMobileBoardLayout() && wideRatio >= 1.06)) {
+      const boardX = SUDOKU_BOARD_X;
+      const boardY = SUDOKU_BOARD_Y;
+      const virtH = SUDOKU_DESKTOP_H;
+      const padX = SUDOKU_PAD_X;
+      const padY = SUDOKU_PAD_Y;
+      const padH = SUDOKU_PAD_H;
+      const desiredVirtW = Math.round(
+        virtH * Math.min(1.42, Math.max(1.275, wideRatio * 0.985))
+      );
+      const padW = Math.max(129, Math.min(200, desiredVirtW - padX - 6));
+      const virtW = padX + padW + 6;
+      return {
+        variant: 'landscape',
+        virtW,
+        virtH,
+        boardX,
+        boardY,
+        cellPx,
+        boardPx,
+        framePad: 5.5,
+        padX,
+        padY,
+        padW,
+        padH,
+        trayY: 0,
+        trayH: 0,
+      };
+    }
+
+    const boardX = 5;
+    const boardY = 5;
+    const virtW = boardPx + boardX * 2; // 496
+
+    if (tallRatio >= 1.25) {
+      const maxNoShrinkVirtH = Math.floor(virtW * Math.max(1.23, tallRatio - 0.015));
+      const virtH = Math.max(608, Math.min(656, maxNoShrinkVirtH));
+      const trayY = boardY + boardPx + 6; // 497
+      const trayH = virtH - trayY - 2;
+      return {
+        variant: 'portrait-tall',
+        virtW,
+        virtH,
+        boardX,
+        boardY,
+        cellPx,
+        boardPx,
+        framePad: 4,
+        padX: 0,
+        padY: 0,
+        padW: 0,
+        padH: 0,
+        trayY,
+        trayH,
+      };
+    }
+
+    const maxNoShrinkVirtH = Math.floor(virtW * Math.max(1.09, tallRatio - 0.01));
+    const virtH = Math.max(540, Math.min(564, maxNoShrinkVirtH));
+    const trayY = boardY + boardPx + 6; // 497
+    const trayH = virtH - trayY - 2;
+    return {
+      variant: 'portrait-compact',
+      virtW,
+      virtH,
+      boardX,
+      boardY,
+      cellPx,
+      boardPx,
+      framePad: 4,
+      padX: 0,
+      padY: 0,
+      padW: 0,
+      padH: 0,
+      trayY,
+      trayH,
+    };
+  }
+
   private getVirtualCanvasSize(): { w: number; h: number } {
     switch (this.mode) {
       case 'caro':
         return { w: CARO_VIRTUAL_PX, h: CARO_VIRTUAL_PX };
       case 'chess':
         return { w: CHESS_VIRTUAL_PX, h: CHESS_VIRTUAL_PX };
-      case 'sudoku':
-        return this.isMobileBoardLayout()
-          ? { w: SUDOKU_MOBILE_W, h: SUDOKU_MOBILE_H }
-          : { w: SUDOKU_DESKTOP_W, h: SUDOKU_DESKTOP_H };
+      case 'sudoku': {
+        const sm = this.getSudokuLayoutMetrics();
+        return { w: sm.virtW, h: sm.virtH };
+      }
       case 'blocks': {
         if (this.observedCanvasCssW >= 60 && this.observedCanvasCssH >= 60) {
           return { w: Math.round(this.observedCanvasCssW), h: Math.round(this.observedCanvasCssH) };
@@ -1577,10 +1761,11 @@ export class PuzzleArcadeModalController {
     didCapture: boolean,
     isTerminalMate: boolean
   ): void {
-    const x0 = CHESS_BOARD_X + (fromC + 0.5) * CHESS_CELL_PX;
-    const y0 = CHESS_BOARD_Y + (fromR + 0.5) * CHESS_CELL_PX;
-    const x1 = CHESS_BOARD_X + (toC + 0.5) * CHESS_CELL_PX;
-    const y1 = CHESS_BOARD_Y + (toR + 0.5) * CHESS_CELL_PX;
+    const cm = this.getChessBoardMetrics();
+    const x0 = cm.boardX + (fromC + 0.5) * cm.cellPx;
+    const y0 = cm.boardY + (fromR + 0.5) * cm.cellPx;
+    const x1 = cm.boardX + (toC + 0.5) * cm.cellPx;
+    const y1 = cm.boardY + (toR + 0.5) * cm.cellPx;
     const isWhite = movedPiece.color === 'w';
 
     this.chessMoveAnim = {
@@ -2515,8 +2700,9 @@ export class PuzzleArcadeModalController {
       const hint = ce.useBestMoveHint();
       if (hint) {
         this.persistModeSession('caro', true);
-        const cx = CARO_ORIGIN_X + hint.c * CARO_STEP_PX;
-        const cy = CARO_ORIGIN_Y + hint.r * CARO_STEP_PX;
+        const cm = this.getCaroBoardMetrics();
+        const cx = cm.originX + hint.c * cm.stepPx;
+        const cy = cm.originY + hint.r * cm.stepPx;
         this.spawnBurst(cx, cy, '#34d399', 16);
         this.sim.audio.playMatchPop(2);
         this.renderDOM();
@@ -2583,11 +2769,12 @@ export class PuzzleArcadeModalController {
 
       // Nếu đã có gợi ý đang sáng trên bàn cờ hiện tại, chỉ nháy lại hiệu ứng mà không trừ thêm lượt/vàng
       if (we.hintMove) {
+        const cm = this.getChessBoardMetrics();
         we.selected = { r: we.hintMove.fromR, c: we.hintMove.fromC };
-        const x0 = CHESS_BOARD_X + (we.hintMove.fromC + 0.5) * CHESS_CELL_PX;
-        const y0 = CHESS_BOARD_Y + (we.hintMove.fromR + 0.5) * CHESS_CELL_PX;
-        const x1 = CHESS_BOARD_X + (we.hintMove.toC + 0.5) * CHESS_CELL_PX;
-        const y1 = CHESS_BOARD_Y + (we.hintMove.toR + 0.5) * CHESS_CELL_PX;
+        const x0 = cm.boardX + (we.hintMove.fromC + 0.5) * cm.cellPx;
+        const y0 = cm.boardY + (we.hintMove.fromR + 0.5) * cm.cellPx;
+        const x1 = cm.boardX + (we.hintMove.toC + 0.5) * cm.cellPx;
+        const y1 = cm.boardY + (we.hintMove.toR + 0.5) * cm.cellPx;
         this.spawnBurst(x0, y0, '#fde047', 12);
         this.spawnBurst(x1, y1, '#34d399', 16);
         this.sim.audio.playMatchPop(2);
@@ -2626,10 +2813,11 @@ export class PuzzleArcadeModalController {
         }
         return;
       }
-      const x0 = CHESS_BOARD_X + (res.move.fromC + 0.5) * CHESS_CELL_PX;
-      const y0 = CHESS_BOARD_Y + (res.move.fromR + 0.5) * CHESS_CELL_PX;
-      const x1 = CHESS_BOARD_X + (res.move.toC + 0.5) * CHESS_CELL_PX;
-      const y1 = CHESS_BOARD_Y + (res.move.toR + 0.5) * CHESS_CELL_PX;
+      const cm = this.getChessBoardMetrics();
+      const x0 = cm.boardX + (res.move.fromC + 0.5) * cm.cellPx;
+      const y0 = cm.boardY + (res.move.fromR + 0.5) * cm.cellPx;
+      const x1 = cm.boardX + (res.move.toC + 0.5) * cm.cellPx;
+      const y1 = cm.boardY + (res.move.toR + 0.5) * cm.cellPx;
       this.spawnBurst(x0, y0, '#fde047', 14);
       this.spawnBurst(x1, y1, '#34d399', 18);
       this.sim.audio.playMatchPop(2);
@@ -2770,9 +2958,10 @@ export class PuzzleArcadeModalController {
           this.showToast(res.msg, '🔥');
           return;
         }
+        const sm = this.getSudokuLayoutMetrics();
         this.spawnWeasleyFireworks(
-          SUDOKU_BOARD_X + SUDOKU_BOARD_PX * 0.5,
-          SUDOKU_BOARD_Y + SUDOKU_BOARD_PX * 0.5,
+          sm.boardX + sm.boardPx * 0.5,
+          sm.boardY + sm.boardPx * 0.5,
           2
         );
         this.sim.audio.playPowerupBlast();
@@ -2793,9 +2982,10 @@ export class PuzzleArcadeModalController {
         }
         this.caroWinRevealTimer = 0;
         this.aiThinkTimer = 0;
+        const cm = this.getCaroBoardMetrics();
         this.spawnWeasleyFireworks(
-          CARO_ORIGIN_X + 6 * CARO_STEP_PX,
-          CARO_ORIGIN_Y + 6 * CARO_STEP_PX,
+          cm.originX + 6 * cm.stepPx,
+          cm.originY + 6 * cm.stepPx,
           2
         );
         this.sim.audio.playPowerupBlast();
@@ -2823,9 +3013,10 @@ export class PuzzleArcadeModalController {
             res.won
           );
         } else {
+          const chm = this.getChessBoardMetrics();
           this.spawnWeasleyFireworks(
-            CHESS_BOARD_X + CHESS_BOARD_PX * 0.5,
-            CHESS_BOARD_Y + CHESS_BOARD_PX * 0.5,
+            chm.boardX + chm.boardPx * 0.5,
+            chm.boardY + chm.boardPx * 0.5,
             2
           );
         }
@@ -3024,26 +3215,47 @@ export class PuzzleArcadeModalController {
 
     const panArea = box.querySelector('.mg-stage-pan-area') as HTMLElement | null;
     const shell = box.querySelector('.pa-canvas-shell') as HTMLElement | null;
+    if (panArea && panArea.clientWidth > 24 && panArea.clientHeight > 24) {
+      this.observedStageCssW = panArea.clientWidth;
+      this.observedStageCssH = panArea.clientHeight;
+    }
     sharedMinigameViewport.bindCanvasStageInteractions({
       gameId: this.mode,
+      hostKey: 'arcade',
       rootScope: box,
       panAreaEl: panArea,
       canvasShellEl: shell,
       canvasEl: cvs,
+      getBoardAspectRatio: (availW, availH) => {
+        if (this.mode === 'blocks') return 0;
+        if (this.mode === 'sudoku') {
+          const sm = this.getSudokuLayoutMetrics(availW, availH);
+          return sm.virtW / sm.virtH;
+        }
+        return 1;
+      },
+      onStageResized: (availW, availH, boardW, boardH) => {
+        this.observedStageCssW = availW;
+        this.observedStageCssH = availH;
+        this.observedCanvasCssW = boardW;
+        this.observedCanvasCssH = boardH;
+        this.forceImmediateRedraw = true;
+      },
       canSingleFingerPanAt: (clientX, clientY) => {
         if (this.mode !== 'chess') {
           return true;
         }
         if (!this.chessEngine || this.chessEngine.status !== 'playing') return true;
         const { vx, vy } = clientToVirtual(clientX, clientY);
+        const cm = this.getChessBoardMetrics();
         if (
-          vx >= CHESS_BOARD_X &&
-          vx <= CHESS_BOARD_X + CHESS_BOARD_PX &&
-          vy >= CHESS_BOARD_Y &&
-          vy <= CHESS_BOARD_Y + CHESS_BOARD_PX
+          vx >= cm.boardX &&
+          vx <= cm.boardX + cm.boardPx &&
+          vy >= cm.boardY &&
+          vy <= cm.boardY + cm.boardPx
         ) {
-          const c = Math.min(7, Math.max(0, Math.floor((vx - CHESS_BOARD_X) / CHESS_CELL_PX)));
-          const r = Math.min(7, Math.max(0, Math.floor((vy - CHESS_BOARD_Y) / CHESS_CELL_PX)));
+          const c = Math.min(7, Math.max(0, Math.floor((vx - cm.boardX) / cm.cellPx)));
+          const r = Math.min(7, Math.max(0, Math.floor((vy - cm.boardY) / cm.cellPx)));
           const p = this.chessEngine.board[r]?.[c];
           if (p && p.color === 'w') return false;
         }
@@ -3082,24 +3294,25 @@ export class PuzzleArcadeModalController {
 
       if (ev.pointerType === 'touch') {
         this.handlePointerHover(pos.vx, pos.vy);
-        if (
-          this.mode === 'chess' &&
-          this.chessEngine &&
-          pos.vx >= CHESS_BOARD_X &&
-          pos.vx <= CHESS_BOARD_X + CHESS_BOARD_PX &&
-          pos.vy >= CHESS_BOARD_Y &&
-          pos.vy <= CHESS_BOARD_Y + CHESS_BOARD_PX
-        ) {
-          const c = Math.min(7, Math.max(0, Math.floor((pos.vx - CHESS_BOARD_X) / CHESS_CELL_PX)));
-          const r = Math.min(7, Math.max(0, Math.floor((pos.vy - CHESS_BOARD_Y) / CHESS_CELL_PX)));
-          const p = this.chessEngine.board[r]?.[c];
-          if (p && p.color === 'w') {
-            pendingTouchTap = false;
-            this.chessDragFrom = { r, c };
-            this.handleChessSquareAction(r, c);
-            return;
+        if (this.mode === 'chess' && this.chessEngine) {
+          const cm = this.getChessBoardMetrics();
+          if (
+            pos.vx >= cm.boardX &&
+            pos.vx <= cm.boardX + cm.boardPx &&
+            pos.vy >= cm.boardY &&
+            pos.vy <= cm.boardY + cm.boardPx
+          ) {
+            const c = Math.min(7, Math.max(0, Math.floor((pos.vx - cm.boardX) / cm.cellPx)));
+            const r = Math.min(7, Math.max(0, Math.floor((pos.vy - cm.boardY) / cm.cellPx)));
+            const p = this.chessEngine.board[r]?.[c];
+            if (p && p.color === 'w') {
+              pendingTouchTap = false;
+              this.chessDragFrom = { r, c };
+              this.handleChessSquareAction(r, c);
+              return;
+            }
+            this.chessDragFrom = null;
           }
-          this.chessDragFrom = null;
         }
         pendingTouchTap = true;
         return;
@@ -3175,8 +3388,9 @@ export class PuzzleArcadeModalController {
     if (se.undo()) {
       this.persistSudokuSession(true);
       if (se.selected) {
-        const cx = SUDOKU_BOARD_X + (se.selected.c + 0.5) * SUDOKU_CELL_PX;
-        const cy = SUDOKU_BOARD_Y + (se.selected.r + 0.5) * SUDOKU_CELL_PX;
+        const sm = this.getSudokuLayoutMetrics();
+        const cx = sm.boardX + (se.selected.c + 0.5) * sm.cellPx;
+        const cy = sm.boardY + (se.selected.r + 0.5) * sm.cellPx;
         this.spawnBurst(cx, cy, '#fcd34d', 10);
       }
       this.sim.audio.playClick();
@@ -3209,8 +3423,9 @@ export class PuzzleArcadeModalController {
     }
     const res = se.useMagicHint();
     if (res.ok) {
-      const cx = SUDOKU_BOARD_X + (res.c + 0.5) * SUDOKU_CELL_PX;
-      const cy = SUDOKU_BOARD_Y + (res.r + 0.5) * SUDOKU_CELL_PX;
+      const sm = this.getSudokuLayoutMetrics();
+      const cx = sm.boardX + (res.c + 0.5) * sm.cellPx;
+      const cy = sm.boardY + (res.r + 0.5) * sm.cellPx;
       this.spawnBurst(cx, cy, '#fbbf24', 18);
       this.sim.audio.playPowerupBlast();
       if (res.won) {
@@ -3233,8 +3448,9 @@ export class PuzzleArcadeModalController {
     }
     const sel = this.sudokuEngine.selected;
     if (sel) {
-      const cx = SUDOKU_BOARD_X + (sel.c + 0.5) * SUDOKU_CELL_PX;
-      const cy = SUDOKU_BOARD_Y + (sel.r + 0.5) * SUDOKU_CELL_PX;
+      const sm = this.getSudokuLayoutMetrics();
+      const cx = sm.boardX + (sel.c + 0.5) * sm.cellPx;
+      const cy = sm.boardY + (sel.r + 0.5) * sm.cellPx;
       this.spawnBurst(
         cx,
         cy,
@@ -3279,8 +3495,9 @@ export class PuzzleArcadeModalController {
       se.eraseMode = false;
       this.persistSudokuSession(true);
       if (se.selected) {
-        const cx = SUDOKU_BOARD_X + (se.selected.c + 0.5) * SUDOKU_CELL_PX;
-        const cy = SUDOKU_BOARD_Y + (se.selected.r + 0.5) * SUDOKU_CELL_PX;
+        const sm = this.getSudokuLayoutMetrics();
+        const cx = sm.boardX + (se.selected.c + 0.5) * sm.cellPx;
+        const cy = sm.boardY + (se.selected.r + 0.5) * sm.cellPx;
         this.spawnBurst(cx, cy, '#e7cba0', 10);
       }
       this.sim.audio.playClick();
@@ -3307,12 +3524,13 @@ export class PuzzleArcadeModalController {
   }
 
   private getCaroIntersectionAt(vx: number, vy: number): { r: number; c: number } | null {
-    const c = Math.round((vx - CARO_ORIGIN_X) / CARO_STEP_PX);
-    const r = Math.round((vy - CARO_ORIGIN_Y) / CARO_STEP_PX);
+    const cm = this.getCaroBoardMetrics();
+    const c = Math.round((vx - cm.originX) / cm.stepPx);
+    const r = Math.round((vy - cm.originY) / cm.stepPx);
     if (r < 0 || r >= CARO_BOARD_SIZE || c < 0 || c >= CARO_BOARD_SIZE) return null;
-    const ix = CARO_ORIGIN_X + c * CARO_STEP_PX;
-    const iy = CARO_ORIGIN_Y + r * CARO_STEP_PX;
-    if (Math.hypot(vx - ix, vy - iy) > CARO_STEP_PX * 0.52) return null;
+    const ix = cm.originX + c * cm.stepPx;
+    const iy = cm.originY + r * cm.stepPx;
+    if (Math.hypot(vx - ix, vy - iy) > cm.stepPx * 0.54) return null;
     return { r, c };
   }
 
@@ -3379,14 +3597,15 @@ export class PuzzleArcadeModalController {
         }
       }
 
+      const sm = this.getSudokuLayoutMetrics();
       if (
-        vx >= SUDOKU_BOARD_X &&
-        vx <= SUDOKU_BOARD_X + SUDOKU_BOARD_PX &&
-        vy >= SUDOKU_BOARD_Y &&
-        vy <= SUDOKU_BOARD_Y + SUDOKU_BOARD_PX
+        vx >= sm.boardX &&
+        vx <= sm.boardX + sm.boardPx &&
+        vy >= sm.boardY &&
+        vy <= sm.boardY + sm.boardPx
       ) {
-        const c = Math.min(8, Math.max(0, Math.floor((vx - SUDOKU_BOARD_X) / SUDOKU_CELL_PX)));
-        const r = Math.min(8, Math.max(0, Math.floor((vy - SUDOKU_BOARD_Y) / SUDOKU_CELL_PX)));
+        const c = Math.min(8, Math.max(0, Math.floor((vx - sm.boardX) / sm.cellPx)));
+        const r = Math.min(8, Math.max(0, Math.floor((vy - sm.boardY) / sm.cellPx)));
         const isSameSelected = se.selected?.r === r && se.selected?.c === c;
         if (se.eraseMode || (isSameSelected && se.isWrongCell(r, c))) {
           const wasLost = se.status === 'lost';
@@ -3395,8 +3614,8 @@ export class PuzzleArcadeModalController {
             se.eraseMode = false;
             se.selectCell(r, c);
             this.persistSudokuSession(true);
-            const cx = SUDOKU_BOARD_X + (c + 0.5) * SUDOKU_CELL_PX;
-            const cy = SUDOKU_BOARD_Y + (r + 0.5) * SUDOKU_CELL_PX;
+            const cx = sm.boardX + (c + 0.5) * sm.cellPx;
+            const cy = sm.boardY + (r + 0.5) * sm.cellPx;
             this.spawnBurst(cx, cy, '#e7cba0', 10);
             this.sim.audio.playClick();
             if (wasLost || wasErase) {
@@ -3433,8 +3652,9 @@ export class PuzzleArcadeModalController {
       }
       this.bumpCompanionCharge();
       this.caroLastMoveAnim = { r: cell.r, c: cell.c, age: 0, duration: 0.24 };
-      const ix = CARO_ORIGIN_X + cell.c * CARO_STEP_PX;
-      const iy = CARO_ORIGIN_Y + cell.r * CARO_STEP_PX;
+      const cm = this.getCaroBoardMetrics();
+      const ix = cm.originX + cell.c * cm.stepPx;
+      const iy = cm.originY + cell.r * cm.stepPx;
       this.spawnBurst(ix, iy, '#fde047', 16);
       this.sim.audio.playChessClack(res.won);
       if (res.won) {
@@ -3458,14 +3678,15 @@ export class PuzzleArcadeModalController {
     }
 
     if (this.mode === 'chess' && this.chessEngine) {
+      const cm = this.getChessBoardMetrics();
       if (
-        vx >= CHESS_BOARD_X &&
-        vx <= CHESS_BOARD_X + CHESS_BOARD_PX &&
-        vy >= CHESS_BOARD_Y &&
-        vy <= CHESS_BOARD_Y + CHESS_BOARD_PX
+        vx >= cm.boardX &&
+        vx <= cm.boardX + cm.boardPx &&
+        vy >= cm.boardY &&
+        vy <= cm.boardY + cm.boardPx
       ) {
-        const c = Math.min(7, Math.max(0, Math.floor((vx - CHESS_BOARD_X) / CHESS_CELL_PX)));
-        const r = Math.min(7, Math.max(0, Math.floor((vy - CHESS_BOARD_Y) / CHESS_CELL_PX)));
+        const c = Math.min(7, Math.max(0, Math.floor((vx - cm.boardX) / cm.cellPx)));
+        const r = Math.min(7, Math.max(0, Math.floor((vy - cm.boardY) / cm.cellPx)));
         const p = this.chessEngine.board[r]?.[c];
         this.chessDragFrom = p && p.color === 'w' ? { r, c } : null;
         this.handleChessSquareAction(r, c);
@@ -3502,14 +3723,15 @@ export class PuzzleArcadeModalController {
 
   private handlePointerDrag(vx: number, vy: number): void {
     if (this.mode === 'chess' && this.chessEngine) {
+      const cm = this.getChessBoardMetrics();
       if (
-        vx >= CHESS_BOARD_X &&
-        vx <= CHESS_BOARD_X + CHESS_BOARD_PX &&
-        vy >= CHESS_BOARD_Y &&
-        vy <= CHESS_BOARD_Y + CHESS_BOARD_PX
+        vx >= cm.boardX &&
+        vx <= cm.boardX + cm.boardPx &&
+        vy >= cm.boardY &&
+        vy <= cm.boardY + cm.boardPx
       ) {
-        const c = Math.min(7, Math.max(0, Math.floor((vx - CHESS_BOARD_X) / CHESS_CELL_PX)));
-        const r = Math.min(7, Math.max(0, Math.floor((vy - CHESS_BOARD_Y) / CHESS_CELL_PX)));
+        const c = Math.min(7, Math.max(0, Math.floor((vx - cm.boardX) / cm.cellPx)));
+        const r = Math.min(7, Math.max(0, Math.floor((vy - cm.boardY) / cm.cellPx)));
         this.chessHoverSquare = { r, c };
       } else {
         this.chessHoverSquare = null;
@@ -3520,14 +3742,15 @@ export class PuzzleArcadeModalController {
 
   private handlePointerHover(vx: number, vy: number): void {
     if (this.mode === 'chess' && this.chessEngine) {
+      const cm = this.getChessBoardMetrics();
       if (
-        vx >= CHESS_BOARD_X &&
-        vx <= CHESS_BOARD_X + CHESS_BOARD_PX &&
-        vy >= CHESS_BOARD_Y &&
-        vy <= CHESS_BOARD_Y + CHESS_BOARD_PX
+        vx >= cm.boardX &&
+        vx <= cm.boardX + cm.boardPx &&
+        vy >= cm.boardY &&
+        vy <= cm.boardY + cm.boardPx
       ) {
-        const c = Math.min(7, Math.max(0, Math.floor((vx - CHESS_BOARD_X) / CHESS_CELL_PX)));
-        const r = Math.min(7, Math.max(0, Math.floor((vy - CHESS_BOARD_Y) / CHESS_CELL_PX)));
+        const c = Math.min(7, Math.max(0, Math.floor((vx - cm.boardX) / cm.cellPx)));
+        const r = Math.min(7, Math.max(0, Math.floor((vy - cm.boardY) / cm.cellPx)));
         this.chessHoverSquare = { r, c };
       } else {
         this.chessHoverSquare = null;
@@ -3537,14 +3760,15 @@ export class PuzzleArcadeModalController {
     this.chessHoverSquare = null;
 
     if (this.mode === 'sudoku' && this.sudokuEngine) {
+      const sm = this.getSudokuLayoutMetrics();
       if (
-        vx >= SUDOKU_BOARD_X &&
-        vx <= SUDOKU_BOARD_X + SUDOKU_BOARD_PX &&
-        vy >= SUDOKU_BOARD_Y &&
-        vy <= SUDOKU_BOARD_Y + SUDOKU_BOARD_PX
+        vx >= sm.boardX &&
+        vx <= sm.boardX + sm.boardPx &&
+        vy >= sm.boardY &&
+        vy <= sm.boardY + sm.boardPx
       ) {
-        const c = Math.min(8, Math.max(0, Math.floor((vx - SUDOKU_BOARD_X) / SUDOKU_CELL_PX)));
-        const r = Math.min(8, Math.max(0, Math.floor((vy - SUDOKU_BOARD_Y) / SUDOKU_CELL_PX)));
+        const c = Math.min(8, Math.max(0, Math.floor((vx - sm.boardX) / sm.cellPx)));
+        const r = Math.min(8, Math.max(0, Math.floor((vy - sm.boardY) / sm.cellPx)));
         this.sudokuHoverCell = { r, c };
       } else {
         this.sudokuHoverCell = null;
@@ -3611,19 +3835,20 @@ export class PuzzleArcadeModalController {
     if (this.mode === 'chess' && this.chessEngine) {
       const from = this.chessDragFrom;
       this.chessDragFrom = null;
+      const cm = this.getChessBoardMetrics();
       if (
         from &&
         this.hasDragged &&
         this.chessEngine.selected &&
         this.chessEngine.selected.r === from.r &&
         this.chessEngine.selected.c === from.c &&
-        vx >= CHESS_BOARD_X &&
-        vx <= CHESS_BOARD_X + CHESS_BOARD_PX &&
-        vy >= CHESS_BOARD_Y &&
-        vy <= CHESS_BOARD_Y + CHESS_BOARD_PX
+        vx >= cm.boardX &&
+        vx <= cm.boardX + cm.boardPx &&
+        vy >= cm.boardY &&
+        vy <= cm.boardY + cm.boardPx
       ) {
-        const c2 = Math.min(7, Math.max(0, Math.floor((vx - CHESS_BOARD_X) / CHESS_CELL_PX)));
-        const r2 = Math.min(7, Math.max(0, Math.floor((vy - CHESS_BOARD_Y) / CHESS_CELL_PX)));
+        const c2 = Math.min(7, Math.max(0, Math.floor((vx - cm.boardX) / cm.cellPx)));
+        const r2 = Math.min(7, Math.max(0, Math.floor((vy - cm.boardY) / cm.cellPx)));
         if (r2 !== from.r || c2 !== from.c) {
           this.handleChessSquareAction(r2, c2);
         }
@@ -3653,27 +3878,29 @@ export class PuzzleArcadeModalController {
     transposed: boolean;
   } {
     const virt = this.getVirtualCanvasSize();
-    // Auto-orient cols × rows vertically whenever layout is Portrait or canvas is taller than wide
+    const minDim = Math.min(virt.w, virt.h);
+    // Tự xoay chiều lưới cols × rows theo tỷ lệ thực tế của màn hình mobile dọc / ngang / gập
     const transposed =
-      (this.isMobileBoardLayout() || virt.h > virt.w * 1.02) && engine.cols > engine.rows;
+      (virt.h > virt.w * 1.03 && engine.cols > engine.rows) ||
+      (virt.w > virt.h * 1.03 && engine.rows > engine.cols) ||
+      (Math.abs(virt.h - virt.w) <= virt.w * 0.03 &&
+        this.isMobileBoardLayout() &&
+        engine.cols > engine.rows);
     const dispRows = transposed ? engine.cols : engine.rows;
     const dispCols = transposed ? engine.rows : engine.cols;
 
-    const outerTrackMargin = Math.max(
-      6,
-      Math.min(10, Math.round(Math.min(virt.w, virt.h) * 0.014))
-    );
-    const timerHeaderGap = 4;
-    const timerBarH = 17;
+    const outerTrackMargin = Math.max(4, Math.min(10, Math.round(minDim * 0.013)));
+    const timerHeaderGap = minDim < 360 ? 3 : 4;
+    const timerBarH = minDim < 360 ? 14 : 17;
     const timerHeaderTotal = timerBarH + timerHeaderGap;
-    const boxPad = 2;
-    const availW = Math.max(180, virt.w - (outerTrackMargin + boxPad) * 2);
-    const availH = Math.max(150, virt.h - (outerTrackMargin + boxPad) * 2 - timerHeaderTotal);
-    const maxTileSide = this.isMobileBoardLayout() ? 108 : 120;
+    const boxPad = minDim < 360 ? 1 : 2;
+    const availW = Math.max(140, virt.w - (outerTrackMargin + boxPad) * 2);
+    const availH = Math.max(120, virt.h - (outerTrackMargin + boxPad) * 2 - timerHeaderTotal);
+    const maxTileSide = this.isMobileBoardLayout() ? 116 : 126;
     const rawCellW = Math.min(maxTileSide, availW / dispCols);
-    const rawCellH = Math.min(maxTileSide * 1.06, availH / dispRows);
-    const cellW = Math.min(rawCellW, rawCellH * 1.28);
-    const cellH = Math.min(rawCellH, rawCellW * 1.28);
+    const rawCellH = Math.min(maxTileSide * 1.08, availH / dispRows);
+    const cellW = Math.min(rawCellW, rawCellH * 1.35);
+    const cellH = Math.min(rawCellH, rawCellW * 1.35);
     const boardW = dispCols * cellW;
     const boardH = dispRows * cellH;
     const frameW = boardW + outerTrackMargin * 2;
@@ -3684,7 +3911,7 @@ export class PuzzleArcadeModalController {
     const frameY = unitTopY + timerHeaderTotal;
     const originX = frameX + outerTrackMargin;
     const originY = frameY + outerTrackMargin;
-    const timerBarW = Math.min(virt.w - 16, Math.max(230, frameW));
+    const timerBarW = Math.min(virt.w - 10, Math.max(Math.min(220, virt.w - 12), frameW));
     const timerBarX = (virt.w - timerBarW) * 0.5;
     const timerBarY = unitTopY;
     return {
@@ -3977,9 +4204,10 @@ export class PuzzleArcadeModalController {
         this.caroFireworkTimer -= dt;
         if (this.caroFireworkTimer <= 0) {
           this.caroFireworkTimer = 0.24;
+          const cm = this.getCaroBoardMetrics();
           this.spawnWeasleyFireworks(
-            CARO_FRAME_X + CARO_FRAME_PX * 0.5,
-            CARO_FRAME_Y + CARO_FRAME_PX * 0.45,
+            cm.frameX + cm.framePx * 0.5,
+            cm.frameY + cm.framePx * 0.45,
             2
           );
         }
@@ -3998,8 +4226,9 @@ export class PuzzleArcadeModalController {
           if (aiRes) {
             this.persistModeSession('caro', true);
             this.caroLastMoveAnim = { r: aiRes.r, c: aiRes.c, age: 0, duration: 0.24 };
-            const ix = CARO_ORIGIN_X + aiRes.c * CARO_STEP_PX;
-            const iy = CARO_ORIGIN_Y + aiRes.r * CARO_STEP_PX;
+            const cm = this.getCaroBoardMetrics();
+            const ix = cm.originX + aiRes.c * cm.stepPx;
+            const iy = cm.originY + aiRes.r * cm.stepPx;
             this.spawnBurst(ix, iy, '#34d399', 15);
             this.sim.audio.playChessClack(Boolean(aiRes.aiWon));
             if (aiRes.aiWon || aiRes.draw) {
@@ -4968,18 +5197,23 @@ export class PuzzleArcadeModalController {
   }
 
   private drawSudokuScene(ctx: CanvasRenderingContext2D, engine: SudokuPuzzleEngine): void {
-    const isPortraitSudoku = this.isMobileBoardLayout();
+    const sm = this.getSudokuLayoutMetrics();
+    const isPortraitSudoku = sm.variant !== 'landscape';
+    const bX = sm.boardX;
+    const bY = sm.boardY;
+    const cPx = sm.cellPx;
+    const bPx = sm.boardPx;
     const sel = engine.selected;
     const selVal = sel ? engine.grid[sel.r]?.[sel.c] ?? 0 : 0;
     const activeDigit =
       this.sudokuHoverPadDigit ?? (selVal > 0 ? selVal : engine.highlightDigit > 0 ? engine.highlightDigit : 0);
 
     // 1. Carved Hang Sóc Mahogany-Oak Frame & Antique Brass Bezel around the 9×9 Board
-    const framePad = 5.5;
-    const fx = SUDOKU_BOARD_X - framePad;
-    const fy = SUDOKU_BOARD_Y - framePad;
-    const fw = SUDOKU_BOARD_PX + framePad * 2;
-    const fh = SUDOKU_BOARD_PX + framePad * 2;
+    const framePad = sm.framePad;
+    const fx = bX - framePad;
+    const fy = bY - framePad;
+    const fw = bPx + framePad * 2;
+    const fh = bPx + framePad * 2;
 
     ctx.save();
     // 3D bottom lip & tabletop shadow
@@ -5013,14 +5247,14 @@ export class PuzzleArcadeModalController {
 
     // Parchment backing inside frame
     ctx.fillStyle = '#fffdf6';
-    ctx.fillRect(SUDOKU_BOARD_X, SUDOKU_BOARD_Y, SUDOKU_BOARD_PX, SUDOKU_BOARD_PX);
+    ctx.fillRect(bX, bY, bPx, bPx);
     ctx.restore();
 
     // 2. Classic 9×9 Parchment Cells (Alternating 3×3 Warm Vellum + 4-State Golden-Amber Highlighting)
     for (let r = 0; r < 9; r++) {
       for (let c = 0; c < 9; c++) {
-        const cx = SUDOKU_BOARD_X + c * SUDOKU_CELL_PX;
-        const cy = SUDOKU_BOARD_Y + r * SUDOKU_CELL_PX;
+        const cx = bX + c * cPx;
+        const cy = bY + r * cPx;
         const val = engine.grid[r][c];
         const isEvenBox = (Math.floor(r / 3) + Math.floor(c / 3)) % 2 === 0;
         const isSel = Boolean(sel && sel.r === r && sel.c === c);
@@ -5044,7 +5278,7 @@ export class PuzzleArcadeModalController {
         } else if (conflict) {
           ctx.fillStyle = '#fde2dc';
         } else if (isSel) {
-          const selGrad = ctx.createLinearGradient(0, cy, 0, cy + SUDOKU_CELL_PX);
+          const selGrad = ctx.createLinearGradient(0, cy, 0, cy + cPx);
           selGrad.addColorStop(0, '#fef08a');
           selGrad.addColorStop(1, '#f7c948');
           ctx.fillStyle = selGrad;
@@ -5057,23 +5291,23 @@ export class PuzzleArcadeModalController {
         } else {
           ctx.fillStyle = isEvenBox ? '#fffdf6' : '#f7edd6';
         }
-        ctx.fillRect(cx, cy, SUDOKU_CELL_PX, SUDOKU_CELL_PX);
+        ctx.fillRect(cx, cy, cPx, cPx);
 
         // Subtle tactile ivory top-edge sheen on each parchment tile
         ctx.fillStyle = 'rgba(255, 255, 255, 0.38)';
-        ctx.fillRect(cx, cy, SUDOKU_CELL_PX, 1.2);
+        ctx.fillRect(cx, cy, cPx, 1.2);
 
         if (isSameVal && !conflict) {
           ctx.save();
           ctx.lineWidth = 1.4;
           ctx.strokeStyle = 'rgba(180, 83, 9, 0.55)';
-          ctx.strokeRect(cx + 1.5, cy + 1.5, SUDOKU_CELL_PX - 3, SUDOKU_CELL_PX - 3);
+          ctx.strokeRect(cx + 1.5, cy + 1.5, cPx - 3, cPx - 3);
           ctx.restore();
         }
 
         if (val >= 1 && val <= 9) {
-          const midCellX = cx + SUDOKU_CELL_PX * 0.5;
-          const midCellY = cy + SUDOKU_CELL_PX * 0.5 + 1;
+          const midCellX = cx + cPx * 0.5;
+          const midCellY = cy + cPx * 0.5 + 1;
           const isInitialClue = Boolean(engine.initialGiven[r]?.[c]);
           ctx.save();
           ctx.font = isInitialClue
@@ -5101,7 +5335,7 @@ export class PuzzleArcadeModalController {
             ctx.save();
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            const subPx = SUDOKU_CELL_PX / 3;
+            const subPx = cPx / 3;
             for (let d = 1; d <= 9; d++) {
               if ((mask & (1 << d)) === 0) continue;
               const nr = Math.floor((d - 1) / 3);
@@ -5136,13 +5370,13 @@ export class PuzzleArcadeModalController {
     ctx.strokeStyle = '#cfb486';
     for (let i = 1; i < 9; i++) {
       if (i % 3 === 0) continue;
-      const x = SUDOKU_BOARD_X + i * SUDOKU_CELL_PX;
-      const y = SUDOKU_BOARD_Y + i * SUDOKU_CELL_PX;
+      const x = bX + i * cPx;
+      const y = bY + i * cPx;
       ctx.beginPath();
-      ctx.moveTo(x, SUDOKU_BOARD_Y);
-      ctx.lineTo(x, SUDOKU_BOARD_Y + SUDOKU_BOARD_PX);
-      ctx.moveTo(SUDOKU_BOARD_X, y);
-      ctx.lineTo(SUDOKU_BOARD_X + SUDOKU_BOARD_PX, y);
+      ctx.moveTo(x, bY);
+      ctx.lineTo(x, bY + bPx);
+      ctx.moveTo(bX, y);
+      ctx.lineTo(bX + bPx, y);
       ctx.stroke();
     }
 
@@ -5150,48 +5384,48 @@ export class PuzzleArcadeModalController {
     ctx.lineWidth = 2.8;
     ctx.strokeStyle = '#43200d';
     for (const i of [3, 6]) {
-      const x = SUDOKU_BOARD_X + i * SUDOKU_CELL_PX;
-      const y = SUDOKU_BOARD_Y + i * SUDOKU_CELL_PX;
+      const x = bX + i * cPx;
+      const y = bY + i * cPx;
       ctx.beginPath();
-      ctx.moveTo(x, SUDOKU_BOARD_Y);
-      ctx.lineTo(x, SUDOKU_BOARD_Y + SUDOKU_BOARD_PX);
-      ctx.moveTo(SUDOKU_BOARD_X, y);
-      ctx.lineTo(SUDOKU_BOARD_X + SUDOKU_BOARD_PX, y);
+      ctx.moveTo(x, bY);
+      ctx.lineTo(x, bY + bPx);
+      ctx.moveTo(bX, y);
+      ctx.lineTo(bX + bPx, y);
       ctx.stroke();
     }
 
     if (sel) {
-      const sx = SUDOKU_BOARD_X + sel.c * SUDOKU_CELL_PX;
-      const sy = SUDOKU_BOARD_Y + sel.r * SUDOKU_CELL_PX;
+      const sx = bX + sel.c * cPx;
+      const sy = bY + sel.r * cPx;
       const selConflict = engine.hasConflict(sel.r, sel.c);
       ctx.lineWidth = 2.5;
       ctx.strokeStyle = selConflict ? '#b91c1c' : '#9a3412';
-      ctx.strokeRect(sx + 1.25, sy + 1.25, SUDOKU_CELL_PX - 2.5, SUDOKU_CELL_PX - 2.5);
+      ctx.strokeRect(sx + 1.25, sy + 1.25, cPx - 2.5, cPx - 2.5);
       ctx.lineWidth = 1;
       ctx.strokeStyle = selConflict ? '#fecaca' : 'rgba(255, 251, 235, 0.85)';
-      ctx.strokeRect(sx + 3, sy + 3, SUDOKU_CELL_PX - 6, SUDOKU_CELL_PX - 6);
+      ctx.strokeRect(sx + 3, sy + 3, cPx - 6, cPx - 6);
     }
 
     // Inner recessed wood-brass border around 9×9 field
     ctx.lineWidth = 2.6;
     ctx.strokeStyle = '#3b1c0a';
-    ctx.strokeRect(SUDOKU_BOARD_X, SUDOKU_BOARD_Y, SUDOKU_BOARD_PX, SUDOKU_BOARD_PX);
+    ctx.strokeRect(bX, bY, bPx, bPx);
     ctx.restore();
 
     // Heirloom brass corner brackets on the outer wooden frame
-    this.drawBrassCornerBrackets(ctx, fx + 1, fy + 1, fw - 2, fh - 2, 14);
+    this.drawBrassCornerBrackets(ctx, fx + 1, fy + 1, fw - 2, fh - 2, 13);
 
     const rem = engine.getRemainingDigitCounts();
 
-    // 4a. Portrait / Mobile: Hang Sóc Wood & Brass Single-Row 1–9 Bar below 9×9 Grid
+    // 4a. Portrait / Mobile: Adaptive Keypad (2-Row Thumb Deck on tall phones, Slim 1-Row Bar on compact screens)
     if (isPortraitSudoku) {
       this.sudokuPadRects.clear();
       this.sudokuActionRects.clear();
 
       const trayX = fx;
-      const trayY = 501;
+      const trayY = sm.trayY;
       const trayW = fw;
-      const trayH = 64;
+      const trayH = sm.trayH;
 
       ctx.save();
       drawRoundedRect(ctx, trayX, trayY, trayW, trayH, 11);
@@ -5208,12 +5442,147 @@ export class PuzzleArcadeModalController {
       ctx.strokeStyle = '#e5a93c';
       ctx.stroke();
 
-      const barX = SUDOKU_BOARD_X;
-      const barY = 505;
-      const barW = SUDOKU_BOARD_PX;
+      if (sm.variant === 'portrait-tall') {
+        const barX = bX;
+        const barW = bPx;
+        const colGap = 5;
+        const rowGap = 5;
+        const padV = 5;
+        const btnW = (barW - colGap * 4) / 5;
+        const btnH = Math.max(46, (trayH - padV * 2 - rowGap) * 0.5);
+
+        for (let d = 1; d <= 9; d++) {
+          const rowIdx = d <= 5 ? 0 : 1;
+          const colIdx = d <= 5 ? d - 1 : d - 6;
+          const bx = barX + colIdx * (btnW + colGap);
+          const by = trayY + padV + rowIdx * (btnH + rowGap);
+          this.sudokuPadRects.set(d, { x: bx, y: by, w: btnW, h: btnH });
+
+          const done = rem[d] === 0;
+          const isKeyActive = activeDigit === d && !done;
+          const isKeyHover = this.sudokuHoverPadDigit === d && !done;
+
+          if (!done) {
+            drawRoundedRect(ctx, bx, by + 2.5, btnW, btnH, 9);
+            ctx.fillStyle = '#1e0d04';
+            ctx.fill();
+          }
+
+          drawRoundedRect(ctx, bx, by, btnW, btnH, 9);
+          if (done) {
+            ctx.fillStyle = 'rgba(28, 13, 5, 0.55)';
+          } else if (isKeyActive) {
+            const actGrad = ctx.createLinearGradient(0, by, 0, by + btnH);
+            actGrad.addColorStop(0, '#fff3b0');
+            actGrad.addColorStop(0.55, '#fbbf24');
+            actGrad.addColorStop(1, '#d97706');
+            ctx.fillStyle = actGrad;
+          } else if (isKeyHover) {
+            const hovGrad = ctx.createLinearGradient(0, by, 0, by + btnH);
+            hovGrad.addColorStop(0, '#fffef7');
+            hovGrad.addColorStop(1, '#fde68a');
+            ctx.fillStyle = hovGrad;
+          } else {
+            const keyGrad = ctx.createLinearGradient(0, by, 0, by + btnH);
+            keyGrad.addColorStop(0, '#fffef8');
+            keyGrad.addColorStop(0.58, '#f8e9ca');
+            keyGrad.addColorStop(1, '#ebd3a4');
+            ctx.fillStyle = keyGrad;
+          }
+          ctx.fill();
+
+          ctx.lineWidth = isKeyActive ? 2 : 1.35;
+          ctx.strokeStyle = done
+            ? 'rgba(229, 169, 60, 0.25)'
+            : isKeyActive
+              ? '#fffbeb'
+              : engine.pencilMode
+                ? '#d97706'
+                : '#b87d32';
+          ctx.stroke();
+
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const fontPx = Math.min(28, Math.max(22, Math.round(btnH * 0.48)));
+          ctx.font = `800 ${fontPx}px "Be Vietnam Pro", system-ui, -apple-system, sans-serif`;
+          ctx.fillStyle = done
+            ? 'rgba(253, 230, 138, 0.35)'
+            : isKeyActive
+              ? '#3b1806'
+              : engine.pencilMode
+                ? '#6b4423'
+                : '#2b1407';
+          ctx.fillText(String(d), bx + btnW * 0.36, by + btnH * 0.52);
+
+          // Side count badge inside wide thumb key
+          const pillW = 24;
+          const pillH = 18;
+          const pillX = bx + btnW - pillW - 8;
+          const pillY = by + (btnH - pillH) * 0.5;
+          drawRoundedRect(ctx, pillX, pillY, pillW, pillH, 6);
+          ctx.fillStyle = done
+            ? 'transparent'
+            : isKeyActive
+              ? 'rgba(59, 24, 6, 0.85)'
+              : 'rgba(67, 32, 13, 0.84)';
+          ctx.fill();
+          ctx.font = '800 11px "Be Vietnam Pro", system-ui, sans-serif';
+          ctx.fillStyle = done ? '#eab308' : '#fde68a';
+          ctx.fillText(done ? '✓' : String(rem[d]), pillX + pillW * 0.5, pillY + pillH * 0.53);
+        }
+
+        // Slot 10 (Row 2, Col 5): Quick Erase Thumb Key ("🧹 Xoá")
+        const ex = barX + 4 * (btnW + colGap);
+        const ey = trayY + padV + (btnH + rowGap);
+        const eraseDisabled = engine.status !== 'playing' && engine.status !== 'lost';
+        const eraseActive = engine.eraseMode;
+        const eraseHover = this.sudokuHoverAction === 'erase' && !eraseDisabled;
+        this.sudokuActionRects.set('erase', { x: ex, y: ey, w: btnW, h: btnH });
+
+        if (!eraseDisabled) {
+          drawRoundedRect(ctx, ex, ey + 2.5, btnW, btnH, 9);
+          ctx.fillStyle = '#1e0d04';
+          ctx.fill();
+        }
+        drawRoundedRect(ctx, ex, ey, btnW, btnH, 9);
+        if (eraseDisabled) {
+          ctx.fillStyle = 'rgba(28, 13, 5, 0.55)';
+        } else if (eraseActive) {
+          const erGrad = ctx.createLinearGradient(0, ey, 0, ey + btnH);
+          erGrad.addColorStop(0, '#e04f3e');
+          erGrad.addColorStop(0.55, '#b91c1c');
+          erGrad.addColorStop(1, '#7f1d1d');
+          ctx.fillStyle = erGrad;
+        } else if (eraseHover) {
+          ctx.fillStyle = '#fde68a';
+        } else {
+          const defGrad = ctx.createLinearGradient(0, ey, 0, ey + btnH);
+          defGrad.addColorStop(0, '#fffdf5');
+          defGrad.addColorStop(1, '#e8cb94');
+          ctx.fillStyle = defGrad;
+        }
+        ctx.fill();
+        ctx.lineWidth = eraseActive ? 2 : 1.35;
+        ctx.strokeStyle = eraseActive ? '#fde047' : '#b87d32';
+        ctx.stroke();
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = '800 13.5px "Be Vietnam Pro", system-ui, sans-serif';
+        ctx.fillStyle = eraseDisabled ? '#a89070' : eraseActive ? '#fffbeb' : '#3b1806';
+        ctx.fillText('🧹 Xoá', ex + btnW * 0.5, ey + btnH * 0.52);
+
+        ctx.restore();
+        return;
+      }
+
+      const barX = bX;
+      const barY = trayY + 3.5;
+      const barW = bPx;
       const gap = 4;
       const btnW = (barW - gap * 8) / 9;
-      const btnH = 54;
+      const btnH = Math.max(34, trayH - 7);
+      const isUltraCompact = btnH < 46;
 
       for (let d = 1; d <= 9; d++) {
         const bx = barX + (d - 1) * (btnW + gap);
@@ -5226,12 +5595,12 @@ export class PuzzleArcadeModalController {
 
         if (!done) {
           // Tactile 3D dark-walnut bottom lip
-          drawRoundedRect(ctx, bx, by + 2.5, btnW, btnH, 8.5);
+          drawRoundedRect(ctx, bx, by + 2, btnW, btnH, 8);
           ctx.fillStyle = '#1e0d04';
           ctx.fill();
         }
 
-        drawRoundedRect(ctx, bx, by, btnW, btnH, 8.5);
+        drawRoundedRect(ctx, bx, by, btnW, btnH, 8);
         if (done) {
           ctx.fillStyle = 'rgba(28, 13, 5, 0.55)';
         } else if (isKeyActive) {
@@ -5264,7 +5633,9 @@ export class PuzzleArcadeModalController {
 
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.font = '800 25px "Be Vietnam Pro", system-ui, -apple-system, sans-serif';
+        ctx.font = isUltraCompact
+          ? '800 20px "Be Vietnam Pro", system-ui, -apple-system, sans-serif'
+          : '800 24px "Be Vietnam Pro", system-ui, -apple-system, sans-serif';
         ctx.fillStyle = done
           ? 'rgba(253, 230, 138, 0.35)'
           : isKeyActive
@@ -5272,10 +5643,15 @@ export class PuzzleArcadeModalController {
             : engine.pencilMode
               ? '#6b4423'
               : '#2b1407';
-        ctx.fillText(String(d), bx + btnW * 0.5, by + 20.5);
+        ctx.fillText(
+          String(d),
+          bx + btnW * 0.5,
+          isUltraCompact ? by + btnH * 0.39 : by + btnH * 0.4
+        );
 
-        // Dark wood count pill at bottom of key
-        drawRoundedRect(ctx, bx + 5, by + 35.5, btnW - 10, 14.5, 5);
+        const pillH = isUltraCompact ? 11.5 : 14;
+        const pillY = by + btnH - pillH - 2.5;
+        drawRoundedRect(ctx, bx + 4.5, pillY, btnW - 9, pillH, 4.5);
         ctx.fillStyle = done
           ? 'transparent'
           : isKeyActive
@@ -5283,9 +5659,11 @@ export class PuzzleArcadeModalController {
             : 'rgba(67, 32, 13, 0.82)';
         ctx.fill();
 
-        ctx.font = '800 10px "Be Vietnam Pro", system-ui, sans-serif';
+        ctx.font = isUltraCompact
+          ? '800 8.8px "Be Vietnam Pro", system-ui, sans-serif'
+          : '800 10px "Be Vietnam Pro", system-ui, sans-serif';
         ctx.fillStyle = done ? '#eab308' : '#fde68a';
-        ctx.fillText(done ? '✓' : String(rem[d]), bx + btnW * 0.5, by + 43.2);
+        ctx.fillText(done ? '✓' : String(rem[d]), bx + btnW * 0.5, pillY + pillH * 0.53);
       }
       ctx.restore();
       return;
@@ -5295,9 +5673,14 @@ export class PuzzleArcadeModalController {
     this.sudokuPadRects.clear();
     this.sudokuActionRects.clear();
 
+    const padX = sm.padX;
+    const padY = sm.padY;
+    const padW = sm.padW;
+    const padH = sm.padH;
+
     ctx.save();
     // 3D bottom lip & shadow under right dock
-    drawRoundedRect(ctx, SUDOKU_PAD_X, SUDOKU_PAD_Y + 2.5, SUDOKU_PAD_W, SUDOKU_PAD_H, 12);
+    drawRoundedRect(ctx, padX, padY + 2.5, padW, padH, 12);
     ctx.fillStyle = 'rgba(24, 10, 4, 0.52)';
     ctx.shadowColor = 'rgba(20, 8, 3, 0.38)';
     ctx.shadowBlur = 12;
@@ -5306,8 +5689,8 @@ export class PuzzleArcadeModalController {
     ctx.shadowColor = 'transparent';
 
     // Carved mahogany-oak dock panel
-    drawRoundedRect(ctx, SUDOKU_PAD_X, SUDOKU_PAD_Y, SUDOKU_PAD_W, SUDOKU_PAD_H, 12);
-    const dockGrad = ctx.createLinearGradient(0, SUDOKU_PAD_Y, 0, SUDOKU_PAD_Y + SUDOKU_PAD_H);
+    drawRoundedRect(ctx, padX, padY, padW, padH, 12);
+    const dockGrad = ctx.createLinearGradient(0, padY, 0, padY + padH);
     dockGrad.addColorStop(0, '#5a3116');
     dockGrad.addColorStop(0.5, '#3e200d');
     dockGrad.addColorStop(1, '#261206');
@@ -5318,17 +5701,17 @@ export class PuzzleArcadeModalController {
     ctx.strokeStyle = '#e5a93c';
     ctx.stroke();
 
-    drawRoundedRect(ctx, SUDOKU_PAD_X + 2, SUDOKU_PAD_Y + 2, SUDOKU_PAD_W - 4, SUDOKU_PAD_H - 4, 10);
+    drawRoundedRect(ctx, padX + 2, padY + 2, padW - 4, padH - 4, 10);
     ctx.lineWidth = 0.9;
     ctx.strokeStyle = 'rgba(254, 243, 199, 0.28)';
     ctx.stroke();
 
-    const innerX = SUDOKU_PAD_X + 8;
-    const innerW = SUDOKU_PAD_W - 16; // 135px
+    const innerX = padX + 7;
+    const innerW = padW - 14;
     const actGap = 6;
-    const actW = (innerW - actGap) / 2; // 64.5px
+    const actW = (innerW - actGap) / 2;
     const actH = 47;
-    const actStartY = SUDOKU_PAD_Y + 8; // 14
+    const actStartY = padY + 8;
 
     const sandbox = this.sim.state.sandboxMode;
     const canHint =
@@ -5693,22 +6076,31 @@ export class PuzzleArcadeModalController {
 
   private drawCaroScene(ctx: CanvasRenderingContext2D, engine: CaroGameEngine): void {
     const now = performance.now() * 0.001;
+    const cm = this.getCaroBoardMetrics();
+    const fX = cm.frameX;
+    const fY = cm.frameY;
+    const fPx = cm.framePx;
+    const oX = cm.originX;
+    const oY = cm.originY;
+    const sPx = cm.stepPx;
+    const stScale = cm.stoneScale;
 
     // 1. Mahogany Gryffindor Table Backing + Unfolded Antique Marauder's Map Parchment!
     ctx.save();
+    const rimOut = Math.min(4, fX);
     drawRoundedRect(
       ctx,
-      CARO_FRAME_X - 4,
-      CARO_FRAME_Y - 4,
-      CARO_FRAME_PX + 8,
-      CARO_FRAME_PX + 8,
-      16
+      fX - rimOut,
+      fY - rimOut,
+      fPx + rimOut * 2,
+      fPx + rimOut * 2,
+      15
     );
     const rimGrad = ctx.createLinearGradient(
       0,
-      CARO_FRAME_Y - 4,
+      fY - rimOut,
       0,
-      CARO_FRAME_Y + CARO_FRAME_PX + 4
+      fY + fPx + rimOut
     );
     rimGrad.addColorStop(0, '#6b1d1b');
     rimGrad.addColorStop(0.5, '#471512');
@@ -5724,9 +6116,10 @@ export class PuzzleArcadeModalController {
     ctx.shadowColor = 'transparent';
 
     // Unfolded Tri-Panel Marauder's Map Vellum Parchment
-    const mapX = CARO_FRAME_X + 4;
-    const mapY = CARO_FRAME_Y + 4;
-    const mapPx = CARO_FRAME_PX - 8;
+    const mapInset = fX <= 3 ? 2.5 : 4;
+    const mapX = fX + mapInset;
+    const mapY = fY + mapInset;
+    const mapPx = fPx - mapInset * 2;
     drawRoundedRect(ctx, mapX, mapY, mapPx, mapPx, 11);
     const parchGrad = ctx.createRadialGradient(
       mapX + mapPx * 0.5,
@@ -5773,8 +6166,8 @@ export class PuzzleArcadeModalController {
     ctx.stroke();
 
     // Watermarked Hogwarts Castle Turrets, Secret Passages & Compass Rose in Sepia Marauder Ink
-    const centerMapX = CARO_ORIGIN_X + 6 * CARO_STEP_PX;
-    const centerMapY = CARO_ORIGIN_Y + 6 * CARO_STEP_PX;
+    const centerMapX = oX + 6 * sPx;
+    const centerMapY = oY + 6 * sPx;
     ctx.strokeStyle = 'rgba(110, 46, 24, 0.11)';
     ctx.lineWidth = 1.2;
     for (const rCompass of [46, 76, 132]) {
@@ -5784,10 +6177,10 @@ export class PuzzleArcadeModalController {
     }
     // 4 Corner Hogwarts Tower Turrets watermarked on the parchment
     for (const [tx, ty] of [
-      [CARO_ORIGIN_X + 1.5 * CARO_STEP_PX, CARO_ORIGIN_Y + 1.5 * CARO_STEP_PX],
-      [CARO_ORIGIN_X + 10.5 * CARO_STEP_PX, CARO_ORIGIN_Y + 1.5 * CARO_STEP_PX],
-      [CARO_ORIGIN_X + 1.5 * CARO_STEP_PX, CARO_ORIGIN_Y + 10.5 * CARO_STEP_PX],
-      [CARO_ORIGIN_X + 10.5 * CARO_STEP_PX, CARO_ORIGIN_Y + 10.5 * CARO_STEP_PX],
+      [oX + 1.5 * sPx, oY + 1.5 * sPx],
+      [oX + 10.5 * sPx, oY + 1.5 * sPx],
+      [oX + 1.5 * sPx, oY + 10.5 * sPx],
+      [oX + 10.5 * sPx, oY + 10.5 * sPx],
     ]) {
       ctx.beginPath();
       ctx.arc(tx, ty, 22, 0, Math.PI * 2);
@@ -5798,55 +6191,52 @@ export class PuzzleArcadeModalController {
     // Miniature Crimson Marauder Banner at Top Margin of Map
     const mbW = 248;
     const mbX = centerMapX - mbW * 0.5;
-    const mbY = mapY + 3.5;
-    drawRoundedRect(ctx, mbX, mbY, mbW, 14, 7);
+    const mbY = mapY + 2.5;
+    drawRoundedRect(ctx, mbX, mbY, mbW, 13, 6.5);
     ctx.fillStyle = 'rgba(153, 27, 27, 0.88)';
     ctx.fill();
     ctx.strokeStyle = '#fde68a';
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.fillStyle = '#fffbeb';
-    ctx.font = '800 8.5px "Be Vietnam Pro", system-ui, sans-serif';
+    ctx.font = '800 8.2px "Be Vietnam Pro", system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('🗺️ BẢN ĐỒ ĐẠO TẶC • THÀNH TRÌ HOGWARTS', centerMapX, mbY + 7.5);
+    ctx.fillText('🗺️ BẢN ĐỒ ĐẠO TẶC • THÀNH TRÌ HOGWARTS', centerMapX, mbY + 6.8);
 
     // Animated Disappearing/Appearing Marauder Inked Footprints patrolling the corridors!
-    // Bottom secret corridor: Harry Potter walking West -> East
     const p1 = (now * 0.85) % 10;
     for (let s = 0; s < 10; s++) {
       const dist = (p1 - s + 10) % 10;
       const fade = dist < 4.2 ? Math.sin((1 - dist / 4.2) * Math.PI * 0.5) * 0.68 : 0;
-      const fx = CARO_ORIGIN_X + 28 + s * 36;
-      const fy = CARO_ORIGIN_Y + 12 * CARO_STEP_PX + 12.5;
+      const fx = oX + 28 + s * 36;
+      const fy = Math.min(mapY + mapPx - 5, oY + 12 * sPx + 11.5);
       this.drawMarauderFootprintStep(ctx, fx, fy, 0, s % 2 === 0, fade);
     }
-    const label1X = CARO_ORIGIN_X + 28 + Math.floor(p1) * 36;
+    const label1X = oX + 28 + Math.floor(p1) * 36;
     ctx.fillStyle = 'rgba(110, 32, 18, 0.65)';
     ctx.font = 'italic 700 8.5px Georgia, serif';
     ctx.fillText(
       'Harry Potter',
-      Math.min(CARO_ORIGIN_X + 398, Math.max(CARO_ORIGIN_X + 36, label1X)),
-      CARO_ORIGIN_Y + 12 * CARO_STEP_PX + 5
+      Math.min(oX + 398, Math.max(oX + 36, label1X)),
+      Math.min(mapY + mapPx - 9, oY + 12 * sPx + 5)
     );
 
-    // Left secret corridor: Severus Snape patrolling South -> North
     const p2 = (now * 0.72 + 3.5) % 9;
     for (let s = 0; s < 9; s++) {
       const dist = (p2 - s + 9) % 9;
       const fade = dist < 3.8 ? Math.sin((1 - dist / 3.8) * Math.PI * 0.5) * 0.62 : 0;
-      const fx = mapX + 10;
-      const fy = CARO_ORIGIN_Y + 11 * CARO_STEP_PX - s * 38;
+      const fx = mapX + 8;
+      const fy = oY + 11 * sPx - s * sPx;
       this.drawMarauderFootprintStep(ctx, fx, fy, -Math.PI * 0.5, s % 2 === 0, fade);
     }
 
-    // Right secret corridor: Sirius Black patrolling North -> South
     const p3 = (now * 0.78 + 6.1) % 9;
     for (let s = 0; s < 9; s++) {
       const dist = (p3 - s + 9) % 9;
       const fade = dist < 3.8 ? Math.sin((1 - dist / 3.8) * Math.PI * 0.5) * 0.62 : 0;
-      const fx = mapX + mapPx - 10;
-      const fy = CARO_ORIGIN_Y + 1 * CARO_STEP_PX + s * 38;
+      const fx = mapX + mapPx - 8;
+      const fy = oY + 1 * sPx + s * sPx;
       this.drawMarauderFootprintStep(ctx, fx, fy, Math.PI * 0.5, s % 2 === 0, fade);
     }
 
@@ -5854,33 +6244,33 @@ export class PuzzleArcadeModalController {
 
     this.drawBrassCornerBrackets(
       ctx,
-      CARO_FRAME_X - 2,
-      CARO_FRAME_Y - 2,
-      CARO_FRAME_PX + 4,
-      CARO_FRAME_PX + 4,
-      17
+      fX - Math.min(2, rimOut),
+      fY - Math.min(2, rimOut),
+      fPx + Math.min(2, rimOut) * 2,
+      fPx + Math.min(2, rimOut) * 2,
+      16
     );
 
     // 2. 13x13 Sepia-Crimson Marauder Ink Intersection Grid
-    const endPx = (CARO_BOARD_SIZE - 1) * CARO_STEP_PX;
+    const endPx = (CARO_BOARD_SIZE - 1) * sPx;
     ctx.strokeStyle = 'rgba(92, 38, 16, 0.66)';
     ctx.lineWidth = 1.25;
     for (let i = 0; i < CARO_BOARD_SIZE; i++) {
-      const gx = CARO_ORIGIN_X + i * CARO_STEP_PX;
+      const gx = oX + i * sPx;
       ctx.beginPath();
-      ctx.moveTo(gx, CARO_ORIGIN_Y);
-      ctx.lineTo(gx, CARO_ORIGIN_Y + endPx);
+      ctx.moveTo(gx, oY);
+      ctx.lineTo(gx, oY + endPx);
       ctx.stroke();
 
-      const gy = CARO_ORIGIN_Y + i * CARO_STEP_PX;
+      const gy = oY + i * sPx;
       ctx.beginPath();
-      ctx.moveTo(CARO_ORIGIN_X, gy);
-      ctx.lineTo(CARO_ORIGIN_X + endPx, gy);
+      ctx.moveTo(oX, gy);
+      ctx.lineTo(oX + endPx, gy);
       ctx.stroke();
     }
     ctx.lineWidth = 1.8;
     ctx.strokeStyle = '#6b2714';
-    ctx.strokeRect(CARO_ORIGIN_X, CARO_ORIGIN_Y, endPx, endPx);
+    ctx.strokeRect(oX, oY, endPx, endPx);
 
     // 5 golden inlaid Marauder compass stars at hoshi intersections
     for (const [hr, hc] of [
@@ -5890,8 +6280,8 @@ export class PuzzleArcadeModalController {
       [9, 3],
       [9, 9],
     ]) {
-      const sx = CARO_ORIGIN_X + hc * CARO_STEP_PX;
-      const sy = CARO_ORIGIN_Y + hr * CARO_STEP_PX;
+      const sx = oX + hc * sPx;
+      const sy = oY + hr * sPx;
       this.drawFourPointStar(ctx, sx, sy, hr === 6 && hc === 6 ? 7 : 5.2, 2);
       ctx.fillStyle = '#7f1d1d';
       ctx.fill();
@@ -5907,21 +6297,21 @@ export class PuzzleArcadeModalController {
       this.caroWinRevealTimer <= 0 &&
       engine.grid[this.caroHoverCell.r]?.[this.caroHoverCell.c] === 0
     ) {
-      const hx = CARO_ORIGIN_X + this.caroHoverCell.c * CARO_STEP_PX;
-      const hy = CARO_ORIGIN_Y + this.caroHoverCell.r * CARO_STEP_PX;
+      const hx = oX + this.caroHoverCell.c * sPx;
+      const hy = oY + this.caroHoverCell.r * sPx;
       ctx.save();
       ctx.globalAlpha = 0.52;
-      this.drawCaroStone(ctx, hx, hy, 1, false, 1);
+      this.drawCaroStone(ctx, hx, hy, 1, false, stScale);
       ctx.restore();
     }
 
     if (engine.hintCell && engine.grid[engine.hintCell.r]?.[engine.hintCell.c] === 0) {
-      const hx = CARO_ORIGIN_X + engine.hintCell.c * CARO_STEP_PX;
-      const hy = CARO_ORIGIN_Y + engine.hintCell.r * CARO_STEP_PX;
+      const hx = oX + engine.hintCell.c * sPx;
+      const hy = oY + engine.hintCell.r * sPx;
       const pulse = 1 + 0.14 * Math.sin(now * 8);
       ctx.save();
       ctx.beginPath();
-      ctx.arc(hx, hy, 17.5 * pulse, 0, Math.PI * 2);
+      ctx.arc(hx, hy, 17.5 * stScale * pulse, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(250, 204, 21, 0.36)';
       ctx.fill();
       ctx.lineWidth = 2.6;
@@ -5939,17 +6329,17 @@ export class PuzzleArcadeModalController {
       for (let c = 0; c < CARO_BOARD_SIZE; c++) {
         const st = engine.grid[r][c];
         if (st === 0) continue;
-        const ix = CARO_ORIGIN_X + c * CARO_STEP_PX;
-        const iy = CARO_ORIGIN_Y + r * CARO_STEP_PX;
+        const ix = oX + c * sPx;
+        const iy = oY + r * sPx;
         const isLast = Boolean(last && last.r === r && last.c === c);
-        let popScale = 1;
+        let popScale = stScale;
         if (
           this.caroLastMoveAnim &&
           this.caroLastMoveAnim.r === r &&
           this.caroLastMoveAnim.c === c
         ) {
           const t = Math.min(1, this.caroLastMoveAnim.age / this.caroLastMoveAnim.duration);
-          popScale = 0.72 + Math.sin(t * Math.PI * 0.78) * 0.38;
+          popScale = stScale * (0.72 + Math.sin(t * Math.PI * 0.78) * 0.38);
         }
         this.drawCaroStone(ctx, ix, iy, st, isLast, popScale);
       }
@@ -5959,10 +6349,10 @@ export class PuzzleArcadeModalController {
     if (engine.winningLine && engine.winningLine.length >= 2) {
       const first = engine.winningLine[0];
       const end = engine.winningLine[engine.winningLine.length - 1];
-      const x1 = CARO_ORIGIN_X + first.c * CARO_STEP_PX;
-      const y1 = CARO_ORIGIN_Y + first.r * CARO_STEP_PX;
-      const x2 = CARO_ORIGIN_X + end.c * CARO_STEP_PX;
-      const y2 = CARO_ORIGIN_Y + end.r * CARO_STEP_PX;
+      const x1 = oX + first.c * sPx;
+      const y1 = oY + first.r * sPx;
+      const x2 = oX + end.c * sPx;
+      const y2 = oY + end.r * sPx;
       const isPhoenixWin = engine.status === 'won';
       const dx = x2 - x1;
       const dy = y2 - y1;
@@ -6028,8 +6418,8 @@ export class PuzzleArcadeModalController {
       ctx.fill();
 
       for (const pt of engine.winningLine) {
-        const px = CARO_ORIGIN_X + pt.c * CARO_STEP_PX;
-        const py = CARO_ORIGIN_Y + pt.r * CARO_STEP_PX;
+        const px = oX + pt.c * sPx;
+        const py = oY + pt.r * sPx;
         this.drawFourPointStar(ctx, px, py, 7.2, 2.4);
         ctx.fillStyle = '#fffbeb';
         ctx.fill();
@@ -6045,13 +6435,13 @@ export class PuzzleArcadeModalController {
     ) {
       const pulse = 1 + 0.08 * Math.sin(now * 6.5);
       for (const hc of caroReview.highlightCells) {
-        const hx = CARO_ORIGIN_X + hc.c * CARO_STEP_PX;
-        const hy = CARO_ORIGIN_Y + hc.r * CARO_STEP_PX;
+        const hx = oX + hc.c * sPx;
+        const hy = oY + hc.r * sPx;
         const isBest = hc.role === 'best';
         const ringCol = isBest ? '#10b981' : '#f59e0b';
         ctx.save();
         ctx.beginPath();
-        ctx.arc(hx, hy, 18.5 * pulse, 0, Math.PI * 2);
+        ctx.arc(hx, hy, 18.5 * stScale * pulse, 0, Math.PI * 2);
         ctx.lineWidth = 3;
         ctx.strokeStyle = ringCol;
         ctx.shadowColor = isBest ? '#6ee7b7' : '#fde047';
@@ -6062,8 +6452,8 @@ export class PuzzleArcadeModalController {
         const lbl = isBest ? '✨ Nước Chuẩn' : '⚡ Đã Đi';
         ctx.font = '800 9.2px "Be Vietnam Pro", system-ui, sans-serif';
         const tw = Math.ceil(ctx.measureText(lbl).width) + 10;
-        const bx = Math.max(18, Math.min(CARO_FRAME_X + CARO_FRAME_PX - tw - 4, hx - tw * 0.5));
-        const by = hy - 29;
+        const bx = Math.max(12, Math.min(fX + fPx - tw - 4, hx - tw * 0.5));
+        const by = Math.max(8, hy - 29);
         drawRoundedRect(ctx, bx, by, tw, 15, 7);
         ctx.fillStyle = isBest ? '#065f46' : '#78350f';
         ctx.fill();
@@ -6322,23 +6712,29 @@ export class PuzzleArcadeModalController {
 
   private drawWizardChessScene(ctx: CanvasRenderingContext2D, engine: WizardChessEngine): void {
     const now = performance.now();
-    const pieceScale = CHESS_CELL_PX / 48;
+    const cm = this.getChessBoardMetrics();
+    const bX = cm.boardX;
+    const bY = cm.boardY;
+    const cPx = cm.cellPx;
+    const bPx = cm.boardPx;
+    const pieceScale = cPx / 48;
+    const rimPad = Math.max(3, bX - 2);
 
     // 1. Grand Hogwarts Great Hall Carved Stone & Split House Heraldry Frame
     ctx.save();
     drawRoundedRect(
       ctx,
-      CHESS_BOARD_X - 10,
-      CHESS_BOARD_Y - 10,
-      CHESS_BOARD_PX + 20,
-      CHESS_BOARD_PX + 20,
-      14
+      bX - rimPad,
+      bY - rimPad,
+      bPx + rimPad * 2,
+      bPx + rimPad * 2,
+      rimPad <= 6 ? 10 : 14
     );
     const frameGrad = ctx.createLinearGradient(
       0,
-      CHESS_BOARD_Y - 10,
+      bY - rimPad,
       0,
-      CHESS_BOARD_Y + CHESS_BOARD_PX + 10
+      bY + bPx + rimPad
     );
     frameGrad.addColorStop(0, '#16302b'); // Slytherin obsidian-emerald top
     frameGrad.addColorStop(0.48, '#291d18');
@@ -6354,29 +6750,31 @@ export class PuzzleArcadeModalController {
     ctx.stroke();
     ctx.shadowColor = 'transparent';
 
-    // Subtle inlaid house heraldic trim strips (top Slytherin emerald, bottom Gryffindor scarlet)
-    ctx.save();
-    ctx.strokeStyle = 'rgba(52, 211, 153, 0.42)';
-    ctx.lineWidth = 1.8;
-    ctx.beginPath();
-    ctx.moveTo(CHESS_BOARD_X + 12, CHESS_BOARD_Y - 8);
-    ctx.lineTo(CHESS_BOARD_X + CHESS_BOARD_PX - 12, CHESS_BOARD_Y - 8);
-    ctx.stroke();
+    if (rimPad >= 8) {
+      // Subtle inlaid house heraldic trim strips (top Slytherin emerald, bottom Gryffindor scarlet)
+      ctx.save();
+      ctx.strokeStyle = 'rgba(52, 211, 153, 0.42)';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(bX + 12, bY - 8);
+      ctx.lineTo(bX + bPx - 12, bY - 8);
+      ctx.stroke();
 
-    ctx.strokeStyle = 'rgba(251, 191, 36, 0.58)';
-    ctx.beginPath();
-    ctx.moveTo(CHESS_BOARD_X + 12, CHESS_BOARD_Y + CHESS_BOARD_PX + 8);
-    ctx.lineTo(CHESS_BOARD_X + CHESS_BOARD_PX - 12, CHESS_BOARD_Y + CHESS_BOARD_PX + 8);
-    ctx.stroke();
-    ctx.restore();
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.58)';
+      ctx.beginPath();
+      ctx.moveTo(bX + 12, bY + bPx + 8);
+      ctx.lineTo(bX + bPx - 12, bY + bPx + 8);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     this.drawBrassCornerBrackets(
       ctx,
-      CHESS_BOARD_X - 9,
-      CHESS_BOARD_Y - 9,
-      CHESS_BOARD_PX + 18,
-      CHESS_BOARD_PX + 18,
-      13
+      bX - Math.max(2, rimPad - 1),
+      bY - Math.max(2, rimPad - 1),
+      bPx + Math.max(2, rimPad - 1) * 2,
+      bPx + Math.max(2, rimPad - 1) * 2,
+      rimPad <= 6 ? 10 : 13
     );
 
     const sel = engine.selected;
@@ -6396,11 +6794,11 @@ export class PuzzleArcadeModalController {
     // 2. 8x8 Great Hall Sunlit Alabaster-Gold & Slytherin Emerald-Slate Marble Squares
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
-        const sx = CHESS_BOARD_X + c * CHESS_CELL_PX;
-        const sy = CHESS_BOARD_Y + r * CHESS_CELL_PX;
+        const sx = bX + c * cPx;
+        const sy = bY + r * cPx;
         const isLight = (r + c) % 2 === 0;
 
-        const sqGrad = ctx.createLinearGradient(sx, sy, sx + CHESS_CELL_PX, sy + CHESS_CELL_PX);
+        const sqGrad = ctx.createLinearGradient(sx, sy, sx + cPx, sy + cPx);
         if (isLight) {
           sqGrad.addColorStop(0, '#fffaf0');
           sqGrad.addColorStop(1, '#ebd4a6');
@@ -6409,12 +6807,12 @@ export class PuzzleArcadeModalController {
           sqGrad.addColorStop(1, '#1b3b35');
         }
         ctx.fillStyle = sqGrad;
-        ctx.fillRect(sx, sy, CHESS_CELL_PX, CHESS_CELL_PX);
+        ctx.fillRect(sx, sy, cPx, cPx);
 
         // Crisp stone bevel on every square
         ctx.strokeStyle = isLight ? 'rgba(255, 255, 255, 0.55)' : 'rgba(253, 230, 138, 0.16)';
         ctx.lineWidth = 1;
-        ctx.strokeRect(sx + 0.5, sy + 0.5, CHESS_CELL_PX - 1, CHESS_CELL_PX - 1);
+        ctx.strokeRect(sx + 0.5, sy + 0.5, cPx - 1, cPx - 1);
 
         // Last played move golden enchantment wash
         const isLast =
@@ -6423,35 +6821,35 @@ export class PuzzleArcadeModalController {
             (engine.lastMove.toR === r && engine.lastMove.toC === c));
         if (isLast) {
           ctx.fillStyle = 'rgba(250, 204, 21, 0.34)';
-          ctx.fillRect(sx, sy, CHESS_CELL_PX, CHESS_CELL_PX);
+          ctx.fillRect(sx, sy, cPx, cPx);
           ctx.strokeStyle = 'rgba(245, 158, 11, 0.65)';
           ctx.lineWidth = 1.4;
-          ctx.strokeRect(sx + 1, sy + 1, CHESS_CELL_PX - 2, CHESS_CELL_PX - 2);
+          ctx.strokeRect(sx + 1, sy + 1, cPx - 2, cPx - 2);
         }
 
         // Pointer hover highlight
         if (this.chessHoverSquare && this.chessHoverSquare.r === r && this.chessHoverSquare.c === c) {
           ctx.fillStyle = 'rgba(254, 249, 195, 0.22)';
-          ctx.fillRect(sx, sy, CHESS_CELL_PX, CHESS_CELL_PX);
+          ctx.fillRect(sx, sy, cPx, cPx);
         }
 
         // Selected Gryffindor square aura + rotating golden runic ring
         if (sel && sel.r === r && sel.c === c) {
           const selGrad = ctx.createRadialGradient(
-            sx + CHESS_CELL_PX * 0.5,
-            sy + CHESS_CELL_PX * 0.5,
+            sx + cPx * 0.5,
+            sy + cPx * 0.5,
             3,
-            sx + CHESS_CELL_PX * 0.5,
-            sy + CHESS_CELL_PX * 0.5,
-            CHESS_CELL_PX * 0.65
+            sx + cPx * 0.5,
+            sy + cPx * 0.5,
+            cPx * 0.65
           );
           selGrad.addColorStop(0, 'rgba(254, 240, 138, 0.55)');
           selGrad.addColorStop(1, 'rgba(220, 38, 38, 0.24)');
           ctx.fillStyle = selGrad;
-          ctx.fillRect(sx, sy, CHESS_CELL_PX, CHESS_CELL_PX);
+          ctx.fillRect(sx, sy, cPx, cPx);
           ctx.lineWidth = 2.3;
           ctx.strokeStyle = '#fde047';
-          ctx.strokeRect(sx + 1.5, sy + 1.5, CHESS_CELL_PX - 3, CHESS_CELL_PX - 3);
+          ctx.strokeRect(sx + 1.5, sy + 1.5, cPx - 3, cPx - 3);
         }
 
         // Pulsing crimson check warning under Dumbledore or Voldemort
@@ -6461,17 +6859,17 @@ export class PuzzleArcadeModalController {
         ) {
           const pulse = 0.68 + Math.sin(now * 0.008) * 0.2;
           const kGrad = ctx.createRadialGradient(
-            sx + CHESS_CELL_PX * 0.5,
-            sy + CHESS_CELL_PX * 0.5,
+            sx + cPx * 0.5,
+            sy + cPx * 0.5,
             4,
-            sx + CHESS_CELL_PX * 0.5,
-            sy + CHESS_CELL_PX * 0.5,
-            CHESS_CELL_PX * 0.58
+            sx + cPx * 0.5,
+            sy + cPx * 0.5,
+            cPx * 0.58
           );
           kGrad.addColorStop(0, `rgba(225, 29, 72, ${pulse.toFixed(2)})`);
           kGrad.addColorStop(1, 'rgba(225, 29, 72, 0.16)');
           ctx.fillStyle = kGrad;
-          ctx.fillRect(sx, sy, CHESS_CELL_PX, CHESS_CELL_PX);
+          ctx.fillRect(sx, sy, cPx, cPx);
         }
 
         // Hint highlight on origin and destination squares (💡 Gợi Ý)
@@ -6484,10 +6882,10 @@ export class PuzzleArcadeModalController {
             ctx.fillStyle = isHintTo
               ? `rgba(16, 185, 129, ${(0.34 * hPulse).toFixed(2)})`
               : `rgba(250, 204, 21, ${(0.28 * hPulse).toFixed(2)})`;
-            ctx.fillRect(sx, sy, CHESS_CELL_PX, CHESS_CELL_PX);
+            ctx.fillRect(sx, sy, cPx, cPx);
             ctx.lineWidth = 2.6;
             ctx.strokeStyle = isHintTo ? '#34d399' : '#fde047';
-            ctx.strokeRect(sx + 2, sy + 2, CHESS_CELL_PX - 4, CHESS_CELL_PX - 4);
+            ctx.strokeRect(sx + 2, sy + 2, cPx - 4, cPx - 4);
             ctx.restore();
           }
         }
@@ -6495,13 +6893,13 @@ export class PuzzleArcadeModalController {
         // Legal move markers (Snitch star for empty square, arcane spell-lock ring for captures)
         const leg = legalMap.get(`${r},${c}`);
         if (leg) {
-          const cx = sx + CHESS_CELL_PX * 0.5;
-          const cy = sy + CHESS_CELL_PX * 0.5;
+          const cx = sx + cPx * 0.5;
+          const cy = sy + cPx * 0.5;
           if (leg.capture) {
             ctx.fillStyle = 'rgba(225, 29, 72, 0.22)';
-            ctx.fillRect(sx, sy, CHESS_CELL_PX, CHESS_CELL_PX);
+            ctx.fillRect(sx, sy, cPx, cPx);
             ctx.beginPath();
-            ctx.arc(cx, cy + 4, CHESS_CELL_PX * 0.4, 0, Math.PI * 2);
+            ctx.arc(cx, cy + 4, cPx * 0.4, 0, Math.PI * 2);
             ctx.lineWidth = 2.8;
             ctx.strokeStyle = '#fb7185';
             ctx.stroke();
@@ -6513,15 +6911,15 @@ export class PuzzleArcadeModalController {
             ctx.moveTo(sx + 3, sy + 3 + b);
             ctx.lineTo(sx + 3, sy + 3);
             ctx.lineTo(sx + 3 + b, sy + 3);
-            ctx.moveTo(sx + CHESS_CELL_PX - 3 - b, sy + 3);
-            ctx.lineTo(sx + CHESS_CELL_PX - 3, sy + 3);
-            ctx.lineTo(sx + CHESS_CELL_PX - 3, sy + 3 + b);
-            ctx.moveTo(sx + 3, sy + CHESS_CELL_PX - 3 - b);
-            ctx.lineTo(sx + 3, sy + CHESS_CELL_PX - 3);
-            ctx.lineTo(sx + 3 + b, sy + CHESS_CELL_PX - 3);
-            ctx.moveTo(sx + CHESS_CELL_PX - 3 - b, sy + CHESS_CELL_PX - 3);
-            ctx.lineTo(sx + CHESS_CELL_PX - 3, sy + CHESS_CELL_PX - 3);
-            ctx.lineTo(sx + CHESS_CELL_PX - 3, sy + CHESS_CELL_PX - 3 - b);
+            ctx.moveTo(sx + cPx - 3 - b, sy + 3);
+            ctx.lineTo(sx + cPx - 3, sy + 3);
+            ctx.lineTo(sx + cPx - 3, sy + 3 + b);
+            ctx.moveTo(sx + 3, sy + cPx - 3 - b);
+            ctx.lineTo(sx + 3, sy + cPx - 3);
+            ctx.lineTo(sx + 3 + b, sy + cPx - 3);
+            ctx.moveTo(sx + cPx - 3 - b, sy + cPx - 3);
+            ctx.lineTo(sx + cPx - 3, sy + cPx - 3);
+            ctx.lineTo(sx + cPx - 3, sy + cPx - 3 - b);
             ctx.stroke();
           } else {
             const starPulse = 1 + Math.sin(now * 0.006 + r + c) * 0.12;
@@ -6534,29 +6932,47 @@ export class PuzzleArcadeModalController {
             ctx.fill();
           }
         }
+
+        // Mobile slim-bezel algebraic coordinates inside rank 1 / file a corners
+        if (cm.coordsInsideSquares) {
+          ctx.font = '800 9.5px "Be Vietnam Pro", system-ui, sans-serif';
+          ctx.fillStyle = isLight ? 'rgba(120, 53, 15, 0.82)' : 'rgba(253, 230, 138, 0.88)';
+          if (c === 0) {
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText(String(8 - r), sx + 3.5, sy + 2.5);
+          }
+          if (r === 7) {
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(String.fromCharCode(97 + c), sx + cPx - 3.5, sy + cPx - 2);
+          }
+        }
       }
     }
 
     // Inner brass fillet & engraved algebraic coordinates a..h / 8..1
     ctx.strokeStyle = '#f4c668';
     ctx.lineWidth = 1.6;
-    ctx.strokeRect(CHESS_BOARD_X, CHESS_BOARD_Y, CHESS_BOARD_PX, CHESS_BOARD_PX);
+    ctx.strokeRect(bX, bY, bPx, bPx);
 
-    ctx.font = '800 9px "Be Vietnam Pro", system-ui, sans-serif';
-    ctx.fillStyle = '#fde68a';
-    for (let i = 0; i < 8; i++) {
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(
-        String.fromCharCode(97 + i),
-        CHESS_BOARD_X + (i + 0.5) * CHESS_CELL_PX,
-        CHESS_BOARD_Y + CHESS_BOARD_PX + 5.5
-      );
-      ctx.fillText(
-        String(8 - i),
-        CHESS_BOARD_X - 5.5,
-        CHESS_BOARD_Y + (i + 0.5) * CHESS_CELL_PX
-      );
+    if (!cm.coordsInsideSquares) {
+      ctx.font = '800 9px "Be Vietnam Pro", system-ui, sans-serif';
+      ctx.fillStyle = '#fde68a';
+      for (let i = 0; i < 8; i++) {
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(
+          String.fromCharCode(97 + i),
+          bX + (i + 0.5) * cPx,
+          bY + bPx + 5.5
+        );
+        ctx.fillText(
+          String(8 - i),
+          bX - 5.5,
+          bY + (i + 0.5) * cPx
+        );
+      }
     }
 
     const activeDragPiece =
@@ -6577,8 +6993,8 @@ export class PuzzleArcadeModalController {
         }
         const piece = engine.board[r][c];
         if (!piece) continue;
-        const cx = CHESS_BOARD_X + (c + 0.5) * CHESS_CELL_PX;
-        const cy = CHESS_BOARD_Y + (r + 0.5) * CHESS_CELL_PX;
+        const cx = bX + (c + 0.5) * cPx;
+        const cy = bY + (r + 0.5) * cPx;
         const isSelectedPiece = Boolean(sel && sel.r === r && sel.c === c);
         const isBeingDragged = Boolean(
           activeDragPiece && this.chessDragFrom?.r === r && this.chessDragFrom?.c === c
@@ -6619,10 +7035,10 @@ export class PuzzleArcadeModalController {
       const anim = this.chessMoveAnim;
       const t = Math.min(1, anim.age / anim.duration);
       const ease = 1 - Math.pow(1 - t, 3);
-      const x0 = CHESS_BOARD_X + (anim.fromC + 0.5) * CHESS_CELL_PX;
-      const y0 = CHESS_BOARD_Y + (anim.fromR + 0.5) * CHESS_CELL_PX;
-      const x1 = CHESS_BOARD_X + (anim.toC + 0.5) * CHESS_CELL_PX;
-      const y1 = CHESS_BOARD_Y + (anim.toR + 0.5) * CHESS_CELL_PX;
+      const x0 = bX + (anim.fromC + 0.5) * cPx;
+      const y0 = bY + (anim.fromR + 0.5) * cPx;
+      const x1 = bX + (anim.toC + 0.5) * cPx;
+      const y1 = bY + (anim.toR + 0.5) * cPx;
       const gx = x0 + (x1 - x0) * ease;
       const gy = y0 + (y1 - y0) * ease - Math.sin(Math.PI * ease) * 16;
       this.drawWizardChessPiece(ctx, gx, gy, anim.piece, pieceScale * 1.06, true);
@@ -6643,10 +7059,10 @@ export class PuzzleArcadeModalController {
     // 3a. Magical Hint Guide Arrow & Target Badge (when player clicked 💡 Gợi Ý)
     if (engine.hintMove && engine.status === 'playing' && !this.chessMoveAnim) {
       const hm = engine.hintMove;
-      const hx0 = CHESS_BOARD_X + (hm.fromC + 0.5) * CHESS_CELL_PX;
-      const hy0 = CHESS_BOARD_Y + (hm.fromR + 0.5) * CHESS_CELL_PX;
-      const hx1 = CHESS_BOARD_X + (hm.toC + 0.5) * CHESS_CELL_PX;
-      const hy1 = CHESS_BOARD_Y + (hm.toR + 0.5) * CHESS_CELL_PX;
+      const hx0 = bX + (hm.fromC + 0.5) * cPx;
+      const hy0 = bY + (hm.fromR + 0.5) * cPx;
+      const hx1 = bX + (hm.toC + 0.5) * cPx;
+      const hy1 = bY + (hm.toR + 0.5) * cPx;
       const dx = hx1 - hx0;
       const dy = hy1 - hy0;
       const dist = Math.hypot(dx, dy);
@@ -6711,21 +7127,21 @@ export class PuzzleArcadeModalController {
     ) {
       const pulse = 0.85 + 0.15 * Math.sin(now * 0.007);
       for (const hc of chessReview.highlightCells) {
-        const sx = CHESS_BOARD_X + hc.c * CHESS_CELL_PX;
-        const sy = CHESS_BOARD_Y + hc.r * CHESS_CELL_PX;
+        const sx = bX + hc.c * cPx;
+        const sy = bY + hc.r * cPx;
         const isBest = hc.role === 'best';
         ctx.save();
         ctx.strokeStyle = isBest ? '#10b981' : '#f59e0b';
         ctx.lineWidth = 3 * pulse;
         ctx.shadowColor = isBest ? '#6ee7b7' : '#fde047';
         ctx.shadowBlur = 10;
-        ctx.strokeRect(sx + 2.5, sy + 2.5, CHESS_CELL_PX - 5, CHESS_CELL_PX - 5);
+        ctx.strokeRect(sx + 2.5, sy + 2.5, cPx - 5, cPx - 5);
         ctx.shadowBlur = 0;
 
         const lbl = isBest ? '✨ Chuẩn' : '⚡ Đã Đi';
         ctx.font = '800 8.8px "Be Vietnam Pro", system-ui, sans-serif';
         const tw = Math.ceil(ctx.measureText(lbl).width) + 8;
-        const bx = sx + (CHESS_CELL_PX - tw) * 0.5;
+        const bx = sx + (cPx - tw) * 0.5;
         const by = sy + 2;
         drawRoundedRect(ctx, bx, by, tw, 13.5, 6);
         ctx.fillStyle = isBest ? '#065f46' : '#78350f';

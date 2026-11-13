@@ -199,6 +199,7 @@ import {
   getItemPriceBounds,
   getLocalDateKey,
   getUpgradeCost,
+  isSandboxRuntimeAllowed,
   migrateLoadedState,
   PHOENIX_FORGE_ELIGIBLE_GOODS,
   PHOENIX_FORGE_GOLD_COST,
@@ -349,6 +350,9 @@ export function lifecycleResetNewGame(sim: ParkSimulation): void {
 }
 
 export function lifecycleToggleHeadmasterPreview(sim: ParkSimulation, targetLevel = 100): void {
+    if (!sim.isHeadmasterPreview && !isSandboxRuntimeAllowed()) {
+      return;
+    }
     if (sim.isVisitingNeighbor) {
       sim.exitNeighborVisit(true);
     }

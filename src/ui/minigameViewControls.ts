@@ -62,8 +62,8 @@ export function resolveMinigameOrientation(
   const safeW = Math.max(1, winW || 1024);
   const safeH = Math.max(1, winH || 768);
   const naturalLandscape = isSeedQuiz
-    ? safeW >= 881 || (safeW > safeH && safeW >= 640)
-    : safeW >= 980 || (safeW > safeH && safeH <= 620);
+    ? safeW >= 881 || (safeW > safeH * 1.05 && safeW >= 560)
+    : safeW >= 980 || (safeW > safeH * 1.06 && safeW >= 560);
 
   if (pref === 'auto') {
     return {
@@ -192,6 +192,39 @@ export function computeBoardFitScale(
   return Math.min(1, Math.max(0.45, Math.min(scaleW, scaleH)));
 }
 
+/**
+ * Tính kích thước hộp bàn cờ (CSS px) tự co giãn khít tối đa vùng sân khấu
+ * theo kích thước màn hình di động hiện tại mà không tràn viền hay méo tỷ lệ.
+ */
+export function computeResponsiveBoardBox(
+  gameId: MinigameViewId,
+  availW: number,
+  availH: number,
+  boardAspectRatio = 1
+): { width: number; height: number } {
+  const safeW = Math.max(120, Math.floor(Number.isFinite(availW) ? availW : 320));
+  const safeH = Math.max(120, Math.floor(Number.isFinite(availH) ? availH : 320));
+  if (
+    gameId === 'blocks' ||
+    gameId === 'seedquiz' ||
+    !Number.isFinite(boardAspectRatio) ||
+    boardAspectRatio <= 0
+  ) {
+    return { width: safeW, height: safeH };
+  }
+  const clampedRatio = Math.min(3, Math.max(0.33, boardAspectRatio));
+  let width = safeW;
+  let height = Math.round(width / clampedRatio);
+  if (height > safeH) {
+    height = safeH;
+    width = Math.round(height * clampedRatio);
+  }
+  return {
+    width: Math.max(120, Math.min(safeW, width)),
+    height: Math.max(120, Math.min(safeH, height)),
+  };
+}
+
 export function clampMinigamePan(
   panX: number,
   panY: number,
@@ -228,6 +261,7 @@ export class MinigameViewportManager {
   private spacePressed = false;
   private lastPinchEndMs = 0;
   private activePinchCount = 0;
+  private stageCleanupByHost = new Map<'arcade' | 'match3', () => void>();
 
   constructor() {
     // Xoá trạng thái khoá hướng cũ trong sessionStorage để bàn chơi luôn tự thích ứng tự nhiên
@@ -293,8 +327,14 @@ export class MinigameViewportManager {
     effectiveLayout: 'landscape' | 'portrait';
     dialogQuarterTurn: QuarterTurn;
   } {
-    const winW = typeof window !== 'undefined' ? window.innerWidth : 1280;
-    const winH = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const winW =
+      typeof window !== 'undefined'
+        ? Math.round(window.visualViewport?.width || window.innerWidth)
+        : 1280;
+    const winH =
+      typeof window !== 'undefined'
+        ? Math.round(window.visualViewport?.height || window.innerHeight)
+        : 800;
     return resolveMinigameOrientation(
       this.orientationPref,
       winW,
@@ -302,6 +342,14 @@ export class MinigameViewportManager {
       this.dialogFlip180,
       isSeedQuiz
     );
+  }
+
+  public unbindStageInteractions(hostKey: 'arcade' | 'match3'): void {
+    const prevCleanup = this.stageCleanupByHost.get(hostKey);
+    if (prevCleanup) {
+      this.stageCleanupByHost.delete(hostKey);
+      prevCleanup();
+    }
   }
 
   public getEffectiveLayout(isSeedQuiz = false): 'landscape' | 'portrait' {
@@ -513,10 +561,13 @@ export class MinigameViewportManager {
 
   public bindCanvasStageInteractions(params: {
     gameId: MinigameViewId;
+    hostKey?: 'arcade' | 'match3';
     rootScope: HTMLElement;
     panAreaEl: HTMLElement | null;
     canvasShellEl: HTMLElement | null;
     canvasEl: HTMLCanvasElement | null;
+    getBoardAspectRatio?: (availW: number, availH: number) => number;
+    onStageResized?: (availW: number, availH: number, boardW: number, boardH: number) => void;
     canSingleFingerPanAt?: (clientX: number, clientY: number) => boolean;
     onTransformUpdated: () => void;
     onOrientationToggled?: () => void;
@@ -524,18 +575,66 @@ export class MinigameViewportManager {
   }): void {
     const {
       gameId,
+      hostKey,
       panAreaEl,
       canvasShellEl,
       canvasEl,
+      getBoardAspectRatio,
+      onStageResized,
       canSingleFingerPanAt,
       onTransformUpdated,
     } = params;
+
+    const resolvedHostKey: 'arcade' | 'match3' =
+      hostKey ?? (gameId === 'match3' ? 'match3' : 'arcade');
+    this.unbindStageInteractions(resolvedHostKey);
 
     if (!panAreaEl || !canvasShellEl) {
       return;
     }
 
     const refreshTransform = () => {
+      this.applyCanvasStageTransform(gameId, panAreaEl, canvasShellEl);
+      onTransformUpdated();
+    };
+
+    let lastAppliedW = 0;
+    let lastAppliedH = 0;
+    let lastStageW = 0;
+    let lastStageH = 0;
+    const syncResponsiveStageSize = (forceNotify = false) => {
+      if (!canvasEl || !panAreaEl.isConnected) return;
+      const vpW = Math.floor(panAreaEl.clientWidth);
+      const vpH = Math.floor(panAreaEl.clientHeight);
+      if (vpW <= 24 || vpH <= 24) return;
+      const fitW = gameId === 'blocks' ? vpW : Math.max(120, vpW - 2);
+      const fitH = gameId === 'blocks' ? vpH : Math.max(120, vpH - 4);
+      const ratio = getBoardAspectRatio
+        ? getBoardAspectRatio(vpW, vpH)
+        : gameId === 'blocks'
+          ? 0
+          : 1;
+      const box = computeResponsiveBoardBox(gameId, fitW, fitH, ratio);
+      const changed =
+        forceNotify ||
+        box.width !== lastAppliedW ||
+        box.height !== lastAppliedH ||
+        vpW !== lastStageW ||
+        vpH !== lastStageH;
+      if (!changed) return;
+
+      lastAppliedW = box.width;
+      lastAppliedH = box.height;
+      lastStageW = vpW;
+      lastStageH = vpH;
+
+      canvasShellEl.style.width = `${box.width}px`;
+      canvasShellEl.style.height = `${box.height}px`;
+      const aspectCss = gameId === 'blocks' ? 'auto' : `${box.width} / ${box.height}`;
+      canvasShellEl.style.aspectRatio = aspectCss;
+      canvasEl.style.aspectRatio = aspectCss;
+
+      onStageResized?.(vpW, vpH, box.width, box.height);
       this.applyCanvasStageTransform(gameId, panAreaEl, canvasShellEl);
       onTransformUpdated();
     };
@@ -890,6 +989,46 @@ export class MinigameViewportManager {
     panAreaEl.addEventListener('pointerup', endGesture, { capture: true });
     panAreaEl.addEventListener('pointercancel', endGesture, { capture: true });
 
+    let resizeRafId = 0;
+    const scheduleStageResize = () => {
+      if (resizeRafId) return;
+      if (typeof requestAnimationFrame === 'function') {
+        resizeRafId = requestAnimationFrame(() => {
+          resizeRafId = 0;
+          syncResponsiveStageSize(false);
+        });
+      } else {
+        syncResponsiveStageSize(false);
+      }
+    };
+
+    let stageObserver: ResizeObserver | null = null;
+    if (canvasEl && typeof ResizeObserver !== 'undefined') {
+      stageObserver = new ResizeObserver(() => {
+        scheduleStageResize();
+      });
+      stageObserver.observe(panAreaEl);
+    }
+
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    const onVisualViewportResize = () => {
+      scheduleStageResize();
+    };
+    if (canvasEl && vv) {
+      vv.addEventListener('resize', onVisualViewportResize);
+    }
+
+    this.stageCleanupByHost.set(resolvedHostKey, () => {
+      if (resizeRafId && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(resizeRafId);
+        resizeRafId = 0;
+      }
+      stageObserver?.disconnect();
+      stageObserver = null;
+      vv?.removeEventListener('resize', onVisualViewportResize);
+    });
+
+    syncResponsiveStageSize(true);
     this.applyCanvasStageTransform(gameId, panAreaEl, canvasShellEl);
   }
 

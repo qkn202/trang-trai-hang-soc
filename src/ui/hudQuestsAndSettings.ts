@@ -72,6 +72,8 @@ import {
   getItemPriceBounds,
   getNpcScheduleForPeriod,
   getUpgradeCost,
+  IS_SANDBOX_BUILD_ENABLED,
+  isSandboxRuntimeAllowed,
   loadFromNamedSlot,
   MAX_PHOENIX_TALISMANS,
   ParkSimulation,
@@ -120,7 +122,6 @@ import {
   WeatherOverride,
   ZoneId,
 } from '../types/game';
-import { isLocalDevelopmentHost } from './authoritativeClient';
 import { LeaderboardModalController } from './leaderboardModal';
 import {
   lookupRealPlayerByFriendCode,
@@ -1108,8 +1109,7 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
               <input id="swGrid" type="checkbox" switch ${st.settings.showGrid ? 'checked' : ''} />
             </label>
             ${
-              Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV) ||
-              (typeof window !== 'undefined' && isLocalDevelopmentHost(window.location.hostname))
+              IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed()
                 ? `<label class="switch-row">
                     <span>♾️ Sandbox (Dev)</span>
                     <input id="swSandbox" type="checkbox" switch ${st.sandboxMode ? 'checked' : ''} />
@@ -1136,19 +1136,23 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
               .join('')}
           </div>
 
-          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">
-            ${(['auto', 'halloween', 'christmas', 'quidditch_cup'] as Array<'auto' | FestivalType>)
-              .map((f) => {
-                const labels: Record<string, string> = {
-                  auto: '🎪 Tự động',
-                  halloween: '🎃 Halloween',
-                  christmas: '🎄 Giáng Sinh',
-                  quidditch_cup: '🏆 Quidditch',
-                };
-                return `<button type="button" data-fest="${f}" data-active="${st.settings.activeFestival === f}" aria-pressed="${st.settings.activeFestival === f}" class="brass-btn" style="padding:4px 8px;font-size:12px;">${labels[f]}</button>`;
-              })
-              .join('')}
-          </div>
+          ${
+            IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed()
+              ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">
+                  ${(['auto', 'halloween', 'christmas', 'quidditch_cup'] as Array<'auto' | FestivalType>)
+                    .map((f) => {
+                      const labels: Record<string, string> = {
+                        auto: '🎪 Tự động',
+                        halloween: '🎃 Halloween',
+                        christmas: '🎄 Giáng Sinh',
+                        quidditch_cup: '🏆 Quidditch',
+                      };
+                      return `<button type="button" data-fest="${f}" data-active="${st.settings.activeFestival === f}" aria-pressed="${st.settings.activeFestival === f}" class="brass-btn" style="padding:4px 8px;font-size:12px;">${labels[f]}</button>`;
+                    })
+                    .join('')}
+                </div>`
+              : ''
+          }
 
           <div style="display:flex;flex-wrap:wrap;gap:5px;">
             ${(['auto', 'clear', 'cloudy', 'rain', 'storm', 'snow', 'fog'] as WeatherOverride[])
@@ -1268,17 +1272,23 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
           ${(['slot_1', 'slot_2', 'slot_3'] as SaveSlotId[])
             .map((sid, idx) => {
               const info = loadFromNamedSlot(sid);
+              const isLockedSandboxSlot =
+                !isSandboxRuntimeAllowed() &&
+                Boolean(info.ok && (info.state?.sandboxMode || info.state?.sandboxTainted));
+              const canLoadSlot = Boolean(info.ok && !isLockedSandboxSlot);
               return `
                 <div class="aaa-slot-card">
                   <div style="font-size:12px;font-weight:800;">Hồ Sơ #${idx + 1}</div>
                   <div style="font-size:11px;color:var(--ink-soft);">${
-                    info.ok && info.meta
-                      ? `${info.meta.parkName} • Cấp ${info.meta.level}`
-                      : 'Ô trống'
+                    isLockedSandboxSlot
+                      ? 'Ô lưu thử nghiệm (Đã khóa)'
+                      : info.ok && info.meta
+                        ? `${escapeHtml(info.meta.parkName)} • Cấp ${info.meta.level}`
+                        : 'Ô trống'
                   }</div>
                   <div style="display:flex;gap:5px;">
                     <button type="button" data-save-slot="${sid}" class="brass-btn" style="flex:1;padding:3px 6px;font-size:11px;">💾 Ghi</button>
-                    <button type="button" data-load-slot="${sid}" ${info.ok ? '' : 'disabled'} class="brass-btn ${info.ok ? 'gold-cta' : ''}" style="flex:1;padding:3px 6px;font-size:11px;">📂 Tải</button>
+                    <button type="button" data-load-slot="${sid}" ${canLoadSlot ? '' : 'disabled'} class="brass-btn ${canLoadSlot ? 'gold-cta' : ''}" style="flex:1;padding:3px 6px;font-size:11px;">📂 Tải</button>
                   </div>
                 </div>
               `;
@@ -1294,20 +1304,14 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
             📖 Hướng Dẫn
           </button>
           ${
-            Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV) ||
-            (typeof window !== 'undefined' && isLocalDevelopmentHost(window.location.hostname))
+            IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed()
               ? `<button id="btnPreview100" type="button" class="brass-btn gold-cta">
                   ${hud.sim.isHeadmasterPreview ? '↩️ Về Save' : '🌾 Xem Lv.100'}
-                </button>`
-              : ''
-          }
-          <button id="btnTestFireworks" type="button" class="brass-btn">
-            🎆 Pháo Hoa
-          </button>
-          ${
-            Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV) ||
-            (typeof window !== 'undefined' && isLocalDevelopmentHost(window.location.hostname))
-              ? `<button id="btnTestEscape" type="button" class="brass-btn">
+                </button>
+                <button id="btnTestFireworks" type="button" class="brass-btn">
+                  🎆 Pháo Hoa
+                </button>
+                <button id="btnTestEscape" type="button" class="brass-btn">
                   🐾 Thả Niffler
                 </button>`
               : ''
@@ -1318,11 +1322,10 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
       <div class="quest-card-mini">
         <div style="font-size:13.5px;font-weight:800;margin-bottom:6px;">💾 Dữ Liệu</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;">
-          <button id="btnExportSave" type="button" class="brass-btn">📥 Xuất (.json)</button>
           ${
-            Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV) ||
-            (typeof window !== 'undefined' && isLocalDevelopmentHost(window.location.hostname))
-              ? `<label class="brass-btn" style="cursor:pointer;">
+            IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed()
+              ? `<button id="btnExportSave" type="button" class="brass-btn">📥 Xuất (.json)</button>
+                <label class="brass-btn" style="cursor:pointer;">
                   📤 Nhập (.json)
                   <input id="inpImportSave" type="file" accept=".json" style="display:none;" />
                 </label>`
@@ -1362,31 +1365,82 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
       hud.refreshAll();
     });
 
-    box.querySelector('#swSandbox')?.addEventListener('change', (e) => {
-      const devAllowed =
-        Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV) ||
-        (typeof window !== 'undefined' && isLocalDevelopmentHost(window.location.hostname));
-      if (!devAllowed) return;
-      st.sandboxMode = (e.currentTarget as HTMLInputElement).checked;
-      if (st.sandboxMode) {
-        st.sandboxTainted = true;
-      }
-      hud.sim.saveToStorage();
-      hud.refreshAll();
-    });
+    if (IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed()) {
+      box.querySelector('#swSandbox')?.addEventListener('change', (e) => {
+        if (!isSandboxRuntimeAllowed()) return;
+        st.sandboxMode = (e.currentTarget as HTMLInputElement).checked;
+        if (st.sandboxMode) {
+          st.sandboxTainted = true;
+        }
+        hud.sim.saveToStorage();
+        hud.refreshAll();
+      });
+
+      box.querySelectorAll<HTMLButtonElement>('[data-fest]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          if (!isSandboxRuntimeAllowed()) return;
+          st.settings.activeFestival = btn.dataset.fest as 'auto' | FestivalType;
+          hud.sim.saveToStorage();
+          hud.refreshHeader();
+          questsUiRenderSettingsDialog(hud);
+        });
+      });
+
+      box.querySelector('#btnTestFireworks')?.addEventListener('click', () => {
+        if (!isSandboxRuntimeAllowed()) return;
+        (hud.root.querySelector('#settingsDialog') as HTMLDialogElement).close();
+        hud.sim.launchFireworksShow(12);
+      });
+
+      box.querySelector('#btnTestEscape')?.addEventListener('click', () => {
+        if (!isSandboxRuntimeAllowed()) return;
+        (hud.root.querySelector('#settingsDialog') as HTMLDialogElement).close();
+        hud.sim.triggerPlayfulEscape();
+      });
+
+      box.querySelector('#btnPreview100')?.addEventListener('click', () => {
+        if (!isSandboxRuntimeAllowed()) return;
+        hud.match3Modal?.resetSession();
+        hud.puzzleArcadeModal?.resetSession();
+        hud.sim.toggleHeadmasterPreview(100);
+        hud.refreshAll();
+        questsUiRenderSettingsDialog(hud);
+      });
+
+      box.querySelector('#btnExportSave')?.addEventListener('click', () => {
+        if (!isSandboxRuntimeAllowed()) return;
+        const blob = new Blob([hud.sim.exportSaveJson()], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `cong-vien-harry-potter-lv${st.level}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        hud.showToast('Đã xuất file Save thành công!', '💾');
+      });
+
+      box.querySelector('#inpImportSave')?.addEventListener('change', (e) => {
+        if (!isSandboxRuntimeAllowed()) return;
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (hud.sim.importSaveJson(String(reader.result))) {
+            hud.match3Modal?.resetSession();
+            hud.puzzleArcadeModal?.resetSession();
+            hud.showToast('Đã khôi phục công viên thành công!', '✨');
+            (hud.root.querySelector('#settingsDialog') as HTMLDialogElement).close();
+          } else {
+            hud.showToast('File Save không hợp lệ!', '⚠️');
+          }
+        };
+        reader.readAsText(file);
+      });
+    }
 
     box.querySelectorAll<HTMLButtonElement>('[data-time]').forEach((btn) => {
       btn.addEventListener('click', () => {
         st.settings.timeOverride = btn.dataset.time as TimeOverride;
-        hud.sim.saveToStorage();
-        hud.refreshHeader();
-        questsUiRenderSettingsDialog(hud);
-      });
-    });
-
-    box.querySelectorAll<HTMLButtonElement>('[data-fest]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        st.settings.activeFestival = btn.dataset.fest as 'auto' | FestivalType;
         hud.sim.saveToStorage();
         hud.refreshHeader();
         questsUiRenderSettingsDialog(hud);
@@ -1411,16 +1465,6 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
       });
     });
 
-    box.querySelector('#btnTestFireworks')?.addEventListener('click', () => {
-      (hud.root.querySelector('#settingsDialog') as HTMLDialogElement).close();
-      hud.sim.launchFireworksShow(12);
-    });
-
-    box.querySelector('#btnTestEscape')?.addEventListener('click', () => {
-      (hud.root.querySelector('#settingsDialog') as HTMLDialogElement).close();
-      hud.sim.triggerPlayfulEscape();
-    });
-
     box.querySelector('#btnReplayTutorial')?.addEventListener('click', () => {
       (hud.root.querySelector('#settingsDialog') as HTMLDialogElement).close();
       hud.tutorialMinimized = false;
@@ -1428,42 +1472,6 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
       hud.sim.restartTutorial();
       hud.panCameraToTutorialTarget();
       hud.refreshAll();
-    });
-
-    box.querySelector('#btnPreview100')?.addEventListener('click', () => {
-      hud.match3Modal?.resetSession();
-      hud.puzzleArcadeModal?.resetSession();
-      hud.sim.toggleHeadmasterPreview(100);
-      hud.refreshAll();
-      questsUiRenderSettingsDialog(hud);
-    });
-
-    box.querySelector('#btnExportSave')?.addEventListener('click', () => {
-      const blob = new Blob([hud.sim.exportSaveJson()], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `cong-vien-harry-potter-lv${st.level}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      hud.showToast('Đã xuất file Save thành công!', '💾');
-    });
-
-    box.querySelector('#inpImportSave')?.addEventListener('change', (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (hud.sim.importSaveJson(String(reader.result))) {
-          hud.match3Modal?.resetSession();
-          hud.puzzleArcadeModal?.resetSession();
-          hud.showToast('Đã khôi phục công viên thành công!', '✨');
-          (hud.root.querySelector('#settingsDialog') as HTMLDialogElement).close();
-        } else {
-          hud.showToast('File Save không hợp lệ!', '⚠️');
-        }
-      };
-      reader.readAsText(file);
     });
 
     box.querySelector('#btnResetPark')?.addEventListener('click', () => {

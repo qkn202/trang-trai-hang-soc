@@ -2806,11 +2806,11 @@ dialog::backdrop {
 }
 
 #puzzleArcadeDialog {
-  width: 100vw;
+  width: 100%;
   width: 100dvw;
   height: 100vh;
   height: 100dvh;
-  max-width: 100vw;
+  max-width: 100%;
   max-width: 100dvw;
   max-height: 100vh;
   max-height: 100dvh;
@@ -3131,6 +3131,7 @@ dialog::backdrop {
 }
 
 .pa-stage-viewport {
+  position: relative;
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
@@ -3157,15 +3158,14 @@ dialog::backdrop {
 }
 
 .mg-stage-pan-area {
-  flex: 1 1 0;
-  min-width: 0;
-  min-height: 0;
-  max-height: 100%;
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 0;
   overflow: hidden;
-  container-type: size;
-  position: relative;
+  container: mg-stage / size;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3265,6 +3265,7 @@ dialog::backdrop {
 
 .pa-canvas-shell {
   position: relative;
+  box-sizing: border-box;
   width: min(100%, calc(100vh * 662 / 502));
   width: min(100%, calc(100dvh * 662 / 502));
   width: min(100cqw, calc(100cqh * 662 / 502));
@@ -5833,11 +5834,11 @@ dialog::backdrop {
 }
 
 #match3Dialog {
-  width: 100vw;
+  width: 100%;
   width: 100dvw;
   height: 100vh;
   height: 100dvh;
-  max-width: 100vw;
+  max-width: 100%;
   max-width: 100dvw;
   max-height: 100vh;
   max-height: 100dvh;
@@ -11293,428 +11294,324 @@ progress.ts-build-progress::-moz-progress-bar {
 }
 
 /* ============================================================
-   Per-Mini-Game Leaderboards (6 Wizarding Disciplines)
-   Token-pure Playrix Township × Hogwarts Cup Hall of Fame
+   Hang Sóc Cozy Farmstead × Hogwarts 4-House Cup Leaderboard
+   Playrix Township 2.5D Warm Parchment, Oak & Brass Aesthetics
+   (Candy Crush 4-House Cup + 6-Column Responsive Table Layout)
    ============================================================ */
-#leaderboardDialog {
-  max-width: min(980px, 95vw);
-  max-width: min(980px, 95dvw);
-  max-height: 90vh;
-  max-height: 90dvh;
+#leaderboardDialog.cc-lb-dialog {
+  max-width: min(960px, 95vw);
+  max-width: min(960px, 95dvw);
+  max-height: 91vh;
+  max-height: 91dvh;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--ink);
 }
 
-.lb-modal-inner {
+#leaderboardDialog.cc-lb-dialog:modal {
+  overscroll-behavior: contain;
+}
+
+#leaderboardDialog.cc-lb-dialog::backdrop {
+  background: var(--farm-parlor-overlay);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.cc-lb-card {
+  position: relative;
   max-height: 88vh;
   max-height: 88dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--hud-scrollbar-thumb-parchment) var(--hud-scrollbar-track-parchment);
 }
 
-.lb-shell {
+/* Mobile Portrait (<= 600px): Cozy Parchment Bottom-Sheet anchored to thumb zone */
+@media (max-width: 600px) {
+  #leaderboardDialog.cc-lb-dialog[open] {
+    margin: auto 0 0 0;
+    max-width: 100%;
+    width: 100%;
+    max-height: 94vh;
+    max-height: 94dvh;
+    padding: 0;
+  }
+
+  .cc-lb-card {
+    border-radius: 22px 22px 0 0;
+    border-bottom-width: 0;
+    max-height: 93vh;
+    max-height: 93dvh;
+    padding: 13px 12px calc(15px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.cc-lb-header {
+  align-items: center;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+}
+
+.cc-lb-title-stack {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 1px;
+  min-inline-size: 0;
 }
 
-.lb-game-tabs {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(142px, 1fr));
-  gap: 8px;
+.cc-lb-ribbon-sub {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--brand-strong);
 }
 
-.lb-game-tab {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
+.cc-lb-close-form {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.cc-lb-header .brass-btn {
+  min-inline-size: 38px;
+  min-block-size: 38px;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.cc-lb-toast {
+  margin: 0 0 10px;
+  padding: 8px 12px;
   border-radius: 12px;
+  background: var(--farm-green-soft-bg);
+  border: 1.5px solid var(--farm-green-soft-border);
+  color: var(--farm-green-text);
+  font-size: 12.5px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.cc-lb-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.cc-lb-unscored-note {
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--farm-gnome-bg-top), var(--farm-gnome-bg-bot));
+  border: 1.5px solid var(--farm-brass-mid);
+  color: var(--farm-ink-body);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Single-Row Scrollable Discipline Tablist (Hang Sóc Cream & Gold Chips) */
+.cc-lb-game-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-snap-type: inline proximity;
+  padding-bottom: 4px;
+}
+
+.cc-lb-game-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.cc-lb-game-tab {
+  position: relative;
+  flex: 1 0 auto;
+  scroll-snap-align: start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-block-size: 40px;
+  padding: 7px 13px 10px;
+  border-radius: 13px;
   border: 2px solid var(--farm-sheet-border);
   background: linear-gradient(180deg, var(--surface-chip-top), var(--surface-chip-bot));
   color: var(--farm-ink-title);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  white-space: nowrap;
   cursor: pointer;
-  text-align: start;
   box-shadow: 0 3px 0 var(--shadow-chip);
-  transition: transform 0.12s ease, border-color 0.12s ease;
+  transition: transform 0.12s ease, background 0.14s ease, border-color 0.14s ease;
 }
 
-.lb-game-tab:hover {
+.cc-lb-game-tab:hover {
   background: var(--surface-chip-hover);
   transform: translateY(-1px);
 }
 
-.lb-game-tab.active {
+.cc-lb-game-tab[aria-selected="true"] {
   background: linear-gradient(180deg, var(--ts-play-cta-top), var(--ts-play-cta-mid));
   border-color: var(--ts-play-cta-border);
   color: var(--ts-play-cta-ink);
   box-shadow: 0 3px 0 var(--ts-play-cta-lip);
 }
 
-.lb-tab-sprite {
-  width: 28px;
-  height: 28px;
+.cc-lb-game-tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  inset: auto 10px 2px;
+  border-block-end: 3px solid var(--brand-strong);
+  border-radius: 2px;
+}
+
+.cc-lb-tab-sprite {
+  width: 26px;
+  height: 26px;
   object-fit: contain;
   flex-shrink: 0;
   filter: drop-shadow(0 2px 3px var(--icon-drop-shadow));
 }
 
-.lb-tab-copy {
-  display: flex;
-  flex-direction: column;
-  min-inline-size: 0;
-  line-height: 1.2;
-}
-
-.lb-tab-copy strong {
-  font-size: 12.5px;
-  font-weight: 900;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.lb-tab-rank-pill {
-  font-size: 11px;
-  font-weight: 800;
+.cc-lb-tab-rank {
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-panel-solid);
+  border: 1px solid var(--border-brass-soft);
   color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 900;
 }
 
-.lb-game-tab.active .lb-tab-rank-pill {
+.cc-lb-game-tab[aria-selected="true"] .cc-lb-tab-rank {
+  background: var(--surface-chip-top);
+  border-color: var(--ts-play-cta-border);
   color: var(--ts-play-cta-ink);
 }
 
-.lb-toolbar-row {
+.cc-lb-panel-body {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 11px;
 }
 
-.lb-scope-pills {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.lb-scope-pill {
-  padding: 6px 12px;
-  border-radius: var(--radius-pill);
-  border: 1.5px solid var(--border-brass);
-  background: var(--surface-chip-top);
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.lb-scope-pill:hover {
-  background: var(--surface-chip-hover);
-}
-
-.lb-scope-pill.active {
-  background: linear-gradient(180deg, var(--sq-quiz-ribbon-top), var(--sq-quiz-ribbon-bot));
-  border-color: var(--teal-deep);
-  color: var(--ts-white);
-}
-
-.lb-toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.lb-action-btn {
-  padding: 6px 13px;
-  font-size: 12.5px;
-}
-
-.lb-cup-banner {
+/* Section 1: Hogwarts 4-House Cup Grid (4 cols desktop -> 2x2 mobile) */
+.cc-hourglass-grid {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  padding: 11px 14px;
-  border-radius: 14px;
-  background: linear-gradient(180deg, var(--farm-gnome-bg-top), var(--farm-gnome-bg-bot));
-  border: 2px solid var(--farm-brass-mid);
-  box-shadow: inset 0 1px 0 var(--farm-highlight-crisp);
-}
-
-.lb-cup-icon {
-  width: 44px;
-  height: 44px;
-  object-fit: contain;
-  filter: drop-shadow(0 3px 5px var(--icon-drop-shadow));
-}
-
-.lb-cup-copy {
-  min-inline-size: 0;
-}
-
-.lb-cup-title {
-  font-family: 'Playfair Display', Georgia, serif;
-  font-size: 15.5px;
-  font-weight: 900;
-  color: var(--farm-ink-title);
-}
-
-.lb-cup-sub {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--farm-ink-body);
-  margin-top: 2px;
-}
-
-.lb-cup-chase {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--talisman-chip-ink);
-  margin-top: 4px;
-}
-
-.lb-player-rank-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  padding: 7px 12px;
-  border-radius: 12px;
-  background: var(--surface-panel-solid);
-  border: 1.5px solid var(--farm-brass-mid);
-}
-
-.lb-player-rank-lbl {
-  font-size: 10.5px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--ink-soft);
-}
-
-.lb-player-rank-num {
-  font-size: 20px;
-  font-weight: 900;
-  line-height: 1.05;
-  color: var(--brand-strong);
-}
-
-.lb-player-rank-num span {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--ink-soft);
-}
-
-/* ============================================================
-   Hogwarts 4-House Cup & Great Hall Gem Hourglasses
-   Inspired by Candy Crush Hogwarts Leaderboard & HP Book Lore
-   ============================================================ */
-.house-cup-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 11px 13px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+  padding: 10px;
   border-radius: 14px;
   background: linear-gradient(180deg, var(--surface-chip-top), var(--surface-parchment));
   border: 2px solid var(--farm-sheet-border);
   box-shadow: inset 0 1px 0 var(--farm-highlight-crisp);
 }
 
-.house-cup-header-bar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.house-cup-heading-copy {
-  flex: 1 1 280px;
-  min-inline-size: 0;
-}
-
-.house-cup-heading {
-  font-family: 'Playfair Display', Georgia, serif;
-  font-size: 14.5px;
-  font-weight: 900;
-  color: var(--farm-ink-title);
-  margin: 0;
-}
-
-.house-cup-quote {
-  font-size: 11.5px;
-  font-style: italic;
-  font-weight: 600;
-  color: var(--ink-soft);
-  margin-top: 2px;
-}
-
-.lb-sorting-hat-box {
+.cc-house-cup-card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-}
-
-.lb-sorting-hat-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--farm-ink-body);
-}
-
-.lb-hat-roll-btn {
-  padding: 4px 10px;
-  font-size: 11.5px;
-  font-weight: 900;
-}
-
-.lb-hat-roll-btn.is-spinning {
-  transform: rotate(-8deg) scale(1.06);
-}
-
-.lb-my-house-pills {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex-wrap: wrap;
-}
-
-.lb-my-house-btn {
-  padding: 4px 9px;
-  border-radius: var(--radius-pill);
-  border: 1.5px solid var(--border-brass);
-  background: var(--surface-panel-solid);
-  color: var(--ink);
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
-}
-
-.lb-my-house-btn:hover {
-  background: var(--surface-chip-hover);
-  transform: translateY(-1px);
-}
-
-.lb-my-house-btn.active {
-  border-color: var(--ts-ink-contour);
-  color: var(--ts-white);
-  text-shadow: 0 1px 2px var(--house-cup-text-shadow);
-  box-shadow: 0 2px 0 var(--shadow-chip);
-}
-
-.lb-my-house-btn.house-pill-gryffindor.active {
-  background: var(--house-gryffindor-grad);
-}
-
-.lb-my-house-btn.house-pill-slytherin.active {
-  background: var(--house-slytherin-grad);
-}
-
-.lb-my-house-btn.house-pill-ravenclaw.active {
-  background: var(--house-ravenclaw-grad);
-}
-
-.lb-my-house-btn.house-pill-hufflepuff.active {
-  background: var(--house-hufflepuff-grad);
-}
-
-.hourglass-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 9px;
-}
-
-.house-cup-card {
-  position: relative;
-  overflow: hidden;
+  justify-content: space-between;
   border-radius: 13px;
   padding: 10px 11px;
   border: 2px solid var(--house-cup-card-border);
-  box-shadow: 0 4px 10px var(--house-cup-card-shadow);
   color: var(--ts-white);
   text-align: start;
   font-family: inherit;
   cursor: pointer;
-  transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
+  box-shadow: 0 4px 10px var(--house-cup-card-shadow);
+  transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
 }
 
-.house-cup-card.house-card-gryffindor {
+.cc-house-cup-card.cc-house-gryffindor {
   background: var(--house-gryffindor-grad);
 }
 
-.house-cup-card.house-card-slytherin {
+.cc-house-cup-card.cc-house-slytherin {
   background: var(--house-slytherin-grad);
 }
 
-.house-cup-card.house-card-ravenclaw {
+.cc-house-cup-card.cc-house-ravenclaw {
   background: var(--house-ravenclaw-grad);
 }
 
-.house-cup-card.house-card-hufflepuff {
+.cc-house-cup-card.cc-house-hufflepuff {
   background: var(--house-hufflepuff-grad);
 }
 
-.house-cup-card:hover {
+.cc-house-cup-card:hover {
   transform: translateY(-2px);
   border-color: var(--house-cup-card-active-border);
 }
 
-.house-cup-card.is-player-house {
+.cc-house-cup-card.is-player-house {
   border-color: var(--house-cup-card-active-border);
   box-shadow:
     0 0 0 2px var(--farm-ink-title),
     0 5px 12px var(--house-cup-card-shadow);
 }
 
-.house-cup-card.is-filtered-house {
-  outline: 3px solid var(--focus-color);
-  outline-offset: 1px;
+.cc-house-cup-card.is-filtered-house {
+  outline: 3px solid var(--brand-strong);
+  outline-offset: 2px;
 }
 
-.house-cup-top {
+.cc-house-cup-top {
   display: flex;
   align-items: center;
   gap: 7px;
   margin-bottom: 5px;
 }
 
-.house-cup-crest {
+.cc-house-cup-crest {
   width: 30px;
   height: 30px;
   flex-shrink: 0;
   filter: drop-shadow(0 2px 3px var(--house-cup-text-shadow));
 }
 
-.house-cup-crest svg {
+.cc-house-cup-crest svg,
+.cc-house-cup-hourglass svg {
   width: 100%;
   height: 100%;
   display: block;
 }
 
-.house-cup-meta {
-  flex: 1 1 auto;
-  min-inline-size: 0;
+.cc-house-cup-hourglass {
+  width: 22px;
+  height: 30px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 3px var(--house-cup-text-shadow));
 }
 
-.house-cup-name-row {
+.cc-house-cup-meta {
+  min-inline-size: 0;
+  flex: 1 1 auto;
+}
+
+.cc-house-cup-name-row {
   display: flex;
   align-items: center;
   gap: 5px;
   flex-wrap: wrap;
 }
 
-.house-cup-name-row strong {
+.cc-house-cup-name-row strong {
   font-size: 13px;
   font-weight: 900;
   text-shadow: 0 1px 3px var(--house-cup-text-shadow);
 }
 
-.house-you-pill {
+.cc-house-you-pill {
   display: inline-block;
   padding: 1px 6px;
   border-radius: var(--radius-pill);
@@ -11725,66 +11622,34 @@ progress.ts-build-progress::-moz-progress-bar {
   line-height: 1.25;
 }
 
-.house-cup-vn-title {
-  font-size: 10.8px;
-  font-weight: 800;
-  opacity: 0.96;
+.cc-house-cup-stats {
+  font-size: 10.6px;
+  font-weight: 700;
+  opacity: 0.94;
+  text-shadow: 0 1px 2px var(--house-cup-text-shadow);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.house-cup-stats {
-  font-size: 10.2px;
-  font-weight: 700;
-  opacity: 0.9;
-}
-
-.house-cup-hourglass-icon {
-  width: 24px;
-  height: 32px;
-  flex-shrink: 0;
-  filter: drop-shadow(0 2px 4px var(--house-cup-text-shadow));
-}
-
-.house-cup-hourglass-icon svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-.house-cup-points-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 6px;
-  margin-bottom: 5px;
-}
-
-.house-cup-points {
+.cc-house-cup-points {
   font-family: 'Playfair Display', Georgia, serif;
-  font-size: 18px;
+  font-size: 19px;
   font-weight: 900;
-  line-height: 1.05;
+  line-height: 1.08;
   text-shadow: 0 2px 4px var(--house-cup-text-shadow);
 }
 
-.house-cup-patronus {
-  font-size: 10px;
-  font-weight: 800;
-  opacity: 0.92;
-  white-space: nowrap;
-}
-
-.hourglass-bar {
+.cc-hourglass-bar {
   height: 8px;
-  background: var(--house-hourglass-track);
   border-radius: var(--radius-pill);
-  overflow: hidden;
+  background: var(--house-hourglass-track);
   border: 1px solid var(--house-cup-card-border);
+  margin-top: 6px;
+  overflow: hidden;
 }
 
-.hourglass-bar-fill {
+.cc-hourglass-bar-fill {
   height: 100%;
   border-radius: var(--radius-pill);
   background: linear-gradient(
@@ -11795,7 +11660,132 @@ progress.ts-build-progress::-moz-progress-bar {
   transition: width 0.35s ease;
 }
 
-.lb-controls {
+@media (max-width: 680px) {
+  .cc-hourglass-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .cc-house-cup-card {
+    padding: 9px 10px;
+  }
+
+  .cc-house-cup-crest {
+    width: 26px;
+    height: 26px;
+  }
+
+  .cc-house-cup-hourglass {
+    width: 18px;
+    height: 25px;
+  }
+
+  .cc-house-cup-points {
+    font-size: 16.5px;
+  }
+}
+
+/* Hang Sóc Tactile 2.5D Brass, Meadow & Teal Pill Buttons */
+.cc-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-block-size: 34px;
+  padding: 6px 13px;
+  border-radius: var(--radius-chip);
+  border: var(--ring-outline) solid var(--border-cream);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ink);
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+.cc-pill-btn:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.cc-pill-btn:active {
+  transform: translateY(2px);
+}
+
+.cc-pill-btn.is-spinning {
+  transform: rotate(-7deg) scale(1.04);
+}
+
+.cc-btn-pink {
+  background: linear-gradient(180deg, var(--ts-play-cta-top), var(--ts-play-cta-mid));
+  border-color: var(--ts-play-cta-border);
+  color: var(--ts-play-cta-ink);
+  box-shadow:
+    0 3px 0 var(--ts-play-cta-lip),
+    0 5px 10px var(--shadow-chip);
+}
+
+.cc-btn-green {
+  background: linear-gradient(180deg, var(--farm-green-top), var(--farm-green-mid));
+  border-color: var(--farm-green-lip);
+  color: var(--ts-ink-contour);
+  box-shadow:
+    0 3px 0 var(--farm-green-lip),
+    0 5px 10px var(--shadow-chip);
+}
+
+.cc-btn-blue {
+  background: linear-gradient(180deg, var(--farm-teal-top), var(--farm-teal-mid));
+  border-color: var(--farm-teal-lip);
+  color: var(--ts-white);
+  text-shadow: 0 1px 2px var(--ts-drop-shadow);
+  box-shadow:
+    0 3px 0 var(--farm-teal-lip),
+    0 5px 10px var(--shadow-chip);
+}
+
+.cc-btn-yellow {
+  background: linear-gradient(180deg, var(--surface-chip-top), var(--gold-soft));
+  border-color: var(--gold-deep);
+  color: var(--farm-ink-title);
+  box-shadow:
+    0 3px 0 var(--gold-deep),
+    0 5px 10px var(--shadow-chip);
+}
+
+.cc-btn-purple {
+  background: linear-gradient(180deg, var(--farm-wood-light), var(--farm-wood-mid));
+  border-color: var(--farm-wood-dark);
+  color: var(--farm-cream-text);
+  text-shadow: 0 1px 2px var(--ts-drop-shadow);
+  box-shadow:
+    0 3px 0 var(--farm-wood-darkest),
+    0 5px 10px var(--shadow-chip);
+}
+
+.cc-btn-slate {
+  background: linear-gradient(180deg, var(--surface-chip-top), var(--surface-chip-bot));
+  border-color: var(--border-brass);
+  color: var(--farm-ink-body);
+  box-shadow: 0 3px 0 var(--shadow-chip);
+}
+
+/* Inline Collapsible Profile & Sorting Hat Drawer (Warm Parchment Note) */
+.cc-profile-drawer {
+  padding: 13px 14px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, var(--farm-note-top), var(--farm-note-mid));
+  border: 2px solid var(--farm-brass-mid);
+  box-shadow: inset 0 1px 0 var(--farm-highlight-crisp);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cc-profile-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -11803,399 +11793,632 @@ progress.ts-build-progress::-moz-progress-bar {
   flex-wrap: wrap;
 }
 
-.lb-filter-pills {
+.cc-profile-heading {
+  margin: 0;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--farm-ink-title);
+}
+
+.cc-server-house-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-panel-solid);
+  border: 1.5px solid var(--farm-brass-mid);
+  color: var(--brand-strong);
+  font-size: 11.5px;
+  font-weight: 800;
+}
+
+.cc-field-group label,
+.cc-houses-fieldset legend {
+  display: block;
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--farm-ink-title);
+  margin-bottom: 5px;
+}
+
+.cc-input-with-action {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
-.filter-pill {
+.cc-input-with-action input {
+  flex: 1 1 200px;
+  min-inline-size: 160px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 2px solid var(--border-brass);
+  background: var(--surface-panel-solid);
+  color: var(--farm-ink-title);
+  font-family: inherit;
+  /* Keep >= 16px (1rem) so iOS Safari never auto-zooms on focus */
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.cc-input-with-action input::placeholder {
+  color: var(--ink-soft);
+}
+
+.cc-input-with-action input:focus-visible {
+  outline: 3px solid var(--brand-strong);
+  outline-offset: 2px;
+}
+
+.cc-houses-fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.cc-houses-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cc-house-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border-radius: 13px;
+  border: 2px solid var(--farm-sheet-border);
+  background: var(--surface-panel-solid);
+  cursor: pointer;
+  box-shadow: 0 2px 0 var(--shadow-chip);
+  transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+.cc-house-option:hover {
+  background: var(--surface-chip-hover);
+}
+
+.cc-house-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cc-house-option.selected {
+  border-color: var(--gold-deep);
+  background: linear-gradient(180deg, var(--surface-chip-top), var(--gold-soft));
+  box-shadow:
+    0 3px 0 var(--gold-deep),
+    0 0 0 2px var(--farm-note-sel-glow);
+}
+
+.cc-house-option:focus-within {
+  outline: 3px solid var(--brand-strong);
+  outline-offset: 2px;
+}
+
+.cc-house-option-crest {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 3px var(--icon-drop-shadow));
+}
+
+.cc-house-option-crest svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.cc-house-option-info strong {
+  display: block;
+  font-size: 12.5px;
+  color: var(--farm-ink-title);
+}
+
+.cc-house-option-info small {
+  display: block;
+  font-size: 10.8px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
+@media (max-width: 480px) {
+  .cc-house-option {
+    flex-direction: column;
+    text-align: center;
+    gap: 4px;
+    padding: 8px 6px;
+  }
+
+  .cc-house-option-crest {
+    width: 28px;
+    height: 28px;
+  }
+
+  .cc-house-option-info strong {
+    font-size: 11.5px;
+  }
+
+  .cc-house-option-info small {
+    font-size: 10px;
+    line-height: 1.2;
+  }
+}
+
+.cc-dialog-lead {
+  margin: 0;
+  padding: 8px 11px;
+  border-radius: 11px;
+  background: var(--surface-panel-solid);
+  border: 1.5px solid var(--farm-sheet-border);
+  font-size: 12px;
+  font-style: italic;
+  font-weight: 700;
+  color: var(--farm-ink-body);
+}
+
+.cc-profile-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Section 2: Controls Bar (Scopes, House Filter Pills & Hang Sóc Tools) */
+.cc-lb-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cc-lb-filters-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-inline-size: 0;
+}
+
+.cc-lb-scope-pills,
+.cc-lb-filter-pills,
+.cc-lb-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.cc-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-block-size: 31px;
   padding: 5px 11px;
   border-radius: var(--radius-pill);
   border: 1.5px solid var(--border-brass);
   background: var(--surface-panel-solid);
   color: var(--ink);
   font-family: inherit;
-  font-size: 11.5px;
+  font-size: 11.8px;
   font-weight: 800;
   cursor: pointer;
-  transition: background 0.12s ease, transform 0.12s ease;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
 }
 
-.filter-pill:hover {
+.cc-filter-pill:hover {
   background: var(--surface-chip-hover);
 }
 
-.filter-pill.active {
+.cc-lb-scope-pills .cc-filter-pill.active {
+  background: linear-gradient(180deg, var(--sq-quiz-ribbon-top), var(--sq-quiz-ribbon-bot));
+  border-color: var(--teal-deep);
+  color: var(--ts-white);
+}
+
+.cc-lb-filter-pills .cc-filter-pill.active {
   background: linear-gradient(180deg, var(--ts-play-cta-top), var(--ts-play-cta-mid));
   border-color: var(--ts-play-cta-border);
   color: var(--ts-play-cta-ink);
   box-shadow: 0 2px 0 var(--ts-play-cta-lip);
 }
 
-.filter-pill-count {
-  font-weight: 700;
-  opacity: 0.82;
-}
-
-.lb-empty-house-cell {
-  padding: 18px 14px !important;
-  text-align: center !important;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--ink-soft);
-}
-
-@media (max-width: 760px) {
-  .hourglass-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+@media (pointer: coarse) {
+  .cc-lb-game-tab {
+    min-block-size: 44px;
   }
 
-  .lb-sorting-hat-box {
-    align-items: flex-start;
-    width: 100%;
+  .cc-pill-btn {
+    min-block-size: 40px;
+    padding: 7px 14px;
+  }
+
+  .cc-filter-pill {
+    min-block-size: 38px;
+    padding: 6px 12px;
+  }
+
+  .cc-lb-visit-btn {
+    min-block-size: 32px;
+    padding: 4px 11px;
   }
 }
 
-@media (max-width: 440px) {
-  .hourglass-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.lb-podium-grid {
+/* Player Rank & Rival Chase Status Strip (Golden Parchment Banner) */
+.cc-lb-status-strip {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px;
-  align-items: flex-end;
-}
-
-.lb-podium-card {
-  flex: 1 1 180px;
-  max-width: 280px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 3px;
-  padding: 10px 8px;
-  border-radius: 14px;
-  background: linear-gradient(180deg, var(--farm-note-top), var(--farm-note-mid));
-  border: 2px solid var(--farm-sheet-border);
-  box-shadow: 0 3px 0 var(--shadow-chip);
-}
-
-.lb-podium-card.place-1 {
-  padding-block: 13px;
-  background: linear-gradient(180deg, var(--surface-chip-top), var(--gold-soft));
-  border-color: var(--gold-deep);
-}
-
-.lb-podium-card.is-player {
-  outline: 2.5px solid var(--farm-green-soft-border);
-  background: linear-gradient(180deg, var(--surface-chip-top), var(--farm-green-soft-bg));
-}
-
-.lb-podium-medal {
-  font-size: 11.5px;
-  font-weight: 900;
-  color: var(--brand-strong);
-}
-
-.lb-podium-avatar-wrap {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-pill);
-  background: var(--surface-panel-solid);
-  border: 1.5px solid var(--farm-brass-mid);
-}
-
-.lb-podium-avatar-img {
-  width: 34px;
-  height: 34px;
-  object-fit: contain;
-}
-
-.lb-podium-avatar-emoji {
-  font-size: 22px;
-  line-height: 1;
-}
-
-.lb-podium-name {
-  font-size: 12.5px;
-  font-weight: 900;
-  color: var(--farm-ink-title);
-  max-inline-size: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.lb-podium-house {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--ink-soft);
-}
-
-.lb-podium-primary {
-  font-size: 12px;
-  font-weight: 900;
-  color: var(--sq-indigo-ink);
-}
-
-.lb-podium-score {
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--brand-strong);
-}
-
-/* Responsive Semantic Leaderboard Table (modern-web-guidance responsive-table) */
-.lb-table-wrapper {
-  overflow: auto;
-  max-inline-size: 100%;
-  max-block-size: min(410px, 50dvh);
-  container-type: inline-size;
-  border-radius: 13px;
-  border: 2px solid var(--farm-sheet-border);
-  background: var(--surface-panel-solid);
-}
-
-.lb-table-wrapper:focus-visible {
-  outline: 3px solid var(--focus-color);
-  outline-offset: 2px;
-}
-
-.lb-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  font-size: 12.5px;
-  color: var(--ink);
-}
-
-.lb-table-caption {
-  padding: 7px 12px;
-  text-align: start;
-  font-size: 11.5px;
-  font-weight: 800;
-  color: var(--ink-soft);
-  background: var(--surface-parchment);
-  border-block-end: 1px solid var(--border-brass-soft);
-}
-
-.lb-table thead {
-  position: sticky;
-  inset-block-start: 0;
-  z-index: 3;
-}
-
-.lb-table thead th {
-  padding: 9px 10px;
-  text-align: start;
-  font-size: 11.5px;
-  font-weight: 900;
-  color: var(--farm-cream-text);
-  background: linear-gradient(180deg, var(--farm-wood-mid), var(--farm-wood-dark));
-  border-block-end: 2px solid var(--farm-brass-mid);
-  white-space: nowrap;
-}
-
-.lb-table tbody th,
-.lb-table tbody td {
-  padding: 8px 10px;
-  vertical-align: middle;
-  border-block-end: 1px solid var(--border-brass-soft);
-}
-
-/* Sticky row headers (desktop horizontal scroll) */
-.lb-table tbody th {
-  position: sticky;
-  inset-inline-start: 0;
-  z-index: 1;
-  text-align: start;
-  background: var(--surface-panel-solid);
-}
-
-.lb-row:nth-child(even) th,
-.lb-row:nth-child(even) td {
-  background: var(--surface-parchment);
-}
-
-.lb-row.is-player th,
-.lb-row.is-player td {
-  background: var(--farm-green-soft-bg);
-  border-block-color: var(--farm-green-soft-border);
-}
-
-.lb-contender-wrap {
-  display: flex;
-  align-items: center;
   gap: 8px;
-  min-inline-size: 0;
+  padding: 9px 12px;
+  border-radius: 13px;
+  background: linear-gradient(180deg, var(--farm-gnome-bg-top), var(--farm-gnome-bg-bot));
+  border: 2px solid var(--farm-brass-mid);
+  box-shadow: inset 0 1px 0 var(--farm-highlight-crisp);
+  font-size: 12px;
 }
 
-.lb-rank-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-inline-size: 46px;
-  padding: 3px 7px;
-  border-radius: var(--radius-pill);
-  font-size: 11.5px;
-  font-weight: 900;
-  background: var(--surface-parchment-2);
-  color: var(--farm-ink-title);
-  border: 1px solid var(--border-brass-soft);
-  flex-shrink: 0;
-}
-
-.lb-rank-chip.rank-1 {
-  background: var(--gold-soft);
-  border-color: var(--gold-deep);
-  color: var(--ts-play-cta-ink);
-}
-
-.lb-rank-chip.rank-2 {
-  background: var(--sq-indigo-soft-bg);
-  border-color: var(--sq-indigo-soft-border);
-  color: var(--sq-indigo-ink);
-}
-
-.lb-rank-chip.rank-3 {
-  background: var(--talisman-chip-bg);
-  border-color: var(--talisman-chip-border);
-  color: var(--talisman-chip-ink);
-}
-
-.lb-avatar-badge {
-  font-size: 19px;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.lb-contender-meta {
-  min-inline-size: 0;
-}
-
-.lb-contender-name-line {
+.cc-lb-status-me {
   display: flex;
   align-items: center;
-  gap: 6px;
   flex-wrap: wrap;
-  font-size: 13px;
+  gap: 7px;
   color: var(--farm-ink-title);
+  font-weight: 700;
 }
 
-.lb-contender-sub {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ink-soft);
-  margin-top: 1px;
-}
-
-.lb-role-tag {
-  display: inline-block;
-  padding: 1px 6px;
-  border-radius: var(--radius-pill);
-  font-size: 10px;
+.cc-lb-status-me strong {
+  color: var(--brand-strong);
   font-weight: 900;
 }
 
-.lb-role-tag.you {
-  background: var(--farm-green-top);
-  color: var(--ts-ink-contour);
-  border: 1px solid var(--farm-green-lip);
+.cc-lb-status-icon {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 3px var(--icon-drop-shadow));
 }
 
-.lb-role-tag.friend {
-  background: var(--sq-indigo-soft-bg);
-  color: var(--sq-indigo-ink);
-  border: 1px solid var(--sq-indigo-soft-border);
+.cc-lb-me-stars {
+  font-weight: 800;
+  color: var(--brand-strong);
 }
 
-.lb-role-tag.cloud {
-  background: var(--sq-purple-soft-bg);
-  color: var(--sq-purple-ink);
-  border: 1px solid var(--sq-purple-soft-border);
+.cc-lb-status-chase {
+  color: var(--talisman-chip-ink);
+  font-weight: 700;
 }
 
-.lb-league-pill {
+.cc-lb-status-chase strong {
+  color: var(--farm-ink-title);
+}
+
+.cc-league-pill {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 8px;
+  padding: 2px 8px;
   border-radius: var(--radius-pill);
   font-size: 11px;
   font-weight: 800;
   white-space: nowrap;
-  background: var(--surface-parchment);
-  border: 1px solid var(--border-brass-soft);
-  color: var(--farm-ink-body);
+  background: var(--surface-panel-solid);
+  border: 1.5px solid var(--border-brass);
+  color: var(--farm-ink-title);
 }
 
-.lb-league-pill.tier-legend {
+.cc-league-pill.tier-legend {
   background: var(--gold-soft);
   border-color: var(--gold-deep);
   color: var(--ts-play-cta-ink);
 }
 
-.lb-league-pill.tier-grandmaster {
+.cc-league-pill.tier-grandmaster {
   background: var(--sq-purple-soft-bg);
   border-color: var(--sq-purple-soft-border);
   color: var(--sq-purple-ink);
 }
 
-.lb-league-pill.tier-gold {
-  background: var(--talisman-chip-bg);
-  border-color: var(--talisman-chip-border);
-  color: var(--talisman-chip-ink);
+/* Section 3: Hang Sóc Oak & Parchment 6-Column Responsive Table */
+.cc-lb-table-wrap {
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  max-inline-size: 100%;
+  max-block-size: min(410px, 48dvh);
+  container-type: inline-size;
+  border-radius: 14px;
+  border: 2px solid var(--farm-sheet-border);
+  background: var(--surface-panel-solid);
+  scrollbar-width: thin;
+  scrollbar-color: var(--hud-scrollbar-thumb-parchment) var(--hud-scrollbar-track-parchment);
 }
 
-.lb-league-pill.tier-silver {
-  background: var(--sq-indigo-soft-bg);
-  border-color: var(--sq-indigo-soft-border);
-  color: var(--sq-indigo-ink);
+.cc-lb-table-wrap:focus-visible,
+.cc-lb-card :where(button, input, [role="tab"]):focus-visible {
+  outline: 3px solid var(--brand-strong);
+  outline-offset: 2px;
 }
 
-.lb-sub-stat {
-  font-size: 11px;
+.cc-lb-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12.8px;
   font-weight: 700;
-  color: var(--ink-soft);
-  margin-top: 2px;
+  color: var(--ink);
 }
 
-.lb-detail-flex {
+.cc-lb-caption {
+  padding: 7px 12px;
+  text-align: start;
+  font-size: 11.4px;
+  font-weight: 800;
+  color: var(--ink-soft);
+  background: var(--surface-parchment);
+  border-block-end: 1px solid var(--border-brass-soft);
+}
+
+.cc-lb-table thead {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 3;
+}
+
+.cc-lb-table th,
+.cc-lb-table td {
+  padding: 8px 10px;
+  text-align: start;
+  vertical-align: middle;
+  border-block-end: 1px solid var(--border-brass-soft);
+}
+
+.cc-lb-table thead th {
+  background: linear-gradient(180deg, var(--farm-wood-mid), var(--farm-wood-dark));
+  color: var(--farm-cream-text);
+  border-block-end: 2px solid var(--farm-brass-mid);
+  font-size: 11.5px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.cc-lb-table tbody tr:nth-child(even) td,
+.cc-lb-table tbody tr:nth-child(even) th.cc-lb-name-cell {
+  background: var(--surface-parchment);
+}
+
+.cc-lb-table tbody th.cc-lb-name-cell {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  font-weight: 800;
+  color: var(--farm-ink-title);
+  background: var(--surface-panel-solid);
+}
+
+.cc-lb-table tbody tr.me-row td,
+.cc-lb-table tbody tr.me-row th.cc-lb-name-cell {
+  background: var(--farm-green-soft-bg);
+  border-block-color: var(--farm-green-soft-border);
+  font-weight: 900;
+}
+
+.cc-lb-name-wrap {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 5px;
   flex-wrap: wrap;
 }
 
-.lb-mini-visit-btn {
-  padding: 3px 8px;
+.cc-lb-mobile-rank {
+  display: none;
+}
+
+.cc-lb-avatar {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.cc-lb-you-tag {
+  color: var(--farm-green-text);
+  font-size: 11.5px;
+  font-weight: 900;
+}
+
+.cc-lb-npc-tag {
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cc-lb-cloud-tag {
+  color: var(--sq-indigo-ink);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.cc-lb-friend-tag {
+  color: var(--teal-deep);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.cc-lb-visit-btn {
+  margin-inline-start: auto;
+  min-block-size: 26px;
+  padding: 2px 9px;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--border-brass);
-  background: var(--surface-chip-top);
-  color: var(--brand-strong);
+  border: 1.5px solid var(--border-brass);
+  background: linear-gradient(180deg, var(--surface-chip-top), var(--surface-chip-bot));
+  color: var(--farm-ink-title);
+  font-family: inherit;
   font-size: 11px;
   font-weight: 800;
   cursor: pointer;
+  box-shadow: 0 2px 0 var(--shadow-chip);
 }
 
-.lb-mini-visit-btn:hover {
+.cc-lb-visit-btn:hover {
   background: var(--surface-chip-hover);
 }
 
-.lb-mini-play-btn {
-  padding: 4px 10px;
-  font-size: 11.5px;
+.cc-house-ink-gryffindor {
+  color: var(--talisman-chip-ink);
 }
 
+.cc-house-ink-slytherin {
+  color: var(--farm-green-text);
+}
+
+.cc-house-ink-ravenclaw {
+  color: var(--sq-indigo-ink);
+}
+
+.cc-house-ink-hufflepuff {
+  color: var(--brand-strong);
+}
+
+.cc-star-glyph {
+  color: var(--gold-deep);
+}
+
+.cc-lb-score-val {
+  color: var(--brand-strong);
+  font-weight: 900;
+}
+
+.cc-lb-empty-cell {
+  text-align: center !important;
+  padding: 20px 14px !important;
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+
+/* Container Query (<= 519px): Warm Parchment 2-Column Stacked Cards (iOS 16.0+ safe) */
+@container (max-width: 519px) {
+  .cc-lb-table,
+  .cc-lb-table thead,
+  .cc-lb-table tbody,
+  .cc-lb-table tr,
+  .cc-lb-table th,
+  .cc-lb-table td {
+    display: block;
+  }
+
+  .cc-lb-table thead,
+  .cc-lb-table .cc-lb-rank-cell {
+    display: none;
+  }
+
+  .cc-lb-mobile-rank {
+    display: inline-block;
+    margin-inline-end: 4px;
+    color: var(--brand-strong);
+    font-weight: 900;
+  }
+
+  .cc-lb-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .cc-lb-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border: 1.5px solid var(--farm-sheet-border);
+    border-radius: 13px;
+    background: var(--surface-panel-solid);
+    box-shadow: 0 2px 0 var(--shadow-chip);
+    overflow: clip;
+  }
+
+  .cc-lb-table tbody tr.me-row {
+    border-color: var(--farm-green-soft-border);
+    background: var(--farm-green-soft-bg);
+  }
+
+  .cc-lb-table tbody th.cc-lb-name-cell,
+  .cc-lb-table tbody tr:nth-child(even) th.cc-lb-name-cell {
+    grid-column: 1 / -1;
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 1;
+    background: linear-gradient(180deg, var(--farm-note-top), var(--farm-note-mid));
+    padding: 7px 10px;
+    border-block-end: 1px solid var(--border-brass-soft);
+    font-size: 13px;
+  }
+
+  .cc-lb-table tbody tr.me-row th.cc-lb-name-cell {
+    background: var(--farm-green-soft-bg);
+    border-block-end-color: var(--farm-green-soft-border);
+  }
+
+  .cc-lb-table tbody td,
+  .cc-lb-table tbody tr:nth-child(even) td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-block-end: none;
+    background: transparent;
+    font-size: 12px;
+  }
+
+  .cc-lb-table tbody td[colspan] {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+
+  .cc-lb-table tbody td:nth-child(3)::before {
+    content: var(--label-3) ": ";
+    color: var(--ink-soft);
+    font-weight: 700;
+  }
+
+  .cc-lb-table tbody td:nth-child(4)::before {
+    content: var(--label-4) ": ";
+    color: var(--ink-soft);
+    font-weight: 700;
+  }
+
+  .cc-lb-table tbody td:nth-child(5)::before {
+    content: var(--label-5) ": ";
+    color: var(--ink-soft);
+    font-weight: 700;
+  }
+
+  .cc-lb-table tbody td:nth-child(6)::before {
+    content: var(--label-6) ": ";
+    color: var(--ink-soft);
+    font-weight: 700;
+  }
+}
+
+@media (forced-colors: active) {
+  .cc-lb-game-tab[aria-selected="true"],
+  .cc-filter-pill.active,
+  .cc-house-option.selected,
+  .cc-house-cup-card.is-filtered-house,
+  .cc-lb-table tbody tr.me-row {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}
+
+/* Shared House Text Accents & Mini-Game Header / Victory Rank-Up Chips */
 .house-gryffindor {
   color: var(--talisman-chip-ink);
   font-weight: 800;
@@ -12216,73 +12439,6 @@ progress.ts-build-progress::-moz-progress-bar {
   font-weight: 800;
 }
 
-/* Container query stacked card layout for narrow viewports/panels */
-@container (width < 580px) {
-  .lb-table,
-  .lb-table thead,
-  .lb-table tbody,
-  .lb-table tr,
-  .lb-table th,
-  .lb-table td {
-    display: block;
-  }
-
-  .lb-table thead {
-    display: none;
-  }
-
-  .lb-table tr {
-    margin: 8px;
-    border: 1.5px solid var(--farm-sheet-border);
-    border-radius: 11px;
-    overflow: hidden;
-  }
-
-  .lb-table tbody th {
-    position: sticky;
-    inset-block-start: 0;
-    z-index: 2;
-    background: var(--farm-note-mid);
-    border-block-end: 1.5px solid var(--farm-sheet-border);
-  }
-
-  .lb-row.is-player th {
-    background: var(--farm-green-soft-bg);
-  }
-
-  .lb-table td {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 6px 10px;
-  }
-
-  .lb-table td::before {
-    font-size: 11px;
-    font-weight: 800;
-    color: var(--ink-soft);
-    flex-shrink: 0;
-  }
-
-  .lb-table td:nth-child(2)::before {
-    content: var(--label-2) ": ";
-  }
-
-  .lb-table td:nth-child(3)::before {
-    content: var(--label-3) ": ";
-  }
-
-  .lb-table td:nth-child(4)::before {
-    content: var(--label-4) ": ";
-  }
-
-  .lb-table td:nth-child(5)::before {
-    content: var(--label-5) ": ";
-  }
-}
-
-/* Mini-game Header Rank Chips & Victory Rank-Up Callouts */
 .minigame-lb-chip {
   cursor: pointer;
   background: linear-gradient(180deg, var(--ts-play-cta-top), var(--ts-play-cta-mid));
@@ -12307,23 +12463,6 @@ progress.ts-build-progress::-moz-progress-bar {
   color: var(--farm-green-text);
   font-size: 12px;
   font-weight: 900;
-}
-
-@media (max-width: 720px) {
-  .lb-cup-banner {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .lb-player-rank-box {
-    grid-column: 1 / -1;
-    flex-direction: row;
-    justify-content: space-between;
-  }
-
-  .lb-podium-card {
-    flex: 1 1 100%;
-    max-width: 100%;
-  }
 }
 
 /* ==========================================================================
@@ -14884,11 +15023,11 @@ dialog.bulldoze-confirm-dialog[open] {
 
 #seedQuizDialog[data-mg-rotate='90'],
 #seedQuizDialog[data-mg-rotate='270'] {
-  width: 100vw;
+  width: 100%;
   width: 100dvw;
   height: 100vh;
   height: 100dvh;
-  max-width: 100vw;
+  max-width: 100%;
   max-width: 100dvw;
   max-height: 100vh;
   max-height: 100dvh;
@@ -15338,9 +15477,9 @@ dialog.bulldoze-confirm-dialog[open] {
 
 /* --- Seed Quiz (Học Viện Thần Chú Đa Ngữ) explicit Portrait / Landscape overrides --- */
 #seedQuizDialog[data-mg-layout='portrait']:not([data-mg-rotate='90']):not([data-mg-rotate='270']) {
-  width: 100vw;
+  width: 100%;
   width: 100dvw;
-  max-width: 100vw;
+  max-width: 100%;
   max-width: 100dvw;
   height: 100vh;
   height: 100dvh;
@@ -15374,6 +15513,108 @@ dialog.bulldoze-confirm-dialog[open] {
 
 #seedQuizDialog[data-mg-layout='landscape'] .sq-lang-tabs {
   grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+/* --- Fluid Mobile Screen-Size Adaptation across Compact Portrait, Tall 20:9 & Landscape Phones --- */
+.sq-stage-card {
+  container: sq-stage / inline-size;
+}
+
+.sq-stem-main {
+  font-size: clamp(0.92rem, 0.84rem + 0.45vw, 1.15rem);
+}
+
+@supports (font-size: 1cqi) {
+  .sq-stem-main {
+    font-size: clamp(0.92rem, 0.82rem + 1.1cqi, 1.18rem);
+  }
+}
+
+@container sq-stage (inline-size >= 480px) {
+  .sq-choice-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container sq-stage (inline-size < 480px) {
+  .sq-choice-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-height: 700px) and (orientation: portrait) {
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-modal-inner,
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .m3-modal-inner {
+    padding:
+      max(3px, env(safe-area-inset-top, 0px))
+      max(4px, env(safe-area-inset-right, 0px))
+      max(3px, env(safe-area-inset-bottom, 0px))
+      max(4px, env(safe-area-inset-left, 0px));
+  }
+
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] #puzzleArcadeDialogContent,
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] #match3DialogContent,
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-layout-shell {
+    gap: 2px;
+  }
+
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock {
+    gap: 2px;
+  }
+
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-top-bar {
+    gap: 2px;
+    padding: 3px 5px;
+    border-radius: 10px;
+  }
+
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-mode-tab,
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-mode-tab:last-child {
+    padding: 2px 1.5px;
+    font-size: 9px;
+    gap: 0.5px;
+  }
+
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-stage-banner {
+    padding: 2px 6px;
+  }
+
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-stage-title {
+    font-size: 11px;
+  }
+
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .aaa-synergy-dock {
+    padding: 2px 5px;
+  }
+
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-layout-shell > .pa-controls-bar {
+    gap: 3px;
+    padding: 3px 5px;
+    border-radius: 10px;
+  }
+
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-layout-shell > .pa-controls-bar .pa-tool-btn {
+    min-block-size: 25px;
+    padding: 2px 7px;
+    font-size: 11px;
+  }
+}
+
+@media (max-height: 440px) and (orientation: landscape) {
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell {
+    grid-template-columns: clamp(178px, 23%, 228px) minmax(0, 1fr);
+    column-gap: 6px;
+  }
+
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock {
+    gap: 3px;
+    padding: 4px 5px 3px;
+  }
+
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell > .pa-controls-bar {
+    gap: 3px;
+    padding: 3px 5px 4px;
+  }
 }
 
 

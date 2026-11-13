@@ -65,6 +65,8 @@ import {
   formatHarvestFeastRewardVi,
   getItemPriceBounds,
   getUpgradeCost,
+  IS_SANDBOX_BUILD_ENABLED,
+  isSandboxRuntimeAllowed,
   MAX_PHOENIX_TALISMANS,
   ParkSimulation,
   PHOENIX_FORGE_GOLD_COST,
@@ -345,14 +347,18 @@ export function headerRenderWeatherPopover(hud: GameHUD): void {
         <div class="weather-current-head">${cur.icon} ${escapeHtml(cur.labelVi)}</div>
         <div class="weather-current-buff">✨ ${escapeHtml(cur.buffVi)}</div>
       </div>
-      <div class="speed-toggle-row" role="group" aria-label="Tốc độ nhịp sống công viên">
-        <button type="button" data-sim-speed="1" data-active="${hud.sim.simSpeed === 1}" aria-pressed="${hud.sim.simSpeed === 1}" class="brass-btn">
-          🐢 1×
-        </button>
-        <button type="button" data-sim-speed="2" data-active="${hud.sim.simSpeed === 2}" aria-pressed="${hud.sim.simSpeed === 2}" class="brass-btn">
-          ⚡ 2×
-        </button>
-      </div>
+      ${
+        IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed()
+          ? `<div class="speed-toggle-row" role="group" aria-label="Tốc độ nhịp sống công viên">
+              <button type="button" data-sim-speed="1" data-active="${hud.sim.simSpeed === 1}" aria-pressed="${hud.sim.simSpeed === 1}" class="brass-btn">
+                🐢 1×
+              </button>
+              <button type="button" data-sim-speed="2" data-active="${hud.sim.simSpeed === 2}" aria-pressed="${hud.sim.simSpeed === 2}" class="brass-btn">
+                ⚡ 2×
+              </button>
+            </div>`
+          : ''
+      }
       <div class="weather-forecast-list">
         ${slots
           .map((s, idx) => {
@@ -371,21 +377,25 @@ export function headerRenderWeatherPopover(hud: GameHUD): void {
       </div>
     `;
 
-    pop.querySelectorAll<HTMLButtonElement>('[data-sim-speed]').forEach((btn) => {
-      btn.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        const spd = btn.dataset.simSpeed === '2' ? 2 : 1;
-        hud.sim.simSpeed = spd;
-        headerRefreshHeaderClock(hud);
-        headerCloseHudPopovers(hud);
-        headerShowToast(hud, 
-          spd === 2
-            ? '⚡ Nhịp sống 2× Nhộn Nhịp: Khách dạo chơi & doanh thu quầy nhanh gấp đôi!'
-            : '🐢 Nhịp sống 1× Thư Thả: Tận hưởng không khí công viên êm đềm.',
-          spd === 2 ? '⚡' : '🌿'
-        );
+    if (IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed()) {
+      pop.querySelectorAll<HTMLButtonElement>('[data-sim-speed]').forEach((btn) => {
+        btn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          if (!isSandboxRuntimeAllowed()) return;
+          const spd = btn.dataset.simSpeed === '2' ? 2 : 1;
+          hud.sim.simSpeed = spd;
+          headerRefreshHeaderClock(hud);
+          headerCloseHudPopovers(hud);
+          headerShowToast(
+            hud,
+            spd === 2
+              ? '⚡ Nhịp sống 2× Nhộn Nhịp: Khách dạo chơi & doanh thu quầy nhanh gấp đôi!'
+              : '🐢 Nhịp sống 1× Thư Thả: Tận hưởng không khí công viên êm đềm.',
+            spd === 2 ? '⚡' : '🌿'
+          );
+        });
       });
-    });
+    }
 }
 
 export function headerAnimateGalleonsTo(hud: GameHUD, target: number): void {

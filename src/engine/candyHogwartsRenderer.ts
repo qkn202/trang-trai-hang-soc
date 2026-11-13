@@ -252,19 +252,20 @@ export class CandyHogwartsBoardRenderer {
   }
 
   public resize(gridSize: number): void {
-    let rawCssSize = this.observedCssSize;
-    if (!rawCssSize || rawCssSize <= 0) {
-      const cw = this.canvas?.clientWidth ?? 0;
-      const ch = this.canvas?.clientHeight ?? 0;
-      if (cw > 0) {
-        rawCssSize = Math.floor(Math.min(cw, ch || cw));
-      } else if (typeof this.canvas?.getBoundingClientRect === 'function') {
-        const rect = this.canvas.getBoundingClientRect();
-        const z = Math.max(0.25, this.viewZoom || 1);
-        rawCssSize = Math.floor(Math.min(rect.width, rect.height || rect.width) / z);
-      }
+    let rawCssSize = 0;
+    const cw = this.canvas?.clientWidth ?? 0;
+    const ch = this.canvas?.clientHeight ?? 0;
+    if (cw > 0) {
+      rawCssSize = Math.floor(Math.min(cw, ch || cw));
+      this.observedCssSize = rawCssSize;
+    } else if (this.observedCssSize > 0) {
+      rawCssSize = this.observedCssSize;
+    } else if (typeof this.canvas?.getBoundingClientRect === 'function') {
+      const rect = this.canvas.getBoundingClientRect();
+      const z = Math.max(0.25, this.viewZoom || 1);
+      rawCssSize = Math.floor(Math.min(rect.width, rect.height || rect.width) / z);
     }
-    const cssSize = Math.max(240, rawCssSize || 468);
+    const cssSize = Math.max(168, rawCssSize || 468);
     const zoomStep = Math.round(Math.max(1, Math.min(2.4, this.viewZoom || 1)) * 100);
     if (
       this.currentGridSize === gridSize &&
@@ -293,7 +294,8 @@ export class CandyHogwartsBoardRenderer {
       this.bgDirty = true;
     }
     this.boardPx = cssSize;
-    this.padding = Math.max(4, Math.round(cssSize * 0.008));
+    const denseFactor = gridSize >= 9 ? 0.005 : 0.0075;
+    this.padding = Math.max(2, Math.min(7, Math.round(cssSize * denseFactor)));
     this.cellSize = (cssSize - this.padding * 2) / gridSize;
   }
 

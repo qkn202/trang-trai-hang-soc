@@ -67,6 +67,26 @@ import {
 import { getZoneAt, getZoneById, GRID_SIZE, ZONES } from '../data/zones';
 import { MagicalAudio } from '../engine/audio';
 import { findNextStepOnPaths, getRandomUnlockedPathTile } from '../engine/pathfinding';
+
+const STRICT_SANDBOX_LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+
+/**
+ * Hằng số biên dịch tĩnh: Vite thay thế `import.meta.env.DEV` thành `false` khi chạy `npm run build`,
+ * giúp loại bỏ hoàn toàn (dead-code elimination) toàn bộ nút/công tắc Sandbox & Dev khỏi `dist/`.
+ */
+export const IS_SANDBOX_BUILD_ENABLED: boolean =
+  import.meta.env.DEV && import.meta.env.VITE_ALLOW_SANDBOX === '1';
+
+/**
+ * Kiểm tra runtime nghiêm ngặt: chỉ cho phép mở các tính năng Sandbox/Dev nội bộ khi chạy Vite dev
+ * kèm cờ `VITE_ALLOW_SANDBOX=1` trực tiếp trên loopback (`localhost` / `127.0.0.1`), chặn cả IP LAN.
+ */
+export function isSandboxRuntimeAllowed(): boolean {
+  if (!IS_SANDBOX_BUILD_ENABLED) return false;
+  if (typeof window === 'undefined' || !window.location) return false;
+  const host = String(window.location.hostname || '').trim().toLowerCase();
+  return STRICT_SANDBOX_LOOPBACK_HOSTS.has(host);
+}
 import {
   createDefaultRetentionState,
   reconcileRetentionStateOnLoad,
@@ -1616,10 +1636,12 @@ export function migrateLoadedState(parsed: GameState): GameState {
     crop_lavender_bed: 'dried_lavender',
     crop_sunflower_bed: 'hedge_sunflower',
   };
+  const sandboxAllowedOnLoad = isSandboxRuntimeAllowed();
   const rawBuildings = Array.isArray(parsed.buildings) ? parsed.buildings : def.buildings;
   const safeBuildings: PlacedBuilding[] = [];
   for (const b of rawBuildings) {
     if (!b || typeof b !== 'object' || typeof b.itemId !== 'string') continue;
+    if (!sandboxAllowedOnLoad && b.builtInSandbox) continue;
     const legacyCrop = LEGACY_CROP_BED_MAP[b.itemId];
     const resolvedItemId = legacyCrop ? 'farmland_plot' : b.itemId;
     const item = getCatalogItem(resolvedItemId);
@@ -1905,6 +1927,8 @@ export function migrateLoadedState(parsed: GameState): GameState {
     ...def,
     ...parsed,
     version: 6,
+    sandboxMode: sandboxAllowedOnLoad ? Boolean(parsed.sandboxMode) : false,
+    sandboxTainted: Boolean(parsed.sandboxTainted || parsed.sandboxMode),
     unlockedZones: Array.from(unlockedZoneSet),
     tileOverrides: safeTileOverrides,
     parkName: sanitizePlainText(parsed.parkName, 80) || def.parkName,
@@ -2225,10 +2249,20 @@ export function migrateLoadedState(parsed: GameState): GameState {
     settings: {
       ...def.settings,
       ...(parsed.settings ?? {}),
+      activeFestival: sandboxAllowedOnLoad
+        ? (parsed.settings?.activeFestival ?? def.settings.activeFestival)
+        : 'auto',
       showGrid: false,
       cutawayMode: false,
     },
   };
+
+  if (!sandboxAllowedOnLoad && migratedState.minigameLeaderboard) {
+    migratedState.minigameLeaderboard = {
+      ...migratedState.minigameLeaderboard,
+      includeSeededRivals: false,
+    };
+  }
 
   reconcileRetentionStateOnLoad(
     migratedState,

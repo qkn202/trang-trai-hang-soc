@@ -301,6 +301,7 @@ export class CandyHogwartsEngine {
     this.renderer = canvas
       ? new CandyHogwartsBoardRenderer(canvas, () => {
           if (this.level && this.rafId !== null && this.renderer) {
+            this.renderer.resize(this.size);
             this.renderer.render(this.getRenderState(), nowMs());
           }
         })

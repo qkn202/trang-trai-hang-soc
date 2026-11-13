@@ -1168,6 +1168,7 @@ export function createAutoAuthoritativeClient(): BurrowGardenClient {
     const emulatorFlag = params.get('emulator');
     const functionsPortParam = params.get('functionsPort');
     if (
+      import.meta.env.DEV &&
       (emulatorFlag === '1' || functionsPortParam) &&
       isLocalDevelopmentHost(window.location.hostname)
     ) {

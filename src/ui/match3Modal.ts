@@ -29,7 +29,11 @@ import {
   CandyObjectiveProgress,
 } from '../sim/candyHogwartsEngine';
 import { MAX_DAILY_MINIGAME_RESCUES } from '../sim/neighborSocial';
-import { ParkSimulation } from '../sim/simulation';
+import {
+  IS_SANDBOX_BUILD_ENABLED,
+  isSandboxRuntimeAllowed,
+  ParkSimulation,
+} from '../sim/simulation';
 import {
   ACTIVE_MINIGAME_RESUME_KEY,
   ActiveMinigameResumeRecord,
@@ -374,6 +378,7 @@ export class Match3ModalController {
           typeof dlg.querySelector === 'function'
             ? (dlg.querySelector('.m3-modal-inner') as HTMLElement | null)
             : null;
+        sharedMinigameViewport.unbindStageInteractions('match3');
         sharedMinigameViewport.clearDialogOrientation(dlg, modalInner);
         this.onParentRefresh();
       });
@@ -407,7 +412,7 @@ export class Match3ModalController {
           this.renderDOM();
         }
       });
-      window.addEventListener('resize', () => {
+      const handleMatch3ViewportResize = () => {
         if (!this.isOpen()) return;
         const openDlg = this.getDialog();
         const modalInner =
@@ -421,7 +426,9 @@ export class Match3ModalController {
           return;
         }
         this.syncMatch3ViewportTransform();
-      });
+      };
+      window.addEventListener('resize', handleMatch3ViewportResize);
+      window.visualViewport?.addEventListener('resize', handleMatch3ViewportResize);
       window.addEventListener('keydown', (ev) => {
         if (!this.isOpen()) return;
         const tag = (ev.target as HTMLElement | null)?.tagName;
@@ -591,18 +598,21 @@ export class Match3ModalController {
     this.devJumpReturnLevel = null;
     this.sim.setLastPlayedMinigame('match3');
     this.sim.tickMatch3Hearts(Date.now());
+    const safeDevJump = Boolean(
+      allowDevJump && IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed()
+    );
     if (typeof overrideLevel === 'number' && Number.isFinite(overrideLevel) && overrideLevel >= 1) {
       const normalMaxAllowed = Math.min(
         MAX_MINIGAME_STAGE,
         (this.sim.state.match3.maxClearedLevel ?? 0) + 1
       );
       const maxAllowed =
-        this.sim.state.sandboxMode || this.sim.isHeadmasterPreview || allowDevJump
+        this.sim.state.sandboxMode || this.sim.isHeadmasterPreview || safeDevJump
           ? MAX_MINIGAME_STAGE
           : normalMaxAllowed;
       const clampedLv = Math.min(maxAllowed, Math.floor(overrideLevel));
       if (
-        allowDevJump &&
+        safeDevJump &&
         !this.sim.state.sandboxMode &&
         !this.sim.isHeadmasterPreview &&
         clampedLv > normalMaxAllowed

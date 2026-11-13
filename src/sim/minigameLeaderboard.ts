@@ -221,6 +221,7 @@ export interface HouseCupStanding {
   meta: HogwartsHouseMeta;
   members: number;
   totalPrimaryValue: number;
+  totalStars: number;
   totalWins: number;
   points: number;
   fillPercent: number;
@@ -261,9 +262,11 @@ export interface LeaderboardRowEntry {
   isPlayer: boolean;
   isFriend: boolean;
   isCloudPlayer?: boolean;
+  isSeededRival?: boolean;
   neighborId?: string;
   primaryValue: number;
   primaryDisplayVi: string;
+  stars: number;
   ratingScore: number;
   ratingDisplayVi: string;
   totalWins: number;
@@ -284,6 +287,7 @@ export interface LeaderboardStandingResult {
   houseStandings: HouseCupStanding[];
   playerHouse: HouseName;
   activeHouseFilter: 'all' | HouseName;
+  includeSeededRivals: boolean;
 }
 
 export interface PersonalDisciplineSummaryRow {
@@ -293,11 +297,143 @@ export interface PersonalDisciplineSummaryRow {
   valleyTotal: number;
   friendsRank: number;
   friendsTotal: number;
+  primaryValue: number;
   primaryDisplayVi: string;
+  stars: number;
+  ratingScore: number;
   ratingDisplayVi: string;
   detailDisplayVi: string;
   bestSessionScore: number;
   league: LeaderboardLeagueBadge;
+}
+
+export interface SeededHogwartsRivalSpec {
+  id: string;
+  name: string;
+  parkName: string;
+  avatarEmoji: string;
+  house: HouseName;
+  stats: Record<
+    'match3' | 'sudoku' | 'blocks',
+    { stage: number; stars: number; score: number; streak: number }
+  >;
+}
+
+export const SEEDED_HOGWARTS_RIVALS: ReadonlyArray<SeededHogwartsRivalSpec> = [
+  {
+    id: 'npc_1',
+    name: 'Minh Khôi Potter',
+    parkName: 'Thung Lũng Godric',
+    avatarEmoji: '⚡',
+    house: 'Gryffindor',
+    stats: {
+      match3: { stage: 19, stars: 48, score: 9840, streak: 7 },
+      sudoku: { stage: 16, stars: 41, score: 8120, streak: 5 },
+      blocks: { stage: 22, stars: 58, score: 11250, streak: 9 },
+    },
+  },
+  {
+    id: 'npc_2',
+    name: 'Bảo Ngọc Granger',
+    parkName: 'Thư Viện Tháp Cao',
+    avatarEmoji: '📚',
+    house: 'Ravenclaw',
+    stats: {
+      match3: { stage: 21, stars: 53, score: 10420, streak: 9 },
+      sudoku: { stage: 24, stars: 66, score: 12680, streak: 11 },
+      blocks: { stage: 19, stars: 49, score: 9640, streak: 7 },
+    },
+  },
+  {
+    id: 'npc_3',
+    name: 'Hoàng Long Malfoy',
+    parkName: 'Thái Ấp Lục Bảo',
+    avatarEmoji: '🐍',
+    house: 'Slytherin',
+    stats: {
+      match3: { stage: 18, stars: 45, score: 9680, streak: 6 },
+      sudoku: { stage: 20, stars: 52, score: 10340, streak: 8 },
+      blocks: { stage: 17, stars: 44, score: 8920, streak: 6 },
+    },
+  },
+  {
+    id: 'npc_4',
+    name: 'Thanh Thảo Diggory',
+    parkName: 'Đồi Lửng Vàng',
+    avatarEmoji: '🦡',
+    house: 'Hufflepuff',
+    stats: {
+      match3: { stage: 17, stars: 44, score: 9150, streak: 6 },
+      sudoku: { stage: 15, stars: 39, score: 7840, streak: 5 },
+      blocks: { stage: 21, stars: 56, score: 10890, streak: 8 },
+    },
+  },
+  {
+    id: 'npc_5',
+    name: 'Gia Huy Weasley',
+    parkName: 'Vườn Táo Hang Sóc',
+    avatarEmoji: '🦊',
+    house: 'Gryffindor',
+    stats: {
+      match3: { stage: 12, stars: 31, score: 6430, streak: 4 },
+      sudoku: { stage: 10, stars: 25, score: 5180, streak: 3 },
+      blocks: { stage: 14, stars: 36, score: 7290, streak: 5 },
+    },
+  },
+  {
+    id: 'npc_6',
+    name: 'Khánh Linh Lovegood',
+    parkName: 'Trảng Trăng Non',
+    avatarEmoji: '🌙',
+    house: 'Ravenclaw',
+    stats: {
+      match3: { stage: 14, stars: 35, score: 7190, streak: 5 },
+      sudoku: { stage: 17, stars: 45, score: 8760, streak: 6 },
+      blocks: { stage: 15, stars: 39, score: 7650, streak: 5 },
+    },
+  },
+  {
+    id: 'npc_7',
+    name: 'Đức Anh Zabini',
+    parkName: 'Biệt Dinh Đá Đen',
+    avatarEmoji: '🧪',
+    house: 'Slytherin',
+    stats: {
+      match3: { stage: 13, stars: 33, score: 6850, streak: 4 },
+      sudoku: { stage: 14, stars: 36, score: 7310, streak: 5 },
+      blocks: { stage: 13, stars: 33, score: 6790, streak: 4 },
+    },
+  },
+  {
+    id: 'npc_8',
+    name: 'Phương Nhi Abbott',
+    parkName: 'Nhà Kính Thảo Dược',
+    avatarEmoji: '🌻',
+    house: 'Hufflepuff',
+    stats: {
+      match3: { stage: 12, stars: 30, score: 6320, streak: 4 },
+      sudoku: { stage: 11, stars: 28, score: 5790, streak: 4 },
+      blocks: { stage: 16, stars: 42, score: 8240, streak: 6 },
+    },
+  },
+];
+
+export function computeDisciplineStars(
+  primaryValue: number,
+  totalWins: number,
+  bestStreak: number,
+  ratingScore: number
+): number {
+  const stages = Math.max(0, Math.min(MAX_PUZZLE_TOWER_STAGE, Math.floor(primaryValue || 0)));
+  if (stages <= 0) return 0;
+  const maxStars = stages * 3;
+  const baseStars = stages * 2;
+  const extraFromMastery =
+    Math.floor((Math.max(0, totalWins - stages) + Math.max(0, bestStreak)) * 0.5) +
+    Math.floor(Math.max(0, ratingScore - stages * 155) / 140);
+  const stagePerformance =
+    ratingScore >= stages * 175 ? Math.ceil(stages * 0.75) : Math.ceil(stages * 0.45);
+  return Math.max(1, Math.min(maxStars, baseStars + Math.max(stagePerformance, extraFromMastery)));
 }
 
 export function getLeaderboardLeagueBadge(
@@ -519,6 +655,47 @@ export function rollSortingHatHouse(state: GameState, randomFn = Math.random): H
   return setPlayerHogwartsHouse(state, pick, { explicit: true });
 }
 
+export function sanitizeWizardDisplayName(raw: unknown, fallback = 'Phù Thủy Hang Sóc'): string {
+  if (typeof raw !== 'string') return fallback;
+  const cleaned = raw
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .trim()
+    .slice(0, 26);
+  return cleaned || fallback;
+}
+
+export function toggleLeaderboardSeededRivals(
+  state: GameState,
+  forceValue?: boolean
+): boolean {
+  const lb = ensureMinigameLeaderboardState(state);
+  lb.includeSeededRivals =
+    typeof forceValue === 'boolean' ? forceValue : !Boolean(lb.includeSeededRivals);
+  return Boolean(lb.includeSeededRivals);
+}
+
+export function updatePlayerWizardProfile(
+  state: GameState,
+  rawName: string,
+  house: HouseName
+): { name: string; house: HouseName; houseLockedByServer: boolean } {
+  const lb = ensureMinigameLeaderboardState(state);
+  const defaultFallback = state.parkName?.trim() || 'Phù Thủy Hang Sóc';
+  const cleanName = sanitizeWizardDisplayName(rawName, defaultFallback);
+  if (state.neighborSocial && typeof state.neighborSocial === 'object') {
+    state.neighborSocial.playerDisplayName = cleanName;
+  }
+  const locked = Boolean(lb.playerHouseLockedByServer && lb.playerHouse);
+  const finalHouse = locked
+    ? getPlayerHogwartsHouse(state)
+    : setPlayerHogwartsHouse(state, house, { explicit: true });
+  return {
+    name: cleanName,
+    house: finalHouse,
+    houseLockedByServer: locked,
+  };
+}
+
 function formatPrimaryDisplayVi(gameId: LeaderboardGameId, primaryVal: number): string {
   if (gameId === 'seedquiz') {
     return `${primaryVal.toLocaleString('vi-VN')} câu đúng`;
@@ -589,6 +766,7 @@ function buildNeighborLeaderboardEntry(
       neighborId: neighbor.id,
       primaryValue: pv,
       primaryDisplayVi: formatPrimaryDisplayVi(gameId, pv),
+      stars: computeDisciplineStars(pv, tw, bs, rs),
       ratingScore: rs,
       ratingDisplayVi: `${rs.toLocaleString('vi-VN')} đ`,
       totalWins: tw,
@@ -614,6 +792,7 @@ function buildNeighborLeaderboardEntry(
     neighborId: neighbor.id,
     primaryValue: 0,
     primaryDisplayVi: formatPrimaryDisplayVi(gameId, 0),
+    stars: 0,
     ratingScore: 0,
     ratingDisplayVi: '0 đ',
     totalWins: 0,
@@ -657,6 +836,7 @@ export function buildPlayerLeaderboardEntry(
     isFriend: true,
     primaryValue: rec.bestStage,
     primaryDisplayVi: formatPrimaryDisplayVi(gameId, rec.bestStage),
+    stars: computeDisciplineStars(rec.bestStage, rec.totalWins, rec.bestStreak, rec.highScore),
     ratingScore: rec.highScore,
     ratingDisplayVi: `${rec.highScore.toLocaleString('vi-VN')} đ`,
     totalWins: rec.totalWins,
@@ -677,6 +857,7 @@ function compareEntries(
 ): number {
   if (b.primaryValue !== a.primaryValue) return b.primaryValue - a.primaryValue;
   if (b.ratingScore !== a.ratingScore) return b.ratingScore - a.ratingScore;
+  if (b.stars !== a.stars) return b.stars - a.stars;
   if (b.totalWins !== a.totalWins) return b.totalWins - a.totalWins;
   if (a.isPlayer !== b.isPlayer) return a.isPlayer ? -1 : 1;
   return a.id.localeCompare(b.id);
@@ -693,6 +874,7 @@ export function buildHouseCupStandings(
       house: HouseName;
       members: number;
       totalPrimaryValue: number;
+      totalStars: number;
       totalWins: number;
       points: number;
     }
@@ -704,6 +886,7 @@ export function buildHouseCupStandings(
       house: h,
       members: 0,
       totalPrimaryValue: 0,
+      totalStars: 0,
       totalWins: 0,
       points: valleyBonus,
     });
@@ -714,16 +897,19 @@ export function buildHouseCupStandings(
     const rec = map.get(h)!;
     rec.members += 1;
     rec.totalPrimaryValue += Math.max(0, row.primaryValue);
+    rec.totalStars += Math.max(0, row.stars);
     rec.totalWins += Math.max(0, row.totalWins);
     rec.points +=
       Math.round(Math.max(0, row.ratingScore) / 10) +
       Math.max(0, row.primaryValue) * 35 +
+      Math.max(0, row.stars) * 4 +
       Math.max(0, row.totalWins) * 15 +
       Math.max(0, row.bestStreak) * 10;
   }
 
   const rawList = ALL_HOGWARTS_HOUSES.map((h) => map.get(h)!).sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
+    if (b.totalStars !== a.totalStars) return b.totalStars - a.totalStars;
     if (b.totalPrimaryValue !== a.totalPrimaryValue) {
       return b.totalPrimaryValue - a.totalPrimaryValue;
     }
@@ -742,6 +928,7 @@ export function buildHouseCupStandings(
     meta: HOGWARTS_HOUSE_META[item.house],
     members: item.members,
     totalPrimaryValue: item.totalPrimaryValue,
+    totalStars: item.totalStars,
     totalWins: item.totalWins,
     points: item.points,
     fillPercent:
@@ -765,11 +952,12 @@ function buildRawPoolForScoredGame(
   scope: Exclude<LeaderboardScope, 'personal'>,
   extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>
 ): Array<Omit<LeaderboardRowEntry, 'rank'>> {
-  const playerRaw = buildPlayerLeaderboardEntry(state, gameId);
+  const scoredGameId = isScoredLeaderboardGame(gameId) ? gameId : 'match3';
+  const playerRaw = buildPlayerLeaderboardEntry(state, scoredGameId);
   const neighbors = (state.neighborSocial?.neighbors ?? []).filter(
     (n) => !isNpcNeighborProfile(n)
   );
-  const effectiveCloud = extraCloudEntries ?? cloudEntriesMemoryCache[gameId] ?? [];
+  const effectiveCloud = extraCloudEntries ?? cloudEntriesMemoryCache[scoredGameId] ?? [];
   const cloudByCode = new Map<string, CloudLeaderboardEntry>();
   const cloudByUid = new Map<string, CloudLeaderboardEntry>();
   for (const ce of effectiveCloud) {
@@ -795,7 +983,7 @@ function buildRawPoolForScoredGame(
       (!PLACEHOLDER_FRIEND_CODES.has(cleanNeighborCode)
         ? cloudByCode.get(cleanNeighborCode)
         : undefined);
-    return buildNeighborLeaderboardEntry(n, gameId, cMatch);
+    return buildNeighborLeaderboardEntry(n, scoredGameId, cMatch);
   });
 
   const pool: Array<Omit<LeaderboardRowEntry, 'rank'>> = [playerRaw, ...friendEntries];
@@ -817,6 +1005,10 @@ function buildRawPoolForScoredGame(
         continue;
       }
       const normalizedHouse = normalizeClientHogwartsHouse(ce.house) ?? 'Gryffindor';
+      const pv = Math.max(0, Math.floor(ce.primaryValue || 0));
+      const rs = Math.max(0, Math.floor(ce.ratingScore || 0));
+      const tw = Math.max(0, Math.floor(ce.totalWins || 0));
+      const bs = Math.max(0, Math.floor(ce.bestStreak || 0));
       pool.push({
         id: `cloud:${ce.userId}`,
         name: ce.name || ce.parkName || 'Người Chơi Trực Tuyến',
@@ -828,20 +1020,45 @@ function buildRawPoolForScoredGame(
         isPlayer: false,
         isFriend: false,
         isCloudPlayer: true,
-        primaryValue: Math.max(0, Math.floor(ce.primaryValue || 0)),
-        primaryDisplayVi: formatPrimaryDisplayVi(
-          gameId,
-          Math.max(0, Math.floor(ce.primaryValue || 0))
-        ),
-        ratingScore: Math.max(0, Math.floor(ce.ratingScore || 0)),
-        ratingDisplayVi: `${Math.max(0, Math.floor(ce.ratingScore || 0)).toLocaleString('vi-VN')} đ`,
-        totalWins: Math.max(0, Math.floor(ce.totalWins || 0)),
-        bestStreak: Math.max(0, Math.floor(ce.bestStreak || 0)),
+        primaryValue: pv,
+        primaryDisplayVi: formatPrimaryDisplayVi(scoredGameId, pv),
+        stars: computeDisciplineStars(pv, tw, bs, rs),
+        ratingScore: rs,
+        ratingDisplayVi: `${rs.toLocaleString('vi-VN')} đ`,
+        totalWins: tw,
+        bestStreak: bs,
         detailDisplayVi:
-          ce.detailLabelVi ||
-          formatDetailDisplayVi(gameId, ce.totalWins || 0, ce.bestStreak || 0),
-        league: getLeaderboardLeagueBadge(gameId, Math.max(0, Math.floor(ce.primaryValue || 0))),
+          ce.detailLabelVi || formatDetailDisplayVi(scoredGameId, tw, bs),
+        league: getLeaderboardLeagueBadge(scoredGameId, pv),
       });
+    }
+
+    if (state.minigameLeaderboard?.includeSeededRivals) {
+      for (const rival of SEEDED_HOGWARTS_RIVALS) {
+        const st = rival.stats[scoredGameId];
+        pool.push({
+          id: `rival:${rival.id}`,
+          name: rival.name,
+          titleVi: 'Học Viên Mẫu Hogwarts',
+          parkName: rival.parkName,
+          friendCode: `HS-SEED-${rival.id.toUpperCase()}`,
+          avatarEmoji: rival.avatarEmoji,
+          house: rival.house,
+          isPlayer: false,
+          isFriend: false,
+          isCloudPlayer: false,
+          isSeededRival: true,
+          primaryValue: st.stage,
+          primaryDisplayVi: formatPrimaryDisplayVi(scoredGameId, st.stage),
+          stars: st.stars,
+          ratingScore: st.score,
+          ratingDisplayVi: `${st.score.toLocaleString('vi-VN')} đ`,
+          totalWins: st.stage,
+          bestStreak: st.streak,
+          detailDisplayVi: formatDetailDisplayVi(scoredGameId, st.stage, st.streak),
+          league: getLeaderboardLeagueBadge(scoredGameId, st.stage),
+        });
+      }
     }
   }
 
@@ -861,6 +1078,7 @@ function buildUnifiedHouseCupStandings(
       house: HouseName;
       memberKeys: Set<string>;
       totalPrimaryValue: number;
+      totalStars: number;
       totalWins: number;
       points: number;
     }
@@ -872,6 +1090,7 @@ function buildUnifiedHouseCupStandings(
       house: h,
       memberKeys: new Set<string>(),
       totalPrimaryValue: 0,
+      totalStars: 0,
       totalWins: 0,
       points: valleyBonus,
     });
@@ -890,15 +1109,19 @@ function buildUnifiedHouseCupStandings(
       const normMemberCode = (row.friendCode || '').trim().toUpperCase();
       const memberKey = row.isPlayer
         ? 'self'
-        : !PLACEHOLDER_FRIEND_CODES.has(normMemberCode) && !row.id.startsWith('cloud:')
+        : !PLACEHOLDER_FRIEND_CODES.has(normMemberCode) &&
+            !row.id.startsWith('cloud:') &&
+            !row.id.startsWith('rival:')
           ? normMemberCode
           : row.id;
       rec.memberKeys.add(memberKey);
       rec.totalPrimaryValue += Math.max(0, row.primaryValue);
+      rec.totalStars += Math.max(0, row.stars);
       rec.totalWins += Math.max(0, row.totalWins);
       rec.points +=
         Math.round(Math.max(0, row.ratingScore) / 10) +
         Math.max(0, row.primaryValue) * 35 +
+        Math.max(0, row.stars) * 4 +
         Math.max(0, row.totalWins) * 15 +
         Math.max(0, row.bestStreak) * 10;
     }
@@ -910,11 +1133,13 @@ function buildUnifiedHouseCupStandings(
       house: item.house,
       members: item.memberKeys.size,
       totalPrimaryValue: item.totalPrimaryValue,
+      totalStars: item.totalStars,
       totalWins: item.totalWins,
       points: item.points,
     };
   }).sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
+    if (b.totalStars !== a.totalStars) return b.totalStars - a.totalStars;
     if (b.totalPrimaryValue !== a.totalPrimaryValue) {
       return b.totalPrimaryValue - a.totalPrimaryValue;
     }
@@ -933,6 +1158,7 @@ function buildUnifiedHouseCupStandings(
     meta: HOGWARTS_HOUSE_META[item.house],
     members: item.members,
     totalPrimaryValue: item.totalPrimaryValue,
+    totalStars: item.totalStars,
     totalWins: item.totalWins,
     points: item.points,
     fillPercent:
@@ -991,7 +1217,58 @@ export function buildMinigameLeaderboard(
     houseStandings,
     playerHouse: playerEntry.house,
     activeHouseFilter: houseFilter,
+    includeSeededRivals: Boolean(state.minigameLeaderboard?.includeSeededRivals),
   };
+}
+
+export function exportMinigameLeaderboardCSV(
+  state: GameState,
+  rawGameId: LeaderboardGameId,
+  scope: Exclude<LeaderboardScope, 'personal'> = 'valley',
+  houseFilter: 'all' | HouseName = 'all',
+  extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>
+): string {
+  const standing = buildMinigameLeaderboard(
+    state,
+    rawGameId,
+    scope,
+    extraCloudEntries,
+    houseFilter
+  );
+  const header = [
+    'Hang',
+    'Ten Phu Thuy',
+    'Nha Hogwarts',
+    'Tong Diem',
+    'Tong Sao',
+    'Man Cao Nhat',
+    'Loai',
+  ];
+  const escapeCsvCell = (raw: unknown): string => {
+    const str = String(raw ?? '').replace(/"/g, '""');
+    const formulaSafe = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+    return `"${formulaSafe}"`;
+  };
+  const rows = standing.entries.map((entry) => {
+    const cleanWizardName = entry.isPlayer
+      ? entry.name.replace(/\s*\(Bạn\)\s*$/u, '').trim() || entry.name
+      : entry.name;
+    const kindLabel = entry.isSeededRival
+      ? 'Hoc vien mau'
+      : entry.isFriend && !entry.isPlayer
+        ? 'Ban be'
+        : 'Nguoi choi that';
+    return [
+      entry.rank,
+      escapeCsvCell(cleanWizardName),
+      entry.house.toUpperCase(),
+      entry.ratingScore,
+      entry.stars,
+      entry.primaryValue,
+      kindLabel,
+    ];
+  });
+  return [header.join(','), ...rows.map((r) => r.join(','))].join('\n');
 }
 
 export function buildAllPersonalRecordsSummary(
@@ -1010,7 +1287,10 @@ export function buildAllPersonalRecordsSummary(
       valleyTotal: valley.totalEntries,
       friendsRank: friends.playerRank,
       friendsTotal: friends.totalEntries,
+      primaryValue: valley.playerEntry.primaryValue,
       primaryDisplayVi: valley.playerEntry.primaryDisplayVi,
+      stars: valley.playerEntry.stars,
+      ratingScore: valley.playerEntry.ratingScore,
       ratingDisplayVi: valley.playerEntry.ratingDisplayVi,
       detailDisplayVi: valley.playerEntry.detailDisplayVi,
       bestSessionScore: rec.bestSessionScore,

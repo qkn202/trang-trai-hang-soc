@@ -33,7 +33,11 @@ import {
   MAX_HOME_LANTERN_MARKS,
   syncNeighborSocialDailyReset,
 } from '../neighborSocial';
-import { ParkSimulation } from '../simulation';
+import {
+  IS_SANDBOX_BUILD_ENABLED,
+  isSandboxRuntimeAllowed,
+  ParkSimulation,
+} from '../simulation';
 
 const SAVE_KEY = 'burrow_hogsmeade_777_v3';
 
@@ -1383,6 +1387,51 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(brewRes.ok).toBe(true);
       expect(brewRes.msg).not.toMatch(/\b3600s\b/);
       expect(brewRes.msg).toContain('1 giờ');
+    });
+
+    it('5. Khóa cứng toàn bộ chế độ Sandbox / Xem Thử Lv.100 / Lễ Hội ép tay / Ô lưu bẩn trong bản game sạch', () => {
+      expect(IS_SANDBOX_BUILD_ENABLED).toBe(false);
+      expect(isSandboxRuntimeAllowed()).toBe(false);
+
+      const sim = new ParkSimulation(createMockAudio());
+      expect(sim.state.sandboxMode).toBe(false);
+
+      // 5a. toggleHeadmasterPreview(100) bị chặn hoàn toàn ở bản sạch
+      sim.toggleHeadmasterPreview(100);
+      expect(sim.isHeadmasterPreview).toBe(false);
+      expect(sim.state.sandboxMode).toBe(false);
+      expect(sim.state.level).toBe(1);
+
+      // 5b. Chỉnh sửa localStorage / importSaveJson ép sandboxMode=true, activeFestival='quidditch_cup' & công trình builtInSandbox bị khử ngay khi nạp
+      const rawTampered = JSON.parse(sim.exportSaveJson());
+      rawTampered.sandboxMode = true;
+      rawTampered.settings.activeFestival = 'quidditch_cup';
+      rawTampered.buildings.push({
+        uid: 'sandbox_cheat_dragon_99',
+        itemId: 'dragon_lair',
+        gx: 40,
+        gy: 40,
+        rotation: 0,
+        stars: 5,
+        builtAt: Date.now(),
+        constructEndsAt: Date.now(),
+        builtInSandbox: true,
+      });
+      expect(sim.importSaveJson(JSON.stringify(rawTampered))).toBe(true);
+      expect(sim.state.sandboxMode).toBe(false);
+      expect(sim.state.sandboxTainted).toBe(true);
+      expect(sim.state.settings.activeFestival).toBe('auto');
+      expect(sim.state.buildings.some((b) => b.uid === 'sandbox_cheat_dragon_99')).toBe(false);
+
+      // 5c. Hồ sơ lưu (slot_1..3) dính dấu vết Sandbox bị từ chối khôi phục trong bản game sạch
+      sim.saveNamedProfileSlot('slot_1');
+      mockLocalStorage.removeItem(SAVE_KEY);
+      const cleanSim = new ParkSimulation(createMockAudio());
+      expect(cleanSim.state.sandboxTainted).toBeFalsy();
+      const slotRes = cleanSim.loadNamedProfileSlot('slot_1');
+      expect(slotRes.ok).toBe(false);
+      expect(cleanSim.state.sandboxMode).toBe(false);
+      expect(cleanSim.state.sandboxTainted).toBeFalsy();
     });
   });
 });

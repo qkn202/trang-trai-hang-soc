@@ -370,7 +370,14 @@ export function questsHarvestBuildingBubble(sim: ParkSimulation, uid: string): b
     if (g > 0) {
       sim.onRewardFly?.('galleons', g, cx, cy);
     }
-    questsTryDropWizardCard(sim, cx, cy, sim.getCurrentWeather().kind === 'fog' ? 0.12 : 0.09);
+    questsTryDropWizardCard(
+      sim,
+      cx,
+      cy,
+      sim.state.settings.weatherOverride === 'auto' && sim.getCurrentWeather().kind === 'fog'
+        ? 0.12
+        : 0.09
+    );
     sim.saveToStorage();
     sim.onUiChange?.();
     return true;

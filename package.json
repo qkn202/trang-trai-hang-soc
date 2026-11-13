@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:sandbox": "VITE_ALLOW_SANDBOX=1 vite",
     "build": "tsc && vite build",
     "package:gzip": "npm run build && node tools/package-gzip.mjs",
     "preview": "vite preview",

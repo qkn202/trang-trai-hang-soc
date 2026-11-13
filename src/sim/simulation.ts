@@ -217,6 +217,8 @@ import {
   getItemPriceBounds,
   getLocalDateKey,
   getUpgradeCost,
+  IS_SANDBOX_BUILD_ENABLED,
+  isSandboxRuntimeAllowed,
   migrateLoadedState,
   PHOENIX_FORGE_ELIGIBLE_GOODS,
   PHOENIX_FORGE_GOLD_COST,
@@ -238,6 +240,8 @@ export {
   getItemPriceBounds,
   getLocalDateKey,
   getUpgradeCost,
+  IS_SANDBOX_BUILD_ENABLED,
+  isSandboxRuntimeAllowed,
   MAX_PHOENIX_TALISMANS,
   PHOENIX_FORGE_ELIGIBLE_GOODS,
   PHOENIX_FORGE_GOLD_COST,
@@ -832,6 +836,22 @@ export class ParkSimulation {
   }
 
   public update(dt: number): void {
+    if (!isSandboxRuntimeAllowed() && !import.meta.env.VITEST) {
+      if (this.simSpeed !== 1) {
+        this.simSpeed = 1;
+      }
+      if (this.isHeadmasterPreview) {
+        this.isHeadmasterPreview = false;
+      }
+      if (this.state.sandboxMode) {
+        this.state.sandboxMode = false;
+        this.state.sandboxTainted = true;
+      }
+      if (this.homeStateWhileVisiting?.sandboxMode) {
+        this.homeStateWhileVisiting.sandboxMode = false;
+        this.homeStateWhileVisiting.sandboxTainted = true;
+      }
+    }
     const clampedDt = Math.min(0.1, dt) * this.simSpeed;
     const now = Date.now();
 
@@ -1624,6 +1644,15 @@ export class ParkSimulation {
     const loaded = loadFromNamedSlot(slotId);
     if (!loaded.ok || !loaded.state) {
       return { ok: false, msg: 'Ô hồ sơ này hiện đang trống!' };
+    }
+    if (
+      !isSandboxRuntimeAllowed() &&
+      (loaded.state.sandboxMode === true || loaded.state.sandboxTainted === true)
+    ) {
+      return {
+        ok: false,
+        msg: 'Hồ sơ thử nghiệm Sandbox đã bị khóa trong bản game chính thức!',
+      };
     }
     const ok = this.importSaveJson(JSON.stringify(loaded.state));
     if (!ok) {

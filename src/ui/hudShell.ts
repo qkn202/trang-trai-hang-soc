@@ -716,13 +716,20 @@ export function shellMountDOM(hud: GameHUD): void {
         </div>
       </dialog>
 
-      <!-- DIALOG 14: PER-MINIGAME LEADERBOARDS (6 WIZARDING DISCIPLINES) -->
-      <dialog id="leaderboardDialog" closedby="any" aria-labelledby="leaderboardDialogTitle">
-        <div class="parchment-panel modal-inner lb-modal-inner">
-          <div class="modal-header">
-            <h2 id="leaderboardDialogTitle" class="modal-title">🏆 Bảng Xếp Hạng</h2>
-            <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
+      <!-- DIALOG 14: PER-MINIGAME LEADERBOARDS & HOGWARTS 4-HOUSE CUP (HANG SÓC PARCHMENT & BRASS EDITION) -->
+      <dialog id="leaderboardDialog" class="cc-lb-dialog" closedby="any" aria-labelledby="leaderboardDialogTitle">
+        <div class="parchment-panel modal-inner lb-modal-inner cc-lb-card">
+          <div class="modal-header cc-lb-header">
+            <div class="cc-lb-title-stack">
+              <span class="cc-lb-ribbon-sub">ĐẠI SẢNH ĐƯỜNG HANG SÓC • 3 MÔN TRANH CÚP</span>
+              <h2 id="leaderboardDialogTitle" class="modal-title">🏆 Bảng Xếp Hạng &amp; Cúp 4 Nhà</h2>
+            </div>
+            <form method="dialog" class="cc-lb-close-form">
+              <button type="submit" class="brass-btn" aria-label="Đóng bảng xếp hạng" autofocus>✕</button>
+            </form>
           </div>
+          <div id="leaderboardLiveAnnouncer" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
+          <div id="leaderboardDialogToast" class="cc-lb-toast" hidden></div>
           <div id="leaderboardDialogContent"></div>
         </div>
       </dialog>

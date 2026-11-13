@@ -297,6 +297,19 @@ export default defineConfig({
         if (!resolvedViteConfig) return;
         const outDir = path.resolve(resolvedViteConfig.root, resolvedViteConfig.build.outDir);
 
+        if (process.env.VITE_ALLOW_SANDBOX !== '1') {
+          for (const devFile of [
+            'hpvn-embed-preview.html',
+            'hpvn-embed-preview.html.gz',
+            'hpvn-embed-preview.html.br',
+          ]) {
+            const devTarget = path.join(outDir, devFile);
+            if (fs.existsSync(devTarget)) {
+              fs.unlinkSync(devTarget);
+            }
+          }
+        }
+
         // Tự động đóng dấu mã băm tài sản (`v33-<hash>`) vào `dist/sw.js` ở mỗi lần build
         // để trình duyệt tự dọn cache Service Worker cũ ngay khi triển khai bản mới lên HPVN.
         const swPath = path.join(outDir, 'sw.js');

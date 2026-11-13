@@ -1,17 +1,26 @@
 import {
   ALL_HOGWARTS_HOUSES,
   ALL_LEADERBOARD_GAMES,
+  exportMinigameLeaderboardCSV,
   fetchCloudLeaderboardEntries,
+  getCachedCloudLeaderboardEntries,
   HOGWARTS_HOUSE_META,
   HouseCupStanding,
   isScoredLeaderboardGame,
   LEADERBOARD_GAME_META,
   LeaderboardRowEntry,
+  MAX_PUZZLE_TOWER_STAGE,
   normalizeScoredLeaderboardGame,
   submitPlayerCloudLeaderboardEntry,
   syncAllPlayerCloudLeaderboards,
+  toggleLeaderboardSeededRivals,
+  updatePlayerWizardProfile,
 } from '../sim/minigameLeaderboard';
-import { ParkSimulation } from '../sim/simulation';
+import {
+  IS_SANDBOX_BUILD_ENABLED,
+  isSandboxRuntimeAllowed,
+  ParkSimulation,
+} from '../sim/simulation';
 import { HouseName, LeaderboardGameId, LeaderboardScope } from '../types/game';
 
 function escapeHtml(raw: string): string {
@@ -23,21 +32,33 @@ function escapeHtml(raw: string): string {
     .replace(/'/g, '&#39;');
 }
 
-function getHouseBadgeVi(house: HouseName): { emoji: string; label: string; cls: string } {
-  const m = HOGWARTS_HOUSE_META[house] ?? HOGWARTS_HOUSE_META.Gryffindor;
-  return {
-    emoji: m.mascotEmoji,
-    label: m.house,
-    cls: `house-${m.cssSlug}`,
-  };
-}
-
-function formatRankMedal(rank: number): string {
-  if (rank === 1) return '🥇 #1';
-  if (rank === 2) return '🥈 #2';
-  if (rank === 3) return '🥉 #3';
+function formatCandyRankBadge(rank: number): string {
+  if (rank === 1) return '🥇 1';
+  if (rank === 2) return '🥈 2';
+  if (rank === 3) return '🥉 3';
   return `#${rank}`;
 }
+
+function stripTrailingPlayerSuffix(name: string): string {
+  return name.replace(/\s*\(Bạn\)\s*$/u, '').trim() || name;
+}
+
+const DIALOG_CARD_INNER_HTML = `
+  <div class="parchment-panel modal-inner lb-modal-inner cc-lb-card">
+    <div class="modal-header cc-lb-header">
+      <div class="cc-lb-title-stack">
+        <span class="cc-lb-ribbon-sub">ĐẠI SẢNH ĐƯỜNG HANG SÓC • 3 MÔN TRANH CÚP</span>
+        <h2 id="leaderboardDialogTitle" class="modal-title">🏆 Bảng Xếp Hạng &amp; Cúp 4 Nhà</h2>
+      </div>
+      <form method="dialog" class="cc-lb-close-form">
+        <button type="submit" class="brass-btn" aria-label="Đóng bảng xếp hạng" autofocus>✕</button>
+      </form>
+    </div>
+    <div id="leaderboardLiveAnnouncer" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
+    <div id="leaderboardDialogToast" class="cc-lb-toast" hidden></div>
+    <div id="leaderboardDialogContent"></div>
+  </div>
+`;
 
 export class LeaderboardModalController {
   public activeGameId: LeaderboardGameId = 'match3';
@@ -52,6 +73,12 @@ export class LeaderboardModalController {
   private readonly sim: ParkSimulation;
   private closeBound = false;
   private sortingHatSpinning = false;
+  private profileDrawerOpen = false;
+  private profileDraftName: string | null = null;
+  private profileDraftHouse: HouseName | null = null;
+  private sortingHatAnnouncement = '';
+  private toastTimer: number | null = null;
+  private liveTimer: number | null = null;
 
   constructor(root: HTMLElement, sim: ParkSimulation) {
     this.root = root;
@@ -64,18 +91,16 @@ export class LeaderboardModalController {
     if (!dlg) {
       dlg = document.createElement('dialog');
       dlg.id = 'leaderboardDialog';
+      dlg.className = 'cc-lb-dialog';
       dlg.setAttribute('closedby', 'any');
       dlg.setAttribute('aria-labelledby', 'leaderboardDialogTitle');
-      dlg.innerHTML = `
-        <div class="parchment-panel modal-inner lb-modal-inner">
-          <div class="modal-header">
-            <h2 id="leaderboardDialogTitle" class="modal-title">🏆 Bảng Xếp Hạng</h2>
-            <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng" autofocus>✕</button></form>
-          </div>
-          <div id="leaderboardDialogContent"></div>
-        </div>
-      `;
+      dlg.innerHTML = DIALOG_CARD_INNER_HTML;
       this.root.appendChild(dlg);
+    } else if (!dlg.querySelector('.cc-lb-card')) {
+      dlg.classList.add('cc-lb-dialog');
+      dlg.setAttribute('closedby', 'any');
+      dlg.setAttribute('aria-labelledby', 'leaderboardDialogTitle');
+      dlg.innerHTML = DIALOG_CARD_INNER_HTML;
     }
 
     if (!this.closeBound) {
@@ -84,22 +109,57 @@ export class LeaderboardModalController {
         dlg!.returnValue = '';
       });
 
-      // Fallback light-dismiss for browsers without native dialog.closedBy support
+      // Fallback light-dismiss where native dialog.closedBy is missing (Safari / older WebKit)
       if (typeof HTMLDialogElement !== 'undefined' && !('closedBy' in HTMLDialogElement.prototype)) {
-        dlg.addEventListener('click', (event) => {
-          if (event.target !== dlg) return;
-          const rect = dlg!.getBoundingClientRect();
-          const inside =
-            rect.top <= event.clientY &&
-            event.clientY <= rect.top + rect.height &&
-            rect.left <= event.clientX &&
-            event.clientX <= rect.left + rect.width;
-          if (!inside) dlg!.close();
+        const isOutside = (ev: PointerEvent, dialogEl: HTMLDialogElement): boolean => {
+          const r = dialogEl.getBoundingClientRect();
+          return (
+            ev.clientX < r.left ||
+            ev.clientX > r.right ||
+            ev.clientY < r.top ||
+            ev.clientY > r.bottom
+          );
+        };
+        let pressedOutside = false;
+        dlg.addEventListener('pointerdown', (ev) => {
+          pressedOutside = isOutside(ev, dlg!);
+        });
+        dlg.addEventListener('pointerup', (ev) => {
+          if (pressedOutside && isOutside(ev, dlg!)) {
+            dlg!.close();
+          }
+          pressedOutside = false;
         });
       }
     }
 
     return dlg;
+  }
+
+  private showInDialogToast(message: string): void {
+    const toastEl = this.root.querySelector('#leaderboardDialogToast') as HTMLElement | null;
+    const liveEl = this.root.querySelector('#leaderboardLiveAnnouncer') as HTMLElement | null;
+    if (toastEl) {
+      toastEl.textContent = message;
+      toastEl.hidden = false;
+      if (this.toastTimer !== null) {
+        window.clearTimeout(this.toastTimer);
+      }
+      this.toastTimer = window.setTimeout(() => {
+        toastEl.hidden = true;
+        this.toastTimer = null;
+      }, 2800);
+    }
+    if (liveEl) {
+      if (this.liveTimer !== null) {
+        window.clearTimeout(this.liveTimer);
+      }
+      liveEl.textContent = '';
+      this.liveTimer = window.setTimeout(() => {
+        liveEl.textContent = message;
+        this.liveTimer = null;
+      }, 50);
+    }
   }
 
   public open(
@@ -133,11 +193,17 @@ export class LeaderboardModalController {
       this.activeHouseFilter = houseFilter;
     }
 
+    this.profileDraftName = null;
+    this.profileDraftHouse = null;
+    this.sortingHatAnnouncement = '';
+
     const dlg = this.ensureDialogMounted();
     this.render();
     if (!dlg.open) {
       dlg.showModal();
     }
+
+    this.scrollSelectedGameTabIntoView();
 
     void syncAllPlayerCloudLeaderboards(this.sim.state)
       .catch(() => {})
@@ -145,7 +211,7 @@ export class LeaderboardModalController {
         Promise.all(ALL_LEADERBOARD_GAMES.map((gid) => fetchCloudLeaderboardEntries(gid)))
       )
       .then(() => {
-        if (dlg.open) {
+        if (dlg.open && !this.profileDrawerOpen) {
           this.render();
         }
       });
@@ -156,136 +222,299 @@ export class LeaderboardModalController {
     if (dlg?.open) dlg.close();
   }
 
-  private renderHouseCupSectionHtml(
-    houseStandings: ReadonlyArray<HouseCupStanding>,
-    playerHouse: HouseName
-  ): string {
-    const playerHouseMeta = HOGWARTS_HOUSE_META[playerHouse] ?? HOGWARTS_HOUSE_META.Gryffindor;
+  private scrollSelectedGameTabIntoView(focusSelected = false): void {
+    const selectedTab = this.root.querySelector<HTMLButtonElement>(
+      '.cc-lb-game-tabs [role="tab"][aria-selected="true"]'
+    );
+    if (!selectedTab) return;
+    if (focusSelected) {
+      selectedTab.focus();
+    }
+    if (typeof selectedTab.scrollIntoView === 'function') {
+      try {
+        selectedTab.scrollIntoView({
+          block: 'nearest',
+          inline: 'nearest',
+          container: 'nearest',
+        } as ScrollIntoViewOptions);
+      } catch {
+        selectedTab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
+    }
+  }
 
-    const houseCardsHtml = houseStandings
+  private getCurrentWizardDisplayName(): string {
+    return (
+      this.sim.state.neighborSocial?.playerDisplayName?.trim() ||
+      this.sim.state.parkName?.trim() ||
+      'Phù Thủy Hang Sóc'
+    );
+  }
+
+  private renderHouseCupGridHtml(houseStandings: ReadonlyArray<HouseCupStanding>): string {
+    const cardsHtml = houseStandings
       .map((item) => {
         const h = item.meta;
         const isFiltered = this.activeHouseFilter === item.house;
-        const rankCrown =
-          item.rank === 1 ? '🥇 #1' : item.rank === 2 ? '🥈 #2' : item.rank === 3 ? '🥉 #3' : `#${item.rank}`;
         return `
           <button
             type="button"
-            class="house-cup-card house-card-${h.cssSlug} ${item.isPlayerHouse ? 'is-player-house' : ''} ${isFiltered ? 'is-filtered-house' : ''}"
+            class="cc-house-cup-card cc-house-${h.cssSlug} ${item.isPlayerHouse ? 'is-player-house' : ''} ${isFiltered ? 'is-filtered-house' : ''}"
             data-lb-house-card="${item.house}"
             aria-pressed="${isFiltered}"
-            title="${escapeHtml(h.vnTitle)} (${escapeHtml(h.gemNameVi)})"
           >
-            <div class="house-cup-top">
-              <span class="house-cup-crest" aria-hidden="true">${h.emblemSvg}</span>
-              <div class="house-cup-meta">
-                <div class="house-cup-name-row">
-                  <strong>${rankCrown} ${escapeHtml(h.house)}</strong>
-                  ${item.isPlayerHouse ? `<span class="house-you-pill">Bạn</span>` : ''}
+            <div class="cc-house-cup-top">
+              <span class="cc-house-cup-crest" aria-hidden="true">${h.emblemSvg}</span>
+              <div class="cc-house-cup-meta">
+                <div class="cc-house-cup-name-row">
+                  <strong>#${item.rank} ${escapeHtml(h.house)}</strong>
+                  ${item.isPlayerHouse ? `<span class="cc-house-you-pill">Bạn</span>` : ''}
                 </div>
-                <div class="house-cup-vn-title">${h.gemEmoji} ${escapeHtml(h.gemShortVi)} • 👥 ${item.members}</div>
+                <div class="cc-house-cup-stats">${item.members} thành viên • ${item.totalStars.toLocaleString('vi-VN')} ★</div>
               </div>
-              <span class="house-cup-hourglass-icon" aria-hidden="true" title="Đồng hồ cát ${escapeHtml(h.gemNameVi)}">${h.hourglassSvg}</span>
+              <span class="cc-house-cup-hourglass" aria-hidden="true">${h.hourglassSvg}</span>
             </div>
-            <div class="house-cup-points-row">
-              <span class="house-cup-points">${item.points.toLocaleString('vi-VN')} đ</span>
-              <span class="house-cup-patronus" title="${escapeHtml(h.patronusNameVi)}">${h.patronusEmoji}</span>
-            </div>
-            <div class="hourglass-bar" role="progressbar" aria-valuenow="${item.fillPercent}" aria-valuemin="0" aria-valuemax="100" aria-label="Mực đá quý ${escapeHtml(h.gemShortVi)} của nhà ${escapeHtml(h.house)}">
-              <div class="hourglass-bar-fill" style="width:${item.fillPercent}%"></div>
+            <div class="cc-house-cup-points">${item.points.toLocaleString('vi-VN')} đ</div>
+            <div
+              class="cc-hourglass-bar"
+              role="progressbar"
+              aria-valuenow="${item.fillPercent}"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-label="Điểm Cúp Nhà ${escapeHtml(h.house)}"
+            >
+              <div class="cc-hourglass-bar-fill" style="width:${item.fillPercent}%"></div>
             </div>
           </button>
         `;
       })
       .join('');
 
-    const houseSelectorBtnsHtml = ALL_HOGWARTS_HOUSES.map((hName) => {
+    return `
+      <div class="cc-hourglass-grid" id="house-cup-grid">
+        ${cardsHtml}
+      </div>
+    `;
+  }
+
+  private renderProfileDrawerHtml(playerHouse: HouseName): string {
+    if (!this.profileDrawerOpen) return '';
+
+    const lockedByServer = Boolean(
+      this.sim.state.minigameLeaderboard?.playerHouseLockedByServer &&
+        this.sim.state.minigameLeaderboard?.playerHouse
+    );
+    const activeHouse = lockedByServer
+      ? playerHouse
+      : this.profileDraftHouse ?? playerHouse;
+    const draftName = this.profileDraftName ?? this.getCurrentWizardDisplayName();
+    const houseMeta = HOGWARTS_HOUSE_META[activeHouse] ?? HOGWARTS_HOUSE_META.Gryffindor;
+
+    const houseOptionsHtml = ALL_HOGWARTS_HOUSES.map((hName) => {
       const hm = HOGWARTS_HOUSE_META[hName];
-      const isMyHouse = hName === playerHouse;
+      const isSelected = hName === activeHouse;
       return `
-        <button
-          type="button"
-          class="lb-my-house-btn house-pill-${hm.cssSlug} ${isMyHouse ? 'active' : ''}"
-          data-lb-pick-house="${hName}"
-          aria-pressed="${isMyHouse}"
-          title="${escapeHtml(hm.vnTitle)} (${escapeHtml(hm.traitsVi)})"
-        >
-          ${hm.mascotEmoji} ${escapeHtml(hm.house)}
-        </button>
+        <label class="cc-house-option ${isSelected ? 'selected' : ''}" data-cc-house-opt="${hName}">
+          <input
+            type="radio"
+            name="ccWizardHouse"
+            value="${hName}"
+            ${isSelected ? 'checked' : ''}
+            ${lockedByServer ? 'disabled' : ''}
+          />
+          <span class="cc-house-option-crest" aria-hidden="true">${hm.emblemSvg}</span>
+          <span class="cc-house-option-info">
+            <strong>${escapeHtml(hm.house)} (${escapeHtml(hm.vnTitle)})</strong>
+            <small>${hm.patronusEmoji} ${escapeHtml(hm.patronusNameVi)} • ${escapeHtml(hm.traitsVi)}</small>
+          </span>
+        </label>
       `;
     }).join('');
 
-    const filterPillsHtml = [
-      `
-        <button
-          type="button"
-          class="filter-pill ${this.activeHouseFilter === 'all' ? 'active' : ''}"
-          data-lb-house-filter="all"
-          aria-pressed="${this.activeHouseFilter === 'all'}"
-        >
-          🏰 Tất Cả
-        </button>
-      `,
-      ...ALL_HOGWARTS_HOUSES.map((hName) => {
-        const hm = HOGWARTS_HOUSE_META[hName];
-        const isAct = this.activeHouseFilter === hName;
-        const count = houseStandings.find((s) => s.house === hName)?.members ?? 0;
-        return `
-          <button
-            type="button"
-            class="filter-pill filter-pill-${hm.cssSlug} ${isAct ? 'active' : ''}"
-            data-lb-house-filter="${hName}"
-            aria-pressed="${isAct}"
-          >
-            ${hm.mascotEmoji} ${escapeHtml(hm.house)} <span class="filter-pill-count">(${count})</span>
-          </button>
-        `;
-      }),
-    ].join('');
+    const quoteText =
+      this.sortingHatAnnouncement ||
+      `${houseMeta.patronusEmoji} ${houseMeta.house}: ${houseMeta.quoteVi}`;
 
     return `
-      <section class="house-cup-section" aria-label="Cúp 4 Nhà Hogwarts">
-        <div class="house-cup-header-bar">
-          <div class="house-cup-heading-copy">
-            <h3 class="house-cup-heading">🏆 Cúp 4 Nhà Hogwarts</h3>
-            <p class="house-cup-quote">🍬 Bùa Gặt Honeydukes • 🔢 Số Học Huyền Bí • 🦄 Sinh Vật Huyền Bí</p>
-          </div>
-          <div class="lb-sorting-hat-box">
-            <div class="lb-sorting-hat-label">
-              <span>${this.sim.state.minigameLeaderboard?.playerHouseLockedByServer ? '🏰' : '🎩'} <strong>${playerHouseMeta.mascotEmoji} ${escapeHtml(playerHouseMeta.house)}</strong></span>
-              ${
-                this.sim.state.minigameLeaderboard?.playerHouseLockedByServer
-                  ? `<span class="house-you-pill" title="Tự động đồng bộ theo tài khoản diễn đàn HPVN">Tài khoản HPVN</span>`
-                  : `<button
-                id="btnLbSortingHat"
-                type="button"
-                class="brass-btn lb-hat-roll-btn ${this.sortingHatSpinning ? 'is-spinning' : ''}"
-                title="Đội Chiếc Nón Phân Loại"
-              >
-                🎩 Phân Loại
-              </button>`
-              }
-            </div>
+      <form id="ccLbProfileForm" class="cc-profile-drawer">
+        <div class="cc-profile-header">
+          <h3 class="cc-profile-heading">🎩 Hồ Sơ Phù Thủy &amp; Lễ Phân Loại Nhà</h3>
+          ${
+            lockedByServer
+              ? `<span class="cc-server-house-badge">🏰 Đồng bộ tài khoản HPVN: ${houseMeta.mascotEmoji} ${escapeHtml(playerHouse)}</span>`
+              : ''
+          }
+        </div>
+
+        <div class="cc-field-group">
+          <label for="ccWizardNameInput">Tên Phù Thủy hiển thị trên Bảng Xếp Hạng (Tối đa 26 ký tự)</label>
+          <div class="cc-input-with-action">
+            <input
+              id="ccWizardNameInput"
+              name="wizardName"
+              type="text"
+              maxlength="26"
+              autocomplete="nickname"
+              placeholder="Ví dụ: Minh Khôi Potter..."
+              value="${escapeHtml(draftName)}"
+              required
+            />
             ${
-              this.sim.state.minigameLeaderboard?.playerHouseLockedByServer
+              lockedByServer
                 ? ''
-                : `<div class="lb-my-house-pills" role="group" aria-label="Chọn Nhà Hogwarts của bạn">
-              ${houseSelectorBtnsHtml}
-            </div>`
+                : `<button
+                    id="btnLbRandomHat"
+                    type="button"
+                    class="cc-pill-btn cc-btn-yellow ${this.sortingHatSpinning ? 'is-spinning' : ''}"
+                    ${this.sortingHatSpinning ? 'disabled' : ''}
+                  >
+                    🎩 Nón Phân Loại
+                  </button>`
             }
           </div>
         </div>
 
-        <div class="hourglass-grid" id="house-cup-grid">
-          ${houseCardsHtml}
+        <fieldset class="cc-houses-fieldset">
+          <legend>${
+            lockedByServer
+              ? 'Nhà Hogwarts (Tự động khoá theo tài khoản diễn đàn HPVN)'
+              : 'Chọn 1 trong 4 Nhà Hogwarts'
+          }</legend>
+          <div class="cc-houses-grid" id="ccHousesSelectorGrid">
+            ${houseOptionsHtml}
+          </div>
+        </fieldset>
+
+        <p id="ccSortingHatQuote" class="cc-dialog-lead">${escapeHtml(quoteText)}</p>
+
+        <div class="cc-profile-actions">
+          <button type="submit" class="cc-pill-btn cc-btn-pink cc-btn-save-profile">
+            💾 Cập Nhật Hồ Sơ
+          </button>
+          <button type="button" id="btnLbCloseProfileDrawer" class="cc-pill-btn cc-btn-slate">
+            Thu gọn
+          </button>
+        </div>
+      </form>
+    `;
+  }
+
+  private renderControlsBarHtml(includeSeededRivals: boolean): string {
+    const activeMeta = LEADERBOARD_GAME_META[this.activeGameId];
+    const scopePillsHtml = `
+      <div class="cc-lb-scope-pills" role="group" aria-label="Phạm vi bảng xếp hạng">
+        <button
+          type="button"
+          class="cc-filter-pill ${this.activeScope === 'valley' ? 'active' : ''}"
+          data-lb-scope="valley"
+          aria-pressed="${this.activeScope === 'valley'}"
+        >
+          🌍 Toàn Trường
+        </button>
+        <button
+          type="button"
+          class="cc-filter-pill ${this.activeScope === 'friends' ? 'active' : ''}"
+          data-lb-scope="friends"
+          aria-pressed="${this.activeScope === 'friends'}"
+        >
+          🤝 Bạn Bè
+        </button>
+        <button
+          type="button"
+          class="cc-filter-pill ${this.activeScope === 'personal' ? 'active' : ''}"
+          data-lb-scope="personal"
+          aria-pressed="${this.activeScope === 'personal'}"
+        >
+          📜 Kỷ Lục 3 Môn
+        </button>
+      </div>
+    `;
+
+    const houseFilterPillsHtml =
+      this.activeScope === 'personal'
+        ? ''
+        : `
+      <div class="cc-lb-filter-pills" id="lb-house-filters" role="group" aria-label="Lọc theo Nhà Hogwarts">
+        <button
+          type="button"
+          class="cc-filter-pill ${this.activeHouseFilter === 'all' ? 'active' : ''}"
+          data-lb-house-filter="all"
+          aria-pressed="${this.activeHouseFilter === 'all'}"
+        >
+          Tất Cả
+        </button>
+        ${ALL_HOGWARTS_HOUSES.map((hName) => {
+          const hm = HOGWARTS_HOUSE_META[hName];
+          const isAct = this.activeHouseFilter === hName;
+          return `
+            <button
+              type="button"
+              class="cc-filter-pill ${isAct ? 'active' : ''}"
+              data-lb-house-filter="${hName}"
+              aria-pressed="${isAct}"
+            >
+              ${hm.mascotEmoji} ${escapeHtml(hm.house)}
+            </button>
+          `;
+        }).join('')}
+      </div>
+    `;
+
+    return `
+      <div class="cc-lb-controls">
+        <div class="cc-lb-filters-stack">
+          ${scopePillsHtml}
+          ${houseFilterPillsHtml}
         </div>
 
-        <div class="lb-controls">
-          <div class="lb-filter-pills" id="lb-house-filters" role="group" aria-label="Lọc bảng xếp hạng theo Nhà Hogwarts">
-            ${filterPillsHtml}
-          </div>
+        <div class="cc-lb-tools">
+          ${
+            IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed() && this.activeScope === 'valley'
+              ? `<button
+                  id="btnLbToggleNpc"
+                  type="button"
+                  class="cc-pill-btn cc-btn-blue"
+                  aria-pressed="${includeSeededRivals}"
+                >
+                  👥 Học viên mẫu: ${includeSeededRivals ? 'Bật' : 'Tắt'}
+                </button>`
+              : ''
+          }
+          <button
+            id="btnLbToggleProfile"
+            type="button"
+            class="cc-pill-btn cc-btn-purple"
+            aria-expanded="${this.profileDrawerOpen}"
+          >
+            🎩 Hồ Sơ &amp; Nhà
+          </button>
+          <button
+            id="btnLbOpenFriendsBook"
+            type="button"
+            class="cc-pill-btn cc-btn-green"
+          >
+            🦉 Kết Bạn
+          </button>
+          ${
+            this.activeScope !== 'personal'
+              ? `<button
+                  id="btnLbExportCsv"
+                  type="button"
+                  class="cc-pill-btn cc-btn-yellow"
+                >
+                  📥 Xuất CSV
+                </button>`
+              : ''
+          }
+          <button
+            id="btnLbPlayActiveGame"
+            type="button"
+            class="cc-pill-btn cc-btn-pink"
+          >
+            ▶️ ${escapeHtml(activeMeta.shortVi)}
+          </button>
         </div>
-      </section>
+      </div>
     `;
   }
 
@@ -296,122 +525,111 @@ export class LeaderboardModalController {
     const activeMeta = LEADERBOARD_GAME_META[this.activeGameId];
     const titleEl = this.root.querySelector('#leaderboardDialogTitle') as HTMLElement | null;
     if (titleEl) {
-      titleEl.innerHTML = `🏆 Bảng Xếp Hạng • ${escapeHtml(activeMeta.shortVi)}`;
+      titleEl.textContent = `🏆 Bảng Xếp Hạng & Cúp 4 Nhà • ${activeMeta.shortVi}`;
     }
 
-    // 1. 3 Scored Mini-Game Discipline Tabs with live rank pill
     const gameTabsHtml = ALL_LEADERBOARD_GAMES.map((gid) => {
       const m = LEADERBOARD_GAME_META[gid];
       const rank = this.sim.getPlayerMinigameRank(gid, 'valley');
       const isAct = gid === this.activeGameId;
       return `
         <button
+          id="ccLbTab-${gid}"
           type="button"
           role="tab"
           aria-selected="${isAct}"
+          tabindex="${isAct ? '0' : '-1'}"
           data-lb-game="${gid}"
-          class="lb-game-tab ${isAct ? 'active' : ''}"
-          title="${escapeHtml(m.titleVi)} — #${rank}"
+          class="cc-lb-game-tab"
         >
-          <img src="${m.spriteIcon}" alt="" class="lb-tab-sprite" />
-          <span class="lb-tab-copy">
-            <strong>${escapeHtml(m.shortVi)}</strong>
-            <span class="lb-tab-rank-pill">${rank <= 3 ? '👑 ' : ''}#${rank}</span>
-          </span>
+          <img src="${m.spriteIcon}" alt="" class="cc-lb-tab-sprite" />
+          <span class="cc-lb-tab-label">${escapeHtml(m.shortVi)}</span>
+          <span class="cc-lb-tab-rank">${rank <= 3 ? '👑 ' : ''}#${rank}</span>
         </button>
       `;
     }).join('');
 
-    // 2. Scope Switcher (Valley / Friends / Personal) + Jump CTA
-    const scopeTabsHtml = `
-      <div class="lb-toolbar-row">
-        <div class="lb-scope-pills" role="tablist" aria-label="Phạm vi bảng xếp hạng">
-          <button
-            type="button"
-            role="tab"
-            aria-selected="${this.activeScope === 'valley'}"
-            data-lb-scope="valley"
-            class="lb-scope-pill ${this.activeScope === 'valley' ? 'active' : ''}"
-          >
-            🌍 Thung Lũng
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected="${this.activeScope === 'friends'}"
-            data-lb-scope="friends"
-            class="lb-scope-pill ${this.activeScope === 'friends' ? 'active' : ''}"
-          >
-            🤝 Bạn Bè
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected="${this.activeScope === 'personal'}"
-            data-lb-scope="personal"
-            class="lb-scope-pill ${this.activeScope === 'personal' ? 'active' : ''}"
-          >
-            📜 Kỷ Lục
-          </button>
-        </div>
-
-        <div class="lb-toolbar-actions">
-          ${
-            this.activeScope === 'friends'
-              ? `<button id="btnLbOpenFriendsBook" type="button" class="brass-btn lb-action-btn" title="Kết bạn qua Mã Điền Trang">
-                  🦉 Thêm Bạn
-                </button>`
-              : ''
-          }
-          <button id="btnLbPlayActiveGame" type="button" class="brass-btn gold-cta lb-action-btn">
-            ▶️ ${escapeHtml(activeMeta.shortVi)}
-          </button>
-        </div>
-      </div>
-    `;
-
-    const bodyContentHtml =
-      this.activeScope === 'personal'
-        ? this.renderPersonalThreeGamesTableHtml()
-        : this.renderStandingViewHtml(this.activeScope);
-
     const unscoredNoticeHtml = this.redirectedFromUnscored
-      ? `<div class="lb-unscored-note" role="note">
-          📌 <strong>${escapeHtml(LEADERBOARD_GAME_META[this.redirectedFromUnscored]?.shortVi ?? '')}</strong> là môn rèn luyện tự do không xếp hạng — dưới đây là Bảng Xếp Hạng <strong>3 môn tính điểm</strong> (Bùa Gặt • Số Học • Sinh Vật).
+      ? `<div class="cc-lb-unscored-note" role="note">
+          📌 <strong>${escapeHtml(LEADERBOARD_GAME_META[this.redirectedFromUnscored]?.shortVi ?? '')}</strong> là môn rèn luyện tự do không tính điểm — dưới đây là Cúp 4 Nhà &amp; Bảng Xếp Hạng của <strong>3 môn tranh cúp</strong> (Bùa Gặt • Số Học • Sinh Vật).
         </div>`
       : '';
 
+    const panelBodyHtml =
+      this.activeScope === 'personal'
+        ? this.renderPersonalThreeGamesViewHtml()
+        : this.renderStandingViewHtml(this.activeScope);
+
     container.innerHTML = `
-      <div class="lb-shell">
+      <div class="cc-lb-shell">
         ${unscoredNoticeHtml}
-        <div class="lb-game-tabs" role="tablist" aria-label="Chọn bảng xếp hạng từng mini game">
+        <div class="cc-lb-game-tabs" role="tablist" aria-label="Chọn bộ môn tranh cúp">
           ${gameTabsHtml}
         </div>
-        ${scopeTabsHtml}
-        ${bodyContentHtml}
+        <div id="ccLbTabPanel" role="tabpanel" aria-labelledby="ccLbTab-${this.activeGameId}">
+          <div class="cc-lb-panel-body">
+            ${panelBodyHtml}
+          </div>
+        </div>
       </div>
     `;
 
     this.bindEvents(container);
   }
 
-  private renderPodiumCardHtml(entry: LeaderboardRowEntry | undefined, place: 1 | 2 | 3): string {
-    if (!entry) return '';
-    const crownEmoji = place === 1 ? '🥇' : place === 2 ? '🥈' : '🥉';
-    const houseMeta = getHouseBadgeVi(entry.house);
-    const avatarHtml = entry.portraitSprite
-      ? `<img src="/sprites/${escapeHtml(entry.portraitSprite)}.png" alt="" class="lb-podium-avatar-img" />`
-      : `<span class="lb-podium-avatar-emoji" aria-hidden="true">${escapeHtml(entry.avatarEmoji)}</span>`;
+  private renderStandingRowHtml(row: LeaderboardRowEntry): string {
+    const rankBadge = formatCandyRankBadge(row.rank);
+    const hm = HOGWARTS_HOUSE_META[row.house] ?? HOGWARTS_HOUSE_META.Gryffindor;
+    const cleanName = row.isPlayer ? stripTrailingPlayerSuffix(row.name) : row.name;
+
+    const statusTagHtml = row.isPlayer
+      ? `<span class="cc-lb-you-tag"> (Bạn)</span>`
+      : row.isSeededRival
+        ? `<span class="cc-lb-npc-tag"> • Mẫu</span>`
+        : row.isCloudPlayer
+          ? `<span class="cc-lb-cloud-tag"> • Online</span>`
+          : row.isFriend
+            ? `<span class="cc-lb-friend-tag"> • Bạn</span>`
+            : '';
+
+    const visitBtnHtml =
+      !row.isPlayer && row.neighborId
+        ? `<button
+            type="button"
+            class="cc-lb-visit-btn"
+            data-lb-visit="${escapeHtml(row.neighborId)}"
+            aria-label="Thăm điền trang của ${escapeHtml(cleanName)}"
+          >🏡 Thăm</button>`
+        : '';
+
+    const stageLabel =
+      row.primaryValue >= MAX_PUZZLE_TOWER_STAGE
+        ? '👑 777/777'
+        : `Màn ${Math.max(0, row.primaryValue)}`;
 
     return `
-      <div class="lb-podium-card place-${place} ${entry.isPlayer ? 'is-player' : ''}">
-        <div class="lb-podium-medal">${crownEmoji} #${place}</div>
-        <div class="lb-podium-avatar-wrap">${avatarHtml}</div>
-        <div class="lb-podium-name">${escapeHtml(entry.name)}</div>
-        <div class="lb-podium-house ${houseMeta.cls}">${houseMeta.emoji} ${houseMeta.label}</div>
-        <div class="lb-podium-primary">${escapeHtml(entry.primaryDisplayVi)}</div>
-        <div class="lb-podium-score">${escapeHtml(entry.ratingDisplayVi)}</div>
-      </div>
+      <tr class="${row.isPlayer ? 'me-row' : ''}">
+        <td class="cc-lb-rank-cell"><strong>${escapeHtml(rankBadge)}</strong></td>
+        <th scope="row" class="cc-lb-name-cell">
+          <div class="cc-lb-name-wrap">
+            <span class="cc-lb-mobile-rank" aria-hidden="true">${escapeHtml(rankBadge)}</span>
+            <span class="cc-lb-avatar" aria-hidden="true">${escapeHtml(row.avatarEmoji)}</span>
+            <span class="cc-lb-wiz-name">${escapeHtml(cleanName)}</span>
+            ${statusTagHtml}
+            ${visitBtnHtml}
+          </div>
+        </th>
+        <td class="cc-lb-house-cell cc-house-ink-${hm.cssSlug}">
+          <strong>${hm.mascotEmoji} ${escapeHtml(hm.house)}</strong>
+        </td>
+        <td>${escapeHtml(stageLabel)}</td>
+        <td>
+          <span class="cc-star-glyph" aria-hidden="true">★</span> ${row.stars.toLocaleString('vi-VN')}
+        </td>
+        <td>
+          <strong class="cc-lb-score-val">${row.ratingScore.toLocaleString('vi-VN')}</strong>
+        </td>
+      </tr>
     `;
   }
 
@@ -430,123 +648,60 @@ export class LeaderboardModalController {
       nextRivalAbove,
       houseStandings,
       playerHouse,
+      includeSeededRivals,
     } = standing;
 
-    const chaseBannerText = nextRivalAbove
-      ? `🎯 Đuổi <strong>#${nextRivalAbove.rank} ${escapeHtml(nextRivalAbove.name)}</strong> (${escapeHtml(nextRivalAbove.primaryDisplayVi)})`
-      : `👑 Đang dẫn đầu <strong>#1</strong> (${escapeHtml(meta.shortVi)})`;
-
-    const houseCupHtml = this.renderHouseCupSectionHtml(houseStandings, playerHouse);
-
-    const podiumHtml =
-      entries.length > 0
-        ? `
-      <div class="lb-podium-grid" aria-label="Top 3 dẫn đầu">
-        ${this.renderPodiumCardHtml(entries[1], 2)}
-        ${this.renderPodiumCardHtml(entries[0], 1)}
-        ${this.renderPodiumCardHtml(entries[2], 3)}
-      </div>
-    `
-        : '';
+    const chaseBannerHtml = nextRivalAbove
+      ? `🎯 Đang đuổi <strong>#${nextRivalAbove.rank} ${escapeHtml(stripTrailingPlayerSuffix(nextRivalAbove.name))}</strong> (${escapeHtml(nextRivalAbove.primaryDisplayVi)} • ${nextRivalAbove.ratingScore.toLocaleString('vi-VN')} đ)`
+      : `👑 Đang dẫn đầu <strong>#1</strong> môn ${escapeHtml(meta.shortVi)}!`;
 
     const rowsHtml =
       entries.length > 0
-        ? entries
-            .map((row) => {
-              const houseMeta = getHouseBadgeVi(row.house);
-              const rankText = formatRankMedal(row.rank);
-              const roleTag = row.isPlayer
-                ? `<span class="lb-role-tag you">Bạn</span>`
-                : row.isCloudPlayer
-                  ? `<span class="lb-role-tag cloud">🌐</span>`
-                  : row.isFriend
-                    ? `<span class="lb-role-tag friend">🤝</span>`
-                    : '';
-              const visitBtn =
-                !row.isPlayer && row.neighborId
-                  ? `<button type="button" class="lb-mini-visit-btn" data-lb-visit="${escapeHtml(row.neighborId)}" title="Thăm ${escapeHtml(row.name)}">🏡</button>`
-                  : '';
-
-              return `
-          <tr class="lb-row ${row.isPlayer ? 'is-player' : ''} ${row.rank <= 3 ? `top-${row.rank}` : ''}">
-            <th scope="row" class="lb-cell-contender">
-              <div class="lb-contender-wrap">
-                <span class="lb-rank-chip rank-${Math.min(4, row.rank)}">${rankText}</span>
-                <span class="lb-avatar-badge" aria-hidden="true">${escapeHtml(row.avatarEmoji)}</span>
-                <div class="lb-contender-meta">
-                  <div class="lb-contender-name-line">
-                    <strong>${escapeHtml(row.name)}</strong>
-                    ${roleTag}
-                  </div>
-                  <div class="lb-contender-sub">
-                    <span class="${houseMeta.cls}">${houseMeta.emoji} ${houseMeta.label}</span>
-                  </div>
-                </div>
-              </div>
-            </th>
-            <td class="lb-cell-league">
-              <span class="lb-league-pill tier-${row.league.tierId}">${row.league.icon} ${escapeHtml(row.league.labelVi)}</span>
-            </td>
-            <td class="lb-cell-primary">
-              <strong>${escapeHtml(row.primaryDisplayVi)}</strong>
-            </td>
-            <td class="lb-cell-rating">
-              <strong>${escapeHtml(row.ratingDisplayVi)}</strong>
-            </td>
-            <td class="lb-cell-detail">
-              <div class="lb-detail-flex">
-                <span>${escapeHtml(row.detailDisplayVi)}</span>
-                ${visitBtn}
-              </div>
-            </td>
-          </tr>
-        `;
-            })
-            .join('')
+        ? entries.map((r) => this.renderStandingRowHtml(r)).join('')
         : `
-          <tr class="lb-row lb-empty-house-row">
-            <td colspan="5" class="lb-empty-house-cell">
-              Chưa có học viên.
+          <tr>
+            <td colspan="6" class="cc-lb-empty-cell">
+              Chưa có phù thủy nào thuộc Nhà này trên bảng xếp hạng. Hãy vượt ải ghi điểm ngay!
             </td>
           </tr>
         `;
 
     return `
-      <div class="lb-cup-banner">
-        <img src="${meta.spriteIcon}" alt="" class="lb-cup-icon" />
-        <div class="lb-cup-copy">
-          <div class="lb-cup-title">${escapeHtml(meta.shortVi)}</div>
-          <div class="lb-cup-chase">${chaseBannerText}</div>
+      ${this.renderHouseCupGridHtml(houseStandings)}
+      ${this.renderProfileDrawerHtml(playerHouse)}
+      ${this.renderControlsBarHtml(includeSeededRivals)}
+
+      <div class="cc-lb-status-strip">
+        <div class="cc-lb-status-me">
+          <img src="${meta.spriteIcon}" alt="" class="cc-lb-status-icon" />
+          <span>Hạng của bạn: <strong>#${playerRank}/${totalEntries}</strong></span>
+          <span class="cc-league-pill tier-${playerEntry.league.tierId}">
+            ${playerEntry.league.icon} ${escapeHtml(playerEntry.league.labelVi)}
+          </span>
+          <span class="cc-lb-me-stars"><span class="cc-star-glyph" aria-hidden="true">★</span> ${playerEntry.stars.toLocaleString('vi-VN')}</span>
         </div>
-        <div class="lb-player-rank-box">
-          <span class="lb-player-rank-lbl">Hạng</span>
-          <strong class="lb-player-rank-num">#${playerRank}<span>/${totalEntries}</span></strong>
-          <span class="lb-league-pill tier-${playerEntry.league.tierId}">${playerEntry.league.icon} ${escapeHtml(playerEntry.league.labelVi)}</span>
-        </div>
+        <div class="cc-lb-status-chase">${chaseBannerHtml}</div>
       </div>
 
-      ${houseCupHtml}
-
-      ${podiumHtml}
-
-      <div tabindex="0" role="region" aria-labelledby="lbTableCaption" class="lb-table-wrapper">
+      <div tabindex="0" role="region" aria-labelledby="ccLbTableCaption" class="cc-lb-table-wrap">
         <table
-          class="lb-table"
-          style="--label-2: 'Bậc'; --label-3: '${escapeHtml(meta.primaryColVi)}'; --label-4: '${escapeHtml(meta.secondaryColVi)}'; --label-5: 'Chi Tiết';"
+          class="cc-lb-table"
+          style="--label-3: 'Nhà'; --label-4: 'Tiến độ'; --label-5: 'Sao'; --label-6: 'Tổng điểm';"
         >
-          <caption id="lbTableCaption" class="lb-table-caption">
-            ${escapeHtml(meta.shortVi)} (${entries.length}/${totalEntries})
+          <caption id="ccLbTableCaption" class="cc-lb-caption">
+            ${escapeHtml(meta.cupTitleVi)} — Hiển thị ${entries.length}/${totalEntries} phù thủy
           </caption>
           <thead>
             <tr>
               <th scope="col">Hạng</th>
-              <th scope="col">Bậc</th>
-              <th scope="col">${escapeHtml(meta.primaryColVi)}</th>
-              <th scope="col">${escapeHtml(meta.secondaryColVi)}</th>
-              <th scope="col">Chi Tiết</th>
+              <th scope="col">Phù Thủy</th>
+              <th scope="col">Nhà</th>
+              <th scope="col">Màn</th>
+              <th scope="col">Sao</th>
+              <th scope="col">Tổng Điểm</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody id="lb-tbody">
             ${rowsHtml}
           </tbody>
         </table>
@@ -554,72 +709,67 @@ export class LeaderboardModalController {
     `;
   }
 
-  private renderPersonalThreeGamesTableHtml(): string {
+  private renderPersonalThreeGamesViewHtml(): string {
+    const valleyStanding = this.sim.getMinigameLeaderboard(this.activeGameId, 'valley', 'all');
     const summaries = this.sim.getAllPersonalLeaderboardSummaries();
+
     const rowsHtml = summaries
-      .map(
-        (s) => `
-          <tr class="lb-row ${s.gameId === this.activeGameId ? 'is-player' : ''}">
-            <th scope="row" class="lb-cell-contender">
-              <div class="lb-contender-wrap">
-                <img src="${s.meta.spriteIcon}" alt="" class="lb-tab-sprite" />
-                <div class="lb-contender-meta">
-                  <div class="lb-contender-name-line">
-                    <strong>${escapeHtml(s.meta.shortVi)}</strong>
-                  </div>
-                  <div class="lb-contender-sub">
-                    <span class="lb-league-pill tier-${s.league.tierId}">${s.league.icon} ${escapeHtml(s.league.labelVi)}</span>
-                  </div>
-                </div>
+      .map((s) => {
+        const isCurrentGame = s.gameId === this.activeGameId;
+        const rankBadge = formatCandyRankBadge(s.valleyRank);
+        const stageLabel =
+          s.primaryValue >= MAX_PUZZLE_TOWER_STAGE
+            ? '👑 777/777'
+            : `Màn ${Math.max(0, s.primaryValue)}/777`;
+
+        return `
+          <tr class="${isCurrentGame ? 'me-row' : ''}">
+            <td class="cc-lb-rank-cell"><strong>${escapeHtml(rankBadge)}</strong></td>
+            <th scope="row" class="cc-lb-name-cell">
+              <div class="cc-lb-name-wrap">
+                <span class="cc-lb-mobile-rank" aria-hidden="true">${escapeHtml(rankBadge)}</span>
+                <img src="${s.meta.spriteIcon}" alt="" class="cc-lb-tab-sprite" />
+                <span class="cc-lb-wiz-name">${escapeHtml(s.meta.shortVi)}</span>
+                <button
+                  type="button"
+                  class="cc-lb-visit-btn"
+                  data-lb-jump-play="${s.gameId}"
+                  aria-label="Chơi ngay ${escapeHtml(s.meta.shortVi)}"
+                >▶️ Chơi</button>
               </div>
             </th>
-            <td class="lb-cell-league">
-              <strong>🌍 #${s.valleyRank}/${s.valleyTotal}</strong>
-              <div class="lb-sub-stat">🤝 #${s.friendsRank}/${s.friendsTotal}</div>
+            <td>
+              <span class="cc-league-pill tier-${s.league.tierId}">${s.league.icon} ${escapeHtml(s.league.labelVi)}</span>
             </td>
-            <td class="lb-cell-primary">
-              <strong>${escapeHtml(s.primaryDisplayVi)}</strong>
-            </td>
-            <td class="lb-cell-rating">
-              <strong>${escapeHtml(s.ratingDisplayVi)}</strong>
-            </td>
-            <td class="lb-cell-detail">
-              <div class="lb-detail-flex">
-                <span>${escapeHtml(s.detailDisplayVi)}</span>
-                <button type="button" class="brass-btn gold-cta lb-mini-play-btn" data-lb-jump-play="${s.gameId}">
-                  ▶️ Chơi
-                </button>
-              </div>
-            </td>
+            <td>${escapeHtml(stageLabel)}</td>
+            <td><span class="cc-star-glyph" aria-hidden="true">★</span> ${s.stars.toLocaleString('vi-VN')}</td>
+            <td><strong class="cc-lb-score-val">${s.ratingScore.toLocaleString('vi-VN')}</strong></td>
           </tr>
-        `
-      )
+        `;
+      })
       .join('');
 
     return `
-      <div class="lb-cup-banner">
-        <img src="/sprites/m3_icon_star.png" alt="" class="lb-cup-icon" />
-        <div class="lb-cup-copy">
-          <div class="lb-cup-title">📜 Kỷ Lục 3 Môn Tính Điểm</div>
-          <div class="lb-cup-sub">🍬 Bùa Gặt Honeydukes • 🔢 Số Học Huyền Bí • 🦄 Sinh Vật Huyền Bí</div>
-        </div>
-      </div>
+      ${this.renderHouseCupGridHtml(valleyStanding.houseStandings)}
+      ${this.renderProfileDrawerHtml(valleyStanding.playerHouse)}
+      ${this.renderControlsBarHtml(valleyStanding.includeSeededRivals)}
 
-      <div tabindex="0" role="region" aria-labelledby="lbPersonalTableCaption" class="lb-table-wrapper">
+      <div tabindex="0" role="region" aria-labelledby="ccLbPersonalCaption" class="cc-lb-table-wrap">
         <table
-          class="lb-table"
-          style="--label-2: 'Hạng'; --label-3: 'Đỉnh'; --label-4: 'Điểm'; --label-5: 'Chơi';"
+          class="cc-lb-table"
+          style="--label-3: 'Danh hiệu'; --label-4: 'Tiến độ'; --label-5: 'Sao'; --label-6: 'Tổng điểm';"
         >
-          <caption id="lbPersonalTableCaption" class="lb-table-caption">
-            Kỷ lục cá nhân 3 môn tính điểm
+          <caption id="ccLbPersonalCaption" class="cc-lb-caption">
+            Kỷ lục cá nhân trên 3 bộ môn tranh Cúp 4 Nhà Hogwarts
           </caption>
           <thead>
             <tr>
-              <th scope="col">Môn</th>
               <th scope="col">Hạng</th>
-              <th scope="col">Đỉnh</th>
-              <th scope="col">Điểm</th>
-              <th scope="col">Chơi</th>
+              <th scope="col">Bộ Môn</th>
+              <th scope="col">Danh Hiệu</th>
+              <th scope="col">Màn</th>
+              <th scope="col">Sao</th>
+              <th scope="col">Tổng Điểm</th>
             </tr>
           </thead>
           <tbody>
@@ -630,25 +780,54 @@ export class LeaderboardModalController {
     `;
   }
 
+  private selectGameDiscipline(gid: LeaderboardGameId, focusTab = false): void {
+    if (!ALL_LEADERBOARD_GAMES.includes(gid)) return;
+    this.sim.audio.playClick();
+    this.activeGameId = gid;
+    if (this.activeScope === 'personal') {
+      this.activeScope = 'valley';
+    }
+    this.render();
+    this.scrollSelectedGameTabIntoView(focusTab);
+    void submitPlayerCloudLeaderboardEntry(this.sim.state, gid)
+      .catch(() => {})
+      .then(() => fetchCloudLeaderboardEntries(gid))
+      .then(() => {
+        if (this.activeGameId === gid && !this.profileDrawerOpen) {
+          this.render();
+        }
+      });
+  }
+
   private bindEvents(container: HTMLElement): void {
-    container.querySelectorAll<HTMLButtonElement>('[data-lb-game]').forEach((btn) => {
+    const tabButtons = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[data-lb-game]')
+    );
+    tabButtons.forEach((btn, idx) => {
       btn.addEventListener('click', () => {
         const gid = btn.dataset.lbGame as LeaderboardGameId | undefined;
-        if (!gid || !ALL_LEADERBOARD_GAMES.includes(gid)) return;
-        this.sim.audio.playClick();
-        this.activeGameId = gid;
-        if (this.activeScope === 'personal') {
-          this.activeScope = 'valley';
+        if (gid) this.selectGameDiscipline(gid, false);
+      });
+
+      btn.addEventListener('keydown', (ev) => {
+        if (tabButtons.length === 0) return;
+        let nextIdx = -1;
+        if (ev.key === 'ArrowRight') {
+          nextIdx = (idx + 1) % tabButtons.length;
+        } else if (ev.key === 'ArrowLeft') {
+          nextIdx = (idx - 1 + tabButtons.length) % tabButtons.length;
+        } else if (ev.key === 'Home') {
+          nextIdx = 0;
+        } else if (ev.key === 'End') {
+          nextIdx = tabButtons.length - 1;
         }
-        this.render();
-        void submitPlayerCloudLeaderboardEntry(this.sim.state, gid)
-          .catch(() => {})
-          .then(() => fetchCloudLeaderboardEntries(gid))
-          .then(() => {
-            if (this.activeGameId === gid) {
-              this.render();
-            }
-          });
+        if (nextIdx >= 0) {
+          ev.preventDefault();
+          const targetGid = tabButtons[nextIdx]?.dataset.lbGame as LeaderboardGameId | undefined;
+          if (targetGid) {
+            this.selectGameDiscipline(targetGid, true);
+          }
+        }
       });
     });
 
@@ -681,35 +860,151 @@ export class LeaderboardModalController {
         const raw = card.dataset.lbHouseCard as HouseName | undefined;
         if (!raw || !ALL_HOGWARTS_HOUSES.includes(raw)) return;
         this.sim.audio.playClick();
+        if (this.activeScope === 'personal') {
+          this.activeScope = 'valley';
+        }
         this.activeHouseFilter = this.activeHouseFilter === raw ? 'all' : raw;
         this.render();
       });
     });
 
-    container.querySelectorAll<HTMLButtonElement>('[data-lb-pick-house]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const raw = btn.dataset.lbPickHouse as HouseName | undefined;
-        if (!raw || !ALL_HOGWARTS_HOUSES.includes(raw)) return;
-        this.sim.setPlayerHouse(raw, this.activeGameId);
-        if (this.activeHouseFilter !== 'all') {
-          this.activeHouseFilter = raw;
-        }
+    if (IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed()) {
+      container.querySelector('#btnLbToggleNpc')?.addEventListener('click', () => {
+        if (!isSandboxRuntimeAllowed()) return;
+        this.sim.audio.playClick();
+        const enabled = toggleLeaderboardSeededRivals(this.sim.state);
+        this.sim.saveToStorage();
         this.render();
+        this.showInDialogToast(
+          enabled
+            ? '👥 Đã bật 8 học viên mẫu Hogwarts trên Bảng Xếp Hạng!'
+            : '👥 Đã tắt học viên mẫu — chỉ hiển thị người chơi thật!'
+        );
       });
-    });
+    }
 
-    container.querySelector('#btnLbSortingHat')?.addEventListener('click', () => {
-      if (this.sortingHatSpinning) return;
-      this.sortingHatSpinning = true;
-      const chosen = this.sim.rollPlayerSortingHat(this.activeGameId);
-      if (this.activeHouseFilter !== 'all') {
-        this.activeHouseFilter = chosen;
+    container.querySelector('#btnLbToggleProfile')?.addEventListener('click', () => {
+      this.sim.audio.playClick();
+      this.profileDrawerOpen = !this.profileDrawerOpen;
+      if (this.profileDrawerOpen) {
+        this.profileDraftName = this.getCurrentWizardDisplayName();
+        this.profileDraftHouse = this.sim.getPlayerHouse();
       }
       this.render();
-      window.setTimeout(() => {
+      if (this.profileDrawerOpen) {
+        container.querySelector<HTMLInputElement>('#ccWizardNameInput')?.focus();
+      }
+    });
+
+    container.querySelector('#btnLbCloseProfileDrawer')?.addEventListener('click', () => {
+      this.sim.audio.playClick();
+      this.profileDrawerOpen = false;
+      this.render();
+    });
+
+    const nameInput = container.querySelector<HTMLInputElement>('#ccWizardNameInput');
+    nameInput?.addEventListener('input', () => {
+      this.profileDraftName = nameInput.value;
+    });
+
+    container
+      .querySelectorAll<HTMLInputElement>('input[name="ccWizardHouse"]')
+      .forEach((radio) => {
+        radio.addEventListener('change', () => {
+          const picked = radio.value as HouseName;
+          if (!ALL_HOGWARTS_HOUSES.includes(picked)) return;
+          this.sim.audio.playClick();
+          this.profileDraftHouse = picked;
+          const hm = HOGWARTS_HOUSE_META[picked];
+          this.sortingHatAnnouncement = `${hm.patronusEmoji} ${hm.house}: ${hm.quoteVi}`;
+          container.querySelectorAll<HTMLElement>('.cc-house-option').forEach((opt) => {
+            opt.classList.toggle('selected', opt.dataset.ccHouseOpt === picked);
+          });
+          const quoteEl = container.querySelector('#ccSortingHatQuote');
+          if (quoteEl) quoteEl.textContent = this.sortingHatAnnouncement;
+        });
+      });
+
+    container.querySelector('#btnLbRandomHat')?.addEventListener('click', () => {
+      if (this.sortingHatSpinning) return;
+      this.sortingHatSpinning = true;
+      if (nameInput) {
+        this.profileDraftName = nameInput.value;
+      }
+      const chosenFinal = this.sim.rollPlayerSortingHat(this.activeGameId);
+      let step = 0;
+      const totalSteps = 7;
+      const spinTick = (): void => {
+        step += 1;
+        if (step < totalSteps) {
+          const preview =
+            ALL_HOGWARTS_HOUSES[Math.floor(Math.random() * ALL_HOGWARTS_HOUSES.length)] ??
+            chosenFinal;
+          this.profileDraftHouse = preview;
+          container.querySelectorAll<HTMLElement>('.cc-house-option').forEach((opt) => {
+            opt.classList.toggle('selected', opt.dataset.ccHouseOpt === preview);
+          });
+          window.setTimeout(spinTick, 65);
+          return;
+        }
         this.sortingHatSpinning = false;
+        this.profileDraftHouse = chosenFinal;
+        const chosenMeta = HOGWARTS_HOUSE_META[chosenFinal];
+        this.sortingHatAnnouncement = `🎩 NÓN PHÂN LOẠI CHỌN: “${chosenMeta.house.toUpperCase()}!” — ${chosenMeta.quoteVi}`;
+        if (this.activeHouseFilter !== 'all') {
+          this.activeHouseFilter = chosenFinal;
+        }
         this.render();
-      }, 420);
+        this.showInDialogToast(
+          `🎩 Nón Phân Loại đã chọn Nhà ${chosenMeta.house} cho bạn!`
+        );
+      };
+      spinTick();
+    });
+
+    container
+      .querySelector<HTMLFormElement>('#ccLbProfileForm')
+      ?.addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        const rawName = nameInput?.value ?? this.getCurrentWizardDisplayName();
+        const desiredHouse = this.profileDraftHouse ?? this.sim.getPlayerHouse();
+        this.sim.ensureNeighborSocial();
+        const saved = updatePlayerWizardProfile(this.sim.state, rawName, desiredHouse);
+        if (!saved.houseLockedByServer) {
+          this.sim.setPlayerHouse(saved.house, this.activeGameId);
+        } else {
+          this.sim.saveToStorage();
+          this.sim.onUiChange?.();
+          void submitPlayerCloudLeaderboardEntry(this.sim.state, this.activeGameId);
+        }
+        this.profileDrawerOpen = false;
+        this.profileDraftName = saved.name;
+        this.profileDraftHouse = saved.house;
+        this.render();
+        this.showInDialogToast(
+          `✨ Đã lưu hồ sơ Phù Thủy ${saved.name} (${saved.house})!`
+        );
+      });
+
+    container.querySelector('#btnLbExportCsv')?.addEventListener('click', () => {
+      this.sim.audio.playClick();
+      const exportScope = this.activeScope === 'friends' ? 'friends' : 'valley';
+      const csv = exportMinigameLeaderboardCSV(
+        this.sim.state,
+        this.activeGameId,
+        exportScope,
+        this.activeHouseFilter,
+        getCachedCloudLeaderboardEntries(this.activeGameId)
+      );
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const dateStr = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `bxh-${this.activeGameId}-hpvn-${dateStr}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      this.showInDialogToast('📥 Đã xuất file CSV Bảng Xếp Hạng!');
     });
 
     container.querySelector('#btnLbPlayActiveGame')?.addEventListener('click', () => {
