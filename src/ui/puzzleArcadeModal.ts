@@ -2621,32 +2621,9 @@ export class PuzzleArcadeModalController {
       this.sim.resetExamWinStreak();
     }
 
-    const comp = this.sim.getActiveMinigameCompanion();
-    const compReady = this.companionCharge >= comp.chargeEveryMoves;
-    const compPct = Math.min(100, Math.round((this.companionCharge / Math.max(1, comp.chargeEveryMoves)) * 100));
-    const compSpriteMap: Record<string, string> = {
-      niffler_den: 'beast_niffler_play',
-      hippogriff_glade: 'beast_hippogriff_bow',
-      phoenix_perch: 'beast_phoenix_soar',
-      dragon_lair: 'beast_dragon_roar',
-      unicorn_glade: 'beast_unicorn_prance',
-      thestral_grove: 'beast_thestral_wings',
-      hagrid_bowtruckle: 'hagrid_bowtruckle',
-    };
-    const compShortMap: Record<string, string> = {
-      niffler_den: 'Niffler',
-      hippogriff_glade: 'Bằng Mã',
-      phoenix_perch: 'Phượng',
-      dragon_lair: 'Rồng Nhỏ',
-      unicorn_glade: 'Kỳ Lân',
-      thestral_grove: 'Vong Mã',
-      hagrid_bowtruckle: 'Bowtruckle',
-    };
-    const compSpriteKey = compSpriteMap[comp.speciesId] ?? 'beast_niffler_play';
-    const compShortName = compShortMap[comp.speciesId] ?? 'Niffler';
     const pieQty = this.sim.getFarmItemCount('cinnamon_apple_pie');
     const paSynergyDockHtml = `
-      <div class="aaa-synergy-dock" role="region" aria-label="Bánh Táo và Đồng hành Niffler">
+      <div class="aaa-synergy-dock" role="region" aria-label="Bánh Táo Quế tiếp sức">
         <button
           id="btnPaSnackApplePie"
           type="button"
@@ -2656,19 +2633,6 @@ export class PuzzleArcadeModalController {
         >
           <img src="/sprites/ui_icon_pie_ready.png" alt="" width="20" height="20" class="aaa-synergy-sprite" />
           <span><span class="aaa-lbl-full">Bánh Táo </span><strong>${this.snackPieUsedThisAttempt ? '✓' : st.sandboxMode ? '∞' : `×${pieQty}`}</strong></span>
-        </button>
-        <button
-          id="btnPaTriggerCompanion"
-          type="button"
-          class="aaa-companion-pill"
-          data-ready="${compReady}"
-          ${!compReady || this.victoryClaimed ? 'disabled' : ''}
-          title="${escapeHtml(comp.nameVi)} (Cấp ${comp.bondLevel}) — Đầy năng lượng nhận +1 Gợi Ý Miễn Phí & +15G!"
-        >
-          <img src="/sprites/${compSpriteKey}.png" alt="" width="22" height="22" class="aaa-synergy-sprite" />
-          <span class="aaa-comp-name">${escapeHtml(compShortName)}</span>
-          <span class="aaa-comp-meter" aria-hidden="true"><span class="aaa-comp-meter-fill" data-pa-comp-meter="1" style="width:${compPct}%"></span></span>
-          <span data-pa-comp-charge="1">${compReady ? '⚡' : `${this.companionCharge}/${comp.chargeEveryMoves}`}</span>
         </button>
       </div>
     `;
@@ -2921,25 +2885,6 @@ export class PuzzleArcadeModalController {
                 ? `${je.hintGoldCost}G`
                 : '0';
         }
-      }
-    }
-
-    const compBtn = box.querySelector('#btnPaTriggerCompanion') as HTMLButtonElement | null;
-    if (compBtn) {
-      const comp = this.sim.getActiveMinigameCompanion();
-      const compReady = this.companionCharge >= comp.chargeEveryMoves;
-      compBtn.dataset.ready = String(compReady);
-      compBtn.disabled = !compReady || this.victoryClaimed;
-      const chargeSpan = compBtn.querySelector('[data-pa-comp-charge]');
-      if (chargeSpan) {
-        chargeSpan.textContent = compReady
-          ? '⚡'
-          : `${this.companionCharge}/${comp.chargeEveryMoves}`;
-      }
-      const meterFill = compBtn.querySelector('[data-pa-comp-meter]') as HTMLElement | null;
-      if (meterFill) {
-        const pct = Math.min(100, Math.round((this.companionCharge / Math.max(1, comp.chargeEveryMoves)) * 100));
-        meterFill.style.width = `${pct}%`;
       }
     }
   }
@@ -3510,46 +3455,6 @@ export class PuzzleArcadeModalController {
     box
       .querySelector('#btnPaRescuePhoenixTalisman')
       ?.addEventListener('click', handlePhoenixTalisman);
-
-    box.querySelector('#btnPaTriggerCompanion')?.addEventListener('click', () => {
-      if (this.victoryClaimed) return;
-      const comp = this.sim.getActiveMinigameCompanion();
-      if (this.companionCharge < comp.chargeEveryMoves) return;
-      this.companionCharge = 0;
-      if (!this.sim.state.sandboxMode) {
-        this.sim.state.galleons += 15;
-      }
-      if (this.mode === 'sudoku' && this.sudokuEngine) {
-        this.sudokuEngine.freeHintsLeft += 1;
-      } else if (this.mode === 'caro' && this.caroEngine) {
-        this.caroEngine.freeHintsLeft += 1;
-      } else if (this.mode === 'chess' && this.chessEngine) {
-        this.chessEngine.freeHintsLeft += 1;
-      } else if (this.mode === 'blocks' && this.onetEngine) {
-        this.onetEngine.freeHintsLeft += 1;
-        this.onetEngine.addBonusTime(20);
-        if (
-          this.onetEngine.lives < this.onetEngine.maxLives ||
-          this.onetEngine.status === 'lost'
-        ) {
-          this.onetEngine.reviveWithExtraLives(1);
-        }
-      } else if (this.mode === 'jigsaw' && this.jigsawEngine) {
-        this.jigsawEngine.freeHintsLeft += 1;
-        this.jigsawEngine.addBonusTime(45);
-      }
-      this.persistModeSession(this.mode, false);
-      const virt = this.getVirtualCanvasSize();
-      this.spawnWeasleyFireworks(virt.w * 0.45, virt.h * 0.48, 2);
-      this.sim.audio.playSpell();
-      this.sim.saveToStorage();
-      this.onParentRefresh();
-      this.showToast(
-        `${comp.emoji} ${comp.nameVi} trợ chiến: +1 Lượt Gợi Ý miễn phí${this.mode === 'blocks' ? ', +20s giờ' : this.mode === 'jigsaw' ? ', +45s giờ' : ''} & +15G!`,
-        comp.emoji
-      );
-      this.renderDOM();
-    });
 
     box.querySelector('#btnPaSnackApplePie')?.addEventListener('click', () => {
       if (this.victoryClaimed || this.snackPieUsedThisAttempt) return;

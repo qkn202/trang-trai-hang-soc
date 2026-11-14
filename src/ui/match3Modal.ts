@@ -1044,29 +1044,6 @@ export class Match3ModalController {
       rainbowPctEl.textContent = `${rainbowPct}%`;
     }
 
-    // Companion button
-    const compBtn = box.querySelector('#btnM3TriggerCompanion') as HTMLButtonElement | null;
-    if (compBtn) {
-      const comp = this.sim.getActiveMinigameCompanion();
-      const compReady = this.companionCharge >= comp.chargeEveryMoves;
-      compBtn.dataset.ready = String(compReady);
-      compBtn.disabled = !compReady || snap.status === 'won';
-      const chargeLbl = compBtn.querySelector('[data-m3-comp-charge]');
-      if (chargeLbl) {
-        chargeLbl.textContent = compReady
-          ? '⚡'
-          : `${this.companionCharge}/${comp.chargeEveryMoves}`;
-      }
-      const meterFill = compBtn.querySelector('[data-m3-comp-meter]') as HTMLElement | null;
-      if (meterFill) {
-        const pct = Math.min(
-          100,
-          Math.round((this.companionCharge / Math.max(1, comp.chargeEveryMoves)) * 100)
-        );
-        meterFill.style.width = `${pct}%`;
-      }
-    }
-
     // Update goal cards & pulse when progress advances
     snap.objectives.forEach((g, idx) => {
       const pill = box.querySelector(`[data-m3-goal-idx="${idx}"]`) as HTMLElement | null;
@@ -1571,32 +1548,6 @@ export class Match3ModalController {
         ? '🔄 Ván Mới'
         : '🔄 Lại (-1❤️)';
 
-    const comp = this.sim.getActiveMinigameCompanion();
-    const compReady = this.companionCharge >= comp.chargeEveryMoves;
-    const compPct = Math.min(
-      100,
-      Math.round((this.companionCharge / Math.max(1, comp.chargeEveryMoves)) * 100)
-    );
-    const compSpriteMap: Record<string, string> = {
-      niffler_den: 'beast_niffler_play',
-      hippogriff_glade: 'beast_hippogriff_bow',
-      phoenix_perch: 'beast_phoenix_soar',
-      dragon_lair: 'beast_dragon_roar',
-      unicorn_glade: 'beast_unicorn_prance',
-      thestral_grove: 'beast_thestral_wings',
-      hagrid_bowtruckle: 'hagrid_bowtruckle',
-    };
-    const compShortMap: Record<string, string> = {
-      niffler_den: 'Niffler',
-      hippogriff_glade: 'Bằng Mã',
-      phoenix_perch: 'Phượng',
-      dragon_lair: 'Rồng Nhỏ',
-      unicorn_glade: 'Kỳ Lân',
-      thestral_grove: 'Vong Mã',
-      hagrid_bowtruckle: 'Bowtruckle',
-    };
-    const compSpriteKey = compSpriteMap[comp.speciesId] ?? 'beast_niffler_play';
-    const compShortName = compShortMap[comp.speciesId] ?? 'Niffler';
     const pieQty = this.sim.getFarmItemCount('cinnamon_apple_pie');
     const rainbowPct = Math.max(0, Math.min(100, Math.round(snap.rainbowCharge || 0)));
     const isSuperRainbow = Boolean(snap.superRainbow);
@@ -1639,7 +1590,7 @@ export class Match3ModalController {
     `;
 
     const synergyDockHtml = `
-      <div class="aaa-synergy-dock" role="region" aria-label="Bánh Táo và Đồng hành Niffler">
+      <div class="aaa-synergy-dock" role="region" aria-label="Bánh Táo Quế tiếp sức">
         <button
           id="btnM3SnackApplePie"
           type="button"
@@ -1649,19 +1600,6 @@ export class Match3ModalController {
         >
           <img src="/sprites/ui_icon_pie_ready.png" alt="" width="20" height="20" class="aaa-synergy-sprite" />
           <span><span class="aaa-lbl-full">Bánh Táo </span><strong data-m3-pie-qty="1">${this.snackPieUsedThisAttempt ? '✓' : st.sandboxMode ? '∞' : `×${pieQty}`}</strong></span>
-        </button>
-        <button
-          id="btnM3TriggerCompanion"
-          type="button"
-          class="aaa-companion-pill"
-          data-ready="${compReady}"
-          ${!compReady || snap.status === 'won' ? 'disabled' : ''}
-          title="${escapeHtml(comp.nameVi)} (Cấp ${comp.bondLevel}) — Đầy năng lượng nhận +2 Lượt, Cánh Vàng Snitch & +15G!"
-        >
-          <img src="/sprites/${compSpriteKey}.png" alt="" width="22" height="22" class="aaa-synergy-sprite" />
-          <span class="aaa-comp-name">${escapeHtml(compShortName)}</span>
-          <span class="aaa-comp-meter" aria-hidden="true"><span class="aaa-comp-meter-fill" data-m3-comp-meter="1" style="width:${compPct}%"></span></span>
-          <span data-m3-comp-charge="1">${compReady ? '⚡' : `${this.companionCharge}/${comp.chargeEveryMoves}`}</span>
         </button>
       </div>
     `;
@@ -1956,30 +1894,6 @@ export class Match3ModalController {
     });
 
     // Farm Synergy Dock
-    box.querySelector('#btnM3TriggerCompanion')?.addEventListener('click', () => {
-      if (!this.engine || this.engine.status === 'won') return;
-      const comp = this.sim.getActiveMinigameCompanion();
-      if (this.companionCharge < comp.chargeEveryMoves) return;
-      this.companionCharge = 0;
-      const wasOut = this.engine.status === 'out_of_moves';
-      this.engine.triggerFarmCompanion(comp.bondLevel);
-      if (!this.sim.state.sandboxMode) {
-        this.sim.state.galleons += 15;
-      }
-      this.sim.audio.playSpell();
-      this.sim.saveToStorage();
-      this.onParentRefresh();
-      this.showToast(
-        `${comp.emoji} ${comp.nameVi} trợ chiến: +2 Lượt, Cánh Vàng Snitch & +15G!`,
-        comp.emoji
-      );
-      if (wasOut) {
-        this.mountOverlayOnly();
-      }
-      this.persistMatch3Session(true);
-      this.syncHudSnapshot(this.engine.getHudSnapshot());
-    });
-
     box.querySelector('#btnM3SnackApplePie')?.addEventListener('click', () => {
       if (!this.engine || this.engine.status === 'won' || this.snackPieUsedThisAttempt) return;
       const res = this.sim.consumeMollyMinigameSnack('cinnamon_apple_pie');

@@ -514,9 +514,9 @@ describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
     expect(contentEl.innerHTML).not.toContain('Nộ Hộ Mệnh');
     expect(contentEl.innerHTML).not.toContain('Gọi Hươu Bạc');
 
-    // Verify simplified synergy dock (ONLY Bánh Táo + Niffler) and removed clutter badges
+    // Verify simplified synergy dock (ONLY Bánh Táo, no Niffler companion pill) and removed clutter badges
     expect(contentEl.innerHTML).toContain('btnM3SnackApplePie');
-    expect(contentEl.innerHTML).toContain('btnM3TriggerCompanion');
+    expect(contentEl.innerHTML).not.toContain('btnM3TriggerCompanion');
     expect(contentEl.innerHTML).not.toContain('btnM3SnackButterbeer');
     expect(contentEl.innerHTML).not.toContain('aaa-sawtooth-tag');
     expect(contentEl.innerHTML).not.toContain('Tiến độ Lv.');
@@ -571,7 +571,7 @@ describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
     for (const mode of ['caro', 'sudoku', 'chess', 'blocks'] as const) {
       paCtrl.open(mode);
       expect(paContentEl.innerHTML).toContain('btnPaSnackApplePie');
-      expect(paContentEl.innerHTML).toContain('btnPaTriggerCompanion');
+      expect(paContentEl.innerHTML).not.toContain('btnPaTriggerCompanion');
       expect(paContentEl.innerHTML).not.toContain('btnPaSnackButterbeer');
       expect(paContentEl.innerHTML).not.toContain('aaa-sawtooth-tag');
       expect(paContentEl.innerHTML).not.toContain('Tiến độ Lv.');
