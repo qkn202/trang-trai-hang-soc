@@ -112,7 +112,9 @@ export interface AuthoritativeSnapshot {
   saleAdmin?: boolean;
   serverNow: number;
   profile?: Record<string, unknown>;
-  leaderboards?: Partial<Record<'match3' | 'sudoku' | 'blocks', Array<Record<string, unknown>>>>;
+  leaderboards?: Partial<
+    Record<'match3' | 'sudoku' | 'blocks' | 'jigsaw', Array<Record<string, unknown>>>
+  >;
   receipt?: Record<string, unknown>;
 }
 

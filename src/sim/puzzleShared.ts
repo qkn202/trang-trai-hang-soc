@@ -29,7 +29,7 @@ export type WizardingPortraitKey =
   | 'voldemort';
 
 export interface TurningPointReview {
-  mode: 'caro' | 'chess' | 'blocks';
+  mode: 'caro' | 'chess' | 'blocks' | 'jigsaw';
   plyNumber: number;
   outcomeTagVi: string;
   playedCoordVi: string;
@@ -112,6 +112,83 @@ export const JIGSAW_PAINTINGS: JigsawPaintingDef[] = [
     imageUrl: '/paintings/p8_hogwarts_moon.jpg',
     accentColor: '#8b5cf6',
   },
+  {
+    id: 'p9_burrow_autumn',
+    title: 'Toàn Cảnh Trang Trại Hang Sóc Hoàng Hôn Thu',
+    subtitle: 'Mái ngói nghiêng ấm khói bếp bên vườn bí ngô chín mọng và suối guồng nước Ottery.',
+    imageUrl: '/paintings/jigsaw_burrow_autumn.jpg',
+    accentColor: '#d97706',
+  },
+  {
+    id: 'p10_steam_platform',
+    title: 'Sân Ga Hơi Nước Đỏ Thẫm & Cú Tuyết Trắng',
+    subtitle: 'Đầu máy hơi nước rực sáng làn khói sao bên rương da cổ điển và đèn lồng đồng.',
+    imageUrl: '/paintings/jigsaw_steam_platform.jpg',
+    accentColor: '#dc2626',
+  },
+  {
+    id: 'p11_magic_alley',
+    title: 'Phố Phép Đá Cuội Đêm Đèn Lồng Tím Biếc',
+    subtitle: 'Tiệm đũa phép, cửa hiệu độc dược và sách cổ toả ánh vàng ấm dọc con hẻm quanh co.',
+    imageUrl: '/paintings/jigsaw_magic_alley.jpg',
+    accentColor: '#a855f7',
+  },
+  {
+    id: 'p12_herbology_conservatory',
+    title: 'Nhà Kính Thảo Dược & Vườn Chậu Mandrake',
+    subtitle: 'Nắng mật ong xuyên qua vòm kính sắt rèn chiếu sáng dây leo phát quang và chuông lam.',
+    imageUrl: '/paintings/jigsaw_herbology_conservatory.jpg',
+    accentColor: '#16a34a',
+  },
+  {
+    id: 'p13_silver_stag_lake',
+    title: 'Thần Hộ Mệnh Hươu Bạc Bên Hồ Đen Cực Quang',
+    subtitle: 'Hào quang bạc lam xoắn ốc phản chiếu lung linh giữa thảm nấm ngọc rừng khuya.',
+    imageUrl: '/paintings/jigsaw_silver_stag_lake.jpg',
+    accentColor: '#38bdf8',
+  },
+  {
+    id: 'p14_butterbeer_hearth',
+    title: 'Quán Ba Cây Chổi & Bếp Lửa Lục Bảo Đêm Tuyết',
+    subtitle: 'Những cốc bia bơ sủi bọt kem béo ngậy bên lò sưởi ấm cúng nhìn ra mái làng phủ tuyết.',
+    imageUrl: '/paintings/jigsaw_butterbeer_hearth.jpg',
+    accentColor: '#f59e0b',
+  },
+  {
+    id: 'p15_burrow_parlor',
+    title: 'Phòng Khách Lò Sưởi Ấm Áp Gia Đình Weasley',
+    subtitle: 'Đồng hồ phép 9 kim, khăn đan tự động và ánh lửa bập bùng trong đêm đoàn viên.',
+    imageUrl: '/paintings/burrow_parlor_bg.jpg',
+    accentColor: '#ea580c',
+  },
+  {
+    id: 'p16_burrow_attic',
+    title: 'Gác Xép Bùa Gặt & Kệ Mứt Ngọt Hang Sóc',
+    subtitle: 'Gác gỗ thơm mùi quế hồi, hũ mứt dâu đỏ, lồng đèn sao và ô cửa tròn nhìn ra đồi thu.',
+    imageUrl: '/paintings/burrow_attic_bg.jpg',
+    accentColor: '#e11d48',
+  },
+  {
+    id: 'p17_great_hall_chess',
+    title: 'Đại Sảnh Cẩm Thạch & Bàn Cờ Phù Thủy Cổ Đại',
+    subtitle: 'Những chiến binh đá cẩm thạch uy nghiêm dưới hàng cờ hiệu rực rỡ và ánh đuốc vàng.',
+    imageUrl: '/paintings/great_hall_chess_bg.jpg',
+    accentColor: '#ca8a04',
+  },
+  {
+    id: 'p18_marauder_parchment',
+    title: 'Mật Thất Bản Đồ Đạo Tặc & Hành Lang Cổ',
+    subtitle: ' Tấm bản đồ giấy da cất giữ mọi lối đi bí mật dưới ánh nến tháp canh đêm khuya.',
+    imageUrl: '/paintings/marauder_caro_bg.jpg',
+    accentColor: '#b45309',
+  },
+  {
+    id: 'p19_potions_dungeon',
+    title: 'Hầm Độc Dược Lục Bảo & Vạc Đồng Cổ Ngữ',
+    subtitle: 'Làn khói lục huyền ảo toả lên từ vạc thuốc bên dãy bình pha lê lấp lánh dưới hầm đá.',
+    imageUrl: '/paintings/potions_runes_sudoku_bg.jpg',
+    accentColor: '#10b981',
+  },
 ];
 
 export function isArcadeSubModeLocked(stage: number): boolean {
@@ -130,6 +207,7 @@ export function createInitialPuzzleArcadeState(): PuzzleArcadeState {
     sudokuCleared: 0,
     caroCleared: 0,
     chessCleared: 0,
+    jigsawCleared: 0,
     blockCleared: 0,
     featuredWinsCount: 0,
     restoredPaintings: [],
@@ -138,6 +216,7 @@ export function createInitialPuzzleArcadeState(): PuzzleArcadeState {
     caroSession: null,
     chessSession: null,
     onetSession: null,
+    jigsawSession: null,
   };
 }
 

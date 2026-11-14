@@ -917,6 +917,7 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
               <button type="button" data-modal-open-trial="sudoku" class="brass-btn ${reqTrial.kind === 'sudoku' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🔮 (${fmtStagePill('sudoku')})</button>
               <button type="button" data-modal-open-trial="chess" class="brass-btn ${reqTrial.kind === 'chess' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🏰 (${fmtStagePill('chess')})</button>
               <button type="button" data-modal-open-trial="blocks" class="brass-btn ${reqTrial.kind === 'blocks' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🦄 (${fmtStagePill('blocks')})</button>
+              <button type="button" data-modal-open-trial="jigsaw" class="brass-btn ${reqTrial.kind === 'jigsaw' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🧩 (${fmtStagePill('jigsaw')})</button>
             </div>
           </div>
         </div>

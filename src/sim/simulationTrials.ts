@@ -251,6 +251,12 @@ export function trialsGetDisciplineStageInfo(sim: ParkSimulation, kind: Minigame
         0,
         Math.min(MAX_MINIGAME_STAGE, pa.chessCleared ?? Math.max(0, currentStage - 1))
       );
+    } else if (kind === 'jigsaw') {
+      currentStage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, pa.jigsawStage ?? 1));
+      clearedStages = Math.max(
+        0,
+        Math.min(MAX_MINIGAME_STAGE, pa.jigsawCleared ?? Math.max(0, currentStage - 1))
+      );
     } else {
       currentStage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, pa.blockStage ?? 1));
       clearedStages = Math.max(
@@ -267,7 +273,7 @@ export function trialsGetDisciplineStageInfo(sim: ParkSimulation, kind: Minigame
 }
 
 export function trialsGetTotalTowerClearedStages(sim: ParkSimulation): { cleared: number; total: number } {
-    const kinds: MinigameTrialKind[] = ['match3', 'caro', 'sudoku', 'chess', 'blocks'];
+    const kinds: MinigameTrialKind[] = ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw'];
     let cleared = 0;
     for (const k of kinds) {
       cleared += trialsGetDisciplineStageInfo(sim, k).clearedStages;
@@ -291,7 +297,7 @@ export function trialsGetWinsProgressForCurrentLevel(sim: ParkSimulation): { cur
 export function trialsGetRequiredLevelTrial(sim: ParkSimulation): LevelTrialRequirement | null {
     if (sim.state.level >= MAX_LEVEL) return null;
     const maxedKinds = new Set<MinigameTrialKind>();
-    for (const k of ['match3', 'caro', 'sudoku', 'chess', 'blocks'] as const) {
+    for (const k of ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw'] as const) {
       if (trialsGetDisciplineStageInfo(sim, k).isMaxed) {
         maxedKinds.add(k);
       }
@@ -305,6 +311,7 @@ const VALID_LAST_PLAYED_MINIGAMES: ReadonlySet<LeaderboardGameId> = new Set([
   'sudoku',
   'chess',
   'blocks',
+  'jigsaw',
   'seedquiz',
 ]);
 
@@ -794,8 +801,9 @@ export const PHOENIX_TALISMAN_DISCIPLINES: readonly MinigameTrialKind[] = [
   'caro',
   'chess',
   'blocks',
+  'jigsaw',
 ];
-export const MAX_DAILY_PHOENIX_TALISMANS = PHOENIX_TALISMAN_DISCIPLINES.length; // 5 lần/ngày (1 lần/môn)
+export const MAX_DAILY_PHOENIX_TALISMANS = PHOENIX_TALISMAN_DISCIPLINES.length; // 6 lần/ngày (1 lần/môn)
 
 function ensurePhoenixTalismanDailyState(
   state: GameState,
@@ -882,7 +890,7 @@ export function trialsCanUsePhoenixTalismanInGame(
       usedTodayInGame: true,
       usedCountToday: status.usedCount,
       maxDaily: status.maxDaily,
-      msg: `Hôm nay bạn đã dùng hết ${status.maxDaily}/${status.maxDaily} lượt 🔥 Bùa Phượng Hoàng trên cả 5 môn khảo thí! Hẹn mở lại sau 00:00.`,
+      msg: `Hôm nay bạn đã dùng hết ${status.maxDaily}/${status.maxDaily} lượt 🔥 Bùa Phượng Hoàng trên cả ${status.maxDaily} môn khảo thí! Hẹn mở lại sau 00:00.`,
     };
   }
   if (!sim.state.sandboxMode && trialsGetPhoenixTalismanCount(sim) <= 0) {
@@ -1132,6 +1140,10 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
       pa.chessStage = nextStage;
       pa.chessCleared = newCleared;
       pa.chessSession = null;
+    } else if (mode === 'jigsaw') {
+      pa.jigsawStage = nextStage;
+      pa.jigsawCleared = newCleared;
+      pa.jigsawSession = null;
     } else {
       pa.blockStage = nextStage;
       pa.blockCleared = newCleared;

@@ -903,6 +903,7 @@ export async function handleAuthoritativeHttpRequest(
         'match3',
         'sudoku',
         'blocks',
+        'jigsaw',
         'caro',
         'chess',
         'seedquiz',

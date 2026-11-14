@@ -1,8 +1,6 @@
-// Engine Match-3 Chiến Thuật chuẩn Candy Crush Hogwarts — 7 Năm Học (777 Màn, Khay 7×7..10×10)
-// Đầy đủ Vật Lý Trượt Chéo, Kẹo Bọc Nổ 2 Nhịp, Ô Vuông 2×2 Kẹo Cánh Vàng Tầm Thủ, 10 Đại Combo Kẹo Phép,
-// Vật Cản Năm 1–7 (Thạch, Băng, Đá Cổ Ngữ, Sô-cô-la Lan, Vạc Độc, Khoá Gringotts, Băng Chuyền, Lò Floo,
-// Đá Phù Thủy, Bom Đếm Ngược, Hoá Đá Tử Xà, Giám Ngục Azkaban, Gió Mê Cung, Sắc Lệnh Umbridge,
-// Lửa Địa Ngục Fiendfyre, Trường Sinh Linh Giá Khiên Hồn), Đại Trùm 2 Pha & Thần Hộ Mệnh 4 Nhà Hogwarts.
+// Engine Match-3 Chiến Thuật chuẩn Playrix Gardenscapes × Hogwarts — 7 Năm Học (777 Màn, Khay 7×7..10×10)
+// Đầy đủ Bậc Thang Thuốc Nổ Bán Kính (Pháo Hoa, Bom, Thuốc Nổ, Thùng TNT), Chong Chóng Tầm Thủ 2×2,
+// Thanh Nạp 🌈 Cầu Vồng Tích Năng (0–100%), Chạm Đúp Nổ Tại Chỗ, Kéo Đổi Ô Bất Kỳ Để Nổ & Đại Combo Kép!
 
 import { SavedMatch3Piece, SavedMatch3Session } from '../types/game';
 import {
@@ -16,8 +14,21 @@ import {
   CandyObjectiveSpec,
   CandyPortalPair,
   CandySpecialType,
+  getGardenscapesBlastRadius,
+  getSpecialRainbowChargeGain,
   getWandMasteryForLevel,
+  isRadialExplosiveSpecial,
+  isSuperRainbowActiveForStreak,
+  SUPER_RAINBOW_WIN_STREAK,
 } from '../data/candyHogwartsLevels';
+
+export {
+  getGardenscapesBlastRadius,
+  getSpecialRainbowChargeGain,
+  isRadialExplosiveSpecial,
+  isSuperRainbowActiveForStreak,
+  SUPER_RAINBOW_WIN_STREAK,
+};
 import {
   CandyBoardPiece,
   CandyHogwartsBoardRenderer,
@@ -55,7 +66,10 @@ export interface CandyHudStateSnapshot {
   objectives: CandyObjectiveProgress[];
   activeBooster: 'hammer' | 'swap' | null;
   swapFirstCell: { r: number; c: number } | null;
+  selectedSpecial: CandySpecialType | null;
   patronusCharge: number;
+  rainbowCharge: number;
+  superRainbow: boolean;
   house: CandyHouseId;
   bossState: CandyBossRuntimeState | null;
   talismanUsed: boolean;
@@ -117,6 +131,7 @@ export interface CandyEngineCallbacks {
 export interface CandyLoadOptions {
   house?: CandyHouseId;
   winStreak?: number;
+  superRainbow?: boolean;
   preBoosters?: Array<'pre_color_bomb' | 'pre_striped_wrapped' | 'pre_lucky_seeker'>;
   instantAnimations?: boolean;
 }
@@ -144,12 +159,28 @@ type SwapSpecialCombo =
       otherSpecial: CandySpecialType | null;
     }
   | { type: 'double_seeker'; posA: { r: number; c: number }; posB: { r: number; c: number } }
-  | { type: 'seeker_striped'; posA: { r: number; c: number }; posB: { r: number; c: number } }
-  | { type: 'seeker_wrapped'; posA: { r: number; c: number }; posB: { r: number; c: number } }
-  | { type: 'single_seeker'; seekerPos: { r: number; c: number } }
+  | {
+      type: 'seeker_payload';
+      posA: { r: number; c: number };
+      posB: { r: number; c: number };
+      seekerPos: { r: number; c: number };
+      payload: CandySpecialType;
+    }
+  | {
+      type: 'combined_explosive';
+      posA: { r: number; c: number };
+      posB: { r: number; c: number };
+      center: { r: number; c: number };
+      gridRadius: number;
+      maxHypot: number;
+    }
+  | {
+      type: 'single_special_swap';
+      specialPos: { r: number; c: number };
+      normalPos: { r: number; c: number };
+    }
   | { type: 'cross_striped'; center: { r: number; c: number } }
-  | { type: 'giant_striped_wrapped'; center: { r: number; c: number } }
-  | { type: 'mega_wrapped'; center: { r: number; c: number } };
+  | { type: 'giant_striped_wrapped'; center: { r: number; c: number } };
 
 function nextAnimFrame(cb: (ts: number) => void): void {
   if (typeof requestAnimationFrame === 'undefined') {
@@ -225,6 +256,9 @@ export class CandyHogwartsEngine {
   private pendingBossEnrageBurst = false;
   public bossEffectiveCastInterval = 4;
   public patronusCharge = 0;
+  public rainbowCharge = 0;
+  public pendingRainbowSpawns = 0;
+  public superRainbow = false;
 
   public grid: Array<Array<CandyInternalPiece | null>> = [];
 
@@ -421,7 +455,7 @@ export class CandyHogwartsEngine {
   }
 
   public isMatchablePiece(p: CandyInternalPiece | null | undefined): p is CandyInternalPiece {
-    return Boolean(p && !p.isIngredient && !p.blocker && p.special !== 'color_bomb' && p.color >= 0);
+    return Boolean(p && !p.isIngredient && !p.blocker && !p.special && p.color >= 0);
   }
 
   public isCellMatchable(r: number, c: number): boolean {
@@ -490,8 +524,15 @@ export class CandyHogwartsEngine {
       this.cb.audio?.onSelect?.();
       this.emitHudState();
     } else if (this.selected.r === cell.r && this.selected.c === cell.c) {
-      this.selected = null;
-      this.emitHudState();
+      const piece = this.grid[cell.r]?.[cell.c];
+      if (piece?.special && !this.activeBooster) {
+        this.selected = null;
+        this.pointerState = null;
+        void this.tryActivateSpecialInPlace({ r: cell.r, c: cell.c });
+      } else {
+        this.selected = null;
+        this.emitHudState();
+      }
     } else if (Math.abs(this.selected.r - cell.r) + Math.abs(this.selected.c - cell.c) === 1) {
       const first = this.selected;
       this.selected = null;
@@ -554,8 +595,16 @@ export class CandyHogwartsEngine {
         swiped: false,
         pointerType: e.pointerType || 'mouse',
       };
-      // Trên màn hình cảm ứng, chỉ kích hoạt chọn/đổi kẹo theo chạm khi nhấc 1 ngón lên (không đổi nhầm khi đặt 2 ngón zoom)
-      if (e.pointerType !== 'touch') {
+      // Trên màn hình cảm ứng (hoặc khi nhấp chuột lần 2 vào Pháo/Bom đang chọn để nổ tại chỗ hay kéo đi),
+      // đợi tới pointerup nếu không vuốt để không kích nổ nhầm khi người chơi định kéo đổi chỗ!
+      const isSecondTapOnArmedSpecial = Boolean(
+        this.selected &&
+          this.selected.r === cell.r &&
+          this.selected.c === cell.c &&
+          this.grid[cell.r]?.[cell.c]?.special &&
+          !this.activeBooster
+      );
+      if (e.pointerType !== 'touch' && !isSecondTapOnArmedSpecial) {
         this.activateCellInteraction(cell);
       }
     };
@@ -605,9 +654,17 @@ export class CandyHogwartsEngine {
         if (e.type === 'pointercancel' || e.type === 'lostpointercapture') {
           return;
         }
+        const deferredMouseSpecialTap = Boolean(
+          prev.pointerType !== 'touch' &&
+            this.selected &&
+            this.selected.r === prev.cell.r &&
+            this.selected.c === prev.cell.c &&
+            this.grid[prev.cell.r]?.[prev.cell.c]?.special &&
+            !this.activeBooster
+        );
         if (
           e.type === 'pointerup' &&
-          prev.pointerType === 'touch' &&
+          (prev.pointerType === 'touch' || deferredMouseSpecialTap) &&
           !prev.swiped &&
           !this.busy &&
           !this.ended &&
@@ -839,6 +896,12 @@ export class CandyHogwartsEngine {
     this.pendingBossEnrageBurst = false;
     this.bossEffectiveCastInterval = this.bossConfig ? this.bossConfig.castInterval || 4 : 4;
     this.patronusCharge = this.house === 'hufflepuff' ? 25 : 0;
+    this.rainbowCharge = 0;
+    this.pendingRainbowSpawns = 0;
+    this.superRainbow =
+      options.superRainbow !== undefined
+        ? Boolean(options.superRainbow)
+        : isSuperRainbowActiveForStreak(options.winStreak || 0);
 
     this.initialJelly = this.countGridSum(this.jelly);
     this.initialIce = this.countGridSum(this.ice);
@@ -1122,19 +1185,23 @@ export class CandyHogwartsEngine {
       if (preId === 'pre_color_bomb') {
         grant('color_bomb');
       } else if (preId === 'pre_striped_wrapped') {
-        grant(Math.random() < 0.5 ? 'striped_h' : 'striped_v');
-        grant('wrapped');
+        grant('firecracker');
+        grant('bomb');
       } else if (preId === 'pre_lucky_seeker') {
         grant('seeker');
         grant('seeker');
       }
     }
 
-    if (winStreak >= 1) grant(Math.random() < 0.5 ? 'striped_h' : 'striped_v');
-    if (winStreak >= 2) grant('wrapped');
+    if (winStreak >= 1) grant('firecracker');
+    if (winStreak >= 2) grant('bomb');
     if (winStreak >= 3) grant('color_bomb');
 
-    if (winStreak > 0) {
+    if (this.superRainbow) {
+      this.spawnCenterBanner(
+        winStreak > 0 ? `SIÊU CẦU VỒNG ×${winStreak}!` : 'SIÊU CẦU VỒNG KÍCH HOẠT!'
+      );
+    } else if (winStreak > 0) {
       this.spawnCenterBanner(`CHUỖI CỐC LỬA ×${winStreak}!`);
     }
   }
@@ -1198,6 +1265,127 @@ export class CandyHogwartsEngine {
     };
   }
 
+  public addRainbowCharge(rawAmount: number): void {
+    if (rawAmount <= 0 || this.ended) return;
+    this.rainbowCharge = Math.max(0, this.rainbowCharge + rawAmount);
+    while (this.rainbowCharge >= 100) {
+      this.rainbowCharge -= 100;
+      if (this.pendingRainbowSpawns < 4) {
+        this.pendingRainbowSpawns++;
+      }
+    }
+    this.rainbowCharge = Math.round(this.rainbowCharge * 10) / 10;
+  }
+
+  public pickTopDistinctColorsOnBoard(count = 1, preferredFirstColor = -1): number[] {
+    const desired = Math.max(1, Math.floor(count));
+    const counts = new Map<number, number>();
+    for (let r = 0; r < this.size; r++) {
+      for (let c = 0; c < this.size; c++) {
+        if (this.mask[r]?.[c] === 0 || this.isCellLocked(r, c) || this.hasStaticBlocker(r, c)) {
+          continue;
+        }
+        const p = this.grid[r]?.[c];
+        if (p && this.isMatchablePiece(p)) {
+          counts.set(p.color, (counts.get(p.color) || 0) + 1);
+        }
+      }
+    }
+
+    const maxColorIdx = Math.max(
+      this.numColors,
+      ...Array.from(counts.keys(), (k) => k + 1)
+    );
+    const picked: number[] = [];
+    if (
+      preferredFirstColor >= 0 &&
+      preferredFirstColor < maxColorIdx &&
+      (counts.get(preferredFirstColor) || 0) > 0
+    ) {
+      picked.push(preferredFirstColor);
+    }
+
+    const rankedColors: Array<{ color: number; cnt: number }> = [];
+    for (let k = 0; k < maxColorIdx; k++) {
+      if (picked.includes(k)) continue;
+      rankedColors.push({ color: k, cnt: counts.get(k) || 0 });
+    }
+    rankedColors.sort((a, b) => b.cnt - a.cnt || a.color - b.color);
+
+    for (const entry of rankedColors) {
+      if (picked.length >= desired) break;
+      if (entry.cnt > 0 || picked.length === 0) {
+        picked.push(entry.color);
+      }
+    }
+
+    if (picked.length === 0) {
+      picked.push(preferredFirstColor >= 0 ? preferredFirstColor : 0);
+    }
+    return picked;
+  }
+
+  public pickRainbowTargetColors(preferredFirstColor = -1): number[] {
+    return this.pickTopDistinctColorsOnBoard(this.superRainbow ? 2 : 1, preferredFirstColor);
+  }
+
+  public pickMostAbundantColorOnBoard(preferredColor = -1): number {
+    return this.pickTopDistinctColorsOnBoard(1, preferredColor)[0] ?? 0;
+  }
+
+  private async materializePendingRainbowBlasts(session = this.sessionId): Promise<boolean> {
+    if (this.pendingRainbowSpawns <= 0 || this.ended || this.status === 'won') return false;
+    const plainCells: Array<{ r: number; c: number }> = [];
+    for (let r = 0; r < this.size; r++) {
+      for (let c = 0; c < this.size; c++) {
+        const p = this.grid[r]?.[c];
+        if (
+          this.mask[r]?.[c] === 1 &&
+          !this.hasStaticBlocker(r, c) &&
+          !this.isCellLocked(r, c) &&
+          p &&
+          this.isMatchablePiece(p) &&
+          !p.special &&
+          p.bombTimer === null
+        ) {
+          plainCells.push({ r, c });
+        }
+      }
+    }
+    if (plainCells.length === 0) return false;
+    plainCells.sort(() => Math.random() - 0.5);
+
+    let spawnedAny = false;
+    while (this.pendingRainbowSpawns > 0 && plainCells.length > 0) {
+      const cell = plainCells.pop()!;
+      const p = this.grid[cell.r]?.[cell.c];
+      if (!p) continue;
+      this.pendingRainbowSpawns--;
+      p.special = 'color_bomb';
+      p.scale = 1.36;
+      spawnedAny = true;
+      this.cb.audio?.onColorBomb?.();
+      this.spawnArc(0, 0, cell.r, cell.c, '#fde047');
+      this.spawnRing(cell.r, cell.c, 1.65, '#fde047');
+      this.spawnBurst(cell.r, cell.c, '#fef08a', 14);
+      this.spawnPopup(
+        cell.r,
+        cell.c,
+        this.superRainbow ? 'SIÊU CẦU VỒNG!' : 'LUMOS MAXIMA!',
+        '#fef08a',
+        16
+      );
+    }
+
+    if (spawnedAny) {
+      this.emitHudState();
+      this.renderer?.render(this.getRenderState(), nowMs());
+      await this.waitMs(150);
+      if (session !== this.sessionId) return true;
+    }
+    return spawnedAny;
+  }
+
   public addPatronusCharge(rawAmount: number): void {
     if (rawAmount <= 0 || this.ended) return;
     const wasReady = this.patronusCharge >= 100;
@@ -1242,10 +1430,7 @@ export class CandyHogwartsEngine {
       this.cb.audio?.onColorBomb?.();
       this.vfx.shake = Math.max(this.vfx.shake, 12);
       this.spawnCenterBanner(`${this.bossConfig.emoji} ĐẠI TRÙM BẠI TRẬN!`);
-      this.grantRandomSpecialsOnBoard([
-        'wrapped',
-        Math.random() < 0.5 ? 'striped_h' : 'striped_v',
-      ]);
+      this.grantRandomSpecialsOnBoard(['bomb', 'firecracker']);
     }
   }
 
@@ -1330,9 +1515,18 @@ export class CandyHogwartsEngine {
     if (!special) return;
     this.specialUsedThisTurn = true;
     this.addPatronusCharge(9);
-    if (special === 'striped_h' || special === 'striped_v') {
+    const rainbowGain = getSpecialRainbowChargeGain(special);
+    if (rainbowGain > 0) {
+      this.addRainbowCharge(rainbowGain);
+    }
+    if (special === 'firecracker' || special === 'striped_h' || special === 'striped_v') {
       this.specialStats.striped = (this.specialStats.striped || 0) + 1;
-    } else if (special === 'wrapped') {
+    } else if (
+      special === 'bomb' ||
+      special === 'dynamite' ||
+      special === 'tnt' ||
+      special === 'wrapped'
+    ) {
       this.specialStats.wrapped = (this.specialStats.wrapped || 0) + 1;
     } else if (special === 'seeker') {
       this.specialStats.seeker = (this.specialStats.seeker || 0) + 1;
@@ -1485,7 +1679,7 @@ export class CandyHogwartsEngine {
     }
     const gifts: CandySpecialType[] = ['seeker'];
     if (bondLevel >= 3) {
-      gifts.push(Math.random() < 0.5 ? 'striped_h' : 'striped_v');
+      gifts.push('firecracker');
     }
     this.grantRandomSpecialsOnBoard(gifts);
     if (this.renderer && this.rafId === null) {
@@ -1641,10 +1835,7 @@ export class CandyHogwartsEngine {
       }
       this.damageBoss(450);
       this.addScore(650, targetR, targetC, '#fde047', true, 'special');
-      this.grantRandomSpecialsOnBoard([
-        'wrapped',
-        Math.random() < 0.5 ? 'striped_h' : 'striped_v',
-      ]);
+      this.grantRandomSpecialsOnBoard(['bomb', 'firecracker']);
     } else if (this.house === 'slytherin') {
       this.spawnCenterBanner('🐍 EXPECTO PATRONUM: RẮN THẦN!');
       const darkTargets: Array<{ r: number; c: number; prio: number }> = [];
@@ -1703,11 +1894,7 @@ export class CandyHogwartsEngine {
         }
         if (pierced) break;
       }
-      this.grantRandomSpecialsOnBoard([
-        'wrapped',
-        Math.random() < 0.5 ? 'striped_h' : 'striped_v',
-        'seeker',
-      ]);
+      this.grantRandomSpecialsOnBoard(['bomb', 'firecracker', 'seeker']);
       this.damageBoss(360);
       this.addScore(520, mid, mid, '#fde047', true, 'special');
     }
@@ -1724,6 +1911,142 @@ export class CandyHogwartsEngine {
     this.emitHudState();
     this.renderer?.render(this.getRenderState(), nowMs());
     await this.checkPostTurnState(session, false);
+    return true;
+  }
+
+  public async tryActivateSpecialInPlace(cell: { r: number; c: number }): Promise<boolean> {
+    if (this.busy || this.ended || !this.level) return false;
+    if (!this.isValidCell(cell.r, cell.c) || this.mask[cell.r]?.[cell.c] === 0) return false;
+
+    if (this.hasStaticBlocker(cell.r, cell.c) || this.isCellLocked(cell.r, cell.c)) {
+      this.cb.audio?.onInvalid?.();
+      this.spawnPopup(cell.r, cell.c, 'Ô đang bị khoá!', '#fde047', 14);
+      return false;
+    }
+
+    const piece = this.grid[cell.r]?.[cell.c];
+    if (!piece || !piece.special || piece.isIngredient || piece.blocker) {
+      return false;
+    }
+
+    const session = this.sessionId;
+    this.busy = true;
+    this.selected = null;
+    this.resetIdleHint();
+    this.maxCascadeThisTurn = 1;
+    this.specialUsedThisTurn = true;
+
+    this.chocolateBrokenThisTurn = false;
+    this.fiendfyreDamagedThisTurn = false;
+    this.cauldronStunnedThisTurn.clear();
+    this.dementorStunnedThisTurn.clear();
+    this.movesLeft = Math.max(0, this.movesLeft - 1);
+    this.movesUsed++;
+    this.emitHudState();
+
+    if (this.extractIngredientsAtExits()) {
+      await this.applyGravityAndRefill(session);
+      if (session !== this.sessionId) return true;
+    }
+
+    const currentPiece = this.grid[cell.r]?.[cell.c];
+    if (currentPiece?.special === 'color_bomb') {
+      const triggered = new Set<string>([`${cell.r},${cell.c}`]);
+      this.cb.audio?.onColorBomb?.();
+      this.consumeSwappedPiece(cell, triggered);
+      const targetColors = this.pickRainbowTargetColors();
+      const targetColorSet = new Set<number>(targetColors);
+      const primaryHex = CANDY_TILE_TYPES[targetColors[0]]?.light || '#fde047';
+      this.spawnPopup(
+        cell.r,
+        cell.c,
+        targetColors.length >= 2 ? 'SIÊU CẦU VỒNG ×2!' : 'LUMOS MAXIMA!',
+        primaryHex,
+        19
+      );
+
+      const targets: Array<{ r: number; c: number }> = [];
+      for (let r = 0; r < this.size; r++) {
+        for (let c = 0; c < this.size; c++) {
+          if (this.mask[r]?.[c] === 0 || this.isCellLocked(r, c) || this.hasStaticBlocker(r, c)) {
+            continue;
+          }
+          const p = this.grid[r]?.[c];
+          if (p && this.isMatchablePiece(p) && targetColorSet.has(p.color)) {
+            targets.push({ r, c });
+            this.spawnArc(
+              cell.r,
+              cell.c,
+              r,
+              c,
+              CANDY_TILE_TYPES[p.color]?.light || primaryHex
+            );
+          }
+        }
+      }
+      await this.waitMs(180);
+      if (session !== this.sessionId) return true;
+      const chainSet = this.cloneSpecialChainGuard(triggered);
+      for (const t of targets) {
+        this.damageCell(t.r, t.c, chainSet, true);
+      }
+      this.damageBoss(targetColors.length >= 2 ? 390 : 260);
+      this.addScore(
+        (targetColors.length >= 2 ? 950 : 650) + targets.length * 90,
+        cell.r,
+        cell.c,
+        primaryHex,
+        true,
+        'special'
+      );
+      await this.waitMs(170);
+    } else if (currentPiece?.special === 'seeker') {
+      const triggered = new Set<string>([`${cell.r},${cell.c}`]);
+      const color = currentPiece.color >= 0 ? currentPiece.color : 5;
+      this.consumeSwappedPiece(cell, triggered);
+      this.cb.audio?.onSeeker?.();
+      this.triggerSeekerTakeoff(cell.r, cell.c, triggered);
+      const landingSet = this.cloneSpecialChainGuard(triggered);
+      const [target] = this.pickBestSeekerTargets(1, landingSet);
+      if (target) {
+        this.spawnSeekerVfx(
+          cell.r,
+          cell.c,
+          target.r,
+          target.c,
+          CANDY_TILE_TYPES[color]?.light || '#fde047'
+        );
+        await this.waitMs(200);
+        if (session !== this.sessionId) return true;
+        this.damageCell(target.r, target.c, landingSet, true);
+      }
+      this.damageBoss(145);
+      this.addScore(
+        380,
+        target ? target.r : cell.r,
+        target ? target.c : cell.c,
+        '#fde047',
+        true,
+        'special'
+      );
+      await this.waitMs(110);
+    } else if (currentPiece?.special) {
+      const triggered = new Set<string>();
+      this.damageCell(cell.r, cell.c, triggered, true);
+      await this.waitMs(190);
+    }
+
+    if (session !== this.sessionId) return true;
+    await this.applyGravityAndRefill(session);
+    if (session !== this.sessionId) return true;
+    await this.resolveAllCascades(2, session);
+    if (session !== this.sessionId) return true;
+
+    this.cb.onPlayerMoveCommitted?.(this.movesUsed, this.maxCascadeThisTurn, true);
+    this.busy = false;
+    this.resetIdleHint();
+    this.renderer?.render(this.getRenderState(), nowMs());
+    await this.checkPostTurnState(session, true);
     return true;
   }
 
@@ -1776,13 +2099,13 @@ export class CandyHogwartsEngine {
     this.resetIdleHint();
     this.lastSwapDir = a.r === b.r ? 'h' : 'v';
     this.maxCascadeThisTurn = 1;
-    this.specialUsedThisTurn = Boolean(pA.special || pB.special);
+    this.specialUsedThisTurn = !isFreeSwapBooster && Boolean(pA.special || pB.special);
 
     this.cb.audio?.onSwap?.();
     await this.animateSwap(a, b, 150, session);
     if (session !== this.sessionId) return false;
 
-    const specialCombo = this.detectSwapSpecialCombo(a, b);
+    const specialCombo = isFreeSwapBooster ? null : this.detectSwapSpecialCombo(a, b);
     const clusters = specialCombo ? [] : this.findMatchClusters([b, a]);
 
     if (!specialCombo && clusters.length === 0 && !isFreeSwapBooster) {
@@ -1894,11 +2217,7 @@ export class CandyHogwartsEngine {
     const pA = this.grid[a.r]?.[a.c];
     const pB = this.grid[b.r]?.[b.c];
     if (!pA || !pB) return null;
-    if (pA.isIngredient || pB.isIngredient || pA.blocker || pB.blocker) {
-      if (pA.special === 'seeker') return { type: 'single_seeker', seekerPos: a };
-      if (pB.special === 'seeker') return { type: 'single_seeker', seekerPos: b };
-      return null;
-    }
+    if (!pA.special && !pB.special) return null;
 
     if (pA.special === 'color_bomb' && pB.special === 'color_bomb') {
       return { type: 'double_color_bomb' };
@@ -1908,43 +2227,56 @@ export class CandyHogwartsEngine {
       const otherPos = pA.special === 'color_bomb' ? b : a;
       const otherPiece = this.grid[otherPos.r]?.[otherPos.c];
       if (!otherPiece) return null;
+      const targetColor =
+        otherPiece.special || otherPiece.isIngredient || otherPiece.blocker || otherPiece.color < 0
+          ? this.pickMostAbundantColorOnBoard()
+          : otherPiece.color;
       return {
         type: 'color_bomb_combo',
         bombPos,
         otherPos,
-        targetColor: otherPiece.color,
+        targetColor,
         otherSpecial: otherPiece.special,
       };
     }
 
-    const isStripedA = pA.special === 'striped_h' || pA.special === 'striped_v';
-    const isStripedB = pB.special === 'striped_h' || pB.special === 'striped_v';
-
     if (pA.special === 'seeker' && pB.special === 'seeker') {
       return { type: 'double_seeker', posA: a, posB: b };
     }
-    if ((pA.special === 'seeker' && isStripedB) || (isStripedA && pB.special === 'seeker')) {
-      return { type: 'seeker_striped', posA: a, posB: b };
-    }
-    if (
-      (pA.special === 'seeker' && pB.special === 'wrapped') ||
-      (pA.special === 'wrapped' && pB.special === 'seeker')
-    ) {
-      return { type: 'seeker_wrapped', posA: a, posB: b };
+    if ((pA.special === 'seeker' && pB.special) || (pA.special && pB.special === 'seeker')) {
+      const seekerPos = pA.special === 'seeker' ? a : b;
+      const payload = (pA.special === 'seeker' ? pB.special : pA.special)!;
+      return { type: 'seeker_payload', posA: a, posB: b, seekerPos, payload };
     }
 
-    if (isStripedA && isStripedB) return { type: 'cross_striped', center: b };
-    if ((isStripedA && pB.special === 'wrapped') || (pA.special === 'wrapped' && isStripedB)) {
-      return { type: 'giant_striped_wrapped', center: b };
-    }
-    if (pA.special === 'wrapped' && pB.special === 'wrapped') {
-      return { type: 'mega_wrapped', center: b };
+    if (pA.special && pB.special) {
+      const isStripedA = pA.special === 'striped_h' || pA.special === 'striped_v';
+      const isStripedB = pB.special === 'striped_h' || pB.special === 'striped_v';
+      if (isStripedA && isStripedB) return { type: 'cross_striped', center: b };
+      if (
+        (isStripedA && isRadialExplosiveSpecial(pB.special)) ||
+        (isRadialExplosiveSpecial(pA.special) && isStripedB)
+      ) {
+        return { type: 'giant_striped_wrapped', center: b };
+      }
+      const radA = getGardenscapesBlastRadius(pA.special);
+      const radB = getGardenscapesBlastRadius(pB.special);
+      if (radA && radB) {
+        const gridRadius = Math.min(5, Math.max(radA.gridRadius, radB.gridRadius) + 1);
+        return {
+          type: 'combined_explosive',
+          posA: a,
+          posB: b,
+          center: b,
+          gridRadius,
+          maxHypot: gridRadius + 0.3,
+        };
+      }
     }
 
-    if (pA.special === 'seeker') return { type: 'single_seeker', seekerPos: a };
-    if (pB.special === 'seeker') return { type: 'single_seeker', seekerPos: b };
-
-    return null;
+    const specialPos = pB.special ? b : a;
+    const normalPos = pB.special ? a : b;
+    return { type: 'single_special_swap', specialPos, normalPos };
   }
 
   private consumeSwappedPiece(pos: { r: number; c: number }, triggeredSet: Set<string>): void {
@@ -1977,8 +2309,10 @@ export class CandyHogwartsEngine {
     if (combo.type === 'double_color_bomb') {
       this.cb.audio?.onColorBomb?.();
       this.cb.audio?.onBomb?.();
-      this.vfx.shake = 14;
-      this.spawnCenterBanner('HOGWARTS CRUSH! TOÀN BÀN!');
+      this.vfx.shake = this.superRainbow ? 19 : 16;
+      this.spawnCenterBanner(
+        this.superRainbow ? 'ĐẠI SIÊU CẦU VỒNG ×2 BÀN!' : 'HOGWARTS CRUSH! TOÀN BÀN!'
+      );
       this.consumeSwappedPiece(a, triggered);
       this.consumeSwappedPiece(b, triggered);
 
@@ -1988,17 +2322,58 @@ export class CandyHogwartsEngine {
           this.spawnArc(b.r, b.c, r, c, '#fde047');
         }
       }
-      await this.waitMs(220);
+      await this.waitMs(200);
       if (session !== this.sessionId) return;
+      const wave1Set = this.cloneSpecialChainGuard(triggered);
       for (let r = 0; r < this.size; r++) {
         for (let c = 0; c < this.size; c++) {
           if (this.mask[r]?.[c] === 0) continue;
-          this.damageCell(r, c, triggered, true, true);
+          this.damageCell(r, c, wave1Set, true, true);
         }
       }
-      this.damageBoss(520);
-      this.addScore(2500, b.r, b.c, '#fde047', true, 'special');
-      await this.waitMs(230);
+      await this.waitMs(140);
+      if (session !== this.sessionId) return;
+      this.spawnRing(b.r, b.c, Math.max(4.5, this.size * 0.65), '#38bdf8');
+      const wave2Set = this.cloneSpecialChainGuard(wave1Set);
+      for (let r = 0; r < this.size; r++) {
+        for (let c = 0; c < this.size; c++) {
+          if (this.mask[r]?.[c] === 0) continue;
+          this.damageCell(r, c, wave2Set, true, true);
+        }
+      }
+      this.damageBoss(620);
+      this.addScore(2800, b.r, b.c, '#fde047', true, 'special');
+
+      if (this.superRainbow) {
+        await this.waitMs(180);
+        if (session !== this.sessionId) return;
+        await this.applyGravityAndRefill(session);
+        if (session !== this.sessionId) return;
+
+        this.cb.audio?.onColorBomb?.();
+        this.cb.audio?.onBomb?.();
+        this.vfx.shake = Math.max(this.vfx.shake, 18);
+        this.spawnRing(b.r, b.c, Math.max(5, this.size * 0.72), '#f472b6');
+        for (let r = 0; r < this.size; r++) {
+          for (let c = 0; c < this.size; c++) {
+            if (this.mask[r]?.[c] === 0) continue;
+            this.spawnArc(b.r, b.c, r, c, '#f472b6');
+          }
+        }
+        await this.waitMs(170);
+        if (session !== this.sessionId) return;
+        const wave3Set = new Set<string>();
+        for (let r = 0; r < this.size; r++) {
+          for (let c = 0; c < this.size; c++) {
+            if (this.mask[r]?.[c] === 0) continue;
+            this.damageCell(r, c, wave3Set, true, true);
+          }
+        }
+        this.damageBoss(420);
+        this.addScore(2200, b.r, b.c, '#f472b6', true, 'special');
+      }
+
+      await this.waitMs(220);
       return;
     }
 
@@ -2006,7 +2381,13 @@ export class CandyHogwartsEngine {
       const { bombPos, otherPos, targetColor, otherSpecial } = combo;
       this.cb.audio?.onColorBomb?.();
       this.consumeSwappedPiece(bombPos, triggered);
-      const colorHex = CANDY_TILE_TYPES[targetColor]?.light || '#fde047';
+      if (otherSpecial) {
+        this.consumeSwappedPiece(otherPos, triggered);
+      }
+      const targetColors = this.pickRainbowTargetColors(otherSpecial ? -1 : targetColor);
+      const targetColorSet = new Set<number>(targetColors);
+      const isDualRainbow = targetColors.length >= 2;
+      const colorHex = CANDY_TILE_TYPES[targetColors[0]]?.light || '#fde047';
 
       const targets: Array<{ r: number; c: number }> = [];
       for (let r = 0; r < this.size; r++) {
@@ -2014,74 +2395,91 @@ export class CandyHogwartsEngine {
           if (
             this.mask[r]?.[c] === 0 ||
             (this.lockGrid[r]?.[c] || 0) > 0 ||
-            (this.petrify[r]?.[c] || 0) > 0
+            (this.petrify[r]?.[c] || 0) > 0 ||
+            this.hasStaticBlocker(r, c)
           ) {
             continue;
           }
           const p = this.grid[r]?.[c];
-          if (p && this.isMatchablePiece(p) && p.color === targetColor) {
+          if (p && this.isMatchablePiece(p) && targetColorSet.has(p.color)) {
             targets.push({ r, c });
-            this.spawnArc(bombPos.r, bombPos.c, r, c, colorHex);
+            this.spawnArc(
+              bombPos.r,
+              bombPos.c,
+              r,
+              c,
+              CANDY_TILE_TYPES[p.color]?.light || colorHex
+            );
           }
         }
-      }
-
-      if (otherSpecial === 'seeker') {
-        this.cb.audio?.onSeeker?.();
-        this.spawnCenterBanner('ĐÀN CÁNH VÀNG SNITCH!');
-        this.consumeSwappedPiece(otherPos, triggered);
-        for (const t of targets) {
-          const piece = this.grid[t.r]?.[t.c];
-          if (piece && !this.isCellLocked(t.r, t.c)) {
-            piece.special = 'seeker';
-            piece.scale = 1.25;
-          }
-        }
-        await this.waitMs(220);
-        if (session !== this.sessionId) return;
-        const chainSet = new Set(triggered);
-        for (const t of targets) {
-          this.damageCell(t.r, t.c, chainSet, true);
-        }
-        this.damageBoss(380);
-        this.addScore(1400 + targets.length * 130, bombPos.r, bombPos.c, '#fde047', true, 'special');
-        await this.waitMs(240);
-        return;
       }
 
       if (otherSpecial) {
-        this.spawnCenterBanner('ĐẠI TIỆC KẸO PHÉP!');
-        this.consumeSwappedPiece(otherPos, triggered);
-
+        if (otherSpecial === 'seeker') {
+          this.cb.audio?.onSeeker?.();
+          this.spawnCenterBanner(
+            isDualRainbow ? 'ĐẠI ĐÀN SNITCH ×2 MÀU!' : 'ĐÀN CÁNH VÀNG SNITCH!'
+          );
+        } else {
+          this.cb.audio?.onBomb?.();
+          this.spawnCenterBanner(
+            isDualRainbow ? 'SIÊU BÃO KẸO PHÉP ×2 MÀU!' : 'ĐẠI TIỆC KẸO PHÉP!'
+          );
+        }
         for (const t of targets) {
           const piece = this.grid[t.r]?.[t.c];
           if (!piece || this.isCellLocked(t.r, t.c)) continue;
-          if (otherSpecial === 'wrapped') {
-            piece.special = 'wrapped';
-          } else {
+          if (otherSpecial === 'striped_h' || otherSpecial === 'striped_v') {
             piece.special = Math.random() < 0.5 ? 'striped_h' : 'striped_v';
+          } else {
+            piece.special = otherSpecial;
           }
-          piece.scale = 1.25;
+          piece.scale = 1.28;
         }
-        await this.waitMs(260);
+        await this.waitMs(230);
         if (session !== this.sessionId) return;
-        const chainSet = new Set(triggered);
+        const armyChainGuard = this.cloneSpecialChainGuard(triggered);
         for (const t of targets) {
-          this.damageCell(t.r, t.c, chainSet, true);
+          if (!this.grid[t.r]?.[t.c]) continue;
+          const blastSet = this.cloneSpecialChainGuard(armyChainGuard);
+          this.damageCell(t.r, t.c, blastSet, true);
+          for (const k of blastSet) {
+            if (!k.includes(':')) armyChainGuard.add(k);
+          }
         }
-        this.damageBoss(400);
-        this.addScore(1400 + targets.length * 120, bombPos.r, bombPos.c, '#fde047', true, 'special');
+        this.damageBoss(isDualRainbow ? 620 : 420);
+        this.addScore(
+          (isDualRainbow ? 1950 : 1450) + targets.length * 135,
+          bombPos.r,
+          bombPos.c,
+          '#fde047',
+          true,
+          'special'
+        );
         await this.waitMs(230);
       } else {
-        this.spawnPopup(bombPos.r, bombPos.c, 'LUMOS MAXIMA!', colorHex, 20);
+        this.spawnPopup(
+          bombPos.r,
+          bombPos.c,
+          isDualRainbow ? 'SIÊU CẦU VỒNG ×2!' : 'LUMOS MAXIMA!',
+          colorHex,
+          20
+        );
         await this.waitMs(200);
         if (session !== this.sessionId) return;
-        const chainSet = new Set(triggered);
+        const chainSet = this.cloneSpecialChainGuard(triggered);
         for (const t of targets) {
           this.damageCell(t.r, t.c, chainSet, true);
         }
-        this.damageBoss(260);
-        this.addScore(650 + targets.length * 90, bombPos.r, bombPos.c, colorHex, true, 'special');
+        this.damageBoss(isDualRainbow ? 390 : 260);
+        this.addScore(
+          (isDualRainbow ? 950 : 650) + targets.length * 90,
+          bombPos.r,
+          bombPos.c,
+          colorHex,
+          true,
+          'special'
+        );
         await this.waitMs(180);
       }
       return;
@@ -2093,77 +2491,138 @@ export class CandyHogwartsEngine {
       this.consumeSwappedPiece(posA, triggered);
       this.consumeSwappedPiece(posB, triggered);
       this.cb.audio?.onSeeker?.();
+      this.triggerSeekerTakeoff(posA.r, posA.c, triggered);
+      this.triggerSeekerTakeoff(posB.r, posB.c, triggered);
       this.spawnPopup(posB.r, posB.c, '3× TẦM THỦ SNITCH!', '#fde047', 19);
-      const best = this.pickBestSeekerTargets(3, triggered);
+      const landingGuard = this.cloneSpecialChainGuard(triggered);
+      const best = this.pickBestSeekerTargets(3, landingGuard);
       for (const t of best) {
-        this.spawnSeekerVfx(posB.r, posB.c, t.r, t.c, CANDY_TILE_TYPES[color]?.light || '#fde047');
+        this.spawnSeekerVfx(
+          posB.r,
+          posB.c,
+          t.r,
+          t.c,
+          CANDY_TILE_TYPES[color]?.light || '#fde047'
+        );
       }
       await this.waitMs(220);
       if (session !== this.sessionId) return;
       for (const t of best) {
-        this.damageCell(t.r, t.c, triggered, true);
+        this.damageCell(t.r, t.c, landingGuard, true);
       }
-      this.damageBoss(240);
-      this.addScore(780, posB.r, posB.c, '#fde047', true, 'special');
+      this.damageBoss(260);
+      this.addScore(820, posB.r, posB.c, '#fde047', true, 'special');
       await this.waitMs(140);
       return;
     }
 
-    if (combo.type === 'seeker_striped' || combo.type === 'seeker_wrapped') {
-      const { posA, posB } = combo;
+    if (combo.type === 'seeker_payload') {
+      const { posA, posB, seekerPos, payload } = combo;
       this.consumeSwappedPiece(posA, triggered);
       this.consumeSwappedPiece(posB, triggered);
       this.cb.audio?.onSeeker?.();
-      const [target] = this.pickBestSeekerTargets(1, triggered);
+      this.triggerSeekerTakeoff(seekerPos.r, seekerPos.c, triggered);
+      const landingGuard = this.cloneSpecialChainGuard(triggered);
+      const [target] = this.pickBestSeekerTargets(1, landingGuard);
       if (target) {
         this.spawnSeekerVfx(posB.r, posB.c, target.r, target.c, '#fde047');
-        await this.waitMs(220);
+        await this.waitMs(210);
         if (session !== this.sessionId) return;
-        if (combo.type === 'seeker_striped') {
+        const rad = getGardenscapesBlastRadius(payload);
+        if (rad) {
+          this.detonateRadialBlast(
+            target.r,
+            target.c,
+            rad.gridRadius,
+            rad.maxHypot,
+            '#fb923c',
+            8 + rad.gridRadius * 2,
+            240 + rad.gridRadius * 55,
+            780 + rad.gridRadius * 180,
+            landingGuard
+          );
+        } else {
           this.cb.audio?.onBeam?.();
           if (Math.random() < 0.5) {
-            this.fireRowBeam(target.r, target.c, 0.72, '#38bdf8', triggered, true);
+            this.fireRowBeam(target.r, target.c, 0.72, '#38bdf8', landingGuard, true);
           } else {
-            this.fireColBeam(target.c, target.r, 0.72, '#38bdf8', triggered, true);
+            this.fireColBeam(target.c, target.r, 0.72, '#38bdf8', landingGuard, true);
           }
-        } else {
-          this.cb.audio?.onBomb?.();
-          this.spawnRing(target.r, target.c, 2.1, '#fb923c');
-          for (let dr = -1; dr <= 1; dr++) {
-            for (let dc = -1; dc <= 1; dc++) {
-              this.damageCell(target.r + dr, target.c + dc, triggered, true);
-            }
-          }
+          this.damageBoss(270);
+          this.addScore(920, target.r, target.c, '#fde047', true, 'special');
         }
-        this.damageBoss(270);
-        this.addScore(920, target.r, target.c, '#fde047', true, 'special');
       }
       await this.waitMs(180);
       return;
     }
 
-    if (combo.type === 'single_seeker') {
-      const { seekerPos } = combo;
-      const color = this.grid[seekerPos.r]?.[seekerPos.c]?.color ?? 5;
-      const onlySeekerSet = new Set<string>([`${seekerPos.r},${seekerPos.c}`]);
-      this.consumeSwappedPiece(seekerPos, onlySeekerSet);
-      this.cb.audio?.onSeeker?.();
-      const [target] = this.pickBestSeekerTargets(1, onlySeekerSet);
-      if (target) {
-        this.spawnSeekerVfx(
-          seekerPos.r,
-          seekerPos.c,
-          target.r,
-          target.c,
-          CANDY_TILE_TYPES[color]?.light || '#fde047'
-        );
-        await this.waitMs(210);
+    if (combo.type === 'combined_explosive') {
+      const { posA, posB, center, gridRadius, maxHypot } = combo;
+      this.consumeSwappedPiece(posA, triggered);
+      this.consumeSwappedPiece(posB, triggered);
+      this.spawnCenterBanner('CONFRINGO! ĐẠI NỔ KÉP!');
+      const blastGuard = this.cloneSpecialChainGuard(triggered);
+      this.detonateRadialBlast(
+        center.r,
+        center.c,
+        gridRadius,
+        maxHypot,
+        gridRadius >= 4 ? '#ef4444' : '#f97316',
+        Math.min(16, 8 + gridRadius * 2),
+        260 + gridRadius * 85,
+        900 + gridRadius * 240,
+        blastGuard
+      );
+      await this.waitMs(230);
+      return;
+    }
+
+    if (combo.type === 'single_special_swap') {
+      const { specialPos, normalPos } = combo;
+      const sideClusters = this.findMatchClusters([normalPos]);
+      if (sideClusters.length > 0) {
+        await this.clearClusters(sideClusters, 1, [normalPos], session);
         if (session !== this.sessionId) return;
-        this.damageCell(target.r, target.c, onlySeekerSet, true);
-        this.damageBoss(140);
-        this.addScore(360, target.r, target.c, '#fde047', true, 'special');
       }
-      await this.waitMs(100);
+
+      const spPiece = this.grid[specialPos.r]?.[specialPos.c];
+      if (!spPiece || !spPiece.special) return;
+
+      if (spPiece.special === 'seeker') {
+        const seekerSet = new Set<string>([`${specialPos.r},${specialPos.c}`]);
+        const color = spPiece.color >= 0 ? spPiece.color : 5;
+        this.consumeSwappedPiece(specialPos, seekerSet);
+        this.cb.audio?.onSeeker?.();
+        this.triggerSeekerTakeoff(specialPos.r, specialPos.c, seekerSet);
+        const landingGuard = this.cloneSpecialChainGuard(seekerSet);
+        const [target] = this.pickBestSeekerTargets(1, landingGuard);
+        if (target) {
+          this.spawnSeekerVfx(
+            specialPos.r,
+            specialPos.c,
+            target.r,
+            target.c,
+            CANDY_TILE_TYPES[color]?.light || '#fde047'
+          );
+          await this.waitMs(200);
+          if (session !== this.sessionId) return;
+          this.damageCell(target.r, target.c, landingGuard, true);
+        }
+        this.damageBoss(145);
+        this.addScore(
+          380,
+          target ? target.r : specialPos.r,
+          target ? target.c : specialPos.c,
+          '#fde047',
+          true,
+          'special'
+        );
+        await this.waitMs(110);
+      } else {
+        const singleSet = new Set<string>();
+        this.damageCell(specialPos.r, specialPos.c, singleSet, true);
+        await this.waitMs(190);
+      }
       return;
     }
 
@@ -2174,8 +2633,9 @@ export class CandyHogwartsEngine {
       this.cb.audio?.onBeam?.();
       this.vfx.shake = 8;
       this.spawnPopup(r, c, 'SECTUMSEMPRA!', '#fff59d', 20);
-      this.fireRowBeam(r, c, 0.75, '#38bdf8', triggered, true);
-      this.fireColBeam(c, r, 0.75, '#38bdf8', triggered, true);
+      const beamSet = this.cloneSpecialChainGuard(triggered);
+      this.fireRowBeam(r, c, 0.75, '#38bdf8', beamSet, true);
+      this.fireColBeam(c, r, 0.75, '#38bdf8', beamSet, true);
       this.damageBoss(260);
       this.addScore(850, r, c, '#fde047', true, 'special');
       await this.waitMs(230);
@@ -2190,52 +2650,18 @@ export class CandyHogwartsEngine {
       this.cb.audio?.onBomb?.();
       this.vfx.shake = 12;
       this.spawnCenterBanner('BOMBARDIA MAXIMA 3×3!');
+      const beamSet = this.cloneSpecialChainGuard(triggered);
       for (let d = -1; d <= 1; d++) {
         if (r + d >= 0 && r + d < this.size) {
-          this.fireRowBeam(r + d, c, 0.9, '#c084fc', triggered, false);
+          this.fireRowBeam(r + d, c, 0.9, '#c084fc', beamSet, false);
         }
         if (c + d >= 0 && c + d < this.size) {
-          this.fireColBeam(c + d, r, 0.9, '#c084fc', triggered, false);
+          this.fireColBeam(c + d, r, 0.9, '#c084fc', beamSet, false);
         }
       }
       this.damageBoss(420);
       this.addScore(1500, r, c, '#fde047', true, 'special');
       await this.waitMs(260);
-      return;
-    }
-
-    if (combo.type === 'mega_wrapped') {
-      const { r, c } = combo.center;
-      const savedColor = this.grid[b.r]?.[b.c]?.color ?? 0;
-      this.consumeSwappedPiece(a, triggered);
-      this.consumeSwappedPiece(b, triggered);
-      this.cb.audio?.onBomb?.();
-      this.vfx.shake = 13;
-      this.spawnCenterBanner('CONFRINGO! ĐẠI NỔ KÉP 5×5!');
-      this.spawnRing(r, c, 3.2, '#f97316');
-      for (let dr = -2; dr <= 2; dr++) {
-        for (let dc = -2; dc <= 2; dc++) {
-          const nr = r + dr;
-          const nc = c + dc;
-          if (this.isValidCell(nr, nc) && this.mask[nr]?.[nc] === 1) {
-            this.damageCell(nr, nc, triggered, true);
-          }
-        }
-      }
-      if (
-        this.mask[r]?.[c] === 1 &&
-        !this.hasStaticBlocker(r, c) &&
-        (this.lockGrid[r]?.[c] || 0) === 0 &&
-        !this.grid[r]?.[c]
-      ) {
-        const primed = this.createPiece(savedColor, c, r, 'wrapped');
-        primed.primedWrapped = true;
-        primed.primedMega = true;
-        this.grid[r][c] = primed;
-      }
-      this.damageBoss(380);
-      this.addScore(1350, r, c, '#fb923c', true, 'special');
-      await this.waitMs(240);
     }
   }
 
@@ -2393,21 +2819,17 @@ export class CandyHogwartsEngine {
       }
 
       const clusterCells = Array.from(cellMap.values());
-      const hasPlayerAnchor = preferredAnchors.some((anc) =>
-        clusterCells.some((ce) => ce.r === anc.r && ce.c === anc.c)
-      );
+      const totalCells = clusterCells.length;
 
       let spawnSpecial: CandySpecialType | null = null;
-      if (maxLineLen >= 5) {
-        spawnSpecial = 'color_bomb';
-      } else if (hasH && hasV) {
-        spawnSpecial = 'wrapped';
+      if (totalCells >= 7 && (maxLineLen >= 4 || (hasH && hasV))) {
+        spawnSpecial = 'tnt';
+      } else if (totalCells >= 6 && (maxLineLen >= 4 || (hasH && hasV) || hasSq)) {
+        spawnSpecial = 'dynamite';
+      } else if (maxLineLen >= 5 || (hasH && hasV)) {
+        spawnSpecial = 'bomb';
       } else if (maxLineLen === 4) {
-        if (hasPlayerAnchor) {
-          spawnSpecial = this.lastSwapDir === 'h' ? 'striped_h' : 'striped_v';
-        } else {
-          spawnSpecial = hasH ? 'striped_v' : 'striped_h';
-        }
+        spawnSpecial = 'firecracker';
       } else if (hasSq) {
         spawnSpecial = 'seeker';
       }
@@ -2499,6 +2921,10 @@ export class CandyHogwartsEngine {
       }
 
       break;
+    }
+
+    if (session === this.sessionId && !this.ended && this.pendingRainbowSpawns > 0) {
+      await this.materializePendingRainbowBlasts(session);
     }
   }
 
@@ -3019,6 +3445,60 @@ export class CandyHogwartsEngine {
     }
   }
 
+  private cloneSpecialChainGuard(src: Set<string>): Set<string> {
+    const next = new Set<string>();
+    for (const k of src) {
+      if (!k.includes(':')) next.add(k);
+    }
+    return next;
+  }
+
+  private triggerSeekerTakeoff(r: number, c: number, triggeredSet: Set<string>): void {
+    this.spawnRing(r, c, 1.35, '#fde047');
+    const ortho: Array<[number, number]> = [
+      [-1, 0],
+      [1, 0],
+      [0, -1],
+      [0, 1],
+    ];
+    for (const [dr, dc] of ortho) {
+      const nr = r + dr;
+      const nc = c + dc;
+      if (this.isValidCell(nr, nc) && this.mask[nr]?.[nc] === 1) {
+        this.damageCell(nr, nc, triggeredSet, true);
+      }
+    }
+  }
+
+  private detonateRadialBlast(
+    r: number,
+    c: number,
+    gridRadius: number,
+    maxHypot: number,
+    ringColor: string,
+    shakePower: number,
+    bossDmg: number,
+    baseScore: number,
+    triggeredSet: Set<string>
+  ): void {
+    this.cb.audio?.onBomb?.();
+    this.vfx.shake = Math.max(this.vfx.shake, shakePower);
+    this.spawnRing(r, c, gridRadius + 0.85, ringColor);
+    this.spawnBurst(r, c, ringColor, Math.min(24, 10 + gridRadius * 4));
+    for (let dr = -gridRadius; dr <= gridRadius; dr++) {
+      for (let dc = -gridRadius; dc <= gridRadius; dc++) {
+        if (Math.hypot(dr, dc) > maxHypot) continue;
+        const nr = r + dr;
+        const nc = c + dc;
+        if (this.isValidCell(nr, nc) && this.mask[nr]?.[nc] === 1) {
+          this.damageCell(nr, nc, triggeredSet, true);
+        }
+      }
+    }
+    this.damageBoss(bossDmg);
+    this.addScore(baseScore, r, c, ringColor, false, 'special');
+  }
+
   private triggerSpecialPiece(
     r: number,
     c: number,
@@ -3027,7 +3507,15 @@ export class CandyHogwartsEngine {
     triggeredSet: Set<string>
   ): void {
     const beamColor = CANDY_TILE_TYPES[color]?.light || '#fde047';
-    if (special === 'striped_h') {
+    if (special === 'firecracker') {
+      this.detonateRadialBlast(r, c, 1, 1.45, '#facc15', 7, 135, 340, triggeredSet);
+    } else if (special === 'bomb' || special === 'wrapped') {
+      this.detonateRadialBlast(r, c, 2, 2.25, '#fb923c', 10, 210, 560, triggeredSet);
+    } else if (special === 'dynamite') {
+      this.detonateRadialBlast(r, c, 3, 3.2, '#f97316', 13, 310, 820, triggeredSet);
+    } else if (special === 'tnt') {
+      this.detonateRadialBlast(r, c, 4, 4.25, '#ef4444', 16, 430, 1150, triggeredSet);
+    } else if (special === 'striped_h') {
       this.cb.audio?.onBeam?.();
       this.vfx.shake = Math.max(this.vfx.shake, 6);
       this.fireRowBeam(r, c, 0.68, beamColor, triggeredSet, true);
@@ -3039,54 +3527,48 @@ export class CandyHogwartsEngine {
       this.fireColBeam(c, r, 0.68, beamColor, triggeredSet, true);
       this.damageBoss(130);
       this.addScore(320, r, c, beamColor, false, 'special');
-    } else if (special === 'wrapped') {
-      this.cb.audio?.onBomb?.();
-      this.vfx.shake = Math.max(this.vfx.shake, 9);
-      this.spawnRing(r, c, 2.0, '#fb923c');
-      for (let dr = -1; dr <= 1; dr++) {
-        for (let dc = -1; dc <= 1; dc++) {
-          this.damageCell(r + dr, c + dc, triggeredSet, true);
-        }
-      }
-      if (
-        !this.ended &&
-        this.mask[r]?.[c] === 1 &&
-        !this.hasStaticBlocker(r, c) &&
-        (this.lockGrid[r]?.[c] || 0) === 0 &&
-        !this.grid[r]?.[c]
-      ) {
-        const primed = this.createPiece(color >= 0 ? color : 0, c, r, 'wrapped');
-        primed.primedWrapped = true;
-        this.grid[r][c] = primed;
-      }
-      this.damageBoss(170);
-      this.addScore(480, r, c, '#fbbf24', false, 'special');
     } else if (special === 'seeker') {
       this.cb.audio?.onSeeker?.();
-      const [target] = this.pickBestSeekerTargets(1, triggeredSet);
+      this.triggerSeekerTakeoff(r, c, triggeredSet);
+      const landingGuard = this.cloneSpecialChainGuard(triggeredSet);
+      const [target] = this.pickBestSeekerTargets(1, landingGuard);
       if (target) {
         this.spawnSeekerVfx(r, c, target.r, target.c, beamColor);
-        this.damageCell(target.r, target.c, triggeredSet, true);
+        this.damageCell(target.r, target.c, landingGuard, true);
+        for (const k of landingGuard) {
+          if (!k.includes(':')) triggeredSet.add(k);
+        }
       }
-      this.damageBoss(140);
-      this.addScore(360, r, c, '#fde047', false, 'special');
+      this.damageBoss(145);
+      this.addScore(380, r, c, '#fde047', false, 'special');
     } else if (special === 'color_bomb') {
       this.cb.audio?.onColorBomb?.();
-      const targetColor = Math.floor(Math.random() * this.numColors);
+      const targetColors = this.pickRainbowTargetColors();
+      const targetColorSet = new Set<number>(targetColors);
       for (let rr = 0; rr < this.size; rr++) {
         for (let cc = 0; cc < this.size; cc++) {
+          const tp = this.grid[rr]?.[cc];
           if (
             this.mask[rr]?.[cc] === 1 &&
-            this.isCellMatchable(rr, cc) &&
-            this.grid[rr]?.[cc]?.color === targetColor
+            !this.isCellLocked(rr, cc) &&
+            !this.hasStaticBlocker(rr, cc) &&
+            tp &&
+            this.isMatchablePiece(tp) &&
+            targetColorSet.has(tp.color)
           ) {
-            this.spawnArc(r, c, rr, cc, '#fde047');
+            this.spawnArc(
+              r,
+              c,
+              rr,
+              cc,
+              CANDY_TILE_TYPES[tp.color]?.light || '#fde047'
+            );
             this.damageCell(rr, cc, triggeredSet, true);
           }
         }
       }
-      this.damageBoss(240);
-      this.addScore(700, r, c, '#fde047', false, 'special');
+      this.damageBoss(targetColors.length >= 2 ? 380 : 250);
+      this.addScore(targetColors.length >= 2 ? 1050 : 720, r, c, '#fde047', false, 'special');
     }
   }
 
@@ -3673,26 +4155,20 @@ export class CandyHogwartsEngine {
           const pA = this.grid[r][c]!;
           const pB = this.grid[nr][nc]!;
 
-          if (pA.special === 'seeker' || pB.special === 'seeker') {
-            return [
-              { r, c },
-              { r: nr, c: nc },
-            ];
-          }
-          if (
-            (pA.special === 'color_bomb' && !pB.isIngredient && !pB.blocker) ||
-            (pB.special === 'color_bomb' && !pA.isIngredient && !pA.blocker)
-          ) {
-            return [
-              { r, c },
-              { r: nr, c: nc },
-            ];
-          }
           if (pA.special && pB.special) {
             return [
               { r, c },
               { r: nr, c: nc },
             ];
+          }
+          if (pA.special || pB.special) {
+            if (!fallbackPair) {
+              fallbackPair = [
+                { r, c },
+                { r: nr, c: nc },
+              ];
+            }
+            continue;
           }
 
           this.grid[r][c] = pB;
@@ -3714,6 +4190,28 @@ export class CandyHogwartsEngine {
         }
       }
     }
+
+    if (!fallbackPair) {
+      for (let r = 0; r < this.size; r++) {
+        for (let c = 0; c < this.size; c++) {
+          const p = this.grid[r]?.[c];
+          if (
+            this.mask[r]?.[c] === 1 &&
+            !this.isCellLocked(r, c) &&
+            !this.hasStaticBlocker(r, c) &&
+            p?.special &&
+            !p.isIngredient &&
+            !p.blocker
+          ) {
+            return [
+              { r, c },
+              { r, c },
+            ];
+          }
+        }
+      }
+    }
+
     return fallbackPair;
   }
 
@@ -4796,13 +5294,15 @@ export class CandyHogwartsEngine {
         const p = this.grid[cell.r]?.[cell.c];
         if (p) {
           p.special =
-            i % 4 === 0
-              ? 'seeker'
-              : i % 3 === 0
-                ? 'wrapped'
-                : i % 2 === 0
-                  ? 'striped_h'
-                  : 'striped_v';
+            i % 5 === 0
+              ? 'tnt'
+              : i % 4 === 0
+                ? 'dynamite'
+                : i % 3 === 0
+                  ? 'bomb'
+                  : i % 2 === 0
+                    ? 'firecracker'
+                    : 'seeker';
           p.scale = 1.25;
         }
       }
@@ -4959,6 +5459,7 @@ export class CandyHogwartsEngine {
 
   public getHudSnapshot(): CandyHudStateSnapshot | null {
     if (!this.level) return null;
+    const selectedPiece = this.selected ? this.grid[this.selected.r]?.[this.selected.c] : null;
     return {
       level: this.level,
       score: this.score,
@@ -4968,6 +5469,9 @@ export class CandyHogwartsEngine {
       objectives: this.getObjectivesProgress(),
       activeBooster: this.activeBooster,
       swapFirstCell: this.activeBooster === 'swap' && this.selected ? { ...this.selected } : null,
+      selectedSpecial: selectedPiece?.special ?? null,
+      rainbowCharge: Math.min(100, Math.floor(this.rainbowCharge)),
+      superRainbow: this.superRainbow,
       patronusCharge: Math.min(100, Math.floor(this.patronusCharge)),
       house: this.house,
       bossState: this.buildBossRuntimeState(),
@@ -5089,6 +5593,9 @@ export class CandyHogwartsEngine {
       pendingBossEnrageBurst: this.pendingBossEnrageBurst,
       bossEffectiveCastInterval: this.bossEffectiveCastInterval,
       patronusCharge: this.patronusCharge,
+      rainbowCharge: this.rainbowCharge,
+      pendingRainbowSpawns: this.pendingRainbowSpawns,
+      superRainbow: this.superRainbow,
       score: this.score,
       movesLeft: this.movesLeft,
       movesUsed: this.movesUsed,
@@ -5162,6 +5669,10 @@ export class CandyHogwartsEngine {
 
     if (!Array.isArray(snap.grid) || snap.grid.length !== sz) return false;
     const validSpecials = new Set<CandySpecialType>([
+      'firecracker',
+      'bomb',
+      'dynamite',
+      'tnt',
       'striped_h',
       'striped_v',
       'wrapped',
@@ -5252,6 +5763,14 @@ export class CandyHogwartsEngine {
       Math.floor(snap.bossEffectiveCastInterval || (this.bossConfig?.castInterval ?? 4))
     );
     this.patronusCharge = Math.max(0, Math.min(100, Number(snap.patronusCharge || 0)));
+    this.rainbowCharge = Math.max(0, Math.min(100, Number(snap.rainbowCharge || 0)));
+    this.pendingRainbowSpawns = Math.max(
+      0,
+      Math.min(4, Math.floor(Number(snap.pendingRainbowSpawns || 0)))
+    );
+    if (snap.superRainbow !== undefined) {
+      this.superRainbow = Boolean(snap.superRainbow);
+    }
     this.score = Math.max(0, Math.floor(snap.score || 0));
     this.movesLeft = Math.max(0, Math.min(99, Math.floor(snap.movesLeft ?? this.level.moves)));
     this.movesUsed = Math.max(0, Math.floor(snap.movesUsed || 0));
@@ -5284,7 +5803,8 @@ export class CandyHogwartsEngine {
 
     if (this.areAllObjectivesComplete()) {
       const reloadHouse = this.house;
-      this.loadLevel(this.level, { house: reloadHouse });
+      const reloadSuper = this.superRainbow;
+      this.loadLevel(this.level, { house: reloadHouse, superRainbow: reloadSuper });
       return false;
     }
 

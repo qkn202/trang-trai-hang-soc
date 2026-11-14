@@ -109,32 +109,36 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(getWinsRequiredForNextLevel(100)).toBe(54);
     });
 
-    it('getLevelTrialRequirement xoay tua 5 môn giải đố mượt mà', () => {
+    it('getLevelTrialRequirement xoay tua 6 môn giải đố mượt mà', () => {
       const t1 = getLevelTrialRequirement(1);
       const t2 = getLevelTrialRequirement(2);
       const t3 = getLevelTrialRequirement(3);
       const t4 = getLevelTrialRequirement(4);
       const t5 = getLevelTrialRequirement(5);
       const t6 = getLevelTrialRequirement(6);
+      const t7 = getLevelTrialRequirement(7);
 
       expect(t1.kind).toBe('match3');
       expect(t2.kind).toBe('caro');
       expect(t3.kind).toBe('sudoku');
       expect(t4.kind).toBe('chess');
       expect(t5.kind).toBe('blocks');
-      expect(t6.kind).toBe('match3'); // Quay lại đầu chu kỳ
+      expect(t6.kind).toBe('jigsaw');
+      expect(t7.kind).toBe('match3'); // Quay lại đầu chu kỳ
 
       expect(t1.icon).toBe('🍬');
       expect(t2.icon).toBe('🗺️');
       expect(t3.icon).toBe('🔢');
       expect(t4.icon).toBe('🏰');
       expect(t5.icon).toBe('🦄');
+      expect(t6.icon).toBe('🧩');
 
       expect(t1.shortVi).toBe('Bùa Gặt Honeydukes');
       expect(t2.shortVi).toBe('Ngũ Ấn Đạo Tặc');
       expect(t3.shortVi).toBe('Số Học Huyền Bí');
       expect(t4.shortVi).toBe('Cờ Phù Thủy');
       expect(t5.shortVi).toBe('Sinh Vật Huyền Bí');
+      expect(t6.shortVi).toBe('Tranh Ghép Phép Thuật');
     });
 
     it('LEVELS có đủ 100 cấp độ với XP curve tăng đơn điệu sau cấp 1', () => {

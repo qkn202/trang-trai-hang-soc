@@ -9,7 +9,7 @@
  * - Vite Dev / HMR (/src/*, /@*, /node_modules/*): Always bypass SW (network-only)
  */
 
-const CACHE_VERSION = 'v47';
+const CACHE_VERSION = 'v49';
 const SHELL_CACHE = `hangsoc-shell-${CACHE_VERSION}`;
 const STATIC_CACHE = `hangsoc-static-${CACHE_VERSION}`;
 const ASSETS_CACHE = `hangsoc-assets-${CACHE_VERSION}`;

@@ -12,13 +12,22 @@ import {
   ChessPiece,
   ChessPieceType,
   ChessSubMode,
+  createJigsawAtlasBakeCache,
   CREATURE_ONET_SPECIES,
   CreatureOnetEngine,
+  JIGSAW_PIECE_BOARD,
+  JIGSAW_PIECE_LOCKED,
   JIGSAW_VIRTUAL_H,
   JIGSAW_VIRTUAL_W,
+  JigsawArtAssetProvider,
+  JigsawAtlasBakeCache,
   LayeredTileCard,
+  MasterJigsawEngine,
   OnetPoint,
+  resolveJigsawBoardAspect,
+  stepJigsawAtlasBake,
   SudokuPuzzleEngine,
+  syncLockedPiecesToLayer,
   TILE_MATCH_SYMBOLS,
   TILE_TRAY_CAPACITY,
   TileMatchZenEngine,
@@ -32,6 +41,7 @@ import {
   ACTIVE_MINIGAME_RESUME_KEY,
   ActiveMinigameResumeRecord,
   BuildReductionResult,
+  JigsawTrayFilter,
   LeaderboardRankChange,
   MinigameRescueContext,
   PuzzleArcadeMode,
@@ -44,6 +54,24 @@ import {
 
 const PA_VIRTUAL_W = JIGSAW_VIRTUAL_W; // 692
 const PA_VIRTUAL_H = JIGSAW_VIRTUAL_H; // 504
+
+function fillRoundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  radius: number
+): void {
+  const r = Math.max(0, Math.min(radius, w * 0.5, h * 0.5));
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
 
 // Classic Sudoku ("Số Học Huyền Bí") 9x9 virtual layout in Hang Sóc parlor style (662 x 502 desktop, 502 x 568 portrait)
 const SUDOKU_BOARD_X = 8;
@@ -373,6 +401,7 @@ export class PuzzleArcadeModalController {
   private iconImages = new Map<string, HTMLImageElement>();
   private chessPieceImages = new Map<string, HTMLImageElement>();
   private caroSealImages = new Map<string, HTMLImageElement>();
+  private jigsawPaintingImages = new Map<string, HTMLImageElement>();
   private parlorBgImage: HTMLImageElement | null = null;
   private greatHallBgImage: HTMLImageElement | null = null;
   private marauderCaroBgImage: HTMLImageElement | null = null;
@@ -384,7 +413,27 @@ export class PuzzleArcadeModalController {
   public caroEngine: CaroGameEngine | null = null;
   public chessEngine: WizardChessEngine | null = null;
   public onetEngine: CreatureOnetEngine | null = null;
+  public jigsawEngine: MasterJigsawEngine | null = null;
   public tileEngine: TileMatchZenEngine | null = null;
+  private jigsawBakeCache: JigsawAtlasBakeCache | null = null;
+  private jigsawAutoSaveAccumSec = 0;
+  private jigsawWinRevealTimer = 0;
+  private jigsawTrayPage = 0;
+  private jigsawTrayCollapsed = false;
+  private jigsawDragBoardPiece: number | null = null;
+  private jigsawDragGrabOffsetNorm: { dx: number; dy: number } = { dx: 0, dy: 0 };
+  private jigsawActiveBoardPiece: number | null = null;
+  private jigsawTrayDragState: {
+    pointerId: number;
+    pieceIdx: number;
+    startX: number;
+    startY: number;
+    currX: number;
+    currY: number;
+    pointerType: string;
+    dragging: boolean;
+    ghostEl: HTMLCanvasElement | null;
+  } | null = null;
   private chessForceSubMode?: ChessSubMode;
   private aiThinkTimer = 0;
   private sudokuPadRects = new Map<number, { x: number; y: number; w: number; h: number }>();
@@ -422,10 +471,13 @@ export class PuzzleArcadeModalController {
   public resetSession(): void {
     this.pendingChessWorkerReqId = null;
     this.aiThinkTimer = 0;
+    this.cleanupJigsawTrayDrag();
     this.sudokuEngine = null;
     this.caroEngine = null;
     this.chessEngine = null;
     this.onetEngine = null;
+    this.jigsawEngine = null;
+    this.jigsawBakeCache = null;
     this.tileEngine = null;
     this.victoryClaimed = false;
     this.rescueContext = null;
@@ -523,12 +575,17 @@ export class PuzzleArcadeModalController {
       this.pendingChessWorkerReqId = null;
       this.hitStopTimer = 0;
       this.inspectingTurningPoint = false;
+      this.cleanupJigsawTrayDrag();
       if (this.caroWinRevealTimer > 0 && !this.victoryClaimed) {
         this.caroWinRevealTimer = 0;
         this.checkAndClaimVictory();
       }
       if (this.onetWinRevealTimer > 0 && !this.victoryClaimed) {
         this.onetWinRevealTimer = 0;
+        this.checkAndClaimVictory();
+      }
+      if (this.jigsawWinRevealTimer > 0 && !this.victoryClaimed) {
+        this.jigsawWinRevealTimer = 0;
         this.checkAndClaimVictory();
       }
       if (this.rescueContext) {
@@ -538,6 +595,8 @@ export class PuzzleArcadeModalController {
         this.caroEngine = null;
         this.chessEngine = null;
         this.onetEngine = null;
+        this.jigsawEngine = null;
+        this.jigsawBakeCache = null;
       } else {
         this.persistModeSession(this.mode, true);
       }
@@ -634,6 +693,67 @@ export class PuzzleArcadeModalController {
         return;
       }
       this.forceImmediateRedraw = true;
+
+      if (
+        this.mode === 'jigsaw' &&
+        this.jigsawEngine &&
+        (this.jigsawEngine.status === 'playing' || this.jigsawEngine.status === 'lost')
+      ) {
+        const je = this.jigsawEngine;
+        if (je.status === 'playing') {
+          if (e.key === 'h' || e.key === 'H') {
+            e.preventDefault();
+            (this.root.querySelector('#btnPaJigsawHint') as HTMLButtonElement | null)?.click();
+            return;
+          }
+          if (e.key === 'p' || e.key === 'P' || e.key === 'g' || e.key === 'G') {
+            e.preventDefault();
+            (this.root.querySelector('#btnPaJigsawPreview') as HTMLButtonElement | null)?.click();
+            return;
+          }
+          if (e.key === 't' || e.key === 'T') {
+            e.preventDefault();
+            (this.root.querySelector('#btnPaJigsawTidy') as HTMLButtonElement | null)?.click();
+            return;
+          }
+          if (
+            this.jigsawActiveBoardPiece !== null &&
+            je.pieceState[this.jigsawActiveBoardPiece] === JIGSAW_PIECE_BOARD
+          ) {
+            if (
+              e.key === 'ArrowUp' ||
+              e.key === 'ArrowDown' ||
+              e.key === 'ArrowLeft' ||
+              e.key === 'ArrowRight'
+            ) {
+              e.preventDefault();
+              const stepCells = e.shiftKey ? 1 : 0.25;
+              const cur = je.getBoardPieceNormCenter(this.jigsawActiveBoardPiece);
+              const dnx =
+                e.key === 'ArrowLeft'
+                  ? -stepCells / je.cols
+                  : e.key === 'ArrowRight'
+                    ? stepCells / je.cols
+                    : 0;
+              const dny =
+                e.key === 'ArrowUp'
+                  ? -stepCells / je.rows
+                  : e.key === 'ArrowDown'
+                    ? stepCells / je.rows
+                    : 0;
+              je.movePieceClusterToNorm(this.jigsawActiveBoardPiece, cur.nx + dnx, cur.ny + dny);
+              this.persistModeSession('jigsaw', false);
+              return;
+            }
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              this.finalizeJigsawBoardClusterDrop(this.jigsawActiveBoardPiece);
+              return;
+            }
+          }
+        }
+        return;
+      }
 
       if (
         this.mode === 'blocks' &&
@@ -952,7 +1072,8 @@ export class PuzzleArcadeModalController {
         const sm = this.getSudokuLayoutMetrics();
         return { w: sm.virtW, h: sm.virtH };
       }
-      case 'blocks': {
+      case 'blocks':
+      case 'jigsaw': {
         if (this.observedCanvasCssW >= 60 && this.observedCanvasCssH >= 60) {
           return { w: Math.round(this.observedCanvasCssW), h: Math.round(this.observedCanvasCssH) };
         }
@@ -964,8 +1085,8 @@ export class PuzzleArcadeModalController {
           }
           if (typeof this.canvas.getBoundingClientRect === 'function') {
             const r = this.canvas.getBoundingClientRect();
-            const netRot = sharedMinigameViewport.getNetQuarterTurns('blocks');
-            const z = Math.max(0.25, sharedMinigameViewport.getState('blocks').zoom);
+            const netRot = sharedMinigameViewport.getNetQuarterTurns(this.mode);
+            const z = Math.max(0.25, sharedMinigameViewport.getState(this.mode).zoom);
             const rw = (netRot % 2 === 1 ? r.height : r.width) / z;
             const rh = (netRot % 2 === 1 ? r.width : r.height) / z;
             if (rw >= 60 && rh >= 60) {
@@ -973,7 +1094,7 @@ export class PuzzleArcadeModalController {
             }
           }
         }
-        return this.isMobileBoardLayout() ? { w: 540, h: 810 } : { w: 864, h: 540 };
+        return this.isMobileBoardLayout() ? { w: 540, h: 720 } : { w: 864, h: 540 };
       }
     }
   }
@@ -1046,6 +1167,49 @@ export class PuzzleArcadeModalController {
     return null;
   }
 
+  private getJigsawPaintingImage(url: string): HTMLImageElement | null {
+    let img = this.jigsawPaintingImages.get(url);
+    if (!img && typeof Image !== 'undefined') {
+      img = new Image();
+      img.decoding = 'async';
+      img.onload = () => {
+        if (this.jigsawBakeCache?.waitingOnExternalImage) {
+          this.jigsawBakeCache = null;
+          this.forceImmediateRedraw = true;
+        }
+      };
+      img.src = url;
+      this.jigsawPaintingImages.set(url, img);
+    }
+    if (img && img.complete && img.naturalWidth > 0) return img;
+    return null;
+  }
+
+  private getJigsawSpriteImage(key: string): HTMLImageElement | null {
+    const existing = this.getSpriteImage(key);
+    if (existing) return existing;
+    if (!this.iconImages.has(key) && typeof Image !== 'undefined') {
+      const img = new Image();
+      img.decoding = 'async';
+      img.onload = () => {
+        if (this.jigsawBakeCache?.waitingOnExternalImage) {
+          this.jigsawBakeCache = null;
+          this.forceImmediateRedraw = true;
+        }
+      };
+      img.src = `/sprites/${key}.png`;
+      this.iconImages.set(key, img);
+    }
+    return null;
+  }
+
+  private getJigsawArtAssetProvider(): JigsawArtAssetProvider {
+    return {
+      getPaintingImage: (url) => this.getJigsawPaintingImage(url),
+      getSpriteImage: (spriteKey) => this.getJigsawSpriteImage(spriteKey),
+    };
+  }
+
   public open(initialMode?: PuzzleArcadeMode): void {
     this.rescueContext = null;
     this.rescueVictoryOutcome = null;
@@ -1054,7 +1218,8 @@ export class PuzzleArcadeModalController {
       rawMode === 'sudoku' ||
       rawMode === 'caro' ||
       rawMode === 'chess' ||
-      rawMode === 'blocks'
+      rawMode === 'blocks' ||
+      rawMode === 'jigsaw'
         ? rawMode
         : 'caro';
     this.mode = targetMode;
@@ -1104,9 +1269,15 @@ export class PuzzleArcadeModalController {
   }
 
   public switchMode(nextMode: PuzzleArcadeMode): void {
-    if ((this.caroWinRevealTimer > 0 || this.onetWinRevealTimer > 0) && !this.victoryClaimed) {
+    if (
+      (this.caroWinRevealTimer > 0 ||
+        this.onetWinRevealTimer > 0 ||
+        this.jigsawWinRevealTimer > 0) &&
+      !this.victoryClaimed
+    ) {
       this.caroWinRevealTimer = 0;
       this.onetWinRevealTimer = 0;
+      this.jigsawWinRevealTimer = 0;
       this.checkAndClaimVictory();
     }
     if (!this.rescueContext) {
@@ -1129,6 +1300,7 @@ export class PuzzleArcadeModalController {
   }
 
   private resetInteractionState(): void {
+    this.cleanupJigsawTrayDrag();
     this.activePointerId = null;
     this.onetHoverCell = null;
     this.onetCursorCell = null;
@@ -1137,6 +1309,11 @@ export class PuzzleArcadeModalController {
     this.onetSlideAnims.clear();
     this.onetWinRevealTimer = 0;
     this.onetAutoSaveAccumSec = 0;
+    this.jigsawAutoSaveAccumSec = 0;
+    this.jigsawWinRevealTimer = 0;
+    this.jigsawTrayPage = 0;
+    this.jigsawDragBoardPiece = null;
+    this.jigsawActiveBoardPiece = null;
     this.sudokuHoverCell = null;
     this.sudokuHoverPadDigit = null;
     this.sudokuHoverAction = null;
@@ -1277,6 +1454,9 @@ export class PuzzleArcadeModalController {
     if (this.mode === 'blocks' && this.onetEngine) {
       return this.onetEngine.getTurningPointReview();
     }
+    if (this.mode === 'jigsaw' && this.jigsawEngine) {
+      return this.jigsawEngine.getTurningPointReview();
+    }
     return null;
   }
 
@@ -1309,6 +1489,7 @@ export class PuzzleArcadeModalController {
     if (this.mode === 'sudoku') return this.sudokuEngine?.stage ?? pa.sudokuStage ?? 1;
     if (this.mode === 'caro') return this.caroEngine?.stage ?? pa.caroStage ?? 1;
     if (this.mode === 'chess') return this.chessEngine?.stage ?? pa.chessStage ?? 1;
+    if (this.mode === 'jigsaw') return this.jigsawEngine?.stage ?? pa.jigsawStage ?? 1;
     return this.onetEngine?.stage ?? pa.blockStage ?? 1;
   }
 
@@ -1409,6 +1590,25 @@ export class PuzzleArcadeModalController {
       return;
     }
 
+    if (mode === 'jigsaw') {
+      if (!this.jigsawEngine || this.jigsawEngine.stage !== pa.jigsawStage) return;
+      if (this.jigsawEngine.status === 'won' || (this.mode === 'jigsaw' && this.victoryClaimed)) {
+        if (pa.jigsawSession) {
+          pa.jigsawSession = null;
+          if (saveToDisk) this.sim.saveToStorage();
+        }
+        return;
+      }
+      pa.jigsawSession = this.jigsawEngine.exportSession(
+        extra ?? {
+          companionCharge: pa.jigsawSession?.companionCharge ?? 0,
+          snackPieUsed: pa.jigsawSession?.snackPieUsed ?? false,
+        }
+      );
+      if (saveToDisk) this.sim.saveToStorage();
+      return;
+    }
+
     if (!this.onetEngine || this.onetEngine.stage !== pa.blockStage) return;
     if (this.onetEngine.status === 'won' || (this.mode === 'blocks' && this.victoryClaimed)) {
       if (pa.onetSession) {
@@ -1427,9 +1627,15 @@ export class PuzzleArcadeModalController {
   }
 
   private flushArcadeAndModalBeforeHide(): void {
-    if ((this.caroWinRevealTimer > 0 || this.onetWinRevealTimer > 0) && !this.victoryClaimed) {
+    if (
+      (this.caroWinRevealTimer > 0 ||
+        this.onetWinRevealTimer > 0 ||
+        this.jigsawWinRevealTimer > 0) &&
+      !this.victoryClaimed
+    ) {
       this.caroWinRevealTimer = 0;
       this.onetWinRevealTimer = 0;
+      this.jigsawWinRevealTimer = 0;
       this.checkAndClaimVictory();
     }
     if (!this.rescueContext) {
@@ -1569,6 +1775,51 @@ export class PuzzleArcadeModalController {
       if (this.chessEngine.status === 'ai_thinking') {
         this.aiThinkTimer = 0.25;
       }
+    } else if (mode === 'jigsaw') {
+      const stage = rescueStage ?? pa.jigsawStage ?? 1;
+      if (
+        forceRestart ||
+        !this.jigsawEngine ||
+        this.jigsawEngine.stage !== stage ||
+        this.jigsawEngine.status === 'won'
+      ) {
+        if (forceRestart && !rescueStage && pa.jigsawSession) {
+          pa.jigsawSession = null;
+          this.sim.saveToStorage();
+        }
+        const nextEngine = new MasterJigsawEngine(stage);
+        let restored = false;
+        if (
+          !forceRestart &&
+          !rescueStage &&
+          pa.jigsawSession &&
+          pa.jigsawSession.stage === stage
+        ) {
+          restored = nextEngine.restoreSession(pa.jigsawSession);
+        }
+        this.jigsawEngine = nextEngine;
+        this.jigsawBakeCache = null;
+        this.jigsawTrayPage = 0;
+        this.jigsawTrayCollapsed = false;
+        if (restored && pa.jigsawSession) {
+          this.companionCharge = Math.max(0, Math.round(pa.jigsawSession.companionCharge ?? 0));
+          this.snackPieUsedThisAttempt = Boolean(pa.jigsawSession.snackPieUsed);
+          this.lossStreakResetForStage = false;
+        } else {
+          this.resetStageSynergySession();
+          if (!rescueStage) {
+            this.persistModeSession('jigsaw', true);
+          }
+        }
+      } else {
+        if (this.jigsawBakeCache && this.jigsawBakeCache.stage !== stage) {
+          this.jigsawBakeCache = null;
+        }
+        if (!rescueStage && pa.jigsawSession?.stage === stage) {
+          this.companionCharge = Math.max(0, Math.round(pa.jigsawSession.companionCharge ?? 0));
+          this.snackPieUsedThisAttempt = Boolean(pa.jigsawSession.snackPieUsed);
+        }
+      }
     } else {
       const stage = rescueStage ?? pa.blockStage ?? 1;
       if (
@@ -1626,7 +1877,8 @@ export class PuzzleArcadeModalController {
       (this.mode === 'sudoku' && this.sudokuEngine?.status === 'won') ||
       (this.mode === 'caro' && this.caroEngine?.status === 'won') ||
       (this.mode === 'chess' && this.chessEngine?.status === 'won') ||
-      (this.mode === 'blocks' && this.onetEngine?.status === 'won');
+      (this.mode === 'blocks' && this.onetEngine?.status === 'won') ||
+      (this.mode === 'jigsaw' && this.jigsawEngine?.status === 'won');
     if (!isWon) return;
 
     if (this.rescueContext && this.rescueContext.kind === this.mode) {
@@ -1703,6 +1955,22 @@ export class PuzzleArcadeModalController {
         {
           sessionScore: Math.max(1200, this.onetEngine.score),
           efficiency: Math.max(1, this.onetEngine.maxCombo),
+        }
+      );
+      this.spawnCelebrationConfetti();
+      this.onParentRefresh();
+      this.renderDOM();
+    } else if (this.mode === 'jigsaw' && this.jigsawEngine?.status === 'won') {
+      this.victoryClaimed = true;
+      this.cleanupJigsawTrayDrag();
+      this.sim.state.puzzleArcade.jigsawSession = null;
+      this.clearActiveModalResumeMarker();
+      this.victorySummary = this.sim.completePuzzleArcadeVictory(
+        'jigsaw',
+        this.jigsawEngine.reward,
+        {
+          sessionScore: Math.max(1200, this.jigsawEngine.score),
+          efficiency: Math.max(1, this.jigsawEngine.maxCombo),
         }
       );
       this.spawnCelebrationConfetti();
@@ -1857,6 +2125,9 @@ export class PuzzleArcadeModalController {
       '#puzzleArcadeDialog .pa-modal-inner'
     ) as HTMLElement | null;
     sharedMinigameViewport.applyDialogOrientation(dlg, modalInner, false);
+    if (dlg?.dataset) {
+      dlg.dataset.paActiveMode = this.mode;
+    }
     modalInner?.classList.toggle('pa-great-hall-mode', this.mode === 'chess');
     modalInner?.classList.remove('pa-potions-sudoku-mode');
     modalInner?.classList.toggle('pa-marauder-caro-mode', this.mode === 'caro');
@@ -1872,6 +2143,9 @@ export class PuzzleArcadeModalController {
       } else if (this.mode === 'caro') {
         modalTitle.innerHTML =
           '<img src="/paintings/caro/phoenix_seal.png" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Ngũ Ấn Đạo Tặc';
+      } else if (this.mode === 'jigsaw') {
+        modalTitle.innerHTML =
+          '<img src="/sprites/ui_icon_jigsaw.png" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Tranh Ghép Phép Thuật';
       } else {
         modalTitle.innerHTML =
           '<img src="/sprites/beast_niffler.png" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Sinh Vật Huyền Bí';
@@ -1888,7 +2162,8 @@ export class PuzzleArcadeModalController {
       : `Bùa Phượng Hoàng — Tối đa 1 lần/môn/ngày (Đã dùng ${talismanDaily.usedCount}/${talismanDaily.maxDaily} môn hôm nay)`;
     const reqTrial = this.sim.getRequiredLevelTrial();
     const curInfo = this.sim.getDisciplineStageInfo(this.mode);
-    const isScoredMode = this.mode === 'sudoku' || this.mode === 'blocks';
+    const isScoredMode =
+      this.mode === 'sudoku' || this.mode === 'blocks' || this.mode === 'jigsaw';
     const activeModeRank = isScoredMode ? this.sim.getPlayerMinigameRank(this.mode, 'valley') : 0;
 
     let stageHeadline = '';
@@ -2173,6 +2448,51 @@ export class PuzzleArcadeModalController {
           </div>
         `;
       }
+    } else if (this.mode === 'jigsaw' && this.jigsawEngine) {
+      const je = this.jigsawEngine;
+      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${je.stage}/${MAX_MINIGAME_STAGE} • ${je.rows}×${je.cols} (${je.totalPieces.toLocaleString('vi-VN')} mảnh)`;
+      stageSubtitle = `⏱ <strong id="paJigsawTimer" class="${!st.sandboxMode && je.isTimeCritical ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : je.formatRemainingTime()}</strong> • 🧩 <strong id="paJigsawProgress">${je.lockedCount.toLocaleString('vi-VN')}/${je.totalPieces.toLocaleString('vi-VN')}</strong> • 🎨 <strong>${escapeHtml(je.artwork.titleVi)}</strong>`;
+      const canHint =
+        je.status === 'playing' && (st.sandboxMode || je.freeHintsLeft + je.paidHintsLeft > 0);
+      const talismanLocked = je.talismanUsed || usedTodayInMode;
+      const canTalisman =
+        (je.status === 'playing' || je.status === 'lost') &&
+        !talismanLocked &&
+        (st.sandboxMode || talismanQty > 0);
+      const hintCostLbl = st.sandboxMode
+        ? '∞'
+        : je.freeHintsLeft > 0
+          ? `${je.freeHintsLeft}`
+          : je.paidHintsLeft > 0
+            ? `${je.hintGoldCost}G`
+            : '0';
+      controlsHtml = `
+        <button id="btnPaJigsawPreview" type="button" class="pa-tool-btn ${je.showGhostPreview ? 'active' : ''}" aria-pressed="${je.showGhostPreview}" ${je.status !== 'playing' ? 'disabled' : ''} title="Bật/tắt ảnh mẫu mờ trên khung tranh (P)">
+          👁️ Mẫu${je.showGhostPreview ? ' ✓' : ''}
+        </button>
+        <button id="btnPaJigsawHint" type="button" class="pa-tool-btn gold" ${!canHint ? 'disabled' : ''} title="Tự khớp chuẩn mảnh tranh vào khung (H)">
+          💡 Gợi Ý <span class="pa-cost-pill">${hintCostLbl}</span>
+        </button>
+        <button id="btnPaJigsawTidy" type="button" class="pa-tool-btn" ${je.status !== 'playing' ? 'disabled' : ''} title="Thu gọn các mảnh đơn lẻ trên mặt bàn về khay (T)">
+          🧹 Gọn Bàn
+        </button>
+        <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="${talismanTooltip}">
+          🔥 Bùa <span class="pa-cost-pill">${talismanLocked ? '✓ 1/1' : `×${talismanDisp}`}</span>
+        </button>
+        <button id="btnPaRestart" type="button" class="pa-tool-btn">
+          🔄 Ván Mới
+        </button>
+      `;
+      if (je.status === 'lost') {
+        const jigRev = je.getTurningPointReview();
+        statusBannerHtml += `
+          <div class="pa-alert-strip">
+            <span>⏰ Hết thời gian (<strong>00:00</strong>) — còn <strong>${je.remainingPieces.toLocaleString('vi-VN')}</strong> mảnh chưa ghép!</span>
+            ${canTalisman ? `<button id="btnPaRescuePhoenixTalisman" type="button" class="pa-tool-btn talisman">🔥 Bùa (×${talismanDisp})</button>` : ''}
+          </div>
+          ${jigRev ? this.renderTurningPointCardHtml(jigRev) : ''}
+        `;
+      }
     }
 
     if (!this.rescueContext && !this.victorySummary) {
@@ -2249,6 +2569,11 @@ export class PuzzleArcadeModalController {
                       </span>`
                     : `<span class="m3-reward-chip star">👑 777/777</span>`
                 }
+                ${
+                  this.mode === 'jigsaw' && this.jigsawEngine
+                    ? `<span class="m3-reward-chip">🖼️ ${escapeHtml(this.jigsawEngine.artwork.titleVi)}</span>`
+                    : ''
+                }
               </div>
               ${winReview ? this.renderTurningPointCardHtml(winReview) : ''}
               <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:6px;">
@@ -2286,6 +2611,7 @@ export class PuzzleArcadeModalController {
     const isFailedNow =
       (this.mode === 'sudoku' && this.sudokuEngine?.status === 'lost') ||
       (this.mode === 'blocks' && this.onetEngine?.status === 'lost') ||
+      (this.mode === 'jigsaw' && this.jigsawEngine?.status === 'lost') ||
       (this.mode === 'caro' &&
         (this.caroEngine?.status === 'lost' || this.caroEngine?.status === 'draw')) ||
       (this.mode === 'chess' &&
@@ -2348,7 +2674,7 @@ export class PuzzleArcadeModalController {
     `;
 
     box.innerHTML = `
-      <div class="pa-layout-shell">
+      <div class="pa-layout-shell" data-pa-active-mode="${this.mode}">
         <aside class="pa-side-dock" aria-label="Bảng chọn trò chơi và công cụ">
           <div class="pa-top-bar">
             <div class="pa-dock-head-row">
@@ -2369,9 +2695,9 @@ export class PuzzleArcadeModalController {
                   <span>🔥</span>
                   <strong id="paTalismanText">${talismanDisp}</strong>
                 </span>
-                <button id="btnPaOpenLeaderboard" type="button" class="m3-res-chip minigame-lb-chip" title="${isScoredMode ? 'Bảng Xếp Hạng môn này' : 'Bảng Xếp Hạng 3 Môn Tính Điểm (Bùa Gặt • Số Học • Sinh Vật)'}">
+                <button id="btnPaOpenLeaderboard" type="button" class="m3-res-chip minigame-lb-chip" title="${isScoredMode ? 'Bảng Xếp Hạng môn này' : 'Bảng Xếp Hạng 4 Môn Tính Điểm (Bùa Gặt • Số Học • Sinh Vật • Tranh Ghép)'}">
                   <span>🏆</span>
-                  <strong id="paRankText">${isScoredMode ? `#${activeModeRank}` : '3 Môn'}</strong>
+                  <strong id="paRankText">${isScoredMode ? `#${activeModeRank}` : '4 Môn'}</strong>
                 </button>
               </div>
               <form method="dialog" class="pa-inline-close-form">
@@ -2392,6 +2718,9 @@ export class PuzzleArcadeModalController {
               <button type="button" role="tab" aria-selected="${this.mode === 'blocks'}" data-pa-mode="blocks" class="pa-mode-tab ${this.mode === 'blocks' ? 'active' : ''}" title="Sinh Vật Huyền Bí">
                 <span class="pa-tab-name"><span class="pa-tab-name-full">🦄 Sinh Vật Huyền Bí</span><span class="pa-tab-name-short">🦄 Sinh Vật</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('blocks')}</span>${trialBadgeFor('blocks')}</span>
               </button>
+              <button type="button" role="tab" aria-selected="${this.mode === 'jigsaw'}" data-pa-mode="jigsaw" class="pa-mode-tab ${this.mode === 'jigsaw' ? 'active' : ''}" title="Tranh Ghép Phép Thuật">
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🧩 Tranh Ghép Phép Thuật</span><span class="pa-tab-name-short">🧩 Tranh Ghép</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('jigsaw')}</span>${trialBadgeFor('jigsaw')}</span>
+              </button>
               <button id="btnPaGoMatch3" type="button" role="tab" aria-selected="false" class="pa-mode-tab" title="Bùa Gặt Honeydukes">
                 <span class="pa-tab-name"><span class="pa-tab-name-full">🍬 Bùa Gặt Honeydukes</span><span class="pa-tab-name-short">🍬 Bùa Gặt</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('match3')}</span>${trialBadgeFor('match3')}</span>
               </button>
@@ -2409,13 +2738,14 @@ export class PuzzleArcadeModalController {
           ${paSynergyDockHtml}
         </aside>
 
-        <div class="pa-stage-viewport">
+        <div class="pa-stage-viewport ${this.mode === 'jigsaw' ? 'pa-jigsaw-stage-viewport' : ''}">
           <div class="mg-stage-pan-area">
             <div class="pa-canvas-shell" data-pa-board-mode="${this.mode}">
               <canvas id="paBoardCanvas" width="${this.getVirtualCanvasSize().w}" height="${this.getVirtualCanvasSize().h}" aria-label="Bàn chơi Sảnh Bàn Cờ &amp; Cổ Ngữ Phép Thuật"></canvas>
               ${inspectReturnBarHtml}
             </div>
           </div>
+          ${this.mode === 'jigsaw' ? '<div id="paJigsawTrayDock" class="pa-jigsaw-tray-dock" role="region" aria-label="Khay mảnh ghép thông minh"></div>' : ''}
         </div>
 
         <div class="pa-controls-bar">
@@ -2562,6 +2892,33 @@ export class PuzzleArcadeModalController {
               ? `❤️${oe.lives}`
               : oe.paidShufflesLeft > 0
                 ? `${oe.shuffleGoldCost}G`
+                : '0';
+        }
+      }
+    } else if (this.mode === 'jigsaw' && this.jigsawEngine) {
+      const je = this.jigsawEngine;
+      const timerEl = box.querySelector('#paJigsawTimer');
+      if (timerEl) {
+        timerEl.textContent = st.sandboxMode ? '∞' : je.formatRemainingTime();
+        timerEl.classList.toggle('pa-err-inline', !st.sandboxMode && je.isTimeCritical);
+      }
+      const prog = box.querySelector('#paJigsawProgress');
+      if (prog) {
+        prog.textContent = `${je.lockedCount.toLocaleString('vi-VN')}/${je.totalPieces.toLocaleString('vi-VN')}`;
+      }
+      const hintBtn = box.querySelector('#btnPaJigsawHint') as HTMLButtonElement | null;
+      if (hintBtn) {
+        const canHint =
+          je.status === 'playing' && (st.sandboxMode || je.freeHintsLeft + je.paidHintsLeft > 0);
+        hintBtn.disabled = !canHint;
+        const pill = hintBtn.querySelector('.pa-cost-pill');
+        if (pill) {
+          pill.textContent = st.sandboxMode
+            ? '∞'
+            : je.freeHintsLeft > 0
+              ? String(je.freeHintsLeft)
+              : je.paidHintsLeft > 0
+                ? `${je.hintGoldCost}G`
                 : '0';
         }
       }
@@ -2923,7 +3280,80 @@ export class PuzzleArcadeModalController {
       }
     });
 
-    // Phoenix Talisman (strictly 1 use per game per day — max 5 uses/day across all 5 games, never resets until next day)
+    // Phoenix Talisman (strictly 1 use per game per day — max 6 uses/day across all 6 games, never resets until next day)
+    // Jigsaw Puzzle ("Tranh Ghép Phép Thuật") controls
+    box.querySelector('#btnPaJigsawPreview')?.addEventListener('click', () => {
+      if (!this.jigsawEngine || this.jigsawEngine.status !== 'playing') return;
+      this.jigsawEngine.showGhostPreview = !this.jigsawEngine.showGhostPreview;
+      this.forceImmediateRedraw = true;
+      this.sim.audio.playClick();
+      const btn = box.querySelector('#btnPaJigsawPreview') as HTMLButtonElement | null;
+      if (btn) {
+        btn.classList.toggle('active', this.jigsawEngine.showGhostPreview);
+        btn.setAttribute('aria-pressed', String(this.jigsawEngine.showGhostPreview));
+        btn.textContent = `👁️ Mẫu${this.jigsawEngine.showGhostPreview ? ' ✓' : ''}`;
+      }
+      this.drawFrame();
+    });
+
+    box.querySelector('#btnPaJigsawTidy')?.addEventListener('click', () => {
+      if (!this.jigsawEngine || this.jigsawEngine.status !== 'playing') return;
+      const moved = this.jigsawEngine.tidyLooseSinglePieces();
+      this.sim.audio.playClick();
+      if (moved > 0) {
+        this.jigsawActiveBoardPiece = null;
+        this.persistModeSession('jigsaw', true);
+        this.renderJigsawTrayDockDOM();
+        this.forceImmediateRedraw = true;
+        this.showToast(`🧹 Đã thu gọn ${moved} mảnh đơn lẻ về khay mảnh!`, '🧹');
+      } else {
+        this.showToast('Mặt bàn đã gọn gàng (các cụm đã ghép được giữ nguyên)!', '✨');
+      }
+    });
+
+    box.querySelector('#btnPaJigsawHint')?.addEventListener('click', () => {
+      const je = this.jigsawEngine;
+      if (!je || je.status !== 'playing') return;
+      if (!this.sim.state.sandboxMode && je.freeHintsLeft <= 0 && je.paidHintsLeft <= 0) {
+        this.showToast('Màn này đã dùng hết lượt 💡 Bùa Chỉ Điểm!', '💡');
+        return;
+      }
+      if (je.freeHintsLeft > 0) {
+        je.freeHintsLeft -= 1;
+      } else {
+        const pay = this.sim.spendPuzzleHelperGold(je.hintGoldCost);
+        if (!pay.ok) {
+          this.showToast(pay.msg, '🪙');
+          return;
+        }
+        if (!this.sim.state.sandboxMode) {
+          je.paidHintsLeft = Math.max(0, je.paidHintsLeft - 1);
+        }
+      }
+      const res = je.useMagicHint();
+      if (res.ok) {
+        this.bumpCompanionCharge();
+        const m = this.computeJigsawBoardMetrics(je);
+        for (const pIdx of res.lockedPieces.slice(0, 6)) {
+          const tc = je.getTargetNormCenter(pIdx);
+          this.spawnBurst(m.boardX + tc.nx * m.boardW, m.boardY + tc.ny * m.boardH, '#fde047', 12);
+        }
+        this.sim.audio.playPowerupBlast();
+        this.showToast(res.msg, '💡');
+        this.onParentRefresh();
+        this.forceImmediateRedraw = true;
+        if (res.won) {
+          this.jigsawWinRevealTimer = 0.42;
+          this.updateLiveCountersOnly();
+          this.renderJigsawTrayDockDOM();
+        } else {
+          this.persistModeSession('jigsaw', true);
+          this.updateLiveCountersOnly();
+          this.renderJigsawTrayDockDOM();
+        }
+      }
+    });
+
     const handlePhoenixTalisman = () => {
       const gate = this.sim.canUsePhoenixTalismanInGame(this.mode);
       if (!gate.ok) {
@@ -2937,7 +3367,9 @@ export class PuzzleArcadeModalController {
             ? this.caroEngine?.talismanUsed
             : this.mode === 'chess'
               ? this.chessEngine?.talismanUsed
-              : this.onetEngine?.talismanUsed;
+              : this.mode === 'jigsaw'
+                ? this.jigsawEngine?.talismanUsed
+                : this.onetEngine?.talismanUsed;
       if (activeUsed) {
         this.showToast(
           'Hôm nay bạn đã dùng 🔥 Bùa Phượng Hoàng ở môn này rồi (giới hạn 1 lần/môn/ngày)!',
@@ -3052,6 +3484,25 @@ export class PuzzleArcadeModalController {
           this.persistModeSession('blocks', true);
           this.renderDOM();
         }
+      } else if (this.mode === 'jigsaw' && this.jigsawEngine) {
+        const res = this.jigsawEngine.applyPhoenixTalisman();
+        if (!res.ok) {
+          this.sim.refundPhoenixTalismanAttempt(this.mode);
+          this.showToast(res.msg, '🔥');
+          return;
+        }
+        const m = this.computeJigsawBoardMetrics(this.jigsawEngine);
+        this.spawnWeasleyFireworks(m.boardX + m.boardW * 0.5, m.boardY + m.boardH * 0.5, 3);
+        this.sim.audio.playPowerupBlast();
+        this.showToast(res.msg, '🔥');
+        this.onParentRefresh();
+        if (res.won) {
+          this.jigsawWinRevealTimer = 0.42;
+          this.renderDOM();
+        } else {
+          this.persistModeSession('jigsaw', true);
+          this.renderDOM();
+        }
       }
     };
 
@@ -3083,6 +3534,9 @@ export class PuzzleArcadeModalController {
         ) {
           this.onetEngine.reviveWithExtraLives(1);
         }
+      } else if (this.mode === 'jigsaw' && this.jigsawEngine) {
+        this.jigsawEngine.freeHintsLeft += 1;
+        this.jigsawEngine.addBonusTime(45);
       }
       this.persistModeSession(this.mode, false);
       const virt = this.getVirtualCanvasSize();
@@ -3091,7 +3545,7 @@ export class PuzzleArcadeModalController {
       this.sim.saveToStorage();
       this.onParentRefresh();
       this.showToast(
-        `${comp.emoji} ${comp.nameVi} trợ chiến: +1 Lượt Gợi Ý miễn phí${this.mode === 'blocks' ? ', +20s giờ' : ''} & +15G!`,
+        `${comp.emoji} ${comp.nameVi} trợ chiến: +1 Lượt Gợi Ý miễn phí${this.mode === 'blocks' ? ', +20s giờ' : this.mode === 'jigsaw' ? ', +45s giờ' : ''} & +15G!`,
         comp.emoji
       );
       this.renderDOM();
@@ -3105,6 +3559,7 @@ export class PuzzleArcadeModalController {
         return;
       }
       this.snackPieUsedThisAttempt = true;
+      let jigsawWonFromPie = false;
       if (this.mode === 'sudoku' && this.sudokuEngine) {
         this.sudokuEngine.mistakesCount = Math.max(0, this.sudokuEngine.mistakesCount - 1);
         if (this.sudokuEngine.status === 'lost') {
@@ -3120,15 +3575,23 @@ export class PuzzleArcadeModalController {
       } else if (this.mode === 'blocks' && this.onetEngine) {
         this.onetEngine.reviveWithExtraLives(2, 35);
         this.onetEngine.freeHintsLeft += 1;
+      } else if (this.mode === 'jigsaw' && this.jigsawEngine) {
+        const boost = this.jigsawEngine.applyApplePieBoost();
+        jigsawWonFromPie = boost.won;
       }
       this.persistModeSession(this.mode, true);
       this.onParentRefresh();
       this.showToast(
         this.mode === 'blocks'
           ? '🥧 Bánh Táo Quế Bà Molly: +35s giờ, +2 ❤️ Đổi Bàn & +1 🔍 Dò Cặp!'
-          : '🥧 Bánh Táo Quế Bà Molly: hồi phục lượt trợ giúp & +1 Gợi Ý!',
+          : this.mode === 'jigsaw'
+            ? '🥧 Bánh Táo Quế Bà Molly: cộng thêm giờ, khớp mảnh tranh & +1 💡 Gợi Ý!'
+            : '🥧 Bánh Táo Quế Bà Molly: hồi phục lượt trợ giúp & +1 Gợi Ý!',
         '🥧'
       );
+      if (jigsawWonFromPie) {
+        this.jigsawWinRevealTimer = 0.35;
+      }
       this.renderDOM();
     });
 
@@ -3227,7 +3690,7 @@ export class PuzzleArcadeModalController {
       canvasShellEl: shell,
       canvasEl: cvs,
       getBoardAspectRatio: (availW, availH) => {
-        if (this.mode === 'blocks') return 0;
+        if (this.mode === 'blocks' || this.mode === 'jigsaw') return 0;
         if (this.mode === 'sudoku') {
           const sm = this.getSudokuLayoutMetrics(availW, availH);
           return sm.virtW / sm.virtH;
@@ -3242,6 +3705,26 @@ export class PuzzleArcadeModalController {
         this.forceImmediateRedraw = true;
       },
       canSingleFingerPanAt: (clientX, clientY) => {
+        if (this.mode === 'jigsaw') {
+          if (!this.jigsawEngine || this.jigsawEngine.status !== 'playing') return true;
+          const { vx, vy } = clientToVirtual(clientX, clientY);
+          const m = this.computeJigsawBoardMetrics(this.jigsawEngine);
+          const { nx, ny } = this.virtualToJigsawNorm(vx, vy, m);
+          const hitRad = this.getJigsawMinHitRadiusNorm(m);
+          if (this.jigsawEngine.pickBoardPieceAtNorm(nx, ny, hitRad.rx, hitRad.ry) !== null) {
+            return false;
+          }
+          if (
+            this.jigsawEngine.selectedTrayPieceIdx !== null &&
+            nx >= -0.05 &&
+            nx <= 1.05 &&
+            ny >= -0.05 &&
+            ny <= 1.05
+          ) {
+            return false;
+          }
+          return true;
+        }
         if (this.mode !== 'chess') {
           return true;
         }
@@ -3294,6 +3777,17 @@ export class PuzzleArcadeModalController {
 
       if (ev.pointerType === 'touch') {
         this.handlePointerHover(pos.vx, pos.vy);
+        if (this.mode === 'jigsaw' && this.jigsawEngine && this.jigsawEngine.status === 'playing') {
+          const m = this.computeJigsawBoardMetrics(this.jigsawEngine);
+          const { nx, ny } = this.virtualToJigsawNorm(pos.vx, pos.vy, m);
+          const hitRad = this.getJigsawMinHitRadiusNorm(m);
+          const hitPiece = this.jigsawEngine.pickBoardPieceAtNorm(nx, ny, hitRad.rx, hitRad.ry);
+          if (hitPiece !== null) {
+            pendingTouchTap = false;
+            this.handlePointerDown(pos.vx, pos.vy);
+            return;
+          }
+        }
         if (this.mode === 'chess' && this.chessEngine) {
           const cm = this.getChessBoardMetrics();
           if (
@@ -3342,6 +3836,7 @@ export class PuzzleArcadeModalController {
       if (ev.type === 'pointercancel') {
         pendingTouchTap = false;
         this.chessDragFrom = null;
+        this.jigsawDragBoardPiece = null;
         this.activePointerId = null;
         this.pointerDownPos = null;
         return;
@@ -3372,6 +3867,10 @@ export class PuzzleArcadeModalController {
       this.chessHoverSquare = null;
       this.onetHoverCell = null;
     });
+
+    if (this.mode === 'jigsaw') {
+      this.renderJigsawTrayDockDOM();
+    }
   }
 
   // ==========================================================================
@@ -3719,9 +4218,54 @@ export class PuzzleArcadeModalController {
       }
       return;
     }
+
+    if (this.mode === 'jigsaw' && this.jigsawEngine && this.jigsawEngine.status === 'playing') {
+      const je = this.jigsawEngine;
+      const m = this.computeJigsawBoardMetrics(je);
+      const { nx, ny } = this.virtualToJigsawNorm(vx, vy, m);
+      const hitRad = this.getJigsawMinHitRadiusNorm(m);
+      const hitPiece = je.pickBoardPieceAtNorm(nx, ny, hitRad.rx, hitRad.ry);
+      if (hitPiece !== null) {
+        je.elevateCluster(hitPiece);
+        const pc = je.getBoardPieceNormCenter(hitPiece);
+        this.jigsawDragBoardPiece = hitPiece;
+        this.jigsawActiveBoardPiece = hitPiece;
+        this.jigsawDragGrabOffsetNorm = {
+          dx: pc.nx - nx,
+          dy: pc.ny - ny,
+        };
+        this.sim.audio.playClick();
+        return;
+      }
+      if (je.selectedTrayPieceIdx !== null && nx >= -0.05 && nx <= 1.05 && ny >= -0.05 && ny <= 1.05) {
+        const trayIdx = je.selectedTrayPieceIdx;
+        if (je.spawnTrayPieceOntoBoard(trayIdx, nx, ny)) {
+          this.jigsawActiveBoardPiece = trayIdx;
+          this.finalizeJigsawBoardClusterDrop(trayIdx);
+          this.renderJigsawTrayDockDOM();
+        }
+      }
+      return;
+    }
   }
 
   private handlePointerDrag(vx: number, vy: number): void {
+    if (
+      this.mode === 'jigsaw' &&
+      this.jigsawEngine &&
+      this.jigsawEngine.status === 'playing' &&
+      this.jigsawDragBoardPiece !== null
+    ) {
+      const m = this.computeJigsawBoardMetrics(this.jigsawEngine);
+      const { nx, ny } = this.virtualToJigsawNorm(vx, vy, m);
+      this.jigsawEngine.movePieceClusterToNorm(
+        this.jigsawDragBoardPiece,
+        nx + this.jigsawDragGrabOffsetNorm.dx,
+        ny + this.jigsawDragGrabOffsetNorm.dy
+      );
+      return;
+    }
+
     if (this.mode === 'chess' && this.chessEngine) {
       const cm = this.getChessBoardMetrics();
       if (
@@ -3832,6 +4376,22 @@ export class PuzzleArcadeModalController {
   }
 
   private handlePointerUp(vx: number, vy: number): void {
+    if (this.mode === 'jigsaw' && this.jigsawEngine && this.jigsawDragBoardPiece !== null) {
+      const draggedPiece = this.jigsawDragBoardPiece;
+      this.jigsawDragBoardPiece = null;
+      if (this.hasDragged && this.jigsawEngine.status === 'playing') {
+        const m = this.computeJigsawBoardMetrics(this.jigsawEngine);
+        const { nx, ny } = this.virtualToJigsawNorm(vx, vy, m);
+        this.jigsawEngine.movePieceClusterToNorm(
+          draggedPiece,
+          nx + this.jigsawDragGrabOffsetNorm.dx,
+          ny + this.jigsawDragGrabOffsetNorm.dy
+        );
+      }
+      this.finalizeJigsawBoardClusterDrop(draggedPiece);
+      return;
+    }
+
     if (this.mode === 'chess' && this.chessEngine) {
       const from = this.chessDragFrom;
       this.chessDragFrom = null;
@@ -4077,9 +4637,20 @@ export class PuzzleArcadeModalController {
   // ==========================================================================
 
   private hasActiveVisualAnimations(): boolean {
+    const jigsawBaking =
+      this.mode === 'jigsaw' &&
+      Boolean(
+        this.jigsawEngine &&
+          (!this.jigsawBakeCache ||
+            this.jigsawBakeCache.bakedPiecesCount < this.jigsawEngine.totalPieces)
+      );
     return (
+      jigsawBaking ||
       this.hitStopTimer > 0 ||
       this.activePointerId !== null ||
+      this.jigsawDragBoardPiece !== null ||
+      this.jigsawTrayDragState !== null ||
+      this.jigsawWinRevealTimer > 0 ||
       this.caroLastMoveAnim !== null ||
       this.caroWinRevealTimer > 0 ||
       this.chessMoveAnim !== null ||
@@ -4193,6 +4764,41 @@ export class PuzzleArcadeModalController {
                 if (this.onetAutoSaveAccumSec >= 5) {
                   this.onetAutoSaveAccumSec = 0;
                   this.persistModeSession('blocks', true);
+                  this.persistActiveModalResumeMarker();
+                }
+              }
+            }
+          }
+        }
+      } else if (this.mode === 'jigsaw') {
+        if (this.jigsawWinRevealTimer > 0) {
+          this.jigsawWinRevealTimer -= dt;
+          if (this.jigsawWinRevealTimer <= 0) {
+            this.jigsawWinRevealTimer = 0;
+            this.checkAndClaimVictory();
+          }
+        } else if (this.jigsawEngine && this.jigsawEngine.status === 'playing') {
+          const isPageHidden = typeof document !== 'undefined' && document.hidden;
+          const openDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
+          if (!isPageHidden && openDlg?.open) {
+            const tick = this.jigsawEngine.tickTimer(dt, Boolean(this.sim.state.sandboxMode));
+            if (tick.timedOut) {
+              this.jigsawAutoSaveAccumSec = 0;
+              this.cleanupJigsawTrayDrag();
+              this.persistModeSession('jigsaw', true);
+              this.sim.audio.playCheekyAlert();
+              this.showToast('⏰ Đã hết thời gian phục dựng bức tranh! Dùng 🔥 Bùa Phượng Hoàng để tiếp sức!', '⏰');
+              this.renderDOM();
+            } else {
+              if (tick.wholeSecondChanged) {
+                this.updateLiveCountersOnly();
+                this.forceImmediateRedraw = true;
+              }
+              if (!this.rescueContext) {
+                this.jigsawAutoSaveAccumSec += dt;
+                if (this.jigsawAutoSaveAccumSec >= 5) {
+                  this.jigsawAutoSaveAccumSec = 0;
+                  this.persistModeSession('jigsaw', true);
                   this.persistActiveModalResumeMarker();
                 }
               }
@@ -4352,7 +4958,11 @@ export class PuzzleArcadeModalController {
       isTouch ? 1.65 : 2.0,
       typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
     );
-    const viewZoom = Math.max(1, Math.min(2.4, sharedMinigameViewport.getState(this.mode).zoom));
+    const maxDprZoom = this.mode === 'jigsaw' ? 3.2 : 2.4;
+    const viewZoom = Math.max(
+      1,
+      Math.min(maxDprZoom, sharedMinigameViewport.getState(this.mode).zoom)
+    );
     const maxCanvasDim = isTouch ? 1560 : 1920;
     const dpr = Math.min(maxCanvasDim / Math.max(1, cssW, cssH), baseDpr * viewZoom);
     const targetW = Math.round(cssW * dpr);
@@ -4384,6 +4994,8 @@ export class PuzzleArcadeModalController {
       this.drawClassicSudokuBackdrop(ctx, virt.w, virt.h);
     } else if (this.mode === 'caro') {
       this.drawMarauderCaroBackdrop(ctx, virt.w, virt.h);
+    } else if (this.mode === 'jigsaw') {
+      this.drawParlorTabletopBackdrop(ctx, virt.w, virt.h);
     } else {
       this.drawUnicornSanctuaryBackdrop(ctx, virt.w, virt.h);
     }
@@ -4397,6 +5009,8 @@ export class PuzzleArcadeModalController {
       this.drawChessSpellBeams(ctx);
     } else if (this.mode === 'blocks' && this.onetEngine) {
       this.drawCreatureOnetScene(ctx, this.onetEngine);
+    } else if (this.mode === 'jigsaw' && this.jigsawEngine) {
+      this.drawJigsawScene(ctx, this.jigsawEngine);
     }
 
     this.drawParticles(ctx);
@@ -7272,6 +7886,714 @@ export class PuzzleArcadeModalController {
     ctx.textBaseline = 'middle';
     ctx.fillText(meta?.glyph ?? '♚', 0, -0.5);
     ctx.restore();
+  }
+
+  // --------------------------------------------------------------------------
+  // RENDERER & SMART TRAY: TRANH GHÉP PHÉP THUẬT (9 -> 2.000 MẢNH, ZOOM 600%)
+  // --------------------------------------------------------------------------
+
+  private cleanupJigsawTrayDrag(): void {
+    if (this.jigsawTrayDragState?.ghostEl) {
+      this.jigsawTrayDragState.ghostEl.remove();
+    }
+    this.jigsawTrayDragState = null;
+  }
+
+  private computeJigsawBoardMetrics(engine: MasterJigsawEngine): {
+    timerBarX: number;
+    timerBarY: number;
+    timerBarW: number;
+    timerBarH: number;
+    frameX: number;
+    frameY: number;
+    frameW: number;
+    frameH: number;
+    boardX: number;
+    boardY: number;
+    boardW: number;
+    boardH: number;
+    boardAspect: number;
+    cellW: number;
+    cellH: number;
+  } {
+    const virt = this.getVirtualCanvasSize();
+    const minDim = Math.min(virt.w, virt.h);
+    const timerBarH = minDim < 380 ? 13 : 15;
+    const timerGap = 2;
+    const timerTotal = timerBarH + timerGap;
+    const framePad = Math.max(3, Math.min(6, Math.round(minDim * 0.009)));
+    const outerMargin = 2;
+    const availW = Math.max(120, virt.w - (outerMargin + framePad) * 2);
+    const availH = Math.max(96, virt.h - timerTotal - (outerMargin + framePad) * 2);
+    const boardAspect = resolveJigsawBoardAspect(engine.rows, engine.cols, availW, availH);
+
+    let boardW = availW;
+    let boardH = boardW / boardAspect;
+    if (boardH > availH) {
+      boardH = availH;
+      boardW = boardH * boardAspect;
+    }
+
+    const frameW = boardW + framePad * 2;
+    const frameH = boardH + framePad * 2;
+    const totalH = timerTotal + frameH;
+    const topY = Math.max(1, (virt.h - totalH) * 0.5);
+    const frameX = (virt.w - frameW) * 0.5;
+    const frameY = topY + timerTotal;
+    const boardX = frameX + framePad;
+    const boardY = frameY + framePad;
+    const timerBarW = Math.min(virt.w - 6, Math.max(Math.min(220, virt.w - 8), frameW));
+    const timerBarX = (virt.w - timerBarW) * 0.5;
+
+    return {
+      timerBarX,
+      timerBarY: topY,
+      timerBarW,
+      timerBarH,
+      frameX,
+      frameY,
+      frameW,
+      frameH,
+      boardX,
+      boardY,
+      boardW,
+      boardH,
+      boardAspect,
+      cellW: boardW / Math.max(1, engine.cols),
+      cellH: boardH / Math.max(1, engine.rows),
+    };
+  }
+
+  private virtualToJigsawNorm(
+    vx: number,
+    vy: number,
+    m: ReturnType<PuzzleArcadeModalController['computeJigsawBoardMetrics']>
+  ): { nx: number; ny: number } {
+    return {
+      nx: (vx - m.boardX) / Math.max(1, m.boardW),
+      ny: (vy - m.boardY) / Math.max(1, m.boardH),
+    };
+  }
+
+  private getJigsawMinHitRadiusNorm(
+    m: ReturnType<PuzzleArcadeModalController['computeJigsawBoardMetrics']>
+  ): { rx: number; ry: number } {
+    const z = Math.max(0.5, sharedMinigameViewport.getState('jigsaw').zoom);
+    const minHitCssPx = 19;
+    return {
+      rx: Math.min(0.16, minHitCssPx / Math.max(40, m.boardW * z)),
+      ry: Math.min(0.16, minHitCssPx / Math.max(40, m.boardH * z)),
+    };
+  }
+
+  private finalizeJigsawBoardClusterDrop(pieceIdx: number): void {
+    const je = this.jigsawEngine;
+    if (!je || je.status !== 'playing') return;
+    const m = this.computeJigsawBoardMetrics(je);
+    const zoom = Math.max(1, sharedMinigameViewport.getState('jigsaw').zoom);
+    const res = je.dropClusterAndResolve(pieceIdx, m.boardW * zoom, m.boardH * zoom);
+
+    if (res.lockedPieces.length > 0) {
+      this.jigsawActiveBoardPiece = null;
+      this.bumpCompanionCharge();
+      for (const lIdx of res.lockedPieces.slice(0, 8)) {
+        const tc = je.getTargetNormCenter(lIdx);
+        this.spawnBurst(m.boardX + tc.nx * m.boardW, m.boardY + tc.ny * m.boardH, '#fde047', 10);
+      }
+      this.sim.audio.playMatchPop(Math.min(6, Math.max(1, je.combo)));
+      this.forceImmediateRedraw = true;
+      if (res.won) {
+        this.hitStopTimer = 0.035;
+        this.sim.audio.playPowerupBlast();
+        this.spawnWeasleyFireworks(m.boardX + m.boardW * 0.5, m.boardY + m.boardH * 0.45, 4);
+        this.jigsawWinRevealTimer = 0.45;
+        this.updateLiveCountersOnly();
+        this.renderJigsawTrayDockDOM();
+      } else {
+        this.persistModeSession('jigsaw', true);
+        this.updateLiveCountersOnly();
+        this.renderJigsawTrayDockDOM();
+      }
+      return;
+    }
+
+    if (res.mergedWithNeighbor) {
+      this.bumpCompanionCharge();
+      const pc = je.getBoardPieceNormCenter(pieceIdx);
+      this.spawnBurst(m.boardX + pc.nx * m.boardW, m.boardY + pc.ny * m.boardH, '#34d399', 12);
+      this.sim.audio.playChessClack(false);
+    } else {
+      this.sim.audio.playClick();
+    }
+    this.persistModeSession('jigsaw', true);
+    this.forceImmediateRedraw = true;
+  }
+
+  private ensureJigsawBakeReady(
+    engine: MasterJigsawEngine,
+    targetBoardAspect?: number
+  ): JigsawAtlasBakeCache | null {
+    const desiredAspect =
+      typeof targetBoardAspect === 'number' && Number.isFinite(targetBoardAspect)
+        ? targetBoardAspect
+        : this.jigsawBakeCache?.boardAspect ?? this.computeJigsawBoardMetrics(engine).boardAspect;
+    if (
+      !this.jigsawBakeCache ||
+      this.jigsawBakeCache.stage !== engine.stage ||
+      this.jigsawBakeCache.rows !== engine.rows ||
+      this.jigsawBakeCache.cols !== engine.cols ||
+      Math.abs(this.jigsawBakeCache.boardAspect - desiredAspect) > 0.025
+    ) {
+      this.jigsawBakeCache = createJigsawAtlasBakeCache(
+        engine,
+        this.getJigsawArtAssetProvider(),
+        desiredAspect
+      );
+    }
+    const cache = this.jigsawBakeCache;
+    if (!cache) return null;
+
+    if (cache.bakedPiecesCount < engine.totalPieces) {
+      const done = stepJigsawAtlasBake(cache, engine, 340);
+      if (done) {
+        syncLockedPiecesToLayer(cache, engine);
+        this.paintVisibleJigsawTrayThumbnails();
+      }
+    } else {
+      syncLockedPiecesToLayer(cache, engine);
+    }
+    return cache;
+  }
+
+  private drawJigsawScene(ctx: CanvasRenderingContext2D, engine: MasterJigsawEngine): void {
+    const m = this.computeJigsawBoardMetrics(engine);
+    const cache = this.ensureJigsawBakeReady(engine, m.boardAspect);
+    const now = performance.now();
+    const isSandbox = Boolean(this.sim.state.sandboxMode);
+    const zoom = sharedMinigameViewport.getState('jigsaw').zoom;
+
+    // 1. Thanh đồng hồ đếm ngược trên đỉnh khung tranh (tối đa 02:00:00)
+    ctx.save();
+    const barBg = ctx.createLinearGradient(0, m.timerBarY, 0, m.timerBarY + m.timerBarH);
+    barBg.addColorStop(0, 'rgba(58, 36, 23, 0.96)');
+    barBg.addColorStop(1, 'rgba(36, 23, 19, 0.98)');
+    ctx.fillStyle = barBg;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.34)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 1.5;
+    fillRoundRect(ctx, m.timerBarX, m.timerBarY, m.timerBarW, m.timerBarH, 5);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle =
+      !isSandbox && engine.isTimeCritical ? 'rgba(239, 68, 68, 0.92)' : 'rgba(207, 160, 82, 0.85)';
+    ctx.stroke();
+
+    const ratio = isSandbox ? 1 : engine.timeProgressRatio;
+    const timeText = isSandbox ? '⏱ ∞' : `⏱ ${engine.formatRemainingTime()}`;
+    const progText = `🧩 ${engine.lockedCount}/${engine.totalPieces}`;
+    ctx.font = '700 10.5px "Be Vietnam Pro", system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    const leftW = Math.ceil(ctx.measureText(timeText).width) + 14;
+    const rightW = Math.ceil(ctx.measureText(progText).width) + 14;
+
+    ctx.fillStyle =
+      !isSandbox && engine.isTimeCritical
+        ? 0.5 + 0.5 * Math.sin(now * 0.014) > 0.45
+          ? '#fecaca'
+          : '#f87171'
+        : '#fef3c7';
+    ctx.textAlign = 'left';
+    ctx.fillText(timeText, m.timerBarX + 7, m.timerBarY + m.timerBarH * 0.5 + 0.5);
+
+    ctx.fillStyle = '#fde68a';
+    ctx.textAlign = 'right';
+    ctx.fillText(progText, m.timerBarX + m.timerBarW - 7, m.timerBarY + m.timerBarH * 0.5 + 0.5);
+
+    const trackX = m.timerBarX + leftW;
+    const trackW = Math.max(36, m.timerBarW - leftW - rightW);
+    const trackH = 7;
+    const trackY = m.timerBarY + (m.timerBarH - trackH) * 0.5;
+    ctx.fillStyle = 'rgba(18, 10, 5, 0.62)';
+    ctx.fillRect(trackX, trackY, trackW, trackH);
+    if (ratio > 0.004) {
+      const fillW = Math.max(2, Math.min(trackW, trackW * ratio));
+      const fillGrad = ctx.createLinearGradient(trackX, trackY, trackX, trackY + trackH);
+      if (!isSandbox && engine.isTimeCritical) {
+        fillGrad.addColorStop(0, '#fca5a5');
+        fillGrad.addColorStop(1, '#dc2626');
+      } else if (ratio <= 0.45) {
+        fillGrad.addColorStop(0, '#fde047');
+        fillGrad.addColorStop(1, '#d97706');
+      } else {
+        fillGrad.addColorStop(0, '#86efac');
+        fillGrad.addColorStop(1, '#16a34a');
+      }
+      ctx.fillStyle = fillGrad;
+      ctx.fillRect(trackX, trackY, fillW, trackH);
+    }
+    ctx.restore();
+
+    // 2. Khung gỗ sồi viền đồng Hang Sóc & lòng bảng giấy da ấm
+    ctx.save();
+    const frameGrad = ctx.createLinearGradient(m.frameX, m.frameY, m.frameX, m.frameY + m.frameH);
+    frameGrad.addColorStop(0, '#6e4526');
+    frameGrad.addColorStop(0.5, '#4d2f18');
+    frameGrad.addColorStop(1, '#331d0e');
+    ctx.fillStyle = frameGrad;
+    ctx.shadowColor = 'rgba(20, 10, 4, 0.52)';
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetY = 4;
+    fillRoundRect(ctx, m.frameX, m.frameY, m.frameW, m.frameH, 8);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = '#cfa052';
+    ctx.stroke();
+
+    const matGrad = ctx.createLinearGradient(m.boardX, m.boardY, m.boardX, m.boardY + m.boardH);
+    matGrad.addColorStop(0, '#f5e7c6');
+    matGrad.addColorStop(1, '#e7d1a1');
+    ctx.fillStyle = matGrad;
+    ctx.fillRect(m.boardX, m.boardY, m.boardW, m.boardH);
+
+    // 3. Ảnh mẫu mờ (Ghost Reference) nếu người chơi bật 👁️ Mẫu
+    if (engine.showGhostPreview && cache) {
+      ctx.save();
+      ctx.globalAlpha = 0.34;
+      ctx.drawImage(cache.sourceCanvas, m.boardX, m.boardY, m.boardW, m.boardH);
+      ctx.restore();
+    }
+
+    // 4. Đường kẻ lưới mảnh dịu mắt (luôn hiện khi <= 400 mảnh hoặc khi phóng to >= 2.1x)
+    if (engine.totalPieces <= 400 || zoom >= 2.1) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(122, 86, 56, 0.18)';
+      ctx.lineWidth = Math.max(0.35, 0.7 / Math.max(1, zoom * 0.7));
+      ctx.beginPath();
+      for (let c = 1; c < engine.cols; c++) {
+        const gx = m.boardX + c * m.cellW;
+        ctx.moveTo(gx, m.boardY);
+        ctx.lineTo(gx, m.boardY + m.boardH);
+      }
+      for (let r = 1; r < engine.rows; r++) {
+        const gy = m.boardY + r * m.cellH;
+        ctx.moveTo(m.boardX, gy);
+        ctx.lineTo(m.boardX + m.boardW, gy);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Viền chìm trong lòng khung tranh
+    ctx.strokeStyle = 'rgba(74, 44, 22, 0.45)';
+    ctx.lineWidth = 1.1;
+    ctx.strokeRect(m.boardX + 0.5, m.boardY + 0.5, m.boardW - 1, m.boardH - 1);
+    ctx.restore();
+
+    if (!cache) return;
+
+    // 5. Lớp mặt bàn tĩnh: vẽ toàn bộ mảnh đã LOCKED chỉ bằng 1 lệnh drawImage duy nhất!
+    if (engine.lockedCount > 0 && cache.bakedPiecesCount >= engine.totalPieces) {
+      ctx.drawImage(cache.lockedCanvas, m.boardX, m.boardY, m.boardW, m.boardH);
+    }
+
+    // 6. Các cụm mảnh đang nằm tự do trên mặt bàn (ON_BOARD), sắp xếp theo Z-order
+    if (cache.bakedPiecesCount >= engine.totalPieces) {
+      const { strideW, strideH, cellW: aCellW, cellH: aCellH, padX, padY } = cache.metrics;
+      const dstPadX = (padX / aCellW) * m.cellW;
+      const dstPadY = (padY / aCellH) * m.cellH;
+      const clusters = engine.getBoardClustersSortedByZ(true);
+      const draggedRoot =
+        this.jigsawDragBoardPiece !== null
+          ? engine.findClusterRoot(this.jigsawDragBoardPiece)
+          : null;
+      const activeRoot =
+        this.jigsawActiveBoardPiece !== null &&
+        engine.pieceState[this.jigsawActiveBoardPiece] === JIGSAW_PIECE_BOARD
+          ? engine.findClusterRoot(this.jigsawActiveBoardPiece)
+          : null;
+
+      for (const cl of clusters) {
+        const isLifted = cl.root === draggedRoot;
+        const isFocused = cl.root === activeRoot;
+        ctx.save();
+        if (isLifted) {
+          ctx.shadowColor = 'rgba(20, 10, 4, 0.55)';
+          ctx.shadowBlur = 9;
+          ctx.shadowOffsetY = 4;
+        } else {
+          ctx.shadowColor = 'rgba(28, 16, 8, 0.36)';
+          ctx.shadowBlur = 3.5;
+          ctx.shadowOffsetY = 1.5;
+        }
+        for (const pIdx of cl.members) {
+          const r = Math.floor(pIdx / engine.cols);
+          const c = pIdx % engine.cols;
+          const pos = engine.getBoardPieceNormCenter(pIdx);
+          const cx = m.boardX + pos.nx * m.boardW;
+          const cy = m.boardY + pos.ny * m.boardH;
+          ctx.drawImage(
+            cache.atlasCanvas,
+            c * strideW,
+            r * strideH,
+            strideW,
+            strideH,
+            cx - m.cellW * 0.5 - dstPadX,
+            cy - m.cellH * 0.5 - dstPadY,
+            m.cellW + dstPadX * 2,
+            m.cellH + dstPadY * 2
+          );
+          if (isFocused && !isLifted) {
+            ctx.strokeStyle = 'rgba(250, 204, 21, 0.85)';
+            ctx.lineWidth = Math.max(1, 1.6 / Math.max(1, zoom * 0.6));
+            ctx.strokeRect(
+              cx - m.cellW * 0.48,
+              cy - m.cellH * 0.48,
+              m.cellW * 0.96,
+              m.cellH * 0.96
+            );
+          }
+        }
+        ctx.restore();
+      }
+    } else {
+      // Hiển thị tiến độ cắt khắc 2.000 mảnh mượt mà trong vài khung hình đầu tiên
+      const pct = Math.min(99, Math.round((cache.bakedPiecesCount / engine.totalPieces) * 100));
+      ctx.save();
+      const pillW = Math.min(260, m.boardW * 0.86);
+      const pillH = 34;
+      const px = m.boardX + (m.boardW - pillW) * 0.5;
+      const py = m.boardY + (m.boardH - pillH) * 0.5;
+      ctx.fillStyle = 'rgba(46, 29, 16, 0.9)';
+      fillRoundRect(ctx, px, py, pillW, pillH, 10);
+      ctx.fill();
+      ctx.strokeStyle = '#f5b301';
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.fillStyle = '#fff6dc';
+      ctx.font = '700 11.5px "Be Vietnam Pro", system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`🎨 Đang khắc mảnh phép thuật (${pct}%)...`, px + pillW * 0.5, py + pillH * 0.5);
+      ctx.restore();
+    }
+  }
+
+  private renderJigsawTrayDockDOM(): void {
+    const dock = this.root.querySelector('#paJigsawTrayDock') as HTMLElement | null;
+    const je = this.jigsawEngine;
+    if (!dock || !je || this.mode !== 'jigsaw') return;
+
+    const filters: Array<{ id: JigsawTrayFilter; label: string }> = [
+      { id: 'all', label: '🧩 Tất Cả' },
+      { id: 'edges', label: '🔲 Viền' },
+      { id: 'q0', label: '↖ Góc I' },
+      { id: 'q1', label: '↗ Góc II' },
+      { id: 'q2', label: '↙ Góc III' },
+      { id: 'q3', label: '↘ Góc IV' },
+    ];
+
+    const filtered = je.getFilteredTrayPieces();
+    const pageSize = 24;
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    if (this.jigsawTrayPage >= totalPages) {
+      this.jigsawTrayPage = totalPages - 1;
+    }
+    if (this.jigsawTrayPage < 0) {
+      this.jigsawTrayPage = 0;
+    }
+    const pageStart = this.jigsawTrayPage * pageSize;
+    const pageSlice = filtered.slice(pageStart, pageStart + pageSize);
+
+    const filterBtnsHtml = filters
+      .map((f) => {
+        const cnt = je.getTrayCountForFilter(f.id);
+        const active = je.trayFilter === f.id;
+        return `<button type="button" class="pa-jigsaw-filter-chip ${active ? 'active' : ''}" data-jigsaw-filter="${f.id}" aria-pressed="${active}">${f.label} <span>(${cnt})</span></button>`;
+      })
+      .join('');
+
+    const totalTrayCount = je.getTrayCountForFilter('all');
+    const pagerHtml =
+      !this.jigsawTrayCollapsed && totalPages > 1
+        ? `<div class="pa-jigsaw-pager" role="group" aria-label="Trang khay mảnh">
+            <button type="button" id="btnPaJigsawTrayPrev" class="pa-jigsaw-page-btn" ${this.jigsawTrayPage <= 0 ? 'disabled' : ''} aria-label="Trang mảnh trước">◀</button>
+            <span class="pa-jigsaw-page-lbl">${this.jigsawTrayPage + 1}/${totalPages}</span>
+            <button type="button" id="btnPaJigsawTrayNext" class="pa-jigsaw-page-btn" ${this.jigsawTrayPage >= totalPages - 1 ? 'disabled' : ''} aria-label="Trang mảnh sau">▶</button>
+          </div>`
+        : '';
+
+    const trayToggleHtml = `<button type="button" id="btnPaJigsawToggleTray" class="pa-jigsaw-tray-toggle-btn ${this.jigsawTrayCollapsed ? 'active' : ''}" aria-expanded="${!this.jigsawTrayCollapsed}" aria-controls="paJigsawTrayStrip" title="${this.jigsawTrayCollapsed ? 'Mở lại khay mảnh ghép' : 'Thu gọn khay mảnh để phóng to tối đa khung tranh'}">${
+      this.jigsawTrayCollapsed ? `▴ Mở Khay (${totalTrayCount})` : '▾ Thu Khay'
+    }</button>`;
+
+    const piecesHtml =
+      pageSlice.length > 0
+        ? pageSlice
+            .map((pIdx) => {
+              const r = Math.floor(pIdx / je.cols) + 1;
+              const c = (pIdx % je.cols) + 1;
+              const isSel = je.selectedTrayPieceIdx === pIdx;
+              const tag = je.isCornerPiece(pIdx) ? 'Mảnh Góc' : je.isEdgePiece(pIdx) ? 'Mảnh Viền' : 'Mảnh Trong';
+              return `<button type="button" class="pa-jigsaw-piece-btn ${isSel ? 'selected' : ''}" data-jigsaw-piece="${pIdx}" aria-pressed="${isSel}" title="${tag} (Hàng ${r}, Cột ${c}) — Kéo lên bảng hoặc chạm chọn rồi chạm bảng"><canvas class="pa-jigsaw-thumb-cvs" width="56" height="56" data-jigsaw-cvs="${pIdx}"></canvas></button>`;
+            })
+            .join('')
+        : `<div class="pa-jigsaw-tray-empty">${
+            je.lockedCount >= je.totalPieces
+              ? '🎉 Toàn bộ mảnh ghép đã hoàn thiện!'
+              : '✨ Không còn mảnh nào trong bộ lọc này — chuyển sang 🧩 Tất Cả hoặc ghép tiếp các mảnh trên bàn!'
+          }</div>`;
+
+    dock.dataset.trayCollapsed = String(this.jigsawTrayCollapsed);
+    dock.innerHTML = `
+      <div class="pa-jigsaw-filter-bar">
+        <div class="pa-jigsaw-filter-scroll" role="group" aria-label="Lọc mảnh ghép">${filterBtnsHtml}</div>
+        <div class="pa-jigsaw-bar-actions">
+          ${pagerHtml}
+          ${trayToggleHtml}
+        </div>
+      </div>
+      <div id="paJigsawTrayStrip" class="pa-jigsaw-tray-strip" role="list" aria-label="Danh sách mảnh ghép trong khay" ${this.jigsawTrayCollapsed ? 'hidden' : ''}>
+        ${piecesHtml}
+      </div>
+    `;
+
+    dock.querySelector('#btnPaJigsawToggleTray')?.addEventListener('click', () => {
+      this.jigsawTrayCollapsed = !this.jigsawTrayCollapsed;
+      this.sim.audio.playClick();
+      this.renderJigsawTrayDockDOM();
+      const syncBoardAfterTrayToggle = () => {
+        const panArea = this.root.querySelector(
+          '#puzzleArcadeDialogContent .mg-stage-pan-area'
+        ) as HTMLElement | null;
+        if (panArea && panArea.clientWidth > 24 && panArea.clientHeight > 24) {
+          this.observedStageCssW = panArea.clientWidth;
+          this.observedStageCssH = panArea.clientHeight;
+          this.observedCanvasCssW = panArea.clientWidth;
+          this.observedCanvasCssH = panArea.clientHeight;
+        }
+        this.forceImmediateRedraw = true;
+        this.drawFrame();
+      };
+      syncBoardAfterTrayToggle();
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(syncBoardAfterTrayToggle);
+      }
+    });
+
+    dock.querySelectorAll<HTMLButtonElement>('[data-jigsaw-filter]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const f = btn.dataset.jigsawFilter as JigsawTrayFilter | undefined;
+        if (!f || !this.jigsawEngine) return;
+        this.jigsawEngine.trayFilter = f;
+        this.jigsawTrayPage = 0;
+        this.jigsawTrayCollapsed = false;
+        this.persistModeSession('jigsaw', false);
+        this.sim.audio.playClick();
+        this.renderJigsawTrayDockDOM();
+      });
+    });
+
+    dock.querySelector('#btnPaJigsawTrayPrev')?.addEventListener('click', () => {
+      if (this.jigsawTrayPage > 0) {
+        this.jigsawTrayPage -= 1;
+        this.sim.audio.playClick();
+        this.renderJigsawTrayDockDOM();
+      }
+    });
+    dock.querySelector('#btnPaJigsawTrayNext')?.addEventListener('click', () => {
+      if (this.jigsawTrayPage < totalPages - 1) {
+        this.jigsawTrayPage += 1;
+        this.sim.audio.playClick();
+        this.renderJigsawTrayDockDOM();
+      }
+    });
+
+    dock.querySelectorAll<HTMLButtonElement>('[data-jigsaw-piece]').forEach((btn) => {
+      const pIdx = Number(btn.dataset.jigsawPiece);
+      if (!Number.isInteger(pIdx)) return;
+
+      btn.addEventListener('keydown', (ke) => {
+        if (ke.key === 'Enter' || ke.key === ' ') {
+          ke.preventDefault();
+          if (!this.jigsawEngine || this.jigsawEngine.status !== 'playing') return;
+          if (this.jigsawEngine.selectedTrayPieceIdx === pIdx) {
+            // Chạm lần 2 bằng bàn phím: đưa mảnh lên giữa bảng để di chuyển bằng phím mũi tên
+            if (this.jigsawEngine.spawnTrayPieceOntoBoard(pIdx, 0.5, 0.5)) {
+              this.jigsawActiveBoardPiece = pIdx;
+              this.sim.audio.playClick();
+              this.forceImmediateRedraw = true;
+              this.renderJigsawTrayDockDOM();
+            }
+          } else {
+            this.jigsawEngine.selectedTrayPieceIdx = pIdx;
+            this.sim.audio.playClick();
+            this.renderJigsawTrayDockDOM();
+          }
+        }
+      });
+
+      btn.addEventListener('pointerdown', (ev) => {
+        if (ev.button !== 0 && ev.pointerType === 'mouse') return;
+        if (!this.jigsawEngine || this.jigsawEngine.status !== 'playing' || this.victoryClaimed) {
+          return;
+        }
+        this.cleanupJigsawTrayDrag();
+        this.jigsawTrayDragState = {
+          pointerId: ev.pointerId,
+          pieceIdx: pIdx,
+          startX: ev.clientX,
+          startY: ev.clientY,
+          currX: ev.clientX,
+          currY: ev.clientY,
+          pointerType: ev.pointerType,
+          dragging: false,
+          ghostEl: null,
+        };
+        try {
+          btn.setPointerCapture(ev.pointerId);
+        } catch {
+          // Ignore synthetic pointer capture errors
+        }
+      });
+
+      btn.addEventListener('pointermove', (ev) => {
+        const stDrag = this.jigsawTrayDragState;
+        if (!stDrag || stDrag.pointerId !== ev.pointerId || stDrag.pieceIdx !== pIdx) return;
+        stDrag.currX = ev.clientX;
+        stDrag.currY = ev.clientY;
+        const dist = Math.hypot(ev.clientX - stDrag.startX, ev.clientY - stDrag.startY);
+        if (!stDrag.dragging && dist > 8) {
+          stDrag.dragging = true;
+          const ghost = document.createElement('canvas');
+          ghost.width = 76;
+          ghost.height = 76;
+          ghost.className = 'pa-jigsaw-drag-ghost';
+          this.paintSingleJigsawPieceCanvas(ghost, pIdx);
+          document.body.appendChild(ghost);
+          stDrag.ghostEl = ghost;
+        }
+        if (stDrag.dragging && stDrag.ghostEl) {
+          const liftY = stDrag.pointerType === 'touch' ? 24 : 0;
+          stDrag.ghostEl.style.left = `${Math.round(ev.clientX - 38)}px`;
+          stDrag.ghostEl.style.top = `${Math.round(ev.clientY - 38 - liftY)}px`;
+        }
+      });
+
+      const finishTrayPointer = (ev: PointerEvent) => {
+        const stDrag = this.jigsawTrayDragState;
+        if (!stDrag || stDrag.pointerId !== ev.pointerId || stDrag.pieceIdx !== pIdx) return;
+        const wasDragging = stDrag.dragging;
+        const pointerType = stDrag.pointerType;
+        this.cleanupJigsawTrayDrag();
+
+        if (ev.type === 'pointercancel' || !this.jigsawEngine || this.jigsawEngine.status !== 'playing') {
+          return;
+        }
+
+        if (!wasDragging) {
+          // Thao tác 1 chạm không cần kéo (WCAG / Modern Web Guidance single-pointer alternative)
+          this.jigsawEngine.selectedTrayPieceIdx =
+            this.jigsawEngine.selectedTrayPieceIdx === pIdx ? null : pIdx;
+          this.sim.audio.playClick();
+          this.renderJigsawTrayDockDOM();
+          return;
+        }
+
+        const cvs = this.canvas;
+        const panArea = this.root.querySelector(
+          '#puzzleArcadeDialogContent .mg-stage-pan-area'
+        ) as HTMLElement | null;
+        if (!cvs || !panArea) return;
+
+        const liftY = pointerType === 'touch' ? 24 : 0;
+        const dropClientX = ev.clientX;
+        const dropClientY = ev.clientY - liftY;
+        const panRect = panArea.getBoundingClientRect();
+        if (
+          dropClientX < panRect.left ||
+          dropClientX > panRect.right ||
+          dropClientY < panRect.top ||
+          dropClientY > panRect.bottom
+        ) {
+          this.sim.audio.playClick();
+          return;
+        }
+
+        const cRect = cvs.getBoundingClientRect();
+        const virt = this.getVirtualCanvasSize();
+        const netRot = sharedMinigameViewport.getNetQuarterTurns('jigsaw');
+        const { lu, lv } = clientToLocalNormalized(dropClientX, dropClientY, cRect, netRot);
+        const vx = lu * virt.w;
+        const vy = lv * virt.h;
+        const m = this.computeJigsawBoardMetrics(this.jigsawEngine);
+        const { nx, ny } = this.virtualToJigsawNorm(vx, vy, m);
+
+        if (this.jigsawEngine.spawnTrayPieceOntoBoard(pIdx, nx, ny)) {
+          this.jigsawActiveBoardPiece = pIdx;
+          this.finalizeJigsawBoardClusterDrop(pIdx);
+          this.renderJigsawTrayDockDOM();
+        }
+      };
+
+      btn.addEventListener('pointerup', finishTrayPointer);
+      btn.addEventListener('pointercancel', finishTrayPointer);
+    });
+
+    this.paintVisibleJigsawTrayThumbnails();
+  }
+
+  private paintVisibleJigsawTrayThumbnails(): void {
+    const dock = this.root.querySelector('#paJigsawTrayDock') as HTMLElement | null;
+    if (!dock || !this.jigsawEngine) return;
+    dock.querySelectorAll<HTMLCanvasElement>('canvas[data-jigsaw-cvs]').forEach((cvs) => {
+      const idx = Number(cvs.dataset.jigsawCvs);
+      if (Number.isInteger(idx)) {
+        this.paintSingleJigsawPieceCanvas(cvs, idx);
+      }
+    });
+  }
+
+  private paintSingleJigsawPieceCanvas(cvs: HTMLCanvasElement, pieceIdx: number): void {
+    const je = this.jigsawEngine;
+    if (!je) return;
+    const ctx = cvs.getContext('2d');
+    if (!ctx) return;
+    const w = cvs.width;
+    const h = cvs.height;
+    ctx.clearRect(0, 0, w, h);
+
+    const cache = this.ensureJigsawBakeReady(je);
+    if (cache && cache.bakedPiecesCount > pieceIdx) {
+      const { strideW, strideH } = cache.metrics;
+      const r = Math.floor(pieceIdx / je.cols);
+      const c = pieceIdx % je.cols;
+      const pad = 3;
+      const scale = Math.min((w - pad * 2) / strideW, (h - pad * 2) / strideH);
+      const dw = strideW * scale;
+      const dh = strideH * scale;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(
+        cache.atlasCanvas,
+        c * strideW,
+        r * strideH,
+        strideW,
+        strideH,
+        (w - dw) * 0.5,
+        (h - dh) * 0.5,
+        dw,
+        dh
+      );
+      return;
+    }
+
+    ctx.fillStyle = 'rgba(245, 179, 1, 0.28)';
+    fillRoundRect(ctx, 10, 10, w - 20, h - 20, 6);
+    ctx.fill();
   }
 
   private drawParticles(ctx: CanvasRenderingContext2D): void {

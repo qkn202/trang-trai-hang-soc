@@ -831,7 +831,7 @@ export class ParkSimulation {
         sum += (it.wonder + morphWonder + bondWonder) * 0.08 * b.stars;
       }
     }
-    const restoredBonus = (this.state.puzzleArcade?.restoredPaintings?.length ?? 0) * 0.05;
+    const restoredBonus = Math.min(0.8, (this.state.puzzleArcade?.restoredPaintings?.length ?? 0) * 0.02);
     return Math.max(1.0, Math.min(5.0, Math.round((sum + restoredBonus) * 10) / 10));
   }
 

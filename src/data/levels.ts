@@ -60,6 +60,12 @@ const FEATURED_DISCIPLINE_ROTATION: ReadonlyArray<{
     shortVi: 'Sinh Vật Huyền Bí',
     descVi: 'Ghép đôi các loài trong Sinh Vật Huyền Bí bằng đường nối tối đa 3 đoạn thẳng (777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
   },
+  {
+    kind: 'jigsaw',
+    icon: '🧩',
+    shortVi: 'Tranh Ghép Phép Thuật',
+    descVi: 'Phục chế bức tranh thế giới phù thủy trong Tranh Ghép Phép Thuật (777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
+  },
 ];
 
 /**

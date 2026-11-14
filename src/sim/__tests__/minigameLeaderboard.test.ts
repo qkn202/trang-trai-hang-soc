@@ -32,6 +32,7 @@ import {
   computeBoardFitScale,
   computeFocalPinchPan,
   computeResponsiveBoardBox,
+  MINIGAME_JIGSAW_ZOOM_MAX,
   MINIGAME_ZOOM_MAX,
   MINIGAME_ZOOM_MIN,
   MinigameViewportManager,
@@ -48,19 +49,20 @@ const mockLocalStorage = {
 };
 vi.stubGlobal('localStorage', mockLocalStorage);
 
-describe('Per-Mini-Game Leaderboards (3 Scored Games: Match-3, Sudoku & Pikachu — Real Players Only)', () => {
+describe('Per-Mini-Game Leaderboards (4 Scored Games: Match-3, Sudoku, Pikachu & Jigsaw — Real Players Only)', () => {
   beforeEach(() => {
     storageMap.clear();
     clearCachedCloudLeaderboards();
   });
 
-  it('contains zero NPCs by default across the 3 scored mini-games (Match-3, Sudoku, Pikachu)', () => {
+  it('contains zero NPCs by default across the 4 scored mini-games (Match-3, Sudoku, Pikachu, Jigsaw)', () => {
     const sim = new ParkSimulation(new MagicalAudio());
-    expect(SCORED_LEADERBOARD_GAMES).toEqual(['match3', 'sudoku', 'blocks']);
-    expect(ALL_LEADERBOARD_GAMES).toEqual(['match3', 'sudoku', 'blocks']);
+    expect(SCORED_LEADERBOARD_GAMES).toEqual(['match3', 'sudoku', 'blocks', 'jigsaw']);
+    expect(ALL_LEADERBOARD_GAMES).toEqual(['match3', 'sudoku', 'blocks', 'jigsaw']);
     expect(isScoredLeaderboardGame('match3')).toBe(true);
     expect(isScoredLeaderboardGame('sudoku')).toBe(true);
     expect(isScoredLeaderboardGame('blocks')).toBe(true);
+    expect(isScoredLeaderboardGame('jigsaw')).toBe(true);
     expect(isScoredLeaderboardGame('caro')).toBe(false);
     expect(isScoredLeaderboardGame('chess')).toBe(false);
     expect(isScoredLeaderboardGame('seedquiz')).toBe(false);
@@ -234,9 +236,9 @@ describe('Per-Mini-Game Leaderboards (3 Scored Games: Match-3, Sudoku & Pikachu 
     expect(valleySynced.entries.filter((e) => e.friendCode === 'HS-VKRM-88').length).toBe(1);
 
     const summaries = sim.getAllPersonalLeaderboardSummaries();
-    expect(summaries).toHaveLength(3);
+    expect(summaries).toHaveLength(4);
     const ids = summaries.map((s) => s.gameId);
-    expect(ids).toEqual(['match3', 'sudoku', 'blocks']);
+    expect(ids).toEqual(['match3', 'sudoku', 'blocks', 'jigsaw']);
 
     // Verify cloud merge deduplicates player's own friendCode while adding external cloud players
     const ownCode = sim.ensureNeighborSocial().playerFriendCode;
@@ -550,8 +552,11 @@ describe('Per-Mini-Game Leaderboards (3 Scored Games: Match-3, Sudoku & Pikachu 
   it('supports button-free mobile finger pinch-zoom (100%–300%), focal-point pan, and inverse pointer mapping across all 6 mini-games', () => {
     expect(MINIGAME_ZOOM_MIN).toBe(1);
     expect(MINIGAME_ZOOM_MAX).toBe(3);
+    expect(MINIGAME_JIGSAW_ZOOM_MAX).toBe(6);
     expect(clampMinigameZoom(0.4)).toBe(1);
     expect(clampMinigameZoom(5.0)).toBe(3);
+    expect(clampMinigameZoom(5.0, 'jigsaw')).toBe(5);
+    expect(clampMinigameZoom(9.0, 'jigsaw')).toBe(6);
     expect(clampMinigameZoom(1.85)).toBe(1.85);
 
     // Focal-point 2-finger pinch keeps the pinched board spot anchored under the fingers + pans with midpoint delta
@@ -613,8 +618,8 @@ describe('Per-Mini-Game Leaderboards (3 Scored Games: Match-3, Sudoku & Pikachu 
     expect(clampMinigamePan(999, -999, 500, 500, 500, 500, 2, 0)).toEqual({ panX: 286, panY: -286 });
 
     const mgr = new MinigameViewportManager();
-    const allSix = ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'seedquiz'] as const;
-    for (const gid of allSix) {
+    const allSeven = ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw', 'seedquiz'] as const;
+    for (const gid of allSeven) {
       expect(mgr.getState(gid).zoom).toBe(1);
       mgr.setZoom(gid, 2.2);
       expect(mgr.getState(gid).zoom).toBe(2.2);
@@ -625,6 +630,8 @@ describe('Per-Mini-Game Leaderboards (3 Scored Games: Match-3, Sudoku & Pikachu 
       expect(mgr.getState(gid).panX).toBe(0);
       expect(mgr.getState(gid).panY).toBe(0);
     }
+    mgr.setZoom('jigsaw', 5.4);
+    expect(mgr.getState('jigsaw').zoom).toBe(5.4);
   });
 
   it('auto-adapts board box dimensions and layout orientation across mobile screen sizes', () => {
@@ -684,10 +691,14 @@ describe('Per-Mini-Game Leaderboards (3 Scored Games: Match-3, Sudoku & Pikachu 
       height: 340,
     });
 
-    // Pikachu ('blocks') and Multilingual Academy ('seedquiz') claim 100% of available stage box
+    // Pikachu ('blocks'), Jigsaw ('jigsaw'), and Multilingual Academy ('seedquiz') claim 100% of available stage box
     expect(computeResponsiveBoardBox('blocks', 374, 620, 374 / 620)).toEqual({
       width: 374,
       height: 620,
+    });
+    expect(computeResponsiveBoardBox('jigsaw', 374, 480, 374 / 480)).toEqual({
+      width: 374,
+      height: 480,
     });
     expect(computeResponsiveBoardBox('seedquiz', 560, 340, 1)).toEqual({
       width: 560,

@@ -296,7 +296,8 @@ export function getCategoryMetricValue(
         Math.max(0, Math.floor(state.puzzleArcade?.sudokuCleared ?? 0)) +
         Math.max(0, Math.floor(state.puzzleArcade?.caroCleared ?? 0)) +
         Math.max(0, Math.floor(state.puzzleArcade?.chessCleared ?? 0)) +
-        Math.max(0, Math.floor(state.puzzleArcade?.blockCleared ?? 0));
+        Math.max(0, Math.floor(state.puzzleArcade?.blockCleared ?? 0)) +
+        Math.max(0, Math.floor(state.puzzleArcade?.jigsawCleared ?? 0));
       return Math.max(Math.max(0, Math.floor(state.stats?.minigamesWon ?? 0)), clearedStagesSum);
     }
     case 'language': {

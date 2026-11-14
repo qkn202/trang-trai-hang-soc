@@ -15,14 +15,20 @@ export const SCORED_LEADERBOARD_GAMES: ReadonlyArray<LeaderboardGameId> = [
   'match3',
   'sudoku',
   'blocks',
+  'jigsaw',
 ];
 
 export const ALL_LEADERBOARD_GAMES: ReadonlyArray<LeaderboardGameId> = SCORED_LEADERBOARD_GAMES;
 
 export function isScoredLeaderboardGame(
   gameId: string
-): gameId is 'match3' | 'sudoku' | 'blocks' {
-  return gameId === 'match3' || gameId === 'sudoku' || gameId === 'blocks';
+): gameId is 'match3' | 'sudoku' | 'blocks' | 'jigsaw' {
+  return (
+    gameId === 'match3' ||
+    gameId === 'sudoku' ||
+    gameId === 'blocks' ||
+    gameId === 'jigsaw'
+  );
 }
 
 export function normalizeScoredLeaderboardGame(gameId?: string): LeaderboardGameId {
@@ -105,6 +111,18 @@ export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMet
     primaryColVi: 'Màn Đỉnh',
     secondaryColVi: 'Điểm Sinh Vật',
     detailColVi: 'Thắng & Đỉnh Combo',
+  },
+  jigsaw: {
+    id: 'jigsaw',
+    icon: '🧩',
+    spriteIcon: '/sprites/ui_icon_jigsaw.png',
+    shortVi: 'Tranh Ghép Phép Thuật',
+    titleVi: 'Tranh Ghép Phép Thuật',
+    cupTitleVi: 'Cúp Đại Sư Tranh Ghép Phép Thuật (777 Màn)',
+    subtitleVi: 'Xếp hạng theo Màn Đỉnh, Điểm Tuyệt Tác & Kỷ Lục Chuỗi Khớp Tranh',
+    primaryColVi: 'Màn Đỉnh',
+    secondaryColVi: 'Điểm Tuyệt Tác',
+    detailColVi: 'Thắng & Chuỗi Khớp',
   },
   seedquiz: {
     id: 'seedquiz',
@@ -314,7 +332,7 @@ export interface SeededHogwartsRivalSpec {
   avatarEmoji: string;
   house: HouseName;
   stats: Record<
-    'match3' | 'sudoku' | 'blocks',
+    'match3' | 'sudoku' | 'blocks' | 'jigsaw',
     { stage: number; stars: number; score: number; streak: number }
   >;
 }
@@ -330,6 +348,7 @@ export const SEEDED_HOGWARTS_RIVALS: ReadonlyArray<SeededHogwartsRivalSpec> = [
       match3: { stage: 19, stars: 48, score: 9840, streak: 7 },
       sudoku: { stage: 16, stars: 41, score: 8120, streak: 5 },
       blocks: { stage: 22, stars: 58, score: 11250, streak: 9 },
+      jigsaw: { stage: 18, stars: 46, score: 9420, streak: 7 },
     },
   },
   {
@@ -342,6 +361,7 @@ export const SEEDED_HOGWARTS_RIVALS: ReadonlyArray<SeededHogwartsRivalSpec> = [
       match3: { stage: 21, stars: 53, score: 10420, streak: 9 },
       sudoku: { stage: 24, stars: 66, score: 12680, streak: 11 },
       blocks: { stage: 19, stars: 49, score: 9640, streak: 7 },
+      jigsaw: { stage: 23, stars: 62, score: 11980, streak: 10 },
     },
   },
   {
@@ -354,6 +374,7 @@ export const SEEDED_HOGWARTS_RIVALS: ReadonlyArray<SeededHogwartsRivalSpec> = [
       match3: { stage: 18, stars: 45, score: 9680, streak: 6 },
       sudoku: { stage: 20, stars: 52, score: 10340, streak: 8 },
       blocks: { stage: 17, stars: 44, score: 8920, streak: 6 },
+      jigsaw: { stage: 19, stars: 49, score: 9890, streak: 7 },
     },
   },
   {
@@ -366,6 +387,7 @@ export const SEEDED_HOGWARTS_RIVALS: ReadonlyArray<SeededHogwartsRivalSpec> = [
       match3: { stage: 17, stars: 44, score: 9150, streak: 6 },
       sudoku: { stage: 15, stars: 39, score: 7840, streak: 5 },
       blocks: { stage: 21, stars: 56, score: 10890, streak: 8 },
+      jigsaw: { stage: 20, stars: 52, score: 10450, streak: 8 },
     },
   },
   {
@@ -378,6 +400,7 @@ export const SEEDED_HOGWARTS_RIVALS: ReadonlyArray<SeededHogwartsRivalSpec> = [
       match3: { stage: 12, stars: 31, score: 6430, streak: 4 },
       sudoku: { stage: 10, stars: 25, score: 5180, streak: 3 },
       blocks: { stage: 14, stars: 36, score: 7290, streak: 5 },
+      jigsaw: { stage: 13, stars: 33, score: 6780, streak: 5 },
     },
   },
   {
@@ -390,6 +413,7 @@ export const SEEDED_HOGWARTS_RIVALS: ReadonlyArray<SeededHogwartsRivalSpec> = [
       match3: { stage: 14, stars: 35, score: 7190, streak: 5 },
       sudoku: { stage: 17, stars: 45, score: 8760, streak: 6 },
       blocks: { stage: 15, stars: 39, score: 7650, streak: 5 },
+      jigsaw: { stage: 16, stars: 42, score: 8340, streak: 6 },
     },
   },
   {
@@ -402,6 +426,7 @@ export const SEEDED_HOGWARTS_RIVALS: ReadonlyArray<SeededHogwartsRivalSpec> = [
       match3: { stage: 13, stars: 33, score: 6850, streak: 4 },
       sudoku: { stage: 14, stars: 36, score: 7310, streak: 5 },
       blocks: { stage: 13, stars: 33, score: 6790, streak: 4 },
+      jigsaw: { stage: 12, stars: 31, score: 6410, streak: 4 },
     },
   },
   {
@@ -414,6 +439,7 @@ export const SEEDED_HOGWARTS_RIVALS: ReadonlyArray<SeededHogwartsRivalSpec> = [
       match3: { stage: 12, stars: 30, score: 6320, streak: 4 },
       sudoku: { stage: 11, stars: 28, score: 5790, streak: 4 },
       blocks: { stage: 16, stars: 42, score: 8240, streak: 6 },
+      jigsaw: { stage: 15, stars: 39, score: 7810, streak: 6 },
     },
   },
 ];
@@ -512,7 +538,7 @@ function deriveBaseRecordFromState(
     };
   }
 
-  const stageMap: Record<'sudoku' | 'blocks', number> = {
+  const stageMap: Record<'sudoku' | 'blocks' | 'jigsaw', number> = {
     sudoku: Math.max(
       0,
       Math.min(MAX_PUZZLE_TOWER_STAGE, pa?.sudokuCleared ?? Math.max(0, (pa?.sudokuStage ?? 1) - 1))
@@ -520,6 +546,10 @@ function deriveBaseRecordFromState(
     blocks: Math.max(
       0,
       Math.min(MAX_PUZZLE_TOWER_STAGE, pa?.blockCleared ?? Math.max(0, (pa?.blockStage ?? 1) - 1))
+    ),
+    jigsaw: Math.max(
+      0,
+      Math.min(MAX_PUZZLE_TOWER_STAGE, pa?.jigsawCleared ?? Math.max(0, (pa?.jigsawStage ?? 1) - 1))
     ),
   };
 
@@ -545,6 +575,7 @@ export function ensureMinigameLeaderboardState(state: GameState): MinigameLeader
         sudoku: deriveBaseRecordFromState(state, 'sudoku'),
         chess: deriveBaseRecordFromState(state, 'chess'),
         blocks: deriveBaseRecordFromState(state, 'blocks'),
+        jigsaw: deriveBaseRecordFromState(state, 'jigsaw'),
         seedquiz: deriveBaseRecordFromState(state, 'seedquiz'),
       },
     };
@@ -735,6 +766,10 @@ function formatDetailDisplayVi(
   }
   if (gameId === 'blocks') {
     const eff = efficiency && efficiency > 0 ? ` • ⚡Combo ×${efficiency}` : '';
+    return `${totalWins} thắng • 🔥×${bestStreak}${eff}`;
+  }
+  if (gameId === 'jigsaw') {
+    const eff = efficiency && efficiency > 0 ? ` • 🧩Combo ×${efficiency}` : '';
     return `${totalWins} thắng • 🔥×${bestStreak}${eff}`;
   }
   const bestRun = efficiency && efficiency > 0 ? ` • 🎯${efficiency.toLocaleString('vi-VN')}đ` : '';
@@ -1456,7 +1491,7 @@ export function setCachedCloudLeaderboardEntries(
 }
 
 export function clearCachedCloudLeaderboards(): void {
-  for (const gid of ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'seedquiz'] as const) {
+  for (const gid of ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw', 'seedquiz'] as const) {
     delete cloudEntriesMemoryCache[gid];
   }
 }

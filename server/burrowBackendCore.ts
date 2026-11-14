@@ -685,7 +685,12 @@ export const KNOWN_WEAK_DEV_SECRETS = new Set<string>([
   'hpvn-burrow-sale-admin',
 ]);
 
-export const SCORED_SERVER_LEADERBOARD_GAMES = new Set<string>(['match3', 'sudoku', 'blocks']);
+export const SCORED_SERVER_LEADERBOARD_GAMES = new Set<string>([
+  'match3',
+  'sudoku',
+  'blocks',
+  'jigsaw',
+]);
 
 export function isWeakOrDefaultSecret(secret: string | undefined | null): boolean {
   if (typeof secret !== 'string') return true;
@@ -2258,10 +2263,11 @@ export class BurrowAuthoritativeBackend {
 
     const omitCatalog =
       typeof params.knownCatalogHash === 'string' && params.knownCatalogHash === catalogHash;
-    const [lbMatch3, lbSudoku, lbBlocks] = await Promise.all([
+    const [lbMatch3, lbSudoku, lbBlocks, lbJigsaw] = await Promise.all([
       this.getLeaderboardEntries('match3'),
       this.getLeaderboardEntries('sudoku'),
       this.getLeaderboardEntries('blocks'),
+      this.getLeaderboardEntries('jigsaw'),
     ]);
 
     return {
@@ -2392,6 +2398,7 @@ export class BurrowAuthoritativeBackend {
         match3: lbMatch3,
         sudoku: lbSudoku,
         blocks: lbBlocks,
+        jigsaw: lbJigsaw,
       },
       ...(params.receipt ? { receipt: params.receipt } : {}),
     };
@@ -4623,7 +4630,7 @@ export class BurrowAuthoritativeBackend {
         : null;
     const sharedStreak = Math.max(0, Math.floor(Number(m3Obj?.winStreak) || 0));
 
-    for (const gameId of ['match3', 'sudoku', 'blocks'] as const) {
+    for (const gameId of ['match3', 'sudoku', 'blocks', 'jigsaw'] as const) {
       const rec =
         recordsObj?.[gameId] && typeof recordsObj[gameId] === 'object'
           ? (recordsObj[gameId] as Record<string, unknown>)
@@ -4653,6 +4660,20 @@ export class BurrowAuthoritativeBackend {
             Math.floor(
               Number(
                 paObj?.sudokuCleared ?? Math.max(0, (Number(paObj?.sudokuStage) || 1) - 1)
+              ) || 0
+            )
+          )
+        );
+        fallbackWins = fallbackCleared;
+        fallbackRating = fallbackCleared * 155 + fallbackCleared * 22 + sharedStreak * 35;
+      } else if (gameId === 'jigsaw') {
+        fallbackCleared = Math.max(
+          0,
+          Math.min(
+            777,
+            Math.floor(
+              Number(
+                paObj?.jigsawCleared ?? Math.max(0, (Number(paObj?.jigsawStage) || 1) - 1)
               ) || 0
             )
           )
@@ -4970,7 +4991,7 @@ export class BurrowAuthoritativeBackend {
     gameId: string;
     entry: Record<string, unknown>;
   }): Promise<{ gameId: string; entries: Array<Record<string, unknown>>; cupPointsAdded: number }> {
-    const validGames = new Set(['match3', 'sudoku', 'blocks', 'caro', 'chess', 'seedquiz']);
+    const validGames = new Set(['match3', 'sudoku', 'blocks', 'jigsaw', 'caro', 'chess', 'seedquiz']);
     const gameId = validGames.has(params.gameId) ? params.gameId : 'match3';
 
     if (!SCORED_SERVER_LEADERBOARD_GAMES.has(gameId)) {

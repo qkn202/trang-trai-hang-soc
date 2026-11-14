@@ -1308,6 +1308,9 @@ export class Match3ModalController {
           <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="blocks" class="pa-mode-tab" title="Sinh Vật Huyền Bí">
             <span class="pa-tab-name"><span class="pa-tab-name-full">🦄 Sinh Vật Huyền Bí</span><span class="pa-tab-name-short">🦄 Sinh Vật</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('blocks')}</span>${trialBadgeFor('blocks')}</span>
           </button>
+          <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="jigsaw" class="pa-mode-tab" title="Tranh Ghép Phép Thuật">
+            <span class="pa-tab-name"><span class="pa-tab-name-full">🧩 Tranh Ghép Phép Thuật</span><span class="pa-tab-name-short">🧩 Tranh Ghép</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('jigsaw')}</span>${trialBadgeFor('jigsaw')}</span>
+          </button>
           <button type="button" role="tab" aria-selected="true" class="pa-mode-tab active" title="Bùa Gặt Honeydukes">
             <span class="pa-tab-name"><span class="pa-tab-name-full">🍬 Bùa Gặt Honeydukes</span><span class="pa-tab-name-short">🍬 Bùa Gặt</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('match3')}</span>${trialBadgeFor('match3')}</span>
           </button>

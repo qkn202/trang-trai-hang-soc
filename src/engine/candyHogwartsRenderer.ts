@@ -240,11 +240,21 @@ export class CandyHogwartsBoardRenderer {
   }
 
   private getSpriteForPiece(piece: CandyBoardPiece): HTMLImageElement | undefined {
+    const col = piece.color >= 0 && piece.color < 6 ? piece.color : 0;
     if (piece.special === 'color_bomb') return this.sprites.color_bomb;
-    if (piece.special === 'striped_h') return this.sprites[`c_${piece.color}_sh`];
-    if (piece.special === 'striped_v') return this.sprites[`c_${piece.color}_sv`];
-    if (piece.special === 'wrapped') return this.sprites[`c_${piece.color}_wr`];
-    return this.sprites[`c_${piece.color}`];
+    if (piece.special === 'striped_h' || piece.special === 'firecracker') {
+      return this.sprites[`c_${col}_sh`];
+    }
+    if (piece.special === 'striped_v') return this.sprites[`c_${col}_sv`];
+    if (
+      piece.special === 'wrapped' ||
+      piece.special === 'bomb' ||
+      piece.special === 'dynamite' ||
+      piece.special === 'tnt'
+    ) {
+      return this.sprites[`c_${col}_wr`];
+    }
+    return this.sprites[`c_${col}`];
   }
 
   public invalidateBg(): void {

@@ -370,7 +370,8 @@ export function socialUiApplyAuthoritativeSnapshotIdentity(
     );
     const sudokuCleared = Math.max(0, homeOrActive.puzzleArcade?.sudokuCleared ?? 0);
     const blockCleared = Math.max(0, homeOrActive.puzzleArcade?.blockCleared ?? 0);
-    if (m3Cleared > 0 || sudokuCleared > 0 || blockCleared > 0) {
+    const jigsawCleared = Math.max(0, homeOrActive.puzzleArcade?.jigsawCleared ?? 0);
+    if (m3Cleared > 0 || sudokuCleared > 0 || blockCleared > 0 || jigsawCleared > 0) {
       void syncAllPlayerCloudLeaderboards(homeOrActive).catch(() => {});
     }
   }

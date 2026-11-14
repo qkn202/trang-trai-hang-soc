@@ -6,3 +6,5 @@ export * from "./caroEngine";
 export * from "./chessPresets";
 export * from "./chessEngine";
 export * from "./onetEngine";
+export * from "./jigsawPaintingComposer";
+export * from "./jigsawEngine";

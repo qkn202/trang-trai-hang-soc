@@ -89,6 +89,8 @@ export function getMinigameKindLabelVi(kind: MinigameTrialKind): {
       return { icon: '🏰', nameVi: 'Cờ Phù Thủy' };
     case 'blocks':
       return { icon: '🦄', nameVi: 'Sinh Vật Huyền Bí' };
+    case 'jigsaw':
+      return { icon: '🧩', nameVi: 'Tranh Ghép Phép Thuật' };
   }
 }
 
@@ -216,6 +218,7 @@ const SOS_NOTES_BY_KIND: Record<MinigameTrialKind, string> = {
   sudoku: 'Bảng Số Học Huyền Bí 9×9 đang hóc ở vài ô cuối, nhờ bồ suy luận điền số vượt màn này giúp mình nhé!',
   chess: 'Thế Cờ Phù Thủy căng quá, nhờ bồ cầm quân Gryffindor chiếu thắng giúp mình!',
   blocks: 'Màn Sinh Vật Huyền Bí này đông quá làm mình hoa cả mắt, nhờ bồ nối cặp vượt màn này giúp mình nha!',
+  jigsaw: 'Bức Tranh Ghép Phép Thuật Hogwarts nhiều mảnh viền quá, nhờ bồ tinh mắt ghép nốt giúp mình nha!',
 };
 
 function buildDailyNeighborCrates(neighborId: string, name: string, daySeed: number): NeighborOwlHelpCrate[] {
@@ -342,7 +345,7 @@ export function syncNeighborSocialDailyReset(
   social.dailyHonorTourClaimed = false;
   social.dailyFlooShareClaimed = false;
 
-  const kinds: MinigameTrialKind[] = ['match3', 'sudoku', 'caro', 'chess', 'blocks'];
+  const kinds: MinigameTrialKind[] = ['match3', 'sudoku', 'caro', 'chess', 'blocks', 'jigsaw'];
   social.neighbors = social.neighbors.map((nb, idx) => {
     const spot = buildDailyMysterySpot(nb.id, daySeed);
     const kind = nb.minigameSos?.kind ?? kinds[(daySeed + idx) % kinds.length];
@@ -385,7 +388,7 @@ export function createFriendNeighborFromCode(
   const seed = hashSeed(cleanCode);
   const houses: HouseName[] = ['Gryffindor', 'Ravenclaw', 'Hufflepuff', 'Slytherin'];
   const emojis = ['🧙‍♂️', '🧙‍♀️', '🦉', '🦊', '🦢', '🍀'];
-  const kinds: MinigameTrialKind[] = ['match3', 'caro', 'sudoku', 'chess', 'blocks'];
+  const kinds: MinigameTrialKind[] = ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw'];
   const resolvedName =
     (customName ?? '').trim() ||
     (verifiedProfile?.name ?? '').trim() ||
@@ -899,7 +902,7 @@ export function upsertFlooMemberToNeighborProfile(
   const seed = hashSeed(cleanUid);
   const houses: HouseName[] = ['Gryffindor', 'Ravenclaw', 'Hufflepuff', 'Slytherin'];
   const emojis = ['🧙‍♂️', '🧙‍♀️', '🦉', '🦊', '🦢', '🍀'];
-  const kinds: MinigameTrialKind[] = ['match3', 'caro', 'sudoku', 'chess', 'blocks'];
+  const kinds: MinigameTrialKind[] = ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw'];
   const validHouses = new Set<HouseName>(houses);
   const house: HouseName =
     row.house && validHouses.has(row.house)

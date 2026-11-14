@@ -15,7 +15,54 @@ export type CandyHouseId = 'gryffindor' | 'slytherin' | 'ravenclaw' | 'hufflepuf
 
 export type CandyDifficultyTier = 'normal' | 'hard' | 'nightmare' | 'exam' | 'boss' | 'finale';
 
-export type CandySpecialType = 'striped_h' | 'striped_v' | 'wrapped' | 'color_bomb' | 'seeker';
+export type CandySpecialType =
+  | 'firecracker'
+  | 'bomb'
+  | 'dynamite'
+  | 'tnt'
+  | 'color_bomb'
+  | 'seeker'
+  | 'striped_h'
+  | 'striped_v'
+  | 'wrapped';
+
+export function isRadialExplosiveSpecial(special: CandySpecialType | null | undefined): boolean {
+  return (
+    special === 'firecracker' ||
+    special === 'bomb' ||
+    special === 'dynamite' ||
+    special === 'tnt' ||
+    special === 'wrapped'
+  );
+}
+
+export function getGardenscapesBlastRadius(
+  special: CandySpecialType | null | undefined
+): { gridRadius: number; maxHypot: number } | null {
+  if (special === 'firecracker') return { gridRadius: 1, maxHypot: 1.45 };
+  if (special === 'bomb' || special === 'wrapped') return { gridRadius: 2, maxHypot: 2.25 };
+  if (special === 'dynamite') return { gridRadius: 3, maxHypot: 3.2 };
+  if (special === 'tnt') return { gridRadius: 4, maxHypot: 4.25 };
+  return null;
+}
+
+export function getSpecialRainbowChargeGain(
+  special: CandySpecialType | null | undefined
+): number {
+  if (special === 'seeker') return 22;
+  if (special === 'firecracker' || special === 'striped_h' || special === 'striped_v') return 28;
+  if (special === 'bomb' || special === 'wrapped') return 45;
+  if (special === 'dynamite') return 68;
+  if (special === 'tnt') return 95;
+  return 0;
+}
+
+/** Chuỗi thắng liên tiếp kích hoạt Siêu Cầu Vồng (Super Rainbow Blast — chuẩn Gardenscapes 2026) */
+export const SUPER_RAINBOW_WIN_STREAK = 5;
+
+export function isSuperRainbowActiveForStreak(winStreak: number | undefined | null): boolean {
+  return Math.floor(Number(winStreak || 0)) >= SUPER_RAINBOW_WIN_STREAK;
+}
 
 export type CandyObjectiveType =
   | 'collect'
@@ -185,9 +232,9 @@ export const HOGWARTS_SEASONS: ReadonlyArray<CandySeasonDef> = [
     finaleLevelId: 111,
     signatureKey: 'core',
     signatureIcon: '💎',
-    signatureName: 'Cửa Sập Ba Đầu & Đá Cổ Ngữ',
+    signatureName: 'Kho Thuốc Nổ & Cầu Vồng Tích Năng',
     signatureDesc:
-      'Nền tảng phép thuật chuẩn Candy Crush: 6 màu kẹo, Thạch Hắc Ám, Băng Azkaban, Vạc Độc Dược, Khoá Gringotts & Đại Trùm 2 Pha.',
+      'Lối chơi Gardenscapes Phép Thuật: Ghép 4 tạo Pháo Hoa, 5 tạo Bom, 6 tạo Thuốc Nổ, 7+ tạo Thùng TNT, vuông 2×2 tạo Chong Chóng Snitch & tích đầy 🌈 Cầu Vồng!',
     accentColor: '#d97706',
   },
   {
@@ -304,9 +351,9 @@ export const CANDY_HOUSES: Record<CandyHouseId, CandyHouseDef> = {
     patronusName: 'Hươu Bạc',
     patronusEmoji: '🦌',
     passiveTitle: 'Trái Tim Sư Tử',
-    passiveDesc: '+15% điểm nổ Kẹo Phép & +25% sát thương lên Trùm.',
+    passiveDesc: '+15% điểm nổ Pháo/Bom & +25% sát thương lên Trùm.',
     activeDesc:
-      'Thanh tẩy mọi Giám Ngục, Chữ Thập Ánh Bạc quét tâm bàn, xuyên Khiên Linh Giá & tặng 1 Kẹo Bọc + 1 Kẹo Sọc!',
+      'Thanh tẩy mọi Giám Ngục, Chữ Thập Ánh Bạc quét tâm bàn, xuyên Khiên Linh Giá & tặng 1 Bom Nổ + 1 Pháo Hoa!',
     emblemSvg: `<svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 10H52V32C52 46 32 56 32 56C32 56 12 46 12 32V10Z" fill="#B91C1C" stroke="#FDE047" stroke-width="3.5"/><path d="M32 17L36 25L45 26L38.5 32.5L40 41.5L32 37L24 41.5L25.5 32.5L19 26L28 25L32 17Z" fill="#FDE047"/></svg>`,
   },
   slytherin: {
@@ -323,7 +370,7 @@ export const CANDY_HOUSES: Record<CandyHouseId, CandyHouseDef> = {
     passiveTitle: 'Uy Quyền Hầm Ngục',
     passiveDesc: 'Kìm hãm Sô-cô-la tự lan chậm đi một nửa & +25% điểm phá mọi Vật Cản.',
     activeDesc:
-      'Thanh tẩy mọi Giám Ngục, phá tới 5 ô Vật Cản Hắc Ám / Khiên Linh Giá, lùi +3 nhịp Bom & kết tinh 1 Cầu Ngũ Sắc!',
+      'Thanh tẩy mọi Giám Ngục, phá tới 5 ô Vật Cản Hắc Ám / Khiên Linh Giá, lùi +3 nhịp Bom & kết tinh 1 Cầu Vồng!',
     emblemSvg: `<svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 10H52V32C52 46 32 56 32 56C32 56 12 46 12 32V10Z" fill="#047857" stroke="#E2E8F0" stroke-width="3.5"/><path d="M38 20C28 18 22 25 32 30C42 35 36 43 25 41" stroke="#A7F3D0" stroke-width="5" stroke-linecap="round"/></svg>`,
   },
   ravenclaw: {
@@ -338,9 +385,9 @@ export const CANDY_HOUSES: Record<CandyHouseId, CandyHouseDef> = {
     patronusName: 'Đại Bàng',
     patronusEmoji: '🦅',
     passiveTitle: 'Nhãn Quan Thông Thái',
-    passiveDesc: 'Tích Nộ Hộ Mệnh nhanh +20%, gợi ý sớm (2.6s) & ưu tiên chỉ nước tạo Kẹo Phép.',
+    passiveDesc: 'Tích năng lượng nhanh +20%, gợi ý sớm (2.6s) & ưu tiên chỉ nước tạo Pháo/Bom.',
     activeDesc:
-      'Thanh tẩy mọi Giám Ngục & triệu hồi 4 Cánh Vàng Snitch bắn tỉa thẳng vào Bom / Linh Giá / Mục tiêu quan trọng nhất!',
+      'Thanh tẩy mọi Giám Ngục & triệu hồi 4 Chong Chóng Snitch bắn tỉa thẳng vào Bom / Linh Giá / Mục tiêu quan trọng nhất!',
     emblemSvg: `<svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 10H52V32C52 46 32 56 32 56C32 56 12 46 12 32V10Z" fill="#1D4ED8" stroke="#FBBF24" stroke-width="3.5"/><path d="M20 35C25 24 32 20 32 20C32 20 39 24 44 35L32 30L20 35Z" fill="#BAE6FD"/></svg>`,
   },
   hufflepuff: {
@@ -355,9 +402,9 @@ export const CANDY_HOUSES: Record<CandyHouseId, CandyHouseDef> = {
     patronusName: 'Lửng Vàng',
     patronusEmoji: '🦡',
     passiveTitle: 'Phúc Lành Bền Bỉ',
-    passiveDesc: 'Vào trận có sẵn 25% Nộ Hộ Mệnh & +12% điểm ghép kẹo.',
+    passiveDesc: 'Vào trận có sẵn 25% Hộ Mệnh & +12% điểm ghép kẹo.',
     activeDesc:
-      'Thanh tẩy mọi Giám Ngục, tặng ngay +2 Lượt Đi Miễn Phí (lùi +2 nhịp Bom) & hoá phép 3 Kẹo Sọc / Bọc / Tầm Thủ!',
+      'Thanh tẩy mọi Giám Ngục, tặng ngay +2 Lượt Đi Miễn Phí (lùi +2 nhịp Bom) & hoá phép 3 Pháo Hoa / Bom / Chong Chóng!',
     emblemSvg: `<svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 10H52V32C52 46 32 56 32 56C32 56 12 46 12 32V10Z" fill="#D97706" stroke="#FEF08A" stroke-width="3.5"/><path d="M23 23L32 18L41 23V35L32 42L23 35V23Z" fill="#422006" stroke="#FEF08A" stroke-width="2.5"/></svg>`,
   },
 };

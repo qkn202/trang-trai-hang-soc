@@ -3316,7 +3316,8 @@ dialog::backdrop {
   aspect-ratio: 1 / 1;
 }
 
-.pa-canvas-shell[data-pa-board-mode='blocks'] {
+.pa-canvas-shell[data-pa-board-mode='blocks'],
+.pa-canvas-shell[data-pa-board-mode='jigsaw'] {
   width: 100%;
   height: 100%;
   width: 100cqw;
@@ -3329,10 +3330,329 @@ dialog::backdrop {
   box-shadow: none;
 }
 
-.pa-canvas-shell[data-pa-board-mode='blocks'] #paBoardCanvas {
+.pa-canvas-shell[data-pa-board-mode='jigsaw'] {
+  border: none;
+  background: transparent;
+}
+
+.pa-canvas-shell[data-pa-board-mode='blocks'] #paBoardCanvas,
+.pa-canvas-shell[data-pa-board-mode='jigsaw'] #paBoardCanvas {
   width: 100%;
   height: 100%;
   aspect-ratio: auto;
+}
+
+.pa-stage-viewport.pa-jigsaw-stage-viewport {
+  gap: 3px;
+}
+
+.pa-stage-viewport.pa-jigsaw-stage-viewport > .mg-stage-pan-area {
+  position: relative;
+  inset: auto;
+  flex: 1 1 0;
+  inline-size: 100%;
+  block-size: auto;
+  min-block-size: 0;
+}
+
+.pa-jigsaw-tray-dock {
+  position: relative;
+  z-index: 5;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding: 3px 6px 4px;
+  border-radius: 10px;
+  background: linear-gradient(
+    180deg,
+    var(--ts-wood-track-top) 0%,
+    var(--ts-wood-track-bot) 100%
+  );
+  border: 1.5px solid var(--farm-brass-bright);
+  box-shadow:
+    0 2px 0 var(--farm-wood-darkest),
+    0 4px 10px var(--farm-shadow-soft),
+    inset 0 1px 0 var(--ts-gloss-soft);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.pa-jigsaw-tray-dock[data-tray-collapsed='true'] {
+  padding-block: 3px;
+}
+
+.pa-jigsaw-filter-bar {
+  display: flex;
+  align-items: center;
+  align-items: safe center;
+  justify-content: space-between;
+  gap: 5px;
+  min-inline-size: 0;
+}
+
+.pa-jigsaw-bar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.pa-jigsaw-filter-scroll {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  padding-block: 1px;
+}
+
+.pa-jigsaw-filter-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.pa-jigsaw-filter-chip,
+.pa-jigsaw-tray-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  flex-shrink: 0;
+  min-inline-size: 28px;
+  min-block-size: 24px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid var(--border-brass);
+  background: linear-gradient(
+    180deg,
+    var(--surface-chip-top) 0%,
+    var(--surface-chip-bot) 100%
+  );
+  color: var(--farm-ink-title);
+  font-family: inherit;
+  font-size: 10.8px;
+  font-weight: 800;
+  line-height: 1.15;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 1.5px 0 var(--farm-wood-darkest);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.pa-jigsaw-filter-chip span {
+  opacity: 0.84;
+  font-variant-numeric: tabular-nums;
+}
+
+.pa-jigsaw-filter-chip:hover,
+.pa-jigsaw-tray-toggle-btn:hover {
+  background: linear-gradient(
+    180deg,
+    var(--surface-chip-hover) 0%,
+    var(--surface-chip-bot) 100%
+  );
+}
+
+.pa-jigsaw-filter-chip:focus-visible,
+.pa-jigsaw-tray-toggle-btn:focus-visible,
+.pa-jigsaw-page-btn:focus-visible,
+.pa-jigsaw-piece-btn:focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 1.5px;
+}
+
+.pa-jigsaw-filter-chip.active,
+.pa-jigsaw-tray-toggle-btn.active {
+  background: linear-gradient(
+    180deg,
+    var(--speed-active-top) 0%,
+    var(--speed-active-bot) 100%
+  );
+  border-color: var(--border-cream);
+  color: var(--ts-play-cta-ink);
+}
+
+.pa-jigsaw-pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.pa-jigsaw-page-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 26px;
+  min-block-size: 24px;
+  padding: 2px 6px;
+  border-radius: var(--radius-chip);
+  border: 1.5px solid var(--border-brass);
+  background: linear-gradient(
+    180deg,
+    var(--surface-chip-top) 0%,
+    var(--surface-chip-bot) 100%
+  );
+  color: var(--farm-ink-title);
+  font-family: inherit;
+  font-size: 10.8px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 1.5px 0 var(--farm-wood-darkest);
+}
+
+.pa-jigsaw-page-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.pa-jigsaw-page-lbl {
+  min-inline-size: 32px;
+  text-align: center;
+  color: var(--farm-gold-text);
+  font-size: 10.8px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.pa-jigsaw-tray-strip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  inline-size: 100%;
+  min-inline-size: 0;
+  overflow-x: auto;
+  overflow-y: clip;
+  overscroll-behavior-x: contain;
+  padding: 1px 2px 3px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--hud-scrollbar-thumb-brass) var(--hud-scrollbar-track-wood);
+}
+
+.pa-jigsaw-tray-strip[hidden] {
+  display: none;
+}
+
+.pa-jigsaw-tray-strip::-webkit-scrollbar {
+  block-size: 5px;
+}
+
+.pa-jigsaw-tray-strip::-webkit-scrollbar-track {
+  background: var(--hud-scrollbar-track-wood);
+  border-radius: var(--radius-pill);
+}
+
+.pa-jigsaw-tray-strip::-webkit-scrollbar-thumb {
+  background: var(--hud-scrollbar-thumb-brass);
+  border-radius: var(--radius-pill);
+}
+
+.pa-jigsaw-piece-btn {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 48px;
+  min-block-size: 48px;
+  padding: 2px;
+  border-radius: var(--radius-chip);
+  border: 1.5px solid var(--border-brass-soft);
+  background: linear-gradient(
+    180deg,
+    var(--farm-wood-mid) 0%,
+    var(--farm-wood-well) 100%
+  );
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  box-shadow:
+    0 2px 0 var(--farm-wood-darkest),
+    inset 0 1px 0 var(--ts-gloss-soft);
+  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.pa-jigsaw-piece-btn:hover {
+  transform: translateY(-1px);
+  border-color: var(--farm-brass-bright);
+}
+
+.pa-jigsaw-piece-btn:active {
+  cursor: grabbing;
+}
+
+.pa-jigsaw-piece-btn.selected {
+  border-color: var(--farm-note-sel-ring);
+  background: linear-gradient(
+    180deg,
+    var(--farm-wood-warm) 0%,
+    var(--farm-wood-dark) 100%
+  );
+  box-shadow:
+    0 0 0 2px var(--farm-note-sel-glow),
+    0 2px 0 var(--farm-wood-darkest);
+  transform: translateY(-2px);
+}
+
+.pa-jigsaw-thumb-cvs {
+  display: block;
+  inline-size: 44px;
+  block-size: 44px;
+  pointer-events: none;
+}
+
+.pa-jigsaw-tray-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  min-block-size: 32px;
+  padding: 3px 10px;
+  border-radius: var(--radius-chip);
+  border: 1.5px dashed var(--border-brass-soft);
+  background: var(--ts-wood-track-inner);
+  color: var(--farm-cream-text);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.pa-jigsaw-drag-ghost {
+  position: fixed;
+  z-index: 2147483646;
+  inline-size: 76px;
+  block-size: 76px;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+  filter: drop-shadow(0 8px 14px var(--farm-shadow-deep));
+  will-change: left, top;
+}
+
+@media (pointer: coarse) {
+  .pa-jigsaw-filter-chip,
+  .pa-jigsaw-tray-toggle-btn,
+  .pa-jigsaw-page-btn {
+    min-inline-size: 44px;
+    min-block-size: 44px;
+  }
+
+  .pa-jigsaw-piece-btn {
+    min-inline-size: 52px;
+    min-block-size: 52px;
+  }
+
+  .pa-jigsaw-thumb-cvs {
+    inline-size: 48px;
+    block-size: 48px;
+  }
 }
 
 #paBoardCanvas:active {
@@ -3587,7 +3907,7 @@ dialog::backdrop {
   .pa-mode-tabs {
     width: 100%;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 3px;
   }
 
@@ -3708,7 +4028,8 @@ dialog::backdrop {
     aspect-ratio: 502 / 568;
   }
 
-  .pa-canvas-shell[data-pa-board-mode='blocks'] {
+  .pa-canvas-shell[data-pa-board-mode='blocks'],
+  .pa-canvas-shell[data-pa-board-mode='jigsaw'] {
     width: 100%;
     height: 100%;
     width: 100cqw;
@@ -3719,7 +4040,8 @@ dialog::backdrop {
     box-shadow: none;
   }
 
-  .pa-canvas-shell[data-pa-board-mode='blocks'] #paBoardCanvas {
+  .pa-canvas-shell[data-pa-board-mode='blocks'] #paBoardCanvas,
+  .pa-canvas-shell[data-pa-board-mode='jigsaw'] #paBoardCanvas {
     width: 100%;
     height: 100%;
     aspect-ratio: auto;
@@ -6890,11 +7212,11 @@ dialog::backdrop {
   }
 
   .pa-side-dock .pa-mode-tab:last-child {
-    grid-column: 1 / -1;
-    flex-direction: row;
+    grid-column: auto;
+    flex-direction: column;
     justify-content: center;
-    padding: 3.5px 6px;
-    gap: 6px;
+    padding: 3px 4px;
+    gap: 1.5px;
   }
 
   .pa-side-dock .pa-tab-name-full {
@@ -15204,10 +15526,10 @@ dialog.bulldoze-confirm-dialog[open] {
 }
 
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .pa-mode-tab:last-child {
-  grid-column: 1 / -1;
-  flex-direction: row;
+  grid-column: auto;
+  flex-direction: column;
   justify-content: center;
-  gap: 6px;
+  gap: 1.5px;
 }
 
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell > .pa-controls-bar {
@@ -15323,22 +15645,38 @@ dialog.bulldoze-confirm-dialog[open] {
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-mode-tabs {
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-auto-rows: auto;
   gap: 3px;
   width: 100%;
 }
 
+@media (min-width: 560px) {
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-mode-tabs {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-mode-tab,
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-mode-tab:last-child {
   grid-column: auto;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  justify-content: center;
-  padding: 3px 2px;
+  justify-content: space-between;
+  padding: 3px 5px;
   font-size: 9.6px;
-  gap: 1px;
+  gap: 3px;
   border-radius: 9px;
+}
+
+@media (min-width: 560px) {
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-mode-tab,
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-mode-tab:last-child {
+    flex-direction: column;
+    justify-content: center;
+    padding: 3px 2px;
+    gap: 1px;
+  }
 }
 
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .pa-tab-name-full {
@@ -15616,6 +15954,58 @@ dialog.bulldoze-confirm-dialog[open] {
     padding: 3px 5px 4px;
   }
 }
+
+/* --- Jigsaw Board Maximization ("Tranh Ghép Phép Thuật"):
+       Slimmer outer padding, compact side-dock & compact portrait bars so the painting frame fills maximum stage area --- */
+#puzzleArcadeDialog[data-pa-active-mode='jigsaw'] .pa-modal-inner {
+  padding:
+    max(3px, env(safe-area-inset-top, 0px))
+    max(5px, env(safe-area-inset-right, 0px))
+    max(4px, env(safe-area-inset-bottom, 0px))
+    max(5px, env(safe-area-inset-left, 0px));
+}
+
+#puzzleArcadeDialog[data-mg-layout='landscape'][data-pa-active-mode='jigsaw'] .pa-layout-shell {
+  grid-template-columns: clamp(174px, 18.5%, 222px) minmax(0, 1fr);
+  column-gap: 6px;
+}
+
+#puzzleArcadeDialog[data-mg-layout='landscape'][data-pa-active-mode='jigsaw'] .pa-side-dock {
+  gap: 3px;
+  padding: 5px 5px 3px;
+}
+
+#puzzleArcadeDialog[data-mg-layout='landscape'][data-pa-active-mode='jigsaw'] .pa-side-dock .pa-stage-banner {
+  padding: 5px 8px;
+}
+
+#puzzleArcadeDialog[data-mg-layout='portrait'][data-pa-active-mode='jigsaw'] #puzzleArcadeDialogContent,
+#puzzleArcadeDialog[data-mg-layout='portrait'][data-pa-active-mode='jigsaw'] .pa-layout-shell {
+  gap: 2px;
+}
+
+#puzzleArcadeDialog[data-mg-layout='portrait'][data-pa-active-mode='jigsaw'] .pa-side-dock {
+  gap: 2px;
+}
+
+#puzzleArcadeDialog[data-mg-layout='portrait'][data-pa-active-mode='jigsaw'] .pa-side-dock .pa-top-bar {
+  gap: 2px;
+  padding: 3px 6px;
+}
+
+#puzzleArcadeDialog[data-mg-layout='portrait'][data-pa-active-mode='jigsaw'] .pa-side-dock .pa-stage-banner {
+  padding: 2px 7px;
+}
+
+#puzzleArcadeDialog[data-mg-layout='portrait'][data-pa-active-mode='jigsaw'] .pa-side-dock .aaa-synergy-dock {
+  padding: 2px 5px;
+}
+
+#puzzleArcadeDialog[data-mg-layout='portrait'][data-pa-active-mode='jigsaw'] .pa-layout-shell > .pa-controls-bar {
+  gap: 3px;
+  padding: 3px 5px;
+}
+
 
 
 

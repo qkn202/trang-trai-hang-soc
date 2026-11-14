@@ -911,7 +911,7 @@ export function headerRefreshHeader(hud: GameHUD): void {
       btnRoadmap.style.setProperty('--hg-lvl-pct', String(lvPct));
       btnRoadmap.title =
         st.level >= MAX_LEVEL
-          ? `👑 Cấp Tối Đa ${MAX_LEVEL} • Rương XP: ${chestXp}/${FARM_HARVEST_CHEST_XP} • Tháp 5 Môn: ${towerProg.cleared.toLocaleString('vi-VN')}/${towerProg.total.toLocaleString('vi-VN')} Màn`
+          ? `👑 Cấp Tối Đa ${MAX_LEVEL} • Rương XP: ${chestXp}/${FARM_HARVEST_CHEST_XP} • Tháp 6 Môn: ${towerProg.cleared.toLocaleString('vi-VN')}/${towerProg.total.toLocaleString('vi-VN')} Màn`
           : `Cấp ${st.level} → ${st.level + 1}: Đã thắng ${winsProg.current}/${winsProg.required} màn • Rương XP: ${chestXp}/${FARM_HARVEST_CHEST_XP}`;
     }
     const barLvlTop = hud.root.querySelector('#barLevelTopFill') as HTMLElement | null;
@@ -920,8 +920,8 @@ export function headerRefreshHeader(hud: GameHUD): void {
       if (barLvlTop.parentElement) {
         barLvlTop.parentElement.title =
           st.level >= MAX_LEVEL
-            ? `👑 Đã đạt Cấp Tối Đa ${MAX_LEVEL} • Tháp 5 Môn: ${towerProg.cleared.toLocaleString('vi-VN')}/${towerProg.total.toLocaleString('vi-VN')} Màn`
-            : `Cấp Giải Đố ${st.level} → ${st.level + 1}: Đã thắng ${winsProg.current}/${winsProg.required} màn mới • Tháp 5 Môn: ${towerProg.cleared.toLocaleString('vi-VN')}/${towerProg.total.toLocaleString('vi-VN')} Màn`;
+            ? `👑 Đã đạt Cấp Tối Đa ${MAX_LEVEL} • Tháp 6 Môn: ${towerProg.cleared.toLocaleString('vi-VN')}/${towerProg.total.toLocaleString('vi-VN')} Màn`
+            : `Cấp Giải Đố ${st.level} → ${st.level + 1}: Đã thắng ${winsProg.current}/${winsProg.required} màn mới • Tháp 6 Môn: ${towerProg.cleared.toLocaleString('vi-VN')}/${towerProg.total.toLocaleString('vi-VN')} Màn`;
       }
     }
     const lblXpFrac = hud.root.querySelector('#lblXpFraction') as HTMLElement | null;
@@ -979,6 +979,11 @@ export function headerRefreshHeader(hud: GameHUD): void {
     } else if (lastGame === 'chess') {
       const info = hud.sim.getDisciplineStageInfo('chess');
       playTag = '🏰 Cờ Phù Thủy';
+      playIcon = '/sprites/ui_icon_jigsaw.png';
+      playStageText = info.isMaxed ? `👑 ${MAX_MINIGAME_STAGE}` : `Màn ${info.currentStage}`;
+    } else if (lastGame === 'jigsaw') {
+      const info = hud.sim.getDisciplineStageInfo('jigsaw');
+      playTag = '🧩 Tranh Ghép';
       playIcon = '/sprites/ui_icon_jigsaw.png';
       playStageText = info.isMaxed ? `👑 ${MAX_MINIGAME_STAGE}` : `Màn ${info.currentStage}`;
     } else if (lastGame === 'seedquiz') {
@@ -1046,7 +1051,7 @@ export function headerRefreshHeader(hud: GameHUD): void {
     const lblArcadeTower = hud.root.querySelector('#lblArcadeTowerLv') as HTMLElement | null;
     if (lblArcadeTower) {
       const arcadeCleared = Math.max(0, towerProg.cleared - m3Info.clearedStages);
-      const arcadeTotal = MAX_MINIGAME_STAGE * 4;
+      const arcadeTotal = MAX_MINIGAME_STAGE * 5;
       lblArcadeTower.textContent =
         arcadeCleared >= arcadeTotal ? `👑${arcadeTotal}` : `${arcadeCleared}/${arcadeTotal}`;
     }

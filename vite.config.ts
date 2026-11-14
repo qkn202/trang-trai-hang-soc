@@ -445,6 +445,8 @@ export default defineConfig({
             id.includes('/src/sim/chessPresets') ||
             id.includes('/src/sim/chessEngine') ||
             id.includes('/src/sim/onetEngine') ||
+            id.includes('/src/sim/jigsawEngine') ||
+            id.includes('/src/sim/jigsawPaintingComposer') ||
             id.includes('/src/data/chessTacticsPack') ||
             id.includes('/src/sim/match3Engine') ||
             id.includes('/src/sim/candyHogwartsEngine') ||

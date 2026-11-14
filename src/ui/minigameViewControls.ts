@@ -17,7 +17,14 @@
  *   3. Tự động huỷ thao tác chạm nhầm của ngón thứ nhất ngay khi ngón thứ hai chạm xuống bàn cờ.
  */
 
-export type MinigameViewId = 'match3' | 'caro' | 'sudoku' | 'chess' | 'blocks' | 'seedquiz';
+export type MinigameViewId =
+  | 'match3'
+  | 'caro'
+  | 'sudoku'
+  | 'chess'
+  | 'blocks'
+  | 'jigsaw'
+  | 'seedquiz';
 
 export type MinigameOrientationPref = 'auto' | 'landscape' | 'portrait';
 
@@ -33,15 +40,31 @@ export interface MinigameViewState {
 
 export const MINIGAME_ZOOM_MIN = 1;
 export const MINIGAME_ZOOM_MAX = 3;
+export const MINIGAME_JIGSAW_ZOOM_MAX = 6;
 export const MINIGAME_ZOOM_STEP = 0.15;
 
 const ORIENT_STORAGE_KEY = 'hangsoc_minigame_orient_v1';
 const SINGLE_FINGER_PAN_THRESHOLD_PX = 8;
 const POST_PINCH_TAP_GUARD_MS = 110;
 
-export function clampMinigameZoom(zoom: number): number {
+export function getMaxZoomForMinigame(gameId: MinigameViewId): number {
+  return gameId === 'jigsaw' ? MINIGAME_JIGSAW_ZOOM_MAX : MINIGAME_ZOOM_MAX;
+}
+
+export function clampMinigameZoom(
+  zoom: number,
+  maxZoomOrGameId: number | MinigameViewId = MINIGAME_ZOOM_MAX
+): number {
   if (!Number.isFinite(zoom)) return 1;
-  const clamped = Math.min(MINIGAME_ZOOM_MAX, Math.max(MINIGAME_ZOOM_MIN, zoom));
+  const resolvedMax =
+    typeof maxZoomOrGameId === 'string'
+      ? getMaxZoomForMinigame(maxZoomOrGameId)
+      : maxZoomOrGameId;
+  const safeMax =
+    Number.isFinite(resolvedMax) && resolvedMax >= MINIGAME_ZOOM_MIN
+      ? resolvedMax
+      : MINIGAME_ZOOM_MAX;
+  const clamped = Math.min(safeMax, Math.max(MINIGAME_ZOOM_MIN, zoom));
   return Math.round(clamped * 1000) / 1000;
 }
 
@@ -154,6 +177,7 @@ export function computeFocalPinchPan(params: {
   prevMidOffsetY: number;
   currMidOffsetX: number;
   currMidOffsetY: number;
+  maxZoom?: number;
 }): { zoom: number; panX: number; panY: number } {
   const {
     prevZoom,
@@ -164,8 +188,9 @@ export function computeFocalPinchPan(params: {
     prevMidOffsetY,
     currMidOffsetX,
     currMidOffsetY,
+    maxZoom = MINIGAME_ZOOM_MAX,
   } = params;
-  const clampedNext = nextZoom <= 1.015 ? 1 : clampMinigameZoom(nextZoom);
+  const clampedNext = nextZoom <= 1.015 ? 1 : clampMinigameZoom(nextZoom, maxZoom);
   if (clampedNext <= 1.001) {
     return { zoom: 1, panX: 0, panY: 0 };
   }
@@ -206,6 +231,7 @@ export function computeResponsiveBoardBox(
   const safeH = Math.max(120, Math.floor(Number.isFinite(availH) ? availH : 320));
   if (
     gameId === 'blocks' ||
+    gameId === 'jigsaw' ||
     gameId === 'seedquiz' ||
     !Number.isFinite(boardAspectRatio) ||
     boardAspectRatio <= 0
@@ -375,7 +401,7 @@ export class MinigameViewportManager {
 
   public stepZoom(gameId: MinigameViewId, delta: number): number {
     const st = this.getState(gameId);
-    st.zoom = clampMinigameZoom(st.zoom + delta);
+    st.zoom = clampMinigameZoom(st.zoom + delta, getMaxZoomForMinigame(gameId));
     if (st.zoom <= 1.01) {
       st.panX = 0;
       st.panY = 0;
@@ -386,7 +412,7 @@ export class MinigameViewportManager {
 
   public setZoom(gameId: MinigameViewId, targetZoom: number): number {
     const st = this.getState(gameId);
-    st.zoom = clampMinigameZoom(targetZoom);
+    st.zoom = clampMinigameZoom(targetZoom, getMaxZoomForMinigame(gameId));
     if (st.zoom <= 1.01) {
       st.panX = 0;
       st.panY = 0;
@@ -607,11 +633,12 @@ export class MinigameViewportManager {
       const vpW = Math.floor(panAreaEl.clientWidth);
       const vpH = Math.floor(panAreaEl.clientHeight);
       if (vpW <= 24 || vpH <= 24) return;
-      const fitW = gameId === 'blocks' ? vpW : Math.max(120, vpW - 2);
-      const fitH = gameId === 'blocks' ? vpH : Math.max(120, vpH - 4);
+      const isFluidStage = gameId === 'blocks' || gameId === 'jigsaw';
+      const fitW = isFluidStage ? vpW : Math.max(120, vpW - 2);
+      const fitH = isFluidStage ? vpH : Math.max(120, vpH - 4);
       const ratio = getBoardAspectRatio
         ? getBoardAspectRatio(vpW, vpH)
-        : gameId === 'blocks'
+        : isFluidStage
           ? 0
           : 1;
       const box = computeResponsiveBoardBox(gameId, fitW, fitH, ratio);
@@ -630,7 +657,7 @@ export class MinigameViewportManager {
 
       canvasShellEl.style.width = `${box.width}px`;
       canvasShellEl.style.height = `${box.height}px`;
-      const aspectCss = gameId === 'blocks' ? 'auto' : `${box.width} / ${box.height}`;
+      const aspectCss = isFluidStage ? 'auto' : `${box.width} / ${box.height}`;
       canvasShellEl.style.aspectRatio = aspectCss;
       canvasEl.style.aspectRatio = aspectCss;
 
@@ -683,6 +710,7 @@ export class MinigameViewportManager {
           prevMidOffsetY: cursorOffsetY,
           currMidOffsetX: cursorOffsetX,
           currMidOffsetY: cursorOffsetY,
+          maxZoom: getMaxZoomForMinigame(gameId),
         });
         if (next.zoom === st.zoom && next.panX === st.panX && next.panY === st.panY) return;
         st.zoom = next.zoom;
@@ -858,6 +886,7 @@ export class MinigameViewportManager {
               prevMidOffsetY,
               currMidOffsetX,
               currMidOffsetY,
+              maxZoom: getMaxZoomForMinigame(gameId),
             });
             st.zoom = next.zoom;
             st.panX = next.panX;

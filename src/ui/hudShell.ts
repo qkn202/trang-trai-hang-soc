@@ -338,20 +338,23 @@ export function shellMountDOM(hud: GameHUD): void {
           <div class="hg-menu-games-box">
             <div class="hg-menu-games-head">
               <span>🎮 Chọn Môn Chơi</span>
-              <button id="btnOpenLeaderboard" type="button" class="hg-bxh-chip" title="Bảng Xếp Hạng 3 Môn Tính Điểm (Phím L)">🥇 BXH</button>
+              <button id="btnOpenLeaderboard" type="button" class="hg-bxh-chip" title="Bảng Xếp Hạng 4 Môn Tính Điểm (Phím L)">🥇 BXH</button>
             </div>
             <div class="hg-menu-games-pills" role="group" aria-label="Đổi trò chơi">
               <button id="btnOpenMatch3" type="button" data-switch-minigame="match3" class="hg-game-pill" title="Bùa Gặt Honeydukes — 777 Màn (Phím J)">
                 🍬 Bùa Gặt Honeydukes <small id="lblMatch3Lv" class="sr-only-hud">1/777</small>
               </button>
               <button id="btnOpenPuzzleArcade" type="button" data-switch-minigame="caro" class="hg-game-pill" title="Ngũ Ấn Đạo Tặc (Phím K)">
-                🗺️ Ngũ Ấn Đạo Tặc <small id="lblArcadeTowerLv" class="sr-only-hud">0/3108</small>
+                🗺️ Ngũ Ấn Đạo Tặc <small id="lblArcadeTowerLv" class="sr-only-hud">0/3885</small>
               </button>
               <button type="button" data-switch-minigame="sudoku" class="hg-game-pill" title="Số Học Huyền Bí">
                 🔢 Số Học Huyền Bí
               </button>
               <button type="button" data-switch-minigame="blocks" class="hg-game-pill" title="Sinh Vật Huyền Bí">
                 🦄 Sinh Vật Huyền Bí
+              </button>
+              <button type="button" data-switch-minigame="jigsaw" class="hg-game-pill" title="Tranh Ghép Phép Thuật — 777 Màn">
+                🧩 Tranh Ghép Phép Thuật
               </button>
               <button type="button" data-switch-minigame="chess" class="hg-game-pill" title="Cờ Phù Thủy">
                 🏰 Cờ Phù Thủy
@@ -788,7 +791,13 @@ export function shellBindEvents(hud: GameHUD): void {
     const handleOpenPuzzleArcade = () => {
       hud.closeHudPopovers();
       const last = hud.sim.getLastPlayedMinigame();
-      if (last === 'caro' || last === 'sudoku' || last === 'chess' || last === 'blocks') {
+      if (
+        last === 'caro' ||
+        last === 'sudoku' ||
+        last === 'chess' ||
+        last === 'blocks' ||
+        last === 'jigsaw'
+      ) {
         hud.openPuzzleArcadeDialog(last);
       } else {
         hud.openPuzzleArcadeDialog('caro');

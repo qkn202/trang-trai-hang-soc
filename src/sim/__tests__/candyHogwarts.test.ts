@@ -322,8 +322,8 @@ describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
     const sim = new ParkSimulation(new MagicalAudio());
     expect(sim.getLastPlayedMinigame()).toBe('match3');
 
-    // Force Level 14 where legacy getRequiredLevelTrial() used to mandate 'chess'
-    sim.state.level = 14;
+    // Force Level 16 where getRequiredLevelTrial() rotates to 'chess' (across 6 disciplines)
+    sim.state.level = 16;
     expect(sim.getRequiredLevelTrial()?.kind).toBe('chess');
     expect(sim.getLastPlayedMinigame()).toBe('match3');
 
@@ -601,5 +601,327 @@ describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
     expect(overlayMountEl.innerHTML).not.toContain('XP');
     expect(overlayMountEl.innerHTML).not.toContain('Gryffindor');
     ctrl.resetSession();
+  });
+
+  it('implements Playrix Gardenscapes radial Power-Up ladder (4->firecracker, 5->bomb, 6->dynamite, 7+->tnt, 2x2->seeker) and colorless match immunity', () => {
+    const lv = getCandyLevelById(12);
+    const engine = new CandyHogwartsEngine(null);
+    engine.loadLevel(lv, { instantAnimations: true });
+
+    const resetCleanBoard = () => {
+      for (let r = 0; r < engine.size; r++) {
+        for (let c = 0; c < engine.size; c++) {
+          engine.mask[r][c] = 1;
+          engine.ice[r][c] = 0;
+          engine.frosting[r][c] = 0;
+          engine.lockGrid[r][c] = 0;
+          engine.petrify[r][c] = 0;
+          engine.decree[r][c] = 0;
+          engine.grid[r][c] = engine.createPiece((r * 2 + c) % 4, c, r, null);
+        }
+      }
+    };
+
+    // 1. Match-4 -> firecracker
+    resetCleanBoard();
+    for (let c = 1; c <= 4; c++) engine.grid[2][c]!.color = 5;
+    let clusters = engine.findMatchClusters([{ r: 2, c: 2 }]);
+    expect(clusters.find((cl) => cl.color === 5)?.spawnSpecial).toBe('firecracker');
+
+    // 2. Match-5 -> bomb (NOT direct color_bomb!)
+    resetCleanBoard();
+    for (let c = 1; c <= 5; c++) engine.grid[2][c]!.color = 5;
+    clusters = engine.findMatchClusters([{ r: 2, c: 3 }]);
+    expect(clusters.find((cl) => cl.color === 5)?.spawnSpecial).toBe('bomb');
+
+    // 3. Match-6 -> dynamite
+    resetCleanBoard();
+    for (let c = 1; c <= 6; c++) engine.grid[2][c]!.color = 5;
+    clusters = engine.findMatchClusters([{ r: 2, c: 3 }]);
+    expect(clusters.find((cl) => cl.color === 5)?.spawnSpecial).toBe('dynamite');
+
+    // 4. Match-7 -> tnt
+    resetCleanBoard();
+    for (let c = 0; c <= 6; c++) engine.grid[2][c]!.color = 5;
+    clusters = engine.findMatchClusters([{ r: 2, c: 3 }]);
+    expect(clusters.find((cl) => cl.color === 5)?.spawnSpecial).toBe('tnt');
+
+    // 5. 2x2 Square -> seeker (Chong Chóng)
+    resetCleanBoard();
+    engine.grid[3][3]!.color = 5;
+    engine.grid[3][4]!.color = 5;
+    engine.grid[4][3]!.color = 5;
+    engine.grid[4][4]!.color = 5;
+    clusters = engine.findMatchClusters([{ r: 3, c: 3 }]);
+    expect(clusters.find((cl) => cl.color === 5)?.spawnSpecial).toBe('seeker');
+
+    // 6. Colorless immunity: Power-Ups do not accidentally dissolve in 3-matches of plain tiles
+    resetCleanBoard();
+    engine.grid[5][2]!.color = 5;
+    engine.grid[5][3] = engine.createPiece(5, 3, 5, 'bomb');
+    engine.grid[5][4]!.color = 5;
+    expect(engine.findMatchClusters()).toHaveLength(0);
+
+    engine.destroy();
+  });
+
+  it('supports Gardenscapes double-tap in place, swap-with-any-neighbor detonation, Gardening Glove free swap, Mega Combos, and chargeable Rainbow Blast meter', async () => {
+    const lv = getCandyLevelById(25);
+    const engine = new CandyHogwartsEngine(null);
+    engine.loadLevel(lv, { instantAnimations: true });
+
+    const prepareDeterministicGrid = () => {
+      for (let r = 0; r < engine.size; r++) {
+        for (let c = 0; c < engine.size; c++) {
+          engine.mask[r][c] = 1;
+          engine.jelly[r][c] = 0;
+          engine.ice[r][c] = 0;
+          engine.frosting[r][c] = 0;
+          engine.chocolate[r][c] = 0;
+          engine.cauldron[r][c] = 0;
+          engine.lockGrid[r][c] = 0;
+          engine.petrify[r][c] = 0;
+          engine.dementor[r][c] = 0;
+          engine.decree[r][c] = 0;
+          engine.fiendfyre[r][c] = 0;
+          engine.horcrux[r][c] = 0;
+          engine.grid[r][c] = engine.createPiece((r * 2 + c) % 4, c, r, null);
+        }
+      }
+      // Keep an incomplete score goal high enough that the stage doesn't auto-win mid-test
+      engine.level = {
+        ...engine.level!,
+        objectives: [{ type: 'score', target: 9_999_999 }],
+      };
+    };
+
+    // A) Swap Power-Up with ANY non-matching neighbor detonates at destination & charges Rainbow Meter
+    prepareDeterministicGrid();
+    const startMoves = engine.movesLeft;
+    engine.grid[3][3] = engine.createPiece(0, 3, 3, 'firecracker');
+    engine.frosting[2][4] = 1; // Within 3x3 of destination (3,4), outside 3x3 of (3,2)
+    engine.grid[2][4] = null;
+
+    const swapped = await engine.trySwap({ r: 3, c: 3 }, { r: 3, c: 4 });
+    expect(swapped).toBe(true);
+    expect(engine.movesLeft).toBe(startMoves - 1);
+    expect(engine.frosting[2][4]).toBe(0);
+    expect(engine.rainbowCharge).toBeGreaterThanOrEqual(28);
+
+    // B) Gardening Glove ('swap' booster) repositions a Power-Up for 0 moves WITHOUT detonating it
+    prepareDeterministicGrid();
+    engine.rainbowCharge = 0;
+    const movesBeforeGlove = engine.movesLeft;
+    engine.grid[4][2] = engine.createPiece(0, 2, 4, 'bomb');
+    engine.setBoosterMode('swap');
+    const gloveSwapped = await engine.trySwap({ r: 4, c: 2 }, { r: 4, c: 3 });
+    expect(gloveSwapped).toBe(true);
+    expect(engine.movesLeft).toBe(movesBeforeGlove);
+    expect(engine.grid[4][3]?.special).toBe('bomb');
+    expect(engine.rainbowCharge).toBe(0);
+
+    // C) Double-tapping an armed Power-Up detonates it in place and crosses 100% Rainbow Charge -> spawns color_bomb!
+    engine.rainbowCharge = 70; // 70 + 45 (bomb) = 115 -> 1 Rainbow Blast + 15% carry-over!
+    engine.frosting[4][5] = 1; // distance 2 from (4,3) -> inside Bomb radius-2 blast!
+    engine.grid[4][5] = null;
+
+    // 1st tap selects the Bomb
+    (engine as unknown as { activateCellInteraction: (c: { r: number; c: number }) => void }).activateCellInteraction({
+      r: 4,
+      c: 3,
+    });
+    expect(engine.getHudSnapshot()?.selectedSpecial).toBe('bomb');
+
+    // 2nd tap on the same cell detonates it in place
+    const detonatedInPlace = await engine.tryActivateSpecialInPlace({ r: 4, c: 3 });
+    expect(detonatedInPlace).toBe(true);
+    expect(engine.frosting[4][5]).toBe(0);
+    expect(engine.rainbowCharge).toBeGreaterThanOrEqual(15);
+
+    let spawnedColorBombs = 0;
+    for (let r = 0; r < engine.size; r++) {
+      for (let c = 0; c < engine.size; c++) {
+        if (engine.grid[r][c]?.special === 'color_bomb') spawnedColorBombs++;
+      }
+    }
+    expect(spawnedColorBombs).toBeGreaterThanOrEqual(1);
+
+    // Round-trip session persistence for new Gardenscapes specials & Rainbow Charge
+    engine.grid[1][1] = engine.createPiece(0, 1, 1, 'tnt');
+    const saved = engine.exportSession();
+    expect(saved?.rainbowCharge).toBe(engine.rainbowCharge);
+    const engine2 = new CandyHogwartsEngine(null);
+    engine2.loadLevel(engine.level!, { instantAnimations: true });
+    expect(engine2.restoreSession(saved)).toBe(true);
+    expect(engine2.grid[1][1]?.special).toBe('tnt');
+    expect(engine2.rainbowCharge).toBe(engine.rainbowCharge);
+    engine2.destroy();
+
+    // D) Double Color Bomb strips 2 layers across the entire board in one turn
+    prepareDeterministicGrid();
+    engine.frosting[0][0] = 2;
+    engine.grid[0][0] = null;
+    engine.frosting[6][6] = 2;
+    engine.grid[6][6] = null;
+    engine.grid[3][3] = engine.createPiece(-1, 3, 3, 'color_bomb');
+    engine.grid[3][4] = engine.createPiece(-1, 4, 3, 'color_bomb');
+    await engine.trySwap({ r: 3, c: 3 }, { r: 3, c: 4 });
+    expect(engine.frosting[0][0]).toBe(0);
+    expect(engine.frosting[6][6]).toBe(0);
+
+    // E) Spinner + Bomb carrier combo flies to remote obstacle and detonates radius-2 blast there
+    prepareDeterministicGrid();
+    engine.level = {
+      ...engine.level!,
+      objectives: [
+        { type: 'frosting', target: 5 },
+        { type: 'score', target: 9_999_999 },
+      ],
+    };
+    engine.frosting[0][6] = 1;
+    engine.grid[0][6] = null;
+    engine.frosting[1][6] = 1; // neighbor of (0,6), destroyed by carried Bomb radius!
+    engine.grid[1][6] = null;
+    engine.grid[6][1] = engine.createPiece(0, 1, 6, 'seeker');
+    engine.grid[6][2] = engine.createPiece(0, 2, 6, 'bomb');
+    await engine.trySwap({ r: 6, c: 1 }, { r: 6, c: 2 });
+    expect(engine.frosting[0][6]).toBe(0);
+    expect(engine.frosting[1][6]).toBe(0);
+
+    engine.destroy();
+  });
+
+  it('activates Gardenscapes 2026 Super Rainbow Blast at winStreak >= 5 (clears 2 colors, dual-color Power-Up army, double board-refill wipe, and resets on loss)', async () => {
+    const { sanitizeSavedMatch3Session } = await import('../simulationData');
+    const lv = getCandyLevelById(30);
+    const engine = new CandyHogwartsEngine(null);
+
+    const setupControlledBoard = () => {
+      for (let r = 0; r < engine.size; r++) {
+        for (let c = 0; c < engine.size; c++) {
+          engine.mask[r][c] = 1;
+          engine.jelly[r][c] = 0;
+          engine.ice[r][c] = 0;
+          engine.frosting[r][c] = 0;
+          engine.chocolate[r][c] = 0;
+          engine.cauldron[r][c] = 0;
+          engine.lockGrid[r][c] = 0;
+          engine.petrify[r][c] = 0;
+          engine.dementor[r][c] = 0;
+          engine.decree[r][c] = 0;
+          engine.fiendfyre[r][c] = 0;
+          engine.horcrux[r][c] = 0;
+          // Colors 0..3 with no initial 3-in-a-row
+          engine.grid[r][c] = engine.createPiece((r * 2 + c) % 4, c, r, null);
+        }
+      }
+      engine.collected = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+      engine.level = {
+        ...engine.level!,
+        objectives: [{ type: 'score', target: 99_999_999 }],
+      };
+    };
+
+    // 1. Streak 4 (< 5): Standard Rainbow Blast clears ONLY 1 color
+    engine.loadLevel(lv, { winStreak: 4, instantAnimations: true });
+    expect(engine.superRainbow).toBe(false);
+    setupControlledBoard();
+    // Place two isolated color-4 pieces and three isolated color-5 pieces so no cascade matches form
+    engine.grid[1][1] = engine.createPiece(4, 1, 1, null);
+    engine.grid[5][5] = engine.createPiece(4, 5, 5, null);
+    engine.grid[0][4] = engine.createPiece(5, 4, 0, null);
+    engine.grid[2][6] = engine.createPiece(5, 6, 2, null);
+    engine.grid[6][2] = engine.createPiece(5, 2, 6, null);
+    engine.grid[1][0] = engine.createPiece(-1, 0, 1, 'color_bomb');
+
+    // Mock refill to only spawn colors 0..3 so cascade cannot collect 4 or 5
+    let dropIdx = 0;
+    vi.spyOn(Math, 'random').mockImplementation(() => {
+      const vals = [0.05, 0.22, 0.38, 0.55];
+      return vals[dropIdx++ % vals.length];
+    });
+    await engine.trySwap({ r: 1, c: 0 }, { r: 1, c: 1 });
+    vi.restoreAllMocks();
+    expect(engine.collected[4]).toBe(2);
+    expect(engine.collected[5]).toBe(0);
+
+    // 2. Streak 5 (>= SUPER_RAINBOW_WIN_STREAK): Super Rainbow Blast clears BOTH swapped color AND top abundant color!
+    engine.loadLevel(lv, { winStreak: 5, instantAnimations: true });
+    expect(engine.superRainbow).toBe(true);
+    setupControlledBoard();
+    // Make color 5 strictly the most abundant color on board, and swap Super Rainbow with color 4
+    for (let r = 0; r < 6; r++) {
+      for (let c = 0; c < engine.size; c++) {
+        if ((r + c) % 2 === 0) {
+          engine.grid[r][c] = engine.createPiece(5, c, r, null);
+        }
+      }
+    }
+    engine.grid[6][2] = engine.createPiece(4, 2, 6, null);
+    engine.grid[6][5] = engine.createPiece(4, 5, 6, null);
+    engine.grid[6][1] = engine.createPiece(-1, 1, 6, 'color_bomb');
+
+    dropIdx = 0;
+    vi.spyOn(Math, 'random').mockImplementation(() => {
+      const vals = [0.05, 0.22, 0.38, 0.55];
+      return vals[dropIdx++ % vals.length];
+    });
+    await engine.trySwap({ r: 6, c: 1 }, { r: 6, c: 2 });
+    vi.restoreAllMocks();
+    // Both color 4 AND color 5 were wiped simultaneously!
+    expect(engine.collected[4]).toBeGreaterThanOrEqual(2);
+    expect(engine.collected[5]).toBeGreaterThanOrEqual(20);
+
+    // 3. Double-tapping Super Rainbow in place clears top 2 distinct colors simultaneously
+    setupControlledBoard();
+    engine.grid[3][3] = engine.createPiece(-1, 3, 3, 'color_bomb');
+    dropIdx = 0;
+    vi.spyOn(Math, 'random').mockImplementation(() => {
+      const vals = [0.72, 0.88]; // colors 4 & 5 on refill
+      return vals[dropIdx++ % vals.length];
+    });
+    await engine.tryActivateSpecialInPlace({ r: 3, c: 3 });
+    vi.restoreAllMocks();
+    const clearedInitialColors = [0, 1, 2, 3].filter((k) => (engine.collected[k] || 0) >= 8);
+    expect(clearedInitialColors.length).toBeGreaterThanOrEqual(2);
+
+    // 4. Super Rainbow + Bomb converts TWO colors across the board into Bombs and detonates them
+    setupControlledBoard();
+    engine.specialStats.wrapped = 0;
+    engine.grid[2][2] = engine.createPiece(-1, 2, 2, 'color_bomb');
+    engine.grid[2][3] = engine.createPiece(0, 3, 2, 'bomb');
+    await engine.trySwap({ r: 2, c: 2 }, { r: 2, c: 3 });
+    // On a 7x7 4-color board (~12 tiles per color), converting 2 colors spawns >20 bombs!
+    expect(engine.specialStats.wrapped).toBeGreaterThanOrEqual(18);
+
+    // 5. Super Rainbow + Super Rainbow wipes board, refills, and wipes a 2nd time (stripping 3 obstacle layers!)
+    setupControlledBoard();
+    engine.frosting[0][0] = 3; // Normal double color_bomb only strips 2 layers; Super strips 3!
+    engine.grid[0][0] = null;
+    engine.grid[3][3] = engine.createPiece(-1, 3, 3, 'color_bomb');
+    engine.grid[3][4] = engine.createPiece(-1, 4, 3, 'color_bomb');
+    await engine.trySwap({ r: 3, c: 3 }, { r: 3, c: 4 });
+    expect(engine.frosting[0][0]).toBe(0);
+
+    // 5. Session save -> sanitize -> restore preserves superRainbow
+    const rawSaved = engine.exportSession();
+    expect(rawSaved?.superRainbow).toBe(true);
+    const sanitized = sanitizeSavedMatch3Session(rawSaved, engine.level!.id);
+    expect(sanitized?.superRainbow).toBe(true);
+    const restoredEngine = new CandyHogwartsEngine(null);
+    restoredEngine.loadLevel(engine.level!, { winStreak: 0, instantAnimations: true });
+    expect(restoredEngine.superRainbow).toBe(false);
+    expect(restoredEngine.restoreSession(sanitized)).toBe(true);
+    expect(restoredEngine.superRainbow).toBe(true);
+    restoredEngine.destroy();
+
+    // 6. Losing a level resets ParkSimulation match3.winStreak to 0 -> deactivates Super Rainbow
+    const sim = new ParkSimulation(new MagicalAudio());
+    sim.state.sandboxMode = false;
+    sim.state.match3.winStreak = 6;
+    sim.loseMatch3Heart();
+    expect(sim.state.match3.winStreak).toBe(0);
+
+    engine.destroy();
   });
 });

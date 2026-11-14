@@ -113,6 +113,7 @@ import {
   HomeOwlLanternMark,
   HouseName,
   IsoDirection,
+  JigsawTrayFilter,
   LanguageQuizState,
   LeaderboardGameId,
   LeaderboardRankChange,
@@ -139,6 +140,7 @@ import {
   SavedChessHistoryItem,
   SavedChessPiece,
   SavedChessSession,
+  SavedJigsawSession,
   SavedMatch3Piece,
   SavedMatch3Session,
   SavedOnetSession,
@@ -1453,6 +1455,93 @@ export function sanitizeSavedOnetSession(
   };
 }
 
+export function sanitizeSavedJigsawSession(
+  raw: unknown,
+  expectedStage: number
+): SavedJigsawSession | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const rec = raw as Partial<SavedJigsawSession>;
+  if (Math.round(clampFinite(rec.stage, -1, MAX_MINIGAME_STAGE, -1)) !== expectedStage) {
+    return null;
+  }
+  if (rec.status !== 'playing' && rec.status !== 'lost') return null;
+  const rows = Math.round(clampFinite(rec.rows, 2, 60, -1));
+  const cols = Math.round(clampFinite(rec.cols, 2, 60, -1));
+  if (rows < 2 || cols < 2 || rows * cols > 2500) return null;
+  if (typeof rec.placedBitsetB64 !== 'string' || rec.placedBitsetB64.length > 1024) return null;
+  if (!Array.isArray(rec.looseClusters) || rec.looseClusters.length > 128) return null;
+
+  const total = rows * cols;
+  const looseClusters: SavedJigsawSession['looseClusters'] = [];
+  for (const grp of rec.looseClusters) {
+    if (!Array.isArray(grp) || grp.length < 4 || !Array.isArray(grp[3])) continue;
+    const rootIdx = Math.round(Number(grp[0]));
+    const dx10000 = Math.round(Number(grp[1]));
+    const dy10000 = Math.round(Number(grp[2]));
+    if (
+      !Number.isFinite(rootIdx) ||
+      rootIdx < 0 ||
+      rootIdx >= total ||
+      !Number.isFinite(dx10000) ||
+      !Number.isFinite(dy10000)
+    ) {
+      continue;
+    }
+    const membersRaw = grp[3];
+    const members: number[] = [];
+    for (let i = 0; i < membersRaw.length && members.length < total; i++) {
+      const m = Math.round(Number(membersRaw[i]));
+      if (Number.isFinite(m) && m >= 0 && m < total) {
+        members.push(m);
+      }
+    }
+    if (members.length === 0) continue;
+    const clampedDx = Math.max(-15000, Math.min(15000, dx10000));
+    const clampedDy = Math.max(-15000, Math.min(15000, dy10000));
+    looseClusters.push([rootIdx, clampedDx, clampedDy, members]);
+  }
+
+  const timeLimitSec = Math.round(clampFinite(rec.timeLimitSec, 60, 7200, 300));
+  const timeRemainingSec =
+    Math.round(clampFinite(rec.timeRemainingSec, 0, 7200, timeLimitSec) * 10) / 10;
+  const validFilters: ReadonlySet<JigsawTrayFilter> = new Set([
+    'all',
+    'edges',
+    'q0',
+    'q1',
+    'q2',
+    'q3',
+  ]);
+  const trayFilter: JigsawTrayFilter =
+    typeof rec.trayFilter === 'string' && validFilters.has(rec.trayFilter as JigsawTrayFilter)
+      ? (rec.trayFilter as JigsawTrayFilter)
+      : 'all';
+
+  return {
+    stage: expectedStage,
+    seed: Math.round(clampFinite(rec.seed, 1, 2147483647, expectedStage * 131 + 17)),
+    rows,
+    cols,
+    timeLimitSec,
+    timeRemainingSec,
+    placedBitsetB64: rec.placedBitsetB64,
+    looseClusters,
+    trayFilter,
+    movesCount: Math.round(clampFinite(rec.movesCount, 0, 999999, 0)),
+    combo: Math.round(clampFinite(rec.combo, 0, 5000, 0)),
+    maxCombo: Math.round(clampFinite(rec.maxCombo, 0, 5000, 0)),
+    score: Math.round(clampFinite(rec.score, 0, 99999999, 0)),
+    freeHintsLeft: Math.round(clampFinite(rec.freeHintsLeft, 0, 20, 1)),
+    paidHintsLeft: Math.round(clampFinite(rec.paidHintsLeft, 0, 20, 3)),
+    talismanUsed: Boolean(rec.talismanUsed),
+    lossReason: rec.lossReason === 'timeout' ? 'timeout' : null,
+    status: rec.status,
+    companionCharge: Math.round(clampFinite(rec.companionCharge, 0, 20, 0)),
+    snackPieUsed: Boolean(rec.snackPieUsed),
+    savedAt: Math.round(clampFinite(rec.savedAt, 0, Number.MAX_SAFE_INTEGER, Date.now())),
+  };
+}
+
 export function sanitizeSavedMatch3Session(
   raw: unknown,
   expectedLevelId: number
@@ -1520,6 +1609,10 @@ export function sanitizeSavedMatch3Session(
 
   if (!Array.isArray(rec.grid) || rec.grid.length !== size) return null;
   const validSpecials = new Set<NonNullable<SavedMatch3Piece['special']>>([
+    'firecracker',
+    'bomb',
+    'dynamite',
+    'tnt',
     'striped_h',
     'striped_v',
     'wrapped',
@@ -1603,6 +1696,9 @@ export function sanitizeSavedMatch3Session(
     pendingBossEnrageBurst: Boolean(rec.pendingBossEnrageBurst),
     bossEffectiveCastInterval: Math.round(clampFinite(rec.bossEffectiveCastInterval, 2, 20, 4)),
     patronusCharge: clampFinite(rec.patronusCharge, 0, 100, 0),
+    rainbowCharge: clampFinite(rec.rainbowCharge, 0, 100, 0),
+    pendingRainbowSpawns: Math.round(clampFinite(rec.pendingRainbowSpawns, 0, 10, 0)),
+    superRainbow: Boolean(rec.superRainbow),
     score: Math.round(clampFinite(rec.score, 0, 99999999, 0)),
     movesLeft: Math.round(clampFinite(rec.movesLeft, 0, 99, 1)),
     movesUsed: Math.round(clampFinite(rec.movesUsed, 0, 999, 0)),
@@ -2107,16 +2203,19 @@ export function migrateLoadedState(parsed: GameState): GameState {
       const safeBlockStage = Math.round(
         clampFinite(parsed.puzzleArcade?.blockStage, 1, MAX_MINIGAME_STAGE, 1)
       );
+      const safeJigsawStage = Math.round(
+        clampFinite(parsed.puzzleArcade?.jigsawStage, 1, MAX_MINIGAME_STAGE, 1)
+      );
       return {
         activeMode: (
-          ['sudoku', 'caro', 'chess', 'blocks'] as const
+          ['sudoku', 'caro', 'chess', 'blocks', 'jigsaw'] as const
         ).includes(parsed.puzzleArcade?.activeMode as PuzzleArcadeMode)
           ? (parsed.puzzleArcade!.activeMode as PuzzleArcadeMode)
           : 'caro',
         sudokuStage: safeSudokuStage,
         caroStage: safeCaroStage,
         chessStage: safeChessStage,
-        jigsawStage: Math.round(clampFinite(parsed.puzzleArcade?.jigsawStage, 1, 99999, 1)),
+        jigsawStage: safeJigsawStage,
         blockStage: safeBlockStage,
         tileStage: Math.round(clampFinite(parsed.puzzleArcade?.tileStage, 1, 99999, 1)),
         sudokuCleared: Math.round(
@@ -2131,6 +2230,9 @@ export function migrateLoadedState(parsed: GameState): GameState {
         blockCleared: Math.round(
           clampFinite(parsed.puzzleArcade?.blockCleared, 0, MAX_MINIGAME_STAGE, safeBlockStage - 1)
         ),
+        jigsawCleared: Math.round(
+          clampFinite(parsed.puzzleArcade?.jigsawCleared, 0, MAX_MINIGAME_STAGE, safeJigsawStage - 1)
+        ),
         featuredWinsCount: Math.round(
           clampFinite(parsed.puzzleArcade?.featuredWinsCount, 0, 999999, 0)
         ),
@@ -2139,7 +2241,7 @@ export function migrateLoadedState(parsed: GameState): GameState {
               new Set(
                 parsed.puzzleArcade.restoredPaintings
                   .filter((x: unknown): x is string => typeof x === 'string')
-                  .slice(0, 64)
+                  .slice(0, 800)
               )
             )
           : [],
@@ -2162,10 +2264,14 @@ export function migrateLoadedState(parsed: GameState): GameState {
           parsed.puzzleArcade?.onetSession,
           safeBlockStage
         ),
+        jigsawSession: sanitizeSavedJigsawSession(
+          parsed.puzzleArcade?.jigsawSession,
+          safeJigsawStage
+        ),
       };
     })(),
     lastPlayedMinigame: (
-      ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'seedquiz'] as const
+      ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw', 'seedquiz'] as const
     ).includes(parsed.lastPlayedMinigame as LeaderboardGameId)
       ? (parsed.lastPlayedMinigame as LeaderboardGameId)
       : 'match3',
@@ -2195,7 +2301,7 @@ export function migrateLoadedState(parsed: GameState): GameState {
         rawDaily.usedByGame && typeof rawDaily.usedByGame === 'object'
           ? (rawDaily.usedByGame as Record<string, unknown>)
           : {};
-      const validKinds = ['match3', 'sudoku', 'caro', 'chess', 'blocks'] as const;
+      const validKinds = ['match3', 'sudoku', 'caro', 'chess', 'blocks', 'jigsaw'] as const;
       const usedByGame: Partial<Record<(typeof validKinds)[number], boolean>> = {};
       for (const k of validKinds) {
         if (rawMap[k] === true) {

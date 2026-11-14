@@ -3,7 +3,7 @@ import { ZONES } from './zones';
 
 export const MATCH3_BOARD_SIZE = 8;
 export const MAX_MINIGAME_STAGE = 777;
-export const TOTAL_MINIGAME_STAGES = MAX_MINIGAME_STAGE * 5; // 5 disciplines × 777 levels = 3,885 stages
+export const TOTAL_MINIGAME_STAGES = MAX_MINIGAME_STAGE * 6; // 6 disciplines × 777 levels = 4,662 stages
 export const MAX_MATCH3_HEARTS = 5;
 export const HEART_REGEN_MS = 5 * 60 * 1000; // 5 minutes per heart
 export const EXTRA_MOVES_COUNT = 5;

@@ -539,7 +539,7 @@ export type QuestObjectiveType =
   | 'place_paths'
   | 'win_minigame';
 
-export type MinigameTrialKind = 'match3' | 'sudoku' | 'caro' | 'chess' | 'blocks';
+export type MinigameTrialKind = 'match3' | 'sudoku' | 'caro' | 'chess' | 'blocks' | 'jigsaw';
 
 export interface PhoenixTalismanDailyUsageState {
   dayKey: string; // YYYY-MM-DD (không reset khi chơi lại/qua màn, chỉ mở lại khi sang ngày mới)
@@ -661,7 +661,7 @@ export interface SuitcaseSanctuaryState {
 
 export type Match3BoosterId = 'reparo_hammer' | 'row_col_cannon' | 'alohomora_shuffle';
 
-export type PuzzleArcadeMode = 'sudoku' | 'caro' | 'chess' | 'blocks';
+export type PuzzleArcadeMode = 'sudoku' | 'caro' | 'chess' | 'blocks' | 'jigsaw';
 
 export const ACTIVE_MINIGAME_RESUME_KEY = 'hangsoc_active_minigame_modal_v1';
 
@@ -802,7 +802,17 @@ export interface SavedOnetSession {
 
 export interface SavedMatch3Piece {
   color: number;
-  special: 'striped_h' | 'striped_v' | 'wrapped' | 'seeker' | 'color_bomb' | null;
+  special:
+    | 'firecracker'
+    | 'bomb'
+    | 'dynamite'
+    | 'tnt'
+    | 'striped_h'
+    | 'striped_v'
+    | 'wrapped'
+    | 'seeker'
+    | 'color_bomb'
+    | null;
   blocker: 'swirl' | null;
   isIngredient: boolean;
   bombTimer: number | null;
@@ -839,6 +849,9 @@ export interface SavedMatch3Session {
   pendingBossEnrageBurst: boolean;
   bossEffectiveCastInterval: number;
   patronusCharge: number;
+  rainbowCharge?: number;
+  pendingRainbowSpawns?: number;
+  superRainbow?: boolean;
   score: number;
   movesLeft: number;
   movesUsed: number;
@@ -858,6 +871,34 @@ export interface SavedMatch3Session {
   savedAt: number;
 }
 
+export type JigsawTrayFilter = 'all' | 'edges' | 'q0' | 'q1' | 'q2' | 'q3';
+
+export interface SavedJigsawSession {
+  stage: number;
+  seed: number;
+  rows: number;
+  cols: number;
+  timeLimitSec: number;
+  timeRemainingSec: number;
+  /** Bitset Base64 nén trạng thái đã khoá của tối đa 2.000 mảnh (chỉ ~336 ký tự) */
+  placedBitsetB64: string;
+  /** Các cụm mảnh rời đang đặt trên mặt bàn: [rootIdx, normX1000, normY1000, memberIndices] */
+  looseClusters: Array<[number, number, number, number[]]>;
+  trayFilter: JigsawTrayFilter;
+  movesCount: number;
+  combo: number;
+  maxCombo: number;
+  score: number;
+  freeHintsLeft: number;
+  paidHintsLeft: number;
+  talismanUsed: boolean;
+  lossReason?: 'timeout' | null;
+  status: 'playing' | 'lost';
+  companionCharge?: number;
+  snackPieUsed?: boolean;
+  savedAt: number;
+}
+
 export interface PuzzleArcadeState {
   activeMode: PuzzleArcadeMode;
   sudokuStage: number;
@@ -869,6 +910,7 @@ export interface PuzzleArcadeState {
   sudokuCleared?: number;
   caroCleared?: number;
   chessCleared?: number;
+  jigsawCleared?: number;
   blockCleared?: number;
   featuredWinsCount?: number;
   restoredPaintings: string[];
@@ -877,6 +919,7 @@ export interface PuzzleArcadeState {
   caroSession?: SavedCaroSession | null;
   chessSession?: SavedChessSession | null;
   onetSession?: SavedOnetSession | null;
+  jigsawSession?: SavedJigsawSession | null;
 }
 
 export interface Match3ProgressionState {
@@ -892,7 +935,14 @@ export interface Match3ProgressionState {
   activeSession?: SavedMatch3Session | null;
 }
 
-export type LeaderboardGameId = 'match3' | 'caro' | 'sudoku' | 'chess' | 'blocks' | 'seedquiz';
+export type LeaderboardGameId =
+  | 'match3'
+  | 'caro'
+  | 'sudoku'
+  | 'chess'
+  | 'blocks'
+  | 'jigsaw'
+  | 'seedquiz';
 
 export type LeaderboardScope = 'valley' | 'friends' | 'personal';
 

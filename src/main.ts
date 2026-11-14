@@ -277,6 +277,7 @@ async function bootstrap(): Promise<void> {
     dlgParam === 'sudoku' ||
     dlgParam === 'chess' ||
     dlgParam === 'blocks' ||
+    dlgParam === 'jigsaw' ||
     dlgParam === 'pikachu' ||
     dlgParam === 'onet'
   ) {
@@ -286,7 +287,8 @@ async function bootstrap(): Promise<void> {
       pmode === 'caro' ||
       pmode === 'sudoku' ||
       pmode === 'chess' ||
-      pmode === 'blocks'
+      pmode === 'blocks' ||
+      pmode === 'jigsaw'
         ? pmode
         : undefined;
     hud.openPuzzleArcadeDialog(validMode);
@@ -302,6 +304,7 @@ async function bootstrap(): Promise<void> {
       rawGame === 'sudoku' ||
       rawGame === 'chess' ||
       rawGame === 'blocks' ||
+      rawGame === 'jigsaw' ||
       rawGame === 'seedquiz'
         ? rawGame
         : undefined;
@@ -343,6 +346,12 @@ async function bootstrap(): Promise<void> {
             pa.onetSession?.stage === pa.blockStage
           ) {
             hud.openPuzzleArcadeDialog('blocks');
+          } else if (
+            parsedResume.dialog === 'puzzleArcade' &&
+            parsedResume.mode === 'jigsaw' &&
+            pa.jigsawSession?.stage === pa.jigsawStage
+          ) {
+            hud.openPuzzleArcadeDialog('jigsaw');
           } else if (
             parsedResume.dialog === 'match3' &&
             sim.state.match3.activeSession?.levelId === sim.state.match3.currentLevel

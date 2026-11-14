@@ -47,7 +47,7 @@ const DIALOG_CARD_INNER_HTML = `
   <div class="parchment-panel modal-inner lb-modal-inner cc-lb-card">
     <div class="modal-header cc-lb-header">
       <div class="cc-lb-title-stack">
-        <span class="cc-lb-ribbon-sub">ĐẠI SẢNH ĐƯỜNG HANG SÓC • 3 MÔN TRANH CÚP</span>
+        <span class="cc-lb-ribbon-sub">ĐẠI SẢNH ĐƯỜNG HANG SÓC • 4 MÔN TRANH CÚP</span>
         <h2 id="leaderboardDialogTitle" class="modal-title">🏆 Bảng Xếp Hạng &amp; Cúp 4 Nhà</h2>
       </div>
       <form method="dialog" class="cc-lb-close-form">
@@ -425,7 +425,7 @@ export class LeaderboardModalController {
           data-lb-scope="personal"
           aria-pressed="${this.activeScope === 'personal'}"
         >
-          📜 Kỷ Lục 3 Môn
+          📜 Kỷ Lục 4 Môn
         </button>
       </div>
     `;
@@ -551,7 +551,7 @@ export class LeaderboardModalController {
 
     const unscoredNoticeHtml = this.redirectedFromUnscored
       ? `<div class="cc-lb-unscored-note" role="note">
-          📌 <strong>${escapeHtml(LEADERBOARD_GAME_META[this.redirectedFromUnscored]?.shortVi ?? '')}</strong> là môn rèn luyện tự do không tính điểm — dưới đây là Cúp 4 Nhà &amp; Bảng Xếp Hạng của <strong>3 môn tranh cúp</strong> (Bùa Gặt • Số Học • Sinh Vật).
+          📌 <strong>${escapeHtml(LEADERBOARD_GAME_META[this.redirectedFromUnscored]?.shortVi ?? '')}</strong> là môn rèn luyện tự do không tính điểm — dưới đây là Cúp 4 Nhà &amp; Bảng Xếp Hạng của <strong>4 môn tranh cúp</strong> (Bùa Gặt • Số Học • Sinh Vật • Tranh Ghép).
         </div>`
       : '';
 
@@ -760,7 +760,7 @@ export class LeaderboardModalController {
           style="--label-3: 'Danh hiệu'; --label-4: 'Tiến độ'; --label-5: 'Sao'; --label-6: 'Tổng điểm';"
         >
           <caption id="ccLbPersonalCaption" class="cc-lb-caption">
-            Kỷ lục cá nhân trên 3 bộ môn tranh Cúp 4 Nhà Hogwarts
+            Kỷ lục cá nhân trên 4 bộ môn tranh Cúp 4 Nhà Hogwarts
           </caption>
           <thead>
             <tr>

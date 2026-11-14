@@ -193,7 +193,7 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
       expect(tangram.applyPhoenixTalisman().ok).toBe(false);
     });
 
-    it('giới hạn Bùa Phượng Hoàng tối đa 1 lần/môn/ngày (tổng 5 lần/ngày trên 5 game), không reset khi chơi lại/qua màn cho tới hết ngày', () => {
+    it('giới hạn Bùa Phượng Hoàng tối đa 1 lần/môn/ngày (tổng 6 lần/ngày trên 6 game), không reset khi chơi lại/qua màn cho tới hết ngày', () => {
       mockLocalStorage.clear();
       const sim = new ParkSimulation(createMockAudio());
       sim.grantPhoenixTalisman(12);
@@ -203,14 +203,14 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
       const day1LateNight = new Date(2026, 10, 11, 23, 59, 0).getTime();
       const day2Morning = new Date(2026, 10, 12, 0, 5, 0).getTime();
 
-      // 1. Dùng lần đầu ở Cờ Phù Thủy trong ngày 1 -> thành công (1/5 môn)
+      // 1. Dùng lần đầu ở Cờ Phù Thủy trong ngày 1 -> thành công (1/6 môn)
       const chessUse1 = sim.consumePhoenixTalisman('chess', day1Noon);
       expect(chessUse1.ok).toBe(true);
       expect(sim.isPhoenixTalismanUsedToday('chess', day1Noon)).toBe(true);
       expect(sim.getPhoenixTalismanDailyStatus(day1Noon)).toMatchObject({
         usedCount: 1,
-        maxDaily: 5,
-        remainingToday: 4,
+        maxDaily: 6,
+        remainingToday: 5,
       });
 
       // 2. Chơi lại / sang màn khác của Cờ Phù Thủy hoặc F5 tải lại trang trong cùng ngày -> VẪN KHÓA!
@@ -223,21 +223,21 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
       expect(reloadedSim.isPhoenixTalismanUsedToday('chess', day1LateNight)).toBe(true);
       expect(reloadedSim.consumePhoenixTalisman('chess', day1LateNight).ok).toBe(false);
 
-      // 3. 4 môn còn lại mỗi môn vẫn dùng được đúng 1 lần trong ngày (tổng cộng đủ 5/5 lần/ngày)
-      for (const otherKind of ['match3', 'sudoku', 'caro', 'blocks'] as const) {
+      // 3. 5 môn còn lại mỗi môn vẫn dùng được đúng 1 lần trong ngày (tổng cộng đủ 6/6 lần/ngày)
+      for (const otherKind of ['match3', 'sudoku', 'caro', 'blocks', 'jigsaw'] as const) {
         expect(reloadedSim.consumePhoenixTalisman(otherKind, day1Noon).ok).toBe(true);
         expect(reloadedSim.consumePhoenixTalisman(otherKind, day1LateNight).ok).toBe(false);
       }
 
       const fullDayStatus = reloadedSim.getPhoenixTalismanDailyStatus(day1LateNight);
-      expect(fullDayStatus.usedCount).toBe(5);
+      expect(fullDayStatus.usedCount).toBe(6);
       expect(fullDayStatus.remainingToday).toBe(0);
-      expect(reloadedSim.getPhoenixTalismanCount()).toBe(7);
+      expect(reloadedSim.getPhoenixTalismanCount()).toBe(6);
 
-      // 4. Qua 00:00 sang ngày mới -> tự động mở lại 0/5 môn
+      // 4. Qua 00:00 sang ngày mới -> tự động mở lại 0/6 môn
       const nextDayStatus = reloadedSim.getPhoenixTalismanDailyStatus(day2Morning);
       expect(nextDayStatus.usedCount).toBe(0);
-      expect(nextDayStatus.remainingToday).toBe(5);
+      expect(nextDayStatus.remainingToday).toBe(6);
       expect(reloadedSim.isPhoenixTalismanUsedToday('chess', day2Morning)).toBe(false);
       expect(reloadedSim.consumePhoenixTalisman('chess', day2Morning).ok).toBe(true);
     });
