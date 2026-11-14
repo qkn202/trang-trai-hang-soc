@@ -976,6 +976,74 @@ describe('HPVN Online Production Hardening Suite (P0–P3)', () => {
       expect(ravenCup.members).toBe(1);
       expect(huffCup.members).toBe(1);
       expect(slythCup.rank).toBe(1);
+
+      // 6. Regression: if Aries previously synced under a temporary hs_... UID (Gryffindor) before HPVN auth resolved (Ravenclaw),
+      // backend absorbs and deduplicates the ghost record in both Leaderboard and Floo Visit Directory!
+      const ariesGuestClient = createBurrowGardenClient((name, data) =>
+        callables[name]({
+          data,
+          auth: {
+            uid: 'hs_m9guest01_aries99',
+            token: { name: 'Aries' },
+          },
+        })
+      );
+      await ariesGuestClient.submitLeaderboard({
+        gameId: 'match3',
+        entry: {
+          userId: 'hs_m9guest01_aries99',
+          name: 'Aries',
+          parkName: 'Trang Trại Hang Sóc',
+          friendCode: 'HS-ARIE-99',
+          avatarEmoji: '🦊',
+          house: 'Gryffindor',
+          primaryValue: 106,
+          ratingScore: 104688,
+          totalWins: 106,
+          bestStreak: 10,
+        },
+      });
+
+      const ariesRealClient = createBurrowGardenClient((name, data) =>
+        callables[name]({
+          data,
+          auth: {
+            uid: 'aries_hpvn_uid',
+            token: { house: 'Ravenclaw', username: 'Aries' },
+          },
+        })
+      );
+      await ariesRealClient.read();
+      const afterAriesSnap = await ariesRealClient.submitLeaderboard({
+        gameId: 'match3',
+        entry: {
+          userId: 'aries_hpvn_uid',
+          name: 'Aries',
+          parkName: 'Tháp Sao Aries',
+          friendCode: 'HS-9F2A-01',
+          avatarEmoji: '🧙‍♂️',
+          house: 'Ravenclaw',
+          primaryValue: 106,
+          ratingScore: 104688,
+          totalWins: 106,
+          bestStreak: 10,
+        },
+      });
+
+      const serverAriesRows = (afterAriesSnap.leaderboards?.match3 ?? []).filter(
+        (r) => r.name === 'Aries'
+      );
+      expect(serverAriesRows).toHaveLength(1);
+      expect(serverAriesRows[0]!.userId).toBe('aries_hpvn_uid');
+      expect(serverAriesRows[0]!.house).toBe('Ravenclaw');
+
+      const cedricVisitList = (await cedricClient.visit({})) as {
+        visits?: Array<{ uid: string; username: string; house: string }>;
+      };
+      const ariesVisitRows = (cedricVisitList.visits ?? []).filter((v) => v.username === 'Aries');
+      expect(ariesVisitRows).toHaveLength(1);
+      expect(ariesVisitRows[0]!.uid).toBe('aries_hpvn_uid');
+      expect(ariesVisitRows[0]!.house).toBe('Ravenclaw');
     } finally {
       registerAuthoritativeLeaderboardTransport(null);
       clearCachedCloudLeaderboards();

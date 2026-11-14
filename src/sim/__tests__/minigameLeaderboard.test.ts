@@ -796,4 +796,115 @@ describe('Per-Mini-Game Leaderboards (4 Scored Games: Match-3, Sudoku, Pikachu &
     expect(csv).toContain('Nguoi choi that');
     expect(csv).toContain('Hoc vien mau');
   });
+
+  it('deduplicates ghost hs_... UID clones and Friend-Code vs Floo duplicates (Aries Ravenclaw/Gryffindor bug) while keeping distinct unnamed players separate', () => {
+    const sim = new ParkSimulation(new MagicalAudio());
+    const lb = sim.ensureMinigameLeaderboard();
+    lb.records.match3.bestStage = 135;
+    lb.records.match3.highScore = 126751;
+    lb.records.match3.totalWins = 135;
+    lb.records.match3.bestStreak = 14;
+
+    // Viewer previously synced a guest/local neighbor card for Aries (🦊 Gryffindor, Màn 106)
+    sim.addFriendByCode('HS-ARIE-01', 'Aries');
+    const ariesNeighbor = sim.ensureNeighborSocial().neighbors[0]!;
+    ariesNeighbor.remoteUserId = 'hs_m9abc123_ghost99';
+    ariesNeighbor.avatarEmoji = '🦊';
+    ariesNeighbor.house = 'Gryffindor';
+
+    // Syncing Floo directory with Aries's real HPVN UID merges into the single neighbor card instead of pushing a 2nd card
+    sim.syncFlooDirectoryMembers([
+      {
+        uid: 'hpvn_aries_real_uid',
+        friendCode: 'HS-9F2A-01',
+        username: 'Aries',
+        parkName: 'Tháp Sao Aries',
+        house: 'Ravenclaw',
+        avatarEmoji: '🧙‍♂️',
+        level: 34,
+        growing: 3,
+      },
+    ]);
+    expect(sim.ensureNeighborSocial().neighbors).toHaveLength(1);
+    expect(sim.ensureNeighborSocial().neighbors[0]!.remoteUserId).toBe('hpvn_aries_real_uid');
+    expect(sim.ensureNeighborSocial().neighbors[0]!.house).toBe('Ravenclaw');
+
+    // Even if the cloud payload still had BOTH the pre-auth guest hs_... row AND the real HPVN row,
+    // plus two genuinely distinct new players who both left default 'Trang Trại Hang Sóc' name:
+    setCachedCloudLeaderboardEntries('match3', [
+      {
+        userId: 'hs_m9abc123_ghost99',
+        name: 'Aries',
+        parkName: 'Trang Trại Hang Sóc',
+        friendCode: 'HS-ARIE-01',
+        avatarEmoji: '🦊',
+        house: 'Gryffindor',
+        primaryValue: 106,
+        ratingScore: 104688,
+        totalWins: 106,
+        bestStreak: 12,
+        detailLabelVi: '106 thắng • 🔥×12',
+        updatedAt: 1000,
+      },
+      {
+        userId: 'hpvn_aries_real_uid',
+        name: 'Aries',
+        parkName: 'Tháp Sao Aries',
+        friendCode: 'HS-9F2A-01',
+        avatarEmoji: '🧙‍♂️',
+        house: 'Ravenclaw',
+        primaryValue: 106,
+        ratingScore: 104688,
+        totalWins: 106,
+        bestStreak: 12,
+        detailLabelVi: '106 thắng • 🔥×12',
+        updatedAt: 2000,
+      },
+      {
+        userId: 'newbie_real_uid_1',
+        name: 'Trang Trại Hang Sóc',
+        parkName: 'Trang Trại Hang Sóc',
+        friendCode: 'HS-NEWB-01',
+        avatarEmoji: '🧙‍♂️',
+        house: 'Hufflepuff',
+        primaryValue: 12,
+        ratingScore: 9400,
+        totalWins: 12,
+        bestStreak: 4,
+        detailLabelVi: '12 thắng • 🔥×4',
+        updatedAt: 1500,
+      },
+      {
+        userId: 'newbie_real_uid_2',
+        name: 'Trang Trại Hang Sóc',
+        parkName: 'Trang Trại Hang Sóc',
+        friendCode: 'HS-NEWB-02',
+        avatarEmoji: '🧙‍♀️',
+        house: 'Slytherin',
+        primaryValue: 9,
+        ratingScore: 7100,
+        totalWins: 9,
+        bestStreak: 3,
+        detailLabelVi: '9 thắng • 🔥×3',
+        updatedAt: 1600,
+      },
+    ]);
+
+    const valley = sim.getMinigameLeaderboard('match3', 'valley');
+    const ariesRows = valley.entries.filter((e) => e.name === 'Aries');
+    expect(ariesRows).toHaveLength(1);
+    expect(ariesRows[0]!.rank).toBe(2);
+    expect(ariesRows[0]!.house).toBe('Ravenclaw');
+    expect(ariesRows[0]!.primaryValue).toBe(106);
+    expect(ariesRows[0]!.ratingScore).toBe(104688);
+    expect(ariesRows[0]!.isFriend).toBe(true);
+
+    // Two distinct unnamed newbies are preserved separately (never falsely merged)
+    expect(valley.entries.filter((e) => e.name === 'Trang Trại Hang Sóc')).toHaveLength(2);
+    expect(valley.totalEntries).toBe(4); // self + 1 Aries + 2 distinct newbies
+
+    // Ravenclaw gets 1 member (Aries), Gryffindor only has self (1 member, no phantom Aries clone)
+    expect(valley.houseStandings.find((h) => h.house === 'Ravenclaw')?.members).toBe(1);
+    expect(valley.houseStandings.find((h) => h.house === 'Gryffindor')?.members).toBe(1);
+  });
 });

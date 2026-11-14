@@ -7,7 +7,7 @@
  *    và tự động nhận thông báo `helpers` khi bạn bè sang chăm giúp thung lũng.
  */
 
-import { useServerCalendarDayKey } from '../sim/neighborSocial';
+import { isGeneratedGuestUserId, useServerCalendarDayKey } from '../sim/neighborSocial';
 import type { HomeOwlLanternMark, HouseName, VerifiedRealPlayerProfile } from '../types/game';
 
 export const SAVE_KEY = 'burrow_hogsmeade_777_v3';
@@ -151,12 +151,26 @@ async function withSaveStorageLock<T>(fn: () => Promise<T> | T): Promise<T> {
   return fn();
 }
 
+function hasEmbeddedHpvnTicketInHash(): boolean {
+  if (typeof window === 'undefined' || !window.location?.hash) return false;
+  const hash = window.location.hash.slice(1);
+  if (!hash) return false;
+  const params = new URLSearchParams(hash);
+  return Boolean(params.get('burrow-ticket') || params.get('hpvn-ticket'));
+}
+
+function isAwaitingEmbeddedTicketUid(userId: string): boolean {
+  return hasEmbeddedHpvnTicketInHash() && isGeneratedGuestUserId(userId);
+}
+
 export async function registerRealPlayerProfileOnline(
   stateOverride?: Record<string, unknown>
 ): Promise<boolean> {
   if (typeof window === 'undefined' || typeof fetch !== 'function') return false;
   if (typeof navigator !== 'undefined' && !navigator.onLine) return false;
   try {
+    const userId = getOrCreateClientUserId();
+    if (isAwaitingEmbeddedTicketUid(userId)) return false;
     let parsed = stateOverride ?? null;
     if (!parsed && typeof localStorage !== 'undefined') {
       const raw = localStorage.getItem(SAVE_KEY);
@@ -181,7 +195,6 @@ export async function registerRealPlayerProfileOnline(
       .toUpperCase();
     if (friendCode.length < 4) return false;
 
-    const userId = getOrCreateClientUserId();
     const payload = JSON.stringify({
       userId,
       friendCode,
@@ -614,8 +627,11 @@ export class CloudSave {
         parsed.lastSavedAt = parsed.lastSavedAt || savedAt;
       }
 
-      this.isUploading = true;
       const userId = this.getUserId();
+      if (isAwaitingEmbeddedTicketUid(userId)) {
+        return false;
+      }
+      this.isUploading = true;
 
       try {
         const url = `${this.endpoint}?userId=${encodeURIComponent(userId)}`;

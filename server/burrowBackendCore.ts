@@ -166,6 +166,272 @@ export const MAX_DAILY_HOUSE_CUP_MEMBER_POINTS = 60; // Tối đa 60 điểm Cú
 export const HOUSE_CUP_REWARD_MIN_POINTS = 20; // Tối thiểu 20 điểm tuần để nhận thưởng Cúp Nhà
 export const CATALOG_VERSION = 'burrow-25.1';
 
+const GENERIC_SERVER_PLAYER_NAMES = new Set([
+  'trang trại hang sóc',
+  'phù thủy hang sóc',
+  'người chơi trực tuyến',
+  'điền trang phép thuật',
+  'tân phù thủy hang sóc',
+  'người chơi thật',
+  'bạn',
+  'bạn hpvn',
+  'khách',
+  'anonymous',
+  'anonymous_user',
+  'local_player',
+]);
+
+function isGeneratedGuestBackendUid(uid: unknown): boolean {
+  const clean = typeof uid === 'string' ? uid.trim() : '';
+  if (!clean) return true;
+  return /^(hs_[a-z0-9]+_[a-z0-9]+|anon(?:ymous)?(?:_user)?|local_player)$/i.test(clean);
+}
+
+function isPlaceholderServerFriendCode(code: unknown): boolean {
+  const clean = typeof code === 'string' ? code.trim().toUpperCase() : '';
+  if (!clean) return true;
+  return (
+    clean === 'HS-YOU1-01' ||
+    clean === 'HS-CLUD-00' ||
+    clean === 'HS-CLUD-01' ||
+    clean === 'HS-PLAYER-01' ||
+    clean.startsWith('FLOO-') ||
+    clean.startsWith('HS-SEED-')
+  );
+}
+
+function normalizeDistinctServerNickname(rawName: unknown): string | null {
+  if (typeof rawName !== 'string') return null;
+  const stripped = rawName
+    .replace(/\s*\(Bạn\)\s*$/iu, '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+  if (stripped.length < 2) return null;
+  if (GENERIC_SERVER_PLAYER_NAMES.has(stripped)) return null;
+  if (/^phù thủy\s+[a-z0-9_-]{1,12}$/iu.test(stripped)) return null;
+  if (/^thung lũng(?:\s+của)?\s+/iu.test(stripped)) return null;
+  if (/^người chơi\s+[a-z0-9-]*$/iu.test(stripped)) return null;
+  return stripped;
+}
+
+function visitRowAuthorityScore(row: VisitDirectorySummaryRow): number {
+  let score = 0;
+  if (!isGeneratedGuestBackendUid(row.uid)) score += 1000;
+  if (row.houseVerified) score += 200;
+  if (row.house && row.house !== 'Gryffindor') score += 80;
+  if (!isPlaceholderServerFriendCode(row.friendCode)) score += 30;
+  if (normalizeDistinctServerNickname(row.username) !== null) score += 20;
+  if (row.avatarUrl) score += 15;
+  return score;
+}
+
+function mergeVisitDirectoryRows(
+  a: VisitDirectorySummaryRow,
+  b: VisitDirectorySummaryRow
+): VisitDirectorySummaryRow {
+  const diff = visitRowAuthorityScore(b) - visitRowAuthorityScore(a);
+  const primary =
+    diff > 0 || (diff === 0 && (b.updatedAt || 0) > (a.updatedAt || 0)) ? b : a;
+  const secondary = primary === a ? b : a;
+  return {
+    ...secondary,
+    ...primary,
+    uid: primary.uid,
+    friendCode: !isPlaceholderServerFriendCode(primary.friendCode)
+      ? primary.friendCode
+      : secondary.friendCode || primary.friendCode,
+    username:
+      normalizeDistinctServerNickname(primary.username) !== null
+        ? primary.username
+        : normalizeDistinctServerNickname(secondary.username) !== null
+          ? secondary.username
+          : primary.username,
+    parkName: primary.parkName || secondary.parkName,
+    house:
+      primary.houseVerified || !isGeneratedGuestBackendUid(primary.uid)
+        ? primary.house === 'Gryffindor' &&
+          !primary.houseVerified &&
+          secondary.house &&
+          secondary.house !== 'Gryffindor'
+          ? secondary.house
+          : primary.house
+        : secondary.house && secondary.house !== 'Gryffindor'
+          ? secondary.house
+          : primary.house,
+    ...(primary.houseVerified || secondary.houseVerified ? { houseVerified: true } : {}),
+    avatarEmoji: primary.avatarEmoji || secondary.avatarEmoji,
+    ...(primary.avatarUrl || secondary.avatarUrl
+      ? { avatarUrl: primary.avatarUrl || secondary.avatarUrl }
+      : {}),
+    level: Math.max(primary.level || 1, secondary.level || 1),
+    updatedAt: Math.max(a.updatedAt || 0, b.updatedAt || 0),
+  };
+}
+
+function deduplicateVisitDirectoryRows(
+  rows: ReadonlyArray<VisitDirectorySummaryRow>
+): VisitDirectorySummaryRow[] {
+  const out: VisitDirectorySummaryRow[] = [];
+  for (const row of rows) {
+    if (!row || !row.uid) continue;
+    const code = (row.friendCode || '').trim().toUpperCase();
+    const hasCode = !isPlaceholderServerFriendCode(code);
+    const nick = normalizeDistinctServerNickname(row.username);
+
+    const idx = out.findIndex((ex) => {
+      if (ex.uid === row.uid) return true;
+      const exCode = (ex.friendCode || '').trim().toUpperCase();
+      if (hasCode && !isPlaceholderServerFriendCode(exCode) && exCode === code) return true;
+      const exNick = normalizeDistinctServerNickname(ex.username);
+      return nick !== null && exNick !== null && nick === exNick;
+    });
+
+    if (idx >= 0) {
+      out[idx] = mergeVisitDirectoryRows(out[idx], row);
+    } else {
+      out.push(row);
+    }
+  }
+  return out;
+}
+
+function serverLeaderboardItemAuthority(
+  item: Record<string, unknown>,
+  dirByUid: Map<string, VisitDirectorySummaryRow>
+): number {
+  const uid = String(item.userId || '');
+  const dirRow = dirByUid.get(uid);
+  let score = 0;
+  if (!isGeneratedGuestBackendUid(uid)) score += 1000;
+  if (dirRow?.houseVerified) score += 200;
+  const h = normalizeHogwartsHouse(item.house);
+  if (h && h !== 'Gryffindor') score += 80;
+  if (!isPlaceholderServerFriendCode(item.friendCode)) score += 30;
+  if (normalizeDistinctServerNickname(item.name) !== null) score += 20;
+  return score;
+}
+
+function mergeServerLeaderboardItems(
+  a: Record<string, unknown>,
+  b: Record<string, unknown>,
+  dirByUid: Map<string, VisitDirectorySummaryRow>
+): Record<string, unknown> {
+  const authDiff =
+    serverLeaderboardItemAuthority(b, dirByUid) -
+    serverLeaderboardItemAuthority(a, dirByUid);
+  const pvA = Math.max(0, Math.floor(Number(a.primaryValue) || 0));
+  const pvB = Math.max(0, Math.floor(Number(b.primaryValue) || 0));
+  const rsA = Math.max(0, Math.floor(Number(a.ratingScore) || 0));
+  const rsB = Math.max(0, Math.floor(Number(b.ratingScore) || 0));
+  const twA = Math.max(0, Math.floor(Number(a.totalWins) || 0));
+  const twB = Math.max(0, Math.floor(Number(b.totalWins) || 0));
+  const bsA = Math.max(0, Math.floor(Number(a.bestStreak) || 0));
+  const bsB = Math.max(0, Math.floor(Number(b.bestStreak) || 0));
+  const upA = Math.floor(Number(a.updatedAt) || 0);
+  const upB = Math.floor(Number(b.updatedAt) || 0);
+
+  const primary =
+    authDiff > 0 ||
+    (authDiff === 0 &&
+      (pvB > pvA ||
+        (pvB === pvA && rsB > rsA) ||
+        (pvB === pvA && rsB === rsA && upB > upA)))
+      ? b
+      : a;
+  const secondary = primary === a ? b : a;
+
+  const bestPrimary = Math.max(pvA, pvB);
+  const bestRating =
+    pvB > pvA ? rsB : pvA > pvB ? rsA : Math.max(rsA, rsB);
+  const bestWins = Math.max(twA, twB);
+  const bestStreak = Math.max(bsA, bsB);
+  const bestDetail =
+    pvB > pvA
+      ? String(b.detailLabelVi || a.detailLabelVi || '')
+      : pvA > pvB
+        ? String(a.detailLabelVi || b.detailLabelVi || '')
+        : String(primary.detailLabelVi || secondary.detailLabelVi || '');
+
+  const pUid = String(primary.userId || '');
+  const sUid = String(secondary.userId || '');
+  const pDir = dirByUid.get(pUid);
+  const pHouse = normalizeHogwartsHouse(primary.house);
+  const sHouse = normalizeHogwartsHouse(secondary.house);
+  const resolvedHouse: HogwartsHouseName =
+    pDir?.houseVerified && pHouse
+      ? pHouse
+      : !isGeneratedGuestBackendUid(pUid) && pHouse
+        ? pHouse === 'Gryffindor' &&
+          sHouse &&
+          sHouse !== 'Gryffindor' &&
+          !isGeneratedGuestBackendUid(sUid)
+          ? sHouse
+          : pHouse
+        : sHouse && sHouse !== 'Gryffindor'
+          ? sHouse
+          : pHouse ?? sHouse ?? 'Gryffindor';
+
+  const resolvedCode = !isPlaceholderServerFriendCode(primary.friendCode)
+    ? String(primary.friendCode)
+    : !isPlaceholderServerFriendCode(secondary.friendCode)
+      ? String(secondary.friendCode)
+      : String(primary.friendCode || secondary.friendCode || 'HS-CLUD-01');
+
+  const resolvedName =
+    normalizeDistinctServerNickname(primary.name) !== null
+      ? String(primary.name)
+      : normalizeDistinctServerNickname(secondary.name) !== null
+        ? String(secondary.name)
+        : String(primary.name || secondary.name || 'Phù Thủy Hang Sóc');
+
+  return {
+    ...secondary,
+    ...primary,
+    userId: pUid,
+    name: resolvedName.slice(0, 42),
+    parkName: String(primary.parkName || secondary.parkName || 'Trang Trại Hang Sóc').slice(0, 42),
+    friendCode: resolvedCode,
+    avatarEmoji: String(primary.avatarEmoji || secondary.avatarEmoji || '🧙‍♂️').slice(0, 8),
+    house: resolvedHouse,
+    primaryValue: bestPrimary,
+    ratingScore: bestRating,
+    totalWins: bestWins,
+    bestStreak: bestStreak,
+    detailLabelVi: bestDetail.slice(0, 64),
+    updatedAt: Math.max(upA, upB),
+  };
+}
+
+function deduplicateServerLeaderboardItems(
+  items: ReadonlyArray<Record<string, unknown>>,
+  dirByUid: Map<string, VisitDirectorySummaryRow>
+): Array<Record<string, unknown>> {
+  const out: Array<Record<string, unknown>> = [];
+  for (const item of items) {
+    if (!item || typeof item.userId !== 'string' || !item.userId.trim()) continue;
+    const uid = item.userId.trim();
+    const code = String(item.friendCode || '').trim().toUpperCase();
+    const hasCode = !isPlaceholderServerFriendCode(code);
+    const nick = normalizeDistinctServerNickname(item.name);
+
+    const idx = out.findIndex((ex) => {
+      if (String(ex.userId || '').trim() === uid) return true;
+      const exCode = String(ex.friendCode || '').trim().toUpperCase();
+      if (hasCode && !isPlaceholderServerFriendCode(exCode) && exCode === code) return true;
+      const exNick = normalizeDistinctServerNickname(ex.name);
+      return nick !== null && exNick !== null && nick === exNick;
+    });
+
+    if (idx >= 0) {
+      out[idx] = mergeServerLeaderboardItems(out[idx], item, dirByUid);
+    } else {
+      out.push(item);
+    }
+  }
+  return out;
+}
+
 export const FREE_ACTION_CAPS: Readonly<Record<string, number>> = Object.freeze({
   pet: 3,
   rotate: 3,
@@ -2033,46 +2299,49 @@ export class BurrowAuthoritativeBackend {
 
   private async getHealedVisitDirectory(): Promise<VisitDirectorySummaryRow[]> {
     const indexKey = 'burrow_visit_directory';
-    const current = (await this.readJson<VisitDirectorySummaryRow[]>(indexKey)) ?? [];
-    if (current.length === 0 || typeof this.store.resolveMemberIdentityProfile !== 'function') {
-      return current;
+    const rawCurrent = (await this.readJson<VisitDirectorySummaryRow[]>(indexKey)) ?? [];
+    if (rawCurrent.length === 0) {
+      return rawCurrent;
+    }
+    const current = deduplicateVisitDirectoryRows(rawCurrent);
+    let modified = current.length !== rawCurrent.length;
+    if (typeof this.store.resolveMemberIdentityProfile === 'function') {
+      const toCheck = current
+        .filter((r) => !r.houseVerified && r.house === 'Gryffindor')
+        .slice(0, 8);
+      await Promise.all(
+        toCheck.map(async (row) => {
+          try {
+            const prof = await this.store.resolveMemberIdentityProfile!(row.uid);
+            row.houseVerified = true;
+            modified = true;
+            if (!prof) return;
+            if (prof.house && row.house !== prof.house) {
+              row.house = prof.house;
+            }
+            if (
+              prof.username &&
+              (row.username === 'Phù Thủy Hang Sóc' ||
+                row.username === 'Trang Trại Hang Sóc' ||
+                !row.username)
+            ) {
+              row.username = prof.username;
+            }
+            if (prof.avatarUrl && !row.avatarUrl) {
+              row.avatarUrl = prof.avatarUrl;
+            }
+          } catch {
+            // Bỏ qua lỗi đọc đơn lẻ
+          }
+        })
+      );
     }
 
-    let modified = false;
-    const toCheck = current
-      .filter((r) => !r.houseVerified && r.house === 'Gryffindor')
-      .slice(0, 8);
-    await Promise.all(
-      toCheck.map(async (row) => {
-        try {
-          const prof = await this.store.resolveMemberIdentityProfile!(row.uid);
-          row.houseVerified = true;
-          modified = true;
-          if (!prof) return;
-          if (prof.house && row.house !== prof.house) {
-            row.house = prof.house;
-          }
-          if (
-            prof.username &&
-            (row.username === 'Phù Thủy Hang Sóc' ||
-              row.username === 'Trang Trại Hang Sóc' ||
-              !row.username)
-          ) {
-            row.username = prof.username;
-          }
-          if (prof.avatarUrl && !row.avatarUrl) {
-            row.avatarUrl = prof.avatarUrl;
-          }
-        } catch {
-          // Bỏ qua lỗi đọc đơn lẻ
-        }
-      })
-    );
-
-    if (modified) {
-      await this.writeJson(indexKey, current, 86_400 * 60);
+    const dedupedAfterHeal = deduplicateVisitDirectoryRows(current);
+    if (modified || dedupedAfterHeal.length !== current.length) {
+      await this.writeJson(indexKey, dedupedAfterHeal, 86_400 * 60);
     }
-    return current;
+    return dedupedAfterHeal;
   }
 
   private async registerVisitDirectoryEntry(
@@ -2134,7 +2403,7 @@ export class BurrowAuthoritativeBackend {
 
     const byUid = new Map(current.map((r) => [r.uid, r]));
     byUid.set(state.uid, nextRow);
-    const trimmed = Array.from(byUid.values())
+    const trimmed = deduplicateVisitDirectoryRows(Array.from(byUid.values()))
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, 120);
     await this.writeJson(indexKey, trimmed, 86_400 * 60);
@@ -3991,10 +4260,27 @@ export class BurrowAuthoritativeBackend {
       );
       const visitorDaily = await this.getOrCreateDaily(identity.uid);
       const nowMs = this.now();
-      const directory = (await this.readJson<VisitDirectorySummaryRow[]>('burrow_visit_directory')) ?? [];
+      const rawDirectory = (await this.readJson<VisitDirectorySummaryRow[]>('burrow_visit_directory')) ?? [];
+      const directory = deduplicateVisitDirectoryRows(rawDirectory);
       const helpsLeft = Math.max(0, MAX_DAILY_FRIEND_HELPS - visitorDaily.helpsGivenCount);
+      const visitorNick = normalizeDistinctServerNickname(visitorState.playerName);
+      const visitorCode = (visitorState.friendCode || '').trim().toUpperCase();
+      const hasVisitorCode = !isPlaceholderServerFriendCode(visitorCode);
 
-      const candidates = directory.filter((row) => row.uid !== identity.uid).slice(0, 48);
+      const candidates = directory
+        .filter((row) => {
+          if (row.uid === identity.uid) return false;
+          const rCode = (row.friendCode || '').trim().toUpperCase();
+          if (hasVisitorCode && !isPlaceholderServerFriendCode(rCode) && rCode === visitorCode) {
+            return false;
+          }
+          const rNick = normalizeDistinctServerNickname(row.username);
+          if (visitorNick !== null && rNick !== null && rNick === visitorNick) {
+            return false;
+          }
+          return true;
+        })
+        .slice(0, 48);
       const enriched = candidates.map((row) => {
         const liveGrowing = Array.isArray(row.timerReadyAts)
           ? row.timerReadyAts.filter((readyAt) => readyAt > nowMs).length
@@ -4831,7 +5117,7 @@ export class BurrowAuthoritativeBackend {
       });
     }
 
-    return Array.from(byUser.values())
+    return deduplicateServerLeaderboardItems(Array.from(byUser.values()), dirByUid)
       .sort(
         (a, b) =>
           Number(b.primaryValue || 0) - Number(a.primaryValue || 0) ||
@@ -4905,14 +5191,37 @@ export class BurrowAuthoritativeBackend {
 
     const kvKey = `burrow_lb:${gameId}`;
     const existing = (await this.readJson<Array<Record<string, unknown>>>(kvKey)) ?? [];
+    const targetCodeNorm = resolvedFriendCode.trim().toUpperCase();
+    const hasTargetCode = !isPlaceholderServerFriendCode(targetCodeNorm);
+    const targetNick = normalizeDistinctServerNickname(resolvedName);
+
+    let prev: Record<string, unknown> | undefined;
     const byUser = new Map<string, Record<string, unknown>>();
     for (const item of existing) {
-      if (item && typeof item.userId === 'string') {
-        byUser.set(item.userId, item);
+      if (!item || typeof item.userId !== 'string') continue;
+      const itemUid = item.userId.trim();
+      const itemCode = String(item.friendCode || '').trim().toUpperCase();
+      const itemNick = normalizeDistinctServerNickname(item.name);
+      const isSamePlayerGhost =
+        itemUid === uid ||
+        (hasTargetCode && !isPlaceholderServerFriendCode(itemCode) && itemCode === targetCodeNorm) ||
+        (targetNick !== null &&
+          itemNick !== null &&
+          itemNick === targetNick &&
+          (!isGeneratedGuestBackendUid(uid) || isGeneratedGuestBackendUid(itemUid)));
+
+      if (isSamePlayerGhost) {
+        prev = prev
+          ? mergeServerLeaderboardItems(prev, item, new Map())
+          : item;
+        if (itemUid !== uid && !isGeneratedGuestBackendUid(uid)) {
+          // Hấp thụ bản ghi bóng ma `hs_...` vào UID chính danh
+          continue;
+        }
       }
+      byUser.set(itemUid, item);
     }
 
-    const prev = byUser.get(uid);
     const prevPrimary = Math.max(0, Math.floor(Number(prev?.primaryValue) || 0));
     const prevRating = Math.max(0, Math.floor(Number(prev?.ratingScore) || 0));
     const prevWins = Math.max(0, Math.floor(Number(prev?.totalWins) || 0));
@@ -4962,7 +5271,7 @@ export class BurrowAuthoritativeBackend {
       };
     }
 
-    const topEntries = Array.from(byUser.values())
+    const topEntries = deduplicateServerLeaderboardItems(Array.from(byUser.values()), new Map())
       .sort(
         (a, b) =>
           Number(b.primaryValue || 0) - Number(a.primaryValue || 0) ||

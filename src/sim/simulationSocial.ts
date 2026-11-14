@@ -138,6 +138,7 @@ import {
   classifyBuildingGardenHelpKind,
   createFriendNeighborFromCode,
   createInitialNeighborSocialState,
+  deduplicateNeighborProfiles,
   FRIENDSHIP_CHEST_TOKEN_COST,
   getGardenHelpMetaVi,
   getHonorGardenById,
@@ -145,11 +146,12 @@ import {
   getMinigameKindLabelVi,
   getPresetNoteMeta,
   HONOR_GARDENS,
-  isNpcNeighborProfile,
+  isPlaceholderOrSyntheticFriendCode,
   MAX_DAILY_FRIEND_HELPS,
   MAX_DAILY_MINIGAME_RESCUES,
   MAX_DAILY_OWL_HELP_REQUESTS,
   MAX_HOME_LANTERN_MARKS,
+  normalizeDistinctPlayerNickname,
   normalizeSceneTimeOverride,
   normalizeSceneWeatherOverride,
   pickSimulatedHomeLanternMark,
@@ -162,6 +164,7 @@ import {
   ensureMinigameLeaderboardState,
   getAllCachedCloudLeaderboards,
   getCachedCloudLeaderboardEntries,
+  getClientLeaderboardUserId,
   getPlayerHogwartsHouse,
   HOGWARTS_HOUSE_META,
   isScoredLeaderboardGame,
@@ -226,9 +229,21 @@ export function socialEnsureNeighborSocial(sim: ParkSimulation): NeighborSocialS
       sim.state.neighborSocial = createInitialNeighborSocialState();
     }
     if (Array.isArray(sim.state.neighborSocial.neighbors)) {
-      const filtered = sim.state.neighborSocial.neighbors.filter((n) => !isNpcNeighborProfile(n));
-      if (filtered.length !== sim.state.neighborSocial.neighbors.length) {
-        sim.state.neighborSocial.neighbors = filtered;
+      const ownUid = getClientLeaderboardUserId();
+      const deduped = deduplicateNeighborProfiles(sim.state.neighborSocial.neighbors, {
+        ownUid: ownUid !== 'local_player' ? ownUid : undefined,
+        ownFriendCode: sim.state.neighborSocial.playerFriendCode,
+        ownDisplayName: sim.state.neighborSocial.playerDisplayName,
+      });
+      if (deduped.length !== sim.state.neighborSocial.neighbors.length) {
+        sim.state.neighborSocial.neighbors = deduped;
+      } else {
+        for (let i = 0; i < deduped.length; i++) {
+          if (deduped[i] !== sim.state.neighborSocial.neighbors[i]) {
+            sim.state.neighborSocial.neighbors = deduped;
+            break;
+          }
+        }
       }
     } else {
       sim.state.neighborSocial.neighbors = [];
@@ -409,11 +424,13 @@ export function socialAddFriendByCode(sim: ParkSimulation,
         msg: 'Sổ Hàng Xóm chỉ kết nối với người chơi thật — không hỗ trợ thêm mã NPC!',
       };
     }
-    const existing = social.neighbors.find(
-      (n) =>
-        n.friendCode.toUpperCase() === cleaned ||
-        (Boolean(verifiedProfile?.userId) && n.remoteUserId === verifiedProfile?.userId)
-    );
+    const candidateNick = normalizeDistinctPlayerNickname(customName || verifiedProfile?.name);
+    const existing = social.neighbors.find((n) => {
+      if (n.friendCode.toUpperCase() === cleaned) return true;
+      if (Boolean(verifiedProfile?.userId) && n.remoteUserId === verifiedProfile?.userId) return true;
+      const exNick = normalizeDistinctPlayerNickname(n.name);
+      return candidateNick !== null && exNick !== null && candidateNick === exNick;
+    });
     if (existing) {
       if (verifiedProfile) {
         socialSyncVerifiedFriendSnapshot(sim, verifiedProfile);
@@ -1420,16 +1437,28 @@ export function socialSyncFlooDirectoryMembers(
 ): NeighborProfileState[] {
   const social = socialEnsureNeighborSocial(sim);
   const synced: NeighborProfileState[] = [];
+  const ownNick = normalizeDistinctPlayerNickname(social.playerDisplayName);
+  const ownCode = (social.playerFriendCode || '').trim().toUpperCase();
+  const hasOwnCode = !isPlaceholderOrSyntheticFriendCode(ownCode);
 
   for (const row of rows) {
     if (!row || !row.uid) continue;
     if (ownUid && row.uid === ownUid) continue;
-    const existingIdx = social.neighbors.findIndex(
-      (n) =>
-        n.remoteUserId === row.uid ||
-        (Boolean(row.friendCode) &&
-          n.friendCode.toUpperCase() === String(row.friendCode).toUpperCase())
-    );
+    const rowCode = String(row.friendCode || '').trim().toUpperCase();
+    const hasRowCode = !isPlaceholderOrSyntheticFriendCode(rowCode);
+    const rowNick = normalizeDistinctPlayerNickname(row.username);
+    if (hasOwnCode && hasRowCode && rowCode === ownCode) continue;
+    if (ownNick !== null && rowNick !== null && rowNick === ownNick) continue;
+
+    const existingIdx = social.neighbors.findIndex((n) => {
+      if (n.remoteUserId === row.uid) return true;
+      const nCode = (n.friendCode || '').trim().toUpperCase();
+      if (hasRowCode && !isPlaceholderOrSyntheticFriendCode(nCode) && nCode === rowCode) {
+        return true;
+      }
+      const nNick = normalizeDistinctPlayerNickname(n.name);
+      return rowNick !== null && nNick !== null && nNick === rowNick;
+    });
     const existing = existingIdx >= 0 ? social.neighbors[existingIdx] : undefined;
     const updated = upsertFlooMemberToNeighborProfile(existing, row, nowMs);
     if (social.dailyRescuesGivenIds.includes(updated.id) && updated.minigameSos) {
@@ -1442,6 +1471,12 @@ export function socialSyncFlooDirectoryMembers(
     }
     synced.push(updated);
   }
+
+  social.neighbors = deduplicateNeighborProfiles(social.neighbors, {
+    ownUid,
+    ownFriendCode: social.playerFriendCode,
+    ownDisplayName: social.playerDisplayName,
+  });
 
   if (synced.length > 0) {
     sim.saveToStorage();

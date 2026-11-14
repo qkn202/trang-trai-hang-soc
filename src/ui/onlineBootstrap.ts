@@ -17,6 +17,7 @@ import {
   type BurrowGardenClient,
   createAutoAuthoritativeClient,
   formatServerRefusalVi,
+  getHpvnTicketFromLocation,
 } from './authoritativeClient';
 import {
   acquireSessionBearerToken,
@@ -167,7 +168,12 @@ export class OnlineBootstrap {
       this.errorMonitor.init();
       this.analytics.init(this.cloudSave);
       this.legalModal.mount();
-      this.cloudSave.init();
+      const hasEmbedTicket = Boolean(
+        typeof window !== 'undefined' && getHpvnTicketFromLocation(window.location)
+      );
+      if (!hasEmbedTicket) {
+        this.cloudSave.init();
+      }
       bindAuthoritativeLeaderboardClient(this.authoritativeClient);
 
       if (typeof window !== 'undefined') {
@@ -240,7 +246,9 @@ export class OnlineBootstrap {
             if (typeof snap.uid === 'string' && snap.uid) {
               const prevUid = this.cloudSave.getUserId();
               const unifiedUid = setAuthenticatedUserId(snap.uid);
-              if (unifiedUid !== prevUid) {
+              if (hasEmbedTicket) {
+                this.cloudSave.init();
+              } else if (unifiedUid !== prevUid) {
                 // Nếu UID từ vé HPVN / Firebase Auth khác với UID tạm cục bộ -> tải bản lưu đám mây rồi áp lại số dư Gringotts
                 acquireSessionBearerToken(unifiedUid)
                   .catch(() => null)
@@ -256,6 +264,8 @@ export class OnlineBootstrap {
                   })
                   .catch(() => {});
               }
+            } else if (hasEmbedTicket) {
+              this.cloudSave.init();
             }
             if (typeof window !== 'undefined') {
               window.dispatchEvent(
@@ -263,7 +273,13 @@ export class OnlineBootstrap {
               );
             }
           })
-          .catch(() => {});
+          .catch(() => {
+            if (hasEmbedTicket) {
+              this.cloudSave.init();
+            }
+          });
+      } else if (hasEmbedTicket) {
+        this.cloudSave.init();
       }
 
       this.hpvnBridge.notifyReady({

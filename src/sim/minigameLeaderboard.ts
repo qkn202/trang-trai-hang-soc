@@ -8,7 +8,13 @@ import {
   MinigamePersonalRecord,
   NeighborProfileState,
 } from '../types/game';
-import { isNpcNeighborProfile } from './neighborSocial';
+import {
+  deduplicateNeighborProfiles,
+  isGeneratedGuestUserId,
+  isNpcNeighborProfile,
+  isPlaceholderOrSyntheticFriendCode,
+  normalizeDistinctPlayerNickname,
+} from './neighborSocial';
 import { acquireSessionBearerToken, getCachedSessionBearerToken } from '../ui/cloudSave';
 
 export const SCORED_LEADERBOARD_GAMES: ReadonlyArray<LeaderboardGameId> = [
@@ -779,8 +785,30 @@ function formatDetailDisplayVi(
 function buildNeighborLeaderboardEntry(
   neighbor: NeighborProfileState,
   gameId: LeaderboardGameId,
-  cloudMatch?: CloudLeaderboardEntry
+  cloudMatch?: CloudLeaderboardEntry,
+  identityHint?: CloudLeaderboardEntry
 ): Omit<LeaderboardRowEntry, 'rank'> {
+  const authCloud = cloudMatch ?? identityHint;
+  const neighborIsGuestOrUnlinked =
+    !neighbor.remoteUserId || isGeneratedGuestUserId(neighbor.remoteUserId);
+  const resolvedName =
+    normalizeDistinctPlayerNickname(neighbor.name) !== null
+      ? neighbor.name
+      : authCloud?.name && normalizeDistinctPlayerNickname(authCloud.name) !== null
+        ? authCloud.name
+        : neighbor.name;
+  const resolvedHouse: HouseName =
+    normalizeClientHogwartsHouse(authCloud?.house) || neighbor.house || 'Gryffindor';
+  const resolvedAvatarEmoji = neighborIsGuestOrUnlinked
+    ? authCloud?.avatarEmoji || neighbor.avatarEmoji || '🧙'
+    : neighbor.avatarEmoji || authCloud?.avatarEmoji || '🧙';
+  const resolvedFriendCode =
+    !isPlaceholderOrSyntheticFriendCode(neighbor.friendCode)
+      ? neighbor.friendCode
+      : authCloud?.friendCode && !isPlaceholderOrSyntheticFriendCode(authCloud.friendCode)
+        ? authCloud.friendCode
+        : neighbor.friendCode;
+
   if (cloudMatch) {
     const pv = Math.max(0, Math.floor(cloudMatch.primaryValue || 0));
     const rs = Math.max(0, Math.floor(cloudMatch.ratingScore || 0));
@@ -788,13 +816,13 @@ function buildNeighborLeaderboardEntry(
     const bs = Math.max(0, Math.floor(cloudMatch.bestStreak || 0));
     return {
       id: `friend:${neighbor.id}`,
-      name: neighbor.name,
+      name: resolvedName,
       titleVi: neighbor.titleVi || 'Người Chơi Thật • Hàng Xóm',
-      parkName: neighbor.parkName,
-      friendCode: neighbor.friendCode,
-      avatarEmoji: neighbor.avatarEmoji || cloudMatch.avatarEmoji || '🧙',
+      parkName: neighbor.parkName || cloudMatch.parkName,
+      friendCode: resolvedFriendCode,
+      avatarEmoji: resolvedAvatarEmoji,
       portraitSprite: neighbor.portraitSprite,
-      house: neighbor.house || cloudMatch.house || 'Gryffindor',
+      house: resolvedHouse,
       isPlayer: false,
       isFriend: true,
       isCloudPlayer: true,
@@ -815,13 +843,13 @@ function buildNeighborLeaderboardEntry(
   // Người chơi thật trong danh bạ nhưng chưa có kỷ lục trực tuyến ở bộ môn này -> hiển thị 0 thật (không bịa điểm ảo)
   return {
     id: `friend:${neighbor.id}`,
-    name: neighbor.name,
+    name: resolvedName,
     titleVi: neighbor.titleVi || 'Người Chơi Thật • Hàng Xóm',
-    parkName: neighbor.parkName,
-    friendCode: neighbor.friendCode,
-    avatarEmoji: neighbor.avatarEmoji || '🧙',
+    parkName: neighbor.parkName || identityHint?.parkName || 'Trang Trại Hang Sóc',
+    friendCode: resolvedFriendCode,
+    avatarEmoji: resolvedAvatarEmoji,
     portraitSprite: neighbor.portraitSprite,
-    house: neighbor.house,
+    house: resolvedHouse,
     isPlayer: false,
     isFriend: true,
     neighborId: neighbor.id,
@@ -981,6 +1009,226 @@ const PLACEHOLDER_FRIEND_CODES: ReadonlySet<string> = new Set([
   'HS-CLUD-01',
 ]);
 
+function cloudEntryIdentityAuthority(ce: CloudLeaderboardEntry): number {
+  let score = 0;
+  if (!isGeneratedGuestUserId(ce.userId)) score += 1000;
+  const house = normalizeClientHogwartsHouse(ce.house);
+  if (house && house !== 'Gryffindor') score += 120;
+  if (!isPlaceholderOrSyntheticFriendCode(ce.friendCode)) score += 40;
+  if (normalizeDistinctPlayerNickname(ce.name) !== null) score += 30;
+  return score;
+}
+
+function compareCloudEntryQuality(a: CloudLeaderboardEntry, b: CloudLeaderboardEntry): number {
+  const authDiff = cloudEntryIdentityAuthority(a) - cloudEntryIdentityAuthority(b);
+  if (authDiff !== 0) return authDiff;
+  if (a.primaryValue !== b.primaryValue) return a.primaryValue - b.primaryValue;
+  if (a.ratingScore !== b.ratingScore) return a.ratingScore - b.ratingScore;
+  if (a.totalWins !== b.totalWins) return a.totalWins - b.totalWins;
+  return (a.updatedAt || 0) - (b.updatedAt || 0);
+}
+
+function mergeCollidingCloudEntries(
+  a: CloudLeaderboardEntry,
+  b: CloudLeaderboardEntry
+): CloudLeaderboardEntry {
+  const primary = compareCloudEntryQuality(b, a) > 0 ? b : a;
+  const secondary = primary === a ? b : a;
+
+  const pvA = Math.max(0, Math.floor(a.primaryValue || 0));
+  const pvB = Math.max(0, Math.floor(b.primaryValue || 0));
+  const bestPrimary = Math.max(pvA, pvB);
+  const bestRating =
+    pvB > pvA
+      ? Math.max(0, Math.floor(b.ratingScore || 0))
+      : pvA > pvB
+        ? Math.max(0, Math.floor(a.ratingScore || 0))
+        : Math.max(Math.floor(a.ratingScore || 0), Math.floor(b.ratingScore || 0));
+  const bestWins = Math.max(Math.floor(a.totalWins || 0), Math.floor(b.totalWins || 0));
+  const bestStreak = Math.max(Math.floor(a.bestStreak || 0), Math.floor(b.bestStreak || 0));
+  const bestDetail =
+    pvB > pvA
+      ? b.detailLabelVi || a.detailLabelVi
+      : pvA > pvB
+        ? a.detailLabelVi || b.detailLabelVi
+        : primary.detailLabelVi || secondary.detailLabelVi;
+
+  const pHouse = normalizeClientHogwartsHouse(primary.house);
+  const sHouse = normalizeClientHogwartsHouse(secondary.house);
+  const resolvedHouse: HouseName =
+    !isGeneratedGuestUserId(primary.userId) && pHouse
+      ? pHouse === 'Gryffindor' &&
+        sHouse &&
+        sHouse !== 'Gryffindor' &&
+        !isGeneratedGuestUserId(secondary.userId)
+        ? sHouse
+        : pHouse
+      : sHouse && sHouse !== 'Gryffindor'
+        ? sHouse
+        : pHouse || sHouse || 'Gryffindor';
+
+  const resolvedCode = !isPlaceholderOrSyntheticFriendCode(primary.friendCode)
+    ? primary.friendCode
+    : !isPlaceholderOrSyntheticFriendCode(secondary.friendCode)
+      ? secondary.friendCode
+      : primary.friendCode || secondary.friendCode;
+
+  const resolvedName =
+    normalizeDistinctPlayerNickname(primary.name) !== null
+      ? primary.name
+      : normalizeDistinctPlayerNickname(secondary.name) !== null
+        ? secondary.name
+        : primary.name;
+
+  return {
+    ...secondary,
+    ...primary,
+    userId: primary.userId,
+    name: resolvedName,
+    parkName: primary.parkName || secondary.parkName,
+    friendCode: resolvedCode,
+    avatarEmoji: primary.avatarEmoji || secondary.avatarEmoji || '🧙‍♂️',
+    house: resolvedHouse,
+    primaryValue: bestPrimary,
+    ratingScore: bestRating,
+    totalWins: bestWins,
+    bestStreak: bestStreak,
+    detailLabelVi: bestDetail,
+    updatedAt: Math.max(a.updatedAt || 0, b.updatedAt || 0),
+  };
+}
+
+/**
+ * Khử trùng lặp các bản ghi BXH đám mây của cùng 1 người chơi (do đổi UID tạm `hs_...` sang UID HPVN,
+ * trùng Mã Thung Lũng hoặc trùng biệt danh riêng).
+ */
+export function deduplicateCloudLeaderboardEntries(
+  entries: ReadonlyArray<CloudLeaderboardEntry>
+): CloudLeaderboardEntry[] {
+  const result: CloudLeaderboardEntry[] = [];
+  for (const raw of entries) {
+    if (!raw || !raw.userId) continue;
+    const uid = raw.userId.trim();
+    const code = (raw.friendCode || '').trim().toUpperCase();
+    const hasDistinctCode = !isPlaceholderOrSyntheticFriendCode(code);
+    const nick = normalizeDistinctPlayerNickname(raw.name);
+
+    const existingIdx = result.findIndex((ex) => {
+      if (ex.userId.trim() === uid) return true;
+      const exCode = (ex.friendCode || '').trim().toUpperCase();
+      if (hasDistinctCode && !isPlaceholderOrSyntheticFriendCode(exCode) && exCode === code) {
+        return true;
+      }
+      const exNick = normalizeDistinctPlayerNickname(ex.name);
+      return nick !== null && exNick !== null && nick === exNick;
+    });
+
+    if (existingIdx >= 0) {
+      result[existingIdx] = mergeCollidingCloudEntries(result[existingIdx], raw);
+    } else {
+      result.push(raw);
+    }
+  }
+  return result;
+}
+
+function collectCrossGameIdentityHints(
+  extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>
+): {
+  byUid: Map<string, CloudLeaderboardEntry>;
+  byCode: Map<string, CloudLeaderboardEntry>;
+  byNick: Map<string, CloudLeaderboardEntry>;
+} {
+  const allRaw: CloudLeaderboardEntry[] = [];
+  if (extraCloudEntries) allRaw.push(...extraCloudEntries);
+  for (const gid of SCORED_LEADERBOARD_GAMES) {
+    const cached = cloudEntriesMemoryCache[gid];
+    if (cached) allRaw.push(...cached);
+  }
+  const deduped = deduplicateCloudLeaderboardEntries(allRaw);
+  const byUid = new Map<string, CloudLeaderboardEntry>();
+  const byCode = new Map<string, CloudLeaderboardEntry>();
+  const byNick = new Map<string, CloudLeaderboardEntry>();
+  for (const ce of deduped) {
+    if (ce.userId) byUid.set(ce.userId, ce);
+    const code = (ce.friendCode || '').trim().toUpperCase();
+    if (!isPlaceholderOrSyntheticFriendCode(code)) byCode.set(code, ce);
+    const nick = normalizeDistinctPlayerNickname(ce.name);
+    if (nick !== null) byNick.set(nick, ce);
+  }
+  return { byUid, byCode, byNick };
+}
+
+function deduplicateFinalPoolRows(
+  pool: ReadonlyArray<Omit<LeaderboardRowEntry, 'rank'>>
+): Array<Omit<LeaderboardRowEntry, 'rank'>> {
+  const out: Array<Omit<LeaderboardRowEntry, 'rank'>> = [];
+  for (const row of pool) {
+    if (row.isSeededRival) {
+      out.push(row);
+      continue;
+    }
+    const rowCode = (row.friendCode || '').trim().toUpperCase();
+    const hasRowCode = !isPlaceholderOrSyntheticFriendCode(rowCode);
+    const rowNick = normalizeDistinctPlayerNickname(row.name);
+
+    const idx = out.findIndex((ex) => {
+      if (ex.isSeededRival) return false;
+      if (ex.id === row.id) return true;
+      const exCode = (ex.friendCode || '').trim().toUpperCase();
+      if (hasRowCode && !isPlaceholderOrSyntheticFriendCode(exCode) && exCode === rowCode) {
+        return true;
+      }
+      const exNick = normalizeDistinctPlayerNickname(ex.name);
+      return rowNick !== null && exNick !== null && rowNick === exNick;
+    });
+
+    if (idx === -1) {
+      out.push(row);
+      continue;
+    }
+
+    const existing = out[idx];
+    if (existing.isPlayer) {
+      if (row.primaryValue > existing.primaryValue) {
+        out[idx] = {
+          ...existing,
+          primaryValue: row.primaryValue,
+          primaryDisplayVi: row.primaryDisplayVi,
+          stars: Math.max(existing.stars, row.stars),
+          ratingScore: Math.max(existing.ratingScore, row.ratingScore),
+          ratingDisplayVi:
+            row.ratingScore > existing.ratingScore ? row.ratingDisplayVi : existing.ratingDisplayVi,
+          totalWins: Math.max(existing.totalWins, row.totalWins),
+          bestStreak: Math.max(existing.bestStreak, row.bestStreak),
+          league: row.league,
+        };
+      }
+      continue;
+    }
+    if (row.isPlayer) {
+      out[idx] = row;
+      continue;
+    }
+
+    // Giữa hai dòng người chơi khác bị trùng: ưu tiên dòng có điểm cao hơn / dữ liệu đám mây chuẩn hơn, đồng thời giữ liên kết bạn bè
+    const preferIncoming = compareEntries(row, existing) < 0;
+    const winner = preferIncoming ? row : existing;
+    const loser = preferIncoming ? existing : row;
+    out[idx] = {
+      ...loser,
+      ...winner,
+      isFriend: Boolean(winner.isFriend || loser.isFriend),
+      isCloudPlayer: Boolean(winner.isCloudPlayer || loser.isCloudPlayer),
+      neighborId: winner.neighborId ?? loser.neighborId,
+      friendCode: !isPlaceholderOrSyntheticFriendCode(winner.friendCode)
+        ? winner.friendCode
+        : loser.friendCode,
+    };
+  }
+  return out;
+}
+
 function buildRawPoolForScoredGame(
   state: GameState,
   gameId: LeaderboardGameId,
@@ -988,54 +1236,89 @@ function buildRawPoolForScoredGame(
   extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>
 ): Array<Omit<LeaderboardRowEntry, 'rank'>> {
   const scoredGameId = isScoredLeaderboardGame(gameId) ? gameId : 'match3';
+  const localUid = getClientLeaderboardUserId();
   const playerRaw = buildPlayerLeaderboardEntry(state, scoredGameId);
-  const neighbors = (state.neighborSocial?.neighbors ?? []).filter(
+  const playerNick = normalizeDistinctPlayerNickname(playerRaw.name);
+  const rawNeighbors = (state.neighborSocial?.neighbors ?? []).filter(
     (n) => !isNpcNeighborProfile(n)
   );
-  const effectiveCloud = extraCloudEntries ?? cloudEntriesMemoryCache[scoredGameId] ?? [];
+  const neighbors = deduplicateNeighborProfiles(rawNeighbors, {
+    ownUid: localUid !== 'local_player' ? localUid : undefined,
+    ownFriendCode: playerRaw.friendCode,
+    ownDisplayName: playerRaw.name,
+  });
+
+  const rawCloud = extraCloudEntries ?? cloudEntriesMemoryCache[scoredGameId] ?? [];
+  const effectiveCloud = deduplicateCloudLeaderboardEntries(rawCloud);
+  const identityHints = collectCrossGameIdentityHints(extraCloudEntries);
+
   const cloudByCode = new Map<string, CloudLeaderboardEntry>();
   const cloudByUid = new Map<string, CloudLeaderboardEntry>();
+  const cloudByNick = new Map<string, CloudLeaderboardEntry>();
   for (const ce of effectiveCloud) {
     if (!ce) continue;
     const ceCode = (ce.friendCode || '').trim().toUpperCase();
-    if (ceCode && !PLACEHOLDER_FRIEND_CODES.has(ceCode)) {
+    if (!isPlaceholderOrSyntheticFriendCode(ceCode)) {
       cloudByCode.set(ceCode, ce);
     }
     if (ce.userId) cloudByUid.set(ce.userId, ce);
+    const ceNick = normalizeDistinctPlayerNickname(ce.name);
+    if (ceNick !== null) cloudByNick.set(ceNick, ce);
   }
-  const friendCodeSet = new Set<string>(
-    neighbors
-      .map((n) => n.friendCode.trim().toUpperCase())
-      .filter((code) => !PLACEHOLDER_FRIEND_CODES.has(code))
-  );
-  const friendUidSet = new Set<string>(
-    neighbors.map((n) => n.remoteUserId || '').filter((uid) => uid.length > 0)
-  );
+
+  const matchedCloudUids = new Set<string>();
+  const friendCodeSet = new Set<string>();
+  const friendUidSet = new Set<string>();
+  const friendNickSet = new Set<string>();
+
   const friendEntries = neighbors.map((n) => {
     const cleanNeighborCode = n.friendCode.trim().toUpperCase();
+    const hasDistinctNeighborCode = !isPlaceholderOrSyntheticFriendCode(cleanNeighborCode);
+    const neighborNick = normalizeDistinctPlayerNickname(n.name);
+
+    if (hasDistinctNeighborCode) friendCodeSet.add(cleanNeighborCode);
+    if (n.remoteUserId) friendUidSet.add(n.remoteUserId);
+    if (neighborNick !== null) friendNickSet.add(neighborNick);
+
     const cMatch =
       (n.remoteUserId ? cloudByUid.get(n.remoteUserId) : undefined) ??
-      (!PLACEHOLDER_FRIEND_CODES.has(cleanNeighborCode)
-        ? cloudByCode.get(cleanNeighborCode)
-        : undefined);
-    return buildNeighborLeaderboardEntry(n, scoredGameId, cMatch);
+      (hasDistinctNeighborCode ? cloudByCode.get(cleanNeighborCode) : undefined) ??
+      (neighborNick !== null ? cloudByNick.get(neighborNick) : undefined);
+
+    if (cMatch?.userId) {
+      matchedCloudUids.add(cMatch.userId);
+      const cCode = (cMatch.friendCode || '').trim().toUpperCase();
+      if (!isPlaceholderOrSyntheticFriendCode(cCode)) friendCodeSet.add(cCode);
+      const cNick = normalizeDistinctPlayerNickname(cMatch.name);
+      if (cNick !== null) friendNickSet.add(cNick);
+    }
+
+    const hint =
+      (n.remoteUserId ? identityHints.byUid.get(n.remoteUserId) : undefined) ??
+      (hasDistinctNeighborCode ? identityHints.byCode.get(cleanNeighborCode) : undefined) ??
+      (neighborNick !== null ? identityHints.byNick.get(neighborNick) : undefined);
+
+    return buildNeighborLeaderboardEntry(n, scoredGameId, cMatch, hint);
   });
 
   const pool: Array<Omit<LeaderboardRowEntry, 'rank'>> = [playerRaw, ...friendEntries];
 
   if (scope === 'valley') {
-    const localUid = getClientLeaderboardUserId();
     const normPlayerCode = playerRaw.friendCode.trim().toUpperCase();
-    const hasDistinctPlayerCode = !PLACEHOLDER_FRIEND_CODES.has(normPlayerCode);
+    const hasDistinctPlayerCode = !isPlaceholderOrSyntheticFriendCode(normPlayerCode);
     for (const ce of effectiveCloud) {
       if (!ce || !ce.userId) continue;
       const normCode = (ce.friendCode || '').trim().toUpperCase();
-      const hasDistinctCloudCode = !PLACEHOLDER_FRIEND_CODES.has(normCode);
+      const hasDistinctCloudCode = !isPlaceholderOrSyntheticFriendCode(normCode);
+      const ceNick = normalizeDistinctPlayerNickname(ce.name);
       if (
         ce.userId === localUid ||
+        matchedCloudUids.has(ce.userId) ||
         friendUidSet.has(ce.userId) ||
         (hasDistinctPlayerCode && hasDistinctCloudCode && normCode === normPlayerCode) ||
-        (hasDistinctCloudCode && friendCodeSet.has(normCode))
+        (hasDistinctCloudCode && friendCodeSet.has(normCode)) ||
+        (playerNick !== null && ceNick !== null && ceNick === playerNick) ||
+        (ceNick !== null && friendNickSet.has(ceNick))
       ) {
         continue;
       }
@@ -1097,7 +1380,7 @@ function buildRawPoolForScoredGame(
     }
   }
 
-  return pool;
+  return deduplicateFinalPoolRows(pool);
 }
 
 function buildUnifiedHouseCupStandings(
@@ -1131,6 +1414,7 @@ function buildUnifiedHouseCupStandings(
     });
   }
 
+  const canonicalHouseByMember = new Map<string, HouseName>();
   for (const gid of SCORED_LEADERBOARD_GAMES) {
     const gPool = buildRawPoolForScoredGame(
       state,
@@ -1139,16 +1423,30 @@ function buildUnifiedHouseCupStandings(
       gid === activeGameId ? extraCloudEntries : undefined
     );
     for (const row of gPool) {
-      const h: HouseName = ALL_HOGWARTS_HOUSES.includes(row.house) ? row.house : 'Gryffindor';
-      const rec = map.get(h)!;
+      const rawHouse: HouseName = ALL_HOGWARTS_HOUSES.includes(row.house)
+        ? row.house
+        : 'Gryffindor';
       const normMemberCode = (row.friendCode || '').trim().toUpperCase();
+      const distinctNick = normalizeDistinctPlayerNickname(row.name);
       const memberKey = row.isPlayer
         ? 'self'
-        : !PLACEHOLDER_FRIEND_CODES.has(normMemberCode) &&
-            !row.id.startsWith('cloud:') &&
-            !row.id.startsWith('rival:')
-          ? normMemberCode
-          : row.id;
+        : row.isSeededRival
+          ? row.id
+          : distinctNick !== null
+            ? `nick:${distinctNick}`
+            : !isPlaceholderOrSyntheticFriendCode(normMemberCode)
+              ? `code:${normMemberCode}`
+              : row.id;
+      const prevCanonical = canonicalHouseByMember.get(memberKey);
+      const h: HouseName =
+        prevCanonical && (prevCanonical !== 'Gryffindor' || rawHouse === 'Gryffindor')
+          ? prevCanonical
+          : rawHouse;
+      if (prevCanonical && prevCanonical !== h) {
+        map.get(prevCanonical)?.memberKeys.delete(memberKey);
+      }
+      canonicalHouseByMember.set(memberKey, h);
+      const rec = map.get(h)!;
       rec.memberKeys.add(memberKey);
       rec.totalPrimaryValue += Math.max(0, row.primaryValue);
       rec.totalStars += Math.max(0, row.stars);
@@ -1487,7 +1785,7 @@ export function setCachedCloudLeaderboardEntries(
   gameId: LeaderboardGameId,
   entries: ReadonlyArray<CloudLeaderboardEntry>
 ): void {
-  cloudEntriesMemoryCache[gameId] = [...entries];
+  cloudEntriesMemoryCache[gameId] = deduplicateCloudLeaderboardEntries(entries);
 }
 
 export function clearCachedCloudLeaderboards(): void {
@@ -1553,7 +1851,7 @@ export function hydrateCloudLeaderboardsFromSnapshot(rawLeaderboards: unknown): 
         if (parsed) cleaned.push(parsed);
       }
     }
-    cloudEntriesMemoryCache[gid] = cleaned;
+    cloudEntriesMemoryCache[gid] = deduplicateCloudLeaderboardEntries(cleaned);
     updated = true;
   }
   return updated;
@@ -1634,9 +1932,11 @@ export async function fetchCloudLeaderboardEntries(
     if (!res.ok) return cloudEntriesMemoryCache[gameId] ?? [];
     const data = (await res.json()) as { entries?: Array<Record<string, unknown>> };
     if (Array.isArray(data?.entries)) {
-      const cleaned = data.entries
-        .map((r) => (r && typeof r === 'object' ? sanitizeCloudEntry(r) : null))
-        .filter((r): r is CloudLeaderboardEntry => r !== null);
+      const cleaned = deduplicateCloudLeaderboardEntries(
+        data.entries
+          .map((r) => (r && typeof r === 'object' ? sanitizeCloudEntry(r) : null))
+          .filter((r): r is CloudLeaderboardEntry => r !== null)
+      );
       cloudEntriesMemoryCache[gameId] = cleaned;
       return cleaned;
     }
@@ -1716,9 +2016,11 @@ export async function submitPlayerCloudLeaderboardEntry(
     if (res.ok) {
       const data = (await res.json()) as { entries?: Array<Record<string, unknown>> };
       if (Array.isArray(data?.entries)) {
-        const cleaned = data.entries
-          .map((r) => (r && typeof r === 'object' ? sanitizeCloudEntry(r) : null))
-          .filter((r): r is CloudLeaderboardEntry => r !== null);
+        const cleaned = deduplicateCloudLeaderboardEntries(
+          data.entries
+            .map((r) => (r && typeof r === 'object' ? sanitizeCloudEntry(r) : null))
+            .filter((r): r is CloudLeaderboardEntry => r !== null)
+        );
         cloudEntriesMemoryCache[gameId] = cleaned;
       }
     }
