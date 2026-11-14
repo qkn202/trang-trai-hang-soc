@@ -111,11 +111,11 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
     if (g.specialKind === 'color_bomb') {
       return {
         visualHtml: pictureSpriteHtml(
-          `/paintings/candy-hogwarts/candy-colorbomb.webp?v=${CANDY_ASSET_REV}`,
-          `/paintings/candy-hogwarts/candy-colorbomb.png?v=${CANDY_ASSET_REV}`,
+          `/paintings/candy-hogwarts/powerup-rainbow.webp?v=${CANDY_ASSET_REV}`,
+          `/paintings/candy-hogwarts/powerup-rainbow.png?v=${CANDY_ASSET_REV}`,
           'm3-goal-sprite'
         ),
-        label: g.label || 'Kẹo Nấm Truffle',
+        label: g.label || 'Quả Cầu Vồng',
         accent: '#b45309',
         countText: g.completed ? '✓' : `${g.current}/${g.target ?? 1}`,
       };
@@ -123,11 +123,11 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
     if (g.specialKind === 'wrapped') {
       return {
         visualHtml: pictureSpriteHtml(
-          `/paintings/candy-hogwarts/candy-0-wrapped.webp?v=${CANDY_ASSET_REV}`,
-          `/paintings/candy-hogwarts/candy-0-wrapped.png?v=${CANDY_ASSET_REV}`,
+          `/paintings/candy-hogwarts/powerup-bomb.webp?v=${CANDY_ASSET_REV}`,
+          `/paintings/candy-hogwarts/powerup-bomb.png?v=${CANDY_ASSET_REV}`,
           'm3-goal-sprite'
         ),
-        label: g.label || 'Kẹo Gói Nổ',
+        label: g.label || 'Bom & Thuốc Nổ',
         accent: '#f97316',
         countText: g.completed ? '✓' : `${g.current}/${g.target ?? 1}`,
       };
@@ -135,18 +135,18 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
     if (g.specialKind === 'striped') {
       return {
         visualHtml: pictureSpriteHtml(
-          `/paintings/candy-hogwarts/candy-3-sh.webp?v=${CANDY_ASSET_REV}`,
-          `/paintings/candy-hogwarts/candy-3-sh.png?v=${CANDY_ASSET_REV}`,
+          `/paintings/candy-hogwarts/powerup-firecracker.webp?v=${CANDY_ASSET_REV}`,
+          `/paintings/candy-hogwarts/powerup-firecracker.png?v=${CANDY_ASSET_REV}`,
           'm3-goal-sprite'
         ),
-        label: g.label || 'Kẹo Sọc Kem',
-        accent: '#0ea5e9',
+        label: g.label || 'Pháo Hoa Nổ',
+        accent: '#ef4444',
         countText: g.completed ? '✓' : `${g.current}/${g.target ?? 1}`,
       };
     }
     return {
       visualHtml: CANDY_OBSTACLE_ICONS.special_seeker,
-      label: g.label || 'Cánh Vàng Snitch',
+      label: g.label || 'Chong Chóng Snitch',
       accent: '#eab308',
       countText: g.completed ? '✓' : `${g.current}/${g.target ?? 1}`,
     };
@@ -895,10 +895,14 @@ export class Match3ModalController {
         ? `<span class="m3-hint-accent">🪄 <strong>Đổi Kẹo</strong>: Chọn ô kề bên thứ 2 để tráo tự do!</span>`
         : `<span class="m3-hint-accent">🪄 <strong>Đổi Kẹo</strong>: Chọn viên kẹo thứ 1</span>`;
     }
+    const rainbowPct = Math.max(0, Math.min(100, Math.round(snap.rainbowCharge || 0)));
+    const rainbowTag = snap.superRainbow
+      ? `⚡🌈 <strong>Siêu Cầu Vồng ${rainbowPct}%</strong>`
+      : `🌈 Cầu Vồng ${rainbowPct}%`;
     if (snap.level.seasonId === 7) {
-      return `<span>💀 Linh Giá Khiên Hồn: Phá khiên bằng Kẹo Phép hoặc Búa Kẹo!</span>`;
+      return `<span>💀 Linh Giá Khiên Hồn: Phá khiên bằng Pháo/Bom/TNT hoặc Búa Kẹo • ${rainbowTag}</span>`;
     }
-    return `<span>✨ Ghép 4 tạo Kẹo Sọc • Vuông 2×2 tạo Cánh Vàng Snitch</span>`;
+    return `<span>🧨 4=Pháo • 5=Bom • 6=Thuốc Nổ • 7+=TNT (Chạm đúp/Tráo nổ ngay) • ${rainbowTag}</span>`;
   }
 
   private syncHudSnapshot(snap: CandyHudStateSnapshot | null): void {

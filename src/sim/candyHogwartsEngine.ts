@@ -819,6 +819,7 @@ export class CandyHogwartsEngine {
       kbCursor: this.kbCursor,
       hintPair: this.hintPair,
       activeBooster: this.activeBooster,
+      superRainbow: this.superRainbow,
       vfx: this.vfx,
     };
   }

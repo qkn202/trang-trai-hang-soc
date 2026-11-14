@@ -421,7 +421,7 @@ export function toEstateHouseName(houseId: CandyHouseId): HouseName {
   return CANDY_HOUSES[houseId].houseName;
 }
 
-export const CANDY_ASSET_REV = 'hs2';
+export const CANDY_ASSET_REV = 'hs3';
 
 export const CANDY_TILE_TYPES: ReadonlyArray<CandyTileTypeDef> = [
   {
@@ -509,7 +509,7 @@ export const CANDY_OBSTACLE_ICONS: Record<string, string> = {
   horcrux: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><polygon points="22,3 38,14 34,36 22,41 10,36 6,14" fill="#1e1b4b" stroke="#fde047" stroke-width="2.8"/><polygon points="22,10 31,18 28,32 22,35 16,32 13,18" fill="#064e3b" stroke="#34d399" stroke-width="2"/><circle cx="22" cy="22" r="4.5" fill="#a855f7" stroke="#fef08a" stroke-width="1.8"/></svg>`,
   boss: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><polygon points="22,3 39,13 35,35 22,41 9,35 5,13" fill="#581c87" stroke="#fde047" stroke-width="2.8"/><path d="M15 19L20 23M29 19L24 23" stroke="#f87171" stroke-width="3" stroke-linecap="round"/><path d="M16 31C19 28 25 28 28 31" stroke="#fde047" stroke-width="2.6" stroke-linecap="round"/></svg>`,
   score: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><path d="M22 4L27.5 15.5L40 17.3L31 26.1L33.1 38.5L22 32.6L10.9 38.5L13 26.1L4 17.3L16.5 15.5L22 4Z" fill="#f59e0b" stroke="#fef9c3" stroke-width="2.6"/></svg>`,
-  special_seeker: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><path d="M3 16C10 10 15 14 17 20C11 22 6 21 3 16Z" fill="#fde047"/><path d="M41 16C34 10 29 14 27 20C33 22 38 21 41 16Z" fill="#fde047"/><circle cx="22" cy="23" r="10" fill="#f59e0b" stroke="#fef9c3" stroke-width="2.5"/></svg>`,
+  special_seeker: `<picture><source srcset="/paintings/candy-hogwarts/powerup-seeker.webp?v=${CANDY_ASSET_REV}" type="image/webp" /><img src="/paintings/candy-hogwarts/powerup-seeker.png?v=${CANDY_ASSET_REV}" alt="" class="m3-goal-sprite" /></picture>`,
 };
 
 export const CANDY_COMBO_PRAISES = [

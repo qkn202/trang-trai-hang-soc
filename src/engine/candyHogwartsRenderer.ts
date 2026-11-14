@@ -122,6 +122,7 @@ export interface CandyRenderState {
   kbCursor: { r: number; c: number } | null;
   hintPair: [{ r: number; c: number }, { r: number; c: number }] | null;
   activeBooster: 'hammer' | 'swap' | null;
+  superRainbow?: boolean;
   vfx: CandyVfxBundle;
 }
 
@@ -228,11 +229,13 @@ export class CandyHogwartsBoardRenderer {
     const q = `?v=${CANDY_ASSET_REV}`;
     for (let i = 0; i < 6; i++) {
       load(`c_${i}`, `/paintings/candy-hogwarts/candy-${i}.webp${q}`);
-      load(`c_${i}_sh`, `/paintings/candy-hogwarts/candy-${i}-sh.webp${q}`);
-      load(`c_${i}_sv`, `/paintings/candy-hogwarts/candy-${i}-sv.webp${q}`);
-      load(`c_${i}_wr`, `/paintings/candy-hogwarts/candy-${i}-wrapped.webp${q}`);
     }
-    load('color_bomb', `/paintings/candy-hogwarts/candy-colorbomb.webp${q}`);
+    load('powerup_firecracker', `/paintings/candy-hogwarts/powerup-firecracker.webp${q}`);
+    load('powerup_bomb', `/paintings/candy-hogwarts/powerup-bomb.webp${q}`);
+    load('powerup_dynamite', `/paintings/candy-hogwarts/powerup-dynamite.webp${q}`);
+    load('powerup_tnt', `/paintings/candy-hogwarts/powerup-tnt.webp${q}`);
+    load('powerup_seeker', `/paintings/candy-hogwarts/powerup-seeker.webp${q}`);
+    load('color_bomb', `/paintings/candy-hogwarts/powerup-rainbow.webp${q}`);
     load('chocolate_block', `/paintings/candy-hogwarts/candy-chocolate.webp${q}`);
     load('chocolate_deluxe', `/paintings/candy-hogwarts/candy-chocolate-deluxe.webp${q}`);
     load('frosting_waffle', `/paintings/candy-hogwarts/candy-frosting.webp${q}`);
@@ -240,20 +243,21 @@ export class CandyHogwartsBoardRenderer {
   }
 
   private getSpriteForPiece(piece: CandyBoardPiece): HTMLImageElement | undefined {
-    const col = piece.color >= 0 && piece.color < 6 ? piece.color : 0;
     if (piece.special === 'color_bomb') return this.sprites.color_bomb;
-    if (piece.special === 'striped_h' || piece.special === 'firecracker') {
-      return this.sprites[`c_${col}_sh`];
-    }
-    if (piece.special === 'striped_v') return this.sprites[`c_${col}_sv`];
     if (
-      piece.special === 'wrapped' ||
-      piece.special === 'bomb' ||
-      piece.special === 'dynamite' ||
-      piece.special === 'tnt'
+      piece.special === 'firecracker' ||
+      piece.special === 'striped_h' ||
+      piece.special === 'striped_v'
     ) {
-      return this.sprites[`c_${col}_wr`];
+      return this.sprites.powerup_firecracker;
     }
+    if (piece.special === 'bomb' || piece.special === 'wrapped') {
+      return this.sprites.powerup_bomb;
+    }
+    if (piece.special === 'dynamite') return this.sprites.powerup_dynamite;
+    if (piece.special === 'tnt') return this.sprites.powerup_tnt;
+    if (piece.special === 'seeker') return this.sprites.powerup_seeker;
+    const col = piece.color >= 0 && piece.color < 6 ? piece.color : 0;
     return this.sprites[`c_${col}`];
   }
 
@@ -424,6 +428,7 @@ export class CandyHogwartsBoardRenderer {
       kbCursor,
       hintPair,
       activeBooster,
+      superRainbow = false,
       vfx,
     } = state;
     this.resize(size);
@@ -634,8 +639,8 @@ export class CandyHogwartsBoardRenderer {
           scale *= 1.05 + 0.05 * Math.sin(now * 0.01);
         } else if (piece.primedWrapped) {
           scale *= 1.12 + 0.08 * Math.sin(now * 0.025);
-        } else if (piece.special === 'wrapped') {
-          scale *= 1.02 + 0.025 * Math.sin(now * 0.008 + r + c);
+        } else if (piece.special) {
+          scale *= 1.02 + 0.025 * Math.sin(now * 0.0085 + r * 1.3 + c);
         }
 
         const isPetrified = (petrify[r]?.[c] || 0) > 0;
@@ -646,7 +651,8 @@ export class CandyHogwartsBoardRenderer {
           cy,
           cs * 0.94 * scale,
           isPetrified ? 0.55 : (piece.alpha ?? 1),
-          now
+          now,
+          superRainbow
         );
 
         if (isPetrified) {
@@ -1357,7 +1363,8 @@ export class CandyHogwartsBoardRenderer {
     cy: number,
     drawSize: number,
     alpha = 1,
-    now = 0
+    now = 0,
+    superRainbow = false
   ): void {
     if (drawSize <= 2) return;
     ctx.save();
@@ -1387,12 +1394,12 @@ export class CandyHogwartsBoardRenderer {
       ctx.restore();
     }
 
-    if (piece.special === 'seeker') {
-      this.drawGoldenSeekerWings(ctx, cx, cy, drawSize, now);
+    if (piece.special === 'color_bomb' && superRainbow) {
+      this.drawSuperRainbowAura(ctx, cx, cy, drawSize, now);
     }
 
     const sprite = this.getSpriteForPiece(piece);
-    const renderScale = piece.special === 'seeker' ? 0.78 : 1;
+    const renderScale = piece.special ? 1.03 : 1;
     const sSize = drawSize * renderScale;
 
     ctx.beginPath();
@@ -1401,7 +1408,17 @@ export class CandyHogwartsBoardRenderer {
     ctx.fill();
 
     if (sprite && sprite.complete && sprite.naturalWidth > 0) {
-      ctx.drawImage(sprite, cx - sSize / 2, cy - sSize / 2, sSize, sSize);
+      if (piece.special === 'seeker') {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(Math.sin(now * 0.007 + piece.id) * 0.08);
+        ctx.drawImage(sprite, -sSize / 2, -sSize / 2, sSize, sSize);
+        ctx.restore();
+      } else {
+        ctx.drawImage(sprite, cx - sSize / 2, cy - sSize / 2, sSize, sSize);
+      }
+    } else if (piece.special) {
+      this.drawPowerupFallbackShape(ctx, piece.special, cx, cy, sSize);
     } else {
       const r = sSize * 0.4;
       ctx.fillStyle = CANDY_TILE_TYPES[piece.color]?.color || '#ff1e27';
@@ -1410,12 +1427,16 @@ export class CandyHogwartsBoardRenderer {
       ctx.fill();
     }
 
-    if (piece.special === 'seeker') {
-      ctx.beginPath();
-      ctx.arc(cx, cy, sSize * 0.43, 0, Math.PI * 2);
-      ctx.lineWidth = 2.4;
-      ctx.strokeStyle = '#fef08a';
-      ctx.stroke();
+    if (
+      piece.special === 'firecracker' ||
+      piece.special === 'striped_h' ||
+      piece.special === 'striped_v' ||
+      piece.special === 'bomb' ||
+      piece.special === 'wrapped' ||
+      piece.special === 'dynamite' ||
+      piece.special === 'tnt'
+    ) {
+      this.drawExplosiveFuseTwinkle(ctx, piece.special, cx, cy, sSize, now + piece.id * 37);
     }
 
     if (piece.bombTimer !== null && piece.bombTimer !== undefined) {
@@ -1426,6 +1447,108 @@ export class CandyHogwartsBoardRenderer {
       this.drawSugarKeyBadge(ctx, cx, cy, drawSize, now);
     }
 
+    ctx.restore();
+  }
+
+  private drawExplosiveFuseTwinkle(
+    ctx: CanvasRenderingContext2D,
+    special: CandySpecialType,
+    cx: number,
+    cy: number,
+    sSize: number,
+    t: number
+  ): void {
+    let sx = cx;
+    let sy = cy;
+    let baseR = sSize * 0.12;
+    if (special === 'firecracker' || special === 'striped_h' || special === 'striped_v') {
+      sx = cx - sSize * 0.31;
+      sy = cy + sSize * 0.31;
+      baseR = sSize * 0.11;
+    } else if (special === 'bomb' || special === 'wrapped') {
+      sx = cx + sSize * 0.31;
+      sy = cy - sSize * 0.31;
+      baseR = sSize * 0.12;
+    } else if (special === 'dynamite') {
+      sx = cx + sSize * 0.11;
+      sy = cy - sSize * 0.36;
+      baseR = sSize * 0.13;
+    } else if (special === 'tnt') {
+      sx = cx - sSize * 0.2;
+      sy = cy - sSize * 0.31;
+      baseR = sSize * 0.16;
+    }
+
+    const flicker = 0.65 + 0.35 * Math.sin(t * 0.026);
+    const r = baseR * flicker;
+    ctx.save();
+    const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
+    g.addColorStop(0, 'rgba(255, 255, 224, 0.92)');
+    g.addColorStop(0.45, 'rgba(251, 191, 36, 0.55)');
+    g.addColorStop(1, 'rgba(249, 115, 22, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  private drawSuperRainbowAura(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    drawSize: number,
+    now: number
+  ): void {
+    const pulse = 0.94 + 0.08 * Math.sin(now * 0.012);
+    const outerR = drawSize * 0.54 * pulse;
+    ctx.save();
+    const grad = ctx.createRadialGradient(cx, cy, drawSize * 0.18, cx, cy, outerR);
+    grad.addColorStop(0, 'rgba(254, 240, 138, 0.55)');
+    grad.addColorStop(0.55, 'rgba(56, 189, 248, 0.42)');
+    grad.addColorStop(0.82, 'rgba(232, 121, 249, 0.34)');
+    grad.addColorStop(1, 'rgba(232, 121, 249, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.translate(cx, cy);
+    ctx.rotate(now * 0.0032);
+    ctx.setLineDash([5, 4]);
+    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = 'rgba(254, 240, 138, 0.9)';
+    ctx.beginPath();
+    ctx.arc(0, 0, drawSize * 0.47, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private drawPowerupFallbackShape(
+    ctx: CanvasRenderingContext2D,
+    special: CandySpecialType,
+    cx: number,
+    cy: number,
+    sSize: number
+  ): void {
+    const r = sSize * 0.38;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle =
+      special === 'tnt'
+        ? '#b45309'
+        : special === 'dynamite' || special === 'firecracker' || special === 'striped_h' || special === 'striped_v'
+          ? '#dc2626'
+          : special === 'seeker'
+            ? '#eab308'
+            : special === 'color_bomb'
+              ? '#ec4899'
+              : '#334155';
+    ctx.fill();
+    ctx.lineWidth = 2.4;
+    ctx.strokeStyle = '#fde047';
+    ctx.stroke();
     ctx.restore();
   }
 

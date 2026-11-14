@@ -437,13 +437,21 @@ describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
       getContext: () => null,
     } as unknown as HTMLCanvasElement);
 
-    // 6*4 candy variants + color_bomb + chocolate_block + chocolate_deluxe + frosting_waffle + swirl_piece = 29
-    expect(instances).toHaveLength(29);
+    // 6 normal candies + 6 Gardenscapes colorless power-ups (firecracker, bomb, dynamite, tnt, seeker, rainbow) + 4 obstacles = 16
+    expect(instances).toHaveLength(16);
     const srcs = instances.map((im) => im.src);
+    expect(srcs).toContain(`/paintings/candy-hogwarts/powerup-firecracker.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/paintings/candy-hogwarts/powerup-bomb.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/paintings/candy-hogwarts/powerup-dynamite.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/paintings/candy-hogwarts/powerup-tnt.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/paintings/candy-hogwarts/powerup-seeker.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/paintings/candy-hogwarts/powerup-rainbow.webp?v=${CANDY_ASSET_REV}`);
     expect(srcs).toContain(`/paintings/candy-hogwarts/candy-chocolate.webp?v=${CANDY_ASSET_REV}`);
     expect(srcs).toContain(`/paintings/candy-hogwarts/candy-chocolate-deluxe.webp?v=${CANDY_ASSET_REV}`);
     expect(srcs).toContain(`/paintings/candy-hogwarts/candy-frosting.webp?v=${CANDY_ASSET_REV}`);
     expect(srcs).toContain(`/paintings/candy-hogwarts/candy-swirl.webp?v=${CANDY_ASSET_REV}`);
+    // Ensure old Candy Crush striped/wrapped sprites are NOT loaded on the board
+    expect(srcs.some((s) => /-sh\.webp|-sv\.webp|-wrapped\.webp|candy-colorbomb\.webp/.test(s))).toBe(false);
 
     // Verify query-preserving .png fallback on .webp error
     const firstImg = instances[0];
