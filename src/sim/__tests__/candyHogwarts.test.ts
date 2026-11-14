@@ -500,6 +500,10 @@ describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
     expect(contentEl.innerHTML).toContain('pa-layout-shell');
     expect(contentEl.innerHTML).toContain('pa-side-dock');
     expect(contentEl.innerHTML).toContain('m3-dock-hud');
+    expect(contentEl.innerHTML).toContain('btnM3RainbowMeter');
+    expect(contentEl.innerHTML).toContain('m3RainbowProgressBar');
+    expect(contentEl.innerHTML).toContain('m3RainbowFill');
+    expect(contentEl.innerHTML).toContain('m3RainbowPctVal');
     expect(contentEl.innerHTML).toContain('m3-booster-row');
     expect(contentEl.innerHTML).not.toContain('m3-layout-shell');
     expect(contentEl.innerHTML).not.toContain('m3-patronus-box');

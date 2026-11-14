@@ -1010,6 +1010,40 @@ export class Match3ModalController {
       hintBanner.innerHTML = this.buildActionHintHtml(snap);
     }
 
+    // Gardenscapes Rainbow Blast Energy Meter
+    const rainbowPct = Math.max(0, Math.min(100, Math.round(snap.rainbowCharge || 0)));
+    const isSuperRainbow = Boolean(snap.superRainbow);
+    const rainbowBtn = box.querySelector('#btnM3RainbowMeter') as HTMLButtonElement | null;
+    if (rainbowBtn) {
+      rainbowBtn.dataset.super = String(isSuperRainbow);
+      rainbowBtn.dataset.hot = String(rainbowPct >= 75);
+      rainbowBtn.title = `${
+        isSuperRainbow
+          ? '⚡ Siêu Cầu Vồng đang bật (quét sạch 2 màu cùng lúc)!'
+          : 'Thanh năng lượng Bom Cầu Vồng'
+      } (${rainbowPct}/100%) — Nổ Chong Chóng (+22%), Pháo (+28%), Bom (+45%), Thuốc Nổ (+68%), TNT (+95%). Đủ 100% tự thả 1 Quả Cầu Vồng lên bàn!`;
+    }
+    const rainbowSuperBadge = box.querySelector('#m3RainbowSuperBadge') as HTMLElement | null;
+    if (rainbowSuperBadge) {
+      rainbowSuperBadge.hidden = !isSuperRainbow;
+    }
+    const rainbowLabel = box.querySelector('#m3RainbowLabelText') as HTMLElement | null;
+    if (rainbowLabel) {
+      rainbowLabel.textContent = isSuperRainbow ? 'Siêu Cầu Vồng' : 'Cầu Vồng';
+    }
+    const rainbowProgress = box.querySelector('#m3RainbowProgressBar') as HTMLElement | null;
+    if (rainbowProgress) {
+      rainbowProgress.setAttribute('aria-valuenow', String(rainbowPct));
+    }
+    const rainbowFill = box.querySelector('#m3RainbowFill') as HTMLElement | null;
+    if (rainbowFill) {
+      rainbowFill.style.width = `${rainbowPct}%`;
+    }
+    const rainbowPctEl = box.querySelector('#m3RainbowPctVal') as HTMLElement | null;
+    if (rainbowPctEl) {
+      rainbowPctEl.textContent = `${rainbowPct}%`;
+    }
+
     // Companion button
     const compBtn = box.querySelector('#btnM3TriggerCompanion') as HTMLButtonElement | null;
     if (compBtn) {
@@ -1564,6 +1598,45 @@ export class Match3ModalController {
     const compSpriteKey = compSpriteMap[comp.speciesId] ?? 'beast_niffler_play';
     const compShortName = compShortMap[comp.speciesId] ?? 'Niffler';
     const pieQty = this.sim.getFarmItemCount('cinnamon_apple_pie');
+    const rainbowPct = Math.max(0, Math.min(100, Math.round(snap.rainbowCharge || 0)));
+    const isSuperRainbow = Boolean(snap.superRainbow);
+
+    const rainbowMeterHtml = `
+      <button
+        id="btnM3RainbowMeter"
+        type="button"
+        class="m3-rainbow-meter"
+        data-super="${isSuperRainbow}"
+        data-hot="${rainbowPct >= 75}"
+        title="${
+          isSuperRainbow
+            ? '⚡ Siêu Cầu Vồng đang bật (quét sạch 2 màu cùng lúc)!'
+            : 'Thanh năng lượng Bom Cầu Vồng'
+        } (${rainbowPct}/100%) — Nổ Chong Chóng (+22%), Pháo (+28%), Bom (+45%), Thuốc Nổ (+68%), TNT (+95%). Đủ 100% tự thả 1 Quả Cầu Vồng lên bàn!"
+      >
+        <span class="m3-rainbow-orb-wrap">
+          ${pictureSpriteHtml(
+            `/paintings/candy-hogwarts/powerup-rainbow.webp?v=${CANDY_ASSET_REV}`,
+            `/paintings/candy-hogwarts/powerup-rainbow.png?v=${CANDY_ASSET_REV}`,
+            'm3-rainbow-orb-icon'
+          )}
+          <span id="m3RainbowSuperBadge" class="m3-rainbow-super-badge" ${isSuperRainbow ? '' : 'hidden'}>⚡</span>
+        </span>
+        <span id="m3RainbowLabelText" class="m3-rainbow-lbl">${isSuperRainbow ? 'Siêu Cầu Vồng' : 'Cầu Vồng'}</span>
+        <span
+          id="m3RainbowProgressBar"
+          class="m3-rainbow-track"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="${rainbowPct}"
+          aria-label="Thanh năng lượng Bom Cầu Vồng"
+        >
+          <span id="m3RainbowFill" class="m3-rainbow-fill" style="width:${rainbowPct}%"></span>
+        </span>
+        <strong id="m3RainbowPctVal" class="m3-rainbow-pct">${rainbowPct}%</strong>
+      </button>
+    `;
 
     const synergyDockHtml = `
       <div class="aaa-synergy-dock" role="region" aria-label="Bánh Táo và Đồng hành Niffler">
@@ -1608,6 +1681,7 @@ export class Match3ModalController {
             <div class="m3-goals-list">
               ${goalsHtml}
             </div>
+            ${rainbowMeterHtml}
           </div>
 
           ${synergyDockHtml}
@@ -1860,6 +1934,25 @@ export class Match3ModalController {
 
     box.querySelector('#btnM3PhoenixTalisman')?.addEventListener('click', () => {
       void this.triggerMatch3Talisman();
+    });
+
+    // Rainbow Blast Energy Meter
+    box.querySelector('#btnM3RainbowMeter')?.addEventListener('click', () => {
+      if (!this.engine) return;
+      this.sim.audio.playClick();
+      const snap = this.engine.getHudSnapshot();
+      const pct = Math.max(0, Math.min(100, Math.round(snap?.rainbowCharge || 0)));
+      if (snap?.superRainbow) {
+        this.showToast(
+          `⚡🌈 Siêu Cầu Vồng: ${pct}/100% — Nổ Chong Chóng (+22%), Pháo (+28%), Bom (+45%), Thuốc Nổ (+68%), TNT (+95%) để tự thả Siêu Cầu Vồng quét 2 màu!`,
+          '🌈'
+        );
+      } else {
+        this.showToast(
+          `🌈 Năng lượng Cầu Vồng: ${pct}/100% — Nổ Chong Chóng (+22%), Pháo (+28%), Bom (+45%), Thuốc Nổ (+68%), TNT (+95%). Đủ 100% tự thả 1 Bom Cầu Vồng!`,
+          '🌈'
+        );
+      }
     });
 
     // Farm Synergy Dock

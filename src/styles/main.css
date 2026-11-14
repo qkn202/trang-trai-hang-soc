@@ -318,6 +318,27 @@
   --m3-patronus-cast-glow: rgba(125, 211, 252, 0.58);
   --m3-patronus-ready-ink: #082f49;
   --m3-patronus-muted-ink: #cbd5e1;
+  --m3-rainbow-shell-top: #4b2410;
+  --m3-rainbow-shell-bot: #2b1307;
+  --m3-rainbow-track-bg: rgba(20, 9, 4, 0.82);
+  --m3-rainbow-fill-grad: linear-gradient(
+    90deg,
+    #f97316 0%,
+    #facc15 24%,
+    #22c55e 48%,
+    #38bdf8 74%,
+    #d946ef 100%
+  );
+  --m3-super-rainbow-fill-grad: linear-gradient(
+    90deg,
+    #fde047 0%,
+    #fb7185 22%,
+    #c084fc 48%,
+    #38bdf8 74%,
+    #fef08a 100%
+  );
+  --m3-rainbow-hot-glow: rgba(250, 204, 21, 0.52);
+  --m3-super-rainbow-glow: rgba(217, 70, 239, 0.56);
   --m3-house-pill-bg: rgba(15, 23, 42, 0.52);
   --m3-house-pill-border: rgba(254, 240, 138, 0.34);
   --m3-boss-track-bg: rgba(24, 9, 18, 0.78);
@@ -16005,6 +16026,151 @@ dialog.bulldoze-confirm-dialog[open] {
   gap: 3px;
   padding: 3px 5px;
 }
+
+/* ============================================================
+   Gardenscapes 2026 Rainbow Blast Energy Meter & House Patronus Bar
+   ============================================================ */
+#match3Dialog .m3-rainbow-meter {
+  width: 100%;
+  min-inline-size: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 7px 3px 5px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, var(--m3-rainbow-shell-top) 0%, var(--m3-rainbow-shell-bot) 100%);
+  border: 1.5px solid var(--farm-brass-bright);
+  box-shadow:
+    0 2px 0 var(--farm-wood-darkest),
+    inset 0 1px 0 var(--ts-gloss-soft);
+  color: var(--farm-cream-text);
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+#match3Dialog .m3-rainbow-meter:active {
+  transform: translateY(1px);
+}
+
+#match3Dialog .m3-rainbow-meter[data-hot='true'] {
+  border-color: var(--focus-color);
+  box-shadow:
+    0 2px 0 var(--farm-wood-darkest),
+    0 0 10px var(--m3-rainbow-hot-glow);
+}
+
+#match3Dialog .m3-rainbow-meter[data-super='true'] {
+  border-color: var(--focus-color);
+  box-shadow:
+    0 2px 0 var(--farm-wood-darkest),
+    0 0 12px var(--m3-super-rainbow-glow);
+}
+
+#match3Dialog .m3-rainbow-orb-wrap {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#match3Dialog .m3-rainbow-orb-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 2px var(--farm-shadow-deep));
+}
+
+#match3Dialog .m3-rainbow-super-badge {
+  position: absolute;
+  right: -4px;
+  bottom: -3px;
+  font-size: 10px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px var(--farm-shadow-deep));
+}
+
+#match3Dialog .m3-rainbow-lbl {
+  flex: 0 0 auto;
+  font-size: 10.2px;
+  font-weight: 800;
+  color: var(--farm-gold-text);
+  white-space: nowrap;
+}
+
+#match3Dialog .m3-rainbow-track {
+  position: relative;
+  flex: 1 1 56px;
+  min-inline-size: 42px;
+  height: 9px;
+  border-radius: var(--radius-pill);
+  background: var(--m3-rainbow-track-bg);
+  border: 1px solid var(--farm-brass-dark);
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px var(--farm-shadow-deep);
+}
+
+#match3Dialog .m3-rainbow-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--m3-rainbow-fill-grad);
+  box-shadow: inset 0 1px 0 var(--farm-highlight-crisp);
+  transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#match3Dialog .m3-rainbow-meter[data-super='true'] .m3-rainbow-fill {
+  background: var(--m3-super-rainbow-fill-grad);
+}
+
+#match3Dialog .m3-rainbow-pct {
+  flex: 0 0 auto;
+  min-inline-size: 30px;
+  text-align: right;
+  font-size: 10.6px;
+  font-weight: 900;
+  color: var(--ts-white);
+  font-variant-numeric: tabular-nums;
+}
+
+#match3Dialog[data-mg-layout='portrait'] .pa-side-dock .m3-dock-hud {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+#match3Dialog[data-mg-layout='portrait'] .pa-side-dock .m3-dock-hud .m3-goals-list {
+  flex: 1 1 130px;
+}
+
+#match3Dialog[data-mg-layout='portrait'] .pa-side-dock .m3-dock-hud .m3-rainbow-meter {
+  flex: 1 0 100%;
+  padding: 2px 7px 2px 4px;
+  min-block-size: 22px;
+}
+
+@media (max-width: 979px) and (orientation: portrait), (max-width: 979px) and (min-height: 621px) {
+  #match3Dialog .m3-dock-hud {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  #match3Dialog .m3-dock-hud .m3-goals-list {
+    flex: 1 1 130px;
+  }
+
+  #match3Dialog .m3-dock-hud .m3-rainbow-meter {
+    flex: 1 0 100%;
+    padding: 2px 7px 2px 4px;
+    min-block-size: 22px;
+  }
+}
+
 
 
 
