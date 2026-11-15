@@ -1438,4 +1438,253 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(cleanSim.state.sandboxTainted).toBeFalsy();
     });
   });
+
+  describe('(m) Xây dựng & Dời chỗ Quán Ba Cây Chổi / Tiệm Kẹo Honeydukes không chiếm click vào mini-game', () => {
+    it('Xây Quán Ba Cây Chổi (burrow_broomsticks_canon) & chọn/dời Tiệm Kẹo Honeydukes mượt mà, không tự nhảy vào mini-game', async () => {
+      const { headerRefreshDock } = await import('../../ui/hudHeaderAndDock');
+
+      const sim = new ParkSimulation(createMockAudio());
+      sim.state.sandboxMode = false;
+      const broomItem = getCatalogItem('burrow_broomsticks_canon')!;
+      expect(broomItem).toBeDefined();
+      expect(broomItem.unlockLevel).toBe(27);
+      expect(sim.getEffectiveItemStarCost(broomItem)).toBe(75);
+
+      const storyIdx = STORY_QUESTS.findIndex((q) => q.id === 'story_5c_broomsticks');
+      expect(storyIdx).toBeGreaterThanOrEqual(0);
+      sim.state.storyQuestIndex = storyIdx;
+      sim.state.storyClaimedIds = STORY_QUESTS.slice(0, storyIdx).map((q) => q.id);
+
+      sim.state.level = 10;
+      sim.state.match3.stars = 12;
+      expect(sim.getStoryAutoActionPreview().shortLabel).toBe('🔒 Mở ở Cấp 27');
+
+      sim.state.level = 27;
+      sim.state.match3.stars = 12;
+      expect(sim.getStoryAutoActionPreview().shortLabel).toBe('🌟 Cần 75 Sao (12/75🌟)');
+
+      sim.state.match3.stars = 80;
+      expect(sim.getStoryAutoActionPreview().shortLabel).toBe('🌟 Xây Ngay (75 🌟)');
+
+      const itemListeners = new Map<string, () => void>();
+      let renderedHtml = '';
+      const toasts: string[] = [];
+      let trialMinigameCalls = 0;
+
+      const cornerRightClasses = new Set<string>();
+      const makeEl = () => ({
+        dataset: {} as Record<string, string>,
+        style: { setProperty: () => {} } as unknown as Record<string, unknown>,
+        innerHTML: '',
+        textContent: '',
+        title: '',
+        parentElement: null,
+        classList: {
+          add: () => {},
+          remove: () => {},
+          toggle: () => {},
+          contains: () => false,
+        },
+        getAttribute: () => null,
+        setAttribute: () => {},
+        addEventListener: () => {},
+        querySelector: () => null,
+        querySelectorAll: () => [],
+      });
+      const fakeCornerRight = {
+        ...makeEl(),
+        classList: {
+          add: (c: string) => {
+            cornerRightClasses.add(c);
+          },
+          remove: (c: string) => {
+            cornerRightClasses.delete(c);
+          },
+          toggle: (c: string, force?: boolean) => {
+            if (force) cornerRightClasses.add(c);
+            else cornerRightClasses.delete(c);
+          },
+          contains: (c: string) => cornerRightClasses.has(c),
+        },
+      };
+
+      const fakeDrawer = {
+        scrollLeft: 0,
+        scrollWidth: 0,
+        clientWidth: 800,
+        classList: { add: () => {}, remove: () => {}, toggle: () => {} },
+        get innerHTML() {
+          return renderedHtml;
+        },
+        set innerHTML(val: string) {
+          renderedHtml = val;
+          itemListeners.clear();
+        },
+        querySelector: () => null,
+        querySelectorAll: (sel: string) => {
+          if (sel === '[data-item-id]') {
+            const ids = Array.from(renderedHtml.matchAll(/data-item-id="([^"]+)"/g)).map(
+              (m) => m[1]
+            );
+            return ids.map((id) => ({
+              dataset: { itemId: id },
+              addEventListener: (ev: string, cb: () => void) => {
+                if (ev === 'click') itemListeners.set(id, cb);
+              },
+            }));
+          }
+          return [];
+        },
+      };
+
+      const fakeStack = {
+        parentElement: null as unknown,
+        appendChild: (node: { textContent?: string }) => {
+          if (node.textContent) toasts.push(node.textContent);
+        },
+      };
+
+      const fakeRoot = {
+        classList: { toggle: () => {} },
+        appendChild: () => {},
+        querySelector: (sel: string) => {
+          if (sel === '#buildDrawer') return fakeDrawer;
+          if (sel === '#toastStack') return fakeStack;
+          if (sel === '#tsCornerRight') return fakeCornerRight;
+          return makeEl();
+        },
+        querySelectorAll: () => [],
+      };
+      fakeStack.parentElement = fakeRoot;
+
+      vi.stubGlobal('window', {
+        setTimeout: () => 0,
+        requestAnimationFrame: () => 0,
+        cancelAnimationFrame: () => {},
+        matchMedia: () => ({ matches: true }),
+      });
+      vi.stubGlobal('document', {
+        activeElement: null,
+        documentElement: { dataset: {} as Record<string, string> },
+        createElement: () => ({ className: '', textContent: '', remove: () => {} }),
+        getElementById: () => fakeStack,
+      });
+
+      const fakeHud = {
+        sim,
+        cam: { x: 0, y: 0, zoom: 1, viewRot: 0 },
+        root: fakeRoot,
+        activeCategory: 'shop',
+        buildSheetOpen: true,
+        mapToolsExpanded: false,
+        selectedCatalogItem: null as ReturnType<typeof getCatalogItem> | null,
+        bulldozerActive: false,
+        moveModeActive: false,
+        movingBuildingUid: null,
+        pincerActive: false,
+        pincerPicked: null,
+        pendingTouchTile: null,
+        inspectSelection: null,
+        photoModeActive: false,
+        minimapHudVisible: false,
+        hudRolledUp: false,
+        manageMenuOpen: false,
+        weatherPopoverOpen: false,
+        seedTrayOpen: false,
+        pastureTrayOpen: false,
+        drawerEdgeObserver: null,
+        displayedGalleons: 0,
+        galleonRaf: 0,
+        openTrialMinigame: () => {
+          trialMinigameCalls++;
+        },
+        refreshNeighborBadges: () => {},
+        refreshSuitcaseBadge: () => {},
+        renderSeedTray: () => {},
+        renderPastureTray: () => {},
+        renderVisitorDockBar: () => {},
+        refreshHarvestFeastBadges: () => {},
+        renderInspector: () => {},
+        renderTutorialCoach: () => {},
+      } as unknown;
+
+      let selectedCallbackItemId: string | null = null;
+      (fakeHud as { onSelectCatalogItem?: (it: { id: string }) => void }).onSelectCatalogItem = (it) => {
+        selectedCallbackItemId = it.id;
+      };
+      sim.state.level = 12;
+      sim.state.match3.stars = 10;
+      expect(sim.isCatalogItemUnlocked(broomItem)).toBe(false);
+      headerRefreshDock(fakeHud as never);
+      expect(itemListeners.has('burrow_broomsticks_canon')).toBe(true);
+      itemListeners.get('burrow_broomsticks_canon')!();
+      expect(trialMinigameCalls).toBe(0);
+      expect((fakeHud as { selectedCatalogItem: unknown }).selectedCatalogItem).toBeNull();
+      expect(toasts.some((t) => t.includes('Cấp 27'))).toBe(true);
+
+      toasts.length = 0;
+      sim.state.level = 27;
+      sim.state.match3.stars = 10;
+      expect(sim.isCatalogItemUnlocked(broomItem)).toBe(true);
+      headerRefreshDock(fakeHud as never);
+      expect(renderedHtml).toContain('🌟 10/75');
+      itemListeners.get('burrow_broomsticks_canon')!();
+      expect(trialMinigameCalls).toBe(0);
+      expect((fakeHud as { selectedCatalogItem: unknown }).selectedCatalogItem).toBeNull();
+      expect(toasts.some((t) => t.includes('10/75'))).toBe(true);
+
+      toasts.length = 0;
+      sim.state.level = 16;
+      sim.state.match3.stars = 80;
+      expect(sim.isCatalogItemUnlocked(broomItem)).toBe(true);
+      expect(sim.getStoryAutoActionPreview().shortLabel).toBe('🌟 Xây Ngay (75 🌟)');
+      (fakeHud as { activeCategory: string | null }).activeCategory = 'shop';
+      headerRefreshDock(fakeHud as never);
+      expect(renderedHtml).not.toContain('🔒 Cấp 27');
+      itemListeners.get('burrow_broomsticks_canon')!();
+      expect(trialMinigameCalls).toBe(0);
+      expect(selectedCallbackItemId).toBe('burrow_broomsticks_canon');
+      expect((fakeHud as { selectedCatalogItem: { id: string } | null }).selectedCatalogItem?.id).toBe(
+        'burrow_broomsticks_canon'
+      );
+      expect(cornerRightClasses.has('hidden')).toBe(true);
+      expect(toasts.some((t) => t.includes('⚡ Đặt Ngay'))).toBe(true);
+
+      sim.connectedPathTiles.clear();
+      const smartSpot = sim.findSmartSpotForStoryBuilding(broomItem, 0);
+      expect(smartSpot).not.toBeNull();
+      const placedOk = sim.placeItem(broomItem, smartSpot!.gx, smartSpot!.gy, 0);
+      expect(placedOk).toBe(true);
+      expect(sim.state.buildings.some((b) => b.itemId === 'burrow_broomsticks_canon')).toBe(true);
+      expect(sim.state.match3.stars).toBe(5);
+      expect(sim.isCatalogItemUnlocked(broomItem)).toBe(true);
+
+      const honeydukesItem = getCatalogItem('burrow_honeydukes_canon')!;
+      sim.state.match3.stars = 40;
+      const hdSpot = sim.findSmartSpotForStoryBuilding(honeydukesItem, 0)!;
+      expect(sim.placeItem(honeydukesItem, hdSpot.gx, hdSpot.gy, 0)).toBe(true);
+      const builtHoneydukes = sim.state.buildings.find((b) => b.itemId === 'burrow_honeydukes_canon')!;
+      builtHoneydukes.constructEndsAt = Date.now() - 1000;
+      sim.state.match3.stars = 5;
+
+      toasts.length = 0;
+      (fakeHud as { activeCategory: string | null }).activeCategory = 'shop';
+      headerRefreshDock(fakeHud as never);
+      expect(renderedHtml).toContain('✅ Đã xây');
+      itemListeners.get('burrow_honeydukes_canon')!();
+      expect(trialMinigameCalls).toBe(0);
+      expect((fakeHud as { inspectSelection: { kind: string; uid: string } | null }).inspectSelection).toEqual({
+        kind: 'building',
+        uid: builtHoneydukes.uid,
+      });
+      expect(toasts.some((t) => t.includes('✋ Dời'))).toBe(true);
+
+      const moveSpot = sim.findSmartSpotForStoryBuilding(honeydukesItem, 0)!;
+      const moveRes = sim.moveBuilding(builtHoneydukes.uid, moveSpot.gx, moveSpot.gy, 0);
+      expect(moveRes.ok).toBe(true);
+      expect(builtHoneydukes.gx).toBe(moveSpot.gx);
+      expect(builtHoneydukes.gy).toBe(moveSpot.gy);
+      vi.unstubAllGlobals();
+    });
+  });
 });

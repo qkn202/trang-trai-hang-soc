@@ -137,9 +137,14 @@ export function headerTogglePhotoMode(hud: GameHUD, force?: boolean): void {
     hud.root
       .querySelector('#tsCornerLeft')
       ?.classList.toggle('hidden', hud.photoModeActive || isVisiting);
+    const isMapEditActive =
+      Boolean(hud.selectedCatalogItem) ||
+      hud.moveModeActive ||
+      hud.bulldozerActive ||
+      hud.pincerActive;
     hud.root
       .querySelector('#tsCornerRight')
-      ?.classList.toggle('hidden', hud.photoModeActive || isVisiting);
+      ?.classList.toggle('hidden', hud.photoModeActive || isVisiting || isMapEditActive);
     hud.root
       .querySelector('#visitorDockBar')
       ?.classList.toggle('hidden', hud.photoModeActive || !isVisiting);
@@ -566,11 +571,11 @@ export function formatToastMessage(msg: string, icon = '🦉'): string {
   return `${cleanIcon} ${body}`;
 }
 
-export function headerShowToast(hud: GameHUD, msg: string, icon = '🦉'): void {
+export function headerSyncToastStackHost(hud: GameHUD): HTMLElement | null {
     const stack =
       hud.root.querySelector<HTMLElement>('#toastStack') ??
       (typeof document !== 'undefined' ? document.getElementById('toastStack') : null);
-    if (!stack) return;
+    if (!stack) return null;
 
     // Promote #toastStack into the topmost open <dialog> (#top-layer) so toasts never hide behind showModal()!
     const openDialogs = Array.from(hud.root.querySelectorAll<HTMLDialogElement>('dialog[open]'));
@@ -596,6 +601,12 @@ export function headerShowToast(hud: GameHUD, msg: string, icon = '🦉'): void 
     } else if (stack.parentElement !== hud.root) {
       hud.root.appendChild(stack);
     }
+    return stack;
+}
+
+export function headerShowToast(hud: GameHUD, msg: string, icon = '🦉'): void {
+    const stack = headerSyncToastStackHost(hud);
+    if (!stack) return;
 
     const item = document.createElement('div');
     item.className = 'parchment-dark owl-toast';
@@ -621,13 +632,16 @@ export function headerShowOfflineModal(hud: GameHUD, report: OfflineReport): voi
 export function headerRefreshFloatingBanner(hud: GameHUD): void {
     const banner = hud.root.querySelector('#floatingModeBanner') as HTMLElement | null;
     const txt = hud.root.querySelector('#floatingBannerText') as HTMLElement | null;
+    const btnAutoPlace = hud.root.querySelector('#btnFloatingAutoPlace') as HTMLButtonElement | null;
     const btnSec = hud.root.querySelector('#btnFloatingSecondary') as HTMLButtonElement | null;
     const btnSwap = hud.root.querySelector('#btnFloatingSwap') as HTMLButtonElement | null;
     const btnExit = hud.root.querySelector('#btnFloatingExit') as HTMLButtonElement | null;
     hud.root.classList.toggle('is-pincer-mode', hud.pincerActive && !hud.photoModeActive);
     if (!banner || !txt || !btnSec || !btnSwap || !btnExit) return;
 
+    btnAutoPlace?.classList.add('hidden');
     btnSwap.classList.add('hidden');
+    btnExit.classList.add('gold-cta');
 
     if (hud.photoModeActive) {
       banner.classList.add('hidden');
@@ -692,6 +706,12 @@ export function headerRefreshFloatingBanner(hud: GameHUD): void {
         !it.isFarmlandPlot &&
         !it.connectableGroup &&
         !it.isZooFence;
+      const canAutoPlace =
+        it.category !== 'path' &&
+        it.category !== 'terrain' &&
+        !it.isCoasterTrackPiece &&
+        !it.isZooFence &&
+        !it.elevationDelta;
       const effStars = hud.sim.getEffectiveItemStarCost(it);
       const costTxt =
         effStars > 0
@@ -701,6 +721,11 @@ export function headerRefreshFloatingBanner(hud: GameHUD): void {
             : `${it.cost.toLocaleString('vi-VN')}G`;
       banner.classList.remove('hidden');
       txt.textContent = `🏗️ ${it.name} • ${costTxt}`;
+      if (canAutoPlace && btnAutoPlace) {
+        btnAutoPlace.textContent = '⚡ Đặt Ngay';
+        btnAutoPlace.classList.remove('hidden');
+        btnExit.classList.remove('gold-cta');
+      }
       if (canRotate) {
         btnSec.textContent = `🔄 ${hud.rotation * 90}°`;
         btnSec.classList.remove('hidden');
@@ -780,9 +805,14 @@ export function headerRefreshAll(hud: GameHUD): void {
     hud.root
       .querySelector('#tsCornerLeft')
       ?.classList.toggle('hidden', hud.photoModeActive || isVisiting);
+    const isMapEditActive =
+      Boolean(hud.selectedCatalogItem) ||
+      hud.moveModeActive ||
+      hud.bulldozerActive ||
+      hud.pincerActive;
     hud.root
       .querySelector('#tsCornerRight')
-      ?.classList.toggle('hidden', hud.photoModeActive || isVisiting);
+      ?.classList.toggle('hidden', hud.photoModeActive || isVisiting || isMapEditActive);
     hud.root
       .querySelector('#btnOpenSeedSilo')
       ?.classList.toggle('hidden', isVisiting);
@@ -1030,9 +1060,9 @@ export function headerRefreshHeader(hud: GameHUD): void {
       const curStars = st.sandboxMode ? 999 : (st.match3?.stars ?? 0);
       const readyUnbuiltBlueprints = CATALOG.filter((c) => {
         if (c.isThemeParkLegacy) return false;
-        const sc = getItemPuzzleStarCost(c);
+        const sc = hud.sim.getEffectiveItemStarCost(c);
         if (sc <= 0) return false;
-        if (!st.sandboxMode && st.level < c.unlockLevel) return false;
+        if (!hud.sim.isCatalogItemUnlocked(c)) return false;
         return !builtSet.has(c.id) && curStars >= sc;
       }).length;
       if (readyUnbuiltBlueprints > 0 && !hud.sim.isHeadmasterPreview) {
@@ -1247,12 +1277,12 @@ export function headerRefreshQuestTracker(hud: GameHUD): void {
           }
           return;
         }
-        headerShowToast(hud, res.msg, res.reason === 'missing_gold' ? '🪙' : '🌟');
-        if (
-          res.reason === 'missing_stars' ||
-          res.reason === 'locked_level' ||
-          res.reason === 'open_match3'
-        ) {
+        headerShowToast(
+          hud,
+          res.msg,
+          res.reason === 'missing_gold' ? '🪙' : res.reason === 'locked_level' ? '🔒' : '🌟'
+        );
+        if (res.reason === 'open_match3') {
           hud.openTrialMinigame();
         }
       });
@@ -1337,12 +1367,13 @@ export function headerRefreshDock(hud: GameHUD): void {
         c.category !== 'terrain' &&
         !c.isThemeParkLegacy
     );
-    const lv = hud.sim.state.level;
     const sandbox = hud.sim.state.sandboxMode;
+    const curStars = hud.sim.state.match3?.stars ?? 0;
+    const curGold = hud.sim.state.galleons;
 
     drawer.innerHTML = items
       .map((item) => {
-        const locked = !sandbox && lv < item.unlockLevel;
+        const locked = !hud.sim.isCatalogItemUnlocked(item);
         const selected = hud.selectedCatalogItem?.id === item.id;
         const fallbackEmoji = item.elevationDelta
           ? item.elevationDelta > 0
@@ -1364,28 +1395,43 @@ export function headerRefreshDock(hud: GameHUD): void {
           : `<div style="height:64px;display:flex;align-items:center;justify-content:center;font-size:28px;">${fallbackEmoji}</div>`;
 
         const starCost = hud.sim.getEffectiveItemStarCost(item);
+        const isMajorStarBlueprint =
+          starCost > 0 && !item.connectableGroup && item.category !== 'decor';
+        const alreadyBuilt =
+          isMajorStarBlueprint && hud.sim.state.buildings.some((b) => b.itemId === item.id);
+        const shortStars = !sandbox && !locked && starCost > 0 && curStars < starCost;
+        const shortGold = !sandbox && !locked && starCost === 0 && curGold < item.cost;
+        const isShortResource = (shortStars && !alreadyBuilt) || shortGold;
         const buildTag =
           item.buildDurationSec > 0
             ? `🔨 ${formatDurationCompactVi(item.buildDurationSec)}`
             : '⚡';
         const subInfo = locked
           ? `🔒 Cấp ${item.unlockLevel}`
-          : starCost > 0
-            ? `🌟 ${starCost} • ${buildTag}`
-            : `🪙 ${item.cost.toLocaleString('vi-VN')}G`;
+          : alreadyBuilt
+            ? shortStars
+              ? `✅ Đã xây • 🌟 ${curStars}/${starCost}`
+              : `✅ Đã xây • 🌟 ${starCost}`
+            : shortStars
+              ? `🌟 ${curStars}/${starCost} • ${buildTag}`
+              : starCost > 0
+                ? `🌟 ${starCost} • ${buildTag}`
+                : shortGold
+                  ? `🪙 ${curGold.toLocaleString('vi-VN')}/${item.cost.toLocaleString('vi-VN')}G`
+                  : `🪙 ${item.cost.toLocaleString('vi-VN')}G`;
 
         return `
           <button
             type="button"
-            class="catalog-card ${locked ? 'locked' : ''}"
+            class="catalog-card ${locked ? 'locked' : ''} ${isShortResource ? 'short-resource' : ''}"
             data-item-id="${item.id}"
             data-selected="${selected}"
             aria-pressed="${selected}"
-            ${locked ? 'aria-disabled="true"' : ''}
+            ${locked || isShortResource ? 'aria-disabled="true"' : ''}
           >
             ${imgTag}
             <div style="font-size:12px;font-weight:800;line-height:1.25;">${escapeHtml(item.name)}</div>
-            <div style="font-size:12px;color:#78350f;font-weight:700;">${subInfo}</div>
+            <div class="catalog-card-sub ${isShortResource ? 'is-short' : ''}">${subInfo}</div>
           </button>
         `;
       })
@@ -1395,31 +1441,75 @@ export function headerRefreshDock(hud: GameHUD): void {
       card.addEventListener('click', () => {
         const item = getCatalogItem(card.dataset.itemId!);
         if (!item) return;
-        if (!hud.sim.state.sandboxMode && hud.sim.state.level < item.unlockLevel) {
+        const needStars = hud.sim.getEffectiveItemStarCost(item);
+        const haveStars = hud.sim.state.match3?.stars ?? 0;
+        if (!hud.sim.isCatalogItemUnlocked(item)) {
           const wp = hud.sim.getWinsProgressForCurrentLevel();
           let winsNeeded = Math.max(1, wp.required - wp.current);
           for (let l = hud.sim.state.level + 1; l < item.unlockLevel; l++) {
             winsNeeded += getWinsRequiredForNextLevel(l);
           }
-          headerShowToast(hud, 
-            `🔒 Bản vẽ "${item.name}" mở ở Cấp Giải Đố ${item.unlockLevel} — Cần thắng thêm ${winsNeeded.toLocaleString('vi-VN')} màn Giải Đố mới!`,
-            '🧩'
+          const starUnlockHint =
+            needStars > 0 ? ` hoặc tích đủ ${needStars} 🌟 Sao (hiện ${haveStars}/${needStars} 🌟)` : '';
+          headerShowToast(
+            hud,
+            `🔒 Bản vẽ "${item.name}" mở ở Cấp ${item.unlockLevel}${starUnlockHint} — Cần thêm ${winsNeeded.toLocaleString('vi-VN')} màn Giải Đố ở nút ▶️ góc phải!`,
+            '🔒'
           );
-          hud.openTrialMinigame();
           return;
         }
-        const needStars = hud.sim.getEffectiveItemStarCost(item);
         if (
           !hud.sim.state.sandboxMode &&
           needStars > 0 &&
-          hud.sim.state.match3.stars < needStars
+          haveStars < needStars
         ) {
-          const missing = needStars - hud.sim.state.match3.stars;
-          headerShowToast(hud, 
-            `Cần thêm ${missing} 🌟 Sao Phép Thuật (${hud.sim.state.match3.stars}/${needStars} 🌟) để dựng "${item.name}" — Hãy chinh phục Tháp Giải Đố 777 Màn!`,
+          const existingBuilt =
+            !item.connectableGroup && item.category !== 'decor'
+              ? hud.sim.state.buildings.find((b) => b.itemId === item.id)
+              : undefined;
+          if (existingBuilt) {
+            hud.selectedCatalogItem = null;
+            hud.bulldozerActive = false;
+            hud.moveModeActive = false;
+            hud.movingBuildingUid = null;
+            hud.pincerActive = false;
+            hud.pincerPicked = null;
+            hud.pendingTouchTile = null;
+            hud.inspectSelection = { kind: 'building', uid: existingBuilt.uid };
+            centerCameraOnGrid(
+              hud.cam,
+              existingBuilt.gx + item.width * 0.5,
+              existingBuilt.gy + item.height * 0.5
+            );
+            hud.onCameraJump?.();
+            headerCollapseBuildDock(hud);
+            headerRefreshAll(hud);
+            headerShowToast(
+              hud,
+              `📍 Đã chọn "${item.name}" đang có trên bản đồ — Bấm "✋ Dời" ở bảng chi tiết để đổi vị trí (hoặc tích đủ ${needStars} 🌟 nếu muốn xây thêm)!`,
+              '✋'
+            );
+            return;
+          }
+          const missing = needStars - haveStars;
+          headerShowToast(
+            hud,
+            `🌟 Thiếu ${missing} Sao Phép Thuật (hiện có ${haveStars}/${needStars} 🌟) để dựng "${item.name}" — Bấm nút ▶️ góc phải để kiếm thêm Sao nhé!`,
             '🌟'
           );
-          hud.openTrialMinigame();
+          return;
+        }
+        if (
+          !hud.sim.state.sandboxMode &&
+          needStars === 0 &&
+          hud.sim.state.galleons < item.cost
+        ) {
+          const missingGold = item.cost - hud.sim.state.galleons;
+          headerShowToast(
+            hud,
+            `🪙 Thiếu ${missingGold.toLocaleString('vi-VN')}G (hiện có ${hud.sim.state.galleons.toLocaleString('vi-VN')}/${item.cost.toLocaleString('vi-VN')}G) để dựng "${item.name}"!`,
+            '🪙'
+          );
           return;
         }
         hud.selectedCatalogItem = item;
@@ -1432,6 +1522,20 @@ export function headerRefreshDock(hud: GameHUD): void {
         hud.inspectSelection = null;
         headerCollapseBuildDock(hud);
         headerRefreshAll(hud);
+        hud.onSelectCatalogItem?.(item);
+        const isBrushItem =
+          item.category === 'path' ||
+          item.category === 'terrain' ||
+          Boolean(item.isCoasterTrackPiece) ||
+          Boolean(item.isZooFence) ||
+          Boolean(item.elevationDelta);
+        headerShowToast(
+          hud,
+          isBrushItem
+            ? `🏗️ Đã chọn "${item.name}" — Nhấp hoặc kéo trên bản đồ để đặt!`
+            : `🏗️ Đã chọn "${item.name}" — Bấm "⚡ Đặt Ngay" trên thanh nổi hoặc nhấp ô xanh để khởi công!`,
+          '🔨'
+        );
       });
     });
 
@@ -1593,7 +1697,13 @@ export function headerSyncBuildDrawerScrollAffordance(hud: GameHUD, drawer: HTML
 
     if (catLbl) {
       const titleVi = BUILD_CATEGORY_TITLES_VI[hud.activeCategory] ?? '🏗️ Danh Mục Xây Dựng';
-      catLbl.textContent = `${titleVi} (${cards.length})`;
+      const starsTxt = hud.sim.state.sandboxMode
+        ? '∞'
+        : String(hud.sim.state.match3?.stars ?? 0);
+      const goldTxt = hud.sim.state.sandboxMode
+        ? '∞'
+        : `${hud.sim.state.galleons.toLocaleString('vi-VN')}G`;
+      catLbl.textContent = `${titleVi} (${cards.length}) • 🌟 ${starsTxt} • 🪙 ${goldTxt}`;
     }
     swipeBar.classList.remove('hidden');
 

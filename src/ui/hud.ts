@@ -158,6 +158,7 @@ import {
   headerRenderWeatherPopover,
   headerAnimateGalleonsTo,
   headerSpawnFlyReward,
+  headerSyncToastStackHost,
   headerShowToast,
   headerShowOfflineModal,
   headerRefreshFloatingBanner,
@@ -255,6 +256,8 @@ export class GameHUD {
   public pendingTouchTile: { gx: number; gy: number; label: string } | null = null;
   public onTouchConfirmPlace: (() => void) | null = null;
   public onTouchCancelPlace: (() => void) | null = null;
+  public onSelectCatalogItem: ((item: CatalogItem) => void) | null = null;
+  public onAutoPlaceSelected: (() => void) | null = null;
   public onCameraJump: (() => void) | null = null;
   public photoModeActive = false;
   public inspectSelection: InspectSelection = null;
@@ -756,14 +759,20 @@ export class GameHUD {
 
   public openMatch3Dialog(overrideLevel?: number, allowDevJump = false): void {
     this.sim.setLastPlayedMinigame('match3');
-    void this.getMatch3Modal().then((m) => m.open(overrideLevel, allowDevJump));
+    void this.getMatch3Modal().then((m) => {
+      m.open(overrideLevel, allowDevJump);
+      headerSyncToastStackHost(this);
+    });
   }
 
   public openPuzzleArcadeDialog(mode?: PuzzleArcadeMode): void {
     if (mode) {
       this.sim.setLastPlayedMinigame(mode);
     }
-    void this.getPuzzleArcadeModal().then((m) => m.open(mode));
+    void this.getPuzzleArcadeModal().then((m) => {
+      m.open(mode);
+      headerSyncToastStackHost(this);
+    });
   }
 
   public openSeedQuizDialog(
@@ -779,6 +788,7 @@ export class GameHUD {
       this.sim.setLastPlayedMinigame('seedquiz');
     }
     this.seedQuizModal.open(cropId, targetPlotUid, lang, tier, format, subView);
+    headerSyncToastStackHost(this);
   }
 
   public openLastPlayedMinigame(): void {

@@ -1560,7 +1560,7 @@ export const CATALOG: CatalogItem[] = [
     name: 'Tiệm Kẹo Công Tước Mật (Honeydukes)',
     category: 'shop',
     description: 'Tiệm kẹo rực rỡ tường hồng – khung cửa bạc hà mái đá phủ tuyết nổi tiếng nhất làng Hogsmeade.',
-    loreTip: 'Nhấp trực tiếp vào tiệm Honeydukes để bước vào Gác Xép Bùa Gặt Honeydukes!',
+    loreTip: 'Nhấp chọn tiệm Honeydukes để nâng cấp, dời vị trí hoặc bấm nút bước lên Gác Xép Bùa Gặt!',
     width: 3,
     height: 3,
     cost: 360,

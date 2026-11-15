@@ -538,6 +538,22 @@ export function worldGetBuildingFootprint(sim: ParkSimulation, item: CatalogItem
     };
 }
 
+export function worldIsCatalogItemUnlocked(sim: ParkSimulation, item: CatalogItem): boolean {
+  if (sim.state.sandboxMode || sim.state.level >= item.unlockLevel) {
+    return true;
+  }
+  const starCost = sim.getEffectiveItemStarCost(item);
+  if (starCost > 0) {
+    if ((sim.state.match3?.stars ?? 0) >= starCost) {
+      return true;
+    }
+    if (sim.state.buildings.some((b) => b.itemId === item.id)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function worldCanPlaceItem(sim: ParkSimulation, 
     item: CatalogItem,
     gx: number,
@@ -549,7 +565,7 @@ export function worldCanPlaceItem(sim: ParkSimulation,
       return { ok: false, reason: 'Chế độ Khách Tham Quan — không thể xây/sửa thung lũng của bạn bè!' };
     }
     if (!ignoreBuildingUid) {
-      if (!sim.state.sandboxMode && sim.state.level < item.unlockLevel) {
+      if (!worldIsCatalogItemUnlocked(sim, item)) {
         return { ok: false, reason: `Mở khóa bản vẽ ở Cấp Giải Đố ${item.unlockLevel}` };
       }
       const starCost = sim.getEffectiveItemStarCost(item);
@@ -936,9 +952,13 @@ export function worldBridgeZoneWithCobblePath(sim: ParkSimulation, zoneId: ZoneI
     worldRecomputeAllCoastersAndBiomes(sim, );
 }
 
-export function worldFindSmartSpotForStoryBuilding(sim: ParkSimulation, item: CatalogItem): { gx: number; gy: number } | null {
+export function worldFindSmartSpotForStoryBuilding(
+  sim: ParkSimulation,
+  item: CatalogItem,
+  rotation: 0 | 1 | 2 | 3 = 0
+): { gx: number; gy: number } | null {
     const unlockedSet = new Set(sim.state.unlockedZones);
-    const { bw, bh } = worldGetBuildingFootprint(sim, item, 0);
+    const { bw, bh } = worldGetBuildingFootprint(sim, item, rotation);
 
     // Find synergy partner coordinates if already built
     const partnerCenters: Array<{ gx: number; gy: number; maxRadius: number }> = [];
@@ -1014,18 +1034,21 @@ export function worldFindSmartSpotForStoryBuilding(sim: ParkSimulation, item: Ca
           }
         }
 
-        if (!touchingRoad && nearestRoadDist > 4) continue;
-
-        let score = touchingRoad ? 1000 : 500 - nearestRoadDist * 60;
+        const canBridgeRoad = !touchingRoad && nearestRoadDist <= 4;
+        let score = touchingRoad
+          ? 1000
+          : canBridgeRoad
+            ? 500 - nearestRoadDist * 60
+            : -200 - Math.min(nearestRoadDist, 30) * 8;
         for (const p of partnerCenters) {
           const dist = Math.hypot(gx - p.gx, gy - p.gy);
           if (dist <= p.maxRadius) score += 380;
         }
-        // Prefer staying cozy near park roads rather than edge corners
-        score -= Math.hypot(gx - 12, gy - 17) * 2;
+        // Prefer staying cozy near central homestead meadow rather than distant edges
+        score -= Math.hypot(gx - 18, gy - 24) * 2;
 
         if (!best || score > best.score) {
-          best = { gx, gy, score, roadAnchor: touchingRoad ? undefined : nearestRoad };
+          best = { gx, gy, score, roadAnchor: canBridgeRoad ? nearestRoad : undefined };
         }
       }
     }

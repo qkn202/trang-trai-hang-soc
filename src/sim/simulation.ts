@@ -298,6 +298,7 @@ import {
   worldAutoBuildCoasterForStation,
   worldMoveBuilding,
   worldGetBuildingFootprint,
+  worldIsCatalogItemUnlocked,
   worldCanPlaceItem,
   worldPlaceItem,
   worldUnlockZone,
@@ -627,6 +628,8 @@ export class ParkSimulation {
   public tickProductionToTimestamp(now: number, silent = false): void { return economyTickProductionToTimestamp(this, now, silent); }
 
   public getEffectiveItemStarCost(item: CatalogItem): number { return economyGetEffectiveItemStarCost(this, item); }
+
+  public isCatalogItemUnlocked(item: CatalogItem): boolean { return worldIsCatalogItemUnlocked(this, item); }
 
   public canPlaceItem(
     item: CatalogItem,
@@ -1060,7 +1063,12 @@ export class ParkSimulation {
 
   public bridgeZoneWithCobblePath(zoneId: ZoneId): void { return worldBridgeZoneWithCobblePath(this, zoneId); }
 
-  public findSmartSpotForStoryBuilding(item: CatalogItem): { gx: number; gy: number } | null { return worldFindSmartSpotForStoryBuilding(this, item); }
+  public findSmartSpotForStoryBuilding(
+    item: CatalogItem,
+    rotation: 0 | 1 | 2 | 3 = 0
+  ): { gx: number; gy: number } | null {
+    return worldFindSmartSpotForStoryBuilding(this, item, rotation);
+  }
 
   public completeStoryStepWithStar(): {
     ok: boolean;

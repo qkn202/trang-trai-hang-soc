@@ -678,22 +678,22 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                       }
                     </div>
                     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px;">
-                      <button id="btnInspPlayMinigameSpeed" type="button" class="brass-btn gold-cta" style="flex:1;" ${canTriggerSpeedup ? '' : 'disabled'} title="Thắng 1 màn trừ 30–75p giờ xây">
+                      <button id="btnInspPlayMinigameSpeed" type="button" class="brass-btn gold-cta" style="flex:1 1 132px;" ${canTriggerSpeedup ? '' : 'disabled'} title="Thắng 1 màn trừ 30–75p giờ xây">
                         ⚡ Khảo Thí (-30~75p)
                       </button>
-                      <button id="btnInspQuizSpeed" type="button" class="brass-btn" style="flex:1;" ${canTriggerSpeedup ? '' : 'disabled'} title="Đố ngoại ngữ trừ 10–25p giờ xây">
+                      <button id="btnInspQuizSpeed" type="button" class="brass-btn" style="flex:1 1 132px;" ${canTriggerSpeedup ? '' : 'disabled'} title="Đố ngoại ngữ trừ 10–25p giờ xây">
                         🪄 Thần Chú (-10~25p)
                       </button>
                       ${
                         reducibleSec > 0 && ((hud.sim.state.morningDewPhials ?? 0) > 0 || hud.sim.state.sandboxMode)
-                          ? `<button type="button" class="brass-btn" data-use-morning-dew="1" style="flex:1;" title="Dùng 1 Bình Sương Mai rút ngắn 15 phút thi công">
+                          ? `<button type="button" class="brass-btn" data-use-morning-dew="1" style="flex:1 1 160px;" title="Dùng 1 Bình Sương Mai rút ngắn 15 phút thi công">
                               🧪 Sương Mai (-15p • ×${hud.sim.state.morningDewPhials ?? 0})
                             </button>`
                           : ''
                       }
                       ${
                         hud.sim.state.sandboxMode
-                          ? `<button id="btnFinishNowSand" type="button" class="brass-btn" style="flex:1;" title="Hoàn tất ngay">
+                          ? `<button id="btnFinishNowSand" type="button" class="brass-btn" style="flex:1 1 120px;" title="Hoàn tất ngay">
                               ⚡ Xong ngay
                             </button>`
                           : ''
@@ -852,10 +852,20 @@ export function inspectorRenderInspector(hud: GameHUD): void {
             : ''
         }
 
+        ${
+          item.id === 'burrow_honeydukes_canon' && !isBuilding
+            ? `
+              <button id="btnInspOpenHoneydukesMatch3" type="button" class="brass-btn gold-cta" style="width:100%;margin-bottom:8px;">
+                🍬 Vào Gác Xép Bùa Gặt Honeydukes
+              </button>
+            `
+            : ''
+        }
+
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           ${
             !isBuilding && b.stars < 5
-              ? `<button id="btnUpgStar" type="button" class="brass-btn" style="flex:1;">
+              ? `<button id="btnUpgStar" type="button" class="brass-btn" style="flex:1 1 170px;">
                   ⬆️ ${b.stars + 1}★ (🌟${getUpgradePuzzleStarCost(b.stars, item)} + 🪙${upgCost.toLocaleString('vi-VN')})
                 </button>`
               : !isBuilding
@@ -864,7 +874,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
           }
           ${
             !b.isIndestructible
-              ? `<button id="btnMoveThis" type="button" class="brass-btn" title="Dời công trình">✋ Dời</button>`
+              ? `<button id="btnMoveThis" type="button" class="brass-btn" style="flex:0 1 auto;" title="Dời công trình">✋ Dời</button>`
               : ''
           }
         </div>
@@ -1060,6 +1070,11 @@ export function inspectorRenderInspector(hud: GameHUD): void {
       panel.querySelector('#btnInspOpenSuitcase')?.addEventListener('click', () => {
         hud.openSuitcaseDialog('care', b.uid);
       });
+      panel.querySelector('#btnInspOpenHoneydukesMatch3')?.addEventListener('click', () => {
+        hud.inspectSelection = null;
+        hud.refreshAll();
+        hud.openMatch3Dialog();
+      });
       panel.querySelector('#btnUpgStar')?.addEventListener('click', () => {
         const res = hud.sim.upgradeBuildingStar(b.uid);
         hud.showToast(res.msg, res.ok ? '🌟' : '🪙');
@@ -1069,6 +1084,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         hud.moveModeActive = true;
         hud.movingBuildingUid = b.uid;
         hud.rotation = b.rotation;
+        hud.pendingTouchTile = null;
         hud.inspectSelection = null;
         hud.collapseBuildDock();
         hud.refreshAll();

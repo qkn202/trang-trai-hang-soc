@@ -394,6 +394,7 @@ export function shellMountDOM(hud: GameHUD): void {
           >⠿</span>
           <span id="floatingBannerText" class="floating-banner-text"></span>
           <div class="floating-banner-btns">
+            <button id="btnFloatingAutoPlace" type="button" class="brass-btn gold-cta hidden" style="padding:4px 10px;font-size:12px;">⚡ Đặt Ngay</button>
             <button id="btnFloatingSecondary" type="button" class="brass-btn hidden" style="padding:4px 8px;font-size:12px;"></button>
             <button id="btnFloatingSwap" type="button" class="brass-btn hidden" style="padding:4px 8px;font-size:12px;"></button>
             <button id="btnFloatingExit" type="button" class="brass-btn gold-cta" aria-label="Thoát" style="padding:4px 8px;font-size:12px;">✕</button>
@@ -1158,6 +1159,10 @@ export function shellBindEvents(hud: GameHUD): void {
     });
 
     // Floating Banner buttons (Ride Cam / Pincer / Move / Bulldoze / Build / Seed)
+    hud.root.querySelector('#btnFloatingAutoPlace')?.addEventListener('click', () => {
+      hud.onAutoPlaceSelected?.();
+    });
+
     hud.root.querySelector('#btnFloatingSecondary')?.addEventListener('click', () => {
       if (hud.rideCamUid) {
         rotateCamera90(hud.cam, 1);

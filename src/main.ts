@@ -2,6 +2,7 @@ import './styles/main.css';
 import { getCatalogItem } from './data/catalog';
 import { getLevelInfo } from './data/levels';
 import { TUTORIAL_STEPS } from './data/quests';
+import { GRID_SIZE } from './data/zones';
 import { MagicalAudio } from './engine/audio';
 import {
   Camera,
@@ -714,6 +715,181 @@ async function bootstrap(): Promise<void> {
     }
   };
 
+  const SNAP_NEIGHBOR_OFFSETS: ReadonlyArray<[number, number]> = [
+    [0, -1],
+    [-1, 0],
+    [1, 0],
+    [0, 1],
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ];
+
+  const resolveBuildingPlacementTile = (
+    item: CatalogItem,
+    cursorGx: number,
+    cursorGy: number,
+    rot: 0 | 1 | 2 | 3,
+    ignoreBuildingUid?: string
+  ): { gx: number; gy: number } => {
+    if (isDragPaintableItem(item)) {
+      return { gx: cursorGx, gy: cursorGy };
+    }
+    const { bw, bh } = sim.getBuildingFootprint(item, rot);
+    const baseGx = Math.max(0, Math.min(GRID_SIZE - bw, cursorGx - Math.floor((bw - 1) / 2)));
+    const baseGy = Math.max(0, Math.min(GRID_SIZE - bh, cursorGy - Math.floor((bh - 1) / 2)));
+    if (sim.canPlaceItem(item, baseGx, baseGy, rot, ignoreBuildingUid).ok) {
+      return { gx: baseGx, gy: baseGy };
+    }
+    for (const [dx, dy] of SNAP_NEIGHBOR_OFFSETS) {
+      const nx = baseGx + dx;
+      const ny = baseGy + dy;
+      if (nx < 0 || ny < 0 || nx + bw > GRID_SIZE || ny + bh > GRID_SIZE) continue;
+      if (sim.canPlaceItem(item, nx, ny, rot, ignoreBuildingUid).ok) {
+        return { gx: nx, gy: ny };
+      }
+    }
+    return { gx: baseGx, gy: baseGy };
+  };
+
+  const findBestPreviewSpotNearCamera = (
+    item: CatalogItem,
+    rot: 0 | 1 | 2 | 3
+  ): { gx: number; gy: number } | null => {
+    const rect = canvas.getBoundingClientRect();
+    const viewW = rect.width || window.innerWidth || 1280;
+    const viewH = rect.height || window.innerHeight || 720;
+    const focus = screenToGrid(viewW * 0.5, viewH * 0.5, cam, viewW, viewH, sim.grid);
+    const { bw, bh } = sim.getBuildingFootprint(item, rot);
+    const centerGx = Math.max(0, Math.min(GRID_SIZE - bw, focus.gx - Math.floor((bw - 1) / 2)));
+    const centerGy = Math.max(0, Math.min(GRID_SIZE - bh, focus.gy - Math.floor((bh - 1) / 2)));
+
+    let bestNear: { gx: number; gy: number; score: number } | null = null;
+    for (let dy = -9; dy <= 9; dy++) {
+      for (let dx = -9; dx <= 9; dx++) {
+        const gx = centerGx + dx;
+        const gy = centerGy + dy;
+        if (gx < 0 || gy < 0 || gx + bw > GRID_SIZE || gy + bh > GRID_SIZE) continue;
+        if (!sim.canPlaceItem(item, gx, gy, rot).ok) continue;
+        let roadBonus = 0;
+        for (let ry = -1; ry <= bh && roadBonus === 0; ry++) {
+          for (let rx = -1; rx <= bw; rx++) {
+            const isCorner = (rx === -1 || rx === bw) && (ry === -1 || ry === bh);
+            const isInside = rx >= 0 && rx < bw && ry >= 0 && ry < bh;
+            if (isCorner || isInside) continue;
+            if (sim.connectedPathTiles.has(`${gx + rx},${gy + ry}`)) {
+              roadBonus = 8;
+              break;
+            }
+          }
+        }
+        const score = roadBonus - Math.hypot(dx, dy);
+        if (!bestNear || score > bestNear.score) {
+          bestNear = { gx, gy, score };
+        }
+      }
+    }
+    if (bestNear) {
+      return { gx: bestNear.gx, gy: bestNear.gy };
+    }
+    const smart = sim.findSmartSpotForStoryBuilding(item, rot);
+    if (smart && sim.canPlaceItem(item, smart.gx, smart.gy, rot).ok) {
+      return smart;
+    }
+    for (let gy = 0; gy <= GRID_SIZE - bh; gy++) {
+      for (let gx = 0; gx <= GRID_SIZE - bw; gx++) {
+        if (sim.canPlaceItem(item, gx, gy, rot).ok) {
+          return { gx, gy };
+        }
+      }
+    }
+    return null;
+  };
+
+  hud.onSelectCatalogItem = (item) => {
+    if (isDragPaintableItem(item)) return;
+    const spot = findBestPreviewSpotNearCamera(item, hud.rotation);
+    if (!spot) return;
+    hoverTile = { gx: spot.gx, gy: spot.gy };
+    const { bw, bh } = sim.getBuildingFootprint(item, hud.rotation);
+    const rect = canvas.getBoundingClientRect();
+    const viewW = rect.width || window.innerWidth || 1280;
+    const viewH = rect.height || window.innerHeight || 720;
+    const elev = sim.grid[spot.gy]?.[spot.gx]?.elevation ?? 0;
+    const scr = gridToScreen(
+      spot.gx + bw * 0.5,
+      spot.gy + bh * 0.5,
+      cam,
+      viewW,
+      viewH,
+      elev * ELEV_PX
+    );
+    if (
+      scr.sx < viewW * 0.18 ||
+      scr.sx > viewW * 0.82 ||
+      scr.sy < viewH * 0.2 ||
+      scr.sy > viewH * 0.76
+    ) {
+      introGlide = null;
+      centerCameraOnGrid(cam, spot.gx + bw * 0.5, spot.gy + bh * 0.5);
+    }
+    if (isTouchOrIOSDevice()) {
+      hud.pendingTouchTile = { gx: spot.gx, gy: spot.gy, label: item.name };
+      hud.refreshTouchConfirmBar();
+    }
+  };
+
+  hud.onAutoPlaceSelected = () => {
+    const placedItem = hud.selectedCatalogItem;
+    if (!placedItem) return;
+    const rot = hud.rotation;
+    let target: { gx: number; gy: number } | null = null;
+    if (
+      hud.pendingTouchTile &&
+      sim.canPlaceItem(placedItem, hud.pendingTouchTile.gx, hud.pendingTouchTile.gy, rot).ok
+    ) {
+      target = { gx: hud.pendingTouchTile.gx, gy: hud.pendingTouchTile.gy };
+    } else if (hoverTile && sim.canPlaceItem(placedItem, hoverTile.gx, hoverTile.gy, rot).ok) {
+      target = { gx: hoverTile.gx, gy: hoverTile.gy };
+    } else {
+      target = findBestPreviewSpotNearCamera(placedItem, rot);
+    }
+
+    if (!target) {
+      const probe = sim.canPlaceItem(placedItem, 18, 24, rot);
+      const { bw, bh } = sim.getBuildingFootprint(placedItem, rot);
+      hud.showToast(
+        probe.reason && !probe.reason.includes('Ô đất')
+          ? probe.reason
+          : `Chưa tìm thấy khoảng đất trống ${bw}×${bh} ô trong vùng đã mở khóa!`,
+        '⚠️'
+      );
+      return;
+    }
+
+    const check = sim.canPlaceItem(placedItem, target.gx, target.gy, rot);
+    if (!check.ok) {
+      hud.showToast(check.reason ?? 'Không thể đặt tại ô này!', '⚠️');
+      return;
+    }
+    const placedOk = sim.placeItem(placedItem, target.gx, target.gy, rot);
+    if (!placedOk) return;
+    const { bw, bh } = sim.getBuildingFootprint(placedItem, rot);
+    introGlide = null;
+    centerCameraOnGrid(cam, target.gx + bw * 0.5, target.gy + bh * 0.5);
+    hud.pendingTouchTile = null;
+    if (!isRepeatableCatalogItem(placedItem)) {
+      hud.selectedCatalogItem = null;
+      hoverTile = null;
+    } else {
+      const nextSpot = findBestPreviewSpotNearCamera(placedItem, rot);
+      hoverTile = nextSpot;
+    }
+    hud.refreshAll();
+    hud.showToast(`🔨 Đã khởi công "${placedItem.name}" thành công!`, '✨');
+  };
+
   // Wire Touch Placement Confirm Bar callbacks
   hud.onTouchConfirmPlace = () => {
     if (!hud.pendingTouchTile) return;
@@ -741,6 +917,14 @@ async function bootstrap(): Promise<void> {
       hud.pendingTouchTile = null;
       if (!isRepeatableCatalogItem(placedItem)) {
         hud.selectedCatalogItem = null;
+        hoverTile = null;
+        hud.showToast(`🔨 Đã khởi công "${placedItem.name}" thành công!`, '✨');
+      } else {
+        const nextSpot = findBestPreviewSpotNearCamera(placedItem, hud.rotation);
+        hoverTile = nextSpot;
+        if (nextSpot) {
+          hud.pendingTouchTile = { gx: nextSpot.gx, gy: nextSpot.gy, label: placedItem.name };
+        }
       }
       hud.refreshAll();
     }
@@ -820,7 +1004,22 @@ async function bootstrap(): Promise<void> {
 
     const gPos = screenToGrid(sx, sy, cam, rect.width, rect.height, sim.grid);
     if (!hud.pendingTouchTile) {
-      hoverTile = { gx: gPos.gx, gy: gPos.gy };
+      if (hud.selectedCatalogItem && !isDragPaintableItem(hud.selectedCatalogItem)) {
+        hoverTile = resolveBuildingPlacementTile(
+          hud.selectedCatalogItem,
+          gPos.gx,
+          gPos.gy,
+          hud.rotation
+        );
+      } else if (hud.moveModeActive && hud.movingBuildingUid) {
+        const mb = sim.state.buildings.find((x) => x.uid === hud.movingBuildingUid);
+        const mIt = mb ? getCatalogItem(mb.itemId) : undefined;
+        hoverTile = mIt
+          ? resolveBuildingPlacementTile(mIt, gPos.gx, gPos.gy, hud.rotation, hud.movingBuildingUid)
+          : { gx: gPos.gx, gy: gPos.gy };
+      } else {
+        hoverTile = { gx: gPos.gx, gy: gPos.gy };
+      }
     }
 
     if (!isPointerDown) return;
@@ -853,7 +1052,12 @@ async function bootstrap(): Promise<void> {
 
     const dx = e.clientX - pointerStartX;
     const dy = e.clientY - pointerStartY;
-    if (Math.hypot(dx, dy) > 5) {
+    const dragThresholdPx =
+      (hud.selectedCatalogItem && !isDragPaintableItem(hud.selectedCatalogItem)) ||
+      (hud.moveModeActive && Boolean(hud.movingBuildingUid))
+        ? 14
+        : 5;
+    if (Math.hypot(dx, dy) > dragThresholdPx) {
       isDraggingCam = true;
       hud.rideCamUid = null;
     }
@@ -881,7 +1085,22 @@ async function bootstrap(): Promise<void> {
     const sy = e.clientY - rect.top;
     const gPos = screenToGrid(sx, sy, cam, rect.width, rect.height, sim.grid);
     if (!hud.pendingTouchTile) {
-      hoverTile = { gx: gPos.gx, gy: gPos.gy };
+      if (hud.selectedCatalogItem && !isDragPaintableItem(hud.selectedCatalogItem)) {
+        hoverTile = resolveBuildingPlacementTile(
+          hud.selectedCatalogItem,
+          gPos.gx,
+          gPos.gy,
+          hud.rotation
+        );
+      } else if (hud.moveModeActive && hud.movingBuildingUid) {
+        const mb = sim.state.buildings.find((x) => x.uid === hud.movingBuildingUid);
+        const mIt = mb ? getCatalogItem(mb.itemId) : undefined;
+        hoverTile = mIt
+          ? resolveBuildingPlacementTile(mIt, gPos.gx, gPos.gy, hud.rotation, hud.movingBuildingUid)
+          : { gx: gPos.gx, gy: gPos.gy };
+      } else {
+        hoverTile = { gx: gPos.gx, gy: gPos.gy };
+      }
     }
 
     isPointerDown = true;
@@ -1080,24 +1299,39 @@ async function bootstrap(): Promise<void> {
     // 2. Move Building Mode (Pick up -> Relocate for 0G!)
     if (hud.moveModeActive) {
       if (hud.movingBuildingUid) {
+        const mb = sim.state.buildings.find((x) => x.uid === hud.movingBuildingUid);
+        const mIt = mb ? getCatalogItem(mb.itemId) : undefined;
+        const moveTarget = mIt
+          ? resolveBuildingPlacementTile(mIt, gPos.gx, gPos.gy, hud.rotation, hud.movingBuildingUid)
+          : { gx: gPos.gx, gy: gPos.gy };
+        const { bw: mBw, bh: mBh } = mIt
+          ? sim.getBuildingFootprint(mIt, hud.rotation)
+          : { bw: 1, bh: 1 };
+        const tappedInsidePendingMove =
+          Boolean(hud.pendingTouchTile) &&
+          gPos.gx >= hud.pendingTouchTile!.gx &&
+          gPos.gx < hud.pendingTouchTile!.gx + mBw &&
+          gPos.gy >= hud.pendingTouchTile!.gy &&
+          gPos.gy < hud.pendingTouchTile!.gy + mBh;
         if (
           isTouch &&
+          !tappedInsidePendingMove &&
           (!hud.pendingTouchTile ||
-            hud.pendingTouchTile.gx !== gPos.gx ||
-            hud.pendingTouchTile.gy !== gPos.gy)
+            hud.pendingTouchTile.gx !== moveTarget.gx ||
+            hud.pendingTouchTile.gy !== moveTarget.gy)
         ) {
-          const mb = sim.state.buildings.find((x) => x.uid === hud.movingBuildingUid);
-          const mIt = mb ? getCatalogItem(mb.itemId) : undefined;
-          hoverTile = { gx: gPos.gx, gy: gPos.gy };
+          hoverTile = moveTarget;
           hud.pendingTouchTile = {
-            gx: gPos.gx,
-            gy: gPos.gy,
+            gx: moveTarget.gx,
+            gy: moveTarget.gy,
             label: mIt?.name ?? 'Dời công trình',
           };
           hud.refreshTouchConfirmBar();
           return;
         }
-        const res = sim.moveBuilding(hud.movingBuildingUid, gPos.gx, gPos.gy, hud.rotation);
+        const finalMoveGx = tappedInsidePendingMove ? hud.pendingTouchTile!.gx : moveTarget.gx;
+        const finalMoveGy = tappedInsidePendingMove ? hud.pendingTouchTile!.gy : moveTarget.gy;
+        const res = sim.moveBuilding(hud.movingBuildingUid, finalMoveGx, finalMoveGy, hud.rotation);
         if (!res.ok) {
           hud.showToast(res.reason ?? 'Không thể đặt tại ô này!', '⚠️');
           return;
@@ -1140,31 +1374,45 @@ async function bootstrap(): Promise<void> {
     // 3. Active building placement mode
     if (hud.selectedCatalogItem) {
       const placedItem = hud.selectedCatalogItem;
+      const targetTile = resolveBuildingPlacementTile(placedItem, gPos.gx, gPos.gy, hud.rotation);
+      const { bw, bh } = sim.getBuildingFootprint(placedItem, hud.rotation);
+      const tappedInsidePending =
+        Boolean(hud.pendingTouchTile) &&
+        gPos.gx >= hud.pendingTouchTile!.gx &&
+        gPos.gx < hud.pendingTouchTile!.gx + bw &&
+        gPos.gy >= hud.pendingTouchTile!.gy &&
+        gPos.gy < hud.pendingTouchTile!.gy + bh;
+
       if (
         isTouch &&
         !isDragPaintableItem(placedItem) &&
+        !tappedInsidePending &&
         (!hud.pendingTouchTile ||
-          hud.pendingTouchTile.gx !== gPos.gx ||
-          hud.pendingTouchTile.gy !== gPos.gy)
+          hud.pendingTouchTile.gx !== targetTile.gx ||
+          hud.pendingTouchTile.gy !== targetTile.gy)
       ) {
-        hoverTile = { gx: gPos.gx, gy: gPos.gy };
+        hoverTile = targetTile;
         hud.pendingTouchTile = {
-          gx: gPos.gx,
-          gy: gPos.gy,
+          gx: targetTile.gx,
+          gy: targetTile.gy,
           label: placedItem.name,
         };
         hud.refreshTouchConfirmBar();
         return;
       }
-      const check = sim.canPlaceItem(placedItem, gPos.gx, gPos.gy, hud.rotation);
+      const placeGx = tappedInsidePending ? hud.pendingTouchTile!.gx : targetTile.gx;
+      const placeGy = tappedInsidePending ? hud.pendingTouchTile!.gy : targetTile.gy;
+      const check = sim.canPlaceItem(placedItem, placeGx, placeGy, hud.rotation);
       if (!check.ok) {
         hud.showToast(check.reason ?? 'Không thể đặt tại ô này!', '⚠️');
         return;
       }
-      sim.placeItem(placedItem, gPos.gx, gPos.gy, hud.rotation);
+      sim.placeItem(placedItem, placeGx, placeGy, hud.rotation);
       hud.pendingTouchTile = null;
       if (!isRepeatableCatalogItem(placedItem)) {
         hud.selectedCatalogItem = null;
+        hoverTile = null;
+        hud.showToast(`🔨 Đã khởi công "${placedItem.name}" thành công!`, '✨');
       }
       hud.refreshAll();
       return;
@@ -1387,13 +1635,6 @@ async function bootstrap(): Promise<void> {
                 return;
               }
             }
-            if (b.itemId === 'burrow_honeydukes_canon') {
-              hud.closeSeedTray();
-              hud.inspectSelection = null;
-              hud.refreshAll();
-              hud.openMatch3Dialog();
-              return;
-            }
             const bItem = getCatalogItem(b.itemId);
             if (bItem?.isFarmlandPlot && b.cropId && b.cropReadyAt && Date.now() >= b.cropReadyAt) {
               sim.harvestCropPlot(b.uid);
@@ -1427,7 +1668,7 @@ async function bootstrap(): Promise<void> {
                 hud.inspectSelection = null;
                 hud.refreshAll();
               } else if (prevPendingSowPlotUid === b.uid) {
-                hud.inspectSelection = null;
+                hud.inspectSelection = { kind: 'building', uid: b.uid };
                 hud.refreshAll();
               } else {
                 hud.openSeedTray(undefined, b.uid);
@@ -1468,7 +1709,7 @@ async function bootstrap(): Promise<void> {
                 hud.inspectSelection = null;
                 hud.refreshAll();
               } else if (prevPendingStockPastureUid === b.uid) {
-                hud.inspectSelection = null;
+                hud.inspectSelection = { kind: 'building', uid: b.uid };
                 hud.refreshAll();
               } else {
                 hud.openPastureTray(undefined, b.uid);

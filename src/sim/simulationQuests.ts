@@ -573,11 +573,21 @@ export function questsGetStoryAutoActionPreview(sim: ParkSimulation): {
     if (story.objectiveType === 'unlock_zone' && story.targetId) {
       const z = getZoneById(story.targetId as ZoneId);
       const zStars = getZonePuzzleStarCost(z);
+      const curStars = sim.state.match3?.stars ?? 0;
       if (!sim.state.sandboxMode && sim.state.level < z.unlockLevel) {
         return {
           kind: 'open_match3',
-          shortLabel: `▶️ Cày lên Cấp ${z.unlockLevel}`,
-          longLabel: `🔒 Cần đạt Cấp Giải Đố ${z.unlockLevel} để mở "${z.name}" — Chơi Giải Đố tăng cấp & nhận x2 🌟 Sao!`,
+          shortLabel: `🔒 Mở ở Cấp ${z.unlockLevel}`,
+          longLabel: `🔒 Cần đạt Cấp Giải Đố ${z.unlockLevel} để mở "${z.name}" — Bấm nút ▶️ góc phải chơi Giải Đố tăng cấp!`,
+          starCost: zStars,
+          goldCost: 0,
+        };
+      }
+      if (!sim.state.sandboxMode && zStars > 0 && curStars < zStars) {
+        return {
+          kind: 'auto_unlock_zone',
+          shortLabel: `🌟 Cần ${zStars} Sao (${curStars}/${zStars}🌟)`,
+          longLabel: `🌟 Cần thêm ${zStars - curStars} Sao Phép Thuật (${curStars}/${zStars} 🌟) để phá phong ấn "${z.name}"!`,
           starCost: zStars,
           goldCost: 0,
         };
@@ -593,24 +603,39 @@ export function questsGetStoryAutoActionPreview(sim: ParkSimulation): {
     if (story.objectiveType === 'build_item' && story.targetId) {
       const item = getCatalogItem(story.targetId);
       if (item) {
-        const starCost = getItemPuzzleStarCost(item);
-        const effStar = Math.max(1, starCost);
+        const starCost = sim.getEffectiveItemStarCost(item);
+        const effStar = starCost > 0 ? starCost : 0;
         const effGold = starCost > 0 ? 0 : item.cost;
-        if (!sim.state.sandboxMode && sim.state.level < item.unlockLevel) {
+        const curStars = sim.state.match3?.stars ?? 0;
+        if (!sim.isCatalogItemUnlocked(item)) {
           return {
             kind: 'open_match3',
-            shortLabel: `▶️ Cày lên Cấp ${item.unlockLevel}`,
-            longLabel: `🔒 Bản vẽ "${item.name}" mở ở Cấp Giải Đố ${item.unlockLevel} — Bấm Chơi Giải Đố Lên Cấp Ngay!`,
+            shortLabel: `🔒 Mở ở Cấp ${item.unlockLevel}`,
+            longLabel: `🔒 Bản vẽ "${item.name}" mở ở Cấp Giải Đố ${item.unlockLevel} (hoặc khi tích đủ ${effStar} 🌟 Sao) — Bấm nút ▶️ góc phải chơi Giải Đố!`,
+            starCost: effStar,
+            goldCost: effGold,
+          };
+        }
+        if (!sim.state.sandboxMode && effStar > 0 && curStars < effStar) {
+          return {
+            kind: 'auto_build',
+            shortLabel: `🌟 Cần ${effStar} Sao (${curStars}/${effStar}🌟)`,
+            longLabel: `🌟 Cần thêm ${effStar - curStars} Sao Phép Thuật (${curStars}/${effStar} 🌟) để khởi công "${item.name}"!`,
             starCost: effStar,
             goldCost: effGold,
           };
         }
         return {
           kind: 'auto_build',
-          shortLabel: effGold > 0 ? `🌟 Xây (${effStar}🌟 + ${effGold}🪙)` : `🌟 Xây Ngay (${effStar} 🌟)`,
+          shortLabel:
+            effGold > 0
+              ? effStar > 0
+                ? `🌟 Xây (${effStar}🌟 + ${effGold}🪙)`
+                : `🔨 Xây Ngay (${effGold.toLocaleString('vi-VN')}🪙)`
+              : `🌟 Xây Ngay (${effStar} 🌟)`,
           longLabel:
             effGold > 0
-              ? `🌟 Xây Tự Động "${item.name}" (${effStar}🌟 + ${effGold.toLocaleString('vi-VN')}🪙) & Hoàn Tất Ngay!`
+              ? `🔨 Xây Tự Động "${item.name}" (${effGold.toLocaleString('vi-VN')}🪙) & Nhận Thưởng!`
               : `🌟 Dùng ${effStar} Sao Khởi Công "${item.name}" & Nhận Thưởng!`,
           starCost: effStar,
           goldCost: effGold,
@@ -763,11 +788,11 @@ export function questsCompleteStoryStepWithStar(sim: ParkSimulation): {
       if (!item) {
         return { ok: false, msg: 'Không tìm thấy công trình nhiệm vụ.' };
       }
-      if (!sim.state.sandboxMode && sim.state.level < item.unlockLevel) {
+      if (!sim.isCatalogItemUnlocked(item)) {
         return {
           ok: false,
           reason: 'locked_level',
-          msg: `🔒 "${item.name}" mở khóa ở Cấp ${item.unlockLevel} — Hãy chơi Giải Đố kiếm thêm XP!`,
+          msg: `🔒 "${item.name}" mở khóa ở Cấp ${item.unlockLevel} — Hãy chơi Giải Đố kiếm thêm Sao & XP!`,
         };
       }
 
