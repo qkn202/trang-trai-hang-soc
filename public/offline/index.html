@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self';"
+    />
+    <meta name="theme-color" content="#241912" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Hang Sóc Games" />
+    <meta
+      name="description"
+      content="Hang Sóc Mini-games Offline — 5 trò chơi trí tuệ phù thủy chạy hoàn toàn ngoại tuyến trên điện thoại."
+    />
+
+    <title>Hang Sóc Mini-games Offline</title>
+
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/fonts/fonts.css" />
+  </head>
+  <body>
+    <div id="offlineApp"></div>
+    <script type="module" src="/src/offline/main.ts"></script>
+  </body>
+</html>

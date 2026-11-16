@@ -1,0 +1,40 @@
+{
+  "id": "./",
+  "name": "Hang Sóc Mini-games Offline",
+  "short_name": "Hang Sóc Games",
+  "description": "5 mini-game trí tuệ Hang Sóc độc lập — chơi ngoại tuyến hoàn toàn trong Chế độ Máy bay.",
+  "lang": "vi",
+  "display": "standalone",
+  "orientation": "any",
+  "start_url": "./",
+  "scope": "./",
+  "background_color": "#241912",
+  "theme_color": "#241912",
+  "categories": ["games", "puzzle"],
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "./icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

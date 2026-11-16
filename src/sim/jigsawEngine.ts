@@ -1290,7 +1290,7 @@ export class MasterJigsawEngine {
     );
     this.timeRemainingSec = Math.max(
       0,
-      Math.min(this.timeLimitSec, Number(saved.timeRemainingSec ?? this.timeLimitSec))
+      Math.min(JIGSAW_MAX_TIME_SEC, Number(saved.timeRemainingSec ?? this.timeLimitSec))
     );
     const validFilters: readonly JigsawTrayFilter[] = ['all', 'edges', 'q0', 'q1', 'q2', 'q3'];
     this.trayFilter = validFilters.includes(saved.trayFilter) ? saved.trayFilter : 'all';
@@ -1519,7 +1519,10 @@ export function sanitizeSavedJigsawSession(
     rows,
     cols,
     timeLimitSec: spec.timeLimitSec,
-    timeRemainingSec: Math.max(0, Math.min(spec.timeLimitSec, Number(obj.timeRemainingSec ?? spec.timeLimitSec))),
+    timeRemainingSec: Math.max(
+      0,
+      Math.min(JIGSAW_MAX_TIME_SEC, Number(obj.timeRemainingSec ?? spec.timeLimitSec))
+    ),
     placedBitsetB64: obj.placedBitsetB64,
     looseClusters,
     trayFilter,

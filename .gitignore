@@ -1,5 +1,6 @@
 # Build output
 dist/
+dist-offline/
 release/
 *.tar.gz
 functions/lib/
@@ -23,4 +24,3 @@ __pycache__/
 # Only ignore regenerated local copies outside public/.
 *.mp3
 !public/audio/*.mp3
-.github/workflows/
