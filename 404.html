@@ -11,7 +11,7 @@
     <!-- Hạ tầng HPVN (hpvnn-archive / asia-southeast1): cho phép kết nối Firebase Cloud Functions v2, Auth/Firestore, HPVN Host & Emulator cục bộ -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://*.hpvn-archive.net https://hpvn-archive.net https://hpvnn-archive.web.app https://hpvnn-burrow.web.app; media-src 'self' data: blob:; connect-src 'self' ws: wss: http://127.0.0.1:* http://localhost:* https://*.cloudfunctions.net https://*.a.run.app https://*.run.app https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.google.com https://hpvn-archive.net https://*.hpvn-archive.net https://hpvn.net https://*.hpvn.net https://hpvnn-archive.web.app https://hpvnn-burrow.web.app; worker-src 'self' blob:; object-src 'none'; base-uri 'self';"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.youtube.com https://s.ytimg.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://i.ytimg.com https://*.hpvn-archive.net https://hpvn-archive.net https://hpvnn-archive.web.app https://hpvnn-burrow.web.app; media-src 'self' data: blob:; frame-src https://www.youtube.com https://www.youtube-nocookie.com; connect-src 'self' ws: wss: http://127.0.0.1:* http://localhost:* https://*.cloudfunctions.net https://*.a.run.app https://*.run.app https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.google.com https://hpvn-archive.net https://*.hpvn-archive.net https://hpvn.net https://*.hpvn.net https://hpvnn-archive.web.app https://hpvnn-burrow.web.app; worker-src 'self' blob:; object-src 'none'; base-uri 'self';"
     />
     <meta name="application-name" content="Hang Sóc Farm" />
     <meta
@@ -89,8 +89,13 @@
         var forceClear = Boolean(
           params && (params.has('clearcache') || params.has('nocache') || params.has('fresh'))
         );
+        var isLocalLoopback =
+          window.location.hostname === 'localhost' ||
+          window.location.hostname === '127.0.0.1' ||
+          window.location.hostname === '[::1]';
         var isViteDev =
           window.location.port === '5173' ||
+          (isLocalLoopback && /^517\d$/.test(window.location.port)) ||
           Boolean(document.querySelector('script[src*="/@vite/client"]'));
 
         if (isViteDev || forceClear) {
@@ -161,7 +166,9 @@
           try {
             window.dispatchEvent(new Event('hangsoc:before-sw-reload'));
           } catch (e) {}
-          window.location.reload();
+          setTimeout(function () {
+            window.location.reload();
+          }, 60);
         }
         navigator.serviceWorker.addEventListener('controllerchange', function () {
           if (!hadInitialSw || refreshingSw || pendingSwReload) return;
@@ -202,11 +209,11 @@
         });
       })();
     </script>
-    <script type="module" crossorigin src="/trang-trai-hang-soc/assets/index-DOY2wtwN.js"></script>
-    <link rel="modulepreload" crossorigin href="/trang-trai-hang-soc/assets/game-data-k4NCjdHW.js">
-    <link rel="modulepreload" crossorigin href="/trang-trai-hang-soc/assets/sim-C7vfV02g.js">
-    <link rel="modulepreload" crossorigin href="/trang-trai-hang-soc/assets/engine-Dz--EfFJ.js">
-    <link rel="stylesheet" crossorigin href="/trang-trai-hang-soc/assets/index-BdH7dsmJ.css">
+    <script type="module" crossorigin src="/trang-trai-hang-soc/assets/index-BgnuQdRl.js"></script>
+    <link rel="modulepreload" crossorigin href="/trang-trai-hang-soc/assets/game-data-B80lpGGE.js">
+    <link rel="modulepreload" crossorigin href="/trang-trai-hang-soc/assets/sim-Bap4m-rP.js">
+    <link rel="modulepreload" crossorigin href="/trang-trai-hang-soc/assets/engine-B82YWe7Z.js">
+    <link rel="stylesheet" crossorigin href="/trang-trai-hang-soc/assets/index-C_OQQRdC.css">
   </head>
   <body>
     <div id="app"></div>

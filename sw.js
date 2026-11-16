@@ -9,11 +9,16 @@
  * - Vite Dev / HMR (/src/*, /@*, /node_modules/*): Always bypass SW (network-only)
  */
 
-const CACHE_VERSION = 'v54-597b477c';
+const CACHE_VERSION = 'v61-41c895f3';
 const SHELL_CACHE = `hangsoc-shell-${CACHE_VERSION}`;
 const STATIC_CACHE = `hangsoc-static-${CACHE_VERSION}`;
 const ASSETS_CACHE = `hangsoc-assets-${CACHE_VERSION}`;
-const IS_VITE_DEV_PORT = self.location.port === '5173';
+const IS_LOCALHOST =
+  self.location.hostname === 'localhost' ||
+  self.location.hostname === '127.0.0.1' ||
+  self.location.hostname === '[::1]';
+const IS_VITE_DEV_PORT =
+  self.location.port === '5173' || (IS_LOCALHOST && /^517\d$/.test(self.location.port));
 const SCOPE_PATH = new URL('./', self.location.href).pathname;
 
 const PRECACHE_URLS = [
@@ -76,15 +81,22 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((cacheNames) =>
-        Promise.all(
+      .then((cacheNames) => {
+        const previousAssetCaches = cacheNames
+          .filter((name) => name.startsWith('hangsoc-assets-') && name !== ASSETS_CACHE)
+          .sort();
+        const retainedPrevAssetCache =
+          previousAssetCaches.length > 0
+            ? previousAssetCaches[previousAssetCaches.length - 1]
+            : null;
+        return Promise.all(
           cacheNames.map((cacheName) => {
-            if (!currentCaches.has(cacheName)) {
+            if (!currentCaches.has(cacheName) && cacheName !== retainedPrevAssetCache) {
               return caches.delete(cacheName);
             }
           })
-        )
-      )
+        );
+      })
       .then(() => self.clients.claim())
   );
 });
@@ -168,7 +180,7 @@ self.addEventListener('fetch', (event) => {
   if (relPath.startsWith('/assets/') || relPath.startsWith('/fonts/')) {
     event.respondWith(
       caches.open(ASSETS_CACHE).then(async (cache) => {
-        const cached = await cache.match(request);
+        const cached = (await cache.match(request)) || (await caches.match(request));
         if (cached) return cached;
 
         const networkResponse = await fetch(request);
@@ -185,14 +197,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // (b) Static heavy media assets (/sprites/*, /paintings/*, /audio/*, /icons/*)
+  // (b) Static heavy media assets (/sprites/*, /paintings/*, /audio/*, /icons/*, /atlases/*)
   // Strategy: Stale-While-Revalidate (~14MB assets, excluding SPA text/html fallbacks)
   const isMediaAsset =
     relPath === '/favicon.ico' ||
     relPath.startsWith('/sprites/') ||
     relPath.startsWith('/paintings/') ||
     relPath.startsWith('/audio/') ||
-    relPath.startsWith('/icons/');
+    relPath.startsWith('/icons/') ||
+    relPath.startsWith('/atlases/');
 
   if (isMediaAsset) {
     event.respondWith(
