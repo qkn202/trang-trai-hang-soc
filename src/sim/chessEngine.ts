@@ -103,9 +103,9 @@ export class WizardChessEngine {
     this.difficultyLabel = this.milestoneBoss
       ? `👑 Đại Trùm Mốc ${this.stage}`
       : `${tier.badgeEmoji} ${tier.label}`;
-    this.freeUndosLeft = this.stage <= 15 ? 1 : 0;
-    this.paidUndosLeft = this.stage <= 120 ? 2 : 1;
-    this.freeHintsLeft = this.stage <= 10 ? 1 : 0;
+    this.freeUndosLeft = this.stage <= 5 ? 1 : 0;
+    this.paidUndosLeft = this.stage <= 60 ? 1 : 0;
+    this.freeHintsLeft = this.stage <= 3 ? 1 : 0;
     this.paidAssistsLeft = 1; // Strictly max 1 paid assist per stage — no auto-play spamming!
     this.assistGoldCost = Math.min(280, 110 + Math.floor(this.stage / 5));
     this.undoGoldCost = Math.min(220, 65 + Math.floor(this.stage / 7));
@@ -814,6 +814,8 @@ export class WizardChessEngine {
 
   private evaluateBoardWhiteScore(board: (ChessPiece | null)[][]): number {
     let score = 0;
+    let wBishops = 0;
+    let bBishops = 0;
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
         const p = board[r][c];
@@ -824,10 +826,59 @@ export class WizardChessEngine {
         else if (p.type === 'n') pst = KNIGHT_PST[pr][c];
         else if (p.type !== 'k') pst = CENTER_PST[pr][c];
 
-        const val = PIECE_VALUES[p.type] + pst;
+        let bonus = 0;
+        if (p.type === 'b') {
+          if (p.color === 'w') wBishops++;
+          else bBishops++;
+        } else if (p.type === 'r') {
+          if ((p.color === 'w' && r === 1) || (p.color === 'b' && r === 6)) bonus += 20;
+          if (c === 3 || c === 4) bonus += 12;
+        } else if (p.type === 'k') {
+          if (
+            (p.color === 'w' && r === 7 && (c === 6 || c === 2 || c === 1)) ||
+            (p.color === 'b' && r === 0 && (c === 6 || c === 2 || c === 1))
+          ) {
+            bonus += 24;
+          } else if ((p.color === 'w' && r <= 5) || (p.color === 'b' && r >= 2)) {
+            bonus -= 18;
+          }
+        } else if (p.type === 'p') {
+          const cMin = c > 0 ? c - 1 : 0;
+          const cMax = c < 7 ? c + 1 : 7;
+          let passed = true;
+          if (p.color === 'w') {
+            for (let rr = r - 1; rr >= 1 && passed; rr--) {
+              for (let cc = cMin; cc <= cMax; cc++) {
+                const blocker = board[rr][cc];
+                if (blocker && blocker.type === 'p' && blocker.color === 'b') {
+                  passed = false;
+                  break;
+                }
+              }
+            }
+            if (passed) bonus += 18 + (6 - r) * 6;
+            else if (r <= 3) bonus += (4 - r) * 8;
+          } else {
+            for (let rr = r + 1; rr <= 6 && passed; rr++) {
+              for (let cc = cMin; cc <= cMax; cc++) {
+                const blocker = board[rr][cc];
+                if (blocker && blocker.type === 'p' && blocker.color === 'w') {
+                  passed = false;
+                  break;
+                }
+              }
+            }
+            if (passed) bonus += 18 + (r - 1) * 6;
+            else if (r >= 4) bonus += (r - 3) * 8;
+          }
+        }
+
+        const val = PIECE_VALUES[p.type] + pst + bonus;
         score += p.color === 'w' ? val : -val;
       }
     }
+    if (wBishops >= 2) score += 35;
+    if (bBishops >= 2) score -= 35;
     return score;
   }
 
@@ -851,19 +902,25 @@ export class WizardChessEngine {
     }
 
     if (depth <= 0) {
-      if (this.stage >= 90) {
-        return {
-          score: this.searchQuiescence(board, color, castling, ep, 2, alpha, beta),
-          move: null,
-        };
-      }
-      return { score: this.evaluateBoardWhiteScore(board), move: null };
+      const qDepth = this.stage >= 120 ? 3 : 2;
+      return {
+        score: this.searchQuiescence(board, color, castling, ep, qDepth, alpha, beta),
+        move: null,
+      };
     }
 
     // MVV-LVA move ordering for tight Alpha-Beta cutoffs
     legal.sort((a, b) => {
-      const sa = (a.captured ? PIECE_VALUES[a.captured.type] * 10 : 0) + (a.promotion ? 8000 : 0);
-      const sb = (b.captured ? PIECE_VALUES[b.captured.type] * 10 : 0) + (b.promotion ? 8000 : 0);
+      const attA = board[a.fromR][a.fromC];
+      const attB = board[b.fromR][b.fromC];
+      const sa =
+        (a.captured
+          ? PIECE_VALUES[a.captured.type] * 12 - (attA ? PIECE_VALUES[attA.type] : 0)
+          : 0) + (a.promotion ? 9000 : 0);
+      const sb =
+        (b.captured
+          ? PIECE_VALUES[b.captured.type] * 12 - (attB ? PIECE_VALUES[attB.type] : 0)
+          : 0) + (b.promotion ? 9000 : 0);
       return sb - sa;
     });
 
@@ -987,13 +1044,11 @@ export class WizardChessEngine {
     ).length;
     if (legalCount === 0) return null;
     const depth =
-      this.stage <= 15
-        ? 2
-        : this.stage <= 320
-          ? 3
-          : legalCount <= 22
-            ? 4
-            : 3;
+      legalCount <= 12
+        ? 5
+        : legalCount <= 26 && (this.stage >= 60 || legalCount <= 18)
+          ? 4
+          : 3;
     const res = this.searchAlphaBeta(
       this.board,
       'b',

@@ -116,6 +116,7 @@ export function shouldOutline(key: string): boolean {
     !key.startsWith('ui_icon_') &&
     !key.startsWith('npc_') &&
     !key.startsWith('villager_') &&
+    !key.startsWith('yule_') &&
     !NO_OUTLINE_KEYS.has(key)
   );
 }
@@ -126,6 +127,7 @@ export function isGlossyUntoonedSprite(key: string): boolean {
     key.startsWith('ui_icon_') ||
     key.startsWith('npc_') ||
     key.startsWith('villager_') ||
+    key.startsWith('yule_') ||
     NO_OUTLINE_KEYS.has(key)
   );
 }

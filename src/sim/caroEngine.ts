@@ -144,25 +144,28 @@ export class CaroGameEngine {
       : `${tier.badgeEmoji} ${tier.label}`;
     // Opponent scales progressively while rotating within each difficulty band; Boss milestones face elite dark wizards
     const oppIdx = this.milestoneBoss
-      ? this.stage >= 500
+      ? this.stage >= 300
         ? CARO_OPPONENTS.length - 1
-        : this.stage >= 200
-          ? CARO_OPPONENTS.length - 2
-          : 2
+        : this.stage >= 100
+          ? Math.max(0, CARO_OPPONENTS.length - 2)
+          : Math.min(CARO_OPPONENTS.length - 1, 3)
       : this.stage === MAX_MINIGAME_STAGE
         ? CARO_OPPONENTS.length - 1
-        : this.stage <= 25
+        : this.stage <= 9
           ? (this.stage - 1) % 2
-          : this.stage <= 150
-            ? 1 + ((this.stage - 1) % 3)
-            : 2 + ((this.stage - 1) % 3);
+          : this.stage < 60
+            ? Math.min(CARO_OPPONENTS.length - 1, 2 + ((this.stage - 1) % 2))
+            : Math.min(
+                CARO_OPPONENTS.length - 1,
+                Math.max(0, CARO_OPPONENTS.length - 2) + ((this.stage - 1) % 2),
+              );
     this.opponent = CARO_OPPONENTS[oppIdx];
     this.rng = mulberry32(this.stage * 65537 + 1337);
 
-    this.freeUndosLeft = this.stage <= 15 ? 1 : 0;
-    this.paidUndosLeft = this.stage <= 100 ? 2 : 1;
-    this.freeHintsLeft = this.stage <= 12 ? 1 : 0;
-    this.paidHintsLeft = this.stage <= 120 ? 1 : 0;
+    this.freeUndosLeft = this.stage <= 5 ? 1 : 0;
+    this.paidUndosLeft = this.stage <= 50 ? 1 : 0;
+    this.freeHintsLeft = this.stage <= 4 ? 1 : 0;
+    this.paidHintsLeft = this.stage <= 80 ? 1 : 0;
     this.hintGoldCost = Math.min(260, 90 + Math.floor(this.stage / 5));
     this.undoGoldCost = Math.min(220, 65 + Math.floor(this.stage / 7));
 
@@ -210,17 +213,17 @@ export class CaroGameEngine {
       }
       this.runeSealCount = placedBoss;
     } else {
-      // Stages 90..777: place 1..5 Ancient Wax Rune Obstacles (stone = 3) so memorized patterns fail
+      // Stages 25..777: place 1..5 Ancient Wax Rune Obstacles (stone = 3) so memorized patterns fail
       const targetSeals =
-        this.stage < 90
+        this.stage < 25
           ? 0
-          : this.stage < 200
+          : this.stage < 90
             ? 1
-            : this.stage < 350
+            : this.stage < 180
               ? 2
-              : this.stage < 520
+              : this.stage < 320
                 ? 3
-                : this.stage < 680
+                : this.stage < 500
                   ? 4
                   : 5;
       let placedSeals = 0;
@@ -238,8 +241,8 @@ export class CaroGameEngine {
       this.runeSealCount = placedSeals;
     }
 
-    // Stages 16..777: Pro-Renju central exchange (1 Phoenix + 1 Dark Mark) so every stage starts fresh!
-    if (this.stage >= 16) {
+    // Stages 8..777: Pro-Renju central exchange (1 Phoenix + 1 Dark Mark) so every stage starts fresh!
+    if (this.stage >= 8) {
       const opening = CARO_PRO_OPENINGS[(this.stage * 7 + 3) % CARO_PRO_OPENINGS.length];
       for (const [r, c, st] of opening) {
         if (this.grid[r][c] === 0) {
@@ -355,12 +358,11 @@ export class CaroGameEngine {
   }
 
   private getStageAiStrength(): number {
-    if (this.stage <= 8) return 0;
-    if (this.stage <= 30) return 1;
-    if (this.stage <= 95) return 2;
-    if (this.stage <= 240) return 3;
-    if (this.stage <= 480) return 4;
-    return 5;
+    if (this.stage <= 5) return 2;
+    if (this.stage <= 20) return 3;
+    if (this.stage <= 70) return 4;
+    if (this.stage <= 180) return 5;
+    return 6;
   }
 
   public stepAiMove(): {
@@ -771,14 +773,42 @@ export class CaroGameEngine {
       if (oppWin) return cell;
     }
 
+    // 2b. Immediate unblockable Open-Four attack (>= 140_000)
+    let bestOpenFourAtk: { r: number; c: number; val: number } | null = null;
+    for (const cell of cands) {
+      const atk = this.scorePlacementAt(cell.r, cell.c, stone);
+      if (atk >= 140_000 && (!bestOpenFourAtk || atk > bestOpenFourAtk.val)) {
+        bestOpenFourAtk = { r: cell.r, c: cell.c, val: atk };
+      }
+    }
+    if (bestOpenFourAtk) return { r: bestOpenFourAtk.r, c: bestOpenFourAtk.c };
+
+    // 2c. Immediate defense against opponent's Open-Four (>= 140_000)
+    let bestOpenFourDef: { r: number; c: number; val: number } | null = null;
+    for (const cell of cands) {
+      const def = this.scorePlacementAt(cell.r, cell.c, opp);
+      if (def >= 140_000 && (!bestOpenFourDef || def > bestOpenFourDef.val)) {
+        bestOpenFourDef = { r: cell.r, c: cell.c, val: def };
+      }
+    }
+    if (bestOpenFourDef) return { r: bestOpenFourDef.r, c: bestOpenFourDef.c };
+
     const defWeight =
-      strength === 0 ? 0.9 : strength === 1 ? 1.04 : strength === 2 ? 1.12 : strength === 3 ? 1.18 : 1.24;
+      strength <= 2
+        ? 1.16
+        : strength === 3
+          ? 1.2
+          : strength === 4
+            ? 1.24
+            : strength === 5
+              ? 1.28
+              : 1.32;
     const scored = cands.map((cell) => {
       const atk = this.scorePlacementAt(cell.r, cell.c, stone);
       const def = this.scorePlacementAt(cell.r, cell.c, opp);
       const centerBonus = Math.max(0, 18 - Math.hypot(cell.r - mid, cell.c - mid) * 2.4);
       const jitter =
-        strength === 0 ? this.rng() * 210 : strength <= 2 ? this.rng() * 14 : this.rng() * 3;
+        strength <= 2 ? this.rng() * 8 : strength <= 4 ? this.rng() * 3 : this.rng() * 0.5;
       return {
         r: cell.r,
         c: cell.c,
@@ -789,9 +819,9 @@ export class CaroGameEngine {
 
     scored.sort((a, b) => b.score - a.score);
 
-    // 3. 2-ply / 3-ply tactical fork & VCF lookahead for mid/late stages
+    // 3. 2-ply / 3-ply tactical fork & VCF lookahead for all stages
     if (strength >= 2 && scored.length > 1) {
-      const beamWidth = strength >= 4 ? 9 : 6;
+      const beamWidth = strength >= 5 ? 11 : strength >= 4 ? 9 : 7;
       const top = scored.slice(0, beamWidth);
       let bestCell = top[0];
       let bestCombined = -Infinity;
@@ -806,13 +836,13 @@ export class CaroGameEngine {
         for (const oc of nextCands) {
           const oppAtk = this.scorePlacementAt(oc.r, oc.c, opp);
           const oppDef = this.scorePlacementAt(oc.r, oc.c, stone);
-          oppScored.push({ r: oc.r, c: oc.c, val: oppAtk * 1.1 + oppDef * 0.7 });
+          oppScored.push({ r: oc.r, c: oc.c, val: oppAtk * 1.15 + oppDef * 0.72 });
         }
         oppScored.sort((a, b) => b.val - a.val);
 
         if (strength >= 4 && oppScored.length > 0) {
-          // 3-ply check across opponent's top 3 replies
-          const oppTop = oppScored.slice(0, 3);
+          // 3-ply check across opponent's top 3..4 replies
+          const oppTop = oppScored.slice(0, strength >= 5 ? 4 : 3);
           for (const rep of oppTop) {
             this.grid[rep.r][rep.c] = opp;
             const followCands = this.getCandidateCells();
@@ -822,7 +852,8 @@ export class CaroGameEngine {
               if (fAtk > bestFollowUp) bestFollowUp = fAtk;
             }
             this.grid[rep.r][rep.c] = 0;
-            const oppPressure = rep.val - bestFollowUp * (strength >= 5 ? 0.55 : 0.42);
+            const oppPressure =
+              rep.val - bestFollowUp * (strength >= 6 ? 0.62 : strength >= 5 ? 0.55 : 0.42);
             if (oppPressure > worstOppNet) worstOppNet = oppPressure;
           }
         } else {
@@ -830,17 +861,13 @@ export class CaroGameEngine {
         }
         this.grid[cand.r][cand.c] = 0;
 
-        const net = cand.score - Math.max(0, worstOppNet) * 0.46;
+        const net = cand.score - Math.max(0, worstOppNet) * 0.48;
         if (net > bestCombined) {
           bestCombined = net;
           bestCell = cand;
         }
       }
       return { r: bestCell.r, c: bestCell.c };
-    }
-
-    if (strength === 0 && !scored[0].urgent && scored.length >= 2 && this.rng() < 0.32) {
-      return { r: scored[1].r, c: scored[1].c };
     }
 
     return { r: scored[0].r, c: scored[0].c };

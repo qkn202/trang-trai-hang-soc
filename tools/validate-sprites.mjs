@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const SPRITES_DIR = join(ROOT, 'public', 'sprites');
 
-/** Every key the loader asks for. Keep in sync with src/engine/spriteLoader.ts (172 total). */
+/** Every key the loader asks for. Keep in sync with src/engine/spriteLoader.ts (288 total). */
 const REQUIRED = [
   'niffler_den', 'hippogriff_glade', 'phoenix_perch', 'dragon_lair',
   'black_lake_boats', 'hagrid_bowtruckle', 'owlery_elf_hut', 'butterbeer_cart',
@@ -84,6 +84,47 @@ const REQUIRED = [
   'villager_ginny_idle', 'villager_ginny_walk',
   'villager_hagrid_idle', 'villager_hagrid_walk',
   'villager_hermione_idle', 'villager_hermione_walk',
+  // Christmas x Harry Potter Growable Seed Flowers & Winter Plants (12 -> 184 Total)
+  'ui_icon_crop_yule_poinsettia', 'ui_icon_crop_yule_hellebore', 'ui_icon_crop_yule_snowdrop',
+  'ui_icon_crop_yule_amaryllis', 'ui_icon_crop_yule_paperwhite', 'ui_icon_crop_yule_holly_sprig',
+  'ui_icon_crop_yule_mistletoe', 'ui_icon_crop_yule_edelweiss', 'ui_icon_crop_yule_winter_camellia',
+  'ui_icon_crop_yule_frost_orchid', 'ui_icon_crop_yule_frost_cranberry', 'ui_icon_crop_yule_dwarf_fir',
+  // Christmas x Harry Potter 104 Snowy Festive Decor Collection (104 -> 288 Total)
+  'yule_burrow_gnome_snowman', 'yule_burrow_knitting_basket', 'yule_hearth_stockings',
+  'yule_gnome_angel_topper', 'yule_weasley_sweater_rack', 'yule_molly_pudding_table',
+  'yule_arthur_duck_sled', 'yule_firewood_snow_shed', 'yule_crookshanks_cushion',
+  'yule_great_hall_tree', 'yule_floating_candelabra', 'yule_four_house_pillar',
+  'yule_crystal_banquet_table', 'yule_goblet_blue_brazier', 'yule_gramophone_harp',
+  'yule_ice_swan_arch', 'yule_ice_stag_sculpture', 'yule_ice_phoenix_fountain',
+  'yule_hogsmeade_twin_lamp', 'yule_snowy_signpost', 'yule_roasted_chestnut_stand',
+  'yule_wizard_cracker_cart', 'yule_butterbeer_hot_cart', 'yule_hogsmeade_arch',
+  'yule_honeydukes_cane_arch', 'yule_sugarplum_tower', 'yule_quill_wrapping_booth',
+  'yule_owl_post_box', 'yule_luggage_gift_trolley', 'yule_broomstick_snow_rack',
+  'yule_floating_parcel_cluster', 'yule_hedwig_gift_sleigh', 'yule_flying_car_tree',
+  'yule_giant_gift_mountain', 'yule_hogwarts_snow_loco', 'yule_puffskein_snowballs',
+  'yule_bowtruckle_mistletoe', 'yule_mandrake_earmuff_pot', 'yule_niffler_wreath_stash',
+  'yule_hagrid_yule_log', 'yule_frog_choir_stage', 'yule_hippogriff_warm_nest',
+  'yule_castle_snowglobe', 'yule_holly_hedgerow', 'yule_candy_cane_fence',
+  'yule_lantern_stone_wall', 'yule_poinsettia_cauldron', 'yule_snitch_topiary',
+  'yule_snowball_fort', 'yule_frozen_skate_pond', 'yule_ollivanders_shop',
+  'yule_weasley_wheezes_facade', 'yule_gringotts_dragon_dome', 'yule_flourish_blotts_front',
+  'yule_shrieking_shack_hill', 'yule_zonkos_joke_corner', 'yule_hogs_head_porch',
+  'yule_puddifoot_tea_pavilion', 'yule_godrics_hollow_statue', 'yule_lovegood_rook_house',
+  'yule_shell_cottage_mini', 'yule_hogwarts_boathouse_ice', 'yule_mirror_of_erised',
+  'yule_invisibility_cloak_chest', 'yule_firebolt_display', 'yule_dobby_sock_tree',
+  'yule_triwizard_golden_egg', 'yule_hermione_bluebell_jars', 'yule_sorting_hat_stool',
+  'yule_sword_frozen_pool', 'yule_common_room_armchairs', 'yule_ministry_phonebox',
+  'yule_platform_nine_pillar', 'yule_fawkes_lemon_perch', 'yule_silver_fir_trio',
+  'yule_blue_spruce_starlight', 'yule_ribbon_house_pine', 'yule_candy_spiral_cypress',
+  'yule_whomping_willow_winter', 'yule_weeping_frost_willow', 'yule_golden_mistletoe_oak',
+  'yule_holly_berry_tree', 'yule_dirigible_plum_tree', 'yule_owl_hedgerow_topiary',
+  'yule_stag_patronus_topiary', 'yule_birch_fairy_grove', 'yule_poinsettia_tiered_stand',
+  'yule_hellebore_stone_trough', 'yule_amaryllis_brass_urn', 'yule_snowdrop_moss_log',
+  'yule_winterberry_cinnamon_barrel', 'yule_frost_rose_trellis', 'yule_sprout_winter_coldframe',
+  'yule_glowing_puffapod_bush', 'yule_edelweiss_alpine_rockery', 'yule_crystal_lotus_fountain_pot',
+  'yule_poinsettia_roundabout_bed', 'yule_winter_flora_conservatory', 'yule_gryffindor_lion_mascot',
+  'yule_slytherin_serpent_mascot', 'yule_ravenclaw_eagle_mascot', 'yule_hufflepuff_badger_mascot',
+  'yule_four_house_hourglasses', 'yule_mini_hogwarts_castle',
 ];
 
 /**

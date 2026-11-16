@@ -163,6 +163,8 @@ export class CandyHogwartsBoardRenderer {
   private bgDirty = true;
   private lastBgKey = '';
   private sprites: Record<string, HTMLImageElement> = {};
+  private yuleSprites: Record<string, HTMLImageElement> = {};
+  private yuleSpritesLoaded = false;
   private resizeObserver: ResizeObserver | null = null;
 
   constructor(canvas: HTMLCanvasElement, onSpriteReady?: () => void) {
@@ -242,8 +244,54 @@ export class CandyHogwartsBoardRenderer {
     load('swirl_piece', `/paintings/candy-hogwarts/candy-swirl.webp${q}`);
   }
 
+  private isYuleSkinActive(): boolean {
+    return (
+      typeof document !== 'undefined' &&
+      document.documentElement?.dataset?.yuleTheme === 'true'
+    );
+  }
+
+  private ensureYuleSpritesLoaded(): void {
+    if (this.yuleSpritesLoaded || typeof Image === 'undefined') return;
+    this.yuleSpritesLoaded = true;
+    const loadYule = (key: string, url: string) => {
+      const img = new Image();
+      img.decoding = 'async';
+      img.onload = () => {
+        this.bgDirty = true;
+        this.onSpriteReady?.();
+      };
+      img.onerror = () => {
+        if (/\.webp(\?.*)?$/.test(url)) {
+          img.src = url.replace(/\.webp(\?.*)?$/, '.png$1');
+        }
+      };
+      img.src = url;
+      this.yuleSprites[key] = img;
+    };
+
+    const q = `?v=${CANDY_ASSET_REV}`;
+    for (let i = 0; i < 6; i++) {
+      loadYule(`c_${i}`, `/paintings/candy-yule/candy-${i}.webp${q}`);
+    }
+    loadYule('color_bomb', `/paintings/candy-yule/powerup-rainbow.webp${q}`);
+    loadYule('frosting_waffle', `/paintings/candy-yule/candy-frosting.webp${q}`);
+    loadYule('swirl_piece', `/paintings/candy-yule/candy-swirl.webp${q}`);
+  }
+
+  private pickActiveSprite(key: string): HTMLImageElement | undefined {
+    if (this.isYuleSkinActive()) {
+      this.ensureYuleSpritesLoaded();
+      const yImg = this.yuleSprites[key];
+      if (yImg && yImg.complete && yImg.naturalWidth > 0) {
+        return yImg;
+      }
+    }
+    return this.sprites[key];
+  }
+
   private getSpriteForPiece(piece: CandyBoardPiece): HTMLImageElement | undefined {
-    if (piece.special === 'color_bomb') return this.sprites.color_bomb;
+    if (piece.special === 'color_bomb') return this.pickActiveSprite('color_bomb');
     if (
       piece.special === 'firecracker' ||
       piece.special === 'striped_h' ||
@@ -258,7 +306,7 @@ export class CandyHogwartsBoardRenderer {
     if (piece.special === 'tnt') return this.sprites.powerup_tnt;
     if (piece.special === 'seeker') return this.sprites.powerup_seeker;
     const col = piece.color >= 0 && piece.color < 6 ? piece.color : 0;
-    return this.sprites[`c_${col}`];
+    return this.pickActiveSprite(`c_${col}`);
   }
 
   public invalidateBg(): void {
@@ -379,7 +427,11 @@ export class CandyHogwartsBoardRenderer {
     bCtx.save();
     bCtx.scale(this.dpr, this.dpr);
 
-    this.drawBoardTray(bCtx, size, mask, cs);
+    const isYule = this.isYuleSkinActive();
+    if (isYule) {
+      this.ensureYuleSpritesLoaded();
+    }
+    this.drawBoardTray(bCtx, size, mask, cs, isYule);
 
     for (let r = 0; r < size; r++) {
       for (let c = 0; c < size; c++) {
@@ -388,19 +440,27 @@ export class CandyHogwartsBoardRenderer {
         const y = this.padding + r * cs;
         const isEven = (r + c) % 2 === 0;
 
-        bCtx.fillStyle = isEven ? 'rgba(245, 231, 206, 0.96)' : 'rgba(232, 212, 180, 0.95)';
+        bCtx.fillStyle = isYule
+          ? isEven
+            ? 'rgba(242, 250, 255, 0.96)'
+            : 'rgba(222, 240, 252, 0.95)'
+          : isEven
+            ? 'rgba(245, 231, 206, 0.96)'
+            : 'rgba(232, 212, 180, 0.95)';
         roundRectPath(bCtx, x + 1, y + 1, cs - 2, cs - 2, cs * 0.15);
         bCtx.fill();
 
         bCtx.lineWidth = 1.15;
-        bCtx.strokeStyle = 'rgba(110, 57, 28, 0.24)';
+        bCtx.strokeStyle = isYule
+          ? 'rgba(20, 83, 45, 0.24)'
+          : 'rgba(110, 57, 28, 0.24)';
         bCtx.stroke();
       }
     }
     bCtx.restore();
 
     this.bgDirty = false;
-    this.lastBgKey = `${size}_${this.boardPx}_${this.dpr}`;
+    this.lastBgKey = `${size}_${this.boardPx}_${this.dpr}_${isYule ? 1 : 0}`;
   }
 
   public render(state: CandyRenderState, now: number): void {
@@ -445,7 +505,11 @@ export class CandyHogwartsBoardRenderer {
       ctx.translate((Math.random() - 0.5) * vfx.shake, (Math.random() - 0.5) * vfx.shake);
     }
 
-    const bgKey = `${size}_${this.boardPx}_${this.dpr}`;
+    const isYule = this.isYuleSkinActive();
+    if (isYule) {
+      this.ensureYuleSpritesLoaded();
+    }
+    const bgKey = `${size}_${this.boardPx}_${this.dpr}_${isYule ? 1 : 0}`;
     if (this.bgDirty || this.lastBgKey !== bgKey) {
       this.renderStaticBg(size, mask, cs);
     }
@@ -716,7 +780,8 @@ export class CandyHogwartsBoardRenderer {
     ctx: CanvasRenderingContext2D,
     size: number,
     mask: number[][],
-    cs: number
+    cs: number,
+    isYule = false
   ): void {
     const fillConnectedShape = (expand: number, radius: number) => {
       for (let r = 0; r < size; r++) {
@@ -748,20 +813,20 @@ export class CandyHogwartsBoardRenderer {
     };
 
     ctx.save();
-    ctx.shadowColor = 'rgba(43, 21, 9, 0.68)';
+    ctx.shadowColor = isYule ? 'rgba(6, 38, 22, 0.72)' : 'rgba(43, 21, 9, 0.68)';
     ctx.shadowBlur = 8;
     ctx.shadowOffsetY = 2;
-    ctx.fillStyle = '#3b1e0e';
+    ctx.fillStyle = isYule ? '#0b3824' : '#3b1e0e';
     fillConnectedShape(6.2, cs * 0.24);
 
     ctx.shadowColor = 'transparent';
-    ctx.fillStyle = '#d89e28';
+    ctx.fillStyle = isYule ? '#f59e0b' : '#d89e28';
     fillConnectedShape(4.6, cs * 0.22);
 
-    ctx.fillStyle = '#733d1d';
+    ctx.fillStyle = isYule ? '#dc2626' : '#733d1d';
     fillConnectedShape(3.0, cs * 0.19);
 
-    ctx.fillStyle = '#4a2511';
+    ctx.fillStyle = isYule ? '#14532d' : '#4a2511';
     fillConnectedShape(1.4, cs * 0.16);
     ctx.restore();
   }
@@ -829,7 +894,7 @@ export class CandyHogwartsBoardRenderer {
     layer: number
   ): void {
     ctx.save();
-    const sprite = this.sprites.frosting_waffle;
+    const sprite = this.pickActiveSprite('frosting_waffle');
     if (sprite && sprite.complete && sprite.naturalWidth > 0) {
       const pad = -w * 0.03;
       ctx.drawImage(sprite, x + pad, y + pad, w - pad * 2, h - pad * 2);
@@ -1617,7 +1682,7 @@ export class CandyHogwartsBoardRenderer {
     ctx.fillStyle = 'rgba(59, 30, 14, 0.28)';
     ctx.fill();
 
-    const sprite = this.sprites.swirl_piece;
+    const sprite = this.pickActiveSprite('swirl_piece');
     if (sprite && sprite.complete && sprite.naturalWidth > 0) {
       const s = size * 0.98;
       ctx.drawImage(sprite, cx - s * 0.5, cy - s * 0.5, s, s);

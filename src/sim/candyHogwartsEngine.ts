@@ -296,6 +296,9 @@ export class CandyHogwartsEngine {
   public kbCursor: { r: number; c: number } | null = null;
   public activeBooster: 'hammer' | 'swap' | null = null;
   public busy = false;
+  public activeAsyncSwaps = 0;
+  private colBusyCounts = new Uint8Array(12);
+  private pendingConsumedTurns = 0;
   public ended = false;
 
   private lastActionAt = nowMs();
@@ -467,9 +470,79 @@ export class CandyHogwartsEngine {
     );
   }
 
+  public isColumnBusy(c: number): boolean {
+    if (this.busy) return true;
+    if (c < 0 || c >= this.size) return true;
+    return (this.colBusyCounts[c] ?? 0) > 0;
+  }
+
+  public isCellBusy(r: number, c: number): boolean {
+    return !this.isValidCell(r, c) || this.isColumnBusy(c);
+  }
+
+  public hasAnyAsyncActivity(): boolean {
+    return this.busy || this.activeAsyncSwaps > 0;
+  }
+
+  public getLockedColumnsSnapshot(): number[] {
+    const out: number[] = [];
+    for (let c = 0; c < this.size; c++) {
+      if (this.isColumnBusy(c)) out.push(c);
+    }
+    return out;
+  }
+
+  private acquireColumnSet(cols: Iterable<number>): Set<number> {
+    const owned = new Set<number>();
+    for (const c of cols) {
+      if (c >= 0 && c < this.size && !owned.has(c)) {
+        owned.add(c);
+        this.colBusyCounts[c] = (this.colBusyCounts[c] ?? 0) + 1;
+      }
+    }
+    return owned;
+  }
+
+  private expandColumnSet(owned: Set<number>, cols: Iterable<number>): void {
+    for (const c of cols) {
+      if (c >= 0 && c < this.size && !owned.has(c) && (this.colBusyCounts[c] ?? 0) === 0) {
+        owned.add(c);
+        this.colBusyCounts[c] = (this.colBusyCounts[c] ?? 0) + 1;
+      }
+    }
+  }
+
+  private releaseColumnSet(owned: Set<number>): void {
+    for (const c of owned) {
+      if (c >= 0 && c < this.colBusyCounts.length && this.colBusyCounts[c]! > 0) {
+        this.colBusyCounts[c]!--;
+      }
+    }
+    owned.clear();
+  }
+
+  private resetAsyncLocks(): void {
+    this.colBusyCounts.fill(0);
+    this.activeAsyncSwaps = 0;
+    this.pendingConsumedTurns = 0;
+  }
+
   public activateCellInteraction(cell: { r: number; c: number } | null): void {
-    if (this.busy || this.ended || !this.level || !cell || this.mask[cell.r]?.[cell.c] === 0) {
+    if (
+      this.busy ||
+      this.ended ||
+      !this.level ||
+      !cell ||
+      this.mask[cell.r]?.[cell.c] === 0 ||
+      this.isColumnBusy(cell.c)
+    ) {
       return;
+    }
+    if (this.activeAsyncSwaps > 0 && this.movesLeft <= 0 && !this.activeBooster) {
+      return;
+    }
+    if (this.selected && this.isColumnBusy(this.selected.c)) {
+      this.selected = null;
     }
     this.resetIdleHint();
 
@@ -570,12 +643,15 @@ export class CandyHogwartsEngine {
       if (e.button !== 0 || this.busy || this.ended || !this.level || !this.renderer || !this.canvas) {
         return;
       }
+      if (this.activeAsyncSwaps > 0 && this.movesLeft <= 0 && !this.activeBooster) {
+        return;
+      }
       if (e.pointerType === 'touch') {
         e.preventDefault?.();
       }
       this.canvas.focus({ preventScroll: true });
       const cell = this.renderer.screenToCell(e.clientX, e.clientY, this.size);
-      if (!cell || this.mask[cell.r]?.[cell.c] === 0) return;
+      if (!cell || this.mask[cell.r]?.[cell.c] === 0 || this.isColumnBusy(cell.c)) return;
       const startPt = this.renderer.screenToBoardPoint(e.clientX, e.clientY) ?? {
         x: e.clientX,
         y: e.clientY,
@@ -788,6 +864,7 @@ export class CandyHogwartsEngine {
   public stopLoop(): void {
     this.sessionId++;
     this.busy = false;
+    this.resetAsyncLocks();
     this.loopActive = false;
     if (this.rafId !== null && typeof cancelAnimationFrame !== 'undefined') {
       cancelAnimationFrame(this.rafId);
@@ -930,6 +1007,7 @@ export class CandyHogwartsEngine {
     this.kbCursor = null;
     this.activeBooster = null;
     this.busy = false;
+    this.resetAsyncLocks();
     this.ended = false;
     this.vfx = {
       beams: [],
@@ -2059,6 +2137,10 @@ export class CandyHogwartsEngine {
     if (!this.isValidCell(a.r, a.c) || !this.isValidCell(b.r, b.c)) return false;
     if (Math.abs(a.r - b.r) + Math.abs(a.c - b.c) !== 1) return false;
     if (this.mask[a.r]?.[a.c] === 0 || this.mask[b.r]?.[b.c] === 0) return false;
+    if (this.isColumnBusy(a.c) || this.isColumnBusy(b.c)) {
+      this.cb.audio?.onInvalid?.();
+      return false;
+    }
 
     if (this.hasStaticBlocker(a.r, a.c) || this.hasStaticBlocker(b.r, b.c)) {
       this.cb.audio?.onInvalid?.();
@@ -2086,6 +2168,20 @@ export class CandyHogwartsEngine {
     if (!pA || !pB) return false;
 
     const isFreeSwapBooster = this.activeBooster === 'swap';
+    if (!isFreeSwapBooster && this.movesLeft <= 0) return false;
+
+    const isWideSpecial = (sp: CandySpecialType | null | undefined): boolean =>
+      sp === 'color_bomb' ||
+      sp === 'seeker' ||
+      sp === 'striped_h' ||
+      sp === 'tnt' ||
+      sp === 'dynamite';
+    const needsGlobalBoardLock =
+      this.portals.length > 0 || isWideSpecial(pA.special) || isWideSpecial(pB.special);
+    if (needsGlobalBoardLock && this.activeAsyncSwaps > 0) {
+      return false;
+    }
+
     if (isFreeSwapBooster && this.cb.onBoosterConsumed) {
       if (!this.cb.onBoosterConsumed('swap')) {
         this.activeBooster = null;
@@ -2096,79 +2192,133 @@ export class CandyHogwartsEngine {
     }
 
     const session = this.sessionId;
-    this.busy = true;
+    const minC = Math.min(a.c, b.c);
+    const maxC = Math.max(a.c, b.c);
+    const blastMargin =
+      pA.special === 'bomb' ||
+      pA.special === 'wrapped' ||
+      pA.special === 'firecracker' ||
+      pB.special === 'bomb' ||
+      pB.special === 'wrapped' ||
+      pB.special === 'firecracker'
+        ? 2
+        : 1;
+
+    let ownedCols: Set<number> | null = null;
+    if (needsGlobalBoardLock) {
+      this.busy = true;
+    } else {
+      const seedCols: number[] = [a.c, b.c];
+      for (let mc = Math.max(0, minC - blastMargin); mc <= Math.min(this.size - 1, maxC + blastMargin); mc++) {
+        if (!this.isColumnBusy(mc)) seedCols.push(mc);
+      }
+      ownedCols = this.acquireColumnSet(seedCols);
+      this.activeAsyncSwaps++;
+    }
+
     this.resetIdleHint();
     this.lastSwapDir = a.r === b.r ? 'h' : 'v';
     this.maxCascadeThisTurn = 1;
     this.specialUsedThisTurn = !isFreeSwapBooster && Boolean(pA.special || pB.special);
 
-    this.cb.audio?.onSwap?.();
-    await this.animateSwap(a, b, 150, session);
-    if (session !== this.sessionId) return false;
-
-    const specialCombo = isFreeSwapBooster ? null : this.detectSwapSpecialCombo(a, b);
-    const clusters = specialCombo ? [] : this.findMatchClusters([b, a]);
-
-    if (!specialCombo && clusters.length === 0 && !isFreeSwapBooster) {
-      this.cb.audio?.onInvalid?.();
+    try {
+      this.cb.audio?.onSwap?.();
       await this.animateSwap(a, b, 150, session);
       if (session !== this.sessionId) return false;
-      this.busy = false;
-      this.renderer?.render(this.getRenderState(), nowMs());
-      return false;
-    }
 
-    this.chocolateBrokenThisTurn = false;
-    this.fiendfyreDamagedThisTurn = false;
-    this.cauldronStunnedThisTurn.clear();
-    this.dementorStunnedThisTurn.clear();
-    if (isFreeSwapBooster) {
-      this.activeBooster = null;
-      this.spawnPopup(b.r, b.c, 'ĐŨA PHÉP ĐỔI KẸO!', '#fff59d', 16);
-    } else {
-      this.movesLeft = Math.max(0, this.movesLeft - 1);
-      this.movesUsed++;
-    }
-    this.emitHudState();
+      const specialCombo = isFreeSwapBooster ? null : this.detectSwapSpecialCombo(a, b);
+      const clusters = specialCombo
+        ? []
+        : this.findMatchClusters([b, a], ownedCols ?? undefined);
 
-    if (this.extractIngredientsAtExits()) {
-      await this.applyGravityAndRefill(session);
-      if (session !== this.sessionId) return true;
-    }
+      if (!specialCombo && clusters.length === 0 && !isFreeSwapBooster) {
+        this.cb.audio?.onInvalid?.();
+        await this.animateSwap(a, b, 150, session);
+        if (session !== this.sessionId) return false;
+        this.renderer?.render(this.getRenderState(), nowMs());
+        return false;
+      }
 
-    if (specialCombo) {
-      this.specialUsedThisTurn = true;
-      await this.executeSpecialCombo(specialCombo, a, b, session);
-      if (session !== this.sessionId) return true;
-      await this.applyGravityAndRefill(session);
-      if (session !== this.sessionId) return true;
-      await this.resolveAllCascades(2, session);
-      if (session !== this.sessionId) return true;
-    } else if (clusters.length > 0) {
-      await this.clearClusters(clusters, 1, [b, a], session);
-      if (session !== this.sessionId) return true;
-      await this.applyGravityAndRefill(session);
-      if (session !== this.sessionId) return true;
-      await this.resolveAllCascades(2, session);
-      if (session !== this.sessionId) return true;
-    } else {
-      await this.resolveAllCascades(1, session);
-      if (session !== this.sessionId) return true;
-    }
+      if (ownedCols) {
+        for (const cl of clusters) {
+          this.expandColumnSet(
+            ownedCols,
+            cl.cells.map((pt) => pt.c)
+          );
+        }
+      }
 
-    if (!isFreeSwapBooster) {
-      this.cb.onPlayerMoveCommitted?.(
-        this.movesUsed,
-        this.maxCascadeThisTurn,
-        this.specialUsedThisTurn
-      );
-    }
+      this.chocolateBrokenThisTurn = false;
+      this.fiendfyreDamagedThisTurn = false;
+      this.cauldronStunnedThisTurn.clear();
+      this.dementorStunnedThisTurn.clear();
+      if (isFreeSwapBooster) {
+        this.activeBooster = null;
+        this.spawnPopup(b.r, b.c, 'ĐŨA PHÉP ĐỔI KẸO!', '#fff59d', 16);
+      } else {
+        this.movesLeft = Math.max(0, this.movesLeft - 1);
+        this.movesUsed++;
+        this.pendingConsumedTurns++;
+      }
+      this.emitHudState();
 
-    this.busy = false;
-    this.resetIdleHint();
-    this.renderer?.render(this.getRenderState(), nowMs());
-    await this.checkPostTurnState(session, !isFreeSwapBooster);
-    return true;
+      if (this.extractIngredientsAtExits()) {
+        await this.applyGravityAndRefill(session, ownedCols ?? undefined);
+        if (session !== this.sessionId) return true;
+      }
+
+      if (specialCombo) {
+        this.specialUsedThisTurn = true;
+        await this.executeSpecialCombo(specialCombo, a, b, session);
+        if (session !== this.sessionId) return true;
+        await this.applyGravityAndRefill(session, ownedCols ?? undefined);
+        if (session !== this.sessionId) return true;
+        await this.resolveAllCascades(2, session, ownedCols ?? undefined);
+        if (session !== this.sessionId) return true;
+      } else if (clusters.length > 0) {
+        await this.clearClusters(clusters, 1, [b, a], session);
+        if (session !== this.sessionId) return true;
+        await this.applyGravityAndRefill(session, ownedCols ?? undefined);
+        if (session !== this.sessionId) return true;
+        await this.resolveAllCascades(2, session, ownedCols ?? undefined);
+        if (session !== this.sessionId) return true;
+      } else {
+        await this.resolveAllCascades(1, session, ownedCols ?? undefined);
+        if (session !== this.sessionId) return true;
+      }
+
+      if (!isFreeSwapBooster) {
+        this.cb.onPlayerMoveCommitted?.(
+          this.movesUsed,
+          this.maxCascadeThisTurn,
+          this.specialUsedThisTurn
+        );
+      }
+      return true;
+    } finally {
+      if (ownedCols) {
+        this.releaseColumnSet(ownedCols);
+        this.activeAsyncSwaps = Math.max(0, this.activeAsyncSwaps - 1);
+      } else {
+        this.busy = false;
+      }
+
+      if (session === this.sessionId && !this.ended && this.activeAsyncSwaps === 0 && !this.busy) {
+        // Nếu 2 luồng cột độc lập khi hạ cánh tạo thêm cụm ngang nối liền giữa ranh giới cột, dọn dẹp mượt ngay lúc lắng bàn!
+        if (this.findMatchClusters().length > 0) {
+          this.busy = true;
+          await this.resolveAllCascades(2, session);
+          this.busy = false;
+        }
+        const consumedAny = this.pendingConsumedTurns > 0;
+        this.pendingConsumedTurns = 0;
+        if (consumedAny || isFreeSwapBooster) {
+          this.resetIdleHint();
+          this.renderer?.render(this.getRenderState(), nowMs());
+          await this.checkPostTurnState(session, consumedAny);
+        }
+      }
+    }
   }
 
   private async animateSwap(
@@ -2667,8 +2817,16 @@ export class CandyHogwartsEngine {
   }
 
   public findMatchClusters(
-    preferredAnchors: Array<{ r: number; c: number }> = []
+    preferredAnchors: Array<{ r: number; c: number }> = [],
+    colScope?: ReadonlySet<number>
   ): MatchCluster[] {
+    void preferredAnchors;
+    const isScopedMatchable = (r: number, c: number): boolean => {
+      if (colScope && !colScope.has(c) && (this.colBusyCounts[c] ?? 0) > 0) {
+        return false;
+      }
+      return this.isCellMatchable(r, c);
+    };
     const hRuns: MatchRun[] = [];
     const vRuns: MatchRun[] = [];
     const sqRuns: MatchRun[] = [];
@@ -2677,14 +2835,14 @@ export class CandyHogwartsEngine {
       let c = 0;
       while (c < this.size) {
         const p = this.grid[r]?.[c];
-        if (!this.isCellMatchable(r, c) || !p || p.primedWrapped) {
+        if (!isScopedMatchable(r, c) || !p || p.primedWrapped) {
           c++;
           continue;
         }
         let end = c + 1;
         while (
           end < this.size &&
-          this.isCellMatchable(r, end) &&
+          isScopedMatchable(r, end) &&
           !this.grid[r]?.[end]?.primedWrapped &&
           this.grid[r]?.[end]?.color === p.color
         ) {
@@ -2703,14 +2861,14 @@ export class CandyHogwartsEngine {
       let r = 0;
       while (r < this.size) {
         const p = this.grid[r]?.[c];
-        if (!this.isCellMatchable(r, c) || !p || p.primedWrapped) {
+        if (!isScopedMatchable(r, c) || !p || p.primedWrapped) {
           r++;
           continue;
         }
         let end = r + 1;
         while (
           end < this.size &&
-          this.isCellMatchable(end, c) &&
+          isScopedMatchable(end, c) &&
           !this.grid[end]?.[c]?.primedWrapped &&
           this.grid[end]?.[c]?.color === p.color
         ) {
@@ -2728,10 +2886,10 @@ export class CandyHogwartsEngine {
     for (let r = 0; r < this.size - 1; r++) {
       for (let c = 0; c < this.size - 1; c++) {
         if (
-          !this.isCellMatchable(r, c) ||
-          !this.isCellMatchable(r, c + 1) ||
-          !this.isCellMatchable(r + 1, c) ||
-          !this.isCellMatchable(r + 1, c + 1)
+          !isScopedMatchable(r, c) ||
+          !isScopedMatchable(r, c + 1) ||
+          !isScopedMatchable(r + 1, c) ||
+          !isScopedMatchable(r + 1, c + 1)
         ) {
           continue;
         }
@@ -2835,6 +2993,9 @@ export class CandyHogwartsEngine {
         spawnSpecial = 'seeker';
       }
 
+      if (colScope && !clusterCells.some((pt) => colScope.has(pt.c))) {
+        continue;
+      }
       clusters.push({
         color: groupRuns[0].color,
         cells: clusterCells,
@@ -2845,19 +3006,24 @@ export class CandyHogwartsEngine {
     return clusters;
   }
 
-  private hasPrimedWrappedCandies(): boolean {
+  private hasPrimedWrappedCandies(colScope?: ReadonlySet<number>): boolean {
     for (let r = 0; r < this.size; r++) {
       for (let c = 0; c < this.size; c++) {
+        if (colScope && !colScope.has(c)) continue;
         if (this.grid[r]?.[c]?.primedWrapped) return true;
       }
     }
     return false;
   }
 
-  private async detonatePrimedWrappedCandies(session = this.sessionId): Promise<boolean> {
+  private async detonatePrimedWrappedCandies(
+    session = this.sessionId,
+    colScope?: Set<number>
+  ): Promise<boolean> {
     const primedList: Array<{ r: number; c: number; piece: CandyInternalPiece }> = [];
     for (let r = 0; r < this.size; r++) {
       for (let c = 0; c < this.size; c++) {
+        if (colScope && !colScope.has(c)) continue;
         const p = this.grid[r]?.[c];
         if (p?.primedWrapped) {
           primedList.push({ r, c, piece: p });
@@ -2865,6 +3031,15 @@ export class CandyHogwartsEngine {
       }
     }
     if (primedList.length === 0) return false;
+
+    if (colScope) {
+      for (const item of primedList) {
+        const radius = item.piece.primedMega ? 2 : 1;
+        for (let dc = -radius; dc <= radius; dc++) {
+          this.expandColumnSet(colScope, [item.c + dc]);
+        }
+      }
+    }
 
     await this.waitMs(120);
     if (session !== this.sessionId) return true;
@@ -2895,27 +3070,39 @@ export class CandyHogwartsEngine {
     return true;
   }
 
-  private async resolveAllCascades(startCombo = 1, session = this.sessionId): Promise<void> {
+  private async resolveAllCascades(
+    startCombo = 1,
+    session = this.sessionId,
+    colScope?: Set<number>
+  ): Promise<void> {
     let combo = startCombo;
     let safety = 0;
     while (session === this.sessionId && safety < 40) {
       safety++;
-      const clusters = this.findMatchClusters();
+      const clusters = this.findMatchClusters([], colScope);
       if (clusters.length > 0) {
+        if (colScope) {
+          for (const cl of clusters) {
+            this.expandColumnSet(
+              colScope,
+              cl.cells.map((pt) => pt.c)
+            );
+          }
+        }
         this.maxCascadeThisTurn = Math.max(this.maxCascadeThisTurn, combo);
         await this.clearClusters(clusters, combo, [], session);
         if (session !== this.sessionId) return;
-        await this.applyGravityAndRefill(session);
+        await this.applyGravityAndRefill(session, colScope);
         if (session !== this.sessionId) return;
         combo++;
         continue;
       }
 
-      if (this.hasPrimedWrappedCandies()) {
+      if (this.hasPrimedWrappedCandies(colScope)) {
         this.specialUsedThisTurn = true;
-        await this.detonatePrimedWrappedCandies(session);
+        await this.detonatePrimedWrappedCandies(session, colScope);
         if (session !== this.sessionId) return;
-        await this.applyGravityAndRefill(session);
+        await this.applyGravityAndRefill(session, colScope);
         if (session !== this.sessionId) return;
         combo++;
         continue;
@@ -2924,7 +3111,12 @@ export class CandyHogwartsEngine {
       break;
     }
 
-    if (session === this.sessionId && !this.ended && this.pendingRainbowSpawns > 0) {
+    if (
+      session === this.sessionId &&
+      !this.ended &&
+      this.pendingRainbowSpawns > 0 &&
+      (!colScope || this.activeAsyncSwaps <= 1)
+    ) {
       await this.materializePendingRainbowBlasts(session);
     }
   }
@@ -3855,11 +4047,16 @@ export class CandyHogwartsEngine {
     );
   }
 
-  public async applyGravityAndRefill(session = this.sessionId): Promise<void> {
+  public async applyGravityAndRefill(
+    session = this.sessionId,
+    colScope?: ReadonlySet<number>
+  ): Promise<void> {
     if (session !== this.sessionId) return;
+    const inCol = (c: number): boolean => !colScope || colScope.has(c);
 
     for (let r = 0; r < this.size; r++) {
       for (let c = 0; c < this.size; c++) {
+        if (!inCol(c)) continue;
         if (!this.grid[r]?.[c]) {
           if ((this.ice[r]?.[c] || 0) > 0) this.ice[r][c] = 0;
           if ((this.lockGrid[r]?.[c] || 0) > 0) this.lockGrid[r][c] = 0;
@@ -3871,6 +4068,7 @@ export class CandyHogwartsEngine {
     const startCoords = new Map<number, { x: number; y: number }>();
     for (let r = 0; r < this.size; r++) {
       for (let c = 0; c < this.size; c++) {
+        if (!inCol(c)) continue;
         const p = this.grid[r]?.[c];
         if (p) {
           p.x = c;
@@ -3881,7 +4079,9 @@ export class CandyHogwartsEngine {
     }
 
     const colSpawnCounts = new Array<number>(this.size).fill(0);
-    this.extractIngredientsAtExits();
+    if (!colScope) {
+      this.extractIngredientsAtExits();
+    }
 
     let portalPlayed = false;
     const maxTicks = this.size * 4 + 14;
@@ -3889,26 +4089,28 @@ export class CandyHogwartsEngine {
     for (let tick = 0; tick < maxTicks; tick++) {
       let moved = false;
 
-      for (const portal of this.portals) {
-        const { from, to, color } = portal;
-        if (this.canPieceFall(from.r, from.c) && this.isOpenEmpty(to.r, to.c)) {
-          const p = this.grid[from.r][from.c]!;
-          this.grid[to.r][to.c] = p;
-          this.grid[from.r][from.c] = null;
-          startCoords.set(p.id, { x: to.c, y: to.r - 0.65 });
-          this.spawnBurst(from.r, from.c, color || '#10b981', 5);
-          this.spawnBurst(to.r, to.c, color || '#10b981', 5);
-          if (!portalPlayed) {
-            this.cb.audio?.onPortal?.();
-            portalPlayed = true;
+      if (!colScope) {
+        for (const portal of this.portals) {
+          const { from, to, color } = portal;
+          if (this.canPieceFall(from.r, from.c) && this.isOpenEmpty(to.r, to.c)) {
+            const p = this.grid[from.r][from.c]!;
+            this.grid[to.r][to.c] = p;
+            this.grid[from.r][from.c] = null;
+            startCoords.set(p.id, { x: to.c, y: to.r - 0.65 });
+            this.spawnBurst(from.r, from.c, color || '#10b981', 5);
+            this.spawnBurst(to.r, to.c, color || '#10b981', 5);
+            if (!portalPlayed) {
+              this.cb.audio?.onPortal?.();
+              portalPlayed = true;
+            }
+            moved = true;
           }
-          moved = true;
         }
       }
 
       for (let r = this.size - 2; r >= 0; r--) {
         for (let c = 0; c < this.size; c++) {
-          if (!this.canPieceFall(r, c)) continue;
+          if (!inCol(c) || !this.canPieceFall(r, c)) continue;
 
           let targetR = -1;
           if (this.isOpenEmpty(r + 1, c)) {
@@ -3931,10 +4133,11 @@ export class CandyHogwartsEngine {
 
       for (let r = this.size - 2; r >= 0; r--) {
         for (let c = 0; c < this.size; c++) {
-          if (!this.canPieceFall(r, c)) continue;
+          if (!inCol(c) || !this.canPieceFall(r, c)) continue;
           const dirs = (r + c + tick) % 2 === 0 ? [-1, 1] : [1, -1];
           for (const dc of dirs) {
             const nc = c + dc;
+            if (!inCol(nc)) continue;
             if (!this.isOpenEmpty(r + 1, nc)) continue;
             if (this.canPieceFall(r, nc)) continue;
             this.grid[r + 1][nc] = this.grid[r][c];
@@ -3946,6 +4149,7 @@ export class CandyHogwartsEngine {
       }
 
       for (let c = 0; c < this.size; c++) {
+        if (!inCol(c)) continue;
         let topR = -1;
         for (let r = 0; r < this.size; r++) {
           if (this.mask[r]?.[c] === 1) {
@@ -3963,7 +4167,7 @@ export class CandyHogwartsEngine {
         }
       }
 
-      if (this.extractIngredientsAtExits()) {
+      if (!colScope && this.extractIngredientsAtExits()) {
         moved = true;
       }
 
@@ -3972,6 +4176,7 @@ export class CandyHogwartsEngine {
 
     for (let r = 0; r < this.size; r++) {
       for (let c = 0; c < this.size; c++) {
+        if (!inCol(c)) continue;
         if (this.isOpenEmpty(r, c)) {
           const p = this.createPiece(Math.floor(Math.random() * this.numColors), c, r);
           this.grid[r][c] = p;
@@ -3979,7 +4184,9 @@ export class CandyHogwartsEngine {
         }
       }
     }
-    this.extractIngredientsAtExits();
+    if (!colScope) {
+      this.extractIngredientsAtExits();
+    }
 
     if (this.countGridSum(this.lockGrid) > 0 && this.countKeysOnBoard() === 0) {
       this.ensureSugarKeysOnBoard(1);
@@ -3994,6 +4201,7 @@ export class CandyHogwartsEngine {
     }> = [];
     for (let r = 0; r < this.size; r++) {
       for (let c = 0; c < this.size; c++) {
+        if (!inCol(c)) continue;
         const p = this.grid[r]?.[c];
         if (!p) continue;
         const st = startCoords.get(p.id) || { x: c, y: r };
@@ -5781,6 +5989,7 @@ export class CandyHogwartsEngine {
       snap.failReason === 'moves' || snap.failReason === 'bomb' ? snap.failReason : null;
     this.ended = snap.status === 'out_of_moves';
     this.busy = false;
+    this.resetAsyncLocks();
     this.selected = null;
     this.activeBooster = null;
     this.hintPair = null;

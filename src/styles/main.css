@@ -371,6 +371,38 @@
   --hg-dock-tray-border: rgba(245, 214, 154, 0.52);
   --hg-play-glow: rgba(251, 191, 36, 0.46);
   --hg-play-tag-bg: rgba(58, 34, 18, 0.94);
+
+  /* Christmas × Harry Potter Mega-Update (Yule Theme, 11-Collection Filter & 7 Minigame Skins) */
+  --yule-pine-deep: #07291a;
+  --yule-pine-mid: #11472c;
+  --yule-pine-soft: #1b653e;
+  --yule-holly-red: #b91c1c;
+  --yule-holly-bright: #dc2626;
+  --yule-gold-bright: #fbbf24;
+  --yule-gold-soft: #fde68a;
+  --yule-frost-white: #f8fcff;
+  --yule-frost-ice: #dbeafe;
+  --yule-frost-cyan: #7dd3fc;
+  --yule-ink-pine: #06281a;
+  --yule-filter-tray-bg: rgba(8, 38, 24, 0.92);
+  --yule-filter-tray-border: rgba(251, 191, 36, 0.58);
+  --yule-filter-chip-bg: linear-gradient(180deg, rgba(255, 253, 246, 0.96) 0%, rgba(242, 230, 198, 0.95) 100%);
+  --yule-filter-chip-border: rgba(201, 146, 59, 0.62);
+  --yule-filter-chip-active-bg: linear-gradient(180deg, #dc2626 0%, #991b1b 100%);
+  --yule-filter-chip-active-border: #fde047;
+  --yule-filter-chip-active-shadow: rgba(127, 29, 29, 0.48);
+  --yule-hud-bar-grad: linear-gradient(180deg, rgba(17, 71, 44, 0.96) 0%, rgba(7, 41, 26, 0.98) 100%);
+  --yule-hud-frost-rim: rgba(224, 242, 254, 0.65);
+  --yule-hud-gold-glow: rgba(251, 191, 36, 0.42);
+  --yule-attic-scrim-top: rgba(8, 38, 24, 0.24);
+  --yule-attic-scrim-bot: rgba(44, 12, 16, 0.34);
+  --yule-library-scrim-top: rgba(7, 36, 24, 0.72);
+  --yule-library-scrim-bot: rgba(32, 14, 16, 0.78);
+  --yule-sq-card-glass: rgba(255, 252, 244, 0.94);
+  --yule-sq-strip-bg: linear-gradient(180deg, rgba(14, 58, 36, 0.94) 0%, rgba(7, 36, 23, 0.96) 100%);
+  --yule-pill-idle-bg: rgba(255, 251, 235, 0.92);
+  --yule-pill-active-bg: linear-gradient(135deg, #15803d 0%, #065f46 55%, #b91c1c 100%);
+  --yule-postcard-btn-bg: linear-gradient(180deg, #dc2626 0%, #991b1b 100%);
 }
 
 * {
@@ -1197,26 +1229,37 @@ progress {
   height: 25px;
 }
 
-/* Toast Notification */
+/* Toast Notification (anchored at top-center clear of corner HUDs, drawers & victory CTAs) */
 .owl-toast-stack {
   position: fixed;
-  bottom: 84px;
+  top: calc(max(10px, env(safe-area-inset-top, 0px)) + 56px);
+  bottom: auto;
   left: 50%;
   transform: translateX(-50%);
+  width: max-content;
+  max-width: min(500px, calc(100dvw - 24px));
   z-index: 9999;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  gap: 5px;
   pointer-events: none;
 }
 
-body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack {
-  bottom: calc(max(12px, env(safe-area-inset-bottom)) + 96px);
+dialog[open] > .owl-toast-stack {
+  top: max(8px, env(safe-area-inset-top, 0px));
+  bottom: auto;
+  max-width: min(460px, calc(100dvw - 24px));
+  z-index: 120;
+  gap: 4px;
 }
 
-body:has(#bottomDockWrap.ts-dock-open) .owl-toast-stack {
-  top: calc(max(10px, env(safe-area-inset-top)) + 64px);
-  bottom: auto;
+dialog[open] > .owl-toast-stack .owl-toast {
+  padding: 6px 14px;
+  font-size: 12px;
+  text-align: center;
+  max-width: 100%;
+  white-space: normal;
 }
 
 .owl-toast {
@@ -1342,6 +1385,34 @@ dialog::backdrop {
   outline: 3px solid var(--focus-color, #fde047);
   outline-offset: 2px;
 }
+
+.yule-event-banner {
+  position: fixed;
+  top: 66px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 250px;
+  max-width: min(420px, calc(100vw - 28px));
+  padding: 8px 12px;
+  border: 1px solid var(--yule-gold-bright, #fbbf24);
+  border-radius: 12px;
+  color: var(--yule-frost-white, #f8fcff);
+  background: var(--yule-hud-bar-grad, linear-gradient(180deg, #11472c, #07291a));
+  box-shadow: 0 5px 18px rgba(0,0,0,.28), 0 0 0 1px rgba(255,255,255,.12) inset;
+  text-align: left;
+  cursor: pointer;
+}
+.yule-event-banner:hover { filter: brightness(1.1); }
+.yule-event-banner-icon { font-size: 22px; }
+.yule-event-banner strong, .yule-event-banner small { display: block; }
+.yule-event-banner strong { font-size: 12.5px; }
+.yule-event-banner small { margin-top: 2px; max-width: 245px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; opacity: .88; }
+.yule-event-banner-progress { margin-left: auto; min-width: 30px; color: var(--yule-gold-soft, #fde68a); font-size: 12px; font-weight: 900; text-align: right; }
+@media (max-width: 640px) { .yule-event-banner { top: 58px; min-width: 0; width: calc(100vw - 28px); } }
 
 .floating-action-banner {
   align-self: flex-end;
@@ -11041,19 +11112,19 @@ progress.ts-build-progress::-moz-progress-bar {
 
 /* Sổ Tay Cổ Ngữ (SRS Lexicon Codex) inside Học Viện Thần Chú */
 .sq-view-switch {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
 .sq-view-tab {
-  flex: 1 1 210px;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: 5px;
+  padding: 6px 8px;
   border-radius: 11px;
   border: 2px solid var(--border-brass);
   background: linear-gradient(180deg, var(--surface-chip-top), var(--surface-chip-bot));
@@ -14989,7 +15060,7 @@ dialog.bulldoze-confirm-dialog[open] {
   .bottom-bar {
     width: 100%;
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 4px;
     padding: 5px;
     overflow: visible;
@@ -15300,13 +15371,13 @@ dialog.bulldoze-confirm-dialog[open] {
     --border-brass: var(--aaa-hc-border-brass);
     --surface-panel: rgba(255, 252, 240, 0.98);
   }
-  html[data-colorblind='protanopia'] #gameCanvas {
+  html[data-colorblind='protanopia'] :is(#gameCanvas, #gpuWorldCanvas) {
     filter: contrast(1.04) saturate(1.06);
   }
-  html[data-colorblind='deuteranopia'] #gameCanvas {
+  html[data-colorblind='deuteranopia'] :is(#gameCanvas, #gpuWorldCanvas) {
     filter: contrast(1.05) hue-rotate(-6deg);
   }
-  html[data-colorblind='tritanopia'] #gameCanvas {
+  html[data-colorblind='tritanopia'] :is(#gameCanvas, #gpuWorldCanvas) {
     filter: contrast(1.05) hue-rotate(8deg);
   }
 
@@ -16198,7 +16269,863 @@ dialog.bulldoze-confirm-dialog[open] {
   }
 }
 
+/* ============================================================
+   Mobile Anti-Overflow & Responsive Button/Label Guard
+   Prevents text from bleeding past button, pill, ribbon & card borders
+   across narrow portrait/landscape mobile screens (320px–740px).
+   ============================================================ */
+.brass-btn,
+.pa-tool-btn,
+.owl-green-send-btn {
+  box-sizing: border-box;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+}
 
+:is(
+    .m3-overlay-card,
+    .m3-empty-hearts-card,
+    .pa-victory-card,
+    .pa-inspect-return-bar,
+    .pa-alert-strip,
+    .inspector-panel,
+    dialog
+  )
+  :is(.brass-btn, .pa-tool-btn):not(.pa-inline-close-btn):not(.m3-inline-close-btn):not(.m3-booster-btn) {
+  white-space: normal;
+  text-wrap: balance;
+  overflow-wrap: break-word;
+  line-height: 1.24;
+  height: auto;
+  text-align: center;
+  flex-wrap: wrap;
+}
+
+.m3-overlay-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  align-items: stretch;
+  width: 100%;
+  margin-top: 6px;
+}
+
+.m3-overlay-actions > :is(.brass-btn, .pa-tool-btn) {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  padding: 9px 12px;
+  font-size: 13px;
+  line-height: 1.24;
+  white-space: normal;
+  text-wrap: balance;
+  overflow-wrap: break-word;
+  text-align: center;
+}
+
+.m3-overlay-actions > .m3-overlay-btn-full {
+  flex: 1 1 100%;
+  width: 100%;
+  font-size: 13.5px;
+}
+
+.m3-overlay-actions > .m3-overlay-btn-primary {
+  flex: 1.25 1 176px;
+  font-size: 13.5px;
+}
+
+.m3-overlay-actions > .m3-overlay-btn-half {
+  flex: 1 1 132px;
+}
+
+.m3-booster-btn {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow: hidden;
+}
+
+.m3-booster-lbl {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pa-layout-shell > .pa-controls-bar .pa-tool-btn {
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  white-space: normal;
+  line-height: 1.18;
+  text-align: center;
+}
+
+.pa-inspect-return-bar,
+.pa-alert-strip {
+  flex-wrap: wrap;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow-wrap: break-word;
+}
+
+@media (max-width: 740px) {
+  .brass-btn:not(.pa-inline-close-btn):not(.m3-inline-close-btn):not(.m3-booster-btn) {
+    white-space: normal;
+    text-wrap: balance;
+    overflow-wrap: break-word;
+    line-height: 1.22;
+    height: auto;
+    text-align: center;
+  }
+
+  .owl-green-send-btn {
+    min-width: 0;
+    width: min(100%, 320px);
+    max-inline-size: 100%;
+    padding: 10px 18px;
+    font-size: clamp(13.5px, 4vw, 15.5px);
+    white-space: normal;
+    text-wrap: balance;
+    overflow-wrap: break-word;
+    line-height: 1.22;
+    text-align: center;
+  }
+
+  .ts-parchment-ribbon {
+    max-inline-size: calc(100dvw - 24px);
+  }
+
+  .ts-ribbon-body {
+    min-width: 0;
+    max-inline-size: 100%;
+    padding: 8px 20px 9px;
+  }
+
+  .ts-ribbon-title {
+    font-size: clamp(14px, 4.2vw, 18px);
+    white-space: normal;
+    text-wrap: balance;
+    overflow-wrap: break-word;
+  }
+
+  .hud-shell-root .ts-corner-left.hg-farm-dock .ts-card-btn.hg-dock-card {
+    min-inline-size: 52px;
+  }
+
+  .hud-shell-root .ts-corner-left.hg-farm-dock .ts-card-label {
+    max-inline-size: 100%;
+    white-space: normal;
+    text-wrap: balance;
+    overflow-wrap: break-word;
+    line-height: 1.04;
+    text-align: center;
+    font-size: clamp(8.2px, 2.25dvw, 10.2px);
+  }
+
+  .bottom-bar .brass-btn,
+  .secondary-map-tools-bar .brass-btn {
+    white-space: normal;
+    text-wrap: balance;
+    overflow-wrap: break-word;
+    line-height: 1.12;
+    max-inline-size: 100%;
+  }
+
+  .sq-option-ribbon,
+  .sq-view-tab,
+  .sq-format-chip,
+  .sq-wallet-chip {
+    max-inline-size: 100%;
+    white-space: normal;
+    overflow-wrap: break-word;
+    text-align: center;
+  }
+}
+
+@media (max-width: 520px) {
+  .m3-overlay-card,
+  .pa-victory-card,
+  .m3-empty-hearts-card {
+    box-sizing: border-box;
+    width: min(100%, calc(100dvw - 20px));
+    padding: 14px 12px;
+  }
+
+  .m3-overlay-actions {
+    gap: 7px;
+  }
+
+  .m3-overlay-actions > .m3-overlay-btn-full,
+  .m3-overlay-actions > .m3-overlay-btn-primary {
+    flex: 1 1 100%;
+    width: 100%;
+    padding: 9px 10px;
+    font-size: clamp(12px, 3.5vw, 13.5px);
+  }
+
+  .m3-overlay-actions > .m3-overlay-btn-half {
+    flex: 1 1 calc(50% - 4px);
+    padding: 8px 8px;
+    font-size: clamp(11.5px, 3.3vw, 12.8px);
+  }
+}
+
+@media (max-width: 380px) {
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-layout-shell > .pa-controls-bar .m3-booster-lbl {
+    display: none;
+  }
+}
+
+@media (max-width: 350px) {
+  .m3-overlay-actions > .m3-overlay-btn-half {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+}
+
+/* ==========================================================================
+   CHRISTMAS × HARRY POTTER MEGA-UPDATE:
+   11-Collection Decor Filter, Postcard Export, Valley HUD Garland & 7 Yule Skins
+   (Zero hardcoded colors — strictly :root tokens per AGENTS.md §3)
+   ========================================================================== */
+
+.decor-collection-filter-bar {
+  pointer-events: auto;
+  width: min(1040px, 100%);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  background: var(--yule-filter-tray-bg);
+  border: 2px solid var(--yule-filter-tray-border);
+  border-radius: var(--radius-pill);
+  box-shadow:
+    0 4px 12px var(--shadow-deep),
+    inset 0 1px 0 var(--yule-hud-frost-rim);
+  scrollbar-width: none;
+}
+
+.decor-collection-filter-bar[hidden] {
+  display: none !important;
+}
+
+.decor-collection-filter-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.decor-filter-chip {
+  flex: 0 0 auto;
+  appearance: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.15;
+  padding: 5px 11px;
+  border-radius: var(--radius-pill);
+  border: 1.6px solid var(--yule-filter-chip-border);
+  background: var(--yule-filter-chip-bg);
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    filter 0.12s ease;
+}
+
+.decor-filter-chip:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.decor-filter-chip:is(.active, .is-active, [aria-selected='true']) {
+  background: var(--yule-filter-chip-active-bg);
+  border-color: var(--yule-filter-chip-active-border);
+  color: var(--ink-cream);
+  box-shadow:
+    0 2px 8px var(--yule-filter-chip-active-shadow),
+    0 0 0 1px var(--yule-gold-bright);
+}
+
+.yule-postcard-btn {
+  background: var(--yule-postcard-btn-bg);
+  border-color: var(--yule-gold-bright);
+  color: var(--ink-cream);
+}
+
+.yule-skin-toggle-pill {
+  cursor: pointer;
+  padding-inline: 7px;
+  border: 1.5px solid var(--border-brass);
+  background: var(--yule-pill-idle-bg);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.14s ease;
+}
+
+.yule-skin-toggle-pill:hover {
+  transform: scale(1.06);
+}
+
+.yule-skin-toggle-pill.is-yule-active {
+  background: var(--yule-pill-active-bg);
+  border-color: var(--yule-gold-bright);
+  color: var(--ink-cream);
+  box-shadow: 0 0 10px var(--yule-hud-gold-glow);
+}
+
+/* Festive Snowy Pine & Gold HUD Accents when Yule Theme is Active */
+html[data-yule-theme='true'] .hg-top-hud-bar {
+  background: var(--yule-hud-bar-grad);
+  border-color: var(--yule-gold-bright);
+  box-shadow:
+    0 4px 14px var(--shadow-deep),
+    inset 0 2px 0 var(--yule-hud-frost-rim);
+}
+
+html[data-yule-theme='true'] .build-drawer {
+  border-color: var(--yule-frost-ice);
+  box-shadow:
+    0 var(--elev-card) 0 var(--shadow-color),
+    0 8px 22px var(--shadow-deep),
+    inset 0 2px 0 var(--yule-frost-white);
+}
+
+/* Match-3 Honeydukes Yule Loft Backdrop & Festive Top Bar */
+html[data-yule-theme='true'] #match3Dialog .m3-modal-inner {
+  background:
+    linear-gradient(180deg, var(--yule-attic-scrim-top) 0%, var(--yule-attic-scrim-bot) 100%),
+    url('/paintings/yule_attic_bg.jpg') center center / cover no-repeat;
+  box-shadow: inset 0 0 0 3px var(--yule-gold-bright);
+}
+
+/* Puzzle Arcade Yule Modal Backdrops & Festive Top Bar */
+html[data-yule-theme='true'] #puzzleArcadeDialog .pa-modal-inner,
+html[data-yule-theme='true'] #puzzleArcadeDialog .pa-modal-inner.pa-great-hall-mode {
+  background:
+    linear-gradient(180deg, var(--yule-attic-scrim-top) 0%, var(--yule-attic-scrim-bot) 100%),
+    url('/paintings/yule_great_hall_chess_bg.jpg') center center / cover no-repeat;
+}
+
+html[data-yule-theme='true'] #puzzleArcadeDialog .pa-modal-inner.pa-marauder-caro-mode,
+html[data-yule-theme='true'] #puzzleArcadeDialog .pa-modal-inner.pa-potions-sudoku-mode {
+  background:
+    linear-gradient(180deg, var(--yule-attic-scrim-top) 0%, var(--yule-attic-scrim-bot) 100%),
+    url('/paintings/yule_caro_bg.jpg') center center / cover no-repeat;
+}
+
+html[data-yule-theme='true'] :is(#match3Dialog, #puzzleArcadeDialog) .pa-top-bar {
+  background: var(--yule-hud-bar-grad);
+  border-color: var(--yule-gold-bright);
+  box-shadow: inset 0 1.5px 0 var(--yule-hud-frost-rim);
+}
+
+html[data-yule-theme='true'] :is(#match3Dialog, #puzzleArcadeDialog) .pa-mode-tab.active {
+  background: var(--yule-filter-chip-active-bg);
+  border-color: var(--yule-filter-chip-active-border);
+  color: var(--ink-cream);
+}
+
+/* Language Quiz Academy Winter Library Yule Skin */
+html[data-yule-theme='true'] #seedQuizDialog .sq-modal-inner {
+  background:
+    linear-gradient(180deg, var(--yule-library-scrim-top) 0%, var(--yule-library-scrim-bot) 100%),
+    url('/paintings/yule_library_quiz_bg.jpg') center center / cover no-repeat;
+  border-color: var(--yule-gold-bright);
+  box-shadow:
+    0 12px 32px var(--shadow-deep),
+    inset 0 2px 0 var(--yule-hud-frost-rim);
+}
+
+html[data-yule-theme='true'] #seedQuizDialog .modal-header {
+  background: var(--yule-sq-strip-bg);
+  border-radius: var(--radius-chip);
+  padding: 6px 10px;
+  border: 1.5px solid var(--yule-filter-tray-border);
+}
+
+html[data-yule-theme='true'] #seedQuizDialog .modal-title,
+html[data-yule-theme='true'] #seedQuizDialog .sq-view-bar-hint {
+  color: var(--yule-frost-white);
+}
+
+html[data-yule-theme='true'] #seedQuizDialog .sq-option-card {
+  background: var(--yule-sq-card-glass);
+  border-color: var(--yule-gold-bright);
+}
+
+@media (max-width: 640px) {
+  .decor-collection-filter-bar {
+    padding: 5px 8px;
+    gap: 5px;
+  }
+
+  .decor-filter-chip {
+    font-size: 11px;
+    padding: 5px 10px;
+    min-block-size: 34px;
+  }
+}
+
+/* ==========================================================================
+   Mobile Building UX Optimization (One-Tap Placement, Compact Toolbar & Inspector)
+   Strictly :root tokens per AGENTS.md §3
+   ========================================================================== */
+
+.catalog-card-title {
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.22;
+  color: var(--ink);
+}
+
+.catalog-empty-hint {
+  flex: 1 1 100%;
+  padding: 12px 14px;
+  border-radius: var(--radius-chip);
+  background: var(--quest-accent-bg);
+  border: 1.5px dashed var(--border-brass);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.secondary-map-tools-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.build-toolbar-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.build-toolbar-sep {
+  display: inline-block;
+  block-size: 24px;
+  border-inline-start: 1.5px solid var(--dock-divider);
+  flex: 0 0 auto;
+}
+
+.secondary-map-tools-bar .brass-btn,
+.bottom-bar .brass-btn {
+  min-block-size: 36px;
+  min-inline-size: 36px;
+}
+
+.secondary-map-tools-bar .brass-btn[aria-pressed='true'],
+.bottom-bar .brass-btn[aria-pressed='true'] {
+  background: linear-gradient(180deg, var(--speed-active-top) 0%, var(--speed-active-bot) 100%);
+  color: var(--ink);
+  border-color: var(--border-cream);
+  box-shadow:
+    inset 0 0 0 2px var(--brand-strong),
+    0 2px 0 var(--shadow-color);
+}
+
+.secondary-map-tools-bar .brass-btn[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.35);
+}
+
+.inspector-build-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.inspector-build-actions .brass-btn {
+  min-block-size: 40px;
+  min-inline-size: 44px;
+  padding: 6px 8px;
+  font-size: 12px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.inspector-build-actions .inspector-delete-btn {
+  border-color: var(--berry-deep);
+  color: var(--berry-deep);
+}
+
+@media (pointer: coarse) {
+  .secondary-map-tools-bar .brass-btn,
+  .bottom-bar .brass-btn,
+  .inspector-build-actions .brass-btn,
+  .touch-confirm-bar .brass-btn {
+    min-block-size: 44px;
+    min-inline-size: 44px;
+  }
+
+  .decor-filter-chip {
+    min-block-size: 36px;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+@media (max-width: 680px) and (pointer: coarse) {
+  /* Touch users swipe naturally; hide the extra header row so the map stays open */
+  .build-drawer-swipe-bar {
+    display: none !important;
+  }
+}
+
+@media (max-width: 680px) {
+  .bottom-dock-wrap.ts-build-sheet {
+    gap: 5px;
+    left: max(8px, env(safe-area-inset-left));
+    right: max(8px, env(safe-area-inset-right));
+  }
+
+  .secondary-map-tools-bar:not(.hidden) {
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 5px;
+    padding: 5px 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+  }
+
+  .secondary-map-tools-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .secondary-map-tools-bar .brass-btn {
+    flex: 0 0 auto;
+    min-block-size: 44px;
+    padding: 6px 10px;
+    font-size: 12px;
+    scroll-snap-align: start;
+  }
+
+  .build-drawer {
+    box-sizing: border-box;
+    padding: 7px 9px;
+    gap: 8px;
+    scroll-snap-type: x proximity;
+  }
+
+  .build-drawer .catalog-card {
+    flex: 0 0 128px;
+    padding: 6px 7px;
+    gap: 3px;
+    scroll-snap-align: start;
+  }
+
+  .build-drawer .catalog-card-img {
+    height: 46px;
+  }
+
+  .build-drawer .catalog-card-title {
+    font-size: 11px;
+    line-height: 1.18;
+  }
+
+  .build-drawer .catalog-card-sub {
+    font-size: 10.5px;
+    line-height: 1.18;
+  }
+}
+
+/* Festive Twinkling Winter Cards inside 🎄 Giáng Sinh Build Drawer + YouTube Mini BGM Dock */
+.build-drawer .catalog-card.yule-festive-card {
+  position: relative;
+  overflow: hidden;
+  border-color: var(--yule-gold-bright);
+  box-shadow:
+    0 2px 0 var(--shadow-chip),
+    inset 0 0 12px var(--border-cream);
+}
+
+.build-drawer .catalog-card .yule-card-twinkle {
+  position: absolute;
+  top: 5px;
+  right: 7px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--sky-deep);
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes yuleCardTwinklePulse {
+    0%,
+    100% {
+      opacity: 0.42;
+      transform: scale(0.92) rotate(0deg);
+    }
+    50% {
+      opacity: 0.98;
+      transform: scale(1.16) rotate(22deg);
+    }
+  }
+
+  @keyframes yuleSpriteGentleBob {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-2px);
+    }
+  }
+
+  .build-drawer[data-christmas-drawer='true'] .catalog-card.yule-festive-card .yule-card-twinkle {
+    animation: yuleCardTwinklePulse 2.6s ease-in-out infinite;
+  }
+
+  .build-drawer[data-christmas-drawer='true'] .catalog-card.yule-festive-card:nth-child(even) .yule-card-twinkle {
+    animation-delay: 1.1s;
+    color: var(--gold-deep);
+  }
+
+  .build-drawer[data-christmas-drawer='true'] .catalog-card.yule-festive-card:hover .catalog-card-img {
+    animation: yuleSpriteGentleBob 1.4s ease-in-out infinite;
+  }
+}
+
+.yt-bgm-mini-dock {
+  position: fixed;
+  left: 12px;
+  bottom: 92px;
+  z-index: 28;
+  width: 204px;
+  border-radius: 12px;
+  border: 2px solid var(--border-brass);
+  background: var(--surface-dark);
+  color: var(--ink-cream);
+  box-shadow: 0 6px 18px var(--shadow-deep);
+  overflow: hidden;
+}
+
+.yt-bgm-mini-dock.hidden {
+  display: none !important;
+}
+
+.yt-bgm-mini-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--surface-dark-2);
+}
+
+.yt-bgm-mini-collapse {
+  appearance: none;
+  border: 1px solid var(--border-brass);
+  border-radius: 6px;
+  background: var(--surface-chip-top);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 1px 6px;
+  cursor: pointer;
+}
+
+.yt-bgm-iframe-slot {
+  width: 200px;
+  height: 112px;
+  margin: 0 auto;
+}
+
+.yt-bgm-iframe-slot iframe {
+  display: block;
+  width: 200px;
+  height: 112px;
+  border: 0;
+}
+
+.yt-bgm-mini-dock.is-collapsed {
+  width: auto;
+}
+
+.yt-bgm-mini-dock.is-collapsed .yt-bgm-iframe-slot,
+.yt-bgm-mini-dock.is-collapsed .yt-bgm-iframe-slot iframe {
+  position: fixed;
+  left: -9999px;
+  bottom: 0;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0.01;
+  pointer-events: none;
+}
+
+body[data-photo-mode='true'] .yt-bgm-mini-dock {
+  display: none !important;
+}
+
+/* ==========================================================================
+   9/10 Full-Loop UX Polish Overrides
+   - Legible Turning-Point Review Inspect Pill (`🔍 Soi Bàn`)
+   - Unclipped Match-3 Goal Counters (`7/28`) across all viewports
+   - Concise Seed Quiz Tabs, Scroll Isolation & Narrow-Landscape Stack
+   - De-stacked Build Drawer / Seed & Pasture Trays (reclaiming 116-126px)
+   ========================================================================== */
+
+.pa-review-card .pa-mini-pill {
+  appearance: none;
+  background: linear-gradient(180deg, var(--surface-chip-top) 0%, var(--surface-chip-bot) 100%);
+  color: var(--farm-ink-title);
+  border: 1.5px solid var(--farm-brass-mid);
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 800;
+  line-height: 1.2;
+  cursor: pointer;
+  box-shadow: 0 1.5px 0 var(--farm-wood-darkest);
+}
+
+.pa-review-card .pa-mini-pill.active {
+  background: linear-gradient(180deg, var(--speed-active-top) 0%, var(--speed-active-bot) 100%);
+  color: var(--ts-play-cta-ink);
+  border-color: var(--border-cream);
+}
+
+/* Match-3 Goal Pills: keep counts (e.g. 7/28) 100% readable without ellipsis */
+#match3Dialog .pa-side-dock .m3-dock-hud .m3-goals-list,
+#match3Dialog .m3-dock-hud .m3-goals-list {
+  grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+  gap: 4px;
+}
+
+#match3Dialog .pa-side-dock .m3-dock-hud .m3-goal-pill,
+#match3Dialog .m3-dock-hud .m3-goal-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 6px;
+  gap: 5px;
+  min-inline-size: 0;
+  overflow: visible;
+}
+
+#match3Dialog .pa-side-dock .m3-dock-hud .m3-goal-name,
+#match3Dialog .m3-dock-hud .m3-goal-name {
+  display: none !important;
+}
+
+#match3Dialog .pa-side-dock .m3-dock-hud .m3-goal-meta,
+#match3Dialog .m3-dock-hud .m3-goal-meta {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: visible;
+  justify-content: flex-end;
+}
+
+#match3Dialog .pa-side-dock .m3-dock-hud .m3-goal-count,
+#match3Dialog .m3-dock-hud .m3-goal-count {
+  flex: 0 0 auto;
+  max-inline-size: none;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 1px 5px;
+}
+
+/* Học Viện Thần Chú (#seedQuizDialog) Header/Scroll Isolation & Compact Language Tabs */
+#seedQuizDialog .modal-header {
+  position: relative;
+  z-index: 3;
+  flex-shrink: 0;
+}
+
+#seedQuizDialog #sqScrollViewport {
+  position: relative;
+  z-index: 1;
+  clip-path: inset(0);
+  padding-top: 2px;
+}
+
+#seedQuizDialog .sq-lang-tab {
+  padding: 5px 6px;
+  gap: 4px;
+  justify-content: center;
+  min-width: 0;
+}
+
+#seedQuizDialog .sq-lang-text strong {
+  font-size: 11.5px;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+@media (max-width: 880px) {
+  #seedQuizDialog[data-mg-layout='landscape'] .sq-options-layout {
+    grid-template-columns: 1fr;
+  }
+
+  #seedQuizDialog[data-mg-layout='landscape'] .sq-lang-tabs {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+/* Seed & Pasture Trays + Build Dock De-Stacking */
+.seed-tray-header {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.seed-tray-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.seed-tray-title-wrap {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.seed-tray-close {
+  flex-shrink: 0;
+}
+
+.hud-shell-root.hud-sheet-or-tray-open .ts-corner-left,
+.hud-shell-root.hud-sheet-or-tray-open .ts-corner-right,
+body:has(#bottomDockWrap.ts-dock-open, #seedBrushTray:not(.hidden), #pastureBrushTray:not(.hidden))
+  :is(.ts-corner-left, .ts-corner-right) {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(20px);
+}
+
+.hud-shell-root.hud-sheet-or-tray-open .bottom-dock-wrap.ts-build-sheet.ts-dock-open,
+.hud-shell-root.hud-sheet-or-tray-open:not(.hud-building-focus) .seed-brush-tray,
+.bottom-dock-wrap.ts-build-sheet.ts-dock-open,
+.hud-shell-root:not(.hud-building-focus):has(#seedBrushTray:not(.hidden), #pastureBrushTray:not(.hidden))
+  .seed-brush-tray {
+  bottom: max(10px, env(safe-area-inset-bottom, 0px));
+}
 
 
 

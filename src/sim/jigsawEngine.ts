@@ -52,42 +52,43 @@ interface GridPreset {
 }
 
 const STAGE_GRID_PRESETS: readonly GridPreset[] = [
-  // Bậc 1: Nhập Môn (Màn 1–15: 9 -> 16 mảnh, 2p30s -> 4p)
+  // Bậc 1: Nhập Môn (Màn 1–15: 9 -> 16 mảnh, 2p30s -> 3p20s)
   { maxStage: 5, rows: 3, cols: 3, timeLimitSec: 150, tierLabelVi: 'Nhập Môn Khung Gỗ' },
-  { maxStage: 10, rows: 3, cols: 4, timeLimitSec: 180, tierLabelVi: 'Nhập Môn Khung Gỗ' },
-  { maxStage: 15, rows: 4, cols: 4, timeLimitSec: 240, tierLabelVi: 'Nhập Môn Khung Gỗ' },
-  // Bậc 2: Tập Sự (Màn 16–45: 20 -> 36 mảnh, 5p -> 9p)
+  { maxStage: 10, rows: 3, cols: 4, timeLimitSec: 165, tierLabelVi: 'Nhập Môn Khung Gỗ' },
+  { maxStage: 15, rows: 4, cols: 4, timeLimitSec: 200, tierLabelVi: 'Nhập Môn Khung Gỗ' },
+  // Bậc 2: Tập Sự (Màn 16–45: 20 -> 36 mảnh, 5p -> 7p)
   { maxStage: 24, rows: 4, cols: 5, timeLimitSec: 300, tierLabelVi: 'Tập Sự Họa Phẩm' },
-  { maxStage: 31, rows: 5, cols: 5, timeLimitSec: 360, tierLabelVi: 'Tập Sự Họa Phẩm' },
-  { maxStage: 38, rows: 5, cols: 6, timeLimitSec: 450, tierLabelVi: 'Tập Sự Họa Phẩm' },
-  { maxStage: 45, rows: 6, cols: 6, timeLimitSec: 540, tierLabelVi: 'Tập Sự Họa Phẩm' },
-  // Bậc 3: Khéo Tay (Màn 46–100: 48 -> 100 mảnh, 12p -> 22p)
-  { maxStage: 60, rows: 6, cols: 8, timeLimitSec: 720, tierLabelVi: 'Khéo Tay Sảnh Tranh' },
-  { maxStage: 78, rows: 8, cols: 8, timeLimitSec: 900, tierLabelVi: 'Khéo Tay Sảnh Tranh' },
-  { maxStage: 94, rows: 8, cols: 10, timeLimitSec: 1080, tierLabelVi: 'Khéo Tay Sảnh Tranh' },
-  { maxStage: 100, rows: 10, cols: 10, timeLimitSec: 1320, tierLabelVi: 'Khéo Tay Sảnh Tranh' },
-  // Bậc 4: Nghệ Nhân (Màn 101–200: 120 -> 270 mảnh, 26p -> 45p)
-  { maxStage: 125, rows: 10, cols: 12, timeLimitSec: 1560, tierLabelVi: 'Nghệ Nhân Phục Chế' },
-  { maxStage: 149, rows: 12, cols: 12, timeLimitSec: 1800, tierLabelVi: 'Nghệ Nhân Phục Chế' },
-  { maxStage: 170, rows: 12, cols: 15, timeLimitSec: 2100, tierLabelVi: 'Nghệ Nhân Phục Chế' },
-  { maxStage: 186, rows: 14, cols: 16, timeLimitSec: 2400, tierLabelVi: 'Nghệ Nhân Phục Chế' },
-  { maxStage: 200, rows: 15, cols: 18, timeLimitSec: 2700, tierLabelVi: 'Nghệ Nhân Phục Chế' },
-  // Bậc 5: Cao Thủ (Màn 201–350: 320 -> 500 mảnh, 50p -> 1h05p)
-  { maxStage: 250, rows: 16, cols: 20, timeLimitSec: 3000, tierLabelVi: 'Cao Thủ Bích Họa' },
-  { maxStage: 305, rows: 18, cols: 22, timeLimitSec: 3360, tierLabelVi: 'Cao Thủ Bích Họa' },
-  { maxStage: 350, rows: 20, cols: 25, timeLimitSec: 3900, tierLabelVi: 'Cao Thủ Bích Họa' },
-  // Bậc 6: Đại Sư (Màn 351–550: 616 -> 1.008 mảnh, 1h12p -> 1h36p)
-  { maxStage: 405, rows: 22, cols: 28, timeLimitSec: 4320, tierLabelVi: 'Đại Sư Ngàn Mảnh' },
-  { maxStage: 460, rows: 25, cols: 30, timeLimitSec: 4800, tierLabelVi: 'Đại Sư Ngàn Mảnh' },
-  { maxStage: 510, rows: 25, cols: 36, timeLimitSec: 5400, tierLabelVi: 'Đại Sư Ngàn Mảnh' },
-  { maxStage: 550, rows: 28, cols: 36, timeLimitSec: 5760, tierLabelVi: 'Đại Sư Ngàn Mảnh' },
-  // Bậc 7: Huyền Thoại (Màn 551–700: 1.200 -> 1.680 mảnh, 1h42p -> 1h54p)
-  { maxStage: 605, rows: 30, cols: 40, timeLimitSec: 6120, tierLabelVi: 'Huyền Thoại Tháp Tranh' },
-  { maxStage: 655, rows: 32, cols: 45, timeLimitSec: 6480, tierLabelVi: 'Huyền Thoại Tháp Tranh' },
-  { maxStage: 700, rows: 35, cols: 48, timeLimitSec: 6840, tierLabelVi: 'Huyền Thoại Tháp Tranh' },
-  // Bậc 8: Tuyệt Tác Tối Thượng (Màn 701–777: 1.800 -> 2.000 mảnh, 1h57p -> tối đa 2h00p = 7.200s)
-  { maxStage: 730, rows: 36, cols: 50, timeLimitSec: 7020, tierLabelVi: 'Tuyệt Tác Hai Ngàn Mảnh' },
-  { maxStage: 755, rows: 38, cols: 50, timeLimitSec: 7110, tierLabelVi: 'Tuyệt Tác Hai Ngàn Mảnh' },
+  { maxStage: 31, rows: 5, cols: 5, timeLimitSec: 320, tierLabelVi: 'Tập Sự Họa Phẩm' },
+  { maxStage: 38, rows: 5, cols: 6, timeLimitSec: 360, tierLabelVi: 'Tập Sự Họa Phẩm' },
+  { maxStage: 45, rows: 6, cols: 6, timeLimitSec: 420, tierLabelVi: 'Tập Sự Họa Phẩm' },
+  // Bậc 3: Khéo Tay (Màn 46–100: 48 -> 100 mảnh, 9p -> 17p)
+  { maxStage: 60, rows: 6, cols: 8, timeLimitSec: 540, tierLabelVi: 'Khéo Tay Sảnh Tranh' },
+  { maxStage: 78, rows: 8, cols: 8, timeLimitSec: 690, tierLabelVi: 'Khéo Tay Sảnh Tranh' },
+  { maxStage: 94, rows: 8, cols: 10, timeLimitSec: 840, tierLabelVi: 'Khéo Tay Sảnh Tranh' },
+  { maxStage: 100, rows: 10, cols: 10, timeLimitSec: 1020, tierLabelVi: 'Khéo Tay Sảnh Tranh' },
+  // Bậc 4: Nghệ Nhân (Màn 101–200: 120 -> 270 mảnh, 20p -> 35p)
+  { maxStage: 125, rows: 10, cols: 12, timeLimitSec: 1200, tierLabelVi: 'Nghệ Nhân Phục Chế' },
+  { maxStage: 149, rows: 12, cols: 12, timeLimitSec: 1410, tierLabelVi: 'Nghệ Nhân Phục Chế' },
+  { maxStage: 170, rows: 12, cols: 15, timeLimitSec: 1650, tierLabelVi: 'Nghệ Nhân Phục Chế' },
+  { maxStage: 186, rows: 14, cols: 16, timeLimitSec: 1890, tierLabelVi: 'Nghệ Nhân Phục Chế' },
+  { maxStage: 200, rows: 15, cols: 18, timeLimitSec: 2100, tierLabelVi: 'Nghệ Nhân Phục Chế' },
+  // Bậc 5: Cao Thủ (Màn 201–350: 320 -> 500 mảnh, 40p -> 51p)
+  { maxStage: 250, rows: 16, cols: 20, timeLimitSec: 2400, tierLabelVi: 'Cao Thủ Bích Họa' },
+  { maxStage: 305, rows: 18, cols: 22, timeLimitSec: 2700, tierLabelVi: 'Cao Thủ Bích Họa' },
+  { maxStage: 350, rows: 20, cols: 25, timeLimitSec: 3060, tierLabelVi: 'Cao Thủ Bích Họa' },
+  // Bậc 6: Đại Sư (Màn 351–550: 616 -> 1.008 mảnh, 57p -> 1h16p)
+  { maxStage: 405, rows: 22, cols: 28, timeLimitSec: 3420, tierLabelVi: 'Đại Sư Ngàn Mảnh' },
+  { maxStage: 460, rows: 25, cols: 30, timeLimitSec: 3780, tierLabelVi: 'Đại Sư Ngàn Mảnh' },
+  { maxStage: 510, rows: 25, cols: 36, timeLimitSec: 4200, tierLabelVi: 'Đại Sư Ngàn Mảnh' },
+  { maxStage: 550, rows: 28, cols: 36, timeLimitSec: 4560, tierLabelVi: 'Đại Sư Ngàn Mảnh' },
+  // Bậc 7: Huyền Thoại (Màn 551–700: 1.200 -> 1.680 mảnh, 1h22p -> 1h34p)
+  { maxStage: 605, rows: 30, cols: 40, timeLimitSec: 4920, tierLabelVi: 'Huyền Thoại Tháp Tranh' },
+  { maxStage: 655, rows: 32, cols: 45, timeLimitSec: 5280, tierLabelVi: 'Huyền Thoại Tháp Tranh' },
+  { maxStage: 700, rows: 35, cols: 48, timeLimitSec: 5640, tierLabelVi: 'Huyền Thoại Tháp Tranh' },
+  // Bậc 8: Tuyệt Tác Tối Thượng (Màn 701–777: 1.800 -> 2.000 mảnh, 1h39p -> tối đa 2h00p = 7.200s)
+  { maxStage: 730, rows: 36, cols: 50, timeLimitSec: 5940, tierLabelVi: 'Tuyệt Tác Hai Ngàn Mảnh' },
+  { maxStage: 755, rows: 38, cols: 50, timeLimitSec: 6300, tierLabelVi: 'Tuyệt Tác Hai Ngàn Mảnh' },
+  { maxStage: 776, rows: 40, cols: 50, timeLimitSec: 6600, tierLabelVi: 'Tuyệt Tác Hai Ngàn Mảnh' },
   { maxStage: 777, rows: 40, cols: 50, timeLimitSec: 7200, tierLabelVi: 'Tuyệt Tác Hai Ngàn Mảnh' },
 ];
 
@@ -124,7 +125,7 @@ export function getJigsawStageSpec(rawStage: number): JigsawStageSpec {
     timeLimitSec,
     tierLabelVi: preset.tierLabelVi,
     tierBadgeEmoji: tier.badgeEmoji,
-    showGhostDefault: stage <= 35,
+    showGhostDefault: stage <= 8,
     isBreatherStage,
     isBossStage,
   };
@@ -455,7 +456,7 @@ export class MasterJigsawEngine {
   public maxCombo = 0;
   public score = 0;
   public freeHintsLeft: number;
-  public paidHintsLeft = 3;
+  public paidHintsLeft = 2;
   public talismanUsed = false;
   public lossReason: 'timeout' | null = null;
   public status: 'playing' | 'won' | 'lost' = 'playing';
@@ -475,7 +476,7 @@ export class MasterJigsawEngine {
     this.timeLimitSec = this.spec.timeLimitSec;
     this.timeRemainingSec = this.spec.timeLimitSec;
     this.showGhostPreview = this.spec.showGhostDefault;
-    this.freeHintsLeft = this.totalPieces >= 500 ? 3 : this.totalPieces >= 100 ? 2 : 1;
+    this.freeHintsLeft = this.totalPieces >= 800 ? 2 : this.totalPieces >= 250 ? 1 : this.stage <= 5 ? 1 : 0;
 
     this.pieceState = new Uint8Array(this.totalPieces);
     this.pieceEdges = new Int8Array(this.totalPieces * 4);
@@ -842,7 +843,7 @@ export class MasterJigsawEngine {
     let root = this.findClusterRoot(pieceIdx);
     const cellPxW = boardPixelW / this.cols;
     const cellPxH = boardPixelH / this.rows;
-    const snapPx = Math.max(16, Math.min(34, Math.min(cellPxW, cellPxH) * 0.44));
+    const snapPx = Math.max(11, Math.min(22, Math.min(cellPxW, cellPxH) * 0.3));
 
     const errPx = Math.hypot(
       this.clusterDeltaX[root] * boardPixelW,
@@ -870,7 +871,7 @@ export class MasterJigsawEngine {
     ] as const;
 
     let mergedAny = false;
-    const neighborSnapPx = Math.max(14, snapPx * 0.92);
+    const neighborSnapPx = Math.max(10, snapPx * 0.84);
 
     for (const m of members) {
       const mr = Math.floor(m / this.cols);
@@ -904,7 +905,7 @@ export class MasterJigsawEngine {
         this.clusterDeltaX[root] * boardPixelW,
         this.clusterDeltaY[root] * boardPixelH
       );
-      if (postErrPx <= snapPx * 1.1) {
+      if (postErrPx <= snapPx * 1.02) {
         const mergedMembers = this.getClusterMembers(root);
         const lockedNow = this.lockPiecesInternal(mergedMembers);
         return {
@@ -1077,12 +1078,10 @@ export class MasterJigsawEngine {
     }
     const batchCount =
       this.totalPieces >= 1000
-        ? 8
+        ? 5
         : this.totalPieces >= 300
-          ? 4
-          : this.totalPieces >= 65
-            ? 2
-            : 1;
+          ? 3
+          : 1;
     const chosen = this.pickPriorityUnlockedPieces(batchCount);
     if (chosen.length === 0) {
       return { ok: false, lockedPieces: [], won: true, msg: 'Bức tranh đã hoàn thiện!' };
@@ -1290,7 +1289,7 @@ export class MasterJigsawEngine {
     );
     this.timeRemainingSec = Math.max(
       0,
-      Math.min(this.timeLimitSec, Number(saved.timeRemainingSec ?? this.timeLimitSec))
+      Math.min(JIGSAW_MAX_TIME_SEC, Number(saved.timeRemainingSec ?? this.timeLimitSec))
     );
     const validFilters: readonly JigsawTrayFilter[] = ['all', 'edges', 'q0', 'q1', 'q2', 'q3'];
     this.trayFilter = validFilters.includes(saved.trayFilter) ? saved.trayFilter : 'all';
@@ -1519,7 +1518,10 @@ export function sanitizeSavedJigsawSession(
     rows,
     cols,
     timeLimitSec: spec.timeLimitSec,
-    timeRemainingSec: Math.max(0, Math.min(spec.timeLimitSec, Number(obj.timeRemainingSec ?? spec.timeLimitSec))),
+    timeRemainingSec: Math.max(
+      0,
+      Math.min(JIGSAW_MAX_TIME_SEC, Number(obj.timeRemainingSec ?? spec.timeLimitSec))
+    ),
     placedBitsetB64: obj.placedBitsetB64,
     looseClusters,
     trayFilter,

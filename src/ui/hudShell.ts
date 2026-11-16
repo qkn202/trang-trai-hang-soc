@@ -120,7 +120,9 @@ import {
   BUILD_HUD_CATEGORIES,
   HEATMAP_CYCLE,
   InspectSelection,
+  clearBuildToolModes,
   escapeHtml,
+  isWinterChristmasBuildItem,
 } from "./hudShared";
 import type { GameHUD } from './hud';
 
@@ -369,6 +371,9 @@ export function shellMountDOM(hud: GameHUD): void {
             <button id="btnAccioAll" type="button" class="brass-btn gold-cta" title="Phép Accio gom toàn bộ nông sản, bánh &amp; vàng">⚡ Accio</button>
             <button id="btnToggleQuestTrackerHud" type="button" class="brass-btn" title="Ghim bảng nhiệm vụ">📌 Ghim NV</button>
             <button id="btnToggleMinimapHud" type="button" class="brass-btn" title="Hiện/ẩn Radar thu nhỏ">🧭 Radar</button>
+            <button id="btnMenuRotateCam" type="button" class="brass-btn" title="Xoay góc nhìn bản đồ 90° (Phím Q / E)">🧭 Bắc</button>
+            <button id="btnMenuCutaway" type="button" aria-pressed="false" class="brass-btn" title="Nhìn xuyên nhà cao (Phím V)">👁️ Xuyên</button>
+            <button id="btnMenuGrid" type="button" aria-pressed="false" class="brass-btn" title="Bật/Tắt lưới ô">✨ Lưới</button>
             <button id="btnCycleHeatmap" type="button" class="brass-btn" aria-pressed="false" title="Bật lớp màu Bản Đồ Nhiệt">🌡️ Nhiệt</button>
             <button id="btnPhotoMode" type="button" class="brass-btn" aria-label="Chế độ chụp ảnh (Phím P)" title="Ẩn giao diện để chụp ảnh (Phím P)">📷 Ảnh</button>
             <button id="btnManageToggleHudRollup" type="button" class="brass-btn" title="Cuộn gọn thanh HUD quanh màn hình (Phím H)">📜 Ẩn HUD</button>
@@ -381,6 +386,13 @@ export function shellMountDOM(hud: GameHUD): void {
 
         <!-- COZY PROGRESSIVE-DISCLOSURE POPOVER 2: LIVE WEATHER FORECAST & PARK SPEED -->
         <div id="weatherPopoverMenu" class="hud-floating-popover hidden" role="region" aria-label="Dự báo thời tiết và tốc độ công viên"></div>
+
+        <!-- YULE EVENT BANNER -->
+        <button id="yuleEventBanner" type="button" class="yule-event-banner hidden" aria-label="Mở nhiệm vụ Yule">
+          <span class="yule-event-banner-icon">🎄</span>
+          <span><strong id="yuleEventBannerTitle">Yule</strong><small id="yuleEventBannerTask"></small></span>
+          <span id="yuleEventBannerProgress" class="yule-event-banner-progress"></span>
+        </button>
 
         <!-- DRAGGABLE FLOATING BANNER -->
         <div id="floatingModeBanner" class="parchment-dark floating-action-banner hidden">
@@ -437,6 +449,7 @@ export function shellMountDOM(hud: GameHUD): void {
       <div id="photoModeBar" class="parchment-dark photo-mode-bar hidden">
         <span style="font-size:12.5px;font-weight:800;color:#fde68a;">📷</span>
         <button id="btnSavePhotoPng" type="button" class="brass-btn gold-cta">💾 PNG</button>
+        <button id="btnSaveYulePostcard" type="button" class="brass-btn yule-postcard-btn" title="Xuất ảnh thiệp Giáng Sinh khung thông tuyết (.png)">🎄 Khung Thiệp</button>
         <button id="btnExitPhoto" type="button" class="brass-btn" aria-label="Thoát chế độ chụp ảnh">✕</button>
       </div>
 
@@ -537,29 +550,29 @@ export function shellMountDOM(hud: GameHUD): void {
             <button id="btnDrawerScrollNext" type="button" class="drawer-nav-pill" aria-label="Cuộn sang phải">›</button>
           </div>
         </div>
+        <div id="decorCollectionFilterBar" class="decor-collection-filter-bar hidden" role="tablist" aria-label="Bộ sưu tập trang trí"></div>
         <div id="buildDrawer" class="parchment-panel build-drawer hidden"></div>
 
-        <div id="secondaryMapToolsBar" class="parchment-dark secondary-map-tools-bar hidden" role="region" aria-label="Công cụ chỉnh sửa và bản đồ">
-          <button id="btnMoveTool" type="button" aria-pressed="false" class="brass-btn" title="Di dời công trình (Phím M)">✋ Dời</button>
-          <button id="btnBulldoze" type="button" aria-pressed="false" class="brass-btn" title="Phá dỡ (Phím X)">🧹 Xóa</button>
-          <button id="btnRotate" type="button" class="brass-btn" title="Xoay hướng công trình (Phím R)">🔄 90°</button>
-          <button id="btnRotateCam" type="button" aria-pressed="false" class="brass-btn" title="Xoay góc nhìn bản đồ 90° (Phím Q / E)">🧭 Bắc</button>
-          <button id="btnPincerTool" type="button" aria-pressed="false" class="brass-btn" title="Kẹp Gắp Nhân Sự (Phím G)">🤏 Gắp</button>
-          <button id="btnCutaway" type="button" aria-pressed="false" class="brass-btn" title="Nhìn xuyên nhà cao (Phím V)">👁️ Xuyên</button>
-          <button id="btnGrid" type="button" aria-pressed="false" class="brass-btn" title="Bật/Tắt lưới ô">✨ Lưới</button>
-          <button id="btnHomeCam" type="button" class="brass-btn" title="Về Hang Sóc">🏡 Nhà</button>
+        <div id="secondaryMapToolsBar" class="parchment-dark secondary-map-tools-bar hidden" role="toolbar" focusgroup="toolbar wrap" aria-label="Công cụ xây dựng chính" aria-controls="gameCanvas">
+          <div role="group" aria-label="Thao tác công trình" class="build-toolbar-group">
+            <button id="btnMoveTool" type="button" aria-pressed="false" class="brass-btn" title="Di dời công trình (Phím M)">✋ Dời</button>
+            <button id="btnBulldoze" type="button" aria-pressed="false" class="brass-btn" title="Xóa công trình hoặc đường (Phím X)">🧹 Xóa</button>
+            <button id="btnRotate" type="button" class="brass-btn" title="Xoay công trình 90° (Phím R)">🔄 Xoay</button>
+          </div>
+          <span role="separator" aria-orientation="vertical" class="build-toolbar-sep"></span>
+          <div role="group" aria-label="Hoàn tác và đóng" class="build-toolbar-group">
+            <button id="btnBuildUndo" type="button" aria-disabled="true" class="brass-btn" title="Hoàn tác xây dựng (Ctrl/Cmd+Z)">↶ Hoàn tác</button>
+            <button id="btnBuildRedo" type="button" aria-disabled="true" class="brass-btn" title="Làm lại xây dựng (Ctrl/Cmd+Y)">↷ Làm lại</button>
+            <button id="btnBuildDone" type="button" class="brass-btn gold-cta" title="Đóng chế độ xây dựng (Esc)">✓ Xong</button>
+          </div>
         </div>
 
-        <div class="parchment-dark bottom-bar">
-          <button type="button" data-cat="path" aria-pressed="false" class="brass-btn"><img src="/sprites/ui_icon_path.png" alt="" class="hud-3d-icon" /> Đường</button>
-          <button type="button" data-cat="shop" aria-pressed="false" class="brass-btn"><img src="/sprites/ui_icon_shop.png" alt="" class="hud-3d-icon" /> Xưởng</button>
-          <button type="button" data-cat="creature" aria-pressed="false" class="brass-btn"><img src="/sprites/ui_icon_creature.png" alt="" class="hud-3d-icon" /> Thú</button>
-          <button type="button" data-cat="decor" aria-pressed="false" class="brass-btn"><img src="/sprites/ui_icon_decor.png" alt="" class="hud-3d-icon" /> Cảnh</button>
-          <button type="button" data-cat="staff" aria-pressed="false" class="brass-btn"><img src="/sprites/ui_icon_staff.png" alt="" class="hud-3d-icon" /> Phụ Tá</button>
-
-          <span class="dock-divider" aria-hidden="true">|</span>
-
-          <button id="btnToggleMapTools" type="button" aria-pressed="false" aria-expanded="false" aria-controls="secondaryMapToolsBar" class="brass-btn" title="Công cụ Sửa &amp; Góc Nhìn"><span class="dock-tool-icon" aria-hidden="true">🛠️</span> Công Cụ</button>
+        <div class="parchment-dark bottom-bar" role="group" aria-label="Nhóm công trình xây dựng">
+          <button type="button" data-cat="shop" aria-pressed="false" class="brass-btn"><img src="/sprites/ui_icon_shop.png" alt="" class="hud-3d-icon" aria-hidden="true" /> Công Trình</button>
+          <button type="button" data-cat="creature" aria-pressed="false" class="brass-btn"><img src="/sprites/ui_icon_creature.png" alt="" class="hud-3d-icon" aria-hidden="true" /> Sản Xuất</button>
+          <button type="button" data-cat="path" aria-pressed="false" class="brass-btn"><img src="/sprites/ui_icon_path.png" alt="" class="hud-3d-icon" aria-hidden="true" /> Đường</button>
+          <button type="button" data-cat="decor" aria-pressed="false" class="brass-btn"><img src="/sprites/ui_icon_decor.png" alt="" class="hud-3d-icon" aria-hidden="true" /> Trang Trí</button>
+          <button type="button" data-decor-event="christmas" aria-pressed="false" class="brass-btn"><span class="dock-tool-icon" aria-hidden="true">🎄</span> Giáng Sinh</button>
         </div>
       </section>
 
@@ -842,31 +855,31 @@ export function shellBindEvents(hud: GameHUD): void {
     hud.root.querySelector('#btnToggleBuildDock')?.addEventListener('click', () => {
       hud.closeHudPopovers();
       const isDockOpen =
-        hud.buildSheetOpen || Boolean(hud.activeCategory) || hud.mapToolsExpanded;
+        hud.buildSheetOpen ||
+        Boolean(hud.activeCategory) ||
+        hud.mapToolsExpanded ||
+        Boolean(hud.selectedCatalogItem) ||
+        hud.moveModeActive ||
+        hud.bulldozerActive;
       if (isDockOpen) {
         hud.collapseBuildDock();
-        hud.selectedCatalogItem = null;
-        hud.bulldozerActive = false;
-        hud.moveModeActive = false;
-        hud.movingBuildingUid = null;
-        hud.pincerActive = false;
-        hud.pincerPicked = null;
-        hud.pendingTouchTile = null;
+        clearBuildToolModes(hud);
       } else {
+        const prevItem = hud.selectedCatalogItem;
+        const prevWasChristmas = Boolean(prevItem && isWinterChristmasBuildItem(prevItem));
+        const prevSelectedCat = prevItem?.category;
         hud.closeSeedTray();
         hud.closePastureTray();
-        hud.bulldozerActive = false;
-        hud.moveModeActive = false;
-        hud.movingBuildingUid = null;
-        hud.pincerActive = false;
-        hud.pincerPicked = null;
-        hud.pendingTouchTile = null;
+        clearBuildToolModes(hud);
         hud.inspectSelection = null;
         hud.buildSheetOpen = true;
-        hud.mapToolsExpanded = window.innerWidth > 680;
-        const selCat = hud.selectedCatalogItem?.category;
-        hud.activeCategory =
-          selCat && BUILD_HUD_CATEGORIES.includes(selCat) ? selCat : 'shop';
+        hud.mapToolsExpanded = true;
+        hud.christmasTabActive = prevWasChristmas;
+        hud.activeCategory = prevWasChristmas
+          ? 'decor'
+          : prevSelectedCat && BUILD_HUD_CATEGORIES.includes(prevSelectedCat)
+            ? prevSelectedCat
+            : 'shop';
       }
       hud.refreshAll();
     });
@@ -890,6 +903,7 @@ export function shellBindEvents(hud: GameHUD): void {
       if (actives.length === 0) return;
       const nextB = actives[0];
       const it = getCatalogItem(nextB.itemId);
+      clearBuildToolModes(hud);
       centerCameraOnGrid(
         hud.cam,
         nextB.gx + (it?.width ?? 1) * 0.5,
@@ -986,10 +1000,51 @@ export function shellBindEvents(hud: GameHUD): void {
       hud.toggleWeatherPopover();
     });
 
-    hud.root.querySelector('#btnToggleMapTools')?.addEventListener('click', () => {
-      hud.mapToolsExpanded = !hud.mapToolsExpanded;
-      hud.refreshDock();
-    });
+    // Progressive roving-tabindex fallback for #secondaryMapToolsBar when native focusgroup is unsupported
+    const buildToolbar = hud.root.querySelector('#secondaryMapToolsBar') as HTMLElement | null;
+    if (
+      buildToolbar &&
+      typeof HTMLElement !== 'undefined' &&
+      !('focusGroup' in HTMLElement.prototype)
+    ) {
+      const toolbarItems = Array.from(
+        buildToolbar.querySelectorAll<HTMLButtonElement>('button')
+      );
+      toolbarItems.forEach((b, i) => {
+        b.tabIndex = i === 0 ? 0 : -1;
+      });
+      buildToolbar.addEventListener('focusin', ({ target }) => {
+        if (target instanceof HTMLButtonElement && toolbarItems.includes(target)) {
+          toolbarItems.forEach((b) => {
+            b.tabIndex = b === target ? 0 : -1;
+          });
+        }
+      });
+      buildToolbar.addEventListener('keydown', (ev) => {
+        if (toolbarItems.length === 0) return;
+        const curIdx = Math.max(
+          0,
+          toolbarItems.findIndex((b) => b === document.activeElement)
+        );
+        const rtl =
+          typeof getComputedStyle === 'function' &&
+          getComputedStyle(buildToolbar).direction === 'rtl';
+        let nextIdx = -1;
+        if (ev.key === 'ArrowRight') {
+          nextIdx = (curIdx + (rtl ? -1 : 1) + toolbarItems.length) % toolbarItems.length;
+        } else if (ev.key === 'ArrowLeft') {
+          nextIdx = (curIdx + (rtl ? 1 : -1) + toolbarItems.length) % toolbarItems.length;
+        } else if (ev.key === 'Home') {
+          nextIdx = 0;
+        } else if (ev.key === 'End') {
+          nextIdx = toolbarItems.length - 1;
+        }
+        if (nextIdx >= 0) {
+          ev.preventDefault();
+          toolbarItems[nextIdx]?.focus();
+        }
+      });
+    }
 
     const scrollBuildDrawerBy = (dir: -1 | 1) => {
       const drawer = hud.root.querySelector('#buildDrawer') as HTMLElement | null;
@@ -1006,6 +1061,31 @@ export function shellBindEvents(hud: GameHUD): void {
     hud.root.querySelector('#btnDrawerScrollNext')?.addEventListener('click', () => {
       scrollBuildDrawerBy(1);
     });
+
+    const attachHorizontalWheel = (container: HTMLElement | null, nestedSelector?: string) => {
+      container?.addEventListener(
+        'wheel',
+        (ev) => {
+          const target = nestedSelector
+            ? (container.querySelector(nestedSelector) as HTMLElement | null)
+            : container;
+          if (
+            target &&
+            target.scrollWidth > target.clientWidth + 4 &&
+            Math.abs(ev.deltaY) > Math.abs(ev.deltaX) &&
+            ev.deltaY !== 0
+          ) {
+            target.scrollLeft += ev.deltaY;
+            ev.preventDefault();
+          }
+        },
+        { passive: false }
+      );
+    };
+    attachHorizontalWheel(hud.root.querySelector('#buildDrawer') as HTMLElement | null);
+    attachHorizontalWheel(hud.root.querySelector('#decorCollectionFilterBar') as HTMLElement | null);
+    attachHorizontalWheel(hud.root.querySelector('#seedBrushTray') as HTMLElement | null, '.seed-tray-scroll');
+    attachHorizontalWheel(hud.root.querySelector('#pastureBrushTray') as HTMLElement | null, '.seed-tray-scroll');
 
     window.addEventListener('pointerdown', (e) => {
       if (!hud.manageMenuOpen && !hud.weatherPopoverOpen) return;
@@ -1056,6 +1136,13 @@ export function shellBindEvents(hud: GameHUD): void {
     });
 
     hud.root.querySelector('#btnOpenQuests')?.addEventListener('click', () => {
+      hud.closeHudPopovers();
+      hud.renderQuestDialog();
+      (hud.root.querySelector('#questDialog') as HTMLDialogElement).showModal();
+    });
+
+    hud.root.querySelector('#yuleEventBanner')?.addEventListener('click', () => {
+      hud.activeQuestTab = 'quests';
       hud.closeHudPopovers();
       hud.renderQuestDialog();
       (hud.root.querySelector('#questDialog') as HTMLDialogElement).showModal();
@@ -1126,13 +1213,94 @@ export function shellBindEvents(hud: GameHUD): void {
     hud.root.querySelector('#btnExitPhoto')?.addEventListener('click', () => {
       hud.togglePhotoMode(false);
     });
+    const compositeWorldSceneCanvas = (): HTMLCanvasElement => {
+      const src = hud.gameCanvas;
+      const gpuEl =
+        typeof document !== 'undefined'
+          ? (document.getElementById('gpuWorldCanvas') as HTMLCanvasElement | null)
+          : null;
+      if (!gpuEl || gpuEl.style.display === 'none' || gpuEl.width <= 0 || gpuEl.height <= 0) {
+        return src;
+      }
+      const out = document.createElement('canvas');
+      out.width = Math.max(640, src.width || gpuEl.width);
+      out.height = Math.max(360, src.height || gpuEl.height);
+      const c = out.getContext('2d');
+      if (c) {
+        c.drawImage(gpuEl, 0, 0, out.width, out.height);
+        c.drawImage(src, 0, 0, out.width, out.height);
+      }
+      return out;
+    };
+
     hud.root.querySelector('#btnSavePhotoPng')?.addEventListener('click', () => {
-      const url = hud.gameCanvas.toDataURL('image/png');
+      const url = compositeWorldSceneCanvas().toDataURL('image/png');
       const a = document.createElement('a');
       a.href = url;
       a.download = `cong-vien-phep-thuat-lv${hud.sim.state.level}.png`;
       a.click();
       hud.showToast('Đã lưu ảnh kỷ niệm công viên (.png)!', '📸');
+    });
+    hud.root.querySelector('#btnSaveYulePostcard')?.addEventListener('click', () => {
+      const src = compositeWorldSceneCanvas();
+      const cw = Math.max(640, src.width);
+      const ch = Math.max(360, src.height);
+      const out = document.createElement('canvas');
+      out.width = cw;
+      out.height = ch;
+      const pctx = out.getContext('2d');
+      if (!pctx) return;
+      pctx.drawImage(src, 0, 0, cw, ch);
+      const pad = Math.max(18, Math.round(Math.min(cw, ch) * 0.032));
+      // Pine-emerald & gold festive frame
+      pctx.save();
+      pctx.strokeStyle = '#14532d';
+      pctx.lineWidth = pad * 1.15;
+      pctx.strokeRect(pad * 0.5, pad * 0.5, cw - pad, ch - pad);
+      pctx.strokeStyle = '#f59e0b';
+      pctx.lineWidth = Math.max(3, pad * 0.18);
+      pctx.strokeRect(pad * 0.92, pad * 0.92, cw - pad * 1.84, ch - pad * 1.84);
+      // Warm fairy lights along top garland
+      const bulbColors = ['#ef4444', '#fbbf24', '#34d399', '#38bdf8'];
+      const step = Math.max(44, Math.round(cw / 18));
+      for (let x = pad * 2, idx = 0; x <= cw - pad * 2; x += step, idx++) {
+        const col = bulbColors[idx % bulbColors.length];
+        pctx.fillStyle = col;
+        pctx.beginPath();
+        pctx.arc(x, pad * 0.92, Math.max(4, pad * 0.24), 0, Math.PI * 2);
+        pctx.fill();
+      }
+      // Festive bottom parchment ribbon plaque
+      const barW = Math.min(cw - pad * 4, Math.max(360, Math.round(cw * 0.62)));
+      const barH = Math.max(44, Math.round(ch * 0.078));
+      const bx = Math.round((cw - barW) * 0.5);
+      const by = ch - pad * 1.4 - barH;
+      pctx.fillStyle = 'rgba(20, 42, 32, 0.9)';
+      pctx.strokeStyle = '#fbbf24';
+      pctx.lineWidth = 2.5;
+      pctx.beginPath();
+      pctx.roundRect(bx, by, barW, barH, 14);
+      pctx.fill();
+      pctx.stroke();
+      const fontSize = Math.max(15, Math.round(barH * 0.42));
+      pctx.font = `700 ${fontSize}px "Playfair Display", Georgia, serif`;
+      pctx.fillStyle = '#fef3c7';
+      pctx.textAlign = 'center';
+      pctx.textBaseline = 'middle';
+      pctx.fillText(
+        `🎄 Giáng Sinh An Lành • ${hud.sim.state.parkName} (Cấp ${hud.sim.state.level}) ✨`,
+        cw * 0.5,
+        by + barH * 0.52
+      );
+      pctx.restore();
+
+      const url = out.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `thiep-giang-sinh-hang-soc-lv${hud.sim.state.level}.png`;
+      a.click();
+      hud.sim.recordFlooShareOrPostcard?.('postcard');
+      hud.showToast('Đã xuất Thiệp Giáng Sinh khung thông tuyết (.png)!', '🎄');
     });
 
     hud.root.querySelector('#btnOpenSettings')?.addEventListener('click', () => {
@@ -1172,10 +1340,7 @@ export function shellBindEvents(hud: GameHUD): void {
         (hud.moveModeActive && hud.movingBuildingUid) ||
         (hud.selectedCatalogItem && !hud.buildSheetOpen && !hud.activeCategory)
       ) {
-        hud.rotation = ((hud.rotation + 1) % 4) as 0 | 1 | 2 | 3;
-        hud.refreshFloatingBanner();
-        hud.refreshTouchConfirmBar();
-        hud.showToast(`Đã xoay hướng cửa công trình (${hud.rotation * 90}°)`, '🔄');
+        hud.triggerRotateAction();
       } else if (hud.activeSeedCropId && !hud.seedTrayOpen) {
         hud.openSeedTray(hud.activeSeedCropId);
       } else if (hud.activePastureAnimalId && !hud.pastureTrayOpen) {
@@ -1185,9 +1350,18 @@ export function shellBindEvents(hud: GameHUD): void {
 
     hud.root.querySelector('#btnFloatingSwap')?.addEventListener('click', () => {
       if (hud.selectedCatalogItem) {
+        const selItem = hud.selectedCatalogItem;
+        const selWasChristmas = isWinterChristmasBuildItem(selItem);
+        const selCat = selItem.category;
+        clearBuildToolModes(hud);
         hud.buildSheetOpen = true;
-        const selCat = hud.selectedCatalogItem.category;
-        hud.activeCategory = BUILD_HUD_CATEGORIES.includes(selCat) ? selCat : 'shop';
+        hud.mapToolsExpanded = true;
+        hud.christmasTabActive = selWasChristmas;
+        hud.activeCategory = selWasChristmas
+          ? 'decor'
+          : BUILD_HUD_CATEGORIES.includes(selCat)
+            ? selCat
+            : 'shop';
         hud.refreshAll();
       } else if (hud.activeSeedCropId) {
         hud.openSeedTray(hud.activeSeedCropId);
@@ -1200,22 +1374,13 @@ export function shellBindEvents(hud: GameHUD): void {
       if (hud.rideCamUid) {
         hud.rideCamUid = null;
         hud.refreshFloatingBanner();
-      } else if (hud.pincerActive) {
-        hud.pincerActive = false;
-        hud.pincerPicked = null;
-        hud.refreshAll();
-      } else if (hud.moveModeActive) {
-        hud.moveModeActive = false;
-        hud.movingBuildingUid = null;
-        hud.pendingTouchTile = null;
-        hud.refreshAll();
-      } else if (hud.bulldozerActive) {
-        hud.bulldozerActive = false;
-        hud.pendingTouchTile = null;
-        hud.refreshAll();
-      } else if (hud.selectedCatalogItem) {
-        hud.selectedCatalogItem = null;
-        hud.pendingTouchTile = null;
+      } else if (
+        hud.pincerActive ||
+        hud.moveModeActive ||
+        hud.bulldozerActive ||
+        hud.selectedCatalogItem
+      ) {
+        clearBuildToolModes(hud);
         hud.refreshAll();
       } else if (hud.activeSeedCropId || hud.seedTrayOpen) {
         hud.closeSeedTray();
@@ -1230,19 +1395,17 @@ export function shellBindEvents(hud: GameHUD): void {
       }
     });
 
-    // Touch Confirm Bar buttons
+    // Touch Confirm Bar buttons (Move confirmation only)
     hud.root.querySelector('#btnTouchConfirmOk')?.addEventListener('click', () => {
       hud.onTouchConfirmPlace?.();
     });
     hud.root.querySelector('#btnTouchRotate')?.addEventListener('click', () => {
-      hud.rotation = ((hud.rotation + 1) % 4) as 0 | 1 | 2 | 3;
-      hud.showToast(`Đã xoay hướng cửa công trình (${hud.rotation * 90}°)`, '🔄');
-      hud.refreshTouchConfirmBar();
+      hud.triggerRotateAction();
     });
     hud.root.querySelector('#btnTouchCancel')?.addEventListener('click', () => {
-      hud.pendingTouchTile = null;
+      clearBuildToolModes(hud);
       hud.onTouchCancelPlace?.();
-      hud.refreshTouchConfirmBar();
+      hud.refreshAll();
     });
 
     // Interactive Minimap Click & Drag Navigation (rotation-aware!)
@@ -1274,22 +1437,25 @@ export function shellBindEvents(hud: GameHUD): void {
       draggingMinimap = false;
     });
 
-    // Category buttons
+    // Category buttons (always reset active item/tool modes when changing category)
     hud.root.querySelectorAll<HTMLButtonElement>('[data-cat]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const cat = btn.dataset.cat as BuildingCategory;
         if (!BUILD_HUD_CATEGORIES.includes(cat)) return;
-        hud.bulldozerActive = false;
-        hud.moveModeActive = false;
-        hud.movingBuildingUid = null;
-        hud.pincerActive = false;
-        hud.pincerPicked = null;
-        hud.pendingTouchTile = null;
-        if (hud.activeCategory === cat) {
+        const wasSameNonChristmasTab =
+          hud.activeCategory === cat && !(cat === 'decor' && hud.christmasTabActive);
+        clearBuildToolModes(hud);
+        hud.inspectSelection = null;
+        hud.christmasTabActive = false;
+        if (wasSameNonChristmasTab) {
           hud.activeCategory = null;
-          hud.selectedCatalogItem = null;
         } else {
           hud.activeCategory = cat;
+          hud.buildSheetOpen = true;
+          hud.mapToolsExpanded = true;
+          if (cat === 'decor' && hud.activeDecorFilter !== 'recent') {
+            hud.activeDecorFilter = 'all';
+          }
         }
         hud.refreshDock();
         hud.refreshFloatingBanner();
@@ -1297,97 +1463,113 @@ export function shellBindEvents(hud: GameHUD): void {
       });
     });
 
-    hud.root.querySelector('#btnPincerTool')?.addEventListener('click', () => {
-      hud.pincerActive = !hud.pincerActive;
-      hud.pincerPicked = null;
-      if (hud.pincerActive) {
-        hud.selectedCatalogItem = null;
-        hud.bulldozerActive = false;
-        hud.moveModeActive = false;
-        hud.movingBuildingUid = null;
-        hud.pendingTouchTile = null;
+    hud.root.querySelectorAll<HTMLButtonElement>('[data-decor-event]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const isAlreadyChristmas =
+          hud.activeCategory === 'decor' && hud.christmasTabActive;
+        clearBuildToolModes(hud);
         hud.inspectSelection = null;
-        hud.collapseBuildDock();
-        const st0 = hud.sim.staff[0];
-        if (st0) {
-          hud.pincerPicked = { kind: 'staff', id: st0.id, label: st0.name };
+        if (isAlreadyChristmas) {
+          hud.activeCategory = null;
+          hud.christmasTabActive = false;
+        } else {
+          hud.activeCategory = 'decor';
+          hud.christmasTabActive = true;
+          hud.buildSheetOpen = true;
+          hud.mapToolsExpanded = true;
         }
-        hud.showToast('Điều phối nhanh: Nhấp ô bất kỳ trên bản đồ để cử nhân sự tới dọn dẹp / sửa chữa!', '🤏');
-      }
-      hud.refreshAll();
+        hud.refreshDock();
+        hud.refreshFloatingBanner();
+        hud.refreshTouchConfirmBar();
+      });
     });
 
     hud.root.querySelector('#btnMoveTool')?.addEventListener('click', () => {
-      hud.moveModeActive = !hud.moveModeActive;
-      hud.movingBuildingUid = null;
-      hud.pendingTouchTile = null;
-      if (hud.moveModeActive) {
-        hud.selectedCatalogItem = null;
-        hud.bulldozerActive = false;
-        hud.pincerActive = false;
-        hud.pincerPicked = null;
+      const nextMove = !hud.moveModeActive;
+      clearBuildToolModes(hud);
+      if (nextMove) {
+        hud.moveModeActive = true;
         hud.inspectSelection = null;
         hud.collapseBuildDock();
-        hud.showToast('Chế độ Di Dời: Nhấp vào công trình cần dời chỗ (Miễn phí 0G)!', '✋');
+        hud.showToast('✋ Chế độ Di Dời: Chạm công trình cần dời chỗ (Miễn phí 0G)!', '✋');
       }
       hud.refreshAll();
     });
 
     hud.root.querySelector('#btnRotate')?.addEventListener('click', () => {
-      hud.rotation = ((hud.rotation + 1) % 4) as 0 | 1 | 2 | 3;
-      hud.refreshFloatingBanner();
-      hud.refreshTouchConfirmBar();
-      hud.showToast(`Đã xoay hướng Cổng Vào/Ra (${hud.rotation * 90}°)`, '🔄');
+      hud.triggerRotateAction();
     });
 
     hud.root.querySelector('#btnBulldoze')?.addEventListener('click', () => {
-      hud.bulldozerActive = !hud.bulldozerActive;
-      hud.pendingTouchTile = null;
-      if (hud.bulldozerActive) {
-        hud.selectedCatalogItem = null;
-        hud.moveModeActive = false;
-        hud.movingBuildingUid = null;
-        hud.pincerActive = false;
-        hud.pincerPicked = null;
+      const nextBulldoze = !hud.bulldozerActive;
+      clearBuildToolModes(hud);
+      if (nextBulldoze) {
+        hud.bulldozerActive = true;
         hud.inspectSelection = null;
         hud.collapseBuildDock();
+        hud.showToast('🧹 Chế độ Xóa: Chạm công trình hoặc đường cần dọn dẹp!', '🧹');
       }
       hud.refreshAll();
     });
 
-    hud.root.querySelector('#btnRotateCam')?.addEventListener('click', () => {
+    hud.root.querySelector('#btnBuildUndo')?.addEventListener('click', (ev) => {
+      const btn = ev.currentTarget as HTMLButtonElement | null;
+      if (btn?.getAttribute('aria-disabled') === 'true') return;
+      if (hud.sim.isVisitingNeighbor) {
+        hud.showToast('Chế độ Khách Tham Quan — không thể hoàn tác thao tác của bạn bè!', '🏡');
+        return;
+      }
+      const did = hud.sim.undoBuild();
+      hud.showToast(
+        did ? '↶ Đã hoàn tác thao tác xây dựng gần nhất.' : 'Không có thao tác nào để hoàn tác.',
+        '↶'
+      );
+      hud.refreshAll();
+    });
+
+    hud.root.querySelector('#btnBuildRedo')?.addEventListener('click', (ev) => {
+      const btn = ev.currentTarget as HTMLButtonElement | null;
+      if (btn?.getAttribute('aria-disabled') === 'true') return;
+      if (hud.sim.isVisitingNeighbor) {
+        hud.showToast('Chế độ Khách Tham Quan — không thể làm lại thao tác của bạn bè!', '🏡');
+        return;
+      }
+      const did = hud.sim.redoBuild();
+      hud.showToast(
+        did ? '↷ Đã làm lại thao tác xây dựng.' : 'Không có thao tác nào để làm lại.',
+        '↷'
+      );
+      hud.refreshAll();
+    });
+
+    hud.root.querySelector('#btnBuildDone')?.addEventListener('click', () => {
+      hud.collapseBuildDock();
+      clearBuildToolModes(hud);
+      hud.refreshAll();
+    });
+
+    // Secondary camera/view controls inside Menu Khu Vườn
+    hud.root.querySelector('#btnMenuRotateCam')?.addEventListener('click', () => {
       rotateCamera90(hud.cam, 1);
       hud.refreshDock();
       hud.showToast(`Góc nhìn bản đồ: ${COMPASS_LABELS_VI[hud.cam.viewRot ?? 0]} (Phím Q/E)`, '🧭');
     });
 
-    hud.root.querySelector('#btnCutaway')?.addEventListener('click', () => {
+    hud.root.querySelector('#btnMenuCutaway')?.addEventListener('click', () => {
       hud.sim.state.settings.cutawayMode = !hud.sim.state.settings.cutawayMode;
-      hud.collapseBuildDock();
+      hud.closeHudPopovers();
       hud.refreshAll();
       hud.showToast(
         hud.sim.state.settings.cutawayMode
-          ? 'Đã bật Nhìn Xuyên Nhà Cao — dễ dàng lát đường & đặt ray khuất phía sau!'
+          ? 'Đã bật Nhìn Xuyên Nhà Cao — dễ dàng lát đường khuất phía sau!'
           : 'Đã tắt chế độ Nhìn Xuyên Nhà Cao',
         '👁️'
       );
     });
 
-    hud.root.querySelector('#btnGrid')?.addEventListener('click', () => {
+    hud.root.querySelector('#btnMenuGrid')?.addEventListener('click', () => {
       hud.sim.state.settings.showGrid = !hud.sim.state.settings.showGrid;
-      hud.collapseBuildDock();
-      hud.refreshAll();
-    });
-
-    hud.root.querySelector('#btnHomeCam')?.addEventListener('click', () => {
-      hud.rideCamUid = null;
-      hud.collapseBuildDock();
-      const burrowB = hud.sim.state.buildings.find((b) => b.itemId === 'burrow_house_canon');
-      if (burrowB) {
-        centerCameraOnGrid(hud.cam, burrowB.gx + 1.5, burrowB.gy + 1.5);
-      } else {
-        centerCameraOnGrid(hud.cam, 13.8, 18.2);
-      }
+      hud.closeHudPopovers();
       hud.refreshAll();
     });
 
@@ -1404,16 +1586,26 @@ export function shellBindEvents(hud: GameHUD): void {
         return;
       }
       if (e.ctrlKey || e.metaKey || e.altKey) {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+          e.preventDefault();
+          if (e.shiftKey) {
+            hud.sim.redoBuild();
+          } else {
+            hud.sim.undoBuild();
+          }
+          hud.refreshAll();
+        } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
+          e.preventDefault();
+          hud.sim.redoBuild();
+          hud.refreshAll();
+        }
         return;
       }
       if (e.key === 'n' || e.key === 'N') {
         hud.openNeighborDialog();
       } else if (e.key === 'r' || e.key === 'R') {
         if (hud.sim.isVisitingNeighbor) return;
-        hud.rotation = ((hud.rotation + 1) % 4) as 0 | 1 | 2 | 3;
-        hud.refreshFloatingBanner();
-        hud.refreshTouchConfirmBar();
-        hud.showToast(`Đã xoay hướng cửa công trình (${hud.rotation * 90}°)`, '🔄');
+        hud.triggerRotateAction();
       } else if (e.key === 'q' || e.key === 'Q') {
         rotateCamera90(hud.cam, -1);
         hud.refreshDock();
@@ -1429,44 +1621,19 @@ export function shellBindEvents(hud: GameHUD): void {
           hud.sim.state.settings.cutawayMode ? 'Bật Nhìn Xuyên Nhà Cao (V)' : 'Tắt Nhìn Xuyên Nhà Cao',
           '👁️'
         );
-      } else if (e.key === 'g' || e.key === 'G') {
-        if (hud.sim.isVisitingNeighbor) {
-          hud.showToast('Đang tham quan vườn bạn — chỉ có thể ngắm cảnh & trợ giúp vườn!', '🏡');
-          return;
-        }
-        hud.pincerActive = !hud.pincerActive;
-        hud.pincerPicked = null;
-        if (hud.pincerActive) {
-          hud.selectedCatalogItem = null;
-          hud.bulldozerActive = false;
-          hud.moveModeActive = false;
-          hud.movingBuildingUid = null;
-          hud.inspectSelection = null;
-          hud.closeSeedTray();
-          hud.collapseBuildDock();
-          const st0 = hud.sim.staff[0];
-          if (st0) {
-            hud.pincerPicked = { kind: 'staff', id: st0.id, label: st0.name };
-          }
-          hud.showToast('Điều phối nhanh (G): Nhấp ô bất kỳ trên bản đồ để cử nhân sự tới hỗ trợ!', '🤏');
-        }
-        hud.refreshAll();
       } else if (e.key === 'm' || e.key === 'M') {
         if (hud.sim.isVisitingNeighbor) {
           hud.showToast('Đang tham quan vườn bạn — không thể di dời công trình của bạn bè!', '🏡');
           return;
         }
-        hud.moveModeActive = !hud.moveModeActive;
-        hud.movingBuildingUid = null;
-        if (hud.moveModeActive) {
-          hud.selectedCatalogItem = null;
-          hud.bulldozerActive = false;
-          hud.pincerActive = false;
-          hud.pincerPicked = null;
+        const nextMove = !hud.moveModeActive;
+        clearBuildToolModes(hud);
+        if (nextMove) {
+          hud.moveModeActive = true;
           hud.inspectSelection = null;
           hud.closeSeedTray();
           hud.collapseBuildDock();
-          hud.showToast('Nhấp chọn công trình để di dời miễn phí!', '✋');
+          hud.showToast('✋ Chạm chọn công trình để di dời miễn phí!', '✋');
         }
         hud.refreshAll();
       } else if (e.key === 'b' || e.key === 'B') {
@@ -1490,19 +1657,19 @@ export function shellBindEvents(hud: GameHUD): void {
           hud.showToast('Đang tham quan vườn bạn — không thể phá dỡ tại vườn bạn bè!', '🏡');
           return;
         }
-        hud.bulldozerActive = !hud.bulldozerActive;
-        if (hud.bulldozerActive) {
-          hud.selectedCatalogItem = null;
-          hud.moveModeActive = false;
-          hud.movingBuildingUid = null;
-          hud.pincerActive = false;
-          hud.pincerPicked = null;
+        const nextBulldoze = !hud.bulldozerActive;
+        clearBuildToolModes(hud);
+        if (nextBulldoze) {
+          hud.bulldozerActive = true;
           hud.inspectSelection = null;
           hud.closeSeedTray();
           hud.collapseBuildDock();
         }
         hud.refreshAll();
       } else if (e.key === 'Escape') {
+        if (hud.sim.pendingBuildStroke) {
+          hud.sim.cancelBuildStroke();
+        }
         if (hud.manageMenuOpen || hud.weatherPopoverOpen) {
           hud.closeHudPopovers();
           return;
@@ -1516,16 +1683,10 @@ export function shellBindEvents(hud: GameHUD): void {
           return;
         }
         hud.rideCamUid = null;
-        hud.pincerActive = false;
-        hud.pincerPicked = null;
+        clearBuildToolModes(hud);
         hud.closeSeedTray();
         hud.closePastureTray();
         hud.collapseBuildDock();
-        hud.pendingTouchTile = null;
-        hud.selectedCatalogItem = null;
-        hud.bulldozerActive = false;
-        hud.moveModeActive = false;
-        hud.movingBuildingUid = null;
         hud.inspectSelection = null;
         if (hud.sim.state.settings.cutawayMode) {
           hud.sim.state.settings.cutawayMode = false;

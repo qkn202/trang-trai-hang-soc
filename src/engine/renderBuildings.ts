@@ -39,7 +39,7 @@ import {
   TILE_H,
   TILE_W,
 } from './isometric';
-import { SpriteRegistry } from './spriteLoader';
+import { resolveCatalogPropSpriteKey, SpriteRegistry } from './spriteLoader';
 import { computeWaterShoreLoops, WaterLoop } from './waterOutlines';
 import { JuiceFX } from './juiceFx';
 import {
@@ -59,7 +59,8 @@ import {
 import type { IsometricRenderer } from './renderer';
 
 export function buildingsGetCropIconImage(self: IsometricRenderer, cropId: FarmCropId): CanvasImageSource | undefined {
-    return self.sprites.get(FARM_CROPS[cropId].iconKey);
+    const meta = FARM_CROPS[cropId];
+    return meta ? self.sprites.get(meta.iconKey) : undefined;
 }
 
 export function buildingsDrawPlacedBuilding(self: IsometricRenderer, 
@@ -96,6 +97,8 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
     const footprintW = (bw + bh) * (TILE_W * 0.5) * cam.zoom;
     const connGroup = item.connectableGroup;
     const isConnectablePlot = Boolean(connGroup);
+    const isWinter =
+      typeof sim.isWinterMainMapActive === 'function' && sim.isWinterMainMapActive();
     const plotConnMask = connGroup
       ? buildingsComputePlotConnMask(self, sim, b.gx, b.gy, bw, bh, elev, connGroup, cam.viewRot ?? 0, now)
       : 0;
@@ -107,7 +110,9 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
       ctx.save();
       ctx.fillStyle = isNight
         ? `rgba(8, 12, 26, ${cutaway ? shadowVec.alpha * 0.35 : shadowVec.alpha * (isConnectablePlot ? 0.55 : 1)})`
-        : `rgba(34, 56, 26, ${cutaway ? shadowVec.alpha * 0.32 : shadowVec.alpha * (isConnectablePlot ? 0.5 : 0.92)})`;
+        : isWinter
+          ? `rgba(38, 66, 104, ${cutaway ? shadowVec.alpha * 0.28 : shadowVec.alpha * (isConnectablePlot ? 0.44 : 0.78)})`
+          : `rgba(34, 56, 26, ${cutaway ? shadowVec.alpha * 0.32 : shadowVec.alpha * (isConnectablePlot ? 0.5 : 0.92)})`;
       ctx.beginPath();
       ctx.ellipse(
         centerX + shadowVec.dx * cam.zoom * (isConnectablePlot ? 0.45 : 1),
@@ -131,13 +136,31 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
           (bw >= 2 || bh >= 2);
         if (hasFlagstoneApron) {
           const padR = footprintW * 0.42;
-          ctx.fillStyle = isNight ? '#3a3026' : '#8a6842';
+          ctx.fillStyle = isWinter
+            ? isNight
+              ? '#4b5c78'
+              : '#b8cbe0'
+            : isNight
+              ? '#3a3026'
+              : '#8a6842';
           ctx.beginPath();
           ctx.ellipse(centerX, centerGroundY + 5.2 * cam.zoom, padR, padR * 0.48, 0, 0, Math.PI * 2);
           ctx.fill();
 
-          ctx.fillStyle = isNight ? '#7a6f61' : '#ead4ab';
-          ctx.strokeStyle = isNight ? '#3a3026' : '#5e4326';
+          ctx.fillStyle = isWinter
+            ? isNight
+              ? '#8696ad'
+              : '#eef5fc'
+            : isNight
+              ? '#7a6f61'
+              : '#ead4ab';
+          ctx.strokeStyle = isWinter
+            ? isNight
+              ? '#3b4a63'
+              : '#94a3b8'
+            : isNight
+              ? '#3a3026'
+              : '#5e4326';
           ctx.lineWidth = Math.max(0.95, 1.3 * cam.zoom);
           ctx.beginPath();
           ctx.ellipse(centerX, centerGroundY + 3.6 * cam.zoom, padR * 0.98, padR * 0.46, 0, 0, Math.PI * 2);
@@ -181,7 +204,11 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
         item.isFarmlandPlot ||
         item.id === 'burrow_reed_pond_mill' ||
         item.id === 'hogsmeade_stone_bridge' ||
-        item.id === 'burrow_puffskein_pasture'
+        item.id === 'burrow_puffskein_pasture' ||
+        item.id === 'yule_frozen_skate_pond' ||
+        item.id === 'yule_sword_frozen_pool' ||
+        item.id === 'yule_poinsettia_roundabout_bed' ||
+        item.id === 'yule_hippogriff_warm_nest'
     );
     const fadeInCutaway =
       cutaway && !isFlatGroundStructure && (bw >= 2 || bh >= 2 || item.id === 'snowy_pines');
@@ -223,6 +250,8 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
     };
     if (!fadeInCutaway) {
       self.hotspots.push(buildingHotspot);
+    } else {
+      self.hotspots.push({ ...buildingHotspot, kind: 'building_cutaway' });
     }
 
     // Under construction / Egg incubating state (Real-time wall-clock scaffolding & progress!)
@@ -281,7 +310,7 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
         ctx.restore();
       } else {
         // 2. Rising magical blueprint silhouette of the actual structure!
-        const sprite = self.sprites.get(item.spriteKey);
+        const sprite = self.sprites.get(resolveCatalogPropSpriteKey(item.id, item.spriteKey));
         if (sprite) {
           const isNonSquare = item.width !== item.height;
           const drawW = footprintW * (isNonSquare ? 1.0 : 1.05);
@@ -355,26 +384,14 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
       return;
     }
 
-    // Procedural Decor Props (Marble Bench, Floating Candles, House Banners, Patronus Ward Lantern)
-    if (item.id === 'marble_bench') {
-      buildingsDrawMarbleBenchProp(self, centerX, bottomY, cam.zoom, isNight);
-      return;
-    }
-    if (item.id === 'floating_candles_post') {
-      buildingsDrawFloatingCandlesProp(self, centerX, bottomY, cam.zoom, isNight);
-      return;
-    }
+    // Banner dùng procedural theo màu 4 Nhà; Marble Bench, Floating Candles, Patronus Ward Lantern dùng 2.5D PNG nếu đã nạp (hoặc fallback procedural)
     if (item.id === 'house_banners') {
       buildingsDrawHouseBannerProp(self, centerX, bottomY, cam.zoom, b.gx + b.gy);
       return;
     }
-    if (item.id === 'patronus_ward_lantern') {
-      buildingsDrawPatronusLanternProp(self, centerX, bottomY, cam.zoom);
-      return;
-    }
 
     // Unified 4-Stage Farmland Plot resolution on the single `crop_plot_tilled` / `crop_plot_sprouts` frame!
-    let activeSpriteKey = item.spriteKey;
+    let activeSpriteKey = resolveCatalogPropSpriteKey(item.id, item.spriteKey);
     let plotGrowRatio = 0;
     if (item.isFarmlandPlot) {
       if (!b.cropId) {
@@ -393,6 +410,20 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
     }
 
     const rawSprite = self.sprites.get(activeSpriteKey);
+    if (!rawSprite) {
+      if (item.id === 'marble_bench') {
+        buildingsDrawMarbleBenchProp(self, centerX, bottomY, cam.zoom, isNight);
+        return;
+      }
+      if (item.id === 'floating_candles_post') {
+        buildingsDrawFloatingCandlesProp(self, centerX, bottomY, cam.zoom, isNight);
+        return;
+      }
+      if (item.id === 'patronus_ward_lantern') {
+        buildingsDrawPatronusLanternProp(self, centerX, bottomY, cam.zoom);
+        return;
+      }
+    }
     if (rawSprite) {
       const isNonSquare = item.width !== item.height;
       const scaleMult = item.spriteScale ?? (isNonSquare ? 1.0 : 1.05);
@@ -420,6 +451,20 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
           bottomY - drawH * 0.45,
           drawW * 0.55,
           `rgba(52, 211, 153, ${0.38 + Math.sin(self.tick * 0.1) * 0.12})`
+        );
+      } else if (item.id === 'floating_candles_post') {
+        self.drawRadialGlow(
+          centerX,
+          bottomY - drawH * 0.68,
+          drawW * (isNight ? 0.72 : 0.42),
+          `rgba(253, 224, 71, ${isNight ? 0.56 : 0.28})`
+        );
+      } else if (item.id === 'patronus_ward_lantern') {
+        self.drawRadialGlow(
+          centerX,
+          bottomY - drawH * 0.65,
+          drawW * (isNight ? 0.78 : 0.45),
+          `rgba(186, 230, 253, ${isNight ? 0.62 : 0.34})`
         );
       } else if (cropNocturnalGlow) {
         self.drawRadialGlow(
@@ -564,7 +609,8 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
               cam.zoom,
               isNight,
               openSW,
-              openSE
+              openSE,
+              isWinter
             );
           }
         }
@@ -1307,7 +1353,255 @@ export function buildingsDrawLiveBuildingAnimations(self: IsometricRenderer,
         const pulse = 0.45 + 0.45 * Math.sin(spPhase * 2.1);
         self.drawRadialGlow(glX, glY, 9 * zoom, `rgba(254, 240, 138, ${pulse * 0.78})`);
       }
+
+      // 4. Festive Live Effects for All 105 Christmas & Winter Assets (`🎄 Giáng Sinh` tab)!
+      if (itemId === 'snowy_pines' || itemId.startsWith('yule_') || Boolean(item.yuleCollection)) {
+        drawWinterAssetLiveEffects(
+          self,
+          itemId,
+          item.yuleCollection,
+          cx,
+          bottomY,
+          drawW,
+          drawH,
+          zoom,
+          isNight,
+          b.gx,
+          b.gy
+        );
+      }
     }
+}
+
+const WINTER_STEAM_OR_SMOKE_IDS = new Set<string>([
+  'yule_hearth_stockings',
+  'yule_roasted_chestnut_stand',
+  'yule_butterbeer_hot_cart',
+  'yule_molly_pudding_table',
+  'yule_hogwarts_snow_loco',
+  'yule_hogs_head_porch',
+  'yule_puddifoot_tea_pavilion',
+  'yule_lovegood_rook_house',
+  'yule_shell_cottage_mini',
+  'yule_mini_hogwarts_castle',
+  'yule_flying_car_tree',
+]);
+
+const WINTER_BLUE_FLAME_IDS = new Set<string>([
+  'yule_goblet_blue_brazier',
+  'yule_hermione_bluebell_jars',
+  'yule_molly_pudding_table',
+  'yule_slytherin_serpent_mascot',
+]);
+
+const WINTER_ICE_CRYSTAL_IDS = new Set<string>([
+  'yule_ice_swan_arch',
+  'yule_ice_stag_sculpture',
+  'yule_ice_phoenix_fountain',
+  'yule_frozen_skate_pond',
+  'yule_sword_frozen_pool',
+  'yule_hogwarts_boathouse_ice',
+  'yule_castle_snowglobe',
+  'yule_mirror_of_erised',
+  'yule_crystal_lotus_fountain_pot',
+  'yule_crystal_banquet_table',
+  'yule_blue_spruce_starlight',
+  'yule_weeping_frost_willow',
+]);
+
+const WINTER_MUSIC_IDS = new Set<string>([
+  'yule_gramophone_harp',
+  'yule_frog_choir_stage',
+  'yule_sorting_hat_stool',
+]);
+
+const WINTER_CRACKER_SPARK_IDS = new Set<string>([
+  'yule_wizard_cracker_cart',
+  'yule_weasley_wheezes_facade',
+  'yule_zonkos_joke_corner',
+]);
+
+export function drawWinterAssetLiveEffects(
+  self: IsometricRenderer,
+  itemId: string,
+  collection: string | undefined,
+  cx: number,
+  bottomY: number,
+  drawW: number,
+  drawH: number,
+  zoom: number,
+  isNight: boolean,
+  seedX: number,
+  seedY: number
+): void {
+  if (self.reducedMotion) return;
+  const ctx = self.ctx;
+  const seed = seedX * 1.73 + seedY * 2.31;
+
+  // A. Cozy ambient lantern / fairy-light halo
+  const isIceThemed = WINTER_ICE_CRYSTAL_IDS.has(itemId);
+  const isBlueFlame = WINTER_BLUE_FLAME_IDS.has(itemId);
+  const haloPulse = 0.72 + 0.28 * Math.sin(self.tick * 0.075 + seed);
+  const haloColor = isBlueFlame
+    ? `rgba(56, 189, 248, ${(isNight ? 0.44 : 0.28) * haloPulse})`
+    : isIceThemed
+      ? `rgba(186, 230, 253, ${(isNight ? 0.42 : 0.26) * haloPulse})`
+      : `rgba(253, 224, 71, ${(isNight ? 0.38 : 0.22) * haloPulse})`;
+  self.drawRadialGlow(cx, bottomY - drawH * 0.48, Math.max(16 * zoom, drawW * 0.34), haloColor);
+
+  // B. Twinkling multi-colored Christmas fairy lights & starlight motes across boughs / roofs
+  const bulbColors = isIceThemed
+    ? ['#e0f2fe', '#7dd3fc', '#fde68a', '#ffffff']
+    : ['#fde047', '#fb7185', '#34d399', '#7dd3fc'];
+  const bulbCount = drawW >= 90 * zoom ? 5 : 4;
+  ctx.save();
+  for (let i = 0; i < bulbCount; i++) {
+    const tw = Math.sin(self.tick * 0.11 + seed + i * 1.92);
+    if (tw < -0.15) continue;
+    const alpha = 0.35 + 0.62 * ((tw + 0.15) / 1.15);
+    const relX = ((i + 0.5) / bulbCount - 0.5) * 0.62 + Math.sin(seed + i * 2.7) * 0.06;
+    const relY = 0.28 + ((i * 37 + Math.round(seed * 10)) % 5) * 0.11;
+    const bx = cx + drawW * relX;
+    const by = bottomY - drawH * relY;
+    const col = bulbColors[(i + Math.abs(Math.round(seedX + seedY))) % bulbColors.length];
+
+    ctx.globalAlpha = alpha * 0.55;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(bx, by, 4.2 * zoom, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = Math.min(1, alpha + 0.15);
+    ctx.fillStyle = '#fffef5';
+    ctx.beginPath();
+    ctx.arc(bx, by, 1.65 * zoom, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // C. Cozy rising steam / chimney smoke / Hogwarts Express locomotive puffs
+  if (WINTER_STEAM_OR_SMOKE_IDS.has(itemId)) {
+    const isLoco = itemId === 'yule_hogwarts_snow_loco';
+    const puffCount = isLoco ? 4 : 3;
+    const anchorX = isLoco ? cx - drawW * 0.16 : cx + drawW * 0.06;
+    const anchorY = bottomY - drawH * (isLoco ? 0.86 : 0.74);
+    for (let s = 0; s < puffCount; s++) {
+      const p = ((self.tick * (isLoco ? 0.026 : 0.018) + s / puffCount + seed * 0.1) % 1);
+      const px = anchorX + Math.sin(p * Math.PI * 2 + s) * 5 * zoom + p * (isLoco ? 12 : 6) * zoom;
+      const py = anchorY - p * (isLoco ? 28 : 20) * zoom;
+      const pa = Math.sin(p * Math.PI) * (isLoco ? 0.68 : 0.48);
+      ctx.fillStyle = `rgba(248, 250, 252, ${pa})`;
+      ctx.beginPath();
+      ctx.arc(px, py, ((isLoco ? 3.2 : 2.2) + p * (isLoco ? 6.5 : 4.2)) * zoom, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // D. Sapphire-blue / emerald magical embers
+  if (WINTER_BLUE_FLAME_IDS.has(itemId)) {
+    const isEmerald = itemId === 'yule_slytherin_serpent_mascot';
+    for (let e = 0; e < 4; e++) {
+      const ep = ((self.tick * 0.03 + e * 0.25 + seed * 0.13) % 1);
+      const ex = cx + Math.sin(ep * Math.PI * 3 + e) * drawW * 0.16;
+      const ey = bottomY - drawH * (0.36 + ep * 0.45);
+      const ea = Math.sin(ep * Math.PI) * 0.85;
+      ctx.fillStyle = isEmerald
+        ? `rgba(52, 211, 153, ${ea})`
+        : `rgba(125, 211, 252, ${ea})`;
+      ctx.beginPath();
+      ctx.arc(ex, ey, (1.5 + (1 - ep) * 1.6) * zoom, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // E. 4-point diamond ice glints, swirling snowglobe flakes & Patronus silver wisps
+  if (isIceThemed || itemId === 'yule_stag_patronus_topiary') {
+    ctx.save();
+    for (let g = 0; g < 3; g++) {
+      const phase = self.tick * 0.065 + g * 2.1 + seed;
+      const glint = Math.max(0, Math.sin(phase));
+      if (glint <= 0.15) continue;
+      const gx = cx + Math.cos(phase * 0.7 + g) * drawW * 0.24;
+      const gy = bottomY - drawH * (0.35 + (g % 3) * 0.18);
+      const arm = (2.8 + glint * 3.4) * zoom;
+      ctx.strokeStyle = `rgba(224, 242, 254, ${glint * 0.92})`;
+      ctx.lineWidth = 1.2 * zoom;
+      ctx.beginPath();
+      ctx.moveTo(gx - arm, gy);
+      ctx.lineTo(gx + arm, gy);
+      ctx.moveTo(gx, gy - arm);
+      ctx.lineTo(gx, gy + arm);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    if (itemId === 'yule_castle_snowglobe') {
+      // Swirling miniature snowstorm inside the giant crystal snowglobe!
+      for (let m = 0; m < 6; m++) {
+        const ang = self.tick * 0.045 + (m * Math.PI) / 3 + seed;
+        const rad = drawW * (0.08 + (m % 3) * 0.055);
+        const mx = cx + Math.cos(ang) * rad;
+        const my = bottomY - drawH * 0.56 + Math.sin(ang * 1.3) * rad * 0.72;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
+        ctx.beginPath();
+        ctx.arc(mx, my, 1.5 * zoom, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  // F. Playful arcing snowballs over Fred & George's Snowball Fort!
+  if (itemId === 'yule_snowball_fort') {
+    for (let sb = 0; sb < 2; sb++) {
+      const t = ((self.tick * 0.028 + sb * 0.5 + seed * 0.1) % 1);
+      const arcX = cx + (t - 0.5) * drawW * 0.68 * (sb === 0 ? 1 : -1);
+      const arcY = bottomY - drawH * 0.42 - Math.sin(t * Math.PI) * 22 * zoom;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.75)';
+      ctx.lineWidth = 1 * zoom;
+      ctx.beginPath();
+      ctx.arc(arcX, arcY, 3.2 * zoom, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  // G. Floating golden musical notes over Yule Harp & Frog Choir Stage
+  if (WINTER_MUSIC_IDS.has(itemId)) {
+    ctx.save();
+    ctx.font = `700 ${Math.max(10, Math.round(12 * zoom))}px "Be Vietnam Pro", sans-serif`;
+    ctx.textAlign = 'center';
+    for (let n = 0; n < 2; n++) {
+      const p = ((self.tick * 0.02 + n * 0.5 + seed * 0.07) % 1);
+      const nx = cx + Math.sin(p * Math.PI * 2 + n * 2) * drawW * 0.2;
+      const ny = bottomY - drawH * (0.58 + p * 0.36);
+      ctx.fillStyle = `rgba(253, 224, 71, ${Math.sin(p * Math.PI) * 0.92})`;
+      ctx.fillText(n % 2 === 0 ? '♪' : '♫', nx, ny);
+    }
+    ctx.restore();
+  }
+
+  // H. Festive cracker / joke-shop pop sparkles & winter flower frost petals
+  if (WINTER_CRACKER_SPARK_IDS.has(itemId) || collection === 'yule_flowers') {
+    const popColors =
+      collection === 'yule_flowers'
+        ? ['#fda4af', '#fef08a', '#bae6fd']
+        : ['#fb7185', '#fde047', '#34d399', '#c084fc'];
+    for (let k = 0; k < 3; k++) {
+      const p = ((self.tick * 0.026 + k * 0.33 + seed * 0.15) % 1);
+      const px = cx + Math.cos(p * Math.PI * 2 + k * 2.1) * drawW * 0.24;
+      const py =
+        collection === 'yule_flowers'
+          ? bottomY - drawH * (0.68 - p * 0.26)
+          : bottomY - drawH * (0.48 + p * 0.34);
+      ctx.fillStyle = popColors[k % popColors.length];
+      ctx.globalAlpha = Math.sin(p * Math.PI) * 0.85;
+      ctx.beginPath();
+      ctx.arc(px, py, 2.0 * zoom, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
 }
 
 export function buildingsComputePlotConnMask(self: IsometricRenderer, 
@@ -1369,7 +1663,8 @@ export function buildingsDrawBuildingBaseGrassTufts(self: IsometricRenderer,
     zoom: number,
     isNight: boolean,
     openSW = true,
-    openSE = true
+    openSE = true,
+    isWinter = false
   ): void {
     if (zoom < 0.42) return;
     const ctx = self.ctx;
@@ -1391,9 +1686,27 @@ export function buildingsDrawBuildingBaseGrassTufts(self: IsometricRenderer,
     }
     if (anchors.length === 0) return;
     ctx.save();
-    const ink = isNight ? '#1a2e22' : '#4a2c16';
-    const leafDark = isNight ? '#28523c' : '#4d9c44';
-    const leafBright = isNight ? '#386b4f' : '#84d068';
+    const ink = isWinter
+      ? isNight
+        ? '#334155'
+        : '#94a3b8'
+      : isNight
+        ? '#1a2e22'
+        : '#4a2c16';
+    const leafDark = isWinter
+      ? isNight
+        ? '#94a8c4'
+        : '#dbeafe'
+      : isNight
+        ? '#28523c'
+        : '#4d9c44';
+    const leafBright = isWinter
+      ? isNight
+        ? '#dbeafe'
+        : '#ffffff'
+      : isNight
+        ? '#386b4f'
+        : '#84d068';
     for (let i = 0; i < anchors.length; i++) {
       const a = anchors[i];
       const r = (a.big ? 3.8 : 3.2) * zoom;
@@ -1415,7 +1728,12 @@ export function buildingsDrawBuildingBaseGrassTufts(self: IsometricRenderer,
       ctx.arc(a.x, a.y - r * 0.55, r * 1.05, 0, Math.PI * 2);
       ctx.fill();
 
-      if (!isNight && (seed + i) % 2 === 0) {
+      if (isWinter && (seed + i) % 2 === 0) {
+        ctx.fillStyle = '#dc2626';
+        ctx.beginPath();
+        ctx.arc(a.x + r * 0.42, a.y - r * 0.52, 1.35 * zoom, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (!isNight && !isWinter && (seed + i) % 2 === 0) {
         ctx.fillStyle = (seed + i) % 4 === 0 ? '#fef08a' : '#fff7ed';
         ctx.beginPath();
         ctx.arc(a.x + r * 0.4, a.y - r * 0.7, 1.5 * zoom, 0, Math.PI * 2);

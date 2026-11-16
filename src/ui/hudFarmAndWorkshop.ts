@@ -120,6 +120,7 @@ import {
   BUILD_HUD_CATEGORIES,
   HEATMAP_CYCLE,
   InspectSelection,
+  clearBuildToolModes,
   escapeHtml,
 } from "./hudShared";
 import type { GameHUD } from './hud';
@@ -134,13 +135,7 @@ export function farmUiOpenWorkshopDialog(hud: GameHUD, tab?: 'barn' | 'brew' | '
 export function farmUiOpenSeedTray(hud: GameHUD, preferredCropId?: FarmCropId, targetPlotUid?: string): void {
     hud.collapseBuildDock();
     farmUiClosePastureTray(hud);
-    hud.selectedCatalogItem = null;
-    hud.bulldozerActive = false;
-    hud.moveModeActive = false;
-    hud.movingBuildingUid = null;
-    hud.pincerActive = false;
-    hud.pincerPicked = null;
-    hud.pendingTouchTile = null;
+    clearBuildToolModes(hud);
     hud.inspectSelection = null;
     hud.pendingSowPlotUid = targetPlotUid ?? null;
     hud.seedTrayOpen = true;
@@ -168,13 +163,7 @@ export function farmUiToggleSeedTray(hud: GameHUD): void {
 export function farmUiOpenPastureTray(hud: GameHUD, preferredAnimalId?: PastureAnimalId, targetPastureUid?: string): void {
     hud.collapseBuildDock();
     farmUiCloseSeedTray(hud);
-    hud.selectedCatalogItem = null;
-    hud.bulldozerActive = false;
-    hud.moveModeActive = false;
-    hud.movingBuildingUid = null;
-    hud.pincerActive = false;
-    hud.pincerPicked = null;
-    hud.pendingTouchTile = null;
+    clearBuildToolModes(hud);
     hud.inspectSelection = null;
     hud.pendingStockPastureUid = targetPastureUid ?? null;
     hud.pastureTrayOpen = true;
@@ -298,20 +287,38 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
 
     tray.innerHTML = `
       <div class="seed-tray-header">
-        <div class="seed-tray-title-wrap">
-          <div class="seed-tray-title">
-            ${
-              activeCrop
-                ? `🌱 <strong>${escapeHtml(activeCrop.name)}</strong> (${hud.sim.getSeedCount(activeCrop.id)})`
-                : '🌱 Hạt Giống & Hoa'
-            }
+        <div class="seed-tray-title-row">
+          <div class="seed-tray-title-wrap">
+            <div class="seed-tray-title">
+              ${
+                activeCrop
+                  ? `🌱 <strong>${escapeHtml(activeCrop.name)}</strong> (${hud.sim.getSeedCount(activeCrop.id)})`
+                  : '🌱 Hạt Giống & Hoa'
+              }
+            </div>
+            <div class="seed-tray-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:3px;">
+              <span>Ô trống: <strong>${emptyPlotCount}/${totalPlotCount}</strong></span>
+              <div class="seed-filter-bar" role="group" aria-label="Bộ lọc nhóm hạt giống">${filterPillsHtml}</div>
+            </div>
           </div>
-          <div class="seed-tray-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:3px;">
-            <span>Ô trống: <strong>${emptyPlotCount}/${totalPlotCount}</strong></span>
-            <div class="seed-filter-bar" role="group" aria-label="Bộ lọc nhóm hạt giống">${filterPillsHtml}</div>
-          </div>
+          <button id="btnCloseSeedTray" type="button" class="brass-btn seed-tray-close" aria-label="Đóng túi hạt giống">✕</button>
         </div>
         <div class="seed-tray-actions">
+          ${
+            hud.pendingSowPlotUid &&
+            hud.sim.state.buildings.some((x) => x.uid === hud.pendingSowPlotUid && !x.isIndestructible)
+              ? `<button id="btnSeedTrayMovePlot" type="button" class="brass-btn" title="Nhấc dời thửa đất này">✋ Dời ô</button>`
+              : ''
+          }
+          <button id="btnSeedTrayPlantAll" type="button" class="brass-btn" title="Gieo hạt giống đã chọn vào tất cả ô đất trống">
+            🌱 Gieo tất cả
+          </button>
+          <button id="btnSeedTrayWaterAll" type="button" class="brass-btn" title="Tưới tất cả luống đang lớn chưa được tưới">
+            💧 Tưới tất cả
+          </button>
+          <button id="btnSeedTrayHarvestAll" type="button" class="brass-btn gold-cta" title="Gặt tất cả luống đã chín vàng">
+            🌾 Gặt tất cả
+          </button>
           <button id="btnSeedTrayOpenQuiz" type="button" class="brass-btn sq-tray-quiz-cta" title="Mua Hạt hoặc Đố Ngoại Ngữ 0G">
             🪄 Hạt 0G
           </button>
@@ -324,11 +331,62 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
           <button id="btnSeedTrayOpenBarn" type="button" class="brass-btn" title="Mở Kho">
             📦 Kho
           </button>
-          <button id="btnCloseSeedTray" type="button" class="brass-btn" aria-label="Đóng túi hạt giống">✕</button>
         </div>
       </div>
       <div class="seed-tray-scroll">${cardsHtml}</div>
     `;
+
+    const seedTrayNow = Date.now();
+    const plotBuildings = hud.sim.state.buildings.filter((b) => getCatalogItem(b.itemId)?.isFarmlandPlot);
+    const cropUids = plotBuildings.map((b) => b.uid);
+    const readyCrops = plotBuildings.filter((b) => b.cropId && b.cropReadyAt && seedTrayNow >= b.cropReadyAt);
+    const waterableCrops = plotBuildings.filter(
+      (b) => b.cropId && b.cropReadyAt && seedTrayNow < b.cropReadyAt && !b.cropWateredBoost
+    );
+    const plantableCrops = plotBuildings.filter((b) => !b.cropId && Date.now() >= b.constructEndsAt);
+
+    const plantAllBtn = tray.querySelector('#btnSeedTrayPlantAll') as HTMLButtonElement | null;
+    const waterAllBtn = tray.querySelector('#btnSeedTrayWaterAll') as HTMLButtonElement | null;
+    const harvestAllBtn = tray.querySelector('#btnSeedTrayHarvestAll') as HTMLButtonElement | null;
+
+    if (plantAllBtn) {
+      const count = plantableCrops.length;
+      plantAllBtn.disabled = count === 0;
+      plantAllBtn.textContent = `🌱 Gieo tất cả${count ? ` (${count})` : ''}`;
+      plantAllBtn.addEventListener('click', () => {
+        const cropId = hud.activeSeedCropId;
+        if (!cropId) {
+          hud.showToast('🌱 Chọn một hạt giống trước để Gieo Tất Cả!', '🪄');
+          return;
+        }
+        const result = hud.sim.batchPlantCropPlots(plantableCrops.map((b) => b.uid), cropId);
+        hud.showToast(result.msg, result.ok ? '🌱' : '🪄');
+        hud.activeSeedCropId = null;
+        hud.refreshAll();
+      });
+    }
+
+    if (waterAllBtn) {
+      const count = waterableCrops.length;
+      waterAllBtn.disabled = count === 0;
+      waterAllBtn.textContent = `💧 Tưới tất cả${count ? ` (${count})` : ''}`;
+      waterAllBtn.addEventListener('click', () => {
+        const result = hud.sim.batchWaterCropPlots(cropUids);
+        hud.showToast(result.msg, result.ok ? '💧' : '🌱');
+        hud.refreshAll();
+      });
+    }
+
+    if (harvestAllBtn) {
+      const count = readyCrops.length;
+      harvestAllBtn.disabled = count === 0;
+      harvestAllBtn.textContent = `🌾 Gặt tất cả${count ? ` (${count})` : ''}`;
+      harvestAllBtn.addEventListener('click', () => {
+        const result = hud.sim.batchHarvestCropPlots(cropUids);
+        hud.showToast(result.msg, result.ok ? '🌾' : '🌱');
+        hud.refreshAll();
+      });
+    }
 
     tray.querySelectorAll<HTMLButtonElement>('[data-seed-filter]').forEach((btn) => {
       btn.addEventListener('click', (ev) => {
@@ -377,8 +435,8 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
           hud.pendingSowPlotUid ??
           (hud.inspectSelection?.kind === 'building' ? hud.inspectSelection.uid : null);
 
-        if (hud.sim.getSeedCount(cid) <= 0) {
-          hud.activeSeedCropId = cid;
+        if (!hud.sim.state.sandboxMode && hud.sim.getSeedCount(cid) <= 0) {
+          hud.activeSeedCropId = null;
           hud.pendingSowPlotUid = null;
           hud.seedTrayOpen = false;
           hud.inspectSelection = null;
@@ -387,7 +445,6 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
           return;
         }
 
-        hud.activeSeedCropId = cid;
         hud.pendingSowPlotUid = null;
         hud.seedTrayOpen = false;
         hud.inspectSelection = null;
@@ -396,6 +453,7 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
           const selB = hud.sim.state.buildings.find((x) => x.uid === targetPlotUid);
           if (selB && getCatalogItem(selB.itemId)?.isFarmlandPlot && !selB.cropId) {
             const res = hud.sim.plantCropOnPlot(selB.uid, cid);
+            hud.activeSeedCropId = null;
             if (res.needSeedAcquire) {
               hud.refreshAll();
               hud.openSeedQuizDialog(cid, selB.uid);
@@ -407,12 +465,29 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
           }
         }
 
+        hud.activeSeedCropId = cid;
         hud.refreshAll();
         hud.showToast(
           `🌱 Đã chọn ${c.emoji} ${c.name} (Túi có ${hud.sim.getSeedCount(cid)} hạt) — Nhấp hoặc kéo lướt qua các Thửa Đất trống để gieo!`,
           c.emoji
         );
       });
+    });
+
+    tray.querySelector('#btnSeedTrayMovePlot')?.addEventListener('click', () => {
+      const targetUid = hud.pendingSowPlotUid;
+      const selB = targetUid ? hud.sim.state.buildings.find((x) => x.uid === targetUid) : undefined;
+      if (!selB || selB.isIndestructible) return;
+      const it = getCatalogItem(selB.itemId);
+      farmUiCloseSeedTray(hud);
+      hud.collapseBuildDock();
+      hud.inspectSelection = null;
+      hud.moveModeActive = true;
+      hud.movingBuildingUid = selB.uid;
+      hud.rotation = selB.rotation;
+      hud.pendingTouchTile = null;
+      hud.refreshAll();
+      hud.showToast(`Đang nhấc "${it?.name ?? 'Thửa đất'}" — Nhấp vào ô đất mới để đặt xuống!`, '✋');
     });
 
     tray.querySelector('#btnSeedTrayBuyPlot')?.addEventListener('click', () => {
@@ -518,30 +593,75 @@ export function farmUiRenderPastureTray(hud: GameHUD): void {
 
     tray.innerHTML = `
       <div class="seed-tray-header">
-        <div class="seed-tray-title-wrap">
-          <div class="seed-tray-title">
-            ${
-              activeAnimal
-                ? `🐾 <strong>${escapeHtml(activeAnimal.name)}</strong> (${activeAnimal.cost.toLocaleString('vi-VN')}G)`
-                : '🐾 Chăn Thả'
-            }
+        <div class="seed-tray-title-row">
+          <div class="seed-tray-title-wrap">
+            <div class="seed-tray-title">
+              ${
+                activeAnimal
+                  ? `🐾 <strong>${escapeHtml(activeAnimal.name)}</strong> (${activeAnimal.cost.toLocaleString('vi-VN')}G)`
+                  : '🐾 Chăn Thả'
+              }
+            </div>
+            <div class="seed-tray-sub">
+              Ô trống: <strong>${emptyPastureCount}/${totalPastureCount}</strong>
+            </div>
           </div>
-          <div class="seed-tray-sub">
-            Ô trống: <strong>${emptyPastureCount}/${totalPastureCount}</strong>
-          </div>
+          <button id="btnClosePastureTray" type="button" class="brass-btn seed-tray-close" aria-label="Đóng khay chọn thú chăn thả">✕</button>
         </div>
         <div class="seed-tray-actions">
+          ${
+            hud.pendingStockPastureUid &&
+            hud.sim.state.buildings.some((x) => x.uid === hud.pendingStockPastureUid && !x.isIndestructible)
+              ? `<button id="btnPastureTrayMovePlot" type="button" class="brass-btn" title="Nhấc dời ô đồng cỏ này">✋ Dời ô</button>`
+              : ''
+          }
           <button id="btnPastureTrayBuyPlot" type="button" class="brass-btn gold-cta" title="Đặt thêm Đồng Cỏ (45G)">
             🐾 + Đồng Cỏ 45G
+          </button>
+          <button id="btnPastureFeedAll" type="button" class="brass-btn" title="Cho tất cả đàn thú đang lớn ăn">
+            🌾 Cho ăn tất cả
+          </button>
+          <button id="btnPastureCollectAll" type="button" class="brass-btn gold-cta" title="Thu hoạch tất cả sản vật đã sẵn sàng">
+            🧺 Thu hoạch tất cả
           </button>
           <button id="btnPastureTrayOpenBarn" type="button" class="brass-btn" title="Mở Kho">
             📦 Kho
           </button>
-          <button id="btnClosePastureTray" type="button" class="brass-btn" aria-label="Đóng khay chọn thú chăn thả">✕</button>
         </div>
       </div>
       <div class="seed-tray-scroll pasture-tray-scroll">${cardsHtml}</div>
     `;
+
+    const pastureUids = hud.sim.state.buildings
+      .filter((b) => getCatalogItem(b.itemId)?.isAnimalPasturePlot)
+      .map((b) => b.uid);
+    const feedAll = tray.querySelector('#btnPastureFeedAll') as HTMLButtonElement | null;
+    const collectAll = tray.querySelector('#btnPastureCollectAll') as HTMLButtonElement | null;
+    const now = Date.now();
+    const feedableCount = hud.sim.state.buildings.filter(
+      (b) => getCatalogItem(b.itemId)?.isAnimalPasturePlot && b.pastureAnimalId && b.pastureReadyAt && now < b.pastureReadyAt && !b.pastureFedBoost
+    ).length;
+    const readyCount = hud.sim.state.buildings.filter(
+      (b) => getCatalogItem(b.itemId)?.isAnimalPasturePlot && b.pastureAnimalId && b.pastureReadyAt && now >= b.pastureReadyAt
+    ).length;
+    if (feedAll) {
+      feedAll.disabled = feedableCount === 0;
+      feedAll.textContent = `🌾 Cho ăn tất cả${feedableCount ? ` (${feedableCount})` : ''}`;
+      feedAll.addEventListener('click', () => {
+        const result = hud.sim.batchFeedAnimalPastures(pastureUids);
+        hud.showToast(result.msg, result.ok ? '🌾' : '✨');
+        hud.refreshAll();
+      });
+    }
+    if (collectAll) {
+      collectAll.disabled = readyCount === 0;
+      collectAll.textContent = `🧺 Thu hoạch tất cả${readyCount ? ` (${readyCount})` : ''}`;
+      collectAll.addEventListener('click', () => {
+        const result = hud.sim.batchHarvestAnimalPastures(pastureUids);
+        hud.showToast(result.msg, result.ok ? '🐾' : '✨');
+        hud.refreshAll();
+      });
+    }
 
     tray.querySelectorAll<HTMLButtonElement>('[data-pasture-brush]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -553,7 +673,6 @@ export function farmUiRenderPastureTray(hud: GameHUD): void {
           hud.pendingStockPastureUid ??
           (hud.inspectSelection?.kind === 'building' ? hud.inspectSelection.uid : null);
 
-        hud.activePastureAnimalId = aid;
         hud.pendingStockPastureUid = null;
         hud.pastureTrayOpen = false;
         hud.inspectSelection = null;
@@ -562,18 +681,36 @@ export function farmUiRenderPastureTray(hud: GameHUD): void {
           const selB = hud.sim.state.buildings.find((x) => x.uid === targetPastureUid);
           if (selB && getCatalogItem(selB.itemId)?.isAnimalPasturePlot && !selB.pastureAnimalId) {
             const res = hud.sim.stockAnimalOnPasture(selB.uid, aid);
+            hud.activePastureAnimalId = null;
             hud.showToast(res.msg, res.ok ? a.emoji : '🪙');
             hud.refreshAll();
             return;
           }
         }
 
+        hud.activePastureAnimalId = aid;
         hud.refreshAll();
         hud.showToast(
           `🐾 Đang dẫn ${a.emoji} ${a.name} (${a.cost.toLocaleString('vi-VN')}G/ô) — Nhấp hoặc kéo lướt qua Đồng Cỏ Chăn Thả trống để thả!`,
           a.emoji
         );
       });
+    });
+
+    tray.querySelector('#btnPastureTrayMovePlot')?.addEventListener('click', () => {
+      const targetUid = hud.pendingStockPastureUid;
+      const selB = targetUid ? hud.sim.state.buildings.find((x) => x.uid === targetUid) : undefined;
+      if (!selB || selB.isIndestructible) return;
+      const it = getCatalogItem(selB.itemId);
+      farmUiClosePastureTray(hud);
+      hud.collapseBuildDock();
+      hud.inspectSelection = null;
+      hud.moveModeActive = true;
+      hud.movingBuildingUid = selB.uid;
+      hud.rotation = selB.rotation;
+      hud.pendingTouchTile = null;
+      hud.refreshAll();
+      hud.showToast(`Đang nhấc "${it?.name ?? 'Đồng cỏ'}" — Nhấp vào ô đất mới để đặt xuống!`, '✋');
     });
 
     tray.querySelector('#btnPastureTrayBuyPlot')?.addEventListener('click', () => {

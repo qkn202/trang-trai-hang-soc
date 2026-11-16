@@ -24,7 +24,9 @@ import {
 } from '../../data/levels';
 import { STORY_QUESTS } from '../../data/quests';
 import { BUILD_HUD_CATEGORIES, formatToastMessage } from '../../ui/hud';
+import { getCatalogCardImageSrc, isWinterChristmasBuildItem } from '../../ui/hudShared';
 import { MagicalAudio } from '../../engine/audio';
+import { SPRITE_KEYS } from '../../engine/spriteLoader';
 import {
   FRIENDSHIP_CHEST_TOKEN_COST,
   MAX_DAILY_FRIEND_HELPS,
@@ -38,6 +40,8 @@ import {
   isSandboxRuntimeAllowed,
   ParkSimulation,
 } from '../simulation';
+import { YULE_EVENT_DAYS, YULE_SCHEDULE, yuleAssetPrice, yuleDayIndex } from '../yuleEvent';
+import { createCanonFarmOwlOrder } from '../simulationData';
 
 const SAVE_KEY = 'burrow_hogsmeade_777_v3';
 
@@ -787,11 +791,11 @@ describe('ParkSimulation & Progression Tests', () => {
   });
 
   describe('(i) 8 hạt giống hoa mới, Ô Vườn Hoa Cảnh & Đồng Cỏ Chăn Thả ghép liền rào', () => {
-    it('Đủ 22 loại hạt giống (10 loài hoa có isFlowerCrop), gieo & gặt hoa vào Kho và bó hoa quà tặng', () => {
+    it('Đủ 34 loại hạt giống (20 loài hoa có isFlowerCrop), gieo & gặt hoa vào Kho và bó hoa quà tặng', () => {
       const allCrops = Object.values(FARM_CROPS);
       const flowerCrops = allCrops.filter((c) => c.isFlowerCrop);
-      expect(allCrops.length).toBe(22);
-      expect(flowerCrops.length).toBe(10);
+      expect(allCrops.length).toBe(34);
+      expect(flowerCrops.length).toBe(20);
       expect(FARM_CROPS.moonlight_flower.nocturnalGlowColor).toBeTruthy();
       expect(FARM_CROPS.phoenix_fireflower.nocturnalGlowColor).toBeTruthy();
 
@@ -1004,9 +1008,9 @@ describe('ParkSimulation & Progression Tests', () => {
       );
       expect(formatDurationCompactVi(MAX_WAIT_DURATION_SECONDS)).toBe('3 ngày');
 
-      // 2. Kiểm tra hoạt động kinh tế (22 hạt giống, 8 thú chăn thả, 22 công thức xưởng) mặc định 1 tiếng (3.600s) ở lần thu hoạch đầu và nhân 2 ở các lần tiếp theo
+      // 2. Kiểm tra hoạt động kinh tế (34 hạt giống, 8 thú chăn thả, 22 công thức xưởng) mặc định 1 tiếng (3.600s) ở lần thu hoạch đầu và nhân 2 ở các lần tiếp theo
       const cropsSorted = Object.values(FARM_CROPS);
-      expect(cropsSorted).toHaveLength(22);
+      expect(cropsSorted).toHaveLength(34);
       for (const crop of cropsSorted) {
         expect(crop.growSec).toBe(FIRST_ECONOMIC_CYCLE_SEC);
       }
@@ -1138,9 +1142,25 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(placedTower.constructEndsAt).toBeLessThanOrEqual(Date.now());
     });
 
-    it('HUD Xây Dựng loại bỏ hoàn toàn danh mục Địa Hình (terrain) mà không gây khoá nhiệm vụ hay mốc cấp', () => {
+    it('HUD Xây Dựng loại bỏ danh mục Địa Hình (terrain) & Phụ Tá (staff), gom 105 asset mùa đông về Giáng Sinh và đủ ảnh 2.5D cho mọi thẻ', () => {
       expect(BUILD_HUD_CATEGORIES).not.toContain('terrain');
-      expect(BUILD_HUD_CATEGORIES).toEqual(['path', 'shop', 'creature', 'decor', 'staff']);
+      expect(BUILD_HUD_CATEGORIES).not.toContain('staff');
+      expect(BUILD_HUD_CATEGORIES).toEqual(['path', 'shop', 'creature', 'decor']);
+
+      const buildable = CATALOG.filter((c) => c.category !== 'terrain' && !c.isThemeParkLegacy);
+      const winterItems = buildable.filter((c) => isWinterChristmasBuildItem(c));
+      expect(winterItems).toHaveLength(105);
+      expect(winterItems.some((c) => c.id === 'snowy_pines')).toBe(true);
+
+      const nonWinterDecor = buildable.filter(
+        (c) => c.category === 'decor' && !isWinterChristmasBuildItem(c)
+      );
+      expect(nonWinterDecor.some((c) => c.id === 'snowy_pines')).toBe(false);
+      expect(nonWinterDecor.some((c) => c.id.startsWith('yule_'))).toBe(false);
+
+      for (const item of buildable) {
+        expect(getCatalogCardImageSrc(item)).toBeTruthy();
+      }
 
       for (const lv of LEVELS) {
         for (const itemId of lv.unlockedItemIds) {
@@ -1439,8 +1459,119 @@ describe('ParkSimulation & Progression Tests', () => {
     });
   });
 
-  describe('(m) Xây dựng & Dời chỗ Quán Ba Cây Chổi / Tiệm Kẹo Honeydukes không chiếm click vào mini-game', () => {
-    it('Xây Quán Ba Cây Chổi (burrow_broomsticks_canon) & chọn/dời Tiệm Kẹo Honeydukes mượt mà, không tự nhảy vào mini-game', async () => {
+  describe('(m) Christmas × Harry Potter Mega-Update (104 Yule Decor, 12 Winter Crops, Yule Theme)', () => {
+    it('Đủ 104 vật phẩm trang trí Giáng Sinh (yule_*) ở 11 bộ sưu tập, tốn 0 🌟 Sao, 0 giây xây và có đủ sprite 2.5D', () => {
+      const spriteSet = new Set<string>(SPRITE_KEYS);
+      const yuleItems = CATALOG.filter((it) => it.id.startsWith('yule_'));
+      expect(yuleItems).toHaveLength(104);
+
+      const collections = new Set<string>();
+      for (const it of yuleItems) {
+        expect(it.category).toBe('decor');
+        expect(it.baseIncome).toBe(0);
+        expect(it.buildDurationSec).toBe(0);
+        expect(getItemPuzzleStarCost(it)).toBe(0);
+        expect(it.cost).toBeGreaterThanOrEqual(45);
+        expect(it.cost).toBeLessThanOrEqual(750);
+        expect(it.yuleCollection).toBeTruthy();
+        collections.add(it.yuleCollection!);
+        expect(Boolean(it.spriteKey && spriteSet.has(it.spriteKey))).toBe(true);
+      }
+      expect(collections.size).toBe(11);
+
+      // Kiểm tra 4 linh vật Nhà (bao gồm Đại Bàng Đồng Ravenclaw chuẩn sách) & Lâu đài Hogwarts thu nhỏ 3×3
+      const ravenclawEagle = getCatalogItem('yule_ravenclaw_eagle_mascot')!;
+      expect(ravenclawEagle).toBeDefined();
+      expect(ravenclawEagle.yuleCollection).toBe('hogwarts_crests');
+      expect(ravenclawEagle.description).toContain('Đại Bàng Đồng');
+      expect(getCatalogItem('yule_gryffindor_lion_mascot')).toBeDefined();
+      expect(getCatalogItem('yule_slytherin_serpent_mascot')).toBeDefined();
+      expect(getCatalogItem('yule_hufflepuff_badger_mascot')).toBeDefined();
+
+      const miniCastle = getCatalogItem('yule_mini_hogwarts_castle')!;
+      expect(miniCastle).toBeDefined();
+      expect(miniCastle.width).toBe(3);
+      expect(miniCastle.height).toBe(3);
+      expect(miniCastle.yuleCollection).toBe('hogwarts_crests');
+    });
+
+    it('Lễ hội Giáng Sinh mở rộng từ 15/11 đến 05/01 và chế độ Giao Diện Giáng Sinh (auto | on | off) lưu trữ bền vững', () => {
+      const sim = new ParkSimulation(createMockAudio());
+      expect(sim.state.settings.yuleThemeMode).toBe('auto');
+
+      expect(sim.getActiveFestival(new Date(2026, 10, 13, 12, 0, 0))).toBe('none');
+      expect(sim.getActiveFestival(new Date(2026, 10, 14, 12, 0, 0))).not.toBe('christmas');
+      expect(sim.getActiveFestival(new Date(2026, 10, 15, 12, 0, 0))).toBe('christmas');
+      expect(sim.getActiveFestival(new Date(2026, 11, 25, 12, 0, 0))).toBe('christmas');
+      expect(sim.getActiveFestival(new Date(2027, 0, 5, 12, 0, 0))).toBe('christmas');
+      expect(sim.getActiveFestival(new Date(2027, 0, 6, 12, 0, 0))).toBe('none');
+
+      expect(sim.isYuleVisualThemeActive(new Date(2026, 11, 24))).toBe(true);
+      expect(sim.isYuleVisualThemeActive(new Date(2026, 6, 15))).toBe(false);
+
+      sim.state.settings.yuleThemeMode = 'on';
+      expect(sim.isYuleVisualThemeActive(new Date(2026, 6, 15))).toBe(true);
+      expect(sim.toggleYuleVisualTheme(new Date(2026, 6, 15))).toBe(false);
+      expect(sim.state.settings.yuleThemeMode).toBe('off');
+      expect(sim.isYuleVisualThemeActive(new Date(2026, 11, 25))).toBe(false);
+
+      const exported = sim.exportSaveJson();
+      const restored = new ParkSimulation(createMockAudio());
+      expect(restored.importSaveJson(exported)).toBe(true);
+      expect(restored.state.settings.yuleThemeMode).toBe('off');
+    });
+
+    describe('Yule daily event (20/11–25/12)', () => {
+      it('Lịch có đúng 36 ngày, sự kiện chỉ active trong cửa sổ và ngày bị lỡ được mở lại', () => {
+        expect(YULE_EVENT_DAYS).toBe(36);
+        expect(yuleDayIndex(new Date(2026, 10, 20, 12, 0, 0))).toBe(1);
+        expect(yuleDayIndex(new Date(2026, 11, 25, 12, 0, 0))).toBe(36);
+        expect(yuleDayIndex(new Date(2026, 10, 19, 12, 0, 0))).toBe(0);
+        expect(yuleDayIndex(new Date(2026, 11, 26, 12, 0, 0))).toBe(0);
+
+        const sim = new ParkSimulation(createMockAudio());
+        expect(sim.getYuleEventStatus(new Date(2026, 11, 25)).active).toBe(true);
+        expect(sim.getYuleEventStatus(new Date(2026, 11, 26)).active).toBe(false);
+        // Bỏ lỡ ngày 5: vẫn làm được sau đó (miễn là ngày đó ≤ ngày hiện tại)
+        expect(sim.claimYuleMainDay(99, new Date(2026, 11, 25)).ok).toBe(false);
+      });
+
+      it('Mỗi ngày có đúng 1 nhiệm vụ chính + tối đa 2 phụ; phần thưởng phụ ≤ 5.000 Sickle; ngày 36 mở lâu đài', () => {
+        for (const d of YULE_SCHEDULE) {
+          expect(d.side.length).toBeLessThanOrEqual(2);
+          for (const s of d.side) expect(s.rewardSickles).toBeLessThanOrEqual(5000);
+        }
+        expect(YULE_SCHEDULE[35].unlockIds).toContain('yule_mini_hogwarts_castle');
+      });
+
+      it('Tiến độ thu hoạch Yule dùng số lần thu hoạch, không dùng tồn kho trong kho', () => {
+        const sim = new ParkSimulation(createMockAudio());
+        const task = YULE_SCHEDULE[0].main;
+        sim.state.farmBarn!.crops.yule_poinsettia = 0;
+        sim.state.cropMastery = { yule_poinsettia: 2 };
+        expect(sim.getYuleTaskProgress(task.id)).toBe(2);
+        expect(sim.getYuleTaskTarget(task.id)).toBe(task.amount);
+      });
+
+      it('Mua asset Yule bằng Sickle (giá ≥ 20.000), trừ tiền đúng, không mua lại lần hai', () => {
+        const sim = new ParkSimulation(createMockAudio());
+        const item = getCatalogItem('yule_burrow_gnome_snowman')!;
+        const price = yuleAssetPrice(item.id);
+        expect(price).toBeGreaterThanOrEqual(20000);
+        sim.state.galleons = price + 100;
+        const res = sim.purchaseYuleAsset(item.id);
+        expect(res.ok).toBe(true);
+        expect(sim.state.galleons).toBe(100);
+        expect(sim.purchaseYuleAsset(item.id).ok).toBe(false);
+        // Thiếu tiền → từ chối
+        const sim2 = new ParkSimulation(createMockAudio());
+        sim2.state.galleons = 0;
+        expect(sim2.purchaseYuleAsset(item.id).ok).toBe(false);
+      });
+    });
+
+    it('Xây Quán Ba Cây Chổi (burrow_broomsticks_canon) không bị tự nhảy vào mini-game khi thiếu Cấp/Sao và đặt xây mượt khi đủ điều kiện', async () => {
+      const { STORY_QUESTS } = await import('../../data/quests');
       const { headerRefreshDock } = await import('../../ui/hudHeaderAndDock');
 
       const sim = new ParkSimulation(createMockAudio());
@@ -1450,6 +1581,7 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(broomItem.unlockLevel).toBe(27);
       expect(sim.getEffectiveItemStarCost(broomItem)).toBe(75);
 
+      // 1. Story quest preview cho story_5c_broomsticks hiển thị minh bạch theo từng trạng thái
       const storyIdx = STORY_QUESTS.findIndex((q) => q.id === 'story_5c_broomsticks');
       expect(storyIdx).toBeGreaterThanOrEqual(0);
       sim.state.storyQuestIndex = storyIdx;
@@ -1466,6 +1598,7 @@ describe('ParkSimulation & Progression Tests', () => {
       sim.state.match3.stars = 80;
       expect(sim.getStoryAutoActionPreview().shortLabel).toBe('🌟 Xây Ngay (75 🌟)');
 
+      // 2. Click thẻ Quán Ba Cây Chổi trên Build Dock khi thiếu Cấp hoặc thiếu Sao KHÔNG tự mở mini-game
       const itemListeners = new Map<string, () => void>();
       let renderedHtml = '';
       const toasts: string[] = [];
@@ -1575,6 +1708,7 @@ describe('ParkSimulation & Progression Tests', () => {
         cam: { x: 0, y: 0, zoom: 1, viewRot: 0 },
         root: fakeRoot,
         activeCategory: 'shop',
+        activeDecorFilter: 'all',
         buildSheetOpen: true,
         mapToolsExpanded: false,
         selectedCatalogItem: null as ReturnType<typeof getCatalogItem> | null,
@@ -1608,6 +1742,7 @@ describe('ParkSimulation & Progression Tests', () => {
         renderTutorialCoach: () => {},
       } as unknown;
 
+      // Khi chưa đủ Cấp 27 và chưa đủ 75 Sao: báo toast Cấp 27, KHÔNG mở mini-game
       let selectedCallbackItemId: string | null = null;
       (fakeHud as { onSelectCatalogItem?: (it: { id: string }) => void }).onSelectCatalogItem = (it) => {
         selectedCallbackItemId = it.id;
@@ -1622,6 +1757,7 @@ describe('ParkSimulation & Progression Tests', () => {
       expect((fakeHud as { selectedCatalogItem: unknown }).selectedCatalogItem).toBeNull();
       expect(toasts.some((t) => t.includes('Cấp 27'))).toBe(true);
 
+      // Khi đủ Cấp 27 nhưng mới có 10/75 Sao: thẻ hiển thị 10/75, click báo toast thiếu Sao, KHÔNG mở mini-game
       toasts.length = 0;
       sim.state.level = 27;
       sim.state.match3.stars = 10;
@@ -1633,6 +1769,7 @@ describe('ParkSimulation & Progression Tests', () => {
       expect((fakeHud as { selectedCatalogItem: unknown }).selectedCatalogItem).toBeNull();
       expect(toasts.some((t) => t.includes('10/75'))).toBe(true);
 
+      // Khi người chơi ĐÃ ĐỦ 75+ SAO ngay cả khi chưa tới Cấp 27 (vd Cấp 16, 80 Sao): mở khóa & xây dựng mượt mà!
       toasts.length = 0;
       sim.state.level = 16;
       sim.state.match3.stars = 80;
@@ -1650,6 +1787,7 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(cornerRightClasses.has('hidden')).toBe(true);
       expect(toasts.some((t) => t.includes('⚡ Đặt Ngay'))).toBe(true);
 
+      // Kể cả khi các ô sát đường đá cuội đã chật kín, findSmartSpotForStoryBuilding vẫn tìm được ô cỏ 3x3 hợp lệ
       sim.connectedPathTiles.clear();
       const smartSpot = sim.findSmartSpotForStoryBuilding(broomItem, 0);
       expect(smartSpot).not.toBeNull();
@@ -1657,15 +1795,19 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(placedOk).toBe(true);
       expect(sim.state.buildings.some((b) => b.itemId === 'burrow_broomsticks_canon')).toBe(true);
       expect(sim.state.match3.stars).toBe(5);
+      // Sau khi tiêu 75 Sao còn 5 Sao ở Cấp 16, bản vẽ đã xây vẫn giữ trạng thái mở khóa
       expect(sim.isCatalogItemUnlocked(broomItem)).toBe(true);
 
+      // Tiệm Kẹo Honeydukes (burrow_honeydukes_canon): khi đã xây trên bản đồ và còn < 35 Sao,
+      // nhấn thẻ trong Build Dock sẽ chọn ngay công trình hiện có để Dời chỗ (KHÔNG nhảy vào mini-game),
+      // và dời vị trí Honeydukes trên bản đồ mượt mà!
       const honeydukesItem = getCatalogItem('burrow_honeydukes_canon')!;
       sim.state.match3.stars = 40;
       const hdSpot = sim.findSmartSpotForStoryBuilding(honeydukesItem, 0)!;
       expect(sim.placeItem(honeydukesItem, hdSpot.gx, hdSpot.gy, 0)).toBe(true);
       const builtHoneydukes = sim.state.buildings.find((b) => b.itemId === 'burrow_honeydukes_canon')!;
       builtHoneydukes.constructEndsAt = Date.now() - 1000;
-      sim.state.match3.stars = 5;
+      sim.state.match3.stars = 5; // < 35 Sao
 
       toasts.length = 0;
       (fakeHud as { activeCategory: string | null }).activeCategory = 'shop';
@@ -1679,12 +1821,218 @@ describe('ParkSimulation & Progression Tests', () => {
       });
       expect(toasts.some((t) => t.includes('✋ Dời'))).toBe(true);
 
+      // Kiểm tra dời vị trí Tiệm Kẹo Honeydukes sang ô cỏ trống mới
       const moveSpot = sim.findSmartSpotForStoryBuilding(honeydukesItem, 0)!;
       const moveRes = sim.moveBuilding(builtHoneydukes.uid, moveSpot.gx, moveSpot.gy, 0);
       expect(moveRes.ok).toBe(true);
       expect(builtHoneydukes.gx).toBe(moveSpot.gx);
       expect(builtHoneydukes.gy).toBe(moveSpot.gy);
       vi.unstubAllGlobals();
+      vi.stubGlobal('localStorage', mockLocalStorage);
+    });
+  });
+
+  describe('(o) Kiểm chứng hồi quy Audit 3 Đợt (P0-1..P0-6, P1-1, P1-7, P2-1, P2-2)', () => {
+    it('P0-1: Bùa Accio thu hoạch được Đồng Cỏ Chăn Thả chín và đặt lại chu kỳ tiếp theo (không cày vô hạn)', () => {
+      const sim = new ParkSimulation(createMockAudio());
+      const barn = sim.ensureFarmBarn();
+      const pasture = sim.state.buildings.find((b) => b.uid === 'burrow_pasture_hen')!;
+      expect(pasture).toBeDefined();
+      pasture.pastureAnimalId = 'burrow_hen';
+      pasture.pastureReadyAt = Date.now() - 5000;
+
+      const beforeEgg = barn.goods.farm_egg_wool ?? 0;
+      sim.castAccioHarvestAll();
+      const afterFirstAccio = barn.goods.farm_egg_wool ?? 0;
+      expect(afterFirstAccio).toBeGreaterThan(beforeEgg);
+      expect(pasture.pastureReadyAt).toBeGreaterThan(Date.now());
+
+      // Gọi Accio ngay lần 2 không thể thu trùng khi chưa hết chu kỳ mới
+      sim.castAccioHarvestAll();
+      expect(barn.goods.farm_egg_wool).toBe(afterFirstAccio);
+    });
+
+    it('P0-3 & P1-1: Đơn Cú chỉ đòi hàng có xưởng đã xây & đủ cấp; Tiệm Kẹo Honeydukes chế được Ếch Sô-cô-la từ Bột Mì Tinh', () => {
+      const sim = new ParkSimulation(createMockAudio());
+      for (let seed = 1; seed <= 50; seed++) {
+        const order = createCanonFarmOwlOrder(8, seed, sim.state.buildings);
+        for (const req of order.requirements) {
+          expect([
+            'frothy_butterbeer',
+            'choc_frog_sweet',
+            'floral_bouquet_gift',
+            'sprout_growth_elixir',
+            'weasley_sweater_w',
+            'blossom_honey_jar',
+            'honey_apple_cider',
+          ]).not.toContain(req.itemId);
+        }
+      }
+
+      const honeydukesCat = getCatalogItem('burrow_honeydukes_canon')!;
+      expect(honeydukesCat.workshopGroupId).toBe('honeydukes');
+      expect(honeydukesCat.isWorkshopBrewery).toBe(true);
+      const recipes = sim.getWorkshopRecipesForBuilding(honeydukesCat);
+      expect(recipes.some((r) => r.id === 'rcp_choc_frog' && r.goodId === 'choc_frog_sweet')).toBe(true);
+
+      sim.state.level = 20;
+      sim.state.match3.stars = 50;
+      sim.state.galleons = 5000;
+      const spot = sim.findSmartSpotForStoryBuilding(honeydukesCat, 0)!;
+      expect(sim.placeItem(honeydukesCat, spot.gx, spot.gy, 0)).toBe(true);
+      const hdBld = sim.state.buildings.find((b) => b.itemId === 'burrow_honeydukes_canon')!;
+      hdBld.constructEndsAt = Date.now() - 1000;
+      hdBld.awaitingUnveil = false;
+
+      const barn = sim.ensureFarmBarn();
+      barn.crops.ruby_strawberry = 5;
+      barn.goods.fine_wheat_flour = 5;
+      const enq = sim.enqueueWorkshopRecipe(hdBld.uid, 'rcp_choc_frog');
+      expect(enq.ok).toBe(true);
+      expect(barn.crops.ruby_strawberry).toBe(3);
+      expect(barn.goods.fine_wheat_flour).toBe(4);
+
+      hdBld.workshopQueue![0].endsAt = Date.now() - 1000;
+      sim.tickProductionToTimestamp(Date.now());
+      expect(hdBld.readyFarmGoods).toContain('choc_frog_sweet');
+      expect(sim.harvestBuildingBubble(hdBld.uid)).toBe(true);
+      expect(barn.goods.choc_frog_sweet).toBeGreaterThanOrEqual(1);
+    });
+
+    it('P0-4: Nhận trứng ấp biến thể & thám hiểm Vali khi đang thăm hàng xóm ghi chuẩn vào chuồng thú nhà mình', () => {
+      const sim = new ParkSimulation(createMockAudio());
+      sim.state.level = 30;
+      sim.state.match3.stars = 100;
+      sim.state.galleons = 10000;
+      const nifflerCat = getCatalogItem('niffler_den')!;
+      const spot = sim.findSmartSpotForStoryBuilding(nifflerCat, 0)!;
+      expect(sim.placeItem(nifflerCat, spot.gx, spot.gy, 0)).toBe(true);
+      const homeHab = sim.state.buildings.find((b) => b.itemId === 'niffler_den')!;
+      homeHab.constructEndsAt = Date.now() - 1000;
+      homeHab.awaitingUnveil = false;
+      homeHab.creatureMorph = 'normal';
+
+      sim.state.suitcase.activeIncubation = {
+        habitatUid: homeHab.uid,
+        itemId: 'niffler_den',
+        startedAt: Date.now() - 7200_000,
+        endsAt: Date.now() - 1000,
+        boostedWithStarlight: true,
+      };
+      sim.state.suitcase.activeExpedition = {
+        expeditionId: 'glowing_mushroom_cave',
+        habitatUid: homeHab.uid,
+        startedAt: Date.now() - 7200_000,
+        endsAt: Date.now() - 1000,
+      };
+
+      const friendRes = sim.addFriendByCode('HS-VISIT-P04', 'Bạn Thăm Vườn');
+      expect(friendRes.ok).toBe(true);
+      expect(sim.enterNeighborVisit(friendRes.neighbor!.id).ok).toBe(true);
+      expect(sim.isVisitingNeighbor).toBe(true);
+
+      const incRes = sim.claimMorphIncubation();
+      expect(incRes.ok).toBe(true);
+      const expRes = sim.claimSuitcaseExpedition();
+      expect(expRes.ok).toBe(true);
+
+      sim.exitNeighborVisit(true);
+      const restoredHab = sim.state.buildings.find((b) => b.uid === homeHab.uid)!;
+      expect(['mystic', 'radiant']).toContain(restoredHab.creatureMorph);
+      expect((restoredHab.creatureBondXp ?? 0) > 0 || (restoredHab.creatureBondLevel ?? 1) > 1).toBe(true);
+    });
+
+    it('P0-5, P0-6 & P1-7: Lọc snapshot hàng xóm khỏi JSON lưu, bảo toàn công trình sự kiện tương lai (unknownBuildings) và giữ nguyên lastSavedAt khi autosave ẩn', () => {
+      const sim = new ParkSimulation(createMockAudio());
+      for (let i = 1; i <= 5; i++) {
+        const res = sim.addFriendByCode(`HS-BLOAT-0${i}`, `Hàng Xóm ${i}`);
+        expect(res.ok).toBe(true);
+        expect(sim.enterNeighborVisit(res.neighbor!.id).ok).toBe(true);
+        sim.exitNeighborVisit(true);
+      }
+
+      // Chèn 1 công trình sự kiện mùa tới chưa có trong catalog hiện hành + nông sản lạ
+      sim.state.buildings.push({
+        uid: 'future_yule_tree_99',
+        itemId: 'future_seasonal_building_2027',
+        gx: 25,
+        gy: 25,
+        rotation: 0,
+        stars: 1,
+        placedAt: 1000,
+        constructEndsAt: 2000,
+        lastTickAt: 2000,
+        durability: 100,
+        readyBubbles: 0,
+        storedGalleons: 0,
+        storedXp: 0,
+        visitorsServed: 0,
+      });
+      (sim.ensureFarmBarn().crops as Record<string, number>).future_crop_2027 = 9;
+
+      sim.saveToStorage(true);
+      const savedTs1 = sim.state.lastSavedAt;
+      const rawJson1 = storageMap.get(SAVE_KEY)!;
+      expect(rawJson1).toBeDefined();
+      expect(rawJson1).not.toContain('"valleyBuildings"');
+      expect(rawJson1.length).toBeLessThan(80_000);
+
+      // Autosave khi tab ẩn (touchTimestamp = false) không đẩy lastSavedAt
+      const laterNow = savedTs1 + 50_000;
+      const spyNow = vi.spyOn(Date, 'now').mockReturnValue(laterNow);
+      sim.saveToStorage(false);
+      expect(sim.state.lastSavedAt).toBe(savedTs1);
+      spyNow.mockRestore();
+
+      // Tải lại từ storage: không crash vì future_crop_2027 và vẫn giữ nguyên future_yule_tree_99 khi save lại!
+      const reloaded = new ParkSimulation(createMockAudio());
+      expect(reloaded.getBarnTotalUsed()).toBeGreaterThanOrEqual(0);
+      expect(reloaded.state.unknownBuildings?.some((b) => b.uid === 'future_yule_tree_99')).toBe(true);
+      reloaded.saveToStorage(true);
+      const rawJson2 = storageMap.get(SAVE_KEY)!;
+      expect(rawJson2).toContain('future_seasonal_building_2027');
+    });
+
+    it('P2-1 & P2-2: Ưu tiên giảm giờ xây đúng công trình người chơi chọn và trợ giá Gà Mái Đỏ bước 3 Tân Thủ khi thiếu Vàng', () => {
+      const sim = new ParkSimulation(createMockAudio());
+      sim.state.level = 20;
+      sim.state.match3.stars = 120;
+      sim.state.galleons = 5000;
+
+      const loomCat = getCatalogItem('burrow_self_knitting_loom')!;
+      const millCat = getCatalogItem('burrow_windmill_canon')!;
+      const spot1 = sim.findSmartSpotForStoryBuilding(loomCat, 0)!;
+      expect(sim.placeItem(loomCat, spot1.gx, spot1.gy, 0)).toBe(true);
+      const spot2 = sim.findSmartSpotForStoryBuilding(millCat, 0)!;
+      expect(sim.placeItem(millCat, spot2.gx, spot2.gy, 0)).toBe(true);
+
+      const b1 = sim.state.buildings.find((b) => b.itemId === 'burrow_self_knitting_loom')!;
+      const b2 = sim.state.buildings.find((b) => b.itemId === 'burrow_windmill_canon')!;
+      const now = Date.now();
+      b1.constructEndsAt = now + 7200_000;
+      b2.constructEndsAt = now + 10800_000;
+
+      const b1Before = b1.constructEndsAt;
+      const b2Before = b2.constructEndsAt;
+      const red = sim.applyConstructionReductionFromGameplay(1800, 'Khảo Thí', b2.uid);
+      expect(red.reducedSec).toBe(1800);
+      expect(b2.constructEndsAt).toBe(b2Before - 1800_000);
+      expect(b1.constructEndsAt).toBe(b1Before);
+
+      // Bước 3 Tân Thủ (index 2: pasture_harvest_and_stock): thiếu Vàng (< 35G) vẫn thả được Gà Mái Đỏ đầu tay mà không kẹt softlock
+      const tutSim = new ParkSimulation(createMockAudio());
+      const emptyPasture = tutSim.state.buildings.find((b) => b.uid === 'burrow_pasture_empty')!;
+      const tut = tutSim.state.tutorial!;
+      tut.active = true;
+      tut.skipped = false;
+      tut.stepIndex = 2;
+      tut.stepId = 'pasture_harvest_and_stock';
+      tut.pastureHarvestedInStep3 = false;
+      tutSim.state.galleons = 5;
+      const stockRes = tutSim.stockAnimalOnPasture(emptyPasture.uid, 'burrow_hen');
+      expect(stockRes.ok).toBe(true);
+      expect(emptyPasture.pastureAnimalId).toBe('burrow_hen');
+      expect(tutSim.state.galleons).toBeGreaterThanOrEqual(0);
     });
   });
 });

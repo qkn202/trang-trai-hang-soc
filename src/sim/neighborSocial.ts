@@ -5,6 +5,7 @@ import {
   FarmCropId,
   FarmItemId,
   FlooVisitDirectoryRow,
+  GameState,
   HomeOwlLanternMark,
   HonorGardenTourDef,
   HouseName,
@@ -21,6 +22,118 @@ import {
   WeatherOverride,
   ZoneId,
 } from '../types/game';
+
+interface NeighborRuntimeValleyCacheEntry {
+  buildings?: PlacedBuilding[];
+  tileOverrides?: Record<string, TileOverrideData>;
+  unlockedZones?: ZoneId[];
+}
+
+const MAX_NEIGHBOR_VALLEY_CACHE_ENTRIES = 64;
+const neighborValleySnapshotCache = new Map<string, NeighborRuntimeValleyCacheEntry>();
+
+function buildNeighborValleyCacheKeys(
+  neighbor: Pick<NeighborProfileState, 'id' | 'remoteUserId' | 'friendCode'>
+): string[] {
+  const keys: string[] = [];
+  if (neighbor.id) keys.push(`id:${neighbor.id}`);
+  const uid = neighbor.remoteUserId?.trim();
+  if (uid) keys.push(`uid:${uid}`);
+  const code = neighbor.friendCode?.trim().toUpperCase();
+  if (code) keys.push(`code:${code}`);
+  return keys;
+}
+
+export function cacheNeighborValleySnapshot(
+  neighbor: Pick<
+    NeighborProfileState,
+    'id' | 'remoteUserId' | 'friendCode' | 'valleyBuildings' | 'valleyTileOverrides' | 'valleyUnlockedZones'
+  >
+): void {
+  const hasBuildings = Array.isArray(neighbor.valleyBuildings) && neighbor.valleyBuildings.length > 0;
+  const hasOverrides =
+    Boolean(neighbor.valleyTileOverrides) &&
+    Object.keys(neighbor.valleyTileOverrides ?? {}).length > 0;
+  const hasZones = Array.isArray(neighbor.valleyUnlockedZones) && neighbor.valleyUnlockedZones.length > 0;
+  if (!hasBuildings && !hasOverrides && !hasZones) return;
+
+  const keys = buildNeighborValleyCacheKeys(neighbor);
+  if (keys.length === 0) return;
+
+  const existing = getCachedNeighborValleySnapshot(neighbor);
+  const entry: NeighborRuntimeValleyCacheEntry = {
+    buildings: hasBuildings ? neighbor.valleyBuildings : existing?.buildings,
+    tileOverrides: hasOverrides ? neighbor.valleyTileOverrides : existing?.tileOverrides,
+    unlockedZones: hasZones ? neighbor.valleyUnlockedZones : existing?.unlockedZones,
+  };
+  for (const k of keys) {
+    if (neighborValleySnapshotCache.has(k)) {
+      neighborValleySnapshotCache.delete(k);
+    }
+    neighborValleySnapshotCache.set(k, entry);
+  }
+  while (neighborValleySnapshotCache.size > MAX_NEIGHBOR_VALLEY_CACHE_ENTRIES) {
+    const oldest = neighborValleySnapshotCache.keys().next().value;
+    if (oldest === undefined) break;
+    neighborValleySnapshotCache.delete(oldest);
+  }
+}
+
+export function getCachedNeighborValleySnapshot(
+  neighbor: Pick<NeighborProfileState, 'id' | 'remoteUserId' | 'friendCode'>
+): NeighborRuntimeValleyCacheEntry | undefined {
+  for (const k of buildNeighborValleyCacheKeys(neighbor)) {
+    const hit = neighborValleySnapshotCache.get(k);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+/**
+ * Tách bản đồ bạn bè nặng (`valleyBuildings` / `valleyTileOverrides`) sang bộ nhớ đệm phiên chạy
+ * và gộp bảo toàn `unknownBuildings` trước khi serialize sang localStorage / Cloud Save (tránh HTTP 413 & trần 1 MiB).
+ */
+export function prepareGameStateForPersistence(state: GameState): GameState {
+  const baseBuildings = Array.isArray(state.buildings) ? state.buildings : [];
+  let mergedBuildings = state.buildings;
+  if (Array.isArray(state.unknownBuildings) && state.unknownBuildings.length > 0) {
+    const seenUids = new Set(baseBuildings.map((b) => b.uid));
+    const extras = state.unknownBuildings.filter((b) => b && typeof b.uid === 'string' && !seenUids.has(b.uid));
+    if (extras.length > 0) {
+      mergedBuildings = [...baseBuildings, ...extras];
+    }
+  }
+
+  let slimSocial = state.neighborSocial;
+  if (slimSocial && Array.isArray(slimSocial.neighbors) && slimSocial.neighbors.length > 0) {
+    let changed = false;
+    const slimNeighbors = slimSocial.neighbors.map((n) => {
+      if (!n) return n;
+      cacheNeighborValleySnapshot(n);
+      if (n.valleyBuildings !== undefined || n.valleyTileOverrides !== undefined) {
+        changed = true;
+        const { valleyBuildings: _vb, valleyTileOverrides: _vt, ...rest } = n;
+        return rest;
+      }
+      return n;
+    });
+    if (changed) {
+      slimSocial = {
+        ...slimSocial,
+        neighbors: slimNeighbors,
+      };
+    }
+  }
+
+  if (mergedBuildings === state.buildings && slimSocial === state.neighborSocial) {
+    return state;
+  }
+  return {
+    ...state,
+    buildings: mergedBuildings,
+    neighborSocial: slimSocial,
+  };
+}
 
 export const MAX_DAILY_FRIEND_HELPS = 5;
 export const MAX_DAILY_MINIGAME_RESCUES = 5;
@@ -407,7 +520,7 @@ export function createFriendNeighborFromCode(
     : `player_${cleanCode.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
   const spot = buildDailyMysterySpot(id, daySeed);
 
-  return {
+  const created: NeighborProfileState = {
     id,
     remoteUserId: verifiedProfile?.userId,
     isVerifiedPlayer: Boolean(verifiedProfile),
@@ -423,8 +536,6 @@ export function createFriendNeighborFromCode(
     bioVi:
       verifiedProfile?.bioVi ||
       `Người chơi thật kết nối qua Mã Thung Lũng ${cleanCode} — ghé thăm tưới cây & tương trợ mỗi ngày!`,
-    valleyBuildings: verifiedProfile?.buildings,
-    valleyTileOverrides: verifiedProfile?.tileOverrides,
     valleyUnlockedZones: verifiedProfile?.unlockedZones,
     helpedMarksToday: [],
     owlHelpCrates: buildDailyNeighborCrates(id, resolvedName, daySeed),
@@ -437,6 +548,12 @@ export function createFriendNeighborFromCode(
     mysteryGiftGx: spot.gx,
     mysteryGiftGy: spot.gy,
   };
+  cacheNeighborValleySnapshot({
+    ...created,
+    valleyBuildings: verifiedProfile?.buildings,
+    valleyTileOverrides: verifiedProfile?.tileOverrides,
+  });
+  return created;
 }
 
 /**
@@ -449,7 +566,7 @@ export function classifyBuildingGardenHelpKind(
 ): NeighborGardenHelpKind | null {
   if (!item) return null;
   if (nowMs < b.constructEndsAt) return null;
-  if (item.id === 'burrow_house_canon' || item.id === 'burrow_honeydukes_canon') return null;
+  if (item.id === 'burrow_house_canon') return null;
 
   if (item.isFarmlandPlot) {
     if (b.cropId && b.cropReadyAt && nowMs < b.cropReadyAt) {
@@ -542,8 +659,19 @@ export function buildNeighborValleySnapshot(
   if (!defaultZones.includes('ga_hogsmeade')) defaultZones.push('ga_hogsmeade');
   if (!defaultZones.includes('hem_xeo')) defaultZones.push('hem_xeo');
 
-  if (Array.isArray(neighbor.valleyBuildings) && neighbor.valleyBuildings.length > 0) {
-    const validReal = neighbor.valleyBuildings
+  const cached = getCachedNeighborValleySnapshot(neighbor);
+  const sourceBuildings =
+    Array.isArray(neighbor.valleyBuildings) && neighbor.valleyBuildings.length > 0
+      ? neighbor.valleyBuildings
+      : cached?.buildings;
+  const sourceTileOverrides = neighbor.valleyTileOverrides ?? cached?.tileOverrides;
+  const sourceUnlockedZones =
+    Array.isArray(neighbor.valleyUnlockedZones) && neighbor.valleyUnlockedZones.length > 0
+      ? neighbor.valleyUnlockedZones
+      : cached?.unlockedZones;
+
+  if (Array.isArray(sourceBuildings) && sourceBuildings.length > 0) {
+    const validReal = sourceBuildings
       .filter((b) => b && typeof b.itemId === 'string' && Boolean(getCatalogItem(b.itemId)))
       .map((b) => {
         const isHelped = neighbor.helpedMarksToday.some((m) => m.buildingUid === b.uid);
@@ -565,14 +693,14 @@ export function buildNeighborValleySnapshot(
 
     if (validReal.length > 0) {
       const realZones =
-        Array.isArray(neighbor.valleyUnlockedZones) && neighbor.valleyUnlockedZones.length > 0
-          ? [...neighbor.valleyUnlockedZones]
+        Array.isArray(sourceUnlockedZones) && sourceUnlockedZones.length > 0
+          ? [...sourceUnlockedZones]
           : defaultZones;
       return {
         neighbor,
         unlockedZones: realZones,
         buildings: validReal,
-        tileOverrides: neighbor.valleyTileOverrides ? { ...neighbor.valleyTileOverrides } : {},
+        tileOverrides: sourceTileOverrides ? { ...sourceTileOverrides } : {},
         focusGx: 18.5,
         focusGy: 22.5,
       };
@@ -910,7 +1038,7 @@ const GENERIC_PLAYER_NICKNAMES = new Set([
 export function isGeneratedGuestUserId(uid: string | undefined | null): boolean {
   const clean = typeof uid === 'string' ? uid.trim() : '';
   if (!clean) return true;
-  return /^(hs_[a-z0-9]+_[a-z0-9]+|anon(?:ymous)?(?:_user)?|local_player)$/i.test(clean);
+  return /^(hs_[a-z0-9_-]+|guest_[a-z0-9_-]+|anon(?:ymous)?(?:_user)?|local_player)$/i.test(clean);
 }
 
 /**
@@ -1055,7 +1183,10 @@ export function deduplicateNeighborProfiles(
         existing.id === item.id ||
         (Boolean(itemUid) && Boolean(exUid) && itemUid === exUid) ||
         (hasItemDistinctCode && hasExDistinctCode && itemCode === exCode) ||
-        (itemNick !== null && exNick !== null && itemNick === exNick)
+        (itemNick !== null &&
+          exNick !== null &&
+          itemNick === exNick &&
+          (!itemUid || !exUid || isGeneratedGuestUserId(itemUid) || isGeneratedGuestUserId(exUid)))
       );
     });
 
@@ -1110,20 +1241,21 @@ export function upsertFlooMemberToNeighborProfile(
     : buildDailyMysterySpot(id, daySeed);
   const sosKind = existing?.minigameSos?.kind ?? kinds[seed % kinds.length];
 
+  const existingCached = existing ? getCachedNeighborValleySnapshot(existing) : undefined;
   const rawSave =
     row.rawClientSave && typeof row.rawClientSave === 'object' ? row.rawClientSave : null;
   const rawBuildings = Array.isArray(rawSave?.buildings)
     ? (rawSave.buildings as PlacedBuilding[])
-    : existing?.valleyBuildings;
+    : existing?.valleyBuildings ?? existingCached?.buildings;
   const rawOverrides =
     rawSave?.tileOverrides && typeof rawSave.tileOverrides === 'object'
       ? (rawSave.tileOverrides as Record<string, TileOverrideData>)
-      : existing?.valleyTileOverrides;
+      : existing?.valleyTileOverrides ?? existingCached?.tileOverrides;
   const rawZones = Array.isArray(rawSave?.unlockedZones)
     ? (rawSave.unlockedZones as ZoneId[])
-    : existing?.valleyUnlockedZones;
+    : existing?.valleyUnlockedZones ?? existingCached?.unlockedZones;
 
-  return {
+  const updatedProfile: NeighborProfileState = {
     id,
     remoteUserId: effectiveUid,
     isVerifiedPlayer: true,
@@ -1142,8 +1274,6 @@ export function upsertFlooMemberToNeighborProfile(
     likesCount: existing?.likesCount ?? 1 + (seed % 9),
     isCanonPreset: false,
     bioVi: `Thành viên cộng đồng Mạng Floo HPVN — bay Floo ghé thăm & chăm giúp 1 chạm!`,
-    valleyBuildings: rawBuildings,
-    valleyTileOverrides: rawOverrides,
     valleyUnlockedZones: rawZones,
     growingCount: Math.max(0, Math.floor(Number(row.growing ?? existing?.growingCount ?? 0))),
     helpedViaFlooToday: Boolean(row.helped || existing?.helpedViaFlooToday),
@@ -1169,6 +1299,12 @@ export function upsertFlooMemberToNeighborProfile(
     mysteryGiftGx: spot.gx,
     mysteryGiftGy: spot.gy,
   };
+  cacheNeighborValleySnapshot({
+    ...updatedProfile,
+    valleyBuildings: rawBuildings,
+    valleyTileOverrides: rawOverrides,
+  });
+  return updatedProfile;
 }
 
 /**

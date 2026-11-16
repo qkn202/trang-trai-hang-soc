@@ -201,7 +201,142 @@ export const SPRITE_KEYS = [
   'villager_hagrid_walk',
   'villager_hermione_idle',
   'villager_hermione_walk',
+  // Christmas x Harry Potter Growable Seed Flowers & Winter Plants (12 -> 184 Total!)
+  'ui_icon_crop_yule_poinsettia',
+  'ui_icon_crop_yule_hellebore',
+  'ui_icon_crop_yule_snowdrop',
+  'ui_icon_crop_yule_amaryllis',
+  'ui_icon_crop_yule_paperwhite',
+  'ui_icon_crop_yule_holly_sprig',
+  'ui_icon_crop_yule_mistletoe',
+  'ui_icon_crop_yule_edelweiss',
+  'ui_icon_crop_yule_winter_camellia',
+  'ui_icon_crop_yule_frost_orchid',
+  'ui_icon_crop_yule_frost_cranberry',
+  'ui_icon_crop_yule_dwarf_fir',
+  // Christmas x Harry Potter 104 Snowy Festive Decor Collection (104 -> 288 Total!)
+  'yule_burrow_gnome_snowman',
+  'yule_burrow_knitting_basket',
+  'yule_hearth_stockings',
+  'yule_gnome_angel_topper',
+  'yule_weasley_sweater_rack',
+  'yule_molly_pudding_table',
+  'yule_arthur_duck_sled',
+  'yule_firewood_snow_shed',
+  'yule_crookshanks_cushion',
+  'yule_great_hall_tree',
+  'yule_floating_candelabra',
+  'yule_four_house_pillar',
+  'yule_crystal_banquet_table',
+  'yule_goblet_blue_brazier',
+  'yule_gramophone_harp',
+  'yule_ice_swan_arch',
+  'yule_ice_stag_sculpture',
+  'yule_ice_phoenix_fountain',
+  'yule_hogsmeade_twin_lamp',
+  'yule_snowy_signpost',
+  'yule_roasted_chestnut_stand',
+  'yule_wizard_cracker_cart',
+  'yule_butterbeer_hot_cart',
+  'yule_hogsmeade_arch',
+  'yule_honeydukes_cane_arch',
+  'yule_sugarplum_tower',
+  'yule_quill_wrapping_booth',
+  'yule_owl_post_box',
+  'yule_luggage_gift_trolley',
+  'yule_broomstick_snow_rack',
+  'yule_floating_parcel_cluster',
+  'yule_hedwig_gift_sleigh',
+  'yule_flying_car_tree',
+  'yule_giant_gift_mountain',
+  'yule_hogwarts_snow_loco',
+  'yule_puffskein_snowballs',
+  'yule_bowtruckle_mistletoe',
+  'yule_mandrake_earmuff_pot',
+  'yule_niffler_wreath_stash',
+  'yule_hagrid_yule_log',
+  'yule_frog_choir_stage',
+  'yule_hippogriff_warm_nest',
+  'yule_castle_snowglobe',
+  'yule_holly_hedgerow',
+  'yule_candy_cane_fence',
+  'yule_lantern_stone_wall',
+  'yule_poinsettia_cauldron',
+  'yule_snitch_topiary',
+  'yule_snowball_fort',
+  'yule_frozen_skate_pond',
+  'yule_ollivanders_shop',
+  'yule_weasley_wheezes_facade',
+  'yule_gringotts_dragon_dome',
+  'yule_flourish_blotts_front',
+  'yule_shrieking_shack_hill',
+  'yule_zonkos_joke_corner',
+  'yule_hogs_head_porch',
+  'yule_puddifoot_tea_pavilion',
+  'yule_godrics_hollow_statue',
+  'yule_lovegood_rook_house',
+  'yule_shell_cottage_mini',
+  'yule_hogwarts_boathouse_ice',
+  'yule_mirror_of_erised',
+  'yule_invisibility_cloak_chest',
+  'yule_firebolt_display',
+  'yule_dobby_sock_tree',
+  'yule_triwizard_golden_egg',
+  'yule_hermione_bluebell_jars',
+  'yule_sorting_hat_stool',
+  'yule_sword_frozen_pool',
+  'yule_common_room_armchairs',
+  'yule_ministry_phonebox',
+  'yule_platform_nine_pillar',
+  'yule_fawkes_lemon_perch',
+  'yule_silver_fir_trio',
+  'yule_blue_spruce_starlight',
+  'yule_ribbon_house_pine',
+  'yule_candy_spiral_cypress',
+  'yule_whomping_willow_winter',
+  'yule_weeping_frost_willow',
+  'yule_golden_mistletoe_oak',
+  'yule_holly_berry_tree',
+  'yule_dirigible_plum_tree',
+  'yule_owl_hedgerow_topiary',
+  'yule_stag_patronus_topiary',
+  'yule_birch_fairy_grove',
+  'yule_poinsettia_tiered_stand',
+  'yule_hellebore_stone_trough',
+  'yule_amaryllis_brass_urn',
+  'yule_snowdrop_moss_log',
+  'yule_winterberry_cinnamon_barrel',
+  'yule_frost_rose_trellis',
+  'yule_sprout_winter_coldframe',
+  'yule_glowing_puffapod_bush',
+  'yule_edelweiss_alpine_rockery',
+  'yule_crystal_lotus_fountain_pot',
+  'yule_poinsettia_roundabout_bed',
+  'yule_winter_flora_conservatory',
+  'yule_gryffindor_lion_mascot',
+  'yule_slytherin_serpent_mascot',
+  'yule_ravenclaw_eagle_mascot',
+  'yule_hufflepuff_badger_mascot',
+  'yule_four_house_hourglasses',
+  'yule_mini_hogwarts_castle',
 ] as const;
+
+export const CATALOG_PROP_SPRITE_PATHS: Readonly<Record<string, string>> = {
+  catalog_marble_bench: '/paintings/catalog/marble_bench.png',
+  catalog_floating_candles_post: '/paintings/catalog/floating_candles_post.png',
+  catalog_patronus_ward_lantern: '/paintings/catalog/patronus_ward_lantern.png',
+};
+
+export function resolveCatalogPropSpriteKey(
+  itemId: string,
+  spriteKey?: string
+): string | undefined {
+  if (spriteKey) return spriteKey;
+  if (itemId === 'marble_bench') return 'catalog_marble_bench';
+  if (itemId === 'floating_candles_post') return 'catalog_floating_candles_post';
+  if (itemId === 'patronus_ward_lantern') return 'catalog_patronus_ward_lantern';
+  return undefined;
+}
 
 export type SpriteSource = HTMLImageElement | HTMLCanvasElement;
 
@@ -257,10 +392,10 @@ export class SpriteRegistry {
     this.toonEnabled = enabled;
     this.connectedFarmlandCache.clear();
     this.connectedFarmlandMips.clear();
+    this.mips.clear();
     for (const [key, img] of this.raw) {
       const built = this.buildSprite(key, img);
       this.images.set(key, built);
-      this.rebuildMip(key, built);
     }
     this.releaseReadScratch();
   }
@@ -337,24 +472,55 @@ export class SpriteRegistry {
 
   async loadAll(): Promise<void> {
     const decoded: Array<{ key: string; img: HTMLImageElement }> = [];
-    await Promise.all(
-      SPRITE_KEYS.map(
-        (key) =>
-          new Promise<void>((resolve) => {
-            const img = new Image();
-            img.decoding = 'async';
-            img.onload = () => {
-              this.raw.set(key, img);
-              decoded.push({ key, img });
-              resolve();
-            };
-            img.onerror = () => {
-              resolve();
-            };
-            img.src = `/sprites/${key}.png`;
-          })
-      )
-    );
+    const loadSingleWithRetry = (
+      key: string,
+      assetUrl: string,
+      attempt = 0
+    ): Promise<void> =>
+      new Promise<void>((resolve) => {
+        let settled = false;
+        const img = new Image();
+        img.decoding = 'async';
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          img.onload = null;
+          img.onerror = null;
+          img.src = '';
+          if (attempt < 1) {
+            void loadSingleWithRetry(key, assetUrl, attempt + 1).then(resolve);
+          } else {
+            resolve();
+          }
+        }, 8000);
+        img.onload = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          this.raw.set(key, img);
+          decoded.push({ key, img });
+          resolve();
+        };
+        img.onerror = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          if (attempt < 1) {
+            void loadSingleWithRetry(key, assetUrl, attempt + 1).then(resolve);
+          } else {
+            resolve();
+          }
+        };
+        img.src = attempt > 0 ? `${assetUrl}?r=${attempt}` : assetUrl;
+      });
+
+    const loadJobs: Array<Promise<void>> = [
+      ...SPRITE_KEYS.map((key) => loadSingleWithRetry(key, `/sprites/${key}.png`)),
+      ...Object.entries(CATALOG_PROP_SPRITE_PATHS).map(([key, url]) =>
+        loadSingleWithRetry(key, url)
+      ),
+    ];
+    await Promise.all(loadJobs);
 
     const nowFn = () =>
       typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -364,7 +530,6 @@ export class SpriteRegistry {
       const { key, img } = decoded[i];
       const built = this.buildSprite(key, img);
       this.images.set(key, built);
-      this.rebuildMip(key, built);
       this.buildAlphaMask(key, img);
 
       if (nowFn() >= deadline && i + 1 < decoded.length) {
@@ -384,16 +549,30 @@ export class SpriteRegistry {
   /**
    * Returns a pre-downsampled 0.5x mipmap when drawing zoomed out so thin warm
    * outlines stay velvety and never shimmer on Retina/mobile screens.
+   * Lazily allocates mipmaps only when zoomed out to save iOS Safari canvas memory.
    */
   getMip(key?: string, targetWidthPx?: number): SpriteSource | undefined {
     if (!key) return undefined;
-    if (typeof targetWidthPx === 'number') {
-      const mip = this.mips.get(key);
-      if (mip && targetWidthPx <= mip.width * 1.15) {
-        return mip;
+    const base = this.images.get(key);
+    if (!base) return undefined;
+    if (
+      typeof targetWidthPx === 'number' &&
+      !key.startsWith('m3_') &&
+      !key.startsWith('ui_icon_') &&
+      base.width >= 200 &&
+      base.height >= 200
+    ) {
+      const mipTargetW = Math.max(64, Math.round(base.width * 0.5));
+      if (targetWidthPx <= mipTargetW * 1.15) {
+        let mip = this.mips.get(key);
+        if (!mip) {
+          this.rebuildMip(key, base);
+          mip = this.mips.get(key);
+        }
+        if (mip) return mip;
       }
     }
-    return this.images.get(key);
+    return base;
   }
 
   /**

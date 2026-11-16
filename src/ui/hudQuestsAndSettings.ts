@@ -82,6 +82,7 @@ import {
   STORY_CUTSCENE_CHAPTERS,
 } from '../sim/simulation';
 import { VALLEY_VILLAGER_PROFILES, getLocalDateKey } from '../sim/simulationData';
+import { yuleTaskProgress } from '../sim/yuleEvent';
 import {
   FRIENDSHIP_CHEST_TOKEN_COST,
   getMinigameKindLabelVi,
@@ -127,9 +128,15 @@ import {
   lookupRealPlayerByFriendCode,
   registerRealPlayerProfileOnline,
 } from './cloudSave';
+import { fetchWeeklyHouseCupStandingsOnline } from './authoritativeClient';
 import type { Match3ModalController } from './match3Modal';
 import type { PuzzleArcadeModalController } from './puzzleArcadeModal';
 import { SeedQuizModalController } from './seedQuizModal';
+import {
+  DEFAULT_YOUTUBE_BGM_URL,
+  parseYouTubeBgmSource,
+  YOUTUBE_BGM_PRESETS,
+} from './youtubeBgmPlayer';
 import {
   BUILD_HUD_CATEGORIES,
   HEATMAP_CYCLE,
@@ -419,7 +426,7 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
               <div style="font-size:15px;font-weight:800;">🏆 Đồng Hồ Ngọc Cúp 4 Nhà Hogwarts</div>
               <div style="font-size:12px;color:var(--ink-soft);">
                 Nhà của bạn: <strong>${playerHouse}</strong>${
-                  serverWeekly ? ` • Tuần HPVN ${serverWeekly.weekKey} (đóng góp: +${serverWeekly.playerContribution} đ)` : ' • Tích điểm khi thu hoạch, giao Đơn Cú & thắng Khảo Thí'
+                  serverWeekly ? ` • Tuần HPVN ${escapeHtml(serverWeekly.weekKey)} (đóng góp: +${serverWeekly.playerContribution} đ)` : ' • Tích điểm khi thu hoạch, giao Đơn Cú & thắng Khảo Thí'
                 }
               </div>
             </div>
@@ -449,10 +456,10 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
           <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
             ${
               canClaimCup
-                ? `<button id="btnClaimHouseCup" type="button" class="brass-btn gold-cta" style="flex:1;">🏆 Nhận Thưởng Cúp Đợt ${st.houseCupMilestoneTier}</button>`
+                ? `<button id="btnClaimHouseCup" type="button" class="brass-btn gold-cta" style="flex:1 1 200px;">🏆 Nhận Thưởng Cúp Đợt ${st.houseCupMilestoneTier}</button>`
                 : ''
             }
-            <button id="btnSyncServerHouseCup" type="button" class="brass-btn" style="font-size:12px;">🔄 Đồng Bộ Bảng Tuần HPVN</button>
+            <button id="btnSyncServerHouseCup" type="button" class="brass-btn" style="flex:1 1 180px;font-size:12px;">🔄 Đồng Bộ Bảng Tuần HPVN</button>
           </div>
         </div>
       `;
@@ -466,16 +473,54 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
         social: getCategoryMetricValue(st, 'social', nowAch),
         collection: getCategoryMetricValue(st, 'collection', nowAch),
       };
+      const catFilterPills: Array<{ id: AchievementCategory | 'all'; label: string }> = [
+        { id: 'all', label: '✨ Tất cả' },
+        { id: 'farm', label: '🌾 Mùa vụ' },
+        { id: 'building', label: '🏰 Kiến trúc' },
+        { id: 'puzzle', label: '🪄 Khảo thí' },
+        { id: 'language', label: '📖 Đa ngữ' },
+        { id: 'social', label: '🦉 Xã hội' },
+        { id: 'collection', label: '🐸 Sưu tầm' },
+      ];
+      const activeCat = hud.activeAchievementFilterCat ?? 'all';
+      const visibleAchievements = ACHIEVEMENT_REGISTRY.filter(
+        (def) => activeCat === 'all' || def.category === activeCat
+      ).slice().sort((a, b) => {
+        const ea = ret.achievements[a.id];
+        const eb = ret.achievements[b.id];
+        const readyA = ea?.unlockedAt && !ea?.claimedAt ? 1 : 0;
+        const readyB = eb?.unlockedAt && !eb?.claimedAt ? 1 : 0;
+        if (readyA !== readyB) return readyB - readyA;
+        return 0;
+      });
       bodyHtml = `
         <div class="quest-card-mini" style="padding:12px;margin-bottom:10px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
             <strong>🎖️ Sổ Vàng 52 Thành Tựu Hang Sóc</strong>
-            <span style="font-size:12px;font-weight:800;color:var(--ink-gold);">Hoàn thành ${codex.completionPct}% (${codex.unlocked}/${codex.total})</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:12px;font-weight:800;color:var(--ink-gold);">Hoàn thành ${codex.completionPct}% (${codex.unlocked}/${codex.total})</span>
+              ${
+                claimableAchCount > 0
+                  ? `<button id="btnClaimAllAchievements" type="button" class="brass-btn gold-cta" style="padding:4px 11px;font-size:11.5px;">🎁 Nhận Tất Cả (${claimableAchCount})</button>`
+                  : ''
+              }
+            </div>
           </div>
-          <progress max="${codex.total}" value="${codex.unlocked}" style="width:100%;"></progress>
+          <progress max="${codex.total}" value="${codex.unlocked}" style="width:100%;margin-bottom:8px;"></progress>
+          <div style="display:flex;flex-wrap:wrap;gap:5px;">
+            ${catFilterPills
+              .map(
+                (p) => `
+                  <button type="button" data-ach-cat="${p.id}" data-active="${activeCat === p.id}" aria-pressed="${activeCat === p.id}" class="brass-btn" style="padding:3px 9px;font-size:11px;">
+                    ${p.label}
+                  </button>
+                `
+              )
+              .join('')}
+          </div>
         </div>
         <div class="aaa-codex-scroll">
-          ${ACHIEVEMENT_REGISTRY.map((def) => {
+          ${visibleAchievements.map((def) => {
             const entry = ret.achievements[def.id];
             const unlocked = Boolean(entry?.unlockedAt);
             const claimed = Boolean(entry?.claimedAt);
@@ -608,21 +653,31 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
 
     box.querySelector('#btnSyncServerHouseCup')?.addEventListener('click', async () => {
       try {
-        const mod = await import('./authoritativeClient');
-        if (typeof mod.fetchWeeklyHouseCupStandingsOnline === 'function') {
-          const snap = await mod.fetchWeeklyHouseCupStandingsOnline();
-          if (snap) {
-            st.weeklyHouseCupServerStandings = snap;
-            hud.sim.saveToStorage();
-            hud.showToast(`🏆 Đã đồng bộ Bảng Cúp 4 Nhà tuần ${snap.weekKey}!`, '🏆');
-            questsUiRenderAlbumDialog(hud);
-            return;
-          }
+        const snap = await fetchWeeklyHouseCupStandingsOnline();
+        if (snap) {
+          st.weeklyHouseCupServerStandings = snap;
+          hud.sim.saveToStorage();
+          hud.showToast(`🏆 Đã đồng bộ Bảng Cúp 4 Nhà tuần ${snap.weekKey}!`, '🏆');
+          questsUiRenderAlbumDialog(hud);
+          return;
         }
         hud.showToast('Đang hiển thị điểm Cúp 4 Nhà tại Thung Lũng của bạn!', '🏆');
       } catch {
         hud.showToast('Chưa kết nối máy chủ HPVN — đang dùng bảng điểm cục bộ.', '🦉');
       }
+    });
+
+    box.querySelector('#btnClaimAllAchievements')?.addEventListener('click', () => {
+      const res = hud.sim.claimAllAchievements();
+      hud.showToast(res.msg, res.ok ? '🎖️' : '⚠️');
+      questsUiRenderAlbumDialog(hud);
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-ach-cat]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        hud.activeAchievementFilterCat = (btn.dataset.achCat as AchievementCategory | 'all') || 'all';
+        questsUiRenderAlbumDialog(hud);
+      });
     });
 
     box.querySelectorAll<HTMLButtonElement>('[data-claim-ach]').forEach((btn) => {
@@ -699,8 +754,12 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
         .map((order) => {
           const isSel = selectedOrder?.id === order.id;
           const isReady = hud.sim.canFulfillFarmOwlOrder(order);
-          const avatarHtml = order.portraitSprite
-            ? `<img src="/sprites/${order.portraitSprite}.png" alt="${escapeHtml(order.senderName)}" class="owl-note-portrait" />`
+          const safePortraitKey =
+            order.portraitSprite && /^[a-z0-9_]+$/i.test(order.portraitSprite)
+              ? order.portraitSprite
+              : null;
+          const avatarHtml = safePortraitKey
+            ? `<img src="/sprites/${safePortraitKey}.png" alt="${escapeHtml(order.senderName)}" class="owl-note-portrait" />`
             : `<span class="owl-note-emoji">${escapeHtml(order.portraitEmoji)}</span>`;
           const miniIcons = order.requirements
             .slice(0, 3)
@@ -878,7 +937,7 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
             <span style="font-size:13.5px;font-weight:800;color:var(--ink);">${escapeHtml(q.giverEmoji)} ${escapeHtml(q.title)}</span>
             <span style="font-size:12px;font-weight:700;color:var(--brand-strong);white-space:nowrap;flex-shrink:0;">${escapeHtml(tag)}</span>
           </div>
-          ${isStory && q.dialogue ? `<div style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.35;">${escapeHtml(q.dialogue)}</div>` : ''}
+          ${isStory && q.dialogue ? `<div style="font-size:12px;color:var(--ink-soft);margin-top:4px;line-height:1.35;">${escapeHtml(q.dialogue)}</div>` : ''}
           <div class="quest-bar"><div class="quest-bar-fill" style="width:${pct}%"></div></div>
           <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;font-weight:700;color:var(--ink);">
             <span>${Math.min(q.progress, q.targetAmount)}/${q.targetAmount}</span>
@@ -927,8 +986,22 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
     const storyChapterTag = story
       ? `Ch.${story.chapter ?? 1} • ${hud.sim.state.storyQuestIndex + 1}/${STORY_QUESTS.length}`
       : '';
+    const yule = hud.sim.getYuleEventStatus();
+    const yuleMain = yule.dayDef?.main;
+    const yuleMainClaimed = yule.day > 0 && yule.claimedMainDays.includes(yule.day);
+    const yuleMainProgress = yuleMain ? yuleTaskProgress(hud.sim.state, yuleMain) : 0;
+    const yuleMainDone = Boolean(yuleMain && yuleMainProgress >= yuleMain.amount);
+    const yuleMainPct = yuleMain ? Math.min(100, Math.round((yuleMainProgress / Math.max(1, yuleMain.amount)) * 100)) : 0;
+    const yuleSideHtml = yule.dayDef?.side.map((task) => {
+      const claimed = yule.claimedSideTaskIds.includes(task.id);
+      const sideProg = yuleTaskProgress(hud.sim.state, task);
+      const sideDone = sideProg >= task.amount;
+      return `<div class="quest-card-mini" style="padding:9px;margin-top:6px;display:flex;align-items:center;justify-content:space-between;gap:8px;"><span style="font-size:12px;font-weight:700;">${escapeHtml(task.titleVi)} <span style="color:var(--ink-soft);">(${Math.min(sideProg, task.amount)}/${task.amount} • +${task.rewardSickles.toLocaleString('vi-VN')} 🪙)</span></span>${claimed ? '<span style="color:#15803d;font-weight:800;">✓</span>' : `<button type="button" class="brass-btn ${sideDone ? 'gold-cta' : ''}" data-yule-side="${escapeHtml(task.id)}" style="padding:4px 8px;font-size:11px;${sideDone ? '' : 'opacity:0.62;'}">Nhận</button>`}</div>`;
+    }).join('') ?? '';
+    const yuleHtml = yule.active && yuleMain ? `<div class="quest-card-mini" style="padding:12px;border:1px solid #d97706;background:linear-gradient(135deg,rgba(254,243,199,.9),rgba(219,234,254,.8));"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><strong>🎄 Yule • Ngày ${yule.day}/36</strong><span style="font-size:11px;color:var(--ink-soft);">${escapeHtml(yule.dayDef?.titleVi ?? '')}</span></div><div style="font-size:13px;font-weight:800;margin-top:7px;">${escapeHtml(yuleMain.titleVi)}</div><div class="quest-bar"><div class="quest-bar-fill" style="width:${yuleMainPct}%"></div></div><div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">${Math.min(yuleMainProgress, yuleMain.amount)}/${yuleMain.amount}</div>${yuleMainClaimed ? '<div style="margin-top:7px;color:#15803d;font-weight:800;">✓ Đã nhận phần thưởng ngày</div>' : `<button type="button" data-yule-main="${yule.day}" class="brass-btn gold-cta" style="width:100%;margin-top:8px;${yuleMainDone ? '' : 'opacity:0.65;'}">🎁 Nhận phần thưởng ngày</button>`}<div style="margin-top:9px;font-size:12px;font-weight:800;">Nhiệm vụ phụ (mỗi nhiệm vụ tối đa 5.000 Sickle)</div>${yuleSideHtml}</div>` : '';
 
     box.innerHTML = `
+      ${yuleHtml}
       ${tabsSwitchHtml}
       ${trialBannerHtml}
       <h3 style="font-size:15px;font-weight:800;margin-bottom:6px;">📖 Cốt Truyện</h3>
@@ -960,6 +1033,20 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
       });
     });
 
+    box.querySelector<HTMLButtonElement>('[data-yule-main]')?.addEventListener('click', () => {
+      const dayNum = Number(box.querySelector<HTMLButtonElement>('[data-yule-main]')?.dataset.yuleMain);
+      const res = hud.sim.claimYuleMainDay(dayNum);
+      hud.showToast(res.msg, res.ok ? '🎄' : '⚠️');
+      questsUiRenderQuestDialog(hud);
+    });
+    box.querySelectorAll<HTMLButtonElement>('[data-yule-side]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const res = hud.sim.claimYuleSideTask(btn.dataset.yuleSide!);
+        hud.showToast(res.msg, res.ok ? '🪙' : '⚠️');
+        questsUiRenderQuestDialog(hud);
+      });
+    });
+
     box.querySelectorAll<HTMLButtonElement>('[data-modal-claim]').forEach((btn) => {
       btn.addEventListener('click', () => {
         hud.sim.claimQuest(btn.dataset.modalClaim!);
@@ -975,12 +1062,8 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
         }
         questsUiRenderQuestDialog(hud);
       } else {
-        hud.showToast(res.msg, res.reason === 'missing_gold' ? '🪙' : '🌟');
-        if (
-          res.reason === 'missing_stars' ||
-          res.reason === 'locked_level' ||
-          res.reason === 'open_match3'
-        ) {
+        hud.showToast(res.msg, res.reason === 'missing_gold' ? '🪙' : res.reason === 'locked_level' ? '🔒' : '🌟');
+        if (res.reason === 'open_match3') {
           (hud.root.querySelector('#questDialog') as HTMLDialogElement).close();
           hud.openTrialMinigame();
         }
@@ -1176,6 +1259,67 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
             <button type="button" data-toon="on" data-active="${toonOn}" aria-pressed="${toonOn}" class="brass-btn" style="padding:4px 8px;font-size:12px;">🎨 Viền nâu</button>
             <button type="button" data-toon="off" data-active="${!toonOn}" aria-pressed="${!toonOn}" class="brass-btn" style="padding:4px 8px;font-size:12px;">🖼️ 2.5D Gốc</button>
           </div>
+
+          <div style="font-size:12px;font-weight:800;margin-top:10px;margin-bottom:5px;color:#78350f;">✨ Engine Đồ Hoạ (Bản đồ chính)</div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px;">
+            ${(['webgl2', 'canvas'] as const)
+              .map((rm) => {
+                const curRm = st.settings.rendererMode ?? 'webgl2';
+                const labels: Record<'webgl2' | 'canvas', string> = {
+                  webgl2: '✨ Engine Mới (WebGL2 2.5D HDR)',
+                  canvas: '🎨 Cổ Điển (Canvas 2D)',
+                };
+                return `<button type="button" data-renderer-mode="${rm}" data-active="${curRm === rm}" aria-pressed="${curRm === rm}" class="brass-btn" style="padding:4px 8px;font-size:12px;">${labels[rm]}</button>`;
+              })
+              .join('')}
+          </div>
+
+          <div style="font-size:12px;font-weight:800;margin-top:10px;margin-bottom:5px;color:#78350f;">🎄 Giao Diện Giáng Sinh (Thung Lũng &amp; 7 Mini-Game)</div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px;">
+            ${(['auto', 'on', 'off'] as const)
+              .map((ym) => {
+                const curMode = st.settings.yuleThemeMode ?? 'auto';
+                const labels: Record<'auto' | 'on' | 'off', string> = {
+                  auto: '🎄 Tự động (15/11–05/01)',
+                  on: '❄️ Luôn bật',
+                  off: '🌿 Tắt',
+                };
+                return `<button type="button" data-yule-theme-mode="${ym}" data-active="${curMode === ym}" aria-pressed="${curMode === ym}" class="brass-btn" style="padding:4px 8px;font-size:12px;">${labels[ym]}</button>`;
+              })
+              .join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="quest-card-mini" style="margin-bottom:14px;">
+        <div style="font-size:13.5px;font-weight:800;margin-bottom:6px;">📺 Nhạc Nền Trực Tiếp Từ YouTube (0 Băng Thông Máy Chủ)</div>
+        <div style="font-size:11.5px;opacity:0.86;margin-bottom:8px;">
+          Phát trực tiếp luồng nhạc từ CDN YouTube về trình duyệt người chơi, không tốn băng thông server của bạn.
+        </div>
+        <label class="switch-row" style="margin-bottom:8px;">
+          <span>🎶 Bật nhạc nền YouTube trực tiếp</span>
+          <input id="swYoutubeBgm" type="checkbox" switch ${st.settings.youtubeBgmEnabled ? 'checked' : ''} />
+        </label>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;">
+          ${YOUTUBE_BGM_PRESETS.map((pr) => {
+            const isCur = (st.settings.youtubeBgmUrl || DEFAULT_YOUTUBE_BGM_URL).trim() === pr.url;
+            return `<button type="button" data-yt-preset="${escapeHtml(pr.url)}" data-active="${isCur}" aria-pressed="${isCur}" class="brass-btn" style="padding:4px 8px;font-size:11.5px;">${escapeHtml(pr.label)}</button>`;
+          }).join('')}
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <input
+            id="inpYoutubeBgmUrl"
+            type="url"
+            value="${escapeHtml(st.settings.youtubeBgmUrl || DEFAULT_YOUTUBE_BGM_URL)}"
+            placeholder="Dán link YouTube (watch?v=..., youtu.be/..., live/..., playlist...)"
+            style="flex:1 1 220px;padding:6px 9px;border-radius:8px;border:1.5px solid var(--border-brass);background:var(--surface-chip-top);color:var(--ink);font-size:12px;"
+          />
+          <button id="btnApplyYoutubeBgm" type="button" class="brass-btn gold-cta" style="padding:6px 11px;font-size:12px;">
+            ▶️ Phát Link
+          </button>
+        </div>
+        <div id="lblYoutubeBgmStatus" style="font-size:11.5px;margin-top:6px;font-weight:700;color:var(--ink-soft);">
+          ${escapeHtml(hud.youtubeBgm?.getStatusText() ?? 'Đang tắt (dùng nhạc nền tích hợp sẵn)')}
         </div>
       </div>
 
@@ -1243,7 +1387,7 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
           ${(['layout_1', 'layout_2', 'layout_3'] as LayoutPresetId[])
             .map((pid, idx) => {
               const saved = st.layoutPresets?.[pid];
-              const title = saved ? saved.label : `Bản Vẽ #${idx + 1}`;
+              const title = saved ? escapeHtml(saved.label) : `Bản Vẽ #${idx + 1}`;
               return `
                 <div class="aaa-slot-card">
                   <div style="font-size:12px;font-weight:800;">${title}</div>
@@ -1347,7 +1491,65 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
     box.querySelector('#swBgm')?.addEventListener('change', (e) => {
       st.settings.bgmEnabled = (e.currentTarget as HTMLInputElement).checked;
       hud.sim.audio.bgmEnabled = st.settings.bgmEnabled;
+      hud.syncYouTubeBgm();
       hud.sim.saveToStorage();
+    });
+
+    box.querySelector('#swYoutubeBgm')?.addEventListener('change', (e) => {
+      const enabled = (e.currentTarget as HTMLInputElement).checked;
+      const inp = box.querySelector('#inpYoutubeBgmUrl') as HTMLInputElement | null;
+      const rawUrl = (inp?.value ?? st.settings.youtubeBgmUrl ?? DEFAULT_YOUTUBE_BGM_URL).trim();
+      if (enabled && !parseYouTubeBgmSource(rawUrl)) {
+        (e.currentTarget as HTMLInputElement).checked = false;
+        hud.showToast('Link YouTube chưa hợp lệ — hãy dán link watch?v=..., youtu.be/... hoặc live/... nhé!', '⚠️');
+        return;
+      }
+      st.settings.youtubeBgmEnabled = enabled;
+      st.settings.youtubeBgmUrl = rawUrl || DEFAULT_YOUTUBE_BGM_URL;
+      if (enabled && !st.settings.bgmEnabled) {
+        st.settings.bgmEnabled = true;
+        hud.sim.audio.bgmEnabled = true;
+        const swBgmEl = box.querySelector('#swBgm') as HTMLInputElement | null;
+        if (swBgmEl) swBgmEl.checked = true;
+      }
+      hud.syncYouTubeBgm();
+      hud.sim.saveToStorage();
+      questsUiRenderSettingsDialog(hud);
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-yt-preset]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const url = btn.dataset.ytPreset || DEFAULT_YOUTUBE_BGM_URL;
+        st.settings.youtubeBgmUrl = url;
+        st.settings.youtubeBgmEnabled = true;
+        if (!st.settings.bgmEnabled) {
+          st.settings.bgmEnabled = true;
+          hud.sim.audio.bgmEnabled = true;
+        }
+        hud.syncYouTubeBgm();
+        hud.sim.saveToStorage();
+        hud.showToast('🎶 Đã chuyển sang phát trực tiếp nhạc nền YouTube!', '🎵');
+        questsUiRenderSettingsDialog(hud);
+      });
+    });
+
+    box.querySelector('#btnApplyYoutubeBgm')?.addEventListener('click', () => {
+      const inp = box.querySelector('#inpYoutubeBgmUrl') as HTMLInputElement | null;
+      const rawUrl = (inp?.value ?? '').trim();
+      if (!parseYouTubeBgmSource(rawUrl)) {
+        hud.showToast('Link YouTube chưa hợp lệ — hãy dán link watch?v=..., youtu.be/... hoặc playlist!', '⚠️');
+        return;
+      }
+      st.settings.youtubeBgmUrl = rawUrl;
+      st.settings.youtubeBgmEnabled = true;
+      if (!st.settings.bgmEnabled) {
+        st.settings.bgmEnabled = true;
+        hud.sim.audio.bgmEnabled = true;
+      }
+      hud.syncYouTubeBgm();
+      hud.sim.saveToStorage();
+      hud.showToast('🎶 Đang phát trực tiếp link nhạc YouTube đã chọn!', '🎵');
+      questsUiRenderSettingsDialog(hud);
     });
 
     box.querySelector('#swSfx')?.addEventListener('change', (e) => {
@@ -1461,8 +1663,41 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
       btn.addEventListener('click', () => {
         const on = btn.dataset.toon === 'on';
         hud.sprites?.setToonEnabled(on);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('hangsoc:toon-changed'));
+        }
         hud.refreshAll();
         questsUiRenderSettingsDialog(hud);
+      });
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-renderer-mode]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const rm = btn.dataset.rendererMode;
+        if (rm === 'webgl2' || rm === 'canvas') {
+          st.settings.rendererMode = rm;
+          hud.sim.saveToStorage();
+          hud.refreshAll();
+          questsUiRenderSettingsDialog(hud);
+        }
+      });
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-yule-theme-mode]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const mode = btn.dataset.yuleThemeMode;
+        if (mode === 'auto' || mode === 'on' || mode === 'off') {
+          st.settings.yuleThemeMode = mode;
+          if (typeof document !== 'undefined') {
+            document.documentElement.dataset.yuleTheme =
+              hud.sim.isYuleVisualThemeActive() || hud.sim.isWinterMainMapActive()
+                ? 'true'
+                : 'false';
+          }
+          hud.sim.saveToStorage();
+          hud.refreshAll();
+          questsUiRenderSettingsDialog(hud);
+        }
       });
     });
 

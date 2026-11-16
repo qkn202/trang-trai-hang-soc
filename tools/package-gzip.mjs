@@ -34,7 +34,10 @@ const COMPRESSIBLE_EXTS = new Set([
   '.ico',
   '.xml',
   '.txt',
+  '.bin',
+  '.md',
 ]);
+const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.ico']);
 const MIN_GZIP_BYTES = 256;
 
 function formatKB(bytes) {
@@ -141,6 +144,35 @@ function main() {
       ? Number(((1 - compressibleGzBytes / compressibleRawBytes) * 100).toFixed(1))
       : 0;
 
+  const imageSummary = {};
+  let totalImageCount = 0;
+  let totalImageBytes = 0;
+  for (const dirName of ['icons', 'paintings', 'sprites']) {
+    const subRoot = path.join(DIST_DIR, dirName);
+    let fileCount = 0;
+    let totalBytes = 0;
+    if (fs.existsSync(subRoot)) {
+      for (const f of walkFiles(subRoot)) {
+        const ext = path.extname(f).toLowerCase();
+        if (!IMAGE_EXTS.has(ext)) continue;
+        fileCount += 1;
+        totalBytes += fs.statSync(f).size;
+      }
+    }
+    totalImageCount += fileCount;
+    totalImageBytes += totalBytes;
+    imageSummary[dirName] = {
+      fileCount,
+      bytes: totalBytes,
+      sizeHuman: formatMB(totalBytes),
+    };
+  }
+  imageSummary.total = {
+    fileCount: totalImageCount,
+    bytes: totalImageBytes,
+    sizeHuman: formatMB(totalImageBytes),
+  };
+
   const manifest = {
     app: 'Trang Trại Hang Sóc & Thung Lũng Hogsmeade',
     builtAt: new Date().toISOString(),
@@ -162,6 +194,7 @@ function main() {
       compressibleGzipHuman: formatKB(compressibleGzBytes),
       gzipSavingsPercent: savedRatio,
     },
+    imageSummary,
   };
 
   fs.writeFileSync(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
@@ -169,6 +202,7 @@ function main() {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('📦 ĐÓNG GÓI GZIP WEBAPP HOÀN TẤT');
   console.log(`  • Nén tĩnh .gz (level 9): ${compressibleCount} file (${formatKB(compressibleRawBytes)} -> ${formatKB(compressibleGzBytes)}, giảm ${savedRatio}%)`);
+  console.log(`  • Ảnh WebApp (dist/)    : ${totalImageCount} ảnh (${formatMB(totalImageBytes)} | icons: ${imageSummary.icons.sizeHuman}, paintings: ${imageSummary.paintings.sizeHuman}, sprites: ${imageSummary.sprites.sizeHuman})`);
   console.log(`  • Tổng tài nguyên dist/ : ${sourceFiles.length} file gốc (${formatMB(totalDistRawBytes)})`);
   console.log(`  • Gói triển khai tar.gz : release/${ARCHIVE_NAME} (${formatMB(archiveBuf.byteLength)})`);
   console.log(`  • SHA-256               : ${sha256}`);

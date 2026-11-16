@@ -15,7 +15,12 @@ import {
   isPlaceholderOrSyntheticFriendCode,
   normalizeDistinctPlayerNickname,
 } from './neighborSocial';
-import { acquireSessionBearerToken, getCachedSessionBearerToken } from '../ui/cloudSave';
+import {
+  acquireSessionBearerToken,
+  getCachedSessionBearerToken,
+  resolveApiUrl,
+} from '../ui/cloudSave';
+import type { ProofOfPlayEnvelope } from './proofOfPlay';
 
 export const SCORED_LEADERBOARD_GAMES: ReadonlyArray<LeaderboardGameId> = [
   'match3',
@@ -1120,7 +1125,12 @@ export function deduplicateCloudLeaderboardEntries(
         return true;
       }
       const exNick = normalizeDistinctPlayerNickname(ex.name);
-      return nick !== null && exNick !== null && nick === exNick;
+      return (
+        nick !== null &&
+        exNick !== null &&
+        nick === exNick &&
+        (isGeneratedGuestUserId(ex.userId.trim()) || isGeneratedGuestUserId(uid))
+      );
     });
 
     if (existingIdx >= 0) {
@@ -1923,7 +1933,7 @@ export async function fetchCloudLeaderboardEntries(
   try {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 3500);
-    const res = await fetch(`${endpoint}?game=${encodeURIComponent(gameId)}`, {
+    const res = await fetch(`${resolveApiUrl(endpoint)}?game=${encodeURIComponent(gameId)}`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
       signal: controller.signal,
@@ -1949,12 +1959,14 @@ export async function fetchCloudLeaderboardEntries(
 export async function submitPlayerCloudLeaderboardEntry(
   state: GameState,
   gameId: LeaderboardGameId,
-  endpoint = '/api/leaderboard'
+  endpoint = '/api/leaderboard',
+  proofOfPlay?: ProofOfPlayEnvelope
 ): Promise<void> {
   if (!isScoredLeaderboardGame(gameId)) return;
   if (state.sandboxMode || state.sandboxTainted) return;
 
-  const entry = buildCloudEntryFromPlayerState(state, gameId);
+  const baseEntry = buildCloudEntryFromPlayerState(state, gameId);
+  const entry = proofOfPlay ? { ...baseEntry, proofOfPlay } : baseEntry;
   const houseExplicit = Boolean(state.minigameLeaderboard?.playerHouseExplicit);
 
   // 1. Ưu tiên gửi qua kênh RPC ủy quyền (`performBurrowAction: submitLeaderboard`) để chạy xuyên iframe `#burrow-ticket` HPVN!
@@ -2006,7 +2018,7 @@ export async function submitPlayerCloudLeaderboardEntry(
     if (bearer) {
       headers.Authorization = `Bearer ${bearer}`;
     }
-    const res = await fetch(endpoint, {
+    const res = await fetch(resolveApiUrl(endpoint), {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),

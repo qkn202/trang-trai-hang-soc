@@ -134,6 +134,7 @@ import { buildSampleCoasterLoop, TrackWaypoint, traceCoasterCircuit } from './co
 import {
   buildHonorGardenSnapshot,
   buildNeighborValleySnapshot,
+  cacheNeighborValleySnapshot,
   CANON_NPC_NEIGHBOR_IDS,
   classifyBuildingGardenHelpKind,
   createFriendNeighborFromCode,
@@ -485,15 +486,19 @@ export function socialSyncVerifiedFriendSnapshot(sim: ParkSimulation, profile: V
     nb.level = Math.max(1, Math.min(100, Math.floor(profile.level || nb.level)));
     nb.house = profile.house || nb.house;
     if (profile.avatarEmoji) nb.avatarEmoji = profile.avatarEmoji;
-    if (Array.isArray(profile.buildings) && profile.buildings.length > 0) {
-      nb.valleyBuildings = profile.buildings;
-    }
-    if (profile.tileOverrides) {
-      nb.valleyTileOverrides = profile.tileOverrides;
-    }
     if (Array.isArray(profile.unlockedZones) && profile.unlockedZones.length > 0) {
       nb.valleyUnlockedZones = profile.unlockedZones;
     }
+    cacheNeighborValleySnapshot({
+      ...nb,
+      valleyBuildings:
+        Array.isArray(profile.buildings) && profile.buildings.length > 0
+          ? profile.buildings
+          : nb.valleyBuildings,
+      valleyTileOverrides: profile.tileOverrides ?? nb.valleyTileOverrides,
+    });
+    delete nb.valleyBuildings;
+    delete nb.valleyTileOverrides;
     sim.saveToStorage();
     return true;
 }

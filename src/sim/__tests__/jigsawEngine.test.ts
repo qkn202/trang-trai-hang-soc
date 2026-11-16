@@ -286,4 +286,14 @@ describe('MasterJigsawEngine & 777 Harry Potter Paintings ("Tranh Ghép Phép Th
       }
     }
   });
+
+  it('P1-5: preserves bonus timeRemainingSec > timeLimitSec across session serialize/deserialize up to JIGSAW_MAX_TIME_SEC', () => {
+    const game = new MasterJigsawEngine(1); // timeLimitSec = 150
+    expect(game.timeLimitSec).toBe(150);
+    game.timeRemainingSec = 240; // Bonus time earned above stage limit
+    const saved = game.exportSession();
+    const restored = new MasterJigsawEngine(1);
+    expect(restored.restoreSession(saved)).toBe(true);
+    expect(restored.timeRemainingSec).toBe(240);
+  });
 });

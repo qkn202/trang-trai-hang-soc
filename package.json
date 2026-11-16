@@ -7,6 +7,7 @@
     "dev": "vite",
     "dev:sandbox": "VITE_ALLOW_SANDBOX=1 vite",
     "build": "tsc && vite build",
+    "compress:images": "python3 tools/compress-images.py",
     "package:gzip": "npm run build && node tools/package-gzip.mjs",
     "preview": "vite preview",
     "test": "vitest run",
@@ -26,6 +27,7 @@
     "vitest": "^5.1.0"
   },
   "dependencies": {
-    "input-switch-polyfill": "^1.12.0"
+    "input-switch-polyfill": "^1.12.0",
+    "pixi.js": "^8.23.0"
   }
 }

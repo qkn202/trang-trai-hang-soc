@@ -46,6 +46,7 @@ const HPVN_CORS_ORIGINS: Array<string | RegExp> = [
   /^https:\/\/([a-z0-9-]+\.)?hpvn\.net$/,
   /^https:\/\/([a-z0-9-]+\.)?hangsoc\.game$/,
   /^https:\/\/(hpvnn[-a-z0-9]*|demo-hpvnn[-a-z0-9]*)\.(web\.app|firebaseapp\.com)$/,
+  /^https:\/\/qkn202\.github\.io$/,
   /^http:\/\/localhost(:\d+)?$/,
   /^http:\/\/127\.0\.0\.1(:\d+)?$/,
 ];

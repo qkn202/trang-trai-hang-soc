@@ -3,7 +3,7 @@
  * Best-effort, không chặn luồng game, hỗ trợ flush khi chuyển tab / đóng trang.
  */
 
-import type { CloudSave } from './cloudSave';
+import { type CloudSave, resolveApiUrl } from './cloudSave';
 
 export interface AnalyticsEvent {
   id: string;
@@ -88,11 +88,13 @@ export class Analytics {
     };
     const bodyStr = JSON.stringify(payload);
 
+    const targetUrl = resolveApiUrl(this.endpoint);
+
     // Khi đóng trang (pagehide / unload): ưu tiên navigator.sendBeacon
     if (isExiting && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
       try {
         const blob = new Blob([bodyStr], { type: 'application/json' });
-        const queued = navigator.sendBeacon(this.endpoint, blob);
+        const queued = navigator.sendBeacon(targetUrl, blob);
         if (queued) return;
       } catch {
         // Fallback sang fetch nếu sendBeacon thất bại
@@ -101,7 +103,7 @@ export class Analytics {
 
     this.isFlushing = true;
     try {
-      await fetch(this.endpoint, {
+      await fetch(targetUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

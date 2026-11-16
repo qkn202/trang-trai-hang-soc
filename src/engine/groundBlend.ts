@@ -68,6 +68,9 @@ const GROUND_BLEND_KEYS = new Set([
   'env_mossy_rock',
   'env_pine_snow',
   'prop_construction_site',
+  'catalog_marble_bench',
+  'catalog_floating_candles_post',
+  'catalog_patronus_ward_lantern',
 ]);
 
 /**
@@ -84,14 +87,22 @@ const BLEND_DEPTH = 0.055;
 const PLINTH_DEPTH = 0.18;
 
 /**
- * Sprites whose artwork ships with a baked-in grass plate.
- * All 172 sprites in public/sprites/ are now Plinth-Free (whomping_willow and
- * unicorn_glade were remastered without plinths), so this set is empty.
+ * Sprites whose artwork ships with a baked-in grass or ice-slab pedestal.
+ * Core 172 Hang Sóc sprites are Plinth-Free; a couple of Yule miniature dioramas
+ * (`yule_mini_hogwarts_castle`, `yule_hogwarts_boathouse_ice`) carry an isometric
+ * ice base that benefits from deeper edge melting (`PLINTH_DEPTH = 0.18`).
  */
-const PLINTH_KEYS = new Set<string>([]);
+const PLINTH_KEYS = new Set<string>([
+  'yule_mini_hogwarts_castle',
+  'yule_hogwarts_boathouse_ice',
+]);
+
+export function isPlinthSpriteKey(key: string): boolean {
+  return PLINTH_KEYS.has(key);
+}
 
 export function shouldGroundBlend(key: string): boolean {
-  return GROUND_BLEND_KEYS.has(key);
+  return GROUND_BLEND_KEYS.has(key) || key.startsWith('yule_');
 }
 
 let sharedBlendReadCanvas: HTMLCanvasElement | null = null;

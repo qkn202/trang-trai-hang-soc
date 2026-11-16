@@ -36,6 +36,13 @@ import {
   WizardingPortraitKey,
 } from '../sim/puzzleArcadeEngine';
 import { MAX_DAILY_MINIGAME_RESCUES } from '../sim/neighborSocial';
+import {
+  isProofOfPlayGameId,
+  ProofOfPlayRecorder,
+  verifyProofOfPlayEnvelope,
+  type ProofOfPlayGameId,
+} from '../sim/proofOfPlay';
+import { MinigameGpuFxBatcher } from '../render/fx/minigameGpuFx';
 import { ParkSimulation } from '../sim/simulation';
 import {
   ACTIVE_MINIGAME_RESUME_KEY,
@@ -406,6 +413,12 @@ export class PuzzleArcadeModalController {
   private greatHallBgImage: HTMLImageElement | null = null;
   private marauderCaroBgImage: HTMLImageElement | null = null;
   private unicornLakeBgImage: HTMLImageElement | null = null;
+  private yuleArcadeAssetsLoaded = false;
+  private yuleChessPieceImages = new Map<string, HTMLImageElement>();
+  private yuleCaroSealImages = new Map<string, HTMLImageElement>();
+  private yuleSudokuRelicImages = new Map<number, HTMLImageElement>();
+  private yuleGreatHallBgImage: HTMLImageElement | null = null;
+  private yuleCaroBgImage: HTMLImageElement | null = null;
 
   public mode: PuzzleArcadeMode = 'caro';
   public sudokuDisplayMode: SudokuDisplayMode = 'num_only';
@@ -468,9 +481,22 @@ export class PuzzleArcadeModalController {
   private victoryClaimed = false;
   public rescueContext: MinigameRescueContext | null = null;
 
-  public resetSession(): void {
+  private terminateChessWorker(): void {
     this.pendingChessWorkerReqId = null;
+    if (this.chessWorker) {
+      try {
+        this.chessWorker.terminate();
+      } catch {
+        // Ignore worker termination errors
+      }
+      this.chessWorker = null;
+    }
+  }
+
+  public resetSession(): void {
+    this.terminateChessWorker();
     this.aiThinkTimer = 0;
+    this.stopLoop();
     this.cleanupJigsawTrayDrag();
     this.sudokuEngine = null;
     this.caroEngine = null;
@@ -482,7 +508,8 @@ export class PuzzleArcadeModalController {
     this.victoryClaimed = false;
     this.rescueContext = null;
     this.rescueVictoryOutcome = null;
-    const dlg = this.root.querySelector('#puzzleDialog') as HTMLDialogElement | null;
+    this.popRecorders.clear();
+    const dlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
     if (dlg?.open) {
       dlg.close();
     }
@@ -494,6 +521,9 @@ export class PuzzleArcadeModalController {
     buildReduction?: BuildReductionResult;
   } | null = null;
   private lastSeenSosRescuedAt = 0;
+  private popRecorders = new Map<ProofOfPlayGameId, ProofOfPlayRecorder>();
+  private popActionSeq = 0;
+  private gpuFx: MinigameGpuFxBatcher | null = null;
   private victorySummary: {
     starsEarned: number;
     sandEarned: number;
@@ -572,7 +602,7 @@ export class PuzzleArcadeModalController {
     }
     dlg?.addEventListener('close', () => {
       dlg.returnValue = '';
-      this.pendingChessWorkerReqId = null;
+      this.terminateChessWorker();
       this.hitStopTimer = 0;
       this.inspectingTurningPoint = false;
       this.cleanupJigsawTrayDrag();
@@ -1152,8 +1182,70 @@ export class PuzzleArcadeModalController {
     }
   }
 
+  private isYuleSkinActive(): boolean {
+    return this.sim.isYuleVisualThemeActive();
+  }
+
+  private ensureYuleArcadeAssetsLoaded(): void {
+    if (this.yuleArcadeAssetsLoaded || typeof Image === 'undefined') return;
+    this.yuleArcadeAssetsLoaded = true;
+
+    const markReady = () => {
+      this.forceImmediateRedraw = true;
+    };
+
+    const yHall = new Image();
+    yHall.decoding = 'async';
+    yHall.onload = markReady;
+    yHall.src = '/paintings/yule_great_hall_chess_bg.jpg';
+    this.yuleGreatHallBgImage = yHall;
+
+    const yCaroBg = new Image();
+    yCaroBg.decoding = 'async';
+    yCaroBg.onload = markReady;
+    yCaroBg.src = '/paintings/yule_caro_bg.jpg';
+    this.yuleCaroBgImage = yCaroBg;
+
+    for (const key of HP_CHESS_PIECE_KEYS) {
+      const pImg = new Image();
+      pImg.decoding = 'async';
+      pImg.onload = markReady;
+      pImg.src = `/paintings/chess-yule/${key}.png`;
+      this.yuleChessPieceImages.set(key, pImg);
+    }
+
+    for (const sealKey of HP_CARO_SEAL_KEYS) {
+      const sImg = new Image();
+      sImg.decoding = 'async';
+      sImg.onload = markReady;
+      sImg.src = `/paintings/caro-yule/${sealKey}.png`;
+      this.yuleCaroSealImages.set(sealKey, sImg);
+    }
+
+    for (let d = 1; d <= 9; d++) {
+      const rImg = new Image();
+      rImg.decoding = 'async';
+      rImg.onload = markReady;
+      rImg.src = `/paintings/sudoku-yule/relic_${d}.png`;
+      this.yuleSudokuRelicImages.set(d, rImg);
+    }
+  }
+
+  private getSudokuRelicImage(digit: number): HTMLImageElement | null {
+    if (!this.isYuleSkinActive()) return null;
+    this.ensureYuleArcadeAssetsLoaded();
+    const img = this.yuleSudokuRelicImages.get(digit);
+    if (img && img.complete && img.naturalWidth > 0) return img;
+    return null;
+  }
+
   private getCaroSealImage(stone: 1 | 2): HTMLImageElement | null {
     const key = stone === 1 ? 'phoenix_seal' : 'dark_mark_seal';
+    if (this.isYuleSkinActive()) {
+      this.ensureYuleArcadeAssetsLoaded();
+      const yImg = this.yuleCaroSealImages.get(key);
+      if (yImg && yImg.complete && yImg.naturalWidth > 0) return yImg;
+    }
     const img = this.caroSealImages.get(key);
     if (img && img.complete && img.naturalWidth > 0) return img;
     return null;
@@ -1282,6 +1374,9 @@ export class PuzzleArcadeModalController {
     }
     if (!this.rescueContext) {
       this.persistModeSession(this.mode, false);
+    }
+    if (this.mode === 'chess' && nextMode !== 'chess') {
+      this.terminateChessWorker();
     }
     this.mode = nextMode;
     this.sim.state.puzzleArcade.activeMode = nextMode;
@@ -1461,6 +1556,11 @@ export class PuzzleArcadeModalController {
   }
 
   private renderTurningPointCardHtml(rev: TurningPointReview): string {
+    const isOptimalMove = rev.playedCoordVi.trim() === rev.recommendedCoordVi.trim();
+    const pillsHtml = isOptimalMove
+      ? `<span class="pa-review-pill best">✨ Nước chuẩn tối ưu: <strong>${escapeHtml(rev.recommendedCoordVi)}</strong></span>`
+      : `<span class="pa-review-pill">⚡ <strong>${escapeHtml(rev.playedCoordVi)}</strong></span>
+          <span class="pa-review-pill best">✨ <strong>${escapeHtml(rev.recommendedCoordVi)}</strong></span>`;
     return `
       <div class="pa-review-card">
         <div class="pa-review-head">
@@ -1473,10 +1573,7 @@ export class PuzzleArcadeModalController {
               : ''
           }
         </div>
-        <div class="pa-review-pills">
-          <span class="pa-review-pill">⚡ <strong>${escapeHtml(rev.playedCoordVi)}</strong></span>
-          <span class="pa-review-pill best">✨ <strong>${escapeHtml(rev.recommendedCoordVi)}</strong></span>
-        </div>
+        <div class="pa-review-pills">${pillsHtml}</div>
       </div>
     `;
   }
@@ -1864,11 +1961,58 @@ export class PuzzleArcadeModalController {
     this.companionCharge = 0;
     this.snackPieUsedThisAttempt = false;
     this.lossStreakResetForStage = false;
+    if (isProofOfPlayGameId(this.mode)) {
+      const stg =
+        this.mode === 'sudoku'
+          ? (this.sudokuEngine?.stage ?? 1)
+          : this.mode === 'blocks'
+            ? (this.onetEngine?.stage ?? 1)
+            : (this.jigsawEngine?.stage ?? 1);
+      this.popRecorders.set(this.mode, new ProofOfPlayRecorder(this.mode, stg));
+    }
   }
 
-  private bumpCompanionCharge(): void {
+  private bumpCompanionCharge(actionHint = 0): void {
     const comp = this.sim.getActiveMinigameCompanion();
     this.companionCharge = Math.min(comp.chargeEveryMoves, this.companionCharge + 1);
+    if (isProofOfPlayGameId(this.mode)) {
+      let rec = this.popRecorders.get(this.mode);
+      const stg =
+        this.mode === 'sudoku'
+          ? (this.sudokuEngine?.stage ?? 1)
+          : this.mode === 'blocks'
+            ? (this.onetEngine?.stage ?? 1)
+            : (this.jigsawEngine?.stage ?? 1);
+      if (!rec || rec.stage !== stg) {
+        rec = new ProofOfPlayRecorder(this.mode, stg);
+        this.popRecorders.set(this.mode, rec);
+      }
+      this.popActionSeq = (this.popActionSeq + 1) & 0xffff;
+      rec.recordMove(((this.popActionSeq * 131) ^ (actionHint & 0xffff) ^ stg) & 0xffff);
+      if (this.mode === 'jigsaw') {
+        const dlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLElement | null;
+        if (dlg) {
+          if (!this.gpuFx) {
+            this.gpuFx = new MinigameGpuFxBatcher(dlg);
+          }
+          const boardEl = dlg.querySelector('#puzzleArcadeCanvas') as HTMLElement | null;
+          const rect = boardEl?.getBoundingClientRect();
+          const cx = rect ? rect.left + rect.width * 0.5 : (window.innerWidth || 800) * 0.5;
+          const cy = rect ? rect.top + rect.height * 0.5 : (window.innerHeight || 600) * 0.5;
+          this.gpuFx.spawnStarburst(cx, cy, 24, 0, 0.95);
+        }
+      }
+    }
+  }
+
+  private sealValidProofOfPlay(
+    gameId: ProofOfPlayGameId,
+    sessionScore: number
+  ) {
+    const rec = this.popRecorders.get(gameId);
+    if (!rec || rec.recordedMoves < 1) return undefined;
+    const sealed = rec.seal(sessionScore);
+    return verifyProofOfPlayEnvelope(sealed, { expectedGameId: gameId }).ok ? sealed : undefined;
   }
 
   private checkAndClaimVictory(): void {
@@ -1900,17 +2044,19 @@ export class PuzzleArcadeModalController {
       this.victoryClaimed = true;
       this.sim.state.puzzleArcade.sudokuSession = null;
       this.clearActiveModalResumeMarker();
+      const sudokuScore = Math.max(
+        1200,
+        2800 -
+          this.sudokuEngine.mistakesCount * 220 -
+          Math.min(600, Math.floor(this.sudokuEngine.elapsedSec * 1.2))
+      );
       this.victorySummary = this.sim.completePuzzleArcadeVictory(
         'sudoku',
         this.sudokuEngine.reward,
         {
-          sessionScore: Math.max(
-            1200,
-            2800 -
-              this.sudokuEngine.mistakesCount * 220 -
-              Math.min(600, Math.floor(this.sudokuEngine.elapsedSec * 1.2))
-          ),
+          sessionScore: sudokuScore,
           efficiency: this.sudokuEngine.mistakesCount,
+          proofOfPlay: this.sealValidProofOfPlay('sudoku', sudokuScore),
         }
       );
       this.spawnCelebrationConfetti();
@@ -1949,12 +2095,14 @@ export class PuzzleArcadeModalController {
       this.victoryClaimed = true;
       this.sim.state.puzzleArcade.onetSession = null;
       this.clearActiveModalResumeMarker();
+      const onetScore = Math.max(1200, this.onetEngine.score);
       this.victorySummary = this.sim.completePuzzleArcadeVictory(
         'blocks',
         this.onetEngine.reward,
         {
-          sessionScore: Math.max(1200, this.onetEngine.score),
+          sessionScore: onetScore,
           efficiency: Math.max(1, this.onetEngine.maxCombo),
+          proofOfPlay: this.sealValidProofOfPlay('blocks', onetScore),
         }
       );
       this.spawnCelebrationConfetti();
@@ -1965,12 +2113,14 @@ export class PuzzleArcadeModalController {
       this.cleanupJigsawTrayDrag();
       this.sim.state.puzzleArcade.jigsawSession = null;
       this.clearActiveModalResumeMarker();
+      const jigsawScore = Math.max(1200, this.jigsawEngine.score);
       this.victorySummary = this.sim.completePuzzleArcadeVictory(
         'jigsaw',
         this.jigsawEngine.reward,
         {
-          sessionScore: Math.max(1200, this.jigsawEngine.score),
+          sessionScore: jigsawScore,
           efficiency: Math.max(1, this.jigsawEngine.maxCombo),
+          proofOfPlay: this.sealValidProofOfPlay('jigsaw', jigsawScore),
         }
       );
       this.spawnCelebrationConfetti();
@@ -2134,7 +2284,11 @@ export class PuzzleArcadeModalController {
 
     const modalTitle = this.root.querySelector('#puzzleArcadeDialogTitle') as HTMLElement | null;
     if (modalTitle) {
-      if (this.mode === 'chess') {
+      if (this.isYuleSkinActive()) {
+      this.ensureYuleArcadeAssetsLoaded();
+    }
+
+    if (this.mode === 'chess') {
         modalTitle.innerHTML =
           '<img src="/paintings/chess/wk.png" alt="" style="width:28px;height:32px;object-fit:contain;vertical-align:-8px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Cờ Phù Thủy';
       } else if (this.mode === 'sudoku') {
@@ -2221,7 +2375,7 @@ export class PuzzleArcadeModalController {
     if (this.mode === 'sudoku' && this.sudokuEngine) {
       const se = this.sudokuEngine;
       stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${se.stage}/${MAX_MINIGAME_STAGE} • ${se.classicDifficultyVi}`;
-      stageSubtitle = `❌ Lỗi: <strong id="paSudokuMistakes" class="${se.mistakesCount > 0 ? 'pa-err-inline' : ''}">${se.mistakesCount}/${se.maxMistakes}</strong> • ⏱ <strong id="paSudokuTimer">${se.formatElapsedTime()}</strong>`;
+      stageSubtitle = `📝 <strong id="paSudokuFilled">${se.filledCount}/81</strong> • ❌ Lỗi nộp: <strong id="paSudokuMistakes" class="${se.mistakesCount > 0 ? 'pa-err-inline' : ''}">${se.mistakesCount}/${se.maxMistakes}</strong> • ⏱ <strong id="paSudokuTimer">${se.formatElapsedTime()}</strong>`;
       const canSudokuHint =
         se.status === 'playing' && (st.sandboxMode || se.freeHintsLeft + se.paidHintsLeft > 0);
       const talismanLocked = se.talismanUsed || usedTodayInMode;
@@ -2258,9 +2412,15 @@ export class PuzzleArcadeModalController {
       `;
       if (se.status === 'lost') {
         statusBannerHtml += `
-          <div class="pa-alert-strip">
-            <span>❌ Quá giới hạn lỗi (<strong>${se.mistakesCount}/${se.maxMistakes}</strong>)! Hoàn tác hoặc xoá ô sai để chơi tiếp.</span>
+          <div class="pa-alert-strip" role="status" aria-live="polite">
+            <span>❌ Quá giới hạn kiểm tra sai (<strong>${se.mistakesCount}/${se.maxMistakes}</strong>)! Bấm ↩️ Hoàn Tác hoặc 🧹 Xoá để tự dò lại (không hiện ô sai).</span>
             ${canTalisman ? `<button id="btnPaRescuePhoenixTalisman" type="button" class="pa-tool-btn talisman">🔥 Bùa (×${talismanDisp})</button>` : ''}
+          </div>
+        `;
+      } else if (se.fullBoardMismatch) {
+        statusBannerHtml += `
+          <div class="pa-alert-strip" role="status" aria-live="polite">
+            <span>⚠️ Đã điền kín <strong>81/81</strong> ô nhưng lời giải chưa đúng (<strong>${se.mistakesCount}/${se.maxMistakes}</strong>) — hãy tự rà lại hàng, cột &amp; khối 3×3!</span>
           </div>
         `;
       }
@@ -2529,8 +2689,8 @@ export class PuzzleArcadeModalController {
                   : ''
               }
             </div>
-            <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:6px;">
-              <button id="btnPaBackToPark" type="button" class="brass-btn gold-cta" style="padding:9px 18px;font-size:13.5px;">
+            <div class="m3-overlay-actions">
+              <button id="btnPaBackToPark" type="button" class="brass-btn gold-cta m3-overlay-btn-full">
                 🏡 Về Vườn
               </button>
             </div>
@@ -2576,18 +2736,18 @@ export class PuzzleArcadeModalController {
                 }
               </div>
               ${winReview ? this.renderTurningPointCardHtml(winReview) : ''}
-              <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:6px;">
-                <button id="btnPaNextStage" type="button" class="brass-btn gold-cta" style="padding:9px 18px;font-size:13.5px;">
+              <div class="m3-overlay-actions">
+                <button id="btnPaNextStage" type="button" class="brass-btn gold-cta m3-overlay-btn-primary">
                   ${vs.isMasterReplay || curInfo.isMaxed ? `👑 Chơi Lại` : `▶️ Màn ${vs.nextStage}`}
                 </button>
                 ${
                   isScoredMode
-                    ? `<button id="btnPaVictoryLeaderboard" type="button" class="brass-btn" style="padding:9px 14px;font-size:13px;">
+                    ? `<button id="btnPaVictoryLeaderboard" type="button" class="brass-btn m3-overlay-btn-half">
                         🏆 #${activeModeRank}
                       </button>`
                     : ''
                 }
-                <button id="btnPaBackToPark" type="button" class="brass-btn" style="padding:9px 14px;font-size:13px;">
+                <button id="btnPaBackToPark" type="button" class="brass-btn m3-overlay-btn-half">
                   🏡 Về Vườn (${st.sandboxMode ? '∞' : st.match3.stars} 🌟)
                 </button>
               </div>
@@ -2662,6 +2822,9 @@ export class PuzzleArcadeModalController {
                 <button id="btnPaOpenLeaderboard" type="button" class="m3-res-chip minigame-lb-chip" title="${isScoredMode ? 'Bảng Xếp Hạng môn này' : 'Bảng Xếp Hạng 4 Môn Tính Điểm (Bùa Gặt • Số Học • Sinh Vật • Tranh Ghép)'}">
                   <span>🏆</span>
                   <strong id="paRankText">${isScoredMode ? `#${activeModeRank}` : '4 Môn'}</strong>
+                </button>
+                <button id="btnPaToggleYuleSkin" type="button" class="m3-res-chip yule-skin-toggle-pill ${this.isYuleSkinActive() ? 'is-yule-active' : ''}" aria-pressed="${this.isYuleSkinActive()}" title="Bật/Tắt giao diện Giáng Sinh">
+                  <span>🎄</span>
                 </button>
               </div>
               <form method="dialog" class="pa-inline-close-form">
@@ -2738,6 +2901,10 @@ export class PuzzleArcadeModalController {
 
     if (this.mode === 'sudoku' && this.sudokuEngine) {
       const se = this.sudokuEngine;
+      const filledEl = box.querySelector('#paSudokuFilled');
+      if (filledEl) {
+        filledEl.textContent = `${se.filledCount}/81`;
+      }
       const mistEl = box.querySelector('#paSudokuMistakes');
       if (mistEl) {
         mistEl.textContent = `${se.mistakesCount}/${se.maxMistakes}`;
@@ -2908,6 +3075,20 @@ export class PuzzleArcadeModalController {
     box.querySelector('#btnPaOpenLeaderboard')?.addEventListener('click', () => {
       this.sim.audio.playClick();
       this.onOpenLeaderboard?.(this.mode);
+    });
+
+    box.querySelector('#btnPaToggleYuleSkin')?.addEventListener('click', () => {
+      this.sim.audio.playClick();
+      const active = this.sim.toggleYuleVisualTheme();
+      if (typeof document !== 'undefined') {
+        document.documentElement.dataset.yuleTheme = active ? 'true' : 'false';
+      }
+      if (active) {
+        this.ensureYuleArcadeAssetsLoaded();
+      }
+      this.forceImmediateRedraw = true;
+      this.onParentRefresh();
+      this.renderDOM();
     });
 
     box.querySelector('#btnPaVictoryLeaderboard')?.addEventListener('click', () => {
@@ -3789,6 +3970,7 @@ export class PuzzleArcadeModalController {
       return;
     }
     const wasLost = se.status === 'lost';
+    const wasFullMismatch = se.fullBoardMismatch;
     if (se.undo()) {
       this.persistSudokuSession(true);
       if (se.selected) {
@@ -3798,7 +3980,7 @@ export class PuzzleArcadeModalController {
         this.spawnBurst(cx, cy, '#fcd34d', 10);
       }
       this.sim.audio.playClick();
-      if (wasLost) {
+      if (wasLost || wasFullMismatch !== se.fullBoardMismatch) {
         this.renderDOM();
       } else {
         this.updateLiveCountersOnly();
@@ -3843,6 +4025,7 @@ export class PuzzleArcadeModalController {
 
   private applySudokuDigit(digit: number): void {
     if (!this.sudokuEngine || this.sudokuEngine.status !== 'playing') return;
+    const wasFullMismatch = this.sudokuEngine.fullBoardMismatch;
     const prevRem = this.sudokuEngine.getRemainingDigitCounts()[digit] ?? 0;
     const res = this.sudokuEngine.inputDigit(digit);
     if (!res.changed) {
@@ -3851,42 +4034,51 @@ export class PuzzleArcadeModalController {
       return;
     }
     const sel = this.sudokuEngine.selected;
-    if (sel) {
-      const sm = this.getSudokuLayoutMetrics();
-      const cx = sm.boardX + (sel.c + 0.5) * sm.cellPx;
-      const cy = sm.boardY + (sel.r + 0.5) * sm.cellPx;
-      this.spawnBurst(
-        cx,
-        cy,
-        res.conflict ? '#dc2626' : this.sudokuEngine.pencilMode ? '#d97706' : '#fbbf24',
-        res.conflict ? 8 : 12
-      );
-      const nextRem = this.sudokuEngine.getRemainingDigitCounts()[digit] ?? 0;
-      if (!res.conflict && prevRem === 1 && nextRem === 0) {
-        const padRect = this.sudokuPadRects.get(digit);
-        if (padRect) {
-          this.spawnBurst(padRect.x + padRect.w * 0.5, padRect.y + padRect.h * 0.5, '#fde047', 18);
-        }
-      }
-    }
-    if (res.conflict) {
+    const sm = this.getSudokuLayoutMetrics();
+    if (res.fullBoardError) {
+      // Tuyệt đối không bắn tia đỏ vào ô vừa bấm để tránh hiểu nhầm/lộ vị trí sai — chỉ hiệu ứng trung tính giữa bàn
+      this.spawnBurst(sm.boardX + sm.boardPx * 0.5, sm.boardY + sm.boardPx * 0.5, '#f59e0b', 14);
       this.sim.audio.playClick();
     } else {
+      if (sel) {
+        const cx = sm.boardX + (sel.c + 0.5) * sm.cellPx;
+        const cy = sm.boardY + (sel.r + 0.5) * sm.cellPx;
+        this.spawnBurst(cx, cy, this.sudokuEngine.pencilMode ? '#d97706' : '#fbbf24', 12);
+        const nextRem = this.sudokuEngine.getRemainingDigitCounts()[digit] ?? 0;
+        if (prevRem === 1 && nextRem === 0) {
+          const padRect = this.sudokuPadRects.get(digit);
+          if (padRect) {
+            this.spawnBurst(padRect.x + padRect.w * 0.5, padRect.y + padRect.h * 0.5, '#fde047', 18);
+          }
+        }
+      }
       this.bumpCompanionCharge();
       this.sim.audio.playMatchPop(1);
     }
+
     if (res.won) {
       this.checkAndClaimVictory();
     } else if (res.lost) {
       this.persistSudokuSession(true);
       this.showToast(
-        `❌ Đã sai ${this.sudokuEngine.mistakesCount}/${this.sudokuEngine.maxMistakes} lần — Bấm ↩️ Hoàn Tác hoặc 🧹 Xoá để sửa!`,
+        `❌ Đã điền kín 81/81 ô nhưng chưa đúng (${this.sudokuEngine.mistakesCount}/${this.sudokuEngine.maxMistakes} lần) — bấm ↩️ Hoàn Tác hoặc 🧹 Xoá để tự dò lại!`,
         '❌'
+      );
+      this.renderDOM();
+    } else if (res.fullBoardError) {
+      this.persistSudokuSession(true);
+      this.showToast(
+        `⚠️ Đã điền đủ 81/81 ô nhưng bảng còn sai sót (${this.sudokuEngine.mistakesCount}/${this.sudokuEngine.maxMistakes}) — hãy tự kiểm tra lại!`,
+        '⚠️'
       );
       this.renderDOM();
     } else {
       this.persistSudokuSession(true);
-      this.updateLiveCountersOnly();
+      if (wasFullMismatch !== this.sudokuEngine.fullBoardMismatch) {
+        this.renderDOM();
+      } else {
+        this.updateLiveCountersOnly();
+      }
     }
   }
 
@@ -3895,6 +4087,7 @@ export class PuzzleArcadeModalController {
     if (!se || (se.status !== 'playing' && se.status !== 'lost')) return;
     const wasLost = se.status === 'lost';
     const wasEraseMode = se.eraseMode;
+    const wasFullMismatch = se.fullBoardMismatch;
     if (se.clearSelectedCell()) {
       se.eraseMode = false;
       this.persistSudokuSession(true);
@@ -3905,7 +4098,7 @@ export class PuzzleArcadeModalController {
         this.spawnBurst(cx, cy, '#e7cba0', 10);
       }
       this.sim.audio.playClick();
-      if (wasLost || wasEraseMode) {
+      if (wasLost || wasEraseMode || wasFullMismatch !== se.fullBoardMismatch) {
         this.renderDOM();
       } else {
         this.updateLiveCountersOnly();
@@ -4010,10 +4203,10 @@ export class PuzzleArcadeModalController {
       ) {
         const c = Math.min(8, Math.max(0, Math.floor((vx - sm.boardX) / sm.cellPx)));
         const r = Math.min(8, Math.max(0, Math.floor((vy - sm.boardY) / sm.cellPx)));
-        const isSameSelected = se.selected?.r === r && se.selected?.c === c;
-        if (se.eraseMode || (isSameSelected && se.isWrongCell(r, c))) {
+        if (se.eraseMode) {
           const wasLost = se.status === 'lost';
           const wasErase = se.eraseMode;
+          const wasFullMismatch = se.fullBoardMismatch;
           if (se.clearCellAt(r, c)) {
             se.eraseMode = false;
             se.selectCell(r, c);
@@ -4022,7 +4215,7 @@ export class PuzzleArcadeModalController {
             const cy = sm.boardY + (r + 0.5) * sm.cellPx;
             this.spawnBurst(cx, cy, '#e7cba0', 10);
             this.sim.audio.playClick();
-            if (wasLost || wasErase) {
+            if (wasLost || wasErase || wasFullMismatch !== se.fullBoardMismatch) {
               this.renderDOM();
             } else {
               this.updateLiveCountersOnly();
@@ -4893,6 +5086,10 @@ export class PuzzleArcadeModalController {
       ctx.translate(Math.sin(now * 0.095) * amp, Math.cos(now * 0.125) * amp * 0.72);
     }
 
+    if (this.isYuleSkinActive()) {
+      this.ensureYuleArcadeAssetsLoaded();
+    }
+
     if (this.mode === 'chess') {
       this.drawGreatHallChessBackdrop(ctx, virt.w, virt.h);
     } else if (this.mode === 'sudoku') {
@@ -4932,16 +5129,25 @@ export class PuzzleArcadeModalController {
     h: number
   ): void {
     ctx.save();
-    const img = this.unicornLakeBgImage;
+    const isYule = this.isYuleSkinActive();
+    const img = isYule && this.yuleGreatHallBgImage?.complete && this.yuleGreatHallBgImage.naturalWidth > 0
+      ? this.yuleGreatHallBgImage
+      : this.unicornLakeBgImage;
     if (img && img.complete && img.naturalWidth > 0) {
       const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
       const dw = img.naturalWidth * scale;
       const dh = img.naturalHeight * scale;
       ctx.drawImage(img, (w - dw) * 0.5, (h - dh) * 0.5, dw, dh);
       const scrim = ctx.createLinearGradient(0, 0, 0, h);
-      scrim.addColorStop(0, 'rgba(15, 36, 42, 0.52)');
-      scrim.addColorStop(0.5, 'rgba(20, 44, 38, 0.42)');
-      scrim.addColorStop(1, 'rgba(24, 18, 12, 0.62)');
+      if (isYule) {
+        scrim.addColorStop(0, 'rgba(6, 38, 28, 0.58)');
+        scrim.addColorStop(0.5, 'rgba(10, 48, 36, 0.44)');
+        scrim.addColorStop(1, 'rgba(28, 12, 16, 0.62)');
+      } else {
+        scrim.addColorStop(0, 'rgba(15, 36, 42, 0.52)');
+        scrim.addColorStop(0.5, 'rgba(20, 44, 38, 0.42)');
+        scrim.addColorStop(1, 'rgba(24, 18, 12, 0.62)');
+      }
       ctx.fillStyle = scrim;
       ctx.fillRect(0, 0, w, h);
     } else {
@@ -5030,11 +5236,18 @@ export class PuzzleArcadeModalController {
     ctx.restore();
 
     // 1. Classic Pikachu Sharp Rectangular Dark Recessed Board Tray (thin border, zero rounded corners)
+    const isYuleOnet = this.isYuleSkinActive();
     ctx.save();
     const trayGrad = ctx.createLinearGradient(0, m.frameY, 0, m.frameY + m.frameH);
-    trayGrad.addColorStop(0, 'rgba(17, 25, 22, 0.94)');
-    trayGrad.addColorStop(0.5, 'rgba(12, 18, 16, 0.95)');
-    trayGrad.addColorStop(1, 'rgba(8, 13, 12, 0.97)');
+    if (isYuleOnet) {
+      trayGrad.addColorStop(0, 'rgba(9, 44, 29, 0.95)');
+      trayGrad.addColorStop(0.5, 'rgba(6, 32, 22, 0.96)');
+      trayGrad.addColorStop(1, 'rgba(15, 23, 42, 0.97)');
+    } else {
+      trayGrad.addColorStop(0, 'rgba(17, 25, 22, 0.94)');
+      trayGrad.addColorStop(0.5, 'rgba(12, 18, 16, 0.95)');
+      trayGrad.addColorStop(1, 'rgba(8, 13, 12, 0.97)');
+    }
     ctx.fillStyle = trayGrad;
     ctx.shadowColor = 'rgba(0, 0, 0, 0.48)';
     ctx.shadowBlur = 10;
@@ -5042,12 +5255,12 @@ export class PuzzleArcadeModalController {
     ctx.fillRect(m.frameX, m.frameY, m.frameW, m.frameH);
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(217, 119, 6, 0.78)';
+    ctx.lineWidth = isYuleOnet ? 1.5 : 1;
+    ctx.strokeStyle = isYuleOnet ? 'rgba(251, 191, 36, 0.88)' : 'rgba(217, 119, 6, 0.78)';
     ctx.strokeRect(m.frameX + 0.5, m.frameY + 0.5, m.frameW - 1, m.frameH - 1);
 
     // Subtle hairline inner corridor guide along the 1-cell walkable outer border
-    ctx.strokeStyle = 'rgba(251, 191, 36, 0.16)';
+    ctx.strokeStyle = isYuleOnet ? 'rgba(186, 230, 253, 0.28)' : 'rgba(251, 191, 36, 0.16)';
     ctx.lineWidth = 0.65;
     ctx.strokeRect(m.originX - 2, m.originY - 2, m.boardW + 4, m.boardH + 4);
     ctx.restore();
@@ -5162,10 +5375,10 @@ export class PuzzleArcadeModalController {
       ctx.lineCap = 'square';
       ctx.lineJoin = 'miter';
 
-      // Outer crimson-red electric glow
-      ctx.shadowColor = '#dc2626';
+      // Outer electric glow (Yule golden-ice starlight vs Classic crimson-red)
+      ctx.shadowColor = isYuleOnet ? '#f59e0b' : '#dc2626';
       ctx.shadowBlur = 10;
-      ctx.strokeStyle = '#dc2626';
+      ctx.strokeStyle = isYuleOnet ? '#f59e0b' : '#dc2626';
       ctx.globalAlpha = alpha * 0.9;
       ctx.lineWidth = 6.2 * (1 - t * 0.3);
       ctx.beginPath();
@@ -5175,24 +5388,24 @@ export class PuzzleArcadeModalController {
       }
       ctx.stroke();
 
-      // Mid vivid red body
+      // Mid vivid body
       ctx.shadowBlur = 0;
-      ctx.strokeStyle = '#ef4444';
+      ctx.strokeStyle = isYuleOnet ? '#38bdf8' : '#ef4444';
       ctx.globalAlpha = alpha;
       ctx.lineWidth = 3.6 * (1 - t * 0.25);
       ctx.stroke();
 
-      // Hot white-rose lightning core
-      ctx.strokeStyle = '#fff1f2';
+      // Hot core
+      ctx.strokeStyle = isYuleOnet ? '#fffbeb' : '#fff1f2';
       ctx.globalAlpha = alpha;
       ctx.lineWidth = 1.5 * (1 - t * 0.25);
       ctx.stroke();
 
-      // Crisp square spark nodes at endpoints & 90° turns
+      // Crisp spark nodes at endpoints & 90° turns
       for (const pt of beam.points) {
         const outerR = 3.6 * (1 - t * 0.35);
         const innerR = 1.7 * (1 - t * 0.35);
-        ctx.fillStyle = '#ef4444';
+        ctx.fillStyle = isYuleOnet ? '#fbbf24' : '#ef4444';
         ctx.fillRect(pt.x - outerR, pt.y - outerR, outerR * 2, outerR * 2);
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(pt.x - innerR, pt.y - innerR, innerR * 2, innerR * 2);
@@ -5273,6 +5486,11 @@ export class PuzzleArcadeModalController {
     ctx.stroke();
 
     // 4. Thin crisp outer tile border (square corners)
+    const isYuleTile = this.isYuleSkinActive();
+    if (isYuleTile && !isBlockedFlash) {
+      ctx.fillStyle = 'rgba(240, 249, 255, 0.88)';
+      ctx.fillRect(bx + 0.8, by + 0.8, Math.max(2, faceW - 1.6), Math.min(3.2, faceH * 0.11));
+    }
     ctx.lineWidth = isSelected || isHinted ? 1.35 : isHovered ? 0.95 : 0.6;
     ctx.strokeStyle = isBlockedFlash
       ? '#dc2626'
@@ -5282,7 +5500,9 @@ export class PuzzleArcadeModalController {
           ? '#dc2626'
           : isHovered
             ? '#d97706'
-            : '#7c6848';
+            : isYuleTile
+              ? '#14532d'
+              : '#7c6848';
     ctx.strokeRect(bx, by, bw, bh);
 
     // 5. Crisp Hang Sóc Creature / Magical Item Sprite centered cleanly on the sharp tile
@@ -5526,9 +5746,12 @@ export class PuzzleArcadeModalController {
     virtH = PA_VIRTUAL_H
   ): void {
     ctx.save();
-    const bgImg = this.parlorBgImage;
+    const isYule = this.isYuleSkinActive();
+    const bgImg =
+      isYule && this.yuleCaroBgImage?.complete && this.yuleCaroBgImage.naturalWidth > 0
+        ? this.yuleCaroBgImage
+        : this.parlorBgImage;
     if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
-      // Crop gently toward the sunlit honey-oak parlor tabletop & hearth glow
       const sw = bgImg.naturalWidth;
       const sh = bgImg.naturalHeight;
       ctx.drawImage(
@@ -5542,18 +5765,23 @@ export class PuzzleArcadeModalController {
         virtW,
         virtH
       );
-      // Warm sunlit honey-oak glaze so boards & cream parchment cards pop cleanly
       const glaze = ctx.createLinearGradient(0, 0, 0, virtH);
-      glaze.addColorStop(0, 'rgba(92, 46, 18, 0.24)');
-      glaze.addColorStop(0.5, 'rgba(72, 34, 12, 0.16)');
-      glaze.addColorStop(1, 'rgba(54, 25, 9, 0.34)');
+      if (isYule) {
+        glaze.addColorStop(0, 'rgba(69, 10, 18, 0.34)');
+        glaze.addColorStop(0.5, 'rgba(10, 46, 29, 0.24)');
+        glaze.addColorStop(1, 'rgba(30, 12, 16, 0.42)');
+      } else {
+        glaze.addColorStop(0, 'rgba(92, 46, 18, 0.24)');
+        glaze.addColorStop(0.5, 'rgba(72, 34, 12, 0.16)');
+        glaze.addColorStop(1, 'rgba(54, 25, 9, 0.34)');
+      }
       ctx.fillStyle = glaze;
       ctx.fillRect(0, 0, virtW, virtH);
     } else {
       const woodBg = ctx.createLinearGradient(0, 0, 0, virtH);
-      woodBg.addColorStop(0, '#c88344');
-      woodBg.addColorStop(0.5, '#a86432');
-      woodBg.addColorStop(1, '#7c431d');
+      woodBg.addColorStop(0, isYule ? '#4c1118' : '#c88344');
+      woodBg.addColorStop(0.5, isYule ? '#14532d' : '#a86432');
+      woodBg.addColorStop(1, isYule ? '#092418' : '#7c431d');
       ctx.fillStyle = woodBg;
       ctx.fillRect(0, 0, virtW, virtH);
     }
@@ -5561,7 +5789,7 @@ export class PuzzleArcadeModalController {
     // Subtle inlaid brass tabletop border & corner studs
     drawRoundedRect(ctx, 6, 6, virtW - 12, virtH - 12, 14);
     ctx.lineWidth = 1.4;
-    ctx.strokeStyle = 'rgba(253, 230, 138, 0.32)';
+    ctx.strokeStyle = isYule ? 'rgba(251, 191, 36, 0.52)' : 'rgba(253, 230, 138, 0.32)';
     ctx.stroke();
     ctx.restore();
   }
@@ -5711,11 +5939,27 @@ export class PuzzleArcadeModalController {
     virtW = SUDOKU_DESKTOP_W,
     virtH = SUDOKU_DESKTOP_H
   ): void {
-    // Clear to transparent so the full-bleed sunlit Hang Sóc room (burrow_parlor_bg.jpg) shines seamlessly behind the carved walnut & brass board and numpad dock
     ctx.clearRect(0, 0, virtW, virtH);
+    if (this.isYuleSkinActive()) {
+      const yBg = this.yuleCaroBgImage;
+      if (yBg && yBg.complete && yBg.naturalWidth > 0) {
+        ctx.save();
+        const scale = Math.max(virtW / yBg.naturalWidth, virtH / yBg.naturalHeight);
+        const dw = yBg.naturalWidth * scale;
+        const dh = yBg.naturalHeight * scale;
+        ctx.drawImage(yBg, (virtW - dw) * 0.5, (virtH - dh) * 0.5, dw, dh);
+        const scrim = ctx.createLinearGradient(0, 0, 0, virtH);
+        scrim.addColorStop(0, 'rgba(6, 40, 26, 0.34)');
+        scrim.addColorStop(1, 'rgba(28, 12, 16, 0.42)');
+        ctx.fillStyle = scrim;
+        ctx.fillRect(0, 0, virtW, virtH);
+        ctx.restore();
+      }
+    }
   }
 
   private drawSudokuScene(ctx: CanvasRenderingContext2D, engine: SudokuPuzzleEngine): void {
+    const isYuleSudoku = this.isYuleSkinActive();
     const sm = this.getSudokuLayoutMetrics();
     const isPortraitSudoku = sm.variant !== 'landscape';
     const bX = sm.boardX;
@@ -5727,7 +5971,7 @@ export class PuzzleArcadeModalController {
     const activeDigit =
       this.sudokuHoverPadDigit ?? (selVal > 0 ? selVal : engine.highlightDigit > 0 ? engine.highlightDigit : 0);
 
-    // 1. Carved Hang Sóc Mahogany-Oak Frame & Antique Brass Bezel around the 9×9 Board
+    // 1. Carved Hang Sóc Mahogany-Oak (or Yule Holly-Evergreen) Frame & Antique Brass Bezel around the 9×9 Board
     const framePad = sm.framePad;
     const fx = bX - framePad;
     const fy = bY - framePad;
@@ -5737,35 +5981,41 @@ export class PuzzleArcadeModalController {
     ctx.save();
     // 3D bottom lip & tabletop shadow
     drawRoundedRect(ctx, fx, fy + 2.5, fw, fh, 11);
-    ctx.fillStyle = 'rgba(24, 10, 4, 0.55)';
+    ctx.fillStyle = isYuleSudoku ? 'rgba(5, 28, 18, 0.62)' : 'rgba(24, 10, 4, 0.55)';
     ctx.shadowColor = 'rgba(20, 8, 3, 0.42)';
     ctx.shadowBlur = 14;
     ctx.shadowOffsetY = 4;
     ctx.fill();
     ctx.shadowColor = 'transparent';
 
-    // Carved dark walnut-oak frame body
+    // Carved dark walnut-oak or Yule evergreen-holly frame body
     drawRoundedRect(ctx, fx, fy, fw, fh, 11);
     const frameGrad = ctx.createLinearGradient(0, fy, 0, fy + fh);
-    frameGrad.addColorStop(0, '#63371a');
-    frameGrad.addColorStop(0.48, '#45230e');
-    frameGrad.addColorStop(1, '#2b1407');
+    if (isYuleSudoku) {
+      frameGrad.addColorStop(0, '#14532d');
+      frameGrad.addColorStop(0.48, '#0b3824');
+      frameGrad.addColorStop(1, '#062417');
+    } else {
+      frameGrad.addColorStop(0, '#63371a');
+      frameGrad.addColorStop(0.48, '#45230e');
+      frameGrad.addColorStop(1, '#2b1407');
+    }
     ctx.fillStyle = frameGrad;
     ctx.fill();
 
     // Antique brass outer rim
     ctx.lineWidth = 2;
-    ctx.strokeStyle = '#e5a93c';
+    ctx.strokeStyle = isYuleSudoku ? '#fbbf24' : '#e5a93c';
     ctx.stroke();
 
     // Inner specular highlight rim
     drawRoundedRect(ctx, fx + 1.8, fy + 1.8, fw - 3.6, fh - 3.6, 9.5);
     ctx.lineWidth = 0.9;
-    ctx.strokeStyle = 'rgba(254, 243, 199, 0.35)';
+    ctx.strokeStyle = isYuleSudoku ? 'rgba(220, 38, 38, 0.68)' : 'rgba(254, 243, 199, 0.35)';
     ctx.stroke();
 
     // Parchment backing inside frame
-    ctx.fillStyle = '#fffdf6';
+    ctx.fillStyle = isYuleSudoku ? '#f8fcff' : '#fffdf6';
     ctx.fillRect(bX, bY, bPx, bPx);
     ctx.restore();
 
@@ -5789,26 +6039,32 @@ export class PuzzleArcadeModalController {
                 Math.floor(sel.c / 3) === Math.floor(c / 3)))
         );
         const isSameVal = activeDigit > 0 && val === activeDigit && !isSel;
-        const isWrong = engine.isWrongCell(r, c);
-        const conflict = engine.hasConflict(r, c);
 
-        if (isSel && conflict) {
-          ctx.fillStyle = '#fca5a5';
-        } else if (conflict) {
-          ctx.fillStyle = '#fde2dc';
-        } else if (isSel) {
+        if (isSel) {
           const selGrad = ctx.createLinearGradient(0, cy, 0, cy + cPx);
-          selGrad.addColorStop(0, '#fef08a');
-          selGrad.addColorStop(1, '#f7c948');
+          selGrad.addColorStop(0, isYuleSudoku ? '#bae6fd' : '#fef08a');
+          selGrad.addColorStop(1, isYuleSudoku ? '#7dd3fc' : '#f7c948');
           ctx.fillStyle = selGrad;
         } else if (isSameVal) {
-          ctx.fillStyle = '#fbd374';
+          ctx.fillStyle = isYuleSudoku ? '#fde68a' : '#fbd374';
         } else if (isHover) {
-          ctx.fillStyle = '#f9e0a2';
+          ctx.fillStyle = isYuleSudoku ? '#e0f2fe' : '#f9e0a2';
         } else if (isPeer) {
-          ctx.fillStyle = isEvenBox ? '#f2e2be' : '#ebd8b0';
+          ctx.fillStyle = isYuleSudoku
+            ? isEvenBox
+              ? '#e6f4f1'
+              : '#dceee9'
+            : isEvenBox
+              ? '#f2e2be'
+              : '#ebd8b0';
         } else {
-          ctx.fillStyle = isEvenBox ? '#fffdf6' : '#f7edd6';
+          ctx.fillStyle = isYuleSudoku
+            ? isEvenBox
+              ? '#f8fcff'
+              : '#ebf5f0'
+            : isEvenBox
+              ? '#fffdf6'
+              : '#f7edd6';
         }
         ctx.fillRect(cx, cy, cPx, cPx);
 
@@ -5816,7 +6072,7 @@ export class PuzzleArcadeModalController {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.38)';
         ctx.fillRect(cx, cy, cPx, 1.2);
 
-        if (isSameVal && !conflict) {
+        if (isSameVal) {
           ctx.save();
           ctx.lineWidth = 1.4;
           ctx.strokeStyle = 'rgba(180, 83, 9, 0.55)';
@@ -5839,14 +6095,18 @@ export class PuzzleArcadeModalController {
           ctx.fillStyle = 'rgba(255, 253, 244, 0.72)';
           ctx.fillText(String(val), midCellX, midCellY + 1);
 
-          if (isWrong) {
-            ctx.fillStyle = '#b91c1c';
-          } else if (isInitialClue) {
-            ctx.fillStyle = conflict ? '#991b1b' : '#2b1407';
+          if (isInitialClue) {
+            ctx.fillStyle = isYuleSudoku ? '#06321d' : '#2b1407';
           } else {
-            ctx.fillStyle = conflict ? '#b91c1c' : '#0f5257';
+            ctx.fillStyle = isYuleSudoku ? '#991b1b' : '#0f5257';
           }
           ctx.fillText(String(val), midCellX, midCellY);
+          const relicImg = this.getSudokuRelicImage(val);
+          if (relicImg && cPx >= 36) {
+            const rSz = Math.min(13.5, cPx * 0.27);
+            ctx.globalAlpha = 0.88;
+            ctx.drawImage(relicImg, cx + cPx - rSz - 1.5, cy + 1.5, rSz, rSz);
+          }
           ctx.restore();
         } else {
           const mask = engine.notes[r][c];
@@ -5916,12 +6176,11 @@ export class PuzzleArcadeModalController {
     if (sel) {
       const sx = bX + sel.c * cPx;
       const sy = bY + sel.r * cPx;
-      const selConflict = engine.hasConflict(sel.r, sel.c);
       ctx.lineWidth = 2.5;
-      ctx.strokeStyle = selConflict ? '#b91c1c' : '#9a3412';
+      ctx.strokeStyle = '#9a3412';
       ctx.strokeRect(sx + 1.25, sy + 1.25, cPx - 2.5, cPx - 2.5);
       ctx.lineWidth = 1;
-      ctx.strokeStyle = selConflict ? '#fecaca' : 'rgba(255, 251, 235, 0.85)';
+      ctx.strokeStyle = 'rgba(255, 251, 235, 0.85)';
       ctx.strokeRect(sx + 3, sy + 3, cPx - 6, cPx - 6);
     }
 
@@ -6467,7 +6726,16 @@ export class PuzzleArcadeModalController {
 
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '800 33px "Be Vietnam Pro", system-ui, -apple-system, sans-serif';
+      const padRelic = this.getSudokuRelicImage(d);
+      if (padRelic && !done) {
+        ctx.save();
+        ctx.globalAlpha = 0.94;
+        ctx.drawImage(padRelic, bx + btnW * 0.5 - 11.5, by + 7, 23, 23);
+        ctx.restore();
+      }
+      ctx.font = padRelic && !done
+        ? '800 28px "Be Vietnam Pro", system-ui, -apple-system, sans-serif'
+        : '800 33px "Be Vietnam Pro", system-ui, -apple-system, sans-serif';
       ctx.fillStyle = done
         ? 'rgba(253, 230, 138, 0.3)'
         : isKeyActive
@@ -6475,7 +6743,7 @@ export class PuzzleArcadeModalController {
           : engine.pencilMode
             ? '#6b4423'
             : '#2b1407';
-      ctx.fillText(String(d), bx + btnW * 0.5, by + 43);
+      ctx.fillText(String(d), bx + btnW * 0.5, padRelic && !done ? by + 51 : by + 43);
 
       // Recessed dark-wood count pill at bottom of key (matches 1/777 Hang Sóc pills)
       drawRoundedRect(ctx, bx + 5, by + 76, btnW - 10, 22, 7);
@@ -6509,7 +6777,11 @@ export class PuzzleArcadeModalController {
     virtH = PA_VIRTUAL_H
   ): void {
     ctx.save();
-    const bg = this.marauderCaroBgImage;
+    const isYule = this.isYuleSkinActive();
+    const bg =
+      isYule && this.yuleCaroBgImage?.complete && this.yuleCaroBgImage.naturalWidth > 0
+        ? this.yuleCaroBgImage
+        : this.marauderCaroBgImage;
     if (bg && bg.complete && bg.naturalWidth > 0) {
       const sw = bg.naturalWidth;
       const sh = bg.naturalHeight;
@@ -6525,16 +6797,22 @@ export class PuzzleArcadeModalController {
         virtH
       );
       const scrim = ctx.createLinearGradient(0, 0, virtW, virtH);
-      scrim.addColorStop(0, 'rgba(54, 14, 12, 0.24)');
-      scrim.addColorStop(0.5, 'rgba(38, 16, 10, 0.16)');
-      scrim.addColorStop(1, 'rgba(28, 12, 8, 0.32)');
+      if (isYule) {
+        scrim.addColorStop(0, 'rgba(6, 44, 28, 0.28)');
+        scrim.addColorStop(0.5, 'rgba(30, 14, 14, 0.18)');
+        scrim.addColorStop(1, 'rgba(18, 8, 12, 0.34)');
+      } else {
+        scrim.addColorStop(0, 'rgba(54, 14, 12, 0.24)');
+        scrim.addColorStop(0.5, 'rgba(38, 16, 10, 0.16)');
+        scrim.addColorStop(1, 'rgba(28, 12, 8, 0.32)');
+      }
       ctx.fillStyle = scrim;
       ctx.fillRect(0, 0, virtW, virtH);
     } else {
       const warmGrad = ctx.createLinearGradient(0, 0, virtW, virtH);
-      warmGrad.addColorStop(0, '#5c1916');
-      warmGrad.addColorStop(0.5, '#451a0e');
-      warmGrad.addColorStop(1, '#291008');
+      warmGrad.addColorStop(0, isYule ? '#14532d' : '#5c1916');
+      warmGrad.addColorStop(0.5, isYule ? '#4c1118' : '#451a0e');
+      warmGrad.addColorStop(1, isYule ? '#092418' : '#291008');
       ctx.fillStyle = warmGrad;
       ctx.fillRect(0, 0, virtW, virtH);
     }
@@ -6605,6 +6883,7 @@ export class PuzzleArcadeModalController {
     const stScale = cm.stoneScale;
 
     // 1. Mahogany Gryffindor Table Backing + Unfolded Antique Marauder's Map Parchment!
+    const isYuleCaro = this.isYuleSkinActive();
     ctx.save();
     const rimOut = Math.min(4, fX);
     drawRoundedRect(
@@ -6621,16 +6900,22 @@ export class PuzzleArcadeModalController {
       0,
       fY + fPx + rimOut
     );
-    rimGrad.addColorStop(0, '#6b1d1b');
-    rimGrad.addColorStop(0.5, '#471512');
-    rimGrad.addColorStop(1, '#2b0b09');
+    if (isYuleCaro) {
+      rimGrad.addColorStop(0, '#14532d');
+      rimGrad.addColorStop(0.5, '#7f1d1d');
+      rimGrad.addColorStop(1, '#062417');
+    } else {
+      rimGrad.addColorStop(0, '#6b1d1b');
+      rimGrad.addColorStop(0.5, '#471512');
+      rimGrad.addColorStop(1, '#2b0b09');
+    }
     ctx.fillStyle = rimGrad;
     ctx.shadowColor = 'rgba(20, 6, 3, 0.62)';
     ctx.shadowBlur = 16;
     ctx.shadowOffsetY = 6;
     ctx.fill();
     ctx.lineWidth = 2.2;
-    ctx.strokeStyle = '#f4c668';
+    ctx.strokeStyle = isYuleCaro ? '#fbbf24' : '#f4c668';
     ctx.stroke();
     ctx.shadowColor = 'transparent';
 
@@ -6648,13 +6933,19 @@ export class PuzzleArcadeModalController {
       mapY + mapPx * 0.5,
       mapPx * 0.75
     );
-    parchGrad.addColorStop(0, '#fff9e6');
-    parchGrad.addColorStop(0.58, '#f5e1b5');
-    parchGrad.addColorStop(1, '#dfc086');
+    if (isYuleCaro) {
+      parchGrad.addColorStop(0, '#fdfbf7');
+      parchGrad.addColorStop(0.58, '#eef6f0');
+      parchGrad.addColorStop(1, '#dcebe1');
+    } else {
+      parchGrad.addColorStop(0, '#fff9e6');
+      parchGrad.addColorStop(0.58, '#f5e1b5');
+      parchGrad.addColorStop(1, '#dfc086');
+    }
     ctx.fillStyle = parchGrad;
     ctx.fill();
     ctx.lineWidth = 1.6;
-    ctx.strokeStyle = '#854d27';
+    ctx.strokeStyle = isYuleCaro ? '#14532d' : '#854d27';
     ctx.stroke();
 
     // Clip inside Marauder's Map parchment for fold creases, Hogwarts castle corridors & animated footprints!
@@ -6712,7 +7003,7 @@ export class PuzzleArcadeModalController {
     const mbX = centerMapX - mbW * 0.5;
     const mbY = mapY + 2.5;
     drawRoundedRect(ctx, mbX, mbY, mbW, 13, 6.5);
-    ctx.fillStyle = 'rgba(153, 27, 27, 0.88)';
+    ctx.fillStyle = isYuleCaro ? 'rgba(20, 83, 45, 0.92)' : 'rgba(153, 27, 27, 0.88)';
     ctx.fill();
     ctx.strokeStyle = '#fde68a';
     ctx.lineWidth = 1;
@@ -6721,7 +7012,11 @@ export class PuzzleArcadeModalController {
     ctx.font = '800 8.2px "Be Vietnam Pro", system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('🗺️ BẢN ĐỒ ĐẠO TẶC • THÀNH TRÌ HOGWARTS', centerMapX, mbY + 6.8);
+    ctx.fillText(
+      isYuleCaro ? '🎄 BẢN ĐỒ ĐẠO TẶC ĐÊM GIÁNG SINH • HOGWARTS' : '🗺️ BẢN ĐỒ ĐẠO TẶC • THÀNH TRÌ HOGWARTS',
+      centerMapX,
+      mbY + 6.8
+    );
 
     // Animated Disappearing/Appearing Marauder Inked Footprints patrolling the corridors!
     const p1 = (now * 0.85) % 10;
@@ -7083,7 +7378,11 @@ export class PuzzleArcadeModalController {
     virtH = PA_VIRTUAL_H
   ): void {
     ctx.save();
-    const bg = this.greatHallBgImage;
+    const isYule = this.isYuleSkinActive();
+    const bg =
+      isYule && this.yuleGreatHallBgImage?.complete && this.yuleGreatHallBgImage.naturalWidth > 0
+        ? this.yuleGreatHallBgImage
+        : this.greatHallBgImage;
     if (bg && bg.complete && bg.naturalWidth > 0) {
       const sw = bg.naturalWidth;
       const sh = bg.naturalHeight;
@@ -7099,16 +7398,22 @@ export class PuzzleArcadeModalController {
         virtH
       );
       const scrim = ctx.createLinearGradient(0, 0, virtW, virtH);
-      scrim.addColorStop(0, 'rgba(38, 16, 12, 0.34)');
-      scrim.addColorStop(0.5, 'rgba(20, 14, 24, 0.24)');
-      scrim.addColorStop(1, 'rgba(10, 26, 22, 0.38)');
+      if (isYule) {
+        scrim.addColorStop(0, 'rgba(6, 40, 26, 0.32)');
+        scrim.addColorStop(0.5, 'rgba(12, 24, 38, 0.24)');
+        scrim.addColorStop(1, 'rgba(38, 12, 16, 0.36)');
+      } else {
+        scrim.addColorStop(0, 'rgba(38, 16, 12, 0.34)');
+        scrim.addColorStop(0.5, 'rgba(20, 14, 24, 0.24)');
+        scrim.addColorStop(1, 'rgba(10, 26, 22, 0.38)');
+      }
       ctx.fillStyle = scrim;
       ctx.fillRect(0, 0, virtW, virtH);
     } else {
       const hallGrad = ctx.createLinearGradient(0, 0, virtW, virtH);
-      hallGrad.addColorStop(0, '#3b1518');
-      hallGrad.addColorStop(0.5, '#1e1b2e');
-      hallGrad.addColorStop(1, '#0f2924');
+      hallGrad.addColorStop(0, isYule ? '#0b3824' : '#3b1518');
+      hallGrad.addColorStop(0.5, isYule ? '#12293a' : '#1e1b2e');
+      hallGrad.addColorStop(1, isYule ? '#4c1118' : '#0f2924');
       ctx.fillStyle = hallGrad;
       ctx.fillRect(0, 0, virtW, virtH);
     }
@@ -7310,7 +7615,8 @@ export class PuzzleArcadeModalController {
     const whiteKing = whiteInCheck ? engine.findKing('w') : null;
     const blackKing = blackInCheck ? engine.findKing('b') : null;
 
-    // 2. 8x8 Great Hall Sunlit Alabaster-Gold & Slytherin Emerald-Slate Marble Squares
+    // 2. 8x8 Great Hall Sunlit Alabaster-Gold & Slytherin Emerald-Slate (or Yule Snow-Frost & Evergreen) Marble Squares
+    const isYuleChess = this.isYuleSkinActive();
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
         const sx = bX + c * cPx;
@@ -7318,7 +7624,15 @@ export class PuzzleArcadeModalController {
         const isLight = (r + c) % 2 === 0;
 
         const sqGrad = ctx.createLinearGradient(sx, sy, sx + cPx, sy + cPx);
-        if (isLight) {
+        if (isYuleChess) {
+          if (isLight) {
+            sqGrad.addColorStop(0, '#f8fcff');
+            sqGrad.addColorStop(1, '#dbeafe');
+          } else {
+            sqGrad.addColorStop(0, '#14532d');
+            sqGrad.addColorStop(1, '#06321d');
+          }
+        } else if (isLight) {
           sqGrad.addColorStop(0, '#fffaf0');
           sqGrad.addColorStop(1, '#ebd4a6');
         } else {
@@ -7726,7 +8040,17 @@ export class PuzzleArcadeModalController {
     const now = performance.now();
     const bob = isSelected ? 3.2 + Math.sin(now * 0.0075) * 1.8 : 0;
     const pieceKey = `${piece.color}${piece.type}`;
-    const spr = this.chessPieceImages.get(pieceKey);
+    let spr: HTMLImageElement | undefined;
+    if (this.isYuleSkinActive()) {
+      this.ensureYuleArcadeAssetsLoaded();
+      const ySpr = this.yuleChessPieceImages.get(pieceKey);
+      if (ySpr && ySpr.complete && ySpr.naturalWidth > 0) {
+        spr = ySpr;
+      }
+    }
+    if (!spr) {
+      spr = this.chessPieceImages.get(pieceKey);
+    }
 
     ctx.save();
     ctx.translate(cx, cy);
@@ -8040,12 +8364,19 @@ export class PuzzleArcadeModalController {
     }
     ctx.restore();
 
-    // 2. Khung gỗ sồi viền đồng Hang Sóc & lòng bảng giấy da ấm
+    // 2. Khung gỗ sồi viền đồng Hang Sóc (hoặc thông Giáng Sinh mạ vàng) & lòng bảng giấy da ấm
+    const isYuleJigsaw = this.isYuleSkinActive();
     ctx.save();
     const frameGrad = ctx.createLinearGradient(m.frameX, m.frameY, m.frameX, m.frameY + m.frameH);
-    frameGrad.addColorStop(0, '#6e4526');
-    frameGrad.addColorStop(0.5, '#4d2f18');
-    frameGrad.addColorStop(1, '#331d0e');
+    if (isYuleJigsaw) {
+      frameGrad.addColorStop(0, '#14532d');
+      frameGrad.addColorStop(0.5, '#7f1d1d');
+      frameGrad.addColorStop(1, '#062417');
+    } else {
+      frameGrad.addColorStop(0, '#6e4526');
+      frameGrad.addColorStop(0.5, '#4d2f18');
+      frameGrad.addColorStop(1, '#331d0e');
+    }
     ctx.fillStyle = frameGrad;
     ctx.shadowColor = 'rgba(20, 10, 4, 0.52)';
     ctx.shadowBlur = 12;
@@ -8054,13 +8385,13 @@ export class PuzzleArcadeModalController {
     ctx.fill();
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
-    ctx.lineWidth = 1.6;
-    ctx.strokeStyle = '#cfa052';
+    ctx.lineWidth = isYuleJigsaw ? 2 : 1.6;
+    ctx.strokeStyle = isYuleJigsaw ? '#fbbf24' : '#cfa052';
     ctx.stroke();
 
     const matGrad = ctx.createLinearGradient(m.boardX, m.boardY, m.boardX, m.boardY + m.boardH);
-    matGrad.addColorStop(0, '#f5e7c6');
-    matGrad.addColorStop(1, '#e7d1a1');
+    matGrad.addColorStop(0, isYuleJigsaw ? '#f8fcff' : '#f5e7c6');
+    matGrad.addColorStop(1, isYuleJigsaw ? '#e6f2ec' : '#e7d1a1');
     ctx.fillStyle = matGrad;
     ctx.fillRect(m.boardX, m.boardY, m.boardW, m.boardH);
 

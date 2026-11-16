@@ -843,10 +843,10 @@ export function getMatch3LevelDef(rawLevel: number): Match3LevelDef {
     Math.ceil(scrollsTotal * (totalBoxLayers > 0 ? 2.35 : 1.95)) +
     (numColors >= 6 ? 3 : 0);
   const lateTighten =
-    level >= 620 ? -4 : level >= 450 ? -3 : level >= 260 ? -2 : level >= 120 ? -1 : 0;
-  const earlyCushion = level <= 5 ? 5 : level <= 25 ? 3 : difficulty === 'normal' ? 1 : 0;
-  const maxMoves = difficulty === 'boss' ? 32 : difficulty === 'hard' ? 29 : 28;
-  const minMoves = level >= 400 ? 15 : 16;
+    level >= 620 ? -6 : level >= 450 ? -5 : level >= 260 ? -4 : level >= 120 ? -2 : -1;
+  const earlyCushion = level <= 3 ? 2 : level <= 15 ? 1 : 0;
+  const maxMoves = difficulty === 'boss' ? 28 : difficulty === 'hard' ? 25 : 24;
+  const minMoves = 14;
   const moves = Math.max(minMoves, Math.min(maxMoves, workloadMoves + earlyCushion + lateTighten));
 
   const actTag = actIndex > 0 ? ` • Hồi ${ROMAN_ACTS[actIndex]}` : '';

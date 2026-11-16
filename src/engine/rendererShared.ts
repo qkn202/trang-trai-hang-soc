@@ -361,6 +361,7 @@ export interface ScreenHotspot {
     | 'unveil_building'
     | 'villager'
     | 'building'
+    | 'building_cutaway'
     | 'escaped'
     | 'zone_plaque';
   id: string;
@@ -422,6 +423,72 @@ export interface LockedSceneryProp {
   spriteKey: string;
   scale: number;
   flipX: boolean;
+}
+
+/**
+ * Cảnh trí Mùa Đông Chào Mừng Giáng Sinh (100% không chặn xây dựng — tự ẩn khi người chơi đặt nhà/đường lên ô đó):
+ * Đón chào người chơi ngay từ Cầu Đá Sông Ottery (`gy = 22`) tới Quảng Trường Lát Đá Hang Sóc (`[16, 19..29]`).
+ */
+export const WINTER_VALLEY_CHRISTMAS_SPOTS: ReadonlyArray<[number, number, string, number, boolean]> = [
+  // Cổng chào Hogsmeade & đèn đôi Giáng Sinh bên Cầu Đá Sông Ottery (gy = 22)
+  [7, 21, 'yule_hogsmeade_arch', 1.48, false],
+  [9, 21, 'yule_owl_post_box', 0.92, false],
+  [2, 21, 'yule_hogsmeade_twin_lamp', 1.04, false],
+  // Quảng trường trung tâm Hang Sóc: Cây Thông Đại Sảnh, Đèn Đôi, Người Tuyết Gia Tinh & Xe Quà Hedwig
+  [16, 19, 'yule_great_hall_tree', 1.72, false],
+  [14, 19, 'yule_hogsmeade_twin_lamp', 1.05, false],
+  [18, 19, 'yule_hogsmeade_twin_lamp', 1.05, true],
+  [13, 21, 'yule_burrow_gnome_snowman', 0.96, false],
+  [20, 21, 'yule_hedwig_gift_sleigh', 1.16, true],
+  [22, 23, 'yule_butterbeer_hot_cart', 1.12, false],
+  [16, 29, 'yule_snowy_signpost', 0.98, false],
+  // Bờ sông phủ tuyết, thông bạc, linh sam sao băng & khóm trạng nguyên đỏ thắm
+  [2, 17, 'yule_silver_fir_trio', 1.16, false],
+  [2, 24, 'yule_blue_spruce_starlight', 1.14, true],
+  [2, 28, 'env_pine_snow', 1.12, false],
+  [5, 19, 'env_mossy_rock', 0.92, false],
+  [8, 16, 'yule_blue_spruce_starlight', 1.18, false],
+  [11, 17, 'yule_puffskein_snowballs', 0.96, false],
+  [10, 26, 'yule_holly_hedgerow', 1.02, false],
+  [19, 29, 'yule_puffskein_snowballs', 0.95, true],
+  [23, 17, 'yule_silver_fir_trio', 1.18, true],
+  [24, 21, 'yule_roasted_chestnut_stand', 1.08, false],
+  [24, 26, 'yule_poinsettia_tiered_stand', 0.98, false],
+  [23, 29, 'yule_holly_berry_tree', 1.14, false],
+  [28, 18, 'env_pine_snow', 1.16, true],
+  [30, 23, 'yule_birch_fairy_grove', 1.16, false],
+  [33, 21, 'yule_ribbon_house_pine', 1.12, true],
+];
+
+/**
+ * Chuyển đổi cảnh trí rừng ngoại vi sang rừng thông phủ tuyết & cây thông lễ hội khi Bản Đồ Chính ở chế độ Mùa Đông Giáng Sinh.
+ */
+export function resolveWinterScenerySpriteKey(prop: LockedSceneryProp): string {
+  const h = Math.abs(Math.round(prop.gx * 37 + prop.gy * 71));
+  switch (prop.spriteKey) {
+    case 'env_tree_oak':
+    case 'env_tree_pine': {
+      const trees = [
+        'env_pine_snow',
+        'env_pine_snow',
+        'snowy_pines',
+        'yule_silver_fir_trio',
+        'yule_blue_spruce_starlight',
+        'yule_holly_berry_tree',
+      ];
+      return trees[h % trees.length];
+    }
+    case 'env_tree_magic': {
+      const magicTrees = ['yule_birch_fairy_grove', 'yule_weeping_frost_willow', 'yule_blue_spruce_starlight'];
+      return magicTrees[h % magicTrees.length];
+    }
+    case 'env_bush_flowers':
+      return h % 2 === 0 ? 'yule_holly_hedgerow' : 'yule_glowing_puffapod_bush';
+    case 'env_flower_patch':
+      return h % 2 === 0 ? 'yule_snowdrop_moss_log' : 'yule_edelweiss_alpine_rockery';
+    default:
+      return prop.spriteKey;
+  }
 }
 
 export function buildLockedSceneryCatalog(): LockedSceneryProp[] {

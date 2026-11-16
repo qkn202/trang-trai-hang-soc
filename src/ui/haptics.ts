@@ -1,9 +1,20 @@
 /**
- * Haptic feedback wrapper for mobile devices using navigator.vibrate.
- * Safely guards against environments without vibration support (iOS Safari, desktop).
+ * Haptic feedback wrapper routed through `PlatformAdapter` (Track B7):
+ * - Native Capacitor iOS / Android: invokes `CoreHaptics` / native tactile impacts.
+ * - Browser / PWA: invokes `navigator.vibrate` with user-activation guard.
  */
 
+import { getPlatformAdapter } from '../platform/nativeAdapter';
+import type { PlatformHapticStyle } from '../platform/platformAdapter';
+
 export type HapticType = 'light' | 'success' | 'harvest' | 'levelup';
+
+const HAPTIC_STYLE_MAP: Record<HapticType, PlatformHapticStyle> = {
+  light: 'light',
+  success: 'success',
+  harvest: 'medium',
+  levelup: 'levelup',
+};
 
 const HAPTIC_PATTERNS: Record<HapticType, number | number[]> = {
   light: 15,
@@ -13,6 +24,12 @@ const HAPTIC_PATTERNS: Record<HapticType, number | number[]> = {
 };
 
 export function haptic(type: HapticType): boolean {
+  const adapter = getPlatformAdapter();
+  if (adapter.isNativeShell) {
+    void adapter.triggerHaptic(HAPTIC_STYLE_MAP[type] ?? 'light');
+    return true;
+  }
+
   if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') {
     return false;
   }

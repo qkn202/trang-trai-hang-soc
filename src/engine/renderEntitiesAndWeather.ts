@@ -206,13 +206,65 @@ export function entitiesGetSunShadowVector(self: IsometricRenderer, period: 'daw
     return { dx: 9, dy: 4, alpha: 0.22 };
 }
 
+let topoNodeCap = 0;
+let topoHead = new Int32Array(0);
+let topoTail = new Int32Array(0);
+let topoInDeg = new Int32Array(0);
+let topoReady = new Int32Array(0);
+let topoEmitted = new Uint8Array(0);
+
+let topoEdgeCap = 0;
+let topoNext = new Int32Array(0);
+let topoTo = new Int32Array(0);
+
+function ensureTopoNodeBuffers(n: number): void {
+  if (n <= topoNodeCap) return;
+  topoNodeCap = Math.max(256, n * 2);
+  topoHead = new Int32Array(topoNodeCap);
+  topoTail = new Int32Array(topoNodeCap);
+  topoInDeg = new Int32Array(topoNodeCap);
+  topoReady = new Int32Array(topoNodeCap);
+  topoEmitted = new Uint8Array(topoNodeCap);
+}
+
+function ensureTopoEdgeCapacity(needed: number): void {
+  if (needed <= topoEdgeCap) return;
+  topoEdgeCap = Math.max(1024, topoEdgeCap * 2, needed);
+  const nextBuf = new Int32Array(topoEdgeCap);
+  const toBuf = new Int32Array(topoEdgeCap);
+  nextBuf.set(topoNext);
+  toBuf.set(topoTo);
+  topoNext = nextBuf;
+  topoTo = toBuf;
+}
+
 export function entitiesSortDrawablesTopological(self: IsometricRenderer, items: TopologicalDrawCmd[]): TopologicalDrawCmd[] {
     const n = items.length;
     if (n <= 1) return items;
 
-    const adj: number[][] = Array.from({ length: n }, () => []);
-    const inDeg = new Int32Array(n);
+    ensureTopoNodeBuffers(n);
+    topoHead.fill(-1, 0, n);
+    topoTail.fill(-1, 0, n);
+    topoInDeg.fill(0, 0, n);
+    topoEmitted.fill(0, 0, n);
+
+    let edgeCount = 0;
     const eps = 0.04;
+
+    const addEdge = (u: number, v: number): void => {
+      ensureTopoEdgeCapacity(edgeCount + 1);
+      const e = edgeCount++;
+      topoTo[e] = v;
+      topoNext[e] = -1;
+      if (topoHead[u] === -1) {
+        topoHead[u] = e;
+        topoTail[u] = e;
+      } else {
+        topoNext[topoTail[u]] = e;
+        topoTail[u] = e;
+      }
+      topoInDeg[v]++;
+    };
 
     for (let i = 0; i < n; i++) {
       const a = items[i];
@@ -233,52 +285,70 @@ export function entitiesSortDrawablesTopological(self: IsometricRenderer, items:
           (b.ryMax <= a.ryMin + eps && b.rxMin < a.rxMax - eps);
 
         if (aBehindB && !bBehindA) {
-          adj[i].push(j);
-          inDeg[j]++;
+          addEdge(i, j);
         } else if (bBehindA && !aBehindB) {
-          adj[j].push(i);
-          inDeg[i]++;
+          addEdge(j, i);
         }
       }
     }
 
-    const ready: number[] = [];
+    let readyHead = 0;
+    let readyTail = 0;
     for (let i = 0; i < n; i++) {
-      if (inDeg[i] === 0) ready.push(i);
+      if (topoInDeg[i] === 0) {
+        const d = items[i].depth;
+        let lo = readyHead;
+        let hi = readyTail;
+        while (lo < hi) {
+          const mid = (lo + hi) >> 1;
+          if (items[topoReady[mid]].depth <= d) lo = mid + 1;
+          else hi = mid;
+        }
+        if (lo < readyTail) {
+          topoReady.copyWithin(lo + 1, lo, readyTail);
+        }
+        topoReady[lo] = i;
+        readyTail++;
+      }
     }
-    ready.sort((u, v) => items[u].depth - items[v].depth);
 
-    const ordered: TopologicalDrawCmd[] = [];
-    const emitted = new Uint8Array(n);
+    const ordered: TopologicalDrawCmd[] = new Array(n);
+    let outIdx = 0;
 
-    while (ready.length > 0) {
-      const cur = ready.shift()!;
-      emitted[cur] = 1;
-      ordered.push(items[cur]);
-      for (const nxt of adj[cur]) {
-        inDeg[nxt]--;
-        if (inDeg[nxt] === 0) {
-          // Binary insert by tie-breaker depth
+    while (readyHead < readyTail) {
+      const cur = topoReady[readyHead++];
+      topoEmitted[cur] = 1;
+      ordered[outIdx++] = items[cur];
+      for (let e = topoHead[cur]; e !== -1; e = topoNext[e]) {
+        const nxt = topoTo[e];
+        topoInDeg[nxt]--;
+        if (topoInDeg[nxt] === 0) {
           const d = items[nxt].depth;
-          let lo = 0;
-          let hi = ready.length;
+          let lo = readyHead;
+          let hi = readyTail;
           while (lo < hi) {
             const mid = (lo + hi) >> 1;
-            if (items[ready[mid]].depth <= d) lo = mid + 1;
+            if (items[topoReady[mid]].depth <= d) lo = mid + 1;
             else hi = mid;
           }
-          ready.splice(lo, 0, nxt);
+          if (lo < readyTail) {
+            topoReady.copyWithin(lo + 1, lo, readyTail);
+          }
+          topoReady[lo] = nxt;
+          readyTail++;
         }
       }
     }
 
-    if (ordered.length < n) {
+    if (outIdx < n) {
       const rest: TopologicalDrawCmd[] = [];
       for (let i = 0; i < n; i++) {
-        if (!emitted[i]) rest.push(items[i]);
+        if (!topoEmitted[i]) rest.push(items[i]);
       }
       rest.sort((a, b) => a.depth - b.depth);
-      for (const r of rest) ordered.push(r);
+      for (let i = 0; i < rest.length; i++) {
+        ordered[outIdx++] = rest[i];
+      }
     }
     return ordered;
 }
@@ -566,13 +636,35 @@ export function entitiesDrawNightCandlelightPass(self: IsometricRenderer,
 
       if (item.isAnimalPasturePlot || item.spriteKey?.startsWith('env_')) continue;
 
+      const isIcyYuleGlow =
+        item.id === 'patronus_ward_lantern' ||
+        item.id.startsWith('yule_ice_') ||
+        item.id === 'yule_goblet_blue_brazier' ||
+        item.id === 'yule_hermione_bluebell_jars' ||
+        item.id === 'yule_sword_frozen_pool' ||
+        item.id === 'yule_snowdrop_moss_log' ||
+        item.id === 'yule_blue_spruce_starlight' ||
+        item.id === 'yule_weeping_frost_willow' ||
+        item.id === 'yule_ravenclaw_eagle_mascot' ||
+        item.id === 'yule_crystal_lotus_fountain_pot';
+      const isEmeraldYuleGlow = item.id === 'yule_slytherin_serpent_mascot';
+      const isWarmRubyYuleGlow =
+        item.id === 'yule_gryffindor_lion_mascot' ||
+        item.id === 'yule_hearth_stockings' ||
+        item.id === 'yule_fawkes_lemon_perch' ||
+        item.id === 'yule_hogwarts_snow_loco' ||
+        item.id === 'yule_glowing_puffapod_bush';
+
       const rad = Math.max(36, (bw + bh) * 24) * cam.zoom * flicker;
-      const color =
-        item.id === 'patronus_ward_lantern'
-          ? 'rgba(125, 211, 252, 0.38)'
-          : isFullNight
-            ? 'rgba(251, 191, 36, 0.28)'
-            : 'rgba(251, 146, 60, 0.24)';
+      const color = isIcyYuleGlow
+        ? 'rgba(125, 211, 252, 0.38)'
+        : isEmeraldYuleGlow
+          ? 'rgba(52, 211, 153, 0.36)'
+          : isWarmRubyYuleGlow
+            ? 'rgba(251, 146, 60, 0.36)'
+            : isFullNight
+              ? 'rgba(251, 191, 36, 0.28)'
+              : 'rgba(251, 146, 60, 0.24)';
       entitiesDrawRadialGlow(self, pt.sx, pt.sy, rad, color);
 
       // Warm front-porch ground bounce ellipse & multi-story cottage window glints (Mockup 2)
@@ -583,12 +675,23 @@ export function entitiesDrawNightCandlelightPass(self: IsometricRenderer,
           porchPt.sx,
           porchPt.sy + 5 * cam.zoom,
           rad * 0.72,
-          isFullNight ? 'rgba(253, 224, 71, 0.26)' : 'rgba(251, 146, 60, 0.22)'
+          isIcyYuleGlow
+            ? 'rgba(125, 211, 252, 0.24)'
+            : isFullNight
+              ? 'rgba(253, 224, 71, 0.26)'
+              : 'rgba(251, 146, 60, 0.22)'
         );
         if (item.id === 'burrow_house_canon') {
           entitiesDrawRadialGlow(self, pt.sx - 6 * cam.zoom, pt.sy - 34 * cam.zoom, 28 * cam.zoom * flicker, 'rgba(253, 224, 71, 0.36)');
           entitiesDrawRadialGlow(self, pt.sx + 5 * cam.zoom, pt.sy - 58 * cam.zoom, 24 * cam.zoom * flicker, 'rgba(251, 191, 36, 0.34)');
           entitiesDrawRadialGlow(self, pt.sx - 2 * cam.zoom, pt.sy - 82 * cam.zoom, 18 * cam.zoom * flicker, 'rgba(254, 240, 138, 0.30)');
+        } else if (item.id === 'yule_mini_hogwarts_castle') {
+          entitiesDrawRadialGlow(self, pt.sx - 18 * cam.zoom, pt.sy - 30 * cam.zoom, 34 * cam.zoom * flicker, 'rgba(253, 224, 71, 0.42)');
+          entitiesDrawRadialGlow(self, pt.sx + 14 * cam.zoom, pt.sy - 62 * cam.zoom, 26 * cam.zoom * flicker, 'rgba(251, 191, 36, 0.38)');
+          entitiesDrawRadialGlow(self, pt.sx + 4 * cam.zoom, pt.sy + 14 * cam.zoom, 30 * cam.zoom * flicker, 'rgba(125, 211, 252, 0.30)');
+        } else if (item.id === 'yule_four_house_hourglasses') {
+          entitiesDrawRadialGlow(self, pt.sx - 12 * cam.zoom, pt.sy - 24 * cam.zoom, 20 * cam.zoom * flicker, 'rgba(248, 113, 113, 0.34)');
+          entitiesDrawRadialGlow(self, pt.sx + 12 * cam.zoom, pt.sy - 24 * cam.zoom, 20 * cam.zoom * flicker, 'rgba(52, 211, 153, 0.34)');
         }
       }
     }
@@ -678,42 +781,116 @@ export function entitiesDrawWeatherParticles(self: IsometricRenderer,
       self.lightningFlashAlpha *= 0.84;
     }
 
-    // 3. Snowflakes, Sunlit Dandelion Pollen Motes & Golden Nighttime Fireflies
+    // 3. Snowflakes, Winter Crystal Dust, Sunlit Dandelion Pollen Motes & Golden Nighttime Fireflies
     const mode = sim.state.settings.weatherOverride;
     if (self.reducedMotion) return;
 
+    const isWinter =
+      typeof sim.isWinterMainMapActive === 'function' && sim.isWinterMainMapActive();
     const isSnow = weather.kind === 'snow';
+    const isGentleWinterSnow =
+      isWinter &&
+      !isSnow &&
+      mode !== 'fireflies' &&
+      weather.kind !== 'rain' &&
+      weather.kind !== 'storm' &&
+      weather.kind !== 'fog';
     const showFireflies =
       mode !== 'clear' &&
       !isSnow &&
+      !isGentleWinterSnow &&
       weather.kind !== 'rain' &&
       weather.kind !== 'storm' &&
-      (festival === 'halloween' || isNight || mode === 'fireflies');
+      (festival === 'halloween' || (!isWinter && isNight) || mode === 'fireflies');
     const showSunPollen =
+      !isWinter &&
       !isNight &&
       !isSnow &&
       weather.kind !== 'rain' &&
       weather.kind !== 'storm' &&
       weather.kind !== 'fog';
 
-    if (!isSnow && !showFireflies && !showSunPollen) return;
+    if (!isSnow && !isGentleWinterSnow && !showFireflies && !showSunPollen) return;
 
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
     const particleBudget = computeWeatherParticleBudget(dpr, Math.max(viewW, self.canvas.width));
     const rawLimit = Math.min(self.particles.length, particleBudget);
-    const particleLimit = showSunPollen && !showFireflies ? Math.min(28, rawLimit) : rawLimit;
+    const particleLimit = isGentleWinterSnow
+      ? Math.min(72, rawLimit)
+      : showSunPollen && !showFireflies
+        ? Math.min(28, rawLimit)
+        : rawLimit;
 
     ctx.save();
     for (let i = 0; i < particleLimit; i++) {
       const p = self.particles[i];
-      p.y = (p.y + (isSnow ? p.vy : -p.vy * 0.45) + 1) % 1;
-      p.x = (p.x + p.vx + Math.sin(self.tick * 0.015 + p.r) * 0.0005 + 1) % 1;
+      const fallingSnow = isSnow || isGentleWinterSnow;
+      const isForegroundBokehFlake = fallingSnow && i % 7 === 0;
+      const snowSpeedMult = isForegroundBokehFlake
+        ? 1.28
+        : isGentleWinterSnow
+          ? 0.82
+          : 1.05;
+      p.y = (p.y + (fallingSnow ? p.vy * snowSpeedMult : -p.vy * 0.45) + 1) % 1;
+      const swayAmp = fallingSnow ? (isForegroundBokehFlake ? 0.0011 : 0.00075) : 0.0005;
+      p.x = (p.x + p.vx + Math.sin(self.tick * 0.02 + p.r + i * 0.7) * swayAmp + 1) % 1;
 
-      if (isSnow) {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.78)';
-        ctx.beginPath();
-        ctx.arc(p.x * viewW, p.y * viewH, p.r, 0, Math.PI * 2);
-        ctx.fill();
+      if (fallingSnow) {
+        const sx = p.x * viewW;
+        const sy = p.y * viewH;
+        if (isForegroundBokehFlake) {
+          // Foreground dreamy out-of-focus snow bokeh flake (smooth radial falloff, never a hollow ring)
+          const br = Math.max(4.8, p.r * 2.5);
+          const g = ctx.createRadialGradient(sx, sy, 0.4, sx, sy, br);
+          g.addColorStop(0, isNight ? 'rgba(240, 249, 255, 0.86)' : 'rgba(255, 255, 255, 0.92)');
+          g.addColorStop(0.5, isNight ? 'rgba(186, 230, 253, 0.42)' : 'rgba(196, 224, 250, 0.46)');
+          g.addColorStop(1, 'rgba(186, 224, 250, 0)');
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(sx, sy, br, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (i % 3 === 0 && p.r >= 1.6) {
+          // 6-ray Hogsmeade crystal dendrite snowflake with subtle 3D offset drop-shadow + crisp white crystal!
+          const sr = p.r * 1.72;
+          const spin = self.tick * 0.014 + i * 0.9;
+          const traceDendrite = (ox: number, oy: number) => {
+            ctx.beginPath();
+            for (let k = 0; k < 3; k++) {
+              const ang = spin + (k * Math.PI) / 3;
+              const ca = Math.cos(ang);
+              const sa = Math.sin(ang);
+              ctx.moveTo(ox - ca * sr, oy - sa * sr);
+              ctx.lineTo(ox + ca * sr, oy + sa * sr);
+              const tx = ox + ca * sr * 0.58;
+              const ty = oy + sa * sr * 0.58;
+              const bLen = sr * 0.34;
+              ctx.moveTo(tx, ty);
+              ctx.lineTo(tx + Math.cos(ang + 0.55) * bLen, ty + Math.sin(ang + 0.55) * bLen);
+              ctx.moveTo(tx, ty);
+              ctx.lineTo(tx + Math.cos(ang - 0.55) * bLen, ty + Math.sin(ang - 0.55) * bLen);
+            }
+          };
+          ctx.lineCap = 'round';
+          traceDendrite(sx + 1.1, sy + 1.3);
+          ctx.strokeStyle = isNight ? 'rgba(56, 189, 248, 0.36)' : 'rgba(96, 148, 206, 0.38)';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+
+          traceDendrite(sx, sy);
+          ctx.strokeStyle = isNight ? 'rgba(240, 249, 255, 0.96)' : 'rgba(255, 255, 255, 0.98)';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+        } else {
+          // Crisp 3D powder snowflake: directional frost shadow underneath + solid pure-white snow puff on top
+          ctx.fillStyle = isNight ? 'rgba(56, 189, 248, 0.30)' : 'rgba(98, 150, 208, 0.34)';
+          ctx.beginPath();
+          ctx.arc(sx + 0.9, sy + 1.1, p.r * 1.06, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = isNight ? 'rgba(240, 249, 255, 0.95)' : 'rgba(255, 255, 255, 0.98)';
+          ctx.beginPath();
+          ctx.arc(sx, sy, p.r * 1.10, 0, Math.PI * 2);
+          ctx.fill();
+        }
       } else if (showFireflies) {
         const pulse = 0.45 + 0.45 * Math.sin(self.tick * 0.08 + p.x * 20);
         const fx = p.x * viewW;
@@ -1339,7 +1516,9 @@ export function entitiesRenderMinimap(self: IsometricRenderer, minimapCanvas: HT
     const originX = w * 0.5;
     const originY = 8;
 
-    const cacheKey = `${w}|${h}|${rot}|${sim.stateRevision}|${sim.state.sandboxMode ? 1 : 0}|${sim.state.unlockedZones.length}`;
+    const isWinter =
+      typeof sim.isWinterMainMapActive === 'function' && sim.isWinterMainMapActive();
+    const cacheKey = `${w}|${h}|${rot}|${isWinter ? 1 : 0}|${sim.stateRevision}|${sim.state.sandboxMode ? 1 : 0}|${sim.state.unlockedZones.length}`;
     if (typeof document !== 'undefined') {
       if (!self.minimapCacheCanvas || self.minimapCacheKey !== cacheKey) {
         if (!self.minimapCacheCanvas) {
@@ -1360,17 +1539,17 @@ export function entitiesRenderMinimap(self: IsometricRenderer, minimapCanvas: HT
               const my = originY + (rx + ry) * scaleY;
 
               if (!unlocked) {
-                cCtx.fillStyle = 'rgba(84, 136, 92, 0.72)';
+                cCtx.fillStyle = isWinter ? 'rgba(148, 184, 218, 0.78)' : 'rgba(84, 136, 92, 0.72)';
               } else if (c.buildingUid) {
                 cCtx.fillStyle = '#fbbf24';
               } else if (c.coasterTrack) {
                 cCtx.fillStyle = '#f97316';
               } else if (c.path !== 'none') {
-                cCtx.fillStyle = '#d6d3d1';
+                cCtx.fillStyle = isWinter ? '#d6c5ab' : '#d6d3d1';
               } else if (c.terrain === 'water') {
                 cCtx.fillStyle = '#38bdf8';
-              } else if (c.terrain === 'snow') {
-                cCtx.fillStyle = '#e2e8f0';
+              } else if (isWinter || c.terrain === 'snow') {
+                cCtx.fillStyle = '#e6f0fa';
               } else {
                 cCtx.fillStyle = '#4ade80';
               }
@@ -1395,17 +1574,17 @@ export function entitiesRenderMinimap(self: IsometricRenderer, minimapCanvas: HT
           const my = originY + (rx + ry) * scaleY;
 
           if (!unlocked) {
-            mCtx.fillStyle = 'rgba(84, 136, 92, 0.72)';
+            mCtx.fillStyle = isWinter ? 'rgba(148, 184, 218, 0.78)' : 'rgba(84, 136, 92, 0.72)';
           } else if (c.buildingUid) {
             mCtx.fillStyle = '#fbbf24';
           } else if (c.coasterTrack) {
             mCtx.fillStyle = '#f97316';
           } else if (c.path !== 'none') {
-            mCtx.fillStyle = '#d6d3d1';
+            mCtx.fillStyle = isWinter ? '#d6c5ab' : '#d6d3d1';
           } else if (c.terrain === 'water') {
             mCtx.fillStyle = '#38bdf8';
-          } else if (c.terrain === 'snow') {
-            mCtx.fillStyle = '#e2e8f0';
+          } else if (isWinter || c.terrain === 'snow') {
+            mCtx.fillStyle = '#e6f0fa';
           } else {
             mCtx.fillStyle = '#4ade80';
           }

@@ -144,6 +144,7 @@ import {
   MAX_DAILY_OWL_HELP_REQUESTS,
   MAX_HOME_LANTERN_MARKS,
   pickSimulatedHomeLanternMark,
+  prepareGameStateForPersistence,
   syncNeighborSocialDailyReset,
 } from './neighborSocial';
 import {
@@ -271,13 +272,19 @@ export function lifecycleSyncPlayerPrimitivesToHomeState(sim: ParkSimulation): v
       timeOverride: h.settings.timeOverride,
     };
     h.lastSavedAt = sim.state.lastSavedAt;
+    h.unknownBuildings = sim.state.unknownBuildings ?? h.unknownBuildings;
 }
 
-export function lifecycleSaveToStorage(sim: ParkSimulation): void {
+export function lifecycleSaveToStorage(sim: ParkSimulation, touchTimestamp = true): void {
     if (sim.isHeadmasterPreview) return;
+    // Build Mode: gộp N lần saveToStorage trong 1 stroke kéo brush xuống đúng
+    // 1 lần commit ở buildTxnCommitStroke để tránh GC stutter khi kéo dài.
+    if (sim.suppressPerActionSave) return;
     try {
       const now = Date.now();
-      sim.state.lastSavedAt = now;
+      if (touchTimestamp || !sim.state.lastSavedAt) {
+        sim.state.lastSavedAt = now;
+      }
       if (sim.state.sandboxMode) {
         sim.state.sandboxTainted = true;
       }
@@ -286,11 +293,12 @@ export function lifecycleSaveToStorage(sim: ParkSimulation): void {
       if (baseState.sandboxMode) {
         baseState.sandboxTainted = true;
       }
+      const preparedState = prepareGameStateForPersistence(baseState);
       const persistedState: GameState = {
-        ...baseState,
-        lastSavedAt: now,
+        ...preparedState,
+        lastSavedAt: baseState.lastSavedAt || now,
         settings: {
-          ...baseState.settings,
+          ...preparedState.settings,
           showGrid: false,
           cutawayMode: false,
         },
@@ -304,7 +312,7 @@ export function lifecycleSaveToStorage(sim: ParkSimulation): void {
 export function lifecycleExportSaveJson(sim: ParkSimulation): string {
     sim.state.lastSavedAt = Date.now();
     lifecycleSyncPlayerPrimitivesToHomeState(sim);
-    const baseState = sim.homeStateWhileVisiting ?? sim.state;
+    const baseState = prepareGameStateForPersistence(sim.homeStateWhileVisiting ?? sim.state);
     return JSON.stringify(baseState, null, 2);
 }
 
@@ -636,10 +644,37 @@ export function lifecycleGetActiveFestival(sim: ParkSimulation, now = new Date()
     const m = now.getMonth();
     const d = now.getDate();
     if (m === 9 || (m === 10 && d <= 5)) return 'halloween';
-    if (m === 11) return 'christmas';
+    if ((m === 10 && d >= 15) || m === 11 || (m === 0 && d <= 5)) return 'christmas';
     const dayOfWeek = now.getDay();
     if (dayOfWeek === 0 || dayOfWeek === 6) return 'quidditch_cup';
     return 'none';
+}
+
+export function lifecycleIsYuleVisualThemeActive(sim: ParkSimulation, now = new Date()): boolean {
+    const mode = sim.state.settings.yuleThemeMode ?? 'auto';
+    if (mode === 'on') return true;
+    if (mode === 'off') return false;
+    return lifecycleGetActiveFestival(sim, now) === 'christmas';
+}
+
+/**
+ * Chủ đề Mùa Đông Giáng Sinh của Bản Đồ Chính:
+ * Bật mặc định (`yuleThemeMode === 'auto' | 'on'`) để chào đón mùa lễ hội Giáng Sinh trên toàn thung lũng,
+ * và tắt ngay lập tức khi người chơi chọn `🌿 Tắt` (`yuleThemeMode === 'off'`) hoặc ép lễ hội khác.
+ */
+export function lifecycleIsWinterMainMapActive(sim: ParkSimulation): boolean {
+    const mode = sim.state.settings.yuleThemeMode ?? 'auto';
+    if (mode === 'off') return false;
+    if (mode === 'on') return true;
+    const festOverride = sim.state.settings.activeFestival;
+    if (
+      festOverride === 'halloween' ||
+      festOverride === 'quidditch_cup' ||
+      festOverride === 'none'
+    ) {
+      return false;
+    }
+    return true;
 }
 
 export function lifecycleResolveWeatherSlotKind(sim: ParkSimulation, slotIdx: number, dateAtSlot: Date): WeatherKind {
@@ -652,9 +687,9 @@ export function lifecycleResolveWeatherSlotKind(sim: ParkSimulation, slotIdx: nu
 
     const period = lifecycleGetRealTimePeriod(sim, dateAtSlot);
     const fest = lifecycleGetActiveFestival(sim, dateAtSlot);
-    if (fest === 'christmas') {
-      if (roll < 52) return 'snow';
-      if (roll < 76) return 'sunny';
+    if (fest === 'christmas' || lifecycleIsWinterMainMapActive(sim)) {
+      if (roll < 64) return 'snow';
+      if (roll < 88) return 'sunny';
       return 'cloudy';
     }
     if (period === 'dawn' && roll < 32) {
@@ -746,8 +781,13 @@ export function lifecycleGetCurrentWeather(sim: ParkSimulation, nowMs = Date.now
             : 'sunny';
       return lifecycleDescribeWeatherSlot(sim, mapped, 0, false);
     }
-    if (sim.state.level <= 2 && sim.state.buildings.length <= 2) {
-      return lifecycleDescribeWeatherSlot(sim, 'sunny', 0, false);
+    if (sim.state.level <= 2 && sim.state.buildings.length <= 4) {
+      return lifecycleDescribeWeatherSlot(
+        sim,
+        lifecycleIsWinterMainMapActive(sim) ? 'snow' : 'sunny',
+        0,
+        false
+      );
     }
     const slotLenMs = 120_000;
     const slotIdx = Math.floor(nowMs / slotLenMs);

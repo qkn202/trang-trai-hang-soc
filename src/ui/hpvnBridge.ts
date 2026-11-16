@@ -503,6 +503,25 @@ export function renderValleyPostcardCanvas(
         sh = Math.round(sourceCanvas.width / dstRatio);
         sy = Math.round((sourceCanvas.height - sh) / 2);
       }
+      const gpuEl =
+        typeof document !== 'undefined' && sourceCanvas.id === 'gameCanvas'
+          ? (document.getElementById('gpuWorldCanvas') as HTMLCanvasElement | null)
+          : null;
+      if (gpuEl && gpuEl.style.display !== 'none' && gpuEl.width > 0 && gpuEl.height > 0) {
+        const gRatio = gpuEl.width / gpuEl.height;
+        let gsx = 0;
+        let gsy = 0;
+        let gsw = gpuEl.width;
+        let gsh = gpuEl.height;
+        if (gRatio > dstRatio) {
+          gsw = Math.round(gpuEl.height * dstRatio);
+          gsx = Math.round((gpuEl.width - gsw) / 2);
+        } else {
+          gsh = Math.round(gpuEl.width / dstRatio);
+          gsy = Math.round((gpuEl.height - gsh) / 2);
+        }
+        ctx.drawImage(gpuEl, gsx, gsy, gsw, gsh, vx, vy, vw, vh);
+      }
       ctx.drawImage(sourceCanvas, sx, sy, sw, sh, vx, vy, vw, vh);
       drewScene = true;
     } catch {

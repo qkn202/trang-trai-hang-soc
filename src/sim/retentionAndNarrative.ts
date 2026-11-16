@@ -6,7 +6,7 @@
 
 import { getCatalogItem } from '../data/catalog';
 import { CREATURE_SPECIES_PROFILES } from '../data/suitcase';
-import { getLocalCalendarResetKey } from './neighborSocial';
+import { getLocalCalendarResetKey, prepareGameStateForPersistence } from './neighborSocial';
 import {
   AchievementCategory,
   AchievementProgressEntry,
@@ -444,6 +444,52 @@ export function claimAchievementReward(
   };
 }
 
+export function claimAllUnlockedAchievements(
+  state: GameState,
+  now = Date.now()
+): { claimedIds: string[]; totalGalleons: number; totalStars: number } {
+  const ret = ensureRetentionState(state);
+  const claimedIds: string[] = [];
+  let totalGalleons = 0;
+  let totalStars = 0;
+  for (const def of ACHIEVEMENT_REGISTRY) {
+    const entry = ret.achievements[def.id];
+    if (!entry?.unlockedAt || entry.claimedAt) continue;
+    entry.claimedAt = now;
+    state.galleons += def.rewardGalleons;
+    totalGalleons += def.rewardGalleons;
+    totalStars += def.rewardStars;
+    claimedIds.push(def.id);
+  }
+  return { claimedIds, totalGalleons, totalStars };
+}
+
+export function getClaimableRetentionCount(
+  state: GameState,
+  unlockedLoginDayMax: number
+): { claimableAchievements: number; claimableLoginDays: number; total: number } {
+  const ret = ensureRetentionState(state);
+  let claimableAchievements = 0;
+  for (const def of ACHIEVEMENT_REGISTRY) {
+    const entry = ret.achievements[def.id];
+    if (entry?.unlockedAt && !entry.claimedAt) {
+      claimableAchievements++;
+    }
+  }
+  const safeMaxDay = Math.max(0, Math.min(7, Math.floor(unlockedLoginDayMax)));
+  let claimableLoginDays = 0;
+  for (const d of DAY_1_TO_7_REWARDS) {
+    if (d.day <= safeMaxDay && !ret.claimedLoginDays.includes(d.day)) {
+      claimableLoginDays++;
+    }
+  }
+  return {
+    claimableAchievements,
+    claimableLoginDays,
+    total: claimableAchievements + claimableLoginDays,
+  };
+}
+
 export function getAchievementCodexSummary(state: GameState): {
   total: number;
   unlocked: number;
@@ -500,9 +546,10 @@ export function exportSavePayload(state: GameState, slotId: SaveSlotId = 'slot_1
   const ret = ensureRetentionState(state);
   ret.activeSaveSlotId = slotId;
   ret.schemaVersion = CURRENT_SAVE_SCHEMA_VERSION;
+  const preparedState = prepareGameStateForPersistence(state);
   const envelope = {
-    meta: buildSaveSlotMeta(state, slotId, now),
-    state,
+    meta: buildSaveSlotMeta(preparedState, slotId, now),
+    state: preparedState,
   };
   return JSON.stringify(envelope);
 }

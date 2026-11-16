@@ -77,6 +77,7 @@ const DEFAULT_TRUSTED_ORIGIN_PATTERNS: ReadonlyArray<RegExp> = [
   /^https:\/\/([a-z0-9-]+\.)?hangsoc\.game$/i,
   /^https:\/\/([a-z0-9-]+\.)?web\.app$/i,
   /^https:\/\/([a-z0-9-]+\.)?firebaseapp\.com$/i,
+  /^https:\/\/qkn202\.github\.io$/i,
   /^http:\/\/localhost(:\d+)?$/i,
   /^http:\/\/127\.0\.0\.1(:\d+)?$/i,
 ];

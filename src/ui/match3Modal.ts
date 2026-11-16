@@ -35,6 +35,11 @@ import {
   ParkSimulation,
 } from '../sim/simulation';
 import {
+  ProofOfPlayRecorder,
+  verifyProofOfPlayEnvelope,
+} from '../sim/proofOfPlay';
+import { MinigameGpuFxBatcher } from '../render/fx/minigameGpuFx';
+import {
   ACTIVE_MINIGAME_RESUME_KEY,
   ActiveMinigameResumeRecord,
   BuildReductionResult,
@@ -327,6 +332,8 @@ export class Match3ModalController {
   private companionCharge = 0;
   private snackPieUsedThisAttempt = false;
   private devJumpReturnLevel: number | null = null;
+  private popRecorder: ProofOfPlayRecorder | null = null;
+  private gpuFx: MinigameGpuFxBatcher | null = null;
 
   constructor(
     root: HTMLElement,
@@ -349,6 +356,7 @@ export class Match3ModalController {
         dlg.returnValue = '';
         this.clearLiveAnnouncement();
         this.engine?.cancelBoosterMode();
+        const wasBusyOnClose = Boolean(this.engine?.hasAnyAsyncActivity());
         this.engine?.stopLoop();
         if (this.rescueContext) {
           this.rescueContext = null;
@@ -367,6 +375,11 @@ export class Match3ModalController {
             this.engine = null;
           }
           this.devJumpReturnLevel = null;
+          this.sim.saveToStorage();
+        } else if (wasBusyOnClose) {
+          // Bàn chơi bị ngắt ngang giữa chuỗi rơi/nổ kẹo: huỷ engine dở dang và giữ nguyên activeSession sạch ở cuối nước đi trước.
+          this.engine?.destroy();
+          this.engine = null;
           this.sim.saveToStorage();
         } else {
           this.persistMatch3Session(true);
@@ -499,7 +512,7 @@ export class Match3ModalController {
       }
       return;
     }
-    if (this.engine.busy) return;
+    if (this.engine.hasAnyAsyncActivity()) return;
     const snap = this.engine.exportSession({
       movesMadeThisAttempt: this.movesMadeThisAttempt,
       companionCharge: this.companionCharge,
@@ -585,6 +598,7 @@ export class Match3ModalController {
     this.victorySummary = null;
     this.lastGameEndPayload = null;
     this.prevObjectiveRemaining = [];
+    this.popRecorder = null;
     const dlg = this.getDialog();
     if (dlg?.open) dlg.close();
   }
@@ -735,9 +749,31 @@ export class Match3ModalController {
         this.onParentRefresh();
         return true;
       },
-      onPlayerMoveCommitted: (movesUsed) => {
+      onPlayerMoveCommitted: (movesUsed, maxCascade, specialUsed) => {
         const wasZero = this.movesMadeThisAttempt === 0;
         this.movesMadeThisAttempt = movesUsed;
+        this.popRecorder?.recordMove(
+          ((movesUsed & 0xff) << 8) ^ ((maxCascade & 0x3f) << 2) ^ (specialUsed ? 3 : 1)
+        );
+        if (specialUsed || maxCascade >= 2) {
+          const dlg = this.getDialog();
+          if (dlg) {
+            if (!this.gpuFx) {
+              this.gpuFx = new MinigameGpuFxBatcher(dlg);
+            }
+            const stageEl = dlg.querySelector('.m3-stage-board-host') as HTMLElement | null;
+            const rect = stageEl?.getBoundingClientRect();
+            const cx = rect ? rect.left + rect.width * 0.5 : (window.innerWidth || 800) * 0.5;
+            const cy = rect ? rect.top + rect.height * 0.5 : (window.innerHeight || 600) * 0.5;
+            this.gpuFx.spawnStarburst(
+              cx,
+              cy,
+              specialUsed ? 38 : Math.min(44, 18 + maxCascade * 6),
+              specialUsed ? 2 : 0,
+              specialUsed ? 1.25 : 1.0
+            );
+          }
+        }
         const comp = this.sim.getActiveMinigameCompanion();
         this.companionCharge = Math.min(comp.chargeEveryMoves, this.companionCharge + 1);
         if (wasZero) {
@@ -800,6 +836,7 @@ export class Match3ModalController {
     this.victorySummary = null;
     this.lastGameEndPayload = null;
     this.prevObjectiveRemaining = [];
+    this.popRecorder = new ProofOfPlayRecorder('match3', levelNum);
 
     eng.loadLevel(levelData, {
       house: houseId,
@@ -844,9 +881,17 @@ export class Match3ModalController {
         } else {
           this.sim.state.match3.activeSession = null;
           this.clearActiveModalResumeMarker();
+          const sealedPop =
+            this.popRecorder && this.popRecorder.recordedMoves >= 1
+              ? this.popRecorder.seal(payload.score)
+              : undefined;
+          const validPop =
+            sealedPop && verifyProofOfPlayEnvelope(sealedPop, { expectedGameId: 'match3' }).ok
+              ? sealedPop
+              : undefined;
           this.victorySummary = this.sim.completeMatch3LevelVictory(
             payload.bonusCoinsFromLeftoverMoves,
-            { sessionScore: payload.score }
+            { sessionScore: payload.score, proofOfPlay: validPop }
           );
         }
         this.onParentRefresh();
@@ -1120,8 +1165,8 @@ export class Match3ModalController {
                   : ''
               }
             </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:100%;margin-top:6px;">
-              <button id="btnM3UseStarsInPark" type="button" class="brass-btn gold-cta" style="flex:1;min-width:190px;padding:9px 14px;font-size:13.5px;">
+            <div class="m3-overlay-actions">
+              <button id="btnM3UseStarsInPark" type="button" class="brass-btn gold-cta m3-overlay-btn-full">
                 🏡 Về Vườn
               </button>
             </div>
@@ -1159,14 +1204,14 @@ export class Match3ModalController {
                   : `<span class="m3-reward-chip star">👑 777/777</span>`
               }
             </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:100%;margin-top:6px;">
-              <button id="btnM3NextLevel" type="button" class="brass-btn gold-cta" style="flex:1;min-width:140px;padding:9px 14px;font-size:13.5px;">
+            <div class="m3-overlay-actions">
+              <button id="btnM3NextLevel" type="button" class="brass-btn gold-cta m3-overlay-btn-primary">
                 ${vs.isMasterReplay || lv.id >= MAX_MINIGAME_STAGE ? `👑 Chơi Lại` : `▶️ Màn ${vs.nextLevel}`}
               </button>
-              <button id="btnM3VictoryLeaderboard" type="button" class="brass-btn" style="flex:0.85;min-width:110px;padding:9px 12px;font-size:13px;">
+              <button id="btnM3VictoryLeaderboard" type="button" class="brass-btn m3-overlay-btn-half">
                 🏆 #${m3Rank}
               </button>
-              <button id="btnM3UseStarsInPark" type="button" class="brass-btn" style="flex:1;min-width:130px;padding:9px 14px;font-size:13px;">
+              <button id="btnM3UseStarsInPark" type="button" class="brass-btn m3-overlay-btn-half">
                 🏡 Về Vườn (${st.sandboxMode ? '∞' : m3.stars} 🌟)
               </button>
             </div>
@@ -1194,27 +1239,27 @@ export class Match3ModalController {
                   : 'Chỉ còn vài bước nữa là phá giải màn kẹo phép — tiếp sức ngay để giữ chuỗi thắng!'
               }
             </p>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:100%;margin-top:6px;">
+            <div class="m3-overlay-actions">
               ${
                 canRescueTalisman
-                  ? `<button id="btnM3RescuePhoenixTalisman" type="button" class="brass-btn pa-tool-btn talisman" style="flex:1.4;min-width:170px;padding:9px 14px;">
+                  ? `<button id="btnM3RescuePhoenixTalisman" type="button" class="brass-btn pa-tool-btn talisman m3-overlay-btn-full">
                       🔥 Bùa (+5 Lượt &amp; Gỡ Bom • ${st.sandboxMode ? '∞' : `×${talismanQty}`})
                     </button>`
                   : ''
               }
-              <button id="btnM3BuyExtraMoves" type="button" class="brass-btn gold-cta" style="flex:1.2;min-width:150px;padding:9px 14px;">
+              <button id="btnM3BuyExtraMoves" type="button" class="brass-btn gold-cta m3-overlay-btn-primary">
                 🪄 +${EXTRA_MOVES_COUNT} Lượt (${st.sandboxMode ? '0G' : `🪙 ${extraMovesCost}G`})
               </button>
-              <button id="btnM3GiveUpRetry" type="button" class="brass-btn" style="flex:0.8;min-width:110px;padding:9px 12px;">
+              <button id="btnM3GiveUpRetry" type="button" class="brass-btn m3-overlay-btn-half">
                 ${this.rescueContext ? '🔄 Thử Lại' : '💔 Thử Lại (-1 ❤️)'}
               </button>
               ${
                 !this.rescueContext
                   ? mySosMatch3?.rescuedAt
-                    ? `<button id="btnM3OverlayClaimSos" type="button" class="brass-btn gold-cta" style="flex:1.4;min-width:160px;padding:9px 14px;">
+                    ? `<button id="btnM3OverlayClaimSos" type="button" class="brass-btn gold-cta m3-overlay-btn-full">
                         🎉 Qua Màn Ngay!
                       </button>`
-                    : `<button id="btnM3OverlayAskFriend" type="button" class="brass-btn" style="flex:1.2;min-width:150px;padding:9px 12px;" ${rescuesReceivedLeft <= 0 && !mySosMatch3 ? 'disabled' : ''}>
+                    : `<button id="btnM3OverlayAskFriend" type="button" class="brass-btn m3-overlay-btn-half" ${rescuesReceivedLeft <= 0 && !mySosMatch3 ? 'disabled' : ''}>
                         ${mySosMatch3 ? '🦉 Đang chờ...' : `🆘 Cứu (${rescuesReceivedLeft}/${MAX_DAILY_MINIGAME_RESCUES})`}
                       </button>`
                   : ''
@@ -1303,6 +1348,9 @@ export class Match3ModalController {
             <button id="btnM3OpenLeaderboard" type="button" class="m3-res-chip minigame-lb-chip" title="Bảng Xếp Hạng (#${m3Rank})">
               <span>🏆</span>
               <strong id="m3ModalRankText">#${m3Rank}</strong>
+            </button>
+            <button id="btnM3ToggleYuleSkin" type="button" class="m3-res-chip yule-skin-toggle-pill ${this.sim.isYuleVisualThemeActive() ? 'is-yule-active' : ''}" aria-pressed="${this.sim.isYuleVisualThemeActive()}" title="Bật/Tắt giao diện Giáng Sinh">
+              <span>🎄</span>
             </button>
           </div>
           <form method="dialog" class="pa-inline-close-form">
@@ -1417,18 +1465,18 @@ export class Match3ModalController {
                 <p style="font-size:12.5px;max-width:440px;line-height:1.45;color:#78350f;margin:0;">
                   <strong>+1 ❤️</strong> sau <strong id="m3NoHeartsCountdown" style="color:#b45309;">${mm}:${ss}</strong>
                 </p>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:4px;">
-                  <button id="btnM3RefillHeartsNow" type="button" class="brass-btn gold-cta" style="padding:8px 16px;font-size:13px;">
+                <div class="m3-overlay-actions">
+                  <button id="btnM3RefillHeartsNow" type="button" class="brass-btn gold-cta m3-overlay-btn-primary">
                     ${
                       butterbeerQty > 0
                         ? `🍻 Hồi 5 ❤️ (×${butterbeerQty})`
                         : `❤️ Hồi 5/5 (🪙 ${REFILL_HEARTS_GOLD_COST}G)`
                     }
                   </button>
-                  <button id="btnM3EmptyGoArcade" type="button" class="brass-btn pa-hud-cta" style="padding:8px 14px;font-size:12.5px;">
+                  <button id="btnM3EmptyGoArcade" type="button" class="brass-btn pa-hud-cta m3-overlay-btn-half">
                     ♟️ 4 Môn Khảo Thí
                   </button>
-                  <button id="btnM3BackToPark" type="button" class="brass-btn" style="padding:8px 14px;font-size:12.5px;">
+                  <button id="btnM3BackToPark" type="button" class="brass-btn m3-overlay-btn-half">
                     🏡 Về Vườn
                   </button>
                 </div>
@@ -1567,8 +1615,12 @@ export class Match3ModalController {
       >
         <span class="m3-rainbow-orb-wrap">
           ${pictureSpriteHtml(
-            `/paintings/candy-hogwarts/powerup-rainbow.webp?v=${CANDY_ASSET_REV}`,
-            `/paintings/candy-hogwarts/powerup-rainbow.png?v=${CANDY_ASSET_REV}`,
+            this.sim.isYuleVisualThemeActive()
+              ? `/paintings/candy-yule/powerup-rainbow.webp?v=${CANDY_ASSET_REV}`
+              : `/paintings/candy-hogwarts/powerup-rainbow.webp?v=${CANDY_ASSET_REV}`,
+            this.sim.isYuleVisualThemeActive()
+              ? `/paintings/candy-yule/powerup-rainbow.png?v=${CANDY_ASSET_REV}`
+              : `/paintings/candy-hogwarts/powerup-rainbow.png?v=${CANDY_ASSET_REV}`,
             'm3-rainbow-orb-icon'
           )}
           <span id="m3RainbowSuperBadge" class="m3-rainbow-super-badge" ${isSuperRainbow ? '' : 'hidden'}>⚡</span>
@@ -1839,6 +1891,15 @@ export class Match3ModalController {
     box.querySelector('#btnM3OpenLeaderboard')?.addEventListener('click', () => {
       this.sim.audio.playClick();
       this.onOpenLeaderboard?.();
+    });
+    box.querySelector('#btnM3ToggleYuleSkin')?.addEventListener('click', () => {
+      this.sim.audio.playClick();
+      const active = this.sim.toggleYuleVisualTheme();
+      if (typeof document !== 'undefined') {
+        document.documentElement.dataset.yuleTheme = active ? 'true' : 'false';
+      }
+      this.onParentRefresh();
+      this.renderDOM();
     });
     box.querySelectorAll('[data-m3-jump-arcade]').forEach((el) => {
       el.addEventListener('click', () => {

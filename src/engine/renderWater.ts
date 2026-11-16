@@ -89,30 +89,50 @@ export function waterDrawOrganicWaterShorelines(self: IsometricRenderer,
 
     const ctx = self.ctx;
     const zoom = cam.zoom;
+    const isWinter =
+      typeof sim.isWinterMainMapActive === 'function' && sim.isWinterMainMapActive();
 
     // Project every loop once into screen space, then stroke the shore in
-    // three passes (wet sand, damp edge, foam lap).
+    // three passes (snowy bank / wet sand, glacier shelf / damp edge, frost / foam lap).
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    const passes: Array<{ color: string; width: (z: number) => number; offset: number }> = [
-      {
-        color: isNight ? 'rgba(34, 62, 48, 0.76)' : 'rgba(72, 134, 38, 0.92)',
-        width: (z) => Math.max(4.5, 9.2 * z),
-        offset: 0,
-      },
-      {
-        color: isNight ? 'rgba(84, 118, 92, 0.52)' : 'rgba(214, 192, 146, 0.78)',
-        width: (z) => Math.max(2.2, 4.4 * z),
-        offset: 0,
-      },
-      {
-        color: isNight ? 'rgba(186, 230, 253, 0.50)' : 'rgba(240, 253, 255, 0.85)',
-        width: (z) => Math.max(1.3, 2.4 * z),
-        offset: 1,
-      },
-    ];
+    const passes: Array<{ color: string; width: (z: number) => number; offset: number }> = isWinter
+      ? [
+          {
+            color: isNight ? 'rgba(92, 120, 158, 0.88)' : 'rgba(235, 245, 255, 0.96)',
+            width: (z) => Math.max(4.8, 9.6 * z),
+            offset: 0,
+          },
+          {
+            color: isNight ? 'rgba(125, 211, 252, 0.52)' : 'rgba(186, 230, 253, 0.88)',
+            width: (z) => Math.max(2.4, 4.8 * z),
+            offset: 0,
+          },
+          {
+            color: isNight ? 'rgba(224, 242, 254, 0.62)' : 'rgba(255, 255, 255, 0.94)',
+            width: (z) => Math.max(1.4, 2.6 * z),
+            offset: 1,
+          },
+        ]
+      : [
+          {
+            color: isNight ? 'rgba(34, 62, 48, 0.76)' : 'rgba(72, 134, 38, 0.92)',
+            width: (z) => Math.max(4.5, 9.2 * z),
+            offset: 0,
+          },
+          {
+            color: isNight ? 'rgba(84, 118, 92, 0.52)' : 'rgba(214, 192, 146, 0.78)',
+            width: (z) => Math.max(2.2, 4.4 * z),
+            offset: 0,
+          },
+          {
+            color: isNight ? 'rgba(186, 230, 253, 0.50)' : 'rgba(240, 253, 255, 0.85)',
+            width: (z) => Math.max(1.3, 2.4 * z),
+            offset: 1,
+          },
+        ];
 
     for (const loop of self.waterLoops) {
       // Skip lakes that live entirely inside locked (undiscovered) zones —
@@ -209,6 +229,8 @@ export function waterDrawSeamlessWaterDetails(self: IsometricRenderer,
     const ctx = self.ctx;
     const cell = sim.grid[gy]?.[gx];
     if (cell?.path && cell.path !== 'none') return;
+    const isWinter =
+      typeof sim.isWinterMainMapActive === 'function' && sim.isWinterMainMapActive();
 
     const isLand = (nx: number, ny: number): boolean => {
       const nc = sim.grid[ny]?.[nx];
@@ -220,8 +242,14 @@ export function waterDrawSeamlessWaterDetails(self: IsometricRenderer,
 
     // 0. AAA River Ottery Depth Gradient & Submerged Shallows Boulders (Mockup 1 & 2)
     if (!nearBank) {
-      // Deeper jewel sapphire-teal mid-channel core
-      ctx.fillStyle = isNight ? 'rgba(6, 30, 56, 0.52)' : 'rgba(10, 96, 126, 0.42)';
+      // Deeper jewel sapphire-teal mid-channel core (crisp glacier sapphire in winter)
+      ctx.fillStyle = isWinter
+        ? isNight
+          ? 'rgba(8, 28, 54, 0.58)'
+          : 'rgba(12, 74, 110, 0.48)'
+        : isNight
+          ? 'rgba(6, 30, 56, 0.52)'
+          : 'rgba(10, 96, 126, 0.42)';
       ctx.beginPath();
       ctx.moveTo(sx, sy);
       ctx.lineTo(sx + hw, sy + hh);
@@ -230,8 +258,14 @@ export function waterDrawSeamlessWaterDetails(self: IsometricRenderer,
       ctx.closePath();
       ctx.fill();
     } else {
-      // Sunlit crystal-turquoise bankside shallows + smooth submerged river boulders
-      ctx.fillStyle = isNight ? 'rgba(56, 189, 248, 0.14)' : 'rgba(134, 244, 254, 0.34)';
+      // Sunlit crystal-turquoise / frosted glacial bankside shallows + smooth submerged river boulders
+      ctx.fillStyle = isWinter
+        ? isNight
+          ? 'rgba(125, 211, 252, 0.18)'
+          : 'rgba(186, 230, 253, 0.42)'
+        : isNight
+          ? 'rgba(56, 189, 248, 0.14)'
+          : 'rgba(134, 244, 254, 0.34)';
       ctx.beginPath();
       ctx.moveTo(sx, sy);
       ctx.lineTo(sx + hw, sy + hh);
@@ -246,10 +280,10 @@ export function waterDrawSeamlessWaterDetails(self: IsometricRenderer,
         ctx.ellipse(sx - 5.4 * zoom, sy + hh + 2.2 * zoom, 3.6 * zoom, 1.8 * zoom, 0.2, 0, Math.PI * 2);
         ctx.ellipse(sx + 4.6 * zoom, sy + hh - 1.6 * zoom, 2.8 * zoom, 1.4 * zoom, -0.2, 0, Math.PI * 2);
         ctx.fill();
-        if (!isNight) {
-          ctx.fillStyle = 'rgba(245, 245, 244, 0.42)';
+        if (!isNight || isWinter) {
+          ctx.fillStyle = isWinter ? 'rgba(248, 250, 252, 0.78)' : 'rgba(245, 245, 244, 0.42)';
           ctx.beginPath();
-          ctx.ellipse(sx - 6.0 * zoom, sy + hh + 1.7 * zoom, 1.8 * zoom, 0.85 * zoom, 0.2, 0, Math.PI * 2);
+          ctx.ellipse(sx - 6.0 * zoom, sy + hh + 1.5 * zoom, 2.2 * zoom, 1.0 * zoom, 0.2, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -260,7 +294,13 @@ export function waterDrawSeamlessWaterDetails(self: IsometricRenderer,
       const wavePhase = self.reducedMotion ? 0 : self.tick * 0.05;
       if ((gx + gy) % 2 === 0) {
         const wave = Math.sin(wavePhase + gx * 0.8 + gy * 0.6) * 3.8 * zoom;
-        ctx.strokeStyle = isNight ? 'rgba(165, 243, 252, 0.44)' : 'rgba(255, 252, 214, 0.72)';
+        ctx.strokeStyle = isWinter
+          ? isNight
+            ? 'rgba(186, 230, 253, 0.48)'
+            : 'rgba(224, 242, 254, 0.82)'
+          : isNight
+            ? 'rgba(165, 243, 252, 0.44)'
+            : 'rgba(255, 252, 214, 0.72)';
         ctx.lineWidth = Math.max(1.1, 1.65 * zoom);
         ctx.beginPath();
         ctx.moveTo(sx - 9.8 * zoom + wave, sy + hh - 1.6 * zoom);
@@ -281,54 +321,94 @@ export function waterDrawSeamlessWaterDetails(self: IsometricRenderer,
       }
     }
 
-    // 2. Round notched green lily pads, layered pink-cream lotus blossoms & marsh frogs!
+    // 2. Winter Crystalline Ice Floes OR Summer Lily Pads, Lotus Blossoms & Marsh Frogs!
     if (hash % 3 === 0) {
       const lx = sx + ((hash % 5) - 2) * 3.6 * zoom;
       const ly = sy + hh + ((hash % 3) - 1) * 2.2 * zoom;
       ctx.save();
-      ctx.fillStyle = isNight ? '#1e6b38' : '#52be42';
-      ctx.strokeStyle = '#1f4d18';
-      ctx.lineWidth = Math.max(1.0, 1.25 * zoom);
-      ctx.beginPath();
-      ctx.ellipse(lx, ly, 6.8 * zoom, 3.8 * zoom, 0, 0.25, Math.PI * 1.92);
-      ctx.lineTo(lx, ly);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
+      if (isWinter) {
+        // Faceted 2.5D translucent glacier ice floe with crisp snow dusting
+        const rxIce = (6.4 + (hash % 3) * 1.2) * zoom;
+        const ryIce = rxIce * 0.52;
+        // Submerged icy rim thickness
+        ctx.fillStyle = isNight ? 'rgba(56, 189, 248, 0.45)' : 'rgba(125, 211, 252, 0.78)';
+        ctx.beginPath();
+        ctx.moveTo(lx - rxIce, ly + 1.6 * zoom);
+        ctx.lineTo(lx - rxIce * 0.38, ly - ryIce + 1.6 * zoom);
+        ctx.lineTo(lx + rxIce * 0.62, ly - ryIce * 0.78 + 1.6 * zoom);
+        ctx.lineTo(lx + rxIce, ly + 0.18 * ryIce + 1.6 * zoom);
+        ctx.lineTo(lx + rxIce * 0.28, ly + ryIce + 1.6 * zoom);
+        ctx.lineTo(lx - rxIce * 0.66, ly + ryIce * 0.75 + 1.6 * zoom);
+        ctx.closePath();
+        ctx.fill();
 
-      if (hash === 3 || hash === 9 || hash === 12) {
-        // Blooming layered pink-and-cream marsh water lily
-        ctx.fillStyle = '#fbcfe8';
+        // Crisp frosted snow-ice top plate
+        ctx.fillStyle = isNight ? 'rgba(203, 229, 248, 0.82)' : 'rgba(248, 252, 255, 0.92)';
+        ctx.strokeStyle = isNight ? 'rgba(125, 211, 252, 0.75)' : 'rgba(56, 189, 248, 0.85)';
+        ctx.lineWidth = Math.max(0.95, 1.2 * zoom);
         ctx.beginPath();
-        ctx.ellipse(lx + 0.8 * zoom, ly - 1.2 * zoom, 3.6 * zoom, 2.1 * zoom, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#fffbeb';
-        ctx.beginPath();
-        ctx.arc(lx + 0.8 * zoom, ly - 1.6 * zoom, 2.2 * zoom, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#f472b6';
-        ctx.beginPath();
-        ctx.arc(lx + 0.8 * zoom, ly - 1.8 * zoom, 1.15 * zoom, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (hash === 6 && !isNight) {
-        // Cute little green frog perched on lily pad!
-        ctx.fillStyle = '#65c436';
-        ctx.strokeStyle = '#264d14';
-        ctx.lineWidth = Math.max(0.9, 1.1 * zoom);
-        ctx.beginPath();
-        ctx.ellipse(lx, ly - 2.2 * zoom, 3.4 * zoom, 2.6 * zoom, 0, 0, Math.PI * 2);
+        ctx.moveTo(lx - rxIce, ly);
+        ctx.lineTo(lx - rxIce * 0.38, ly - ryIce);
+        ctx.lineTo(lx + rxIce * 0.62, ly - ryIce * 0.78);
+        ctx.lineTo(lx + rxIce, ly + 0.18 * ryIce);
+        ctx.lineTo(lx + rxIce * 0.28, ly + ryIce);
+        ctx.lineTo(lx - rxIce * 0.66, ly + ryIce * 0.75);
+        ctx.closePath();
         ctx.fill();
         ctx.stroke();
-        ctx.fillStyle = '#fef08a';
+
+        if (hash === 3 || hash === 9) {
+          // Companion baby ice shard
+          ctx.beginPath();
+          ctx.ellipse(lx + rxIce * 1.18, ly + 2.2 * zoom, 2.8 * zoom, 1.5 * zoom, -0.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+      } else {
+        ctx.fillStyle = isNight ? '#1e6b38' : '#52be42';
+        ctx.strokeStyle = '#1f4d18';
+        ctx.lineWidth = Math.max(1.0, 1.25 * zoom);
         ctx.beginPath();
-        ctx.arc(lx - 1.4 * zoom, ly - 4.2 * zoom, 1.0 * zoom, 0, Math.PI * 2);
-        ctx.arc(lx + 1.4 * zoom, ly - 4.2 * zoom, 1.0 * zoom, 0, Math.PI * 2);
+        ctx.ellipse(lx, ly, 6.8 * zoom, 3.8 * zoom, 0, 0.25, Math.PI * 1.92);
+        ctx.lineTo(lx, ly);
+        ctx.closePath();
         ctx.fill();
+        ctx.stroke();
+
+        if (hash === 3 || hash === 9 || hash === 12) {
+          // Blooming layered pink-and-cream marsh water lily
+          ctx.fillStyle = '#fbcfe8';
+          ctx.beginPath();
+          ctx.ellipse(lx + 0.8 * zoom, ly - 1.2 * zoom, 3.6 * zoom, 2.1 * zoom, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#fffbeb';
+          ctx.beginPath();
+          ctx.arc(lx + 0.8 * zoom, ly - 1.6 * zoom, 2.2 * zoom, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#f472b6';
+          ctx.beginPath();
+          ctx.arc(lx + 0.8 * zoom, ly - 1.8 * zoom, 1.15 * zoom, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (hash === 6 && !isNight) {
+          // Cute little green frog perched on lily pad!
+          ctx.fillStyle = '#65c436';
+          ctx.strokeStyle = '#264d14';
+          ctx.lineWidth = Math.max(0.9, 1.1 * zoom);
+          ctx.beginPath();
+          ctx.ellipse(lx, ly - 2.2 * zoom, 3.4 * zoom, 2.6 * zoom, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#fef08a';
+          ctx.beginPath();
+          ctx.arc(lx - 1.4 * zoom, ly - 4.2 * zoom, 1.0 * zoom, 0, Math.PI * 2);
+          ctx.arc(lx + 1.4 * zoom, ly - 4.2 * zoom, 1.0 * zoom, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
       ctx.restore();
     }
 
-    // 3. Tall swaying Devon Cattail Reeds (`đầm lau sậy` Canon Hang Sóc!) along marsh & river banks
+    // 3. Tall swaying Devon Cattail Reeds (`đầm lau sậy` Canon Hang Sóc — frosted silver-sage in winter!)
     if (nearBank && (hash % 2 === 0 || hash % 5 === 1)) {
       const sway =
         forStaticCache || self.reducedMotion
@@ -347,19 +427,25 @@ export function waterDrawSeamlessWaterDetails(self: IsometricRenderer,
         const bx1 = baseX + dxBlade * 0.35 * zoom;
         const tx1 = baseX + dxBlade * zoom + sway;
         const ty1 = baseY - hBlade * zoom;
-        ctx.strokeStyle = '#244612';
+        ctx.strokeStyle = isWinter ? '#334155' : '#244612';
         ctx.lineWidth = Math.max(1.6, 2.7 * zoom);
         ctx.beginPath();
         ctx.moveTo(bx1, baseY);
         ctx.quadraticCurveTo(bx1 + sway * 0.4, baseY - hBlade * 0.55 * zoom, tx1, ty1);
         ctx.stroke();
 
-        ctx.strokeStyle = isNight ? '#3c782a' : '#74ba36';
+        ctx.strokeStyle = isWinter
+          ? isNight
+            ? '#64748b'
+            : '#cbd5e1'
+          : isNight
+            ? '#3c782a'
+            : '#74ba36';
         ctx.lineWidth = Math.max(1.1, 1.75 * zoom);
         ctx.stroke();
 
         if (hasHead) {
-          // Plump chocolate-brown cattail sausage spike (`bông sậy nâu`)
+          // Plump chocolate-brown cattail sausage spike (`bông sậy nâu` + snow cap in winter)
           const hx = baseX + dxBlade * 0.82 * zoom + sway * 0.82;
           const hy = baseY - hBlade * 0.76 * zoom;
           ctx.strokeStyle = '#291508';
@@ -372,6 +458,13 @@ export function waterDrawSeamlessWaterDetails(self: IsometricRenderer,
           ctx.strokeStyle = '#8a4f20';
           ctx.lineWidth = Math.max(1.9, 3.3 * zoom);
           ctx.stroke();
+
+          if (isWinter) {
+            ctx.fillStyle = isNight ? '#dbeafe' : '#ffffff';
+            ctx.beginPath();
+            ctx.arc(hx + sway * 0.14, hy - 4.6 * zoom, 2.1 * zoom, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
       }
       ctx.restore();
@@ -400,10 +493,18 @@ export function waterDrawAnimatedGroundOverlays(
   const win = computeVisibleRotatedTileWindow(cam, viewW, viewH, margin);
   const wavePhase = self.reducedMotion ? 0 : self.tick * 0.05;
   const sandbox = sim.state.sandboxMode;
+  const isWinter =
+    typeof sim.isWinterMainMapActive === 'function' && sim.isWinterMainMapActive();
 
   let hasRipples = false;
   ctx.save();
-  ctx.strokeStyle = isNight ? 'rgba(165, 243, 252, 0.44)' : 'rgba(255, 252, 214, 0.72)';
+  ctx.strokeStyle = isWinter
+    ? isNight
+      ? 'rgba(186, 230, 253, 0.48)'
+      : 'rgba(224, 242, 254, 0.80)'
+    : isNight
+      ? 'rgba(165, 243, 252, 0.44)'
+      : 'rgba(255, 252, 214, 0.72)';
   ctx.lineWidth = Math.max(1.1, 1.65 * zoom);
   ctx.beginPath();
 

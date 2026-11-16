@@ -49,11 +49,13 @@ import {
   ScreenHotspot,
   TERRAIN_PALETTE,
   TopologicalDrawCmd,
+  WINTER_VALLEY_CHRISTMAS_SPOTS,
   buildLockedSceneryCatalog,
   computeVisibleRotatedTileWindow,
   computeWeatherParticleBudget,
   isTouchOrIOSDevice,
   resolveBuildingInWorldTimerInfo,
+  resolveWinterScenerySpriteKey,
   rotTileToWorldTile,
 } from "./rendererShared";
 export {
@@ -111,6 +113,7 @@ import {
   buildingsDrawMarbleBenchProp,
   buildingsDrawFloatingCandlesProp,
   buildingsDrawHouseBannerProp,
+  drawWinterAssetLiveEffects,
   buildingsDrawPatronusLanternProp,
   buildingsDrawSynergyLinks,
 } from './renderBuildings';
@@ -458,8 +461,9 @@ export class IsometricRenderer {
     viewW: number,
     viewH: number,
     period: 'dawn' | 'day' | 'dusk' | 'night',
-    weather: WeatherForecastSlot
-  ): void { return terrainDrawSkyBackdrop(this, viewW, viewH, period, weather); }
+    weather: WeatherForecastSlot,
+    yuleAurora = false
+  ): void { return terrainDrawSkyBackdrop(this, viewW, viewH, period, weather, yuleAurora); }
 
   private drawFloatingIslandRim(
     sim: ParkSimulation,
@@ -583,9 +587,18 @@ export class IsometricRenderer {
       Boolean(movingBuildingUid) ||
       Boolean(pincerPickedLabel);
 
-    // 1. Sky Backdrop (Time-of-day + Weather tint + Sun/Moon + Rainbow + Drifting Clouds)
-    this.drawSkyBackdrop(viewW, viewH, period, weather);
-    const season = resolveSeasonFromDayCount(sim.state.level ?? 1, this.presentation.seasonOverride);
+    // 1. Sky Backdrop (Time-of-day + Weather tint + Sun/Moon + Magical Yule Aurora + Rainbow + Drifting Clouds)
+    const isWinter =
+      typeof sim.isWinterMainMapActive === 'function' && sim.isWinterMainMapActive();
+    const yuleVisual =
+      isWinter ||
+      festival === 'christmas' ||
+      (typeof sim.isYuleVisualThemeActive === 'function' && sim.isYuleVisualThemeActive());
+    this.drawSkyBackdrop(viewW, viewH, period, weather, yuleVisual);
+    const season = resolveSeasonFromDayCount(
+      sim.state.level ?? 1,
+      isWinter ? 'winter' : this.presentation.seasonOverride
+    );
     this.presentation.drawParallaxHorizonLayer(ctx, cam, viewW, viewH, period, season);
 
     const hw = TILE_W * 0.5 * cam.zoom;
@@ -771,12 +784,13 @@ export class IsometricRenderer {
             cam,
             viewW,
             viewH,
-            isNightLike
+            isNightLike,
+            isWinter
           ),
       });
     }
 
-    // Chunky 2.5D Stacked Grey-Limestone & Emerald-Moss Homestead Walls framing the River Ottery bank & Hang Sóc terraces (auto-hides if built upon!)
+    // Chunky 2.5D Stacked Grey-Limestone & Emerald-Moss / Snow-Capped Homestead Walls framing the River Ottery bank & Hang Sóc terraces (auto-hides if built upon!)
     const pushHomesteadWall = (wgx: number, wgy: number, axis: 'ew' | 'ns', isGatePost: boolean) => {
       const wCell = sim.grid[wgy]?.[wgx];
       if (!wCell || wCell.buildingUid || wCell.path !== 'none' || wCell.terrain !== 'grass') return;
@@ -801,7 +815,8 @@ export class IsometricRenderer {
             cam,
             viewW,
             viewH,
-            isNightLike
+            isNightLike,
+            isWinter
           ),
       });
     };
@@ -811,8 +826,8 @@ export class IsometricRenderer {
     for (let wgx = 19; wgx <= 25; wgx++) pushHomesteadWall(wgx, 13, 'ew', wgx === 19 || wgx === 25);
     for (let wgx = 8; wgx <= 14; wgx++) pushHomesteadWall(wgx, 30, 'ew', wgx === 8 || wgx === 14);
 
-    // Curated non-blocking 2.5D riverside flowering bushes, wildflowers & mossy rocks on open unlocked grass tiles!
-    const valleyFloraSpots: Array<[number, number, string, number, boolean]> = [
+    // Curated non-blocking 2.5D valley scenery: Christmas Welcome Landmarks & Snowy Pines in Winter, Wildflowers in Summer!
+    const summerValleyFloraSpots: ReadonlyArray<[number, number, string, number, boolean]> = [
       [2, 17, 'env_bush_flowers', 1.02, false],
       [2, 20, 'env_mossy_rock', 0.96, true],
       [2, 24, 'env_bush_flowers', 1.05, true],
@@ -832,10 +847,20 @@ export class IsometricRenderer {
       [30, 23, 'env_bush_flowers', 1.05, false],
       [33, 21, 'env_flower_patch', 1.02, true],
     ];
-    for (const [fgx, fgy, spriteKey, scale, flipX] of valleyFloraSpots) {
+    const activeValleySpots = isWinter ? WINTER_VALLEY_CHRISTMAS_SPOTS : summerValleyFloraSpots;
+    for (const [fgx, fgy, spriteKey, scale, flipX] of activeValleySpots) {
       const fCell = sim.grid[fgy]?.[fgx];
       if (!fCell || fCell.buildingUid || fCell.path !== 'none' || fCell.terrain !== 'grass') continue;
       if (!sim.state.sandboxMode && !unlockedSet.has(fCell.zoneId)) continue;
+      if (
+        scale >= 1.4 &&
+        (sim.grid[fgy - 1]?.[fgx]?.buildingUid ||
+          sim.grid[fgy + 1]?.[fgx]?.buildingUid ||
+          sim.grid[fgy]?.[fgx - 1]?.buildingUid ||
+          sim.grid[fgy]?.[fgx + 1]?.buildingUid)
+      ) {
+        continue;
+      }
       const fp = gridToScreen(fgx + 0.5, fgy + 0.5, cam, viewW, viewH, fCell.elevation * ELEV_PX);
       if (fp.sx < -margin || fp.sx > viewW + margin || fp.sy < -margin || fp.sy > viewH + margin) continue;
       const { rx, ry } = rotateGridPoint(fgx + 0.5, fgy + 0.5, viewRot);
@@ -846,7 +871,27 @@ export class IsometricRenderer {
         rxMax: rx + 0.22,
         ryMax: ry + 0.22,
         depth: rx + ry + 0.28,
-        draw: () => this.drawLockedForestProp(floraProp, fp.sx, fp.sy, cam.zoom, shadowVec, isNightLike),
+        draw: () => {
+          this.drawLockedForestProp(floraProp, fp.sx, fp.sy, cam.zoom, shadowVec, isNightLike, isWinter);
+          if (isWinter && (spriteKey.startsWith('yule_') || spriteKey === 'snowy_pines')) {
+            const catItem = getCatalogItem(spriteKey);
+            const approxW = 54 * scale * cam.zoom;
+            const approxH = 62 * scale * cam.zoom;
+            drawWinterAssetLiveEffects(
+              this,
+              spriteKey,
+              catItem?.yuleCollection,
+              fp.sx,
+              fp.sy + 14 * cam.zoom,
+              approxW,
+              approxH,
+              cam.zoom,
+              isNightLike,
+              fgx,
+              fgy
+            );
+          }
+        },
       });
     }
 
@@ -884,7 +929,7 @@ export class IsometricRenderer {
       });
     }
 
-    // 3f-2. Sunlit Enchanted Forest Scenery in Locked Zones (viewport-culled, clears magically on unlock!)
+    // 3f-2. Sunlit Enchanted Forest / Snowy Yule Pine Scenery in Locked Zones (viewport-culled, clears magically on unlock!)
     if (!sim.state.sandboxMode) {
       for (const prop of this.lockedScenery) {
         if (unlockedSet.has(prop.zoneId as ZoneDef['id'])) continue;
@@ -896,13 +941,16 @@ export class IsometricRenderer {
           continue;
         }
         const { rx, ry } = rotateGridPoint(prop.gx + 0.5, prop.gy + 0.5, viewRot);
+        const effProp = isWinter
+          ? { ...prop, spriteKey: resolveWinterScenerySpriteKey(prop) }
+          : prop;
         drawList.push({
           rxMin: rx - 0.32,
           ryMin: ry - 0.32,
           rxMax: rx + 0.32,
           ryMax: ry + 0.32,
           depth: rx + ry + 0.42,
-          draw: () => this.drawLockedForestProp(prop, pp.sx, pp.sy, cam.zoom, shadowVec, isNightLike),
+          draw: () => this.drawLockedForestProp(effProp, pp.sx, pp.sy, cam.zoom, shadowVec, isNightLike, isWinter),
         });
       }
     }
@@ -999,7 +1047,7 @@ export class IsometricRenderer {
       for (const b of sim.state.buildings) {
         if (now < b.constructEndsAt || movingBuildingUid === b.uid) continue;
         const item = getCatalogItem(b.itemId);
-        if (!item || item.id === 'burrow_honeydukes_canon') continue;
+        if (!item) continue;
         const isRipePlot = Boolean(
           item.isFarmlandPlot && b.cropId && b.cropReadyAt && now >= b.cropReadyAt
         );
@@ -1013,10 +1061,9 @@ export class IsometricRenderer {
         if (b.storedGalleons > 0 || hasReadyGoods || isRipePlot || isRipePasture) {
           const { bw, bh } = sim.getBuildingFootprint(item, b.rotation);
           const elev = sim.grid[b.gy]?.[b.gx]?.elevation ?? 0;
-          const zLift =
-            item.isFarmlandPlot ||
-            item.isAnimalPasturePlot ||
-            item.connectableGroup === 'flower_garden'
+          const zLift = item.isAnimalPasturePlot
+            ? 52
+            : item.isFarmlandPlot || item.connectableGroup === 'flower_garden'
               ? 26
               : 48 + Math.max(bw, bh) * 18;
           const topPt = gridToScreen(
@@ -1146,8 +1193,8 @@ export class IsometricRenderer {
       viewH,
       now,
       period,
-      weather.kind,
-      festival !== 'none',
+      isWinter && weather.kind === 'sunny' ? 'snow' : weather.kind,
+      isWinter || festival !== 'none',
       this.reducedMotion,
       Math.hypot(shake.x, shake.y)
     );
@@ -1157,6 +1204,372 @@ export class IsometricRenderer {
     }
 
     // 11. Fullscreen Juice Overlays: FlashFX & ConfettiFX
+    this.juiceFx.applyTo(ctx, viewW, viewH);
+  }
+
+  /**
+   * Lightweight screen-space vector UI & timer badge pass rendered transparently on `#gameCanvas`
+   * directly above `#gpuWorldCanvas` when running in pure WebGL2 mode (`?renderer=webgl2`).
+   * Keeps Vietnamese typography, construction countdown progress bars, harvest bubbles, locked zone
+   * plaques, floating feedback text & ribbon confetti 100% razor-sharp outside HDR Bloom!
+   */
+  public renderWorldUiOverlays(
+    sim: ParkSimulation,
+    cam: Camera,
+    selectedUid: string | null,
+    movingBuildingUid: string | null = null,
+    suppressOwlClick = false,
+    preserveExistingHotspots = true,
+    hoverTile: { gx: number; gy: number } | null = null,
+    activeBuildItem: CatalogItem | null = null,
+    rotation: 0 | 1 | 2 | 3 = 0,
+    bulldozerActive = false,
+    pincerPickedLabel: string | null = null
+  ): void {
+    this.resize();
+    if (!this.reducedMotion) {
+      this.tick++;
+    }
+    if (!preserveExistingHotspots) {
+      this.hotspots = [];
+    }
+
+    const now = Date.now();
+    this.buildingMap.clear();
+    for (const b of sim.state.buildings) {
+      this.buildingMap.set(b.uid, b);
+    }
+
+    const viewW = this.viewCssW || this.canvas.clientWidth;
+    const viewH = this.viewCssH || this.canvas.clientHeight;
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, viewW, viewH);
+
+    this.juiceFx.tick(1 / 60);
+    const period = sim.getRealTimePeriod();
+    const festival = sim.getActiveFestival();
+    const weather = sim.getCurrentWeather(now);
+    const isNightLike = period === 'night' || period === 'dusk';
+    const hw = TILE_W * 0.5 * cam.zoom;
+    const hh = TILE_H * 0.5 * cam.zoom;
+
+    const zonesSig = `${sim.stateRevision}|${sim.state.unlockedZones.length}|${sim.state.unlockedZones[sim.state.unlockedZones.length - 1] ?? ''}`;
+    if (this.cachedUnlockedZonesSig !== zonesSig) {
+      this.cachedUnlockedZonesSet.clear();
+      for (const zid of sim.state.unlockedZones) {
+        this.cachedUnlockedZonesSet.add(zid);
+      }
+      this.cachedUnlockedZonesSig = zonesSig;
+    }
+    const unlockedSet = this.cachedUnlockedZonesSet;
+
+    // 0a. Active Heatmap Overlay & Synergy Links when inspected!
+    if (sim.heatmapMode !== 'none') {
+      if (
+        now - this.heatmapCacheAt > 450 ||
+        this.heatmapCacheMode !== sim.heatmapMode ||
+        this.heatmapCacheBuildingCount !== sim.state.buildings.length
+      ) {
+        this.rebuildHeatmapCache(sim, sim.heatmapMode, unlockedSet, now);
+      }
+      const viewRot = cam.viewRot ?? 0;
+      const win = computeVisibleRotatedTileWindow(cam, viewW, viewH, Math.max(96, 180 * cam.zoom));
+      for (let sum = win.sumMin; sum <= win.sumMax; sum++) {
+        const rxStart = Math.max(0, sum - (GRID_SIZE - 1), Math.floor((sum + win.diffMin) * 0.5) - 1);
+        const rxEnd = Math.min(GRID_SIZE - 1, sum, Math.ceil((sum + win.diffMax) * 0.5) + 1);
+        for (let rx0 = rxStart; rx0 <= rxEnd; rx0++) {
+          const ry0 = sum - rx0;
+          const { gx, gy } = rotTileToWorldTile(rx0, ry0, viewRot);
+          const cell = sim.grid[gy]?.[gx];
+          if (!cell || (!sim.state.sandboxMode && !unlockedSet.has(cell.zoneId))) continue;
+          const heatColor = this.heatmapCache[gy * GRID_SIZE + gx];
+          if (!heatColor) continue;
+          const p = rotatedTileDiamondToScreen(gx, gy, cam, viewW, viewH, cell.elevation * ELEV_PX);
+          this.drawDiamondOutline(p.sx, p.sy, hw, hh, heatColor, 'rgba(255, 255, 255, 0.34)');
+        }
+      }
+      if (sim.heatmapMode === 'wonder') {
+        this.drawSynergyLinks(sim, selectedUid, cam, viewW, viewH);
+      }
+    }
+
+    // 0b. Selected Building Footprint & Entrance/Exit Gate Indicators + Empty Plot Seed/Pasture Cues!
+    if (selectedUid) {
+      const sb = this.buildingMap.get(selectedUid);
+      const sItem = sb ? getCatalogItem(sb.itemId) : undefined;
+      if (sb && sItem) {
+        const { bw, bh } = sim.getBuildingFootprint(sItem, sb.rotation);
+        const elev = sim.grid[sb.gy]?.[sb.gx]?.elevation ?? 0;
+        const { pTop, pRight, pBottom, pLeft } = this.rectScreenCorners(
+          sb.gx,
+          sb.gy,
+          bw,
+          bh,
+          cam,
+          viewW,
+          viewH,
+          elev * ELEV_PX
+        );
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(pTop.sx, pTop.sy);
+        ctx.lineTo(pRight.sx, pRight.sy);
+        ctx.lineTo(pBottom.sx, pBottom.sy);
+        ctx.lineTo(pLeft.sx, pLeft.sy);
+        ctx.closePath();
+        ctx.strokeStyle = '#fde047';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.restore();
+        if (sItem.category === 'ride' || sItem.category === 'shop') {
+          buildingsDrawGateIndicators(this, sim, sb, bw, bh, cam, viewW, viewH);
+        }
+      }
+    }
+
+    if (this.activeSeedBrushCropId || this.activePastureBrushAnimalId) {
+      for (const b of sim.state.buildings) {
+        if (now < b.constructEndsAt) continue;
+        const item = getCatalogItem(b.itemId);
+        if (!item) continue;
+        const wantsSeedCue = Boolean(this.activeSeedBrushCropId && item.isFarmlandPlot && !b.cropId);
+        const wantsPastureCue = Boolean(
+          this.activePastureBrushAnimalId && item.isAnimalPasturePlot && !b.pastureAnimalId
+        );
+        if (!wantsSeedCue && !wantsPastureCue) continue;
+        const { bw, bh } = sim.getBuildingFootprint(item, b.rotation);
+        const elev = sim.grid[b.gy]?.[b.gx]?.elevation ?? 0;
+        const { pRight, pBottom, pLeft } = this.rectScreenCorners(
+          b.gx,
+          b.gy,
+          bw,
+          bh,
+          cam,
+          viewW,
+          viewH,
+          elev * ELEV_PX
+        );
+        const footprintW = (bw + bh) * (TILE_W * 0.5) * cam.zoom;
+        const drawW = footprintW * (item.spriteScale ?? 1.05);
+        const drawH = drawW * 0.6;
+        ctx.save();
+        ctx.translate((pLeft.sx + pRight.sx) * 0.5, pBottom.sy + 4 * cam.zoom);
+        if (wantsSeedCue) {
+          this.drawEmptyPlotSeedCue(drawW, drawH);
+        } else {
+          this.drawEmptyPastureAnimalCue(drawW, drawH);
+        }
+        ctx.restore();
+      }
+    }
+
+    // 0c. Build / Move / Bulldozer / Pincer Rotated Footprint Preview (sprite already rendered in WebGL2 IsoSceneSortedPass)
+    if (
+      hoverTile &&
+      hoverTile.gx >= 0 &&
+      hoverTile.gy >= 0 &&
+      hoverTile.gx < GRID_SIZE &&
+      hoverTile.gy < GRID_SIZE
+    ) {
+      const hElev = sim.grid[hoverTile.gy][hoverTile.gx].elevation;
+      if (pincerPickedLabel) {
+        const hp = rotatedTileDiamondToScreen(hoverTile.gx, hoverTile.gy, cam, viewW, viewH, hElev * ELEV_PX);
+        this.drawDiamondOutline(hp.sx, hp.sy, hw, hh, 'rgba(56, 189, 248, 0.38)', '#38bdf8');
+        ctx.save();
+        ctx.font = '700 12px "Be Vietnam Pro", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = '#1c130d';
+        ctx.lineWidth = 3.5;
+        ctx.strokeText(`🤏 Thả: ${pincerPickedLabel}`, hp.sx, hp.sy - 8);
+        ctx.fillStyle = '#bae6fd';
+        ctx.fillText(`🤏 Thả: ${pincerPickedLabel}`, hp.sx, hp.sy - 8);
+        ctx.restore();
+      } else if (bulldozerActive) {
+        const hp = rotatedTileDiamondToScreen(hoverTile.gx, hoverTile.gy, cam, viewW, viewH, hElev * ELEV_PX);
+        this.drawDiamondOutline(hp.sx, hp.sy, hw, hh, 'rgba(239, 68, 68, 0.45)', '#fca5a5');
+      } else if (movingBuildingUid) {
+        const mb = this.buildingMap.get(movingBuildingUid);
+        const mItem = mb ? getCatalogItem(mb.itemId) : undefined;
+        if (mb && mItem) {
+          this.drawGhostPlacement(
+            sim,
+            mItem,
+            hoverTile.gx,
+            hoverTile.gy,
+            rotation,
+            cam,
+            viewW,
+            viewH,
+            movingBuildingUid,
+            true
+          );
+        }
+      } else if (activeBuildItem) {
+        this.drawGhostPlacement(
+          sim,
+          activeBuildItem,
+          hoverTile.gx,
+          hoverTile.gy,
+          rotation,
+          cam,
+          viewW,
+          viewH,
+          undefined,
+          true
+        );
+      }
+    }
+
+    // 0d. Escaped Magical Creatures & Screen-Space Falling Snowflakes / Rain Streaks / Storm Lightning!
+    for (const esc of sim.escapedCreatures) {
+      const ep = gridToScreen(esc.gx + 0.5, esc.gy + 0.5, cam, viewW, viewH);
+      const prevLen = this.hotspots.length;
+      this.drawEscapedCreature(esc.id, esc.species, ep.sx, ep.sy, cam.zoom);
+      if (preserveExistingHotspots) {
+        this.hotspots.length = prevLen;
+      }
+    }
+    this.drawWeatherParticles(sim, viewW, viewH, isNightLike, festival, weather, now);
+
+    // 1. Locked Zone Plaques
+    if (!sim.state.sandboxMode) {
+      for (const z of ZONES) {
+        if (!unlockedSet.has(z.id)) {
+          this.drawLockedZonePlaque(sim, z, cam, viewW, viewH);
+        }
+      }
+    }
+
+    // 2. Harvest Bubbles, Construction & Crop/Workshop Countdown Timers, Owl Lanterns & Tutorial Target
+    if (sim.isVisitingNeighbor) {
+      this.drawNeighborVisitOverlays(sim, cam, viewW, viewH, now);
+    } else {
+      const bubbleCandidates: Array<{
+        b: PlacedBuilding;
+        sx: number;
+        sy: number;
+        value: number;
+      }> = [];
+      for (const b of sim.state.buildings) {
+        if (now < b.constructEndsAt || movingBuildingUid === b.uid) continue;
+        const item = getCatalogItem(b.itemId);
+        if (!item) continue;
+        const isRipePlot = Boolean(
+          item.isFarmlandPlot && b.cropId && b.cropReadyAt && now >= b.cropReadyAt
+        );
+        const isRipePasture = Boolean(
+          item.isAnimalPasturePlot &&
+            b.pastureAnimalId &&
+            b.pastureReadyAt &&
+            now >= b.pastureReadyAt
+        );
+        const hasReadyGoods = Boolean(b.readyFarmGoods && b.readyFarmGoods.length > 0);
+        if (b.storedGalleons > 0 || hasReadyGoods || isRipePlot || isRipePasture) {
+          const { bw, bh } = sim.getBuildingFootprint(item, b.rotation);
+          const elev = sim.grid[b.gy]?.[b.gx]?.elevation ?? 0;
+          const zLift = item.isAnimalPasturePlot
+            ? 52
+            : item.isFarmlandPlot || item.connectableGroup === 'flower_garden'
+              ? 26
+              : 48 + Math.max(bw, bh) * 18;
+          const topPt = gridToScreen(
+            b.gx + bw * 0.5,
+            b.gy + bh * 0.5,
+            cam,
+            viewW,
+            viewH,
+            elev * ELEV_PX + zLift
+          );
+          if (topPt.sx < -60 || topPt.sx > viewW + 60 || topPt.sy < -60 || topPt.sy > viewH + 60) {
+            continue;
+          }
+          const prioVal =
+            (hasReadyGoods ? 500 : 0) +
+            (isRipePasture ? 360 : 0) +
+            (isRipePlot ? 350 : 0) +
+            b.storedGalleons;
+          bubbleCandidates.push({ b, sx: topPt.sx, sy: topPt.sy, value: prioVal });
+        }
+      }
+      const MAX_BUBBLES_ON_SCREEN = 28;
+      bubbleCandidates.sort((a, c) => c.value - a.value);
+      const overflow = bubbleCandidates.length - MAX_BUBBLES_ON_SCREEN;
+      for (const cand of bubbleCandidates.slice(0, MAX_BUBBLES_ON_SCREEN)) {
+        this.drawHarvestBubble(cand.b, cand.sx, cand.sy, cam.zoom);
+      }
+      if (overflow > 0) {
+        const anchor = bubbleCandidates[0];
+        this.drawHarvestOverflowPill(anchor.sx, anchor.sy, cam.zoom, overflow);
+      }
+
+      // Real-time In-World Construction, Crop, Pasture & Workshop Countdown Badges!
+      this.drawInWorldWaitTimers(
+        sim,
+        cam,
+        viewW,
+        viewH,
+        now,
+        festival,
+        selectedUid,
+        movingBuildingUid
+      );
+      this.drawHomeOwlLanternMarks(sim, cam, viewW, viewH);
+      this.drawTutorialWorldTarget(sim, cam, viewW, viewH);
+    }
+
+    // 2b. Automatic Ripe-Plot Harvest Juice Hook (confetti + golden bloom in WebGL2 mode too!)
+    const sceneKey = `${sim.isVisitingNeighbor ? sim.getActiveVisitingNeighbor()?.id ?? 'visit' : 'home'}|${sim.isHeadmasterPreview ? 'preview' : 'live'}`;
+    const currentRipePlots = this.nextRipePlots;
+    currentRipePlots.clear();
+    for (const b of sim.state.buildings) {
+      const item = getCatalogItem(b.itemId);
+      if (
+        (item?.isFarmlandPlot && b.cropId && b.cropReadyAt && now >= b.cropReadyAt) ||
+        (item?.isAnimalPasturePlot &&
+          b.pastureAnimalId &&
+          b.pastureReadyAt &&
+          now >= b.pastureReadyAt)
+      ) {
+        currentRipePlots.add(b.uid);
+      }
+    }
+    if (this.prevRipeSceneKey && this.prevRipeSceneKey === sceneKey) {
+      for (const prevUid of this.prevRipePlots) {
+        if (!currentRipePlots.has(prevUid)) {
+          const b = this.buildingMap.get(prevUid);
+          if (b) {
+            const pt = gridToScreen(b.gx + 0.5, b.gy + 0.5, cam, viewW, viewH, 18);
+            this.notifyJuice('harvest', pt.sx, pt.sy);
+          }
+        }
+      }
+    }
+    this.prevRipeSceneKey = sceneKey;
+    this.nextRipePlots = this.prevRipePlots;
+    this.prevRipePlots = currentRipePlots;
+
+    // 3. Floating Text Feedback (`🔨 Xây dựng (6 phút)`, `+15 🪙`, `+6 ⭐`)
+    for (const fx of sim.effects) {
+      const progress = fx.life / fx.maxLife;
+      const fp = gridToScreen(fx.gx, fx.gy, cam, viewW, viewH, 32 + progress * 38);
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, 1 - progress);
+      ctx.font = '700 13px "Be Vietnam Pro", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.strokeStyle = '#1c130d';
+      ctx.lineWidth = 3.5;
+      ctx.strokeText(fx.text, fp.sx, fp.sy);
+      ctx.fillStyle = fx.color;
+      ctx.fillText(fx.text, fp.sx, fp.sy);
+      ctx.restore();
+    }
+
+    // 4. Fireworks, Owl Post Parcel Event, Harvest Bloom & Ribbon Confetti
+    this.drawSkyFireworks(sim, cam, viewW, viewH);
+    if (!sim.isVisitingNeighbor) {
+      this.drawAndTickOwlPostEvent(sim, cam, viewW, viewH, now, isNightLike, suppressOwlClick);
+    }
+    this.drawHarvestBloom(now, cam.zoom);
     this.juiceFx.applyTo(ctx, viewW, viewH);
   }
 
@@ -1312,8 +1725,9 @@ export class IsometricRenderer {
     sy: number,
     zoom: number,
     shadowVec: { dx: number; dy: number; alpha: number },
-    isNight: boolean
-  ): void { return terrainDrawLockedForestProp(this, prop, sx, sy, zoom, shadowVec, isNight); }
+    isNight: boolean,
+    isWinter = false
+  ): void { return terrainDrawLockedForestProp(this, prop, sx, sy, zoom, shadowVec, isNight, isWinter); }
 
   public computePlotConnMask(
     sim: ParkSimulation,
@@ -1451,8 +1865,9 @@ export class IsometricRenderer {
     cam: Camera,
     viewW: number,
     viewH: number,
-    ignoreBuildingUid?: string
-  ): void { return cropsDrawGhostPlacement(this, sim, item, gx, gy, rotation, cam, viewW, viewH, ignoreBuildingUid); }
+    ignoreBuildingUid?: string,
+    skipSprite = false
+  ): void { return cropsDrawGhostPlacement(this, sim, item, gx, gy, rotation, cam, viewW, viewH, ignoreBuildingUid, skipSprite); }
 
   private drawLockedZonePlaque(
     sim: ParkSimulation,

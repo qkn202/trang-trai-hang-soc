@@ -11,7 +11,12 @@
  *  - Lưu trữ cục bộ nguyên tử bảo vệ đa tab qua Web Locks API (`navigator.locks.request`).
  */
 
-import { getOrCreateClientUserId, setAuthenticatedUserId } from './cloudSave';
+import {
+  consumeHpvnTicketFromWindowHash,
+  getOrCreateClientUserId,
+  resolveApiUrl,
+  setAuthenticatedUserId,
+} from './cloudSave';
 import { isTrustedHpvnOrigin } from './hpvnBridge';
 
 export interface AuthoritativeError extends Error {
@@ -579,6 +584,9 @@ export const BURROW_EMBED_RPC_CHANNEL = 'hpvn-burrow-game';
  * Đọc mã vé phiên `#burrow-ticket=<nonce>` (hoặc fallback `#hpvn-ticket=<nonce>`) khi game được nhúng trong iframe HPVN.
  */
 export function getHpvnTicketFromLocation(loc: { hash?: string } | undefined = globalThis.location): string | null {
+  if (typeof window !== 'undefined' && loc === window.location) {
+    return consumeHpvnTicketFromWindowHash();
+  }
   const hash = loc?.hash ? loc.hash.slice(1) : '';
   if (!hash) return null;
   const params = new URLSearchParams(hash);
@@ -711,8 +719,8 @@ export function createHttpAuthoritativeClient(
     timeoutMs?: number;
   } = {}
 ): BurrowGardenClient {
-  const baseUrl = (options.baseUrl ?? '/api/rpc/').replace(/\/?$/, '/');
-  const sessionEndpoint = options.sessionEndpoint ?? '/api/auth/session';
+  const baseUrl = resolveApiUrl(options.baseUrl ?? '/api/rpc/').replace(/\/?$/, '/');
+  const sessionEndpoint = resolveApiUrl(options.sessionEndpoint ?? '/api/auth/session');
   const fetchFn = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
   const getUid = options.getUid ?? getOrCreateClientUserId;
   const timeoutMs = options.timeoutMs ?? 18_000;

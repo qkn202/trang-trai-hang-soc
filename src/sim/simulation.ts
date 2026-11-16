@@ -66,6 +66,9 @@ import {
   TOTAL_MINIGAME_STAGES,
 } from '../data/match3Levels';
 import { getZoneAt, getZoneById, GRID_SIZE, ZONES } from '../data/zones';
+import { YULE_EVENT_END, YULE_EVENT_START, YULE_SCHEDULE, yuleAssetPrice, yuleDayIndex, yuleTaskComplete, yuleTaskProgress } from './yuleEvent';
+import type { YuleDayDef } from './yuleEvent';
+import { CATALOG } from '../data/catalog';
 import { MagicalAudio } from '../engine/audio';
 import { findNextStepOnPaths, getRandomUnlockedPathTile } from '../engine/pathfinding';
 import {
@@ -165,6 +168,7 @@ import {
   setPlayerHogwartsHouse,
   submitPlayerCloudLeaderboardEntry,
 } from './minigameLeaderboard';
+import type { ProofOfPlayEnvelope } from './proofOfPlay';
 import {
   createInitialPuzzleArcadeState,
   JIGSAW_PAINTINGS,
@@ -181,10 +185,12 @@ import {
   ACHIEVEMENT_REGISTRY,
   answerVillagerDialogue,
   claimAchievementReward,
+  claimAllUnlockedAchievements,
   claimDailyRetentionReward,
   DAY_1_TO_7_REWARDS,
   ensureRetentionState,
   evaluateAchievements,
+  getClaimableRetentionCount,
   loadFromNamedSlot,
   SaveSlotId,
   SaveSlotMetadata,
@@ -273,7 +279,24 @@ import {
   farmFeedAnimalPasture,
   farmHarvestAnimalPasture,
   farmClearAnimalFromPasture,
+  farmBatchWaterCrops,
+  farmBatchHarvestCrops,
+  farmBatchFeedPastures,
+  farmBatchHarvestPastures,
+  farmBatchPlantCrops,
 } from './simulationFarm';
+import type { FarmBatchResult } from './simulationFarm';
+import {
+  buildTxnBeginStroke,
+  buildTxnCommitStroke,
+  buildTxnCanUndo,
+  buildTxnCanRedo,
+  buildTxnCancelStroke,
+  buildTxnUndo,
+  buildTxnRedo,
+  buildTxnNoteMutation,
+  type BuildSnapshot,
+} from './buildTransactions';
 
 import {
   economyGetEffectivePrice,
@@ -297,6 +320,9 @@ import {
   worldRecomputeAllCoastersAndBiomes,
   worldAutoBuildCoasterForStation,
   worldMoveBuilding,
+  worldRotatePlacedBuilding,
+  isDragPaintableCatalogItem,
+  isRepeatableCatalogItem,
   worldGetBuildingFootprint,
   worldIsCatalogItemUnlocked,
   worldCanPlaceItem,
@@ -307,7 +333,8 @@ import {
   worldGetBulldozeHazardWarning,
   worldRemoveAtTile,
 } from './simulationWorld';
-export type { BarnUpgradeCostInfo } from './simulationFarm';
+export { isDragPaintableCatalogItem, isRepeatableCatalogItem } from './simulationWorld';
+export type { BarnUpgradeCostInfo, FarmBatchResult } from './simulationFarm';
 export type { BulldozeHazardWarning } from './simulationWorld';
 
 import {
@@ -474,6 +501,8 @@ import {
   lifecycleToggleHeadmasterPreview,
   lifecycleGetRealTimePeriod,
   lifecycleGetActiveFestival,
+  lifecycleIsYuleVisualThemeActive,
+  lifecycleIsWinterMainMapActive,
   lifecycleResolveWeatherSlotKind,
   lifecycleDescribeWeatherSlot,
   lifecycleGetCurrentWeather,
@@ -546,6 +575,27 @@ export class ParkSimulation {
   public onTutorialStepChanged: ((stepId: TutorialStepId) => void) | null = null;
   public onRequestBulldozeConfirm: ((warning: BulldozeHazardWarning) => void) | null = null;
   public villagerGreetCooldown = new Map<ValleyVillagerId, number>();
+  /** Công trình đang xây được người chơi bấm rút ngắn trực tiếp trong #inspectorPanel. */
+  public preferredSpeedupBuildingUid: string | null = null;
+  /**
+   * Guard cho thao tác batch (Feed All / Collect All / brush). Khi active,
+   * saveToStorage() và onUiChange() bị gộp lại ở cuối batch (1 lần commit)
+   * để tránh 40 lần serialize localStorage + 40 lần refresh DOM gây GC stutter.
+   */
+  public batchOperationActive = false;
+  /**
+   * Build Mode Transaction (P0.3): khi người chơi đang kéo brush build/move/brush
+   * trên canvas, N lần saveToStorage + onUiChange (mà từng worldPlaceItem /
+   * worldMoveBuilding / farm brush gọi bên trong) bị gộp lại ở cuối stroke
+   * (buildTxnCommitStroke) — tránh GC stutter.
+   */
+  public suppressPerActionSave = false;
+  public pendingBuildStroke: BuildSnapshot | null = null;
+  public buildStrokeMutated = false;
+  public buildUndoStack: BuildSnapshot[] = [];
+  public buildRedoStack: BuildSnapshot[] = [];
+  /** Backup onUiChange khi stroke build active (buildTxnCommitStroke khôi phục). */
+  public buildStrokeOnUiChangeBackup: (() => void) | null | undefined;
 
   constructor(audio: MagicalAudio) {
     this.audio = audio;
@@ -562,7 +612,7 @@ export class ParkSimulation {
 
   public syncPlayerPrimitivesToHomeState(): void { return lifecycleSyncPlayerPrimitivesToHomeState(this); }
 
-  public saveToStorage(): void { return lifecycleSaveToStorage(this); }
+  public saveToStorage(touchTimestamp = true): void { return lifecycleSaveToStorage(this, touchTimestamp); }
 
   public exportSaveJson(): string { return lifecycleExportSaveJson(this); }
 
@@ -599,9 +649,157 @@ export class ParkSimulation {
     newRot: 0 | 1 | 2 | 3
   ): { ok: boolean; reason?: string } { return worldMoveBuilding(this, uid, newGx, newGy, newRot); }
 
+  public rotatePlacedBuilding(
+    uid: string,
+    step: 1 | -1 = 1
+  ): { ok: boolean; reason?: string; newRotation?: 0 | 1 | 2 | 3 } {
+    return worldRotatePlacedBuilding(this, uid, step);
+  }
+
   public getRealTimePeriod(now = new Date()): 'dawn' | 'day' | 'dusk' | 'night' { return lifecycleGetRealTimePeriod(this, now); }
 
   public getActiveFestival(now = new Date()): FestivalType { return lifecycleGetActiveFestival(this, now); }
+
+  public enableInfiniteSandbox(): void {
+    if (!IS_SANDBOX_BUILD_ENABLED || !isSandboxRuntimeAllowed()) return;
+    this.state.sandboxMode = true;
+    this.state.sandboxTainted = true;
+    this.state.galleons = 999_999_999;
+    if (this.state.match3) {
+      this.state.match3.stars = 999_999;
+      this.state.match3.hearts = 5;
+    }
+    this.state.timeSand = 999;
+    this.state.morningDewPhials = 999;
+    this.state.phoenixTalismans = 12;
+    this.state.unlockedZones = ZONES.map((z) => z.id);
+    const now = Date.now();
+    for (const b of this.state.buildings) {
+      if (b.constructEndsAt > now) {
+        b.constructEndsAt = now - 1000;
+        b.constructionNotified = true;
+      }
+    }
+    if (this.isTutorialActive()) {
+      this.skipTutorial();
+    }
+    this.rebuildGrid();
+    this.saveToStorage();
+    this.onUiChange?.();
+  }
+
+  public debugYuleDayOverride: number | null = null;
+
+  private resolveEffectiveYuleDay(now?: Date): number {
+    if (!now && this.debugYuleDayOverride !== null && this.debugYuleDayOverride >= 1 && this.debugYuleDayOverride <= YULE_SCHEDULE.length) {
+      return this.debugYuleDayOverride;
+    }
+    return yuleDayIndex(now ?? new Date());
+  }
+
+  public getYuleEventStatus(now?: Date): { active: boolean; day: number; dayDef: YuleDayDef | null; claimedMainDays: number[]; claimedSideTaskIds: string[]; unlockedAssetIds: string[] } {
+    const y = this.state.yuleEvent ?? { schemaVersion: 1, claimedMainDays: [], claimedSideTaskIds: [], unlockedAssetIds: [], purchasedAssetIds: [] };
+    const day = this.resolveEffectiveYuleDay(now);
+    return { active: day > 0, day, dayDef: day > 0 ? (YULE_SCHEDULE[day - 1] ?? null) : null, claimedMainDays: [...y.claimedMainDays], claimedSideTaskIds: [...y.claimedSideTaskIds], unlockedAssetIds: [...y.unlockedAssetIds] };
+  }
+
+  public claimYuleMainDay(day: number, now?: Date): { ok: boolean; msg: string; unlockedAssetIds?: string[] } {
+    const current = this.resolveEffectiveYuleDay(now);
+    const def = YULE_SCHEDULE[day - 1];
+    if (!def || current === 0 || day > current) return { ok: false, msg: 'Ngày Yule này chưa mở hoặc event đã kết thúc.' };
+    const y = (this.state.yuleEvent ??= { schemaVersion: 1, claimedMainDays: [], claimedSideTaskIds: [], unlockedAssetIds: [], purchasedAssetIds: [] });
+    if (y.claimedMainDays.includes(day)) return { ok: false, msg: 'Nhiệm vụ chính ngày này đã nhận rồi.' };
+    if (!yuleTaskComplete(this.state, def.main)) return { ok: false, msg: `Chưa hoàn thành: ${def.main.titleVi}` };
+    y.claimedMainDays.push(day);
+    const ids = def.unlockIds.filter((id) => !y.unlockedAssetIds.includes(id));
+    y.unlockedAssetIds.push(...ids);
+    this.addXp(def.main.rewardXp);
+    if (this.debugYuleDayOverride !== null) this.state.sandboxTainted = true;
+    this.saveToStorage();
+    this.onUiChange?.();
+    return { ok: true, msg: `Hoàn thành ngày ${day}: ${def.main.titleVi}`, unlockedAssetIds: ids };
+  }
+
+  public claimYuleSideTask(taskId: string, now?: Date): { ok: boolean; msg: string; rewardSickles?: number } {
+    const current = this.resolveEffectiveYuleDay(now);
+    if (current === 0) return { ok: false, msg: 'Event Yule chưa mở hoặc đã kết thúc.' };
+    const task = YULE_SCHEDULE.flatMap((d) => d.side).find((t) => t.id === taskId);
+    const taskDay = Number(taskId.split('_')[2]);
+    if (!task || !Number.isInteger(taskDay) || taskDay < 1 || taskDay > current) return { ok: false, msg: 'Nhiệm vụ phụ này chưa mở hoặc event đã kết thúc.' };
+    const y = (this.state.yuleEvent ??= { schemaVersion: 1, claimedMainDays: [], claimedSideTaskIds: [], unlockedAssetIds: [], purchasedAssetIds: [] });
+    if (y.claimedSideTaskIds.includes(taskId)) return { ok: false, msg: 'Nhiệm vụ phụ đã nhận rồi.' };
+    if (!yuleTaskComplete(this.state, task)) return { ok: false, msg: `Chưa hoàn thành: ${task.titleVi}` };
+    const reward = Math.min(5000, task.rewardSickles);
+    y.claimedSideTaskIds.push(taskId);
+    this.state.galleons += reward;
+    this.addXp(task.rewardXp);
+    if (this.debugYuleDayOverride !== null) this.state.sandboxTainted = true;
+    this.saveToStorage();
+    this.onUiChange?.();
+    return { ok: true, msg: `Nhận +${reward.toLocaleString('vi-VN')} Sickle`, rewardSickles: reward };
+  }
+
+  public purchaseYuleAsset(itemId: string): { ok: boolean; msg: string } {
+    const item = CATALOG.find((x) => x.id === itemId);
+    if (!item?.id.startsWith('yule_')) return { ok: false, msg: 'Asset này không thuộc bộ Yule.' };
+    const y = (this.state.yuleEvent ??= {
+      schemaVersion: 1,
+      claimedMainDays: [],
+      claimedSideTaskIds: [],
+      unlockedAssetIds: [],
+      purchasedAssetIds: [],
+    });
+    if (y.unlockedAssetIds.includes(itemId) || y.purchasedAssetIds.includes(itemId)) return { ok: false, msg: 'Asset Yule này đã được mở.' };
+    const price = yuleAssetPrice(itemId);
+    if (!this.state.sandboxMode) {
+      if (this.state.galleons < price) return { ok: false, msg: `Cần ${price.toLocaleString('vi-VN')} Sickle.` };
+      this.state.galleons -= price;
+    }
+    y.purchasedAssetIds.push(itemId);
+    y.unlockedAssetIds.push(itemId);
+    this.saveToStorage();
+    this.onUiChange?.();
+    return {
+      ok: true,
+      msg: this.state.sandboxMode
+        ? `Đã mở ${item.name} miễn phí (Sandbox).`
+        : `Đã mở ${item.name} với ${price.toLocaleString('vi-VN')} Sickle.`,
+    };
+  }
+
+  public getYuleAssetPrice(itemId: string): number { return yuleAssetPrice(itemId); }
+
+  public getYuleTaskProgress(taskId: string): number {
+    const task = YULE_SCHEDULE.flatMap((d) => [d.main, ...d.side]).find((t) => t.id === taskId);
+    return task ? yuleTaskProgress(this.state, task) : 0;
+  }
+
+  public getYuleTaskTarget(taskId: string): number {
+    const task = YULE_SCHEDULE.flatMap((d) => [d.main, ...d.side]).find((t) => t.id === taskId);
+    return task ? task.amount : 1;
+  }
+
+  public isYuleVisualThemeActive(now = new Date()): boolean { return lifecycleIsYuleVisualThemeActive(this, now); }
+
+  public isWinterMainMapActive(): boolean { return lifecycleIsWinterMainMapActive(this); }
+
+  public toggleYuleVisualTheme(now = new Date()): boolean {
+    const mode = this.state.settings.yuleThemeMode ?? 'auto';
+    const currentlyActive =
+      mode === 'on'
+        ? true
+        : mode === 'off'
+          ? false
+          : this.isYuleVisualThemeActive(now) || this.isWinterMainMapActive();
+    const nextActive = !currentlyActive;
+    this.state.settings.yuleThemeMode = nextActive ? 'on' : 'off';
+    if (typeof document !== 'undefined') {
+      document.documentElement.dataset.yuleTheme = nextActive ? 'true' : 'false';
+    }
+    this.saveToStorage();
+    this.onUiChange?.();
+    return nextActive;
+  }
 
   private resolveWeatherSlotKind(slotIdx: number, dateAtSlot: Date): WeatherKind { return lifecycleResolveWeatherSlotKind(this, slotIdx, dateAtSlot); }
 
@@ -854,6 +1052,14 @@ export class ParkSimulation {
         this.homeStateWhileVisiting.sandboxMode = false;
         this.homeStateWhileVisiting.sandboxTainted = true;
       }
+    } else if (this.state.sandboxMode && !this.isVisitingNeighbor) {
+      if (this.state.galleons < 999_999_999) this.state.galleons = 999_999_999;
+      if (this.state.match3 && this.state.match3.stars < 999_999) {
+        this.state.match3.stars = 999_999;
+      }
+      if ((this.state.timeSand ?? 0) < 999) this.state.timeSand = 999;
+      if ((this.state.morningDewPhials ?? 0) < 999) this.state.morningDewPhials = 999;
+      if ((this.state.phoenixTalismans ?? 0) < 12) this.state.phoenixTalismans = 12;
     }
     const clampedDt = Math.min(0.1, dt) * this.simSpeed;
     const now = Date.now();
@@ -869,7 +1075,8 @@ export class ParkSimulation {
       if (!this.isVisitingNeighbor) {
         this.checkAndToastAchievements(now);
       }
-      this.saveToStorage();
+      const isTabHidden = typeof document !== 'undefined' && document.hidden;
+      this.saveToStorage(!isTabHidden);
       this.onUiChange?.();
     }
 
@@ -1111,7 +1318,7 @@ export class ParkSimulation {
 
   public completeMatch3LevelVictory(
     bonusCoinsFromMoves = 0,
-    sessionMetrics?: { sessionScore?: number }
+    sessionMetrics?: { sessionScore?: number; proofOfPlay?: ProofOfPlayEnvelope }
   ): {
     starsEarned: number;
     goldEarned: number;
@@ -1159,7 +1366,11 @@ export class ParkSimulation {
   public completePuzzleArcadeVictory(
     mode: PuzzleArcadeMode,
     reward: PuzzleRewardSpec,
-    sessionMetrics?: { sessionScore?: number; efficiency?: number }
+    sessionMetrics?: {
+      sessionScore?: number;
+      efficiency?: number;
+      proofOfPlay?: ProofOfPlayEnvelope;
+    }
   ): {
     starsEarned: number;
     sandEarned: number;
@@ -1230,6 +1441,27 @@ export class ParkSimulation {
   public harvestAnimalPasture(uid: string): { ok: boolean; msg: string } { return farmHarvestAnimalPasture(this, uid); }
 
   public clearAnimalFromPasture(uid: string): { ok: boolean; msg: string } { return farmClearAnimalFromPasture(this, uid); }
+
+  public beginBuildStroke(): void { return buildTxnBeginStroke(this); }
+  public commitBuildStroke(): void { return buildTxnCommitStroke(this); }
+  public noteBuildMutation(): void { return buildTxnNoteMutation(this); }
+  public canUndoBuild(): boolean { return buildTxnCanUndo(this); }
+  public canRedoBuild(): boolean { return buildTxnCanRedo(this); }
+  public cancelBuildStroke(): void { return buildTxnCancelStroke(this); }
+  public undoBuild(): boolean { return buildTxnUndo(this); }
+  public redoBuild(): boolean { return buildTxnRedo(this); }
+
+  public batchWaterCropPlots(uids: string[]): FarmBatchResult { return farmBatchWaterCrops(this, uids); }
+
+  public batchHarvestCropPlots(uids: string[]): FarmBatchResult { return farmBatchHarvestCrops(this, uids); }
+
+  public batchFeedAnimalPastures(uids: string[]): FarmBatchResult { return farmBatchFeedPastures(this, uids); }
+
+  public batchHarvestAnimalPastures(uids: string[]): FarmBatchResult { return farmBatchHarvestPastures(this, uids); }
+
+  public batchPlantCropPlots(uids: string[], cropId: FarmCropId): FarmBatchResult {
+    return farmBatchPlantCrops(this, uids, cropId);
+  }
 
   public getWorkshopRecipesForBuilding(item: CatalogItem): FarmWorkshopRecipe[] { return questsGetWorkshopRecipesForBuilding(this, item); }
 
@@ -1560,6 +1792,55 @@ export class ParkSimulation {
     };
   }
 
+  public claimAllAchievements(): {
+    ok: boolean;
+    msg: string;
+    claimedCount: number;
+    rewardGalleons: number;
+    rewardStars: number;
+  } {
+    const res = claimAllUnlockedAchievements(this.state);
+    if (res.claimedIds.length === 0) {
+      return {
+        ok: false,
+        msg: 'Hiện chưa có thành tựu mới chờ nhận thưởng!',
+        claimedCount: 0,
+        rewardGalleons: 0,
+        rewardStars: 0,
+      };
+    }
+    if (res.totalStars > 0) {
+      this.state.match3.stars += res.totalStars;
+      this.state.match3.totalStarsEarned += res.totalStars;
+      this.onRewardFly?.('stars', res.totalStars);
+    }
+    if (res.totalGalleons > 0) {
+      this.onRewardFly?.('galleons', res.totalGalleons);
+    }
+    this.audio.playLevelUp();
+    this.saveToStorage();
+    this.onUiChange?.();
+    return {
+      ok: true,
+      msg: `🎖️ Đã nhận gộp ${res.claimedIds.length} Thành Tựu: +${res.totalGalleons.toLocaleString('vi-VN')}G & +${res.totalStars} 🌟!`,
+      claimedCount: res.claimedIds.length,
+      rewardGalleons: res.totalGalleons,
+      rewardStars: res.totalStars,
+    };
+  }
+
+  public getClaimableRetentionCount(): {
+    claimableAchievements: number;
+    claimableLoginDays: number;
+    total: number;
+  } {
+    const targetState = this.homeStateWhileVisiting ?? this.state;
+    if (this.isHeadmasterPreview || this.isVisitingHonorTour || targetState.sandboxMode) {
+      return { claimableAchievements: 0, claimableLoginDays: 0, total: 0 };
+    }
+    return getClaimableRetentionCount(targetState, this.getUnlockedLoginDayMax());
+  }
+
   public getUnlockedLoginDayMax(): number {
     const ret = ensureRetentionState(this.state);
     const todayKey = getLocalDateKey();
@@ -1886,7 +2167,7 @@ export class ParkSimulation {
         if (!spot) {
           for (let gy = 14; gy < GRID_SIZE - 4 && !spot; gy++) {
             for (let gx = 10; gx < GRID_SIZE - 4; gx++) {
-              if (this.canPlaceItem(it, gx, gy, 0).ok) {
+              if (this.canPlaceItem(it, gx, gy, 0, '__stash_restore__').ok) {
                 spot = { gx, gy };
                 break;
               }
@@ -2085,6 +2366,7 @@ export {
   answerVillagerDialogue,
   buildSaveSlotMeta,
   claimAchievementReward,
+  claimAllUnlockedAchievements,
   claimDailyRetentionReward,
   CURRENT_SAVE_SCHEMA_VERSION,
   DAY_1_TO_7_REWARDS,
@@ -2093,6 +2375,7 @@ export {
   exportSavePayload,
   getAchievementCodexSummary,
   getCategoryMetricValue,
+  getClaimableRetentionCount,
   getNpcScheduleForPeriod,
   importSavePayload,
   loadFromNamedSlot,

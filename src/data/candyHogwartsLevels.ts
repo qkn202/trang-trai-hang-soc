@@ -421,7 +421,7 @@ export function toEstateHouseName(houseId: CandyHouseId): HouseName {
   return CANDY_HOUSES[houseId].houseName;
 }
 
-export const CANDY_ASSET_REV = 'hs3';
+export const CANDY_ASSET_REV = 'hs4';
 
 export const CANDY_TILE_TYPES: ReadonlyArray<CandyTileTypeDef> = [
   {
@@ -1068,10 +1068,23 @@ const SEASON_FINALE_BOSSES: Record<number, CandyBossConfig> = {
 
 export function getCandyBossForLevel(levelId: number): CandyBossConfig | null {
   if (SEASON_FINALE_BOSSES[levelId]) {
-    return { ...SEASON_FINALE_BOSSES[levelId] };
+    const finale = SEASON_FINALE_BOSSES[levelId];
+    return {
+      ...finale,
+      maxHp: Math.round((finale.maxHp * 1.25) / 50) * 50,
+      castInterval: Math.min(finale.castInterval, 2),
+      enrageBelowPct: Math.max(finale.enrageBelowPct, 0.55),
+    };
   }
   if (BOSS_ROSTER_EARLY[levelId]) {
-    return { ...BOSS_ROSTER_EARLY[levelId], isFinaleBoss: false };
+    const early = BOSS_ROSTER_EARLY[levelId];
+    return {
+      ...early,
+      maxHp: Math.round((early.maxHp * 1.25) / 50) * 50,
+      castInterval: Math.min(early.castInterval, 3),
+      enrageBelowPct: Math.max(early.enrageBelowPct, 0.55),
+      isFinaleBoss: false,
+    };
   }
   const season = getCandySeasonByLevel(levelId);
   const isChapterEnd = levelId % 10 === 0 || isMilestoneBossStage(levelId);
@@ -1084,10 +1097,11 @@ export function getCandyBossForLevel(levelId: number): CandyBossConfig | null {
   const isHundredMilestone = levelId % 100 === 0 || isMilestoneBossStage(levelId);
 
   const baseHp =
-    2600 +
-    (seasonIdx - 1) * 1450 +
-    Math.round((offsetInSeason / CANDY_HOGWARTS_LEVELS_PER_SEASON) * 1100) +
-    (isHundredMilestone ? 550 : 0);
+    (2600 +
+      (seasonIdx - 1) * 1450 +
+      Math.round((offsetInSeason / CANDY_HOGWARTS_LEVELS_PER_SEASON) * 1100) +
+      (isHundredMilestone ? 550 : 0)) *
+    1.25;
 
   return {
     levelId,
@@ -1095,8 +1109,8 @@ export function getCandyBossForLevel(levelId: number): CandyBossConfig | null {
     shortTitle: pick.shortTitle,
     emoji: pick.emoji,
     maxHp: Math.round(baseHp / 50) * 50,
-    castInterval: seasonIdx >= 4 || isHundredMilestone ? 3 : 4,
-    enrageBelowPct: 0.5,
+    castInterval: seasonIdx >= 5 || isHundredMilestone ? 2 : 3,
+    enrageBelowPct: 0.55,
     hexType: pick.hexType,
     hexName: pick.hexName,
     isFinaleBoss: false,
@@ -1535,12 +1549,12 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
     isSeasonFinale;
   const hardBias =
     difficultyTier === 'finale'
-      ? 0.22
+      ? 0.34
       : difficultyTier === 'nightmare' || difficultyTier === 'boss' || difficultyTier === 'exam'
-        ? 0.14
+        ? 0.24
         : difficultyTier === 'hard'
-          ? 0.08
-          : 0;
+          ? 0.16
+          : 0.06;
 
   const bossConfig = isBoss ? getCandyBossForLevel(levelNum) : null;
 
@@ -1583,7 +1597,7 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
     }
   }
 
-  const maxTotalBlockers = Math.max(12, Math.floor(activeCells * 0.48));
+  const maxTotalBlockers = Math.max(14, Math.floor(activeCells * 0.56));
   let usedBlockerCells = 0;
 
   // 2. Cột Thả Hòn Đá Phù Thủy (Drop Ingredients)
@@ -2034,13 +2048,14 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
   let bombConfig: CandyBombConfig | null = null;
   const wantsBombs =
     levelNum <= 100
-      ? [39, 50, 64, 70, 76, 80, 86, 90, 96, 100].includes(levelNum)
+      ? [20, 28, 34, 39, 44, 50, 56, 64, 70, 76, 80, 86, 90, 96, 100].includes(levelNum)
       : difficultyTier === 'nightmare' ||
+        difficultyTier === 'hard' ||
         isSeasonFinale ||
-        (isBoss && levelNum % 20 === 0) ||
-        (seasonId >= 3 && levelNum % 6 === 0);
+        (isBoss && levelNum % 10 === 0) ||
+        (seasonId >= 2 && levelNum % 5 === 0);
   if (wantsBombs) {
-    const startTimer =
+    const baseTimer =
       actualFiendfyre > 0
         ? 11
         : seasonId >= 5
@@ -2050,10 +2065,13 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
             : levelNum >= 80
               ? 10
               : 12;
+    const startTimer = Math.max(7, baseTimer - 2);
     bombConfig = {
       initialCount:
-        isSeasonFinale || (seasonId >= 4 && difficultyTier === 'nightmare') ? 2 : 1,
-      intervalMoves: seasonId >= 5 ? 5 : 6,
+        isSeasonFinale || (seasonId >= 3 && (difficultyTier === 'nightmare' || difficultyTier === 'boss'))
+          ? 2
+          : 1,
+      intervalMoves: seasonId >= 4 ? 4 : 5,
       startTimer,
     };
   }
@@ -2067,51 +2085,52 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
     actualDecrees > 0
   );
   let numColors = 6;
-  if (levelNum <= 6) {
+  if (levelNum <= 3) {
     numColors = 5;
   } else if (specialOrder) {
-    numColors = seasonId >= 5 && specialOrder.specialKind !== 'color_bomb' ? 6 : 5;
+    numColors = seasonId >= 3 && specialOrder.specialKind !== 'color_bomb' ? 6 : 5;
   } else if (seasonId === 1) {
     numColors =
-      isSpike || levelNum >= 30
-        ? levelNum % 5 === 1 && !isSpike
+      isSpike || levelNum >= 14
+        ? 6
+        : levelNum % 3 === 1 && !isSpike
           ? 5
-          : 6
-        : levelNum % 2 === 0
-          ? 6
-          : 5;
+          : 6;
   } else {
-    numColors = !isSpike && levelNum % 11 === 4 ? 5 : 6;
+    numColors = !isSpike && levelNum % 17 === 4 ? 5 : 6;
   }
 
-  // 10. Ngân sách Lượt đi chuẩn Candy Crush Saga
-  let moves = 18;
+  // 10. Ngân sách Lượt đi chặt chẽ chuẩn Candy Crush Saga nâng cao
+  let moves = 15;
   if (levelNum <= 3) {
-    moves = levelNum === 3 ? 17 : 18;
+    moves = levelNum === 1 ? 16 : 15;
   } else if (levelNum <= 100) {
-    if (isBoss) moves = levelNum === 100 ? 24 : 20 + Math.floor(levelNum / 45);
-    else if (difficultyTier === 'nightmare') moves = 15 + (levelNum >= 60 ? 1 : 0);
-    else if (difficultyTier === 'hard') moves = 16 + (levelNum % 2);
-    else moves = 17 + (levelNum % 3);
+    if (isBoss) moves = levelNum === 100 ? 21 : 17 + Math.floor(levelNum / 50);
+    else if (difficultyTier === 'nightmare') moves = 13 + (levelNum >= 60 ? 1 : 0);
+    else if (difficultyTier === 'hard') moves = 14 + (levelNum % 2);
+    else moves = 15 + (levelNum % 2);
   } else {
-    const highYearPad = seasonId >= 5 ? 2 : seasonId >= 3 ? 1 : 0;
-    if (isSeasonFinale) moves = 25 + Math.floor(seasonId / 3);
-    else if (isBoss) moves = 21 + highYearPad;
-    else if (difficultyTier === 'nightmare' || isExamTrial) moves = 16 + highYearPad;
-    else if (difficultyTier === 'hard') moves = 17 + highYearPad;
-    else moves = 18 + (levelNum % 2) + highYearPad;
+    const highYearPad = seasonId >= 5 ? 1 : 0;
+    if (isSeasonFinale) moves = 22 + Math.floor(seasonId / 4);
+    else if (isBoss) moves = 18 + highYearPad;
+    else if (difficultyTier === 'nightmare' || isExamTrial) moves = 14 + highYearPad;
+    else if (difficultyTier === 'hard') moves = 15 + highYearPad;
+    else moves = 16 + (levelNum % 2) + highYearPad;
   }
 
   if (hasIngredients && !isBoss) moves += 1;
   if (actualHorcruxes >= 4 && !isBoss) moves += 1;
+  moves = Math.max(13, moves);
 
-  // 11. Ngưỡng 1–2–3 Sao
-  const baseStar1 =
-    2600 +
-    Math.min(100, levelNum) * 160 +
-    (seasonId - 1) * 5200 +
-    Math.round(seasonProgress * 3800) +
-    (isSeasonFinale ? 6500 : isBoss ? 2400 : isSpike ? 1100 : 0);
+  // 11. Ngưỡng 1–2–3 Sao (+22%)
+  const baseStar1 = Math.round(
+    (2600 +
+      Math.min(100, levelNum) * 160 +
+      (seasonId - 1) * 5200 +
+      Math.round(seasonProgress * 3800) +
+      (isSeasonFinale ? 6500 : isBoss ? 2400 : isSpike ? 1100 : 0)) *
+      1.22,
+  );
   const stars: [number, number, number] = [
     Math.round(baseStar1 / 100) * 100,
     Math.round((baseStar1 * 1.72) / 100) * 100,
@@ -2182,8 +2201,8 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
     if (objectives.length < 2 && !bossConfig && ingredientTarget === 0) {
       let preferredTile = (levelNum + seasonId * 2) % numColors;
       if (levelNum <= 12) preferredTile = levelNum % 2 === 0 ? 4 : 2;
-      const multiplier = isSpike ? 1.95 : numColors === 6 ? 1.65 : 1.85;
-      const collectTarget = Math.max(22, Math.round(moves * multiplier + seasonId * 3));
+      const multiplier = isSpike ? 2.25 : numColors === 6 ? 1.95 : 2.15;
+      const collectTarget = Math.max(26, Math.round(moves * multiplier + seasonId * 4));
       objectives.push({
         type: 'collect',
         tileId: preferredTile,
@@ -2203,8 +2222,8 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
 
   if (levelNum === 1) {
     objectives.length = 0;
-    objectives.push({ type: 'collect', tileId: 4, target: 24 });
-    objectives.push({ type: 'collect', tileId: 0, target: 24 });
+    objectives.push({ type: 'collect', tileId: 4, target: 28 });
+    objectives.push({ type: 'collect', tileId: 0, target: 28 });
   }
 
   const legacyDifficulty: 'normal' | 'hard' | 'boss' = isBoss

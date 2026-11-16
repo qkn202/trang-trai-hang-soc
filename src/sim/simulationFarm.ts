@@ -364,8 +364,10 @@ export function farmUpgradeFarmBarn(sim: ParkSimulation): { ok: boolean; msg: st
     sim.audio.playLevelUp();
     const msg = `Kho Nông Sản Hang Sóc đã mở rộng lên ${barn.capacity} ô chứa${spentDetail} (+45 ⭐)!`;
     sim.onToast?.(msg, '🏡');
-    sim.saveToStorage();
-    sim.onUiChange?.();
+    if (!sim.batchOperationActive) {
+      sim.saveToStorage();
+      sim.onUiChange?.();
+    }
     return { ok: true, msg };
 }
 
@@ -385,8 +387,10 @@ export function farmSellFarmItemFromBarn(sim: ParkSimulation, itemId: FarmItemId
     sim.audio.playHarvestBubble();
     const msg = `🪙 Đã bán ${take} ${meta.emoji} ${meta.name} thu về +${gold}G & +${xp} ⭐!`;
     sim.onToast?.(msg, meta.emoji);
-    sim.saveToStorage();
-    sim.onUiChange?.();
+    if (!sim.batchOperationActive) {
+      sim.saveToStorage();
+      sim.onUiChange?.();
+    }
     return { ok: true, msg };
 }
 
@@ -439,8 +443,10 @@ export function farmBuyCropSeedWithGold(sim: ParkSimulation,
     sim.audio.playHarvestBubble();
     sim.advanceTutorialStep('seed_quiz_or_buy');
     const msg = `🪙 Đã mua ${count} hạt giống ${crop.emoji} ${crop.name} (-${totalCost.toLocaleString('vi-VN')}G • Túi có: ${newSeedCount} hạt)!`;
-    sim.saveToStorage();
-    sim.onUiChange?.();
+    if (!sim.batchOperationActive) {
+      sim.saveToStorage();
+      sim.onUiChange?.();
+    }
     return { ok: true, msg, newSeedCount };
 }
 
@@ -490,8 +496,10 @@ export function farmCompleteSeedLanguageQuizAttempt(sim: ParkSimulation,
     } else {
       sim.audio.playClick();
     }
-    sim.saveToStorage();
-    sim.onUiChange?.();
+    if (!sim.batchOperationActive) {
+      sim.saveToStorage();
+      sim.onUiChange?.();
+    }
     return {
       ...outcome,
       phoenixTalismanAwarded,
@@ -571,8 +579,10 @@ export function farmPlantCropOnPlot(sim: ParkSimulation,
       '#86efac'
     );
     sim.advanceTutorialStep('sow_and_merge_plot');
-    sim.saveToStorage();
-    sim.onUiChange?.();
+    if (!sim.batchOperationActive) {
+      sim.saveToStorage();
+      sim.onUiChange?.();
+    }
     return {
       ok: true,
       msg: `🌱 Đã gieo 1 hạt ${crop.emoji} ${crop.name} (Túi còn ${leftSeeds} hạt • ${formatDurationCompactVi(effectiveGrowSec)} chín${rotNote})!`,
@@ -606,8 +616,10 @@ export function farmWaterCropPlot(sim: ParkSimulation, uid: string): { ok: boole
     }
     sim.onBuildingTactile?.(b.uid);
     sim.spawnFloatingText(b.gx + 1, b.gy + 1, '💧 Aguamenti! Chín nhanh +30%!', '#38bdf8');
-    sim.saveToStorage();
-    sim.onUiChange?.();
+    if (!sim.batchOperationActive) {
+      sim.saveToStorage();
+      sim.onUiChange?.();
+    }
     return { ok: true, msg: '💧 Đã tưới nước suối mát — cây lớn nhanh hơn 30% (+4 ⭐)!' };
 }
 
@@ -699,8 +711,10 @@ export function farmHarvestCropPlot(sim: ParkSimulation, uid: string): { ok: boo
       sim.state.galleons += 10;
     }
     sim.advanceTutorialStep('harvest_wheat');
-    sim.saveToStorage();
-    sim.onUiChange?.();
+    if (!sim.batchOperationActive) {
+      sim.saveToStorage();
+      sim.onUiChange?.();
+    }
     return {
       ok: true,
       msg:
@@ -739,7 +753,16 @@ export function farmStockAnimalOnPasture(sim: ParkSimulation,
         msg: `${animal.emoji} ${animal.name} mở khóa ở Cấp ${animal.unlockLevel}!`,
       };
     }
-    if (!sim.state.sandboxMode && sim.state.galleons < animal.cost) {
+    const isMollyTutorialHenSubsidy = Boolean(
+      !sim.state.sandboxMode &&
+        animalId === 'burrow_hen' &&
+        sim.state.tutorial?.active &&
+        !sim.state.tutorial.skipped &&
+        !sim.state.tutorial.completedAt &&
+        TUTORIAL_STEPS[sim.state.tutorial.stepIndex]?.id === 'pasture_harvest_and_stock' &&
+        sim.state.galleons < animal.cost
+    );
+    if (!sim.state.sandboxMode && !isMollyTutorialHenSubsidy && sim.state.galleons < animal.cost) {
       return {
         ok: false,
         msg: `Cần ${animal.cost.toLocaleString('vi-VN')} 🪙 Vàng để thả ${animal.emoji} ${animal.name} vào đồng cỏ!`,
@@ -747,7 +770,7 @@ export function farmStockAnimalOnPasture(sim: ParkSimulation,
     }
 
     if (!sim.state.sandboxMode) {
-      sim.state.galleons -= animal.cost;
+      sim.state.galleons = isMollyTutorialHenSubsidy ? 0 : sim.state.galleons - animal.cost;
     }
 
     const now = Date.now();
@@ -770,8 +793,10 @@ export function farmStockAnimalOnPasture(sim: ParkSimulation,
       '#86efac'
     );
     sim.advanceTutorialStep('pasture_harvest_and_stock');
-    sim.saveToStorage();
-    sim.onUiChange?.();
+    if (!sim.batchOperationActive) {
+      sim.saveToStorage();
+      sim.onUiChange?.();
+    }
     return {
       ok: true,
       msg: `🐾 Đã thả ${animal.emoji} ${animal.name} vào Đồng Cỏ Chăn Thả (${formatDurationCompactVi(effectiveCycleSec)}/mẻ)!`,
@@ -802,8 +827,10 @@ export function farmFeedAnimalPasture(sim: ParkSimulation, uid: string): { ok: b
     sim.audio.playSpell();
     sim.onBuildingTactile?.(b.uid);
     sim.spawnFloatingText(b.gx + 1, b.gy + 1, '🌾 Cỏ Mật! Nhanh +35%!', '#86efac');
-    sim.saveToStorage();
-    sim.onUiChange?.();
+    if (!sim.batchOperationActive) {
+      sim.saveToStorage();
+      sim.onUiChange?.();
+    }
     return {
       ok: true,
       msg: '🌾 Đã cho đàn thú ăn cỏ ba lá mật — thu hoạch nhanh hơn 35% (+5 ⭐)!',
@@ -876,8 +903,10 @@ export function farmHarvestAnimalPasture(sim: ParkSimulation, uid: string): { ok
         sim.advanceTutorialStep('pasture_harvest_and_stock');
       }
     }
-    sim.saveToStorage();
-    sim.onUiChange?.();
+    if (!sim.batchOperationActive) {
+      sim.saveToStorage();
+      sim.onUiChange?.();
+    }
     return {
       ok: true,
       msg:
@@ -885,6 +914,98 @@ export function farmHarvestAnimalPasture(sim: ParkSimulation, uid: string): { ok
           ? `🐾 Thu hoạch +${added} ${goodMeta.emoji} ${goodMeta.name} từ ${animal.name} (+${gold}G, +${xp} ⭐)!`
           : `🏡 Kho Nông Sản đã đầy — bán trực tiếp sản vật thu +${gold + 12}G!`,
     };
+}
+
+export interface FarmBatchResult {
+  ok: boolean;
+  processed: number;
+  skipped: number;
+  totalGold: number;
+  totalXp: number;
+  msg: string;
+}
+
+interface FarmBatchOptions {
+  icon: string;
+  action: (uid: string) => { ok: boolean; msg: string };
+}
+
+function farmRunBatch(sim: ParkSimulation, uids: string[], options: FarmBatchOptions): FarmBatchResult {
+  if (sim.isVisitingNeighbor) {
+    return {
+      ok: false,
+      processed: 0,
+      skipped: uids.length,
+      totalGold: 0,
+      totalXp: 0,
+      msg: 'Chế độ Khách Tham Quan — thao tác hàng loạt chỉ dùng trong thung lũng của bạn.',
+    };
+  }
+
+  const uniqueUids = [...new Set(uids)];
+  const beforeGold = sim.state.galleons;
+  const beforeXp = sim.state.xp;
+
+  // Gộp N lần saveToStorage + N lần onUiChange (mà từng API đơn lẻ gọi bên trong)
+  // xuống đúng 1 lần commit ở cuối batch — tránh serialize localStorage + refresh DOM
+  // từng ô gây GC stutter khi kéo brush / bấm "Tất cả".
+  sim.batchOperationActive = true;
+  const savedOnUiChange = sim.onUiChange;
+  sim.onUiChange = null;
+  let processed = 0;
+  try {
+    for (const uid of uniqueUids) {
+      if (options.action(uid).ok) processed++;
+    }
+  } finally {
+    sim.onUiChange = savedOnUiChange;
+    sim.batchOperationActive = false;
+    if (processed > 0) {
+      sim.saveToStorage();
+      sim.onUiChange?.();
+    }
+  }
+
+  const totalGold = Math.max(0, sim.state.galleons - beforeGold);
+  const totalXp = Math.max(0, sim.state.xp - beforeXp);
+  const skipped = uniqueUids.length - processed;
+  return {
+    ok: processed > 0,
+    processed,
+    skipped,
+    totalGold,
+    totalXp,
+    msg: processed > 0
+      ? `${options.icon} Đã xử lý ${processed} khu vực${skipped > 0 ? `, bỏ qua ${skipped}` : ''}.`
+      : 'Không có khu vực nào sẵn sàng để xử lý.',
+  };
+}
+
+export function farmBatchWaterCrops(sim: ParkSimulation, uids: string[]): FarmBatchResult {
+  return farmRunBatch(sim, uids, { icon: '💧', action: (uid) => farmWaterCropPlot(sim, uid) });
+}
+
+export function farmBatchHarvestCrops(sim: ParkSimulation, uids: string[]): FarmBatchResult {
+  return farmRunBatch(sim, uids, { icon: '🌾', action: (uid) => farmHarvestCropPlot(sim, uid) });
+}
+
+export function farmBatchFeedPastures(sim: ParkSimulation, uids: string[]): FarmBatchResult {
+  return farmRunBatch(sim, uids, { icon: '🌾', action: (uid) => farmFeedAnimalPasture(sim, uid) });
+}
+
+export function farmBatchHarvestPastures(sim: ParkSimulation, uids: string[]): FarmBatchResult {
+  return farmRunBatch(sim, uids, { icon: '🐾', action: (uid) => farmHarvestAnimalPasture(sim, uid) });
+}
+
+export function farmBatchPlantCrops(
+  sim: ParkSimulation,
+  uids: string[],
+  cropId: FarmCropId
+): FarmBatchResult {
+  return farmRunBatch(sim, uids, {
+    icon: '🌱',
+    action: (uid) => farmPlantCropOnPlot(sim, uid, cropId),
+  });
 }
 
 export function farmClearAnimalFromPasture(sim: ParkSimulation, uid: string): { ok: boolean; msg: string } {
@@ -908,8 +1029,10 @@ export function farmClearAnimalFromPasture(sim: ParkSimulation, uid: string): { 
       sim.state.galleons += refund;
     }
     sim.audio.playClick();
-    sim.saveToStorage();
-    sim.onUiChange?.();
+    if (!sim.batchOperationActive) {
+      sim.saveToStorage();
+      sim.onUiChange?.();
+    }
     return {
       ok: true,
       msg: `🐾 Đã đưa ${animal?.emoji ?? '🐾'} ${animal?.name ?? 'thú'} về chuồng nghỉ${refund > 0 ? ` (hoàn +${refund}G)` : ''} — có thể chọn thú mới!`,

@@ -162,6 +162,7 @@ import {
 import { buildSampleCoasterLoop, TrackWaypoint, traceCoasterCircuit } from './coaster';
 import {
   buildNeighborValleySnapshot,
+  cacheNeighborValleySnapshot,
   CANON_NPC_NEIGHBOR_IDS,
   classifyBuildingGardenHelpKind,
   createFriendNeighborFromCode,
@@ -351,27 +352,89 @@ export const PHOENIX_FORGE_ELIGIBLE_GOODS: ReadonlyArray<FarmGoodId> = [
   'floral_bouquet_gift',
 ];
 
-export function createCanonFarmOwlOrder(level: number, seed: number): FarmOwlOrder {
+export function createCanonFarmOwlOrder(
+  level: number,
+  seed: number,
+  placedBuildings?: ReadonlyArray<PlacedBuilding>
+): FarmOwlOrder {
+  const safeLvl = Math.max(1, level);
   const sender = CANON_OWL_SENDERS[seed % CANON_OWL_SENDERS.length];
   const unlockedCrops = (Object.keys(FARM_CROPS) as FarmCropId[]).filter(
-    (cid) => FARM_CROPS[cid].unlockLevel <= Math.max(1, level)
+    (cid) => FARM_CROPS[cid].unlockLevel <= safeLvl
   );
-  const candidateGoods: FarmGoodId[] = [
-    'cinnamon_apple_pie',
-    'pumpkin_pie',
-    ...(level >= 2 ? (['farm_egg_wool', 'creamy_dairy_milk', 'floral_bouquet_gift'] as FarmGoodId[]) : []),
-    ...(level >= 3 ? (['weasley_sweater_w'] as FarmGoodId[]) : []),
-    ...(level >= 5 ? (['fine_wheat_flour'] as FarmGoodId[]) : []),
-    ...(level >= 7 ? (['blossom_honey_jar', 'honey_apple_cider'] as FarmGoodId[]) : []),
-    ...(level >= 14 ? (['frothy_butterbeer', 'cream_mushroom_soup'] as FarmGoodId[]) : []),
-    ...(level >= 16 ? (['sprout_growth_elixir'] as FarmGoodId[]) : []),
-  ];
+  const unlockedCropSet = new Set<string>(unlockedCrops);
+
+  let candidateGoods: FarmGoodId[];
+  if (placedBuildings) {
+    const nowMs = Date.now();
+    const builtWorkshops = new Set<string>();
+    let hasCompletedPasture = false;
+    const stockedPastureGoods = new Set<FarmGoodId>();
+    for (const b of placedBuildings) {
+      if (!b || nowMs < b.constructEndsAt || b.awaitingUnveil) continue;
+      const it = getCatalogItem(b.itemId);
+      if (!it) continue;
+      if (it.workshopGroupId) {
+        builtWorkshops.add(it.workshopGroupId);
+      }
+      if (it.isAnimalPasturePlot) {
+        hasCompletedPasture = true;
+        if (b.pastureAnimalId && b.pastureAnimalId in PASTURE_ANIMALS) {
+          const animalMeta = PASTURE_ANIMALS[b.pastureAnimalId];
+          if (animalMeta.unlockLevel <= safeLvl) {
+            stockedPastureGoods.add(animalMeta.goodId);
+          }
+        }
+      }
+    }
+
+    const reachableSet = new Set<FarmGoodId>();
+    if (hasCompletedPasture && safeLvl >= 2) {
+      reachableSet.add('farm_egg_wool');
+      reachableSet.add('creamy_dairy_milk');
+    }
+    for (const gid of stockedPastureGoods) {
+      if (gid !== 'muggle_plug_kit') {
+        reachableSet.add(gid);
+      }
+    }
+    for (let pass = 0; pass < 3; pass++) {
+      for (const rcp of FARM_WORKSHOP_RECIPES) {
+        if (rcp.goodId === 'muggle_plug_kit') continue;
+        if (rcp.unlockLevel > safeLvl) continue;
+        if (!builtWorkshops.has(rcp.workshopGroupId)) continue;
+        const inputsReady = rcp.inputs.every(
+          (inp) => unlockedCropSet.has(inp.itemId) || reachableSet.has(inp.itemId as FarmGoodId)
+        );
+        if (inputsReady) {
+          reachableSet.add(rcp.goodId);
+        }
+      }
+    }
+    candidateGoods = Array.from(reachableSet);
+  } else {
+    candidateGoods = [
+      'cinnamon_apple_pie',
+      'pumpkin_pie',
+      ...(safeLvl >= 2 ? (['farm_egg_wool', 'creamy_dairy_milk'] as FarmGoodId[]) : []),
+      ...(safeLvl >= 3 ? (['weasley_sweater_w'] as FarmGoodId[]) : []),
+      ...(safeLvl >= 4 ? (['cream_mushroom_soup'] as FarmGoodId[]) : []),
+      ...(safeLvl >= 8 ? (['fine_wheat_flour'] as FarmGoodId[]) : []),
+      ...(safeLvl >= 13 ? (['blossom_honey_jar', 'honey_apple_cider'] as FarmGoodId[]) : []),
+      ...(safeLvl >= 17 ? (['choc_frog_sweet'] as FarmGoodId[]) : []),
+      ...(safeLvl >= 27 ? (['frothy_butterbeer'] as FarmGoodId[]) : []),
+      ...(safeLvl >= 31 ? (['floral_bouquet_gift', 'sprout_growth_elixir'] as FarmGoodId[]) : []),
+    ];
+  }
 
   const c1 = unlockedCrops[(seed * 5 + 2) % unlockedCrops.length];
   const qtyCrop = 2 + (seed % 2);
-  const useCraftedGood = level >= 2 || seed % 2 === 0;
-  const g1 = candidateGoods[(seed * 3 + 1) % candidateGoods.length];
-  const qtyGood = 1 + (level >= 6 ? seed % 2 : 0);
+  const useCraftedGood = candidateGoods.length > 0 && (safeLvl >= 2 || seed % 2 === 0);
+  const g1 =
+    candidateGoods.length > 0
+      ? candidateGoods[(seed * 3 + 1) % candidateGoods.length]
+      : ('cinnamon_apple_pie' as FarmGoodId);
+  const qtyGood = 1 + (safeLvl >= 6 ? seed % 2 : 0);
 
   const c2 = unlockedCrops[(seed * 7 + 1) % unlockedCrops.length];
   const requirements: FarmOwlOrder['requirements'] = useCraftedGood
@@ -443,6 +506,18 @@ export function createInitialFarmBarnState(): FarmBarnState {
       blush_peony: 0,
       moonlight_flower: 0,
       phoenix_fireflower: 0,
+      yule_poinsettia: 0,
+      yule_snowdrop: 0,
+      yule_hellebore: 0,
+      yule_holly_sprig: 0,
+      yule_paperwhite: 0,
+      yule_frost_cranberry: 0,
+      yule_amaryllis: 0,
+      yule_mistletoe: 0,
+      yule_dwarf_fir: 0,
+      yule_edelweiss: 0,
+      yule_winter_camellia: 0,
+      yule_frost_orchid: 0,
     },
     goods: {
       cinnamon_apple_pie: 2,
@@ -875,10 +950,11 @@ export function createInitialGameState(): GameState {
     phoenixTalismans: 1,
     quizTalismanProgress: 0,
     retention: createDefaultRetentionState(),
+    yuleEvent: { schemaVersion: 1, claimedMainDays: [], claimedSideTaskIds: [], unlockedAssetIds: [], purchasedAssetIds: [] },
     staffPatrolZones: {},
     lastProphetHeadline: {
-      title: 'KHAI HOANG ĐỒI CỎ HANG SÓC — THÁP 5 MÔN GIẢI ĐỐ 777 MÀN!',
-      subtitle: 'Chinh phục 5×777 màn Giải Đố tích lũy 🌟 Sao Phép Thuật & Cấp Độ để kiến tạo Đại Điền Trang!',
+      title: '🎄 CHÀO MỪNG MÙA ĐÔNG GIÁNG SINH TẠI ĐỒI TUYẾT HANG SÓC & HOGSMEADE!',
+      subtitle: 'Tuyết đầu mùa phủ trắng thung lũng — thắp đèn lễ hội, trồng hoa Đông & chinh phục 5×777 màn Khảo Thí!',
       positive: true,
     },
     finance: {
@@ -919,9 +995,13 @@ export function createInitialGameState(): GameState {
       cutawayMode: false,
       soundEnabled: true,
       bgmEnabled: true,
-      weatherOverride: 'clear',
+      weatherOverride: 'auto',
       timeOverride: 'day',
       activeFestival: 'auto',
+      yuleThemeMode: 'auto',
+      rendererMode: 'webgl2',
+      youtubeBgmEnabled: false,
+      youtubeBgmUrl: 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
     },
     lastSavedAt: now,
   };
@@ -1733,15 +1813,55 @@ export function migrateLoadedState(parsed: GameState): GameState {
     crop_sunflower_bed: 'hedge_sunflower',
   };
   const sandboxAllowedOnLoad = isSandboxRuntimeAllowed();
-  const rawBuildings = Array.isArray(parsed.buildings) ? parsed.buildings : def.buildings;
+  const baseRawBuildings = Array.isArray(parsed.buildings) ? parsed.buildings : def.buildings;
+  const extraUnknownBuildings = Array.isArray(parsed.unknownBuildings) ? parsed.unknownBuildings : [];
+  const rawBuildings: PlacedBuilding[] = [...baseRawBuildings];
+  if (extraUnknownBuildings.length > 0) {
+    const existingRawUids = new Set(
+      baseRawBuildings
+        .filter((b): b is PlacedBuilding => Boolean(b && typeof b.uid === 'string'))
+        .map((b) => b.uid)
+    );
+    for (const ub of extraUnknownBuildings) {
+      if (ub && typeof ub === 'object' && typeof ub.uid === 'string' && !existingRawUids.has(ub.uid)) {
+        existingRawUids.add(ub.uid);
+        rawBuildings.push(ub);
+      }
+    }
+  }
   const safeBuildings: PlacedBuilding[] = [];
+  const preservedUnknownBuildings: PlacedBuilding[] = [];
   for (const b of rawBuildings) {
     if (!b || typeof b !== 'object' || typeof b.itemId !== 'string') continue;
     if (!sandboxAllowedOnLoad && b.builtInSandbox) continue;
     const legacyCrop = LEGACY_CROP_BED_MAP[b.itemId];
     const resolvedItemId = legacyCrop ? 'farmland_plot' : b.itemId;
     const item = getCatalogItem(resolvedItemId);
-    if (!item) continue;
+    if (!item) {
+      if (
+        preservedUnknownBuildings.length < 500 &&
+        typeof b.gx === 'number' &&
+        typeof b.gy === 'number' &&
+        Number.isFinite(b.gx) &&
+        Number.isFinite(b.gy)
+      ) {
+        const ugx = Math.round(b.gx);
+        const ugy = Math.round(b.gy);
+        if (ugx >= 0 && ugy >= 0 && ugx < GRID_SIZE && ugy < GRID_SIZE) {
+          const cleanItemId = sanitizePlainText(resolvedItemId, 80);
+          if (cleanItemId) {
+            preservedUnknownBuildings.push({
+              ...b,
+              itemId: cleanItemId,
+              uid: sanitizePlainText(b.uid, 80) || `${cleanItemId}_${ugx}_${ugy}`,
+              gx: ugx,
+              gy: ugy,
+            });
+          }
+        }
+      }
+      continue;
+    }
     const rot = ([0, 1, 2, 3].includes(b.rotation) ? b.rotation : 0) as 0 | 1 | 2 | 3;
     const bw = rot % 2 === 1 ? item.height : item.width;
     const bh = rot % 2 === 1 ? item.width : item.height;
@@ -1755,7 +1875,7 @@ export function migrateLoadedState(parsed: GameState): GameState {
     const resolvedCropId: FarmCropId | null | undefined = item.isFarmlandPlot
       ? b.cropId && b.cropId in FARM_CROPS
         ? b.cropId
-        : b.cropId === null
+        : b.cropId === null || typeof b.cropId === 'string'
           ? null
           : legacyCrop
       : undefined;
@@ -1764,7 +1884,6 @@ export function migrateLoadedState(parsed: GameState): GameState {
         ? b.pastureAnimalId
         : null
       : undefined;
-    const isHoneydukesLauncher = resolvedItemId === 'burrow_honeydukes_canon';
     safeBuildings.push({
       ...b,
       itemId: resolvedItemId,
@@ -1773,9 +1892,9 @@ export function migrateLoadedState(parsed: GameState): GameState {
       gy,
       rotation: rot,
       stars: Math.round(clampFinite(b.stars, 1, 5, 1)),
-      storedGalleons: isHoneydukesLauncher ? 0 : Math.round(clampFinite(b.storedGalleons, 0, 9999999, 0)),
-      storedXp: isHoneydukesLauncher ? 0 : Math.round(clampFinite(b.storedXp, 0, 9999999, 0)),
-      readyBubbles: isHoneydukesLauncher ? 0 : Math.round(clampFinite(b.readyBubbles, 0, 50, 0)),
+      storedGalleons: Math.round(clampFinite(b.storedGalleons, 0, 9999999, 0)),
+      storedXp: Math.round(clampFinite(b.storedXp, 0, 9999999, 0)),
+      readyBubbles: Math.round(clampFinite(b.readyBubbles, 0, 50, 0)),
       durability: clampFinite(b.durability, 0, 100, 100),
       visitorsServed: Math.round(clampFinite(b.visitorsServed, 0, 99999999, 0)),
       buildReducedSec:
@@ -1822,13 +1941,13 @@ export function migrateLoadedState(parsed: GameState): GameState {
         item.isAnimalPasturePlot && typeof b.pastureReadyAt === 'number' ? b.pastureReadyAt : undefined,
       pastureFedBoost: item.isAnimalPasturePlot ? Boolean(b.pastureFedBoost) : false,
       workshopQueue:
-        !isHoneydukesLauncher && Array.isArray(b.workshopQueue)
+        Array.isArray(b.workshopQueue)
           ? b.workshopQueue
               .filter((s) => s && typeof s.goodId === 'string' && s.goodId in FARM_GOODS)
               .slice(0, 6)
           : undefined,
       readyFarmGoods:
-        !isHoneydukesLauncher && Array.isArray(b.readyFarmGoods)
+        Array.isArray(b.readyFarmGoods)
           ? b.readyFarmGoods.filter((g): g is FarmGoodId => typeof g === 'string' && g in FARM_GOODS).slice(0, 12)
           : undefined,
       harvestCycleCount:
@@ -1876,25 +1995,67 @@ export function migrateLoadedState(parsed: GameState): GameState {
   const rawStaff = parsed.staffHired ?? def.staffHired;
   const defBarn = def.farmBarn ?? createInitialFarmBarnState();
   const parsedBarn = parsed.farmBarn;
-  const safeBarn: FarmBarnState = parsedBarn
-    ? {
-        capacity: Math.round(clampFinite(parsedBarn.capacity, 40, 2000, defBarn.capacity)),
-        ordersDelivered: Math.round(clampFinite(parsedBarn.ordersDelivered, 0, 999999, 0)),
-        crops: { ...defBarn.crops, ...(parsedBarn.crops ?? {}) },
-        goods: { ...defBarn.goods, ...(parsedBarn.goods ?? {}) },
-        seeds: { ...(defBarn.seeds ?? {}), ...(parsedBarn.seeds ?? {}) },
-        owlOrders:
-          Array.isArray(parsedBarn.owlOrders) && parsedBarn.owlOrders.length > 0
-            ? parsedBarn.owlOrders.slice(0, 6).map((o) => ({
-                ...o,
-                portraitSprite:
-                  o.portraitSprite && o.portraitSprite.startsWith('guest_')
-                    ? undefined
-                    : o.portraitSprite,
-              }))
-            : defBarn.owlOrders,
+  const safeBarn: FarmBarnState = (() => {
+    if (!parsedBarn || typeof parsedBarn !== 'object') return defBarn;
+    const safeCrops = { ...defBarn.crops };
+    const rawCrops = (parsedBarn.crops ?? {}) as Record<string, unknown>;
+    for (const cid of Object.keys(FARM_CROPS) as FarmCropId[]) {
+      safeCrops[cid] = Math.round(clampFinite(rawCrops[cid] as number, 0, 999999, defBarn.crops[cid] ?? 0));
+    }
+    const safeGoods = { ...defBarn.goods };
+    const rawGoods = (parsedBarn.goods ?? {}) as Record<string, unknown>;
+    for (const gid of Object.keys(FARM_GOODS) as FarmGoodId[]) {
+      safeGoods[gid] = Math.round(clampFinite(rawGoods[gid] as number, 0, 999999, defBarn.goods[gid] ?? 0));
+    }
+    const safeSeeds: Partial<Record<FarmCropId, number>> = {};
+    const rawSeeds = (parsedBarn.seeds ?? {}) as Record<string, unknown>;
+    const defSeeds = defBarn.seeds ?? {};
+    for (const cid of Object.keys(FARM_CROPS) as FarmCropId[]) {
+      if (rawSeeds[cid] !== undefined || defSeeds[cid] !== undefined) {
+        safeSeeds[cid] = Math.round(clampFinite(rawSeeds[cid] as number, 0, 999999, defSeeds[cid] ?? 0));
       }
-    : defBarn;
+    }
+    const safeOwlOrders =
+      Array.isArray(parsedBarn.owlOrders) && parsedBarn.owlOrders.length > 0
+        ? parsedBarn.owlOrders.slice(0, 6).map((o, oIdx) => {
+            const hasValidReqs =
+              Boolean(o && typeof o === 'object' && Array.isArray(o.requirements)) &&
+              o.requirements.length > 0 &&
+              o.requirements.every(
+                (r) =>
+                  Boolean(r && typeof r === 'object' && typeof r.itemId === 'string') &&
+                  (r.itemId in FARM_CROPS || r.itemId in FARM_GOODS) &&
+                  typeof r.qty === 'number' &&
+                  Number.isFinite(r.qty) &&
+                  r.qty > 0
+              );
+            if (!hasValidReqs) {
+              return createCanonFarmOwlOrder(safeLevel, oIdx + 1, safeBuildings);
+            }
+            return {
+              ...o,
+              requirements: o.requirements.map((r) => ({
+                itemId: r.itemId,
+                qty: Math.max(1, Math.min(99, Math.round(r.qty))),
+              })),
+              rewardGalleons: Math.round(clampFinite(o.rewardGalleons, 1, 999999, 25)),
+              rewardXp: Math.round(clampFinite(o.rewardXp, 0, 999999, 20)),
+              portraitSprite:
+                typeof o.portraitSprite === 'string' && !o.portraitSprite.startsWith('guest_')
+                  ? o.portraitSprite
+                  : undefined,
+            };
+          })
+        : defBarn.owlOrders;
+    return {
+      capacity: Math.round(clampFinite(parsedBarn.capacity, 40, 2000, defBarn.capacity)),
+      ordersDelivered: Math.round(clampFinite(parsedBarn.ordersDelivered, 0, 999999, 0)),
+      crops: safeCrops,
+      goods: safeGoods,
+      seeds: safeSeeds,
+      owlOrders: safeOwlOrders,
+    };
+  })();
 
   const parsedVersion = typeof parsed.version === 'number' ? parsed.version : 0;
   let safeTileOverrides: GameState['tileOverrides'];
@@ -2034,6 +2195,7 @@ export function migrateLoadedState(parsed: GameState): GameState {
     timeSand: Math.round(clampFinite(parsed.timeSand, 0, 999999, 4)),
     parkEntryFee: 0,
     buildings: safeBuildings,
+    unknownBuildings: preservedUnknownBuildings.length > 0 ? preservedUnknownBuildings : undefined,
     unveiledItemIds: Array.from(unveiledSeedSet),
     finishXpItemIds: Array.from(finishXpSeedSet),
     storyClaimedIds: claimedList,
@@ -2115,7 +2277,13 @@ export function migrateLoadedState(parsed: GameState): GameState {
           clampFinite(rawSoc.dailyHomeLanternsClaimedCount, 0, MAX_HOME_LANTERN_MARKS, 0)
         ),
         neighbors: Array.isArray(rawSoc.neighbors)
-          ? rawSoc.neighbors.filter((n) => !isNpcNeighborProfile(n))
+          ? rawSoc.neighbors
+              .filter((n) => Boolean(n && !isNpcNeighborProfile(n)))
+              .map((n) => {
+                cacheNeighborValleySnapshot(n);
+                const { valleyBuildings: _vb, valleyTileOverrides: _vt, ...slimNeighbor } = n;
+                return slimNeighbor;
+              })
           : [],
         homeLanternMarks: Array.isArray(rawSoc.homeLanternMarks)
           ? rawSoc.homeLanternMarks
@@ -2342,6 +2510,18 @@ export function migrateLoadedState(parsed: GameState): GameState {
       auror: Math.round(clampFinite(rawStaff.auror, 0, MAX_STAFF_PER_ROLE, 0)),
       house_elf: Math.round(clampFinite(rawStaff.house_elf, 0, MAX_STAFF_PER_ROLE, 0)),
     },
+    yuleEvent: (() => {
+      const raw = parsed.yuleEvent;
+      const rec = raw && typeof raw === 'object' ? (raw as unknown as Record<string, unknown>) : {};
+      const list = (key: string) => Array.isArray(rec[key]) ? rec[key].filter((x): x is string | number => typeof x === 'string' || typeof x === 'number').slice(0, 500) : [];
+      return {
+        schemaVersion: 1,
+        claimedMainDays: list('claimedMainDays').filter((x): x is number => typeof x === 'number').map((x) => Math.max(1, Math.min(36, Math.round(x)))),
+        claimedSideTaskIds: list('claimedSideTaskIds').filter((x): x is string => typeof x === 'string'),
+        unlockedAssetIds: list('unlockedAssetIds').filter((x): x is string => typeof x === 'string'),
+        purchasedAssetIds: list('purchasedAssetIds').filter((x): x is string => typeof x === 'string'),
+      };
+    })(),
     staffPatrolZones: parsed.staffPatrolZones ?? {},
     lastProphetHeadline: safeHeadline,
     finance: {
@@ -2358,6 +2538,18 @@ export function migrateLoadedState(parsed: GameState): GameState {
       activeFestival: sandboxAllowedOnLoad
         ? (parsed.settings?.activeFestival ?? def.settings.activeFestival)
         : 'auto',
+      yuleThemeMode:
+        parsed.settings?.yuleThemeMode === 'on' ||
+        parsed.settings?.yuleThemeMode === 'off' ||
+        parsed.settings?.yuleThemeMode === 'auto'
+          ? parsed.settings.yuleThemeMode
+          : 'auto',
+      rendererMode: parsed.settings?.rendererMode === 'canvas' ? 'canvas' : 'webgl2',
+      youtubeBgmEnabled: Boolean(parsed.settings?.youtubeBgmEnabled),
+      youtubeBgmUrl:
+        typeof parsed.settings?.youtubeBgmUrl === 'string' && parsed.settings.youtubeBgmUrl.trim()
+          ? parsed.settings.youtubeBgmUrl.trim().slice(0, 320)
+          : def.settings.youtubeBgmUrl,
       showGrid: false,
       cutawayMode: false,
     },

@@ -369,6 +369,7 @@ export function economyApplyConstructionReductionFromGameplay(sim: ParkSimulatio
     sourceLabelVi = 'Giải Đố',
     preferredUid?: string
   ): BuildReductionResult {
+    const effectivePreferredUid = preferredUid ?? sim.preferredSpeedupBuildingUid ?? undefined;
     const budgetSec = Math.max(0, Math.round(rawReduceSec));
     const targetState = sim.homeStateWhileVisiting ?? sim.state;
     const targetBuildings = targetState.buildings;
@@ -401,8 +402,7 @@ export function economyApplyConstructionReductionFromGameplay(sim: ParkSimulatio
           item.cycleSec > 0 &&
           item.baseIncome > 0 &&
           !item.isFarmlandPlot &&
-          !item.isAnimalPasturePlot &&
-          item.id !== 'burrow_honeydukes_canon'
+          !item.isAnimalPasturePlot
         ) {
           b.lastTickAt = (b.lastTickAt || now) - budgetMs;
           anyEcoReduced = true;
@@ -423,9 +423,9 @@ export function economyApplyConstructionReductionFromGameplay(sim: ParkSimulatio
     const actives = targetBuildings
       .filter((x) => now < x.constructEndsAt)
       .sort((a, b) => {
-        if (preferredUid) {
-          if (a.uid === preferredUid) return -1;
-          if (b.uid === preferredUid) return 1;
+        if (effectivePreferredUid) {
+          if (a.uid === effectivePreferredUid) return -1;
+          if (b.uid === effectivePreferredUid) return 1;
         }
         return (a.placedAt || 0) - (b.placedAt || 0) || a.constructEndsAt - b.constructEndsAt;
       });
@@ -723,17 +723,6 @@ export function economyTickProductionToTimestamp(sim: ParkSimulation, now: numbe
             item.isCreatureHabitat ? '🐣' : b.awaitingUnveil ? '🎀' : '🏗️'
           );
         }
-      }
-
-      // Honeydukes is a pure Match-3 Attic launcher (no coin or goods collection)
-      if (item.id === 'burrow_honeydukes_canon') {
-        b.storedGalleons = 0;
-        b.storedXp = 0;
-        b.readyBubbles = 0;
-        b.workshopQueue = undefined;
-        b.readyFarmGoods = undefined;
-        b.lastTickAt = now;
-        continue;
       }
 
       // Process Workshop Oven / Craft Queue slots (Playrix Township queue!)

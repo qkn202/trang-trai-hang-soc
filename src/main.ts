@@ -18,6 +18,8 @@ import { SpriteRegistry } from './engine/spriteLoader';
 import { sampleCoasterTrainPositions } from './sim/coaster';
 import {
   IS_SANDBOX_BUILD_ENABLED,
+  isDragPaintableCatalogItem,
+  isRepeatableCatalogItem,
   isSandboxRuntimeAllowed,
   ParkSimulation,
 } from './sim/simulation';
@@ -53,21 +55,9 @@ import {
   createRollbackSaveBackup,
   ProductionTelemetryCollector,
 } from './ui/productionShip';
+import { CrossLayerFlyingCollectibles } from './render/fx/flyingCollectibles';
 
-function isDragPaintableItem(item: CatalogItem): boolean {
-  return (
-    item.category === 'path' ||
-    item.category === 'terrain' ||
-    Boolean(item.isCoasterTrackPiece) ||
-    Boolean(item.isZooFence) ||
-    Boolean(item.isFarmlandPlot) ||
-    Boolean(item.connectableGroup)
-  );
-}
-
-function isRepeatableCatalogItem(item: CatalogItem): boolean {
-  return isDragPaintableItem(item) || item.category === 'decor';
-}
+const isDragPaintableItem = isDragPaintableCatalogItem;
 
 async function bootstrap(): Promise<void> {
   const app = document.getElementById('app')!;
@@ -94,8 +84,96 @@ async function bootstrap(): Promise<void> {
   installPrompt.init();
   accessibility.init(sim);
 
-  // URL preview parameters for instant visual verification or sharing
+  // URL preview parameters & default WebGL2 2.5D HDR Graphics Engine on main game ("bản gốc")
   const params = new URLSearchParams(window.location.search);
+  const rawRendererParam = params.get('renderer');
+  const wantsGpuEngineMock =
+    params.get('mock') === 'gpu' || rawRendererParam === 'compare';
+  if (rawRendererParam === 'canvas' || rawRendererParam === 'webgl2') {
+    sim.state.settings.rendererMode = rawRendererParam;
+  }
+
+  let gpuWorldRenderer: import('./render/webgl2/webgl2WorldRenderer').WebGL2WorldRenderer | null = null;
+  let gpuOverlay: import('./render/gpuMockOverlay').GpuMockOverlayController | null = null;
+  let directGpuCanvas: HTMLCanvasElement | null = null;
+  let directGpuSettings: import('./render/core/renderDevice').GpuMockSettings | null = null;
+  let gpuInitFailed = false;
+  const gpuPointerClient = { x: 0, y: 0, moved: false };
+  const bindGpuPointerTracking = () => {
+    window.addEventListener(
+      'pointermove',
+      (ev) => {
+        gpuPointerClient.x = ev.clientX;
+        gpuPointerClient.y = ev.clientY;
+        gpuPointerClient.moved = true;
+      },
+      { passive: true }
+    );
+  };
+
+  if (wantsGpuEngineMock) {
+    try {
+      const initialMode =
+        rawRendererParam === 'webgl2' || rawRendererParam === 'canvas' || rawRendererParam === 'compare'
+          ? rawRendererParam
+          : 'compare';
+      const [{ GpuMockOverlayController }, { WebGL2WorldRenderer }] = await Promise.all([
+        import('./render/gpuMockOverlay'),
+        import('./render/webgl2/webgl2WorldRenderer'),
+      ]);
+      gpuOverlay = new GpuMockOverlayController(app, canvas, sim, initialMode, 'high');
+      gpuWorldRenderer = new WebGL2WorldRenderer(gpuOverlay.gpuCanvas, sprites);
+      if (!params.get('tutorial')) {
+        hud.tutorialMinimized = true;
+      }
+      bindGpuPointerTracking();
+    } catch (err) {
+      console.warn('[WebGL2 Mock] Fallback về Canvas2D:', err);
+      gpuWorldRenderer = null;
+      gpuOverlay = null;
+      gpuInitFailed = true;
+    }
+  } else {
+    try {
+      const { WebGL2WorldRenderer } = await import('./render/webgl2/webgl2WorldRenderer');
+      const gpuCanvas = document.createElement('canvas');
+      gpuCanvas.id = 'gpuWorldCanvas';
+      gpuCanvas.setAttribute('aria-hidden', 'true');
+      gpuCanvas.style.cssText =
+        'position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:0;display:block;';
+      canvas.insertAdjacentElement('beforebegin', gpuCanvas);
+      gpuWorldRenderer = new WebGL2WorldRenderer(gpuCanvas, sprites);
+      directGpuCanvas = gpuCanvas;
+      directGpuSettings = {
+        mode: (sim.state.settings.rendererMode ?? 'webgl2') === 'canvas' ? 'canvas' : 'webgl2',
+        splitRatio: 0.5,
+        qualityTier: isTouchOrIOSDevice() ? 'medium' : 'high',
+        lumosWandEnabled: false,
+        windStrength: 1.15,
+        bloomIntensity: 0.72,
+        normalStrength: 1.12,
+      };
+      if (directGpuSettings.mode === 'webgl2') {
+        canvas.style.position = 'relative';
+        canvas.style.zIndex = '1';
+        canvas.style.background = 'transparent';
+      } else {
+        gpuCanvas.style.display = 'none';
+      }
+      bindGpuPointerTracking();
+      window.addEventListener('hangsoc:toon-changed', () => {
+        gpuWorldRenderer?.invalidateSpriteAtlas();
+      });
+    } catch (err) {
+      console.warn('[WebGL2 Engine] Thiết bị không hỗ trợ WebGL2, tự động fallback về Canvas2D:', err);
+      directGpuCanvas?.remove();
+      directGpuCanvas = null;
+      gpuWorldRenderer = null;
+      directGpuSettings = null;
+      gpuInitFailed = true;
+      sim.state.settings.rendererMode = 'canvas';
+    }
+  }
   const isSandboxAllowed = IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed();
   const hasExplicitCamParam = Boolean(
     (isSandboxAllowed && params.get('preview') === '100') ||
@@ -149,6 +227,14 @@ async function bootstrap(): Promise<void> {
     centerCameraOnGrid(cam, cx, cy);
   }
   if (IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed()) {
+    const sandboxParam = params.get('sandbox');
+    if (
+      sandboxParam === '1' ||
+      (sandboxParam !== '0' && params.get('preview') !== '100' && !params.get('tutorial'))
+    ) {
+      sim.enableInfiniteSandbox();
+      hud.refreshAll();
+    }
     const tutorialParam = params.get('tutorial');
     if (tutorialParam === '1' || tutorialParam === 'reset') {
       sim.restartTutorial();
@@ -214,6 +300,21 @@ async function bootstrap(): Promise<void> {
       sim.launchFireworksShow(12);
     }
   }
+  const yuleParam = params.get('yule');
+  if (yuleParam === 'on' || yuleParam === 'off' || yuleParam === 'auto') {
+    sim.state.settings.yuleThemeMode = yuleParam;
+    hud.refreshAll();
+  }
+  const isLocalDevLoopback =
+    Boolean(import.meta.env.DEV) &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  if (isLocalDevLoopback) {
+    const yuleDayParam = Number(params.get('yuleDay') || 0);
+    if (Number.isFinite(yuleDayParam) && yuleDayParam >= 1 && yuleDayParam <= 36) {
+      sim.debugYuleDayOverride = Math.floor(yuleDayParam);
+      hud.refreshAll();
+    }
+  }
   if (params.get('ridecam') === '1') {
     const coasterB = sim.state.buildings.find((b) => getCatalogItem(b.itemId)?.isCustomCoasterStation);
     if (coasterB) {
@@ -225,8 +326,14 @@ async function bootstrap(): Promise<void> {
     (document.getElementById('btnOpenAlbum') as HTMLButtonElement | null)?.click();
   } else if (dlgParam === 'finance') {
     (document.getElementById('btnOpenFinance') as HTMLButtonElement | null)?.click();
-  } else if (dlgParam === 'orders' || dlgParam === 'quests') {
-    (document.getElementById('btnOpenQuests') as HTMLButtonElement | null)?.click();
+  } else if (dlgParam === 'orders' || dlgParam === 'quests' || dlgParam === 'yule') {
+    if (dlgParam === 'yule') {
+      hud.activeQuestTab = 'quests';
+      hud.renderQuestDialog();
+      (document.getElementById('questDialog') as HTMLDialogElement | null)?.showModal();
+    } else {
+      (document.getElementById('btnOpenQuests') as HTMLButtonElement | null)?.click();
+    }
   } else if (dlgParam === 'barn') {
     hud.openWorkshopDialog('barn');
   } else if (dlgParam === 'seeds') {
@@ -315,7 +422,7 @@ async function bootstrap(): Promise<void> {
         ? rawScope
         : undefined;
     hud.openLeaderboardDialog(validGame, validScope);
-  } else if (!params.get('tour') && !params.get('visit') && !sim.isHeadmasterPreview) {
+  } else if (!params.get('tour') && !params.get('visit') && !sim.isHeadmasterPreview && !wantsGpuEngineMock) {
     try {
       const rawResume = localStorage.getItem(ACTIVE_MINIGAME_RESUME_KEY);
       if (rawResume) {
@@ -554,12 +661,30 @@ async function bootstrap(): Promise<void> {
     hud.showRibbonUnveilBanner(info);
     haptic('levelup');
   };
+  const flyingCollectibles = new CrossLayerFlyingCollectibles(hud.root, {
+    onArrival: (_kind, idx) => {
+      audio.playFlyTick(idx);
+      if (idx === 0) haptic('light');
+    },
+  });
+
   sim.onRewardFly = (kind, amount, gx, gy) => {
     if (typeof gx === 'number' && typeof gy === 'number') {
       const pt = gridToScreen(gx, gy, cam, canvas.clientWidth, canvas.clientHeight, 32);
-      hud.spawnFlyReward(kind, amount, pt.sx, pt.sy);
+      const launched = flyingCollectibles.spawnBurstToHud(kind, amount, pt.sx, pt.sy);
+      if (!launched) {
+        hud.spawnFlyReward(kind, amount, pt.sx, pt.sy);
+      }
     } else {
-      hud.spawnFlyReward(kind, amount);
+      const launched = flyingCollectibles.spawnBurstToHud(
+        kind,
+        amount,
+        canvas.clientWidth * 0.5,
+        canvas.clientHeight * 0.52
+      );
+      if (!launched) {
+        hud.spawnFlyReward(kind, amount);
+      }
     }
   };
   sim.onLevelUp = (lv) => {
@@ -618,27 +743,37 @@ async function bootstrap(): Promise<void> {
   const trySowPlotAt = (gx: number, gy: number, sx: number, sy: number): boolean => {
     const seedCropId = hud.activeSeedCropId;
     if (!seedCropId) return false;
-    let uid = sim.grid[gy]?.[gx]?.buildingUid ?? null;
-    if (!uid) {
+    const nowMs = Date.now();
+    const isEligiblePlot = (candUid: string | null | undefined) => {
+      if (!candUid) return null;
+      const cand = sim.state.buildings.find((x) => x.uid === candUid);
+      if (!cand || cand.cropId || nowMs < cand.constructEndsAt) return null;
+      return getCatalogItem(cand.itemId)?.isFarmlandPlot ? cand : null;
+    };
+    let b = isEligiblePlot(sim.grid[gy]?.[gx]?.buildingUid);
+    if (!b) {
+      let bestDist = Infinity;
       for (let i = renderer.hotspots.length - 1; i >= 0; i--) {
         const hs = renderer.hotspots[i];
-        if (hs.kind === 'building' && Math.hypot(sx - hs.sx, sy - hs.sy) <= hs.radius) {
-          uid = hs.id;
-          break;
+        if (hs.kind !== 'building') continue;
+        const dist = Math.hypot(sx - hs.sx, sy - hs.sy);
+        if (dist <= Math.max(hs.radius * 1.35, 36) && dist < bestDist) {
+          const cand = isEligiblePlot(hs.id);
+          if (cand) {
+            bestDist = dist;
+            b = cand;
+          }
         }
       }
     }
-    if (!uid) return false;
-    const b = sim.state.buildings.find((x) => x.uid === uid);
-    if (!b || b.cropId || Date.now() < b.constructEndsAt) return false;
-    const it = getCatalogItem(b.itemId);
-    if (!it?.isFarmlandPlot) return false;
+    if (!b) return false;
 
     const res = sim.plantCropOnPlot(b.uid, seedCropId);
     if (!res.ok) {
       if (res.needSeedAcquire) {
         isSowingSeeds = false;
         isPointerDown = false;
+        hud.activeSeedCropId = null;
         hud.seedTrayOpen = false;
         hud.inspectSelection = null;
         hud.refreshAll();
@@ -652,8 +787,14 @@ async function bootstrap(): Promise<void> {
       }
       return false;
     }
+    if (!sim.state.sandboxMode && sim.getSeedCount(seedCropId) <= 0) {
+      hud.activeSeedCropId = null;
+    }
     if (hud.seedTrayOpen) {
       hud.seedTrayOpen = false;
+      hud.renderSeedTray();
+      hud.refreshFloatingBanner();
+    } else if (!hud.activeSeedCropId) {
       hud.renderSeedTray();
       hud.refreshFloatingBanner();
     }
@@ -663,21 +804,30 @@ async function bootstrap(): Promise<void> {
   const tryStockPastureAt = (gx: number, gy: number, sx: number, sy: number): boolean => {
     const animalId = hud.activePastureAnimalId;
     if (!animalId) return false;
-    let uid = sim.grid[gy]?.[gx]?.buildingUid ?? null;
-    if (!uid) {
+    const nowMs = Date.now();
+    const isEligiblePasture = (candUid: string | null | undefined) => {
+      if (!candUid) return null;
+      const cand = sim.state.buildings.find((x) => x.uid === candUid);
+      if (!cand || cand.pastureAnimalId || nowMs < cand.constructEndsAt) return null;
+      return getCatalogItem(cand.itemId)?.isAnimalPasturePlot ? cand : null;
+    };
+    let b = isEligiblePasture(sim.grid[gy]?.[gx]?.buildingUid);
+    if (!b) {
+      let bestDist = Infinity;
       for (let i = renderer.hotspots.length - 1; i >= 0; i--) {
         const hs = renderer.hotspots[i];
-        if (hs.kind === 'building' && Math.hypot(sx - hs.sx, sy - hs.sy) <= hs.radius) {
-          uid = hs.id;
-          break;
+        if (hs.kind !== 'building') continue;
+        const dist = Math.hypot(sx - hs.sx, sy - hs.sy);
+        if (dist <= Math.max(hs.radius * 1.35, 36) && dist < bestDist) {
+          const cand = isEligiblePasture(hs.id);
+          if (cand) {
+            bestDist = dist;
+            b = cand;
+          }
         }
       }
     }
-    if (!uid) return false;
-    const b = sim.state.buildings.find((x) => x.uid === uid);
-    if (!b || b.pastureAnimalId || Date.now() < b.constructEndsAt) return false;
-    const it = getCatalogItem(b.itemId);
-    if (!it?.isAnimalPasturePlot) return false;
+    if (!b) return false;
 
     const res = sim.stockAnimalOnPasture(b.uid, animalId);
     if (!res.ok) {
@@ -694,6 +844,120 @@ async function bootstrap(): Promise<void> {
       hud.refreshFloatingBanner();
     }
     return true;
+  };
+
+  type CareSweepMode = 'harvest_crop' | 'water_crop' | 'harvest_pasture' | 'feed_pasture';
+  let pendingCareSweep: {
+    mode: CareSweepMode;
+    initialUid: string;
+    initialSx: number;
+    initialSy: number;
+    active: boolean;
+    sweptUids: Set<string>;
+  } | null = null;
+
+  const detectCareablePlotAt = (
+    gx: number,
+    gy: number,
+    sx: number,
+    sy: number,
+    modeFilter?: CareSweepMode
+  ): { uid: string; mode: CareSweepMode } | null => {
+    if (sim.isVisitingNeighbor) return null;
+    const nowMs = Date.now();
+    const candidateUids: string[] = [];
+    const tileUid = sim.grid[gy]?.[gx]?.buildingUid;
+    if (tileUid) candidateUids.push(tileUid);
+    for (let i = renderer.hotspots.length - 1; i >= 0; i--) {
+      const hs = renderer.hotspots[i];
+      if (
+        (hs.kind === 'water_crop' || hs.kind === 'feed_pasture' || hs.kind === 'building') &&
+        Math.hypot(sx - hs.sx, sy - hs.sy) <= hs.radius
+      ) {
+        if (!candidateUids.includes(hs.id)) {
+          candidateUids.push(hs.id);
+        }
+      }
+    }
+    for (const uid of candidateUids) {
+      const b = sim.state.buildings.find((x) => x.uid === uid);
+      if (!b || nowMs < b.constructEndsAt || b.awaitingUnveil) continue;
+      const it = getCatalogItem(b.itemId);
+      if (!it) continue;
+      if (it.isFarmlandPlot && b.cropId && b.cropReadyAt) {
+        const mode: CareSweepMode | null =
+          nowMs >= b.cropReadyAt
+            ? 'harvest_crop'
+            : !b.cropWateredBoost
+              ? 'water_crop'
+              : null;
+        if (mode && (!modeFilter || mode === modeFilter)) {
+          return { uid, mode };
+        }
+      }
+      if (it.isAnimalPasturePlot && b.pastureAnimalId && b.pastureReadyAt) {
+        const mode: CareSweepMode | null =
+          nowMs >= b.pastureReadyAt
+            ? 'harvest_pasture'
+            : !b.pastureFedBoost
+              ? 'feed_pasture'
+              : null;
+        if (mode && (!modeFilter || mode === modeFilter)) {
+          return { uid, mode };
+        }
+      }
+    }
+    return null;
+  };
+
+  const applyCareSweepPlot = (uid: string, mode: CareSweepMode, sx: number, sy: number): boolean => {
+    let ok = false;
+    if (mode === 'harvest_crop') {
+      ok = sim.harvestCropPlot(uid).ok;
+    } else if (mode === 'water_crop') {
+      ok = sim.waterCropPlot(uid).ok;
+    } else if (mode === 'harvest_pasture') {
+      ok = sim.harvestAnimalPasture(uid).ok;
+    } else if (mode === 'feed_pasture') {
+      ok = sim.feedAnimalPasture(uid).ok;
+    }
+    if (ok) {
+      renderer.triggerSquash(uid);
+      renderer.notifyJuice('harvest', sx, sy);
+      haptic('light');
+    }
+    return ok;
+  };
+
+  const finishCareSweep = (): boolean => {
+    const sweep = pendingCareSweep;
+    pendingCareSweep = null;
+    if (!sweep || !sweep.active) {
+      sim.batchOperationActive = false;
+      return false;
+    }
+    sim.batchOperationActive = false;
+    if (sweep.sweptUids.size > 0) {
+      sim.checkAndToastAchievements();
+      sim.saveToStorage();
+      sim.onUiChange?.();
+      hud.inspectSelection = null;
+      hud.refreshAll();
+    }
+    return sweep.sweptUids.size > 0;
+  };
+
+  const finishBuildStroke = () => {
+    sim.commitBuildStroke();
+  };
+
+  const runSingleBuildStroke = <T>(fn: () => T): T => {
+    sim.beginBuildStroke();
+    try {
+      return fn();
+    } finally {
+      sim.commitBuildStroke();
+    }
   };
 
   // V3 Multi-Touch Pinch-to-Zoom tracking + deferred touch brush guard (P1-4)
@@ -807,15 +1071,75 @@ async function bootstrap(): Promise<void> {
     return null;
   };
 
+  hud.onBuildStateReset = () => {
+    cancelPendingTouchPaint();
+    hoverTile = null;
+  };
+
+  hud.onStartMoveBuilding = (uid) => {
+    const mb = sim.state.buildings.find((x) => x.uid === uid);
+    if (mb) {
+      hoverTile = { gx: mb.gx, gy: mb.gy };
+    }
+  };
+
+  hud.onRotateActivePlacement = () => {
+    if (hud.moveModeActive && hud.movingBuildingUid) {
+      const mb = sim.state.buildings.find((x) => x.uid === hud.movingBuildingUid);
+      const mIt = mb ? getCatalogItem(mb.itemId) : undefined;
+      if (mb && mIt) {
+        const anchor = hud.pendingTouchTile ?? hoverTile ?? { gx: mb.gx, gy: mb.gy };
+        const next = resolveBuildingPlacementTile(
+          mIt,
+          anchor.gx,
+          anchor.gy,
+          hud.rotation,
+          hud.movingBuildingUid
+        );
+        hoverTile = next;
+        if (hud.pendingTouchTile) {
+          hud.pendingTouchTile = {
+            gx: next.gx,
+            gy: next.gy,
+            label: hud.pendingTouchTile.label,
+          };
+        }
+      }
+      return;
+    }
+    if (hud.selectedCatalogItem && !isDragPaintableItem(hud.selectedCatalogItem)) {
+      if (hoverTile) {
+        hoverTile = resolveBuildingPlacementTile(
+          hud.selectedCatalogItem,
+          hoverTile.gx,
+          hoverTile.gy,
+          hud.rotation
+        );
+      } else {
+        hoverTile = findBestPreviewSpotNearCamera(hud.selectedCatalogItem, hud.rotation);
+      }
+    }
+  };
+
   hud.onSelectCatalogItem = (item) => {
-    if (isDragPaintableItem(item)) return;
-    const spot = findBestPreviewSpotNearCamera(item, hud.rotation);
-    if (!spot) return;
-    hoverTile = { gx: spot.gx, gy: spot.gy };
-    const { bw, bh } = sim.getBuildingFootprint(item, hud.rotation);
+    hud.pendingTouchTile = null;
+    hud.refreshTouchConfirmBar();
     const rect = canvas.getBoundingClientRect();
     const viewW = rect.width || window.innerWidth || 1280;
     const viewH = rect.height || window.innerHeight || 720;
+    if (isDragPaintableItem(item)) {
+      const focus = screenToGrid(viewW * 0.5, viewH * 0.5, cam, viewW, viewH, sim.grid);
+      hoverTile = { gx: focus.gx, gy: focus.gy };
+      return;
+    }
+    const spot = findBestPreviewSpotNearCamera(item, hud.rotation);
+    if (!spot) {
+      const focus = screenToGrid(viewW * 0.5, viewH * 0.5, cam, viewW, viewH, sim.grid);
+      hoverTile = resolveBuildingPlacementTile(item, focus.gx, focus.gy, hud.rotation);
+      return;
+    }
+    hoverTile = { gx: spot.gx, gy: spot.gy };
+    const { bw, bh } = sim.getBuildingFootprint(item, hud.rotation);
     const elev = sim.grid[spot.gy]?.[spot.gx]?.elevation ?? 0;
     const scr = gridToScreen(
       spot.gx + bw * 0.5,
@@ -834,10 +1158,6 @@ async function bootstrap(): Promise<void> {
       introGlide = null;
       centerCameraOnGrid(cam, spot.gx + bw * 0.5, spot.gy + bh * 0.5);
     }
-    if (isTouchOrIOSDevice()) {
-      hud.pendingTouchTile = { gx: spot.gx, gy: spot.gy, label: item.name };
-      hud.refreshTouchConfirmBar();
-    }
   };
 
   hud.onAutoPlaceSelected = () => {
@@ -845,12 +1165,7 @@ async function bootstrap(): Promise<void> {
     if (!placedItem) return;
     const rot = hud.rotation;
     let target: { gx: number; gy: number } | null = null;
-    if (
-      hud.pendingTouchTile &&
-      sim.canPlaceItem(placedItem, hud.pendingTouchTile.gx, hud.pendingTouchTile.gy, rot).ok
-    ) {
-      target = { gx: hud.pendingTouchTile.gx, gy: hud.pendingTouchTile.gy };
-    } else if (hoverTile && sim.canPlaceItem(placedItem, hoverTile.gx, hoverTile.gy, rot).ok) {
+    if (hoverTile && sim.canPlaceItem(placedItem, hoverTile.gx, hoverTile.gy, rot).ok) {
       target = { gx: hoverTile.gx, gy: hoverTile.gy };
     } else {
       target = findBestPreviewSpotNearCamera(placedItem, rot);
@@ -873,8 +1188,11 @@ async function bootstrap(): Promise<void> {
       hud.showToast(check.reason ?? 'Không thể đặt tại ô này!', '⚠️');
       return;
     }
-    const placedOk = sim.placeItem(placedItem, target.gx, target.gy, rot);
+    const placedOk = runSingleBuildStroke(() =>
+      sim.placeItem(placedItem, target!.gx, target!.gy, rot)
+    );
     if (!placedOk) return;
+    hud.recordRecentDecorItem(placedItem.id);
     const { bw, bh } = sim.getBuildingFootprint(placedItem, rot);
     introGlide = null;
     centerCameraOnGrid(cam, target.gx + bw * 0.5, target.gy + bh * 0.5);
@@ -883,51 +1201,34 @@ async function bootstrap(): Promise<void> {
       hud.selectedCatalogItem = null;
       hoverTile = null;
     } else {
-      const nextSpot = findBestPreviewSpotNearCamera(placedItem, rot);
-      hoverTile = nextSpot;
+      hoverTile = findBestPreviewSpotNearCamera(placedItem, rot);
     }
     hud.refreshAll();
     hud.showToast(`🔨 Đã khởi công "${placedItem.name}" thành công!`, '✨');
   };
 
-  // Wire Touch Placement Confirm Bar callbacks
+  // Touch Confirm Bar is strictly reserved for Move (relocating existing buildings)
   hud.onTouchConfirmPlace = () => {
     if (!hud.pendingTouchTile) return;
-    const { gx, gy } = hud.pendingTouchTile;
-    if (hud.moveModeActive && hud.movingBuildingUid) {
-      const res = sim.moveBuilding(hud.movingBuildingUid, gx, gy, hud.rotation);
-      if (!res.ok) {
-        hud.showToast(res.reason ?? 'Không thể đặt tại ô này!', '⚠️');
-        return;
-      }
-      hud.movingBuildingUid = null;
-      hud.moveModeActive = false;
+    if (!(hud.moveModeActive && hud.movingBuildingUid)) {
       hud.pendingTouchTile = null;
-      hud.refreshAll();
+      hud.refreshTouchConfirmBar();
       return;
     }
-    if (hud.selectedCatalogItem) {
-      const placedItem = hud.selectedCatalogItem;
-      const check = sim.canPlaceItem(placedItem, gx, gy, hud.rotation);
-      if (!check.ok) {
-        hud.showToast(check.reason ?? 'Không thể đặt tại ô này!', '⚠️');
-        return;
-      }
-      sim.placeItem(placedItem, gx, gy, hud.rotation);
-      hud.pendingTouchTile = null;
-      if (!isRepeatableCatalogItem(placedItem)) {
-        hud.selectedCatalogItem = null;
-        hoverTile = null;
-        hud.showToast(`🔨 Đã khởi công "${placedItem.name}" thành công!`, '✨');
-      } else {
-        const nextSpot = findBestPreviewSpotNearCamera(placedItem, hud.rotation);
-        hoverTile = nextSpot;
-        if (nextSpot) {
-          hud.pendingTouchTile = { gx: nextSpot.gx, gy: nextSpot.gy, label: placedItem.name };
-        }
-      }
-      hud.refreshAll();
+    const movingUid = hud.movingBuildingUid;
+    const mb = sim.state.buildings.find((x) => x.uid === movingUid);
+    const mIt = mb ? getCatalogItem(mb.itemId) : undefined;
+    const { gx, gy } = hud.pendingTouchTile;
+    const res = runSingleBuildStroke(() =>
+      sim.moveBuilding(movingUid, gx, gy, hud.rotation)
+    );
+    if (!res.ok) {
+      hud.showToast(res.reason ?? 'Không thể đặt tại ô này!', '⚠️');
+      return;
     }
+    hud.clearBuildToolModes();
+    hud.refreshAll();
+    hud.showToast(`✋ Đã dời "${mIt?.name ?? 'công trình'}" sang vị trí mới!`, '✨');
   };
 
   hud.onTouchCancelPlace = () => {
@@ -1032,11 +1333,15 @@ async function bootstrap(): Promise<void> {
       const first = pendingTouchPaint;
       cancelPendingTouchPaint();
       isPaintingTiles = true;
-      sim.placeItem(first.item, first.gx, first.gy, first.rot);
+      if (sim.placeItem(first.item, first.gx, first.gy, first.rot)) {
+        hud.recordRecentDecorItem(first.item.id);
+      }
     }
 
     if (isPaintingTiles && hud.selectedCatalogItem) {
-      sim.placeItem(hud.selectedCatalogItem, gPos.gx, gPos.gy, hud.rotation);
+      if (sim.placeItem(hud.selectedCatalogItem, gPos.gx, gPos.gy, hud.rotation)) {
+        hud.recordRecentDecorItem(hud.selectedCatalogItem.id);
+      }
       return;
     }
 
@@ -1048,6 +1353,33 @@ async function bootstrap(): Promise<void> {
     if (isStockingPastures && hud.activePastureAnimalId) {
       tryStockPastureAt(gPos.gx, gPos.gy, sx, sy);
       return;
+    }
+
+    if (pendingCareSweep && activePointers.size === 1 && !wasPinching) {
+      const moveDist = Math.hypot(e.clientX - pointerStartX, e.clientY - pointerStartY);
+      if (!pendingCareSweep.active && moveDist > 7) {
+        pendingCareSweep.active = true;
+        sim.batchOperationActive = true;
+        if (
+          applyCareSweepPlot(
+            pendingCareSweep.initialUid,
+            pendingCareSweep.mode,
+            pendingCareSweep.initialSx,
+            pendingCareSweep.initialSy
+          )
+        ) {
+          pendingCareSweep.sweptUids.add(pendingCareSweep.initialUid);
+        }
+      }
+      if (pendingCareSweep.active) {
+        const hit = detectCareablePlotAt(gPos.gx, gPos.gy, sx, sy, pendingCareSweep.mode);
+        if (hit && !pendingCareSweep.sweptUids.has(hit.uid)) {
+          if (applyCareSweepPlot(hit.uid, hit.mode, sx, sy)) {
+            pendingCareSweep.sweptUids.add(hit.uid);
+          }
+        }
+        return;
+      }
     }
 
     const dx = e.clientX - pointerStartX;
@@ -1072,12 +1404,17 @@ async function bootstrap(): Promise<void> {
     activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (activePointers.size >= 2) {
       cancelPendingTouchPaint();
+      finishCareSweep();
       const pts = Array.from(activePointers.values());
       prevPinchDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
       wasPinching = true;
       isPaintingTiles = false;
       return;
     }
+
+    // Build Mode transaction: mở 1 undo-stroke cho toàn bộ thao tác kéo/chuột hiện tại
+    // (build, move, remove, brush care). Idempotent + no-op trong visitor mode.
+    sim.beginBuildStroke();
 
     if (e.button !== 0 && e.button !== 2) return;
     const rect = canvas.getBoundingClientRect();
@@ -1125,13 +1462,17 @@ async function bootstrap(): Promise<void> {
             pendingTouchPaint = null;
             if (activePointers.size === 1 && !wasPinching && isPointerDown) {
               isPaintingTiles = true;
-              sim.placeItem(item, gPos.gx, gPos.gy, rotSnap);
+              if (sim.placeItem(item, gPos.gx, gPos.gy, rotSnap)) {
+                hud.recordRecentDecorItem(item.id);
+              }
             }
           }, 75),
         };
       } else {
         isPaintingTiles = true;
-        sim.placeItem(item, gPos.gx, gPos.gy, hud.rotation);
+        if (sim.placeItem(item, gPos.gx, gPos.gy, hud.rotation)) {
+          hud.recordRecentDecorItem(item.id);
+        }
       }
       isSowingSeeds = false;
       isStockingPastures = false;
@@ -1163,6 +1504,31 @@ async function bootstrap(): Promise<void> {
       isPaintingTiles = false;
       isSowingSeeds = false;
       isStockingPastures = false;
+      if (
+        e.button === 0 &&
+        !sim.isVisitingNeighbor &&
+        !hud.selectedCatalogItem &&
+        !hud.activeSeedCropId &&
+        !hud.activePastureAnimalId &&
+        !hud.moveModeActive &&
+        !hud.bulldozerActive &&
+        !hud.pincerActive &&
+        !hud.hasOpenFloatingTray()
+      ) {
+        const careTarget = detectCareablePlotAt(gPos.gx, gPos.gy, sx, sy);
+        pendingCareSweep = careTarget
+          ? {
+              mode: careTarget.mode,
+              initialUid: careTarget.uid,
+              initialSx: sx,
+              initialSy: sy,
+              active: false,
+              sweptUids: new Set<string>(),
+            }
+          : null;
+      } else {
+        pendingCareSweep = null;
+      }
     }
   });
 
@@ -1175,6 +1541,8 @@ async function bootstrap(): Promise<void> {
 
   window.addEventListener('pointercancel', (e) => {
     cancelPendingTouchPaint();
+    finishCareSweep();
+    sim.cancelBuildStroke();
     clearPointer(e.pointerId);
     isPointerDown = false;
     isDraggingCam = false;
@@ -1188,6 +1556,8 @@ async function bootstrap(): Promise<void> {
     clearPointer(e.pointerId);
     if (wasPinching) {
       cancelPendingTouchPaint();
+      finishCareSweep();
+      finishBuildStroke();
       if (activePointers.size === 0) {
         wasPinching = false;
         isPointerDown = false;
@@ -1199,18 +1569,35 @@ async function bootstrap(): Promise<void> {
     }
 
     if (!isPointerDown) return;
+    const wasCareSweeping = finishCareSweep();
     let flushedTouchPaint = false;
     if (pendingTouchPaint && !isDraggingCam && e.target === canvas) {
       const first = pendingTouchPaint;
       cancelPendingTouchPaint();
-      sim.placeItem(first.item, first.gx, first.gy, first.rot);
+      const check = sim.canPlaceItem(first.item, first.gx, first.gy, first.rot);
+      if (!check.ok) {
+        finishBuildStroke();
+        isPointerDown = false;
+        isDraggingCam = false;
+        isPaintingTiles = false;
+        isSowingSeeds = false;
+        isStockingPastures = false;
+        hud.showToast(check.reason ?? 'Không thể đặt tại ô này!', '⚠️');
+        return;
+      }
+      if (sim.placeItem(first.item, first.gx, first.gy, first.rot)) {
+        hud.recordRecentDecorItem(first.item.id);
+      }
       flushedTouchPaint = true;
     } else {
       cancelPendingTouchPaint();
     }
+    // Commit stroke build SAU khi flush touch paint (placeItem có thể tạo mutation mới).
+    finishBuildStroke();
 
     const wasDragging = isDraggingCam;
-    const wasPainting = isPaintingTiles || flushedTouchPaint || isSowingSeeds || isStockingPastures;
+    const wasPainting =
+      isPaintingTiles || flushedTouchPaint || isSowingSeeds || isStockingPastures || wasCareSweeping;
     isPointerDown = false;
     isDraggingCam = false;
     isPaintingTiles = false;
@@ -1221,17 +1608,11 @@ async function bootstrap(): Promise<void> {
 
     // Right click cancels active build / move / pincer / bulldoze / seed brush / inspector cleanly
     if (e.button === 2) {
-      hud.selectedCatalogItem = null;
-      hud.bulldozerActive = false;
-      hud.moveModeActive = false;
-      hud.movingBuildingUid = null;
-      hud.pincerActive = false;
-      hud.pincerPicked = null;
+      hud.clearBuildToolModes();
       hud.closeSeedTray();
       hud.closePastureTray();
       hud.collapseBuildDock();
       hud.closeHudPopovers();
-      hud.pendingTouchTile = null;
       hud.inspectSelection = null;
       hud.refreshAll();
       return;
@@ -1269,8 +1650,7 @@ async function bootstrap(): Promise<void> {
       if (target) {
         sim.dropPickedEntity(target.kind, target.id, gPos.gx, gPos.gy);
       }
-      hud.pincerPicked = null;
-      hud.pincerActive = false;
+      hud.clearBuildToolModes();
       hud.refreshAll();
       return;
     }
@@ -1292,17 +1672,19 @@ async function bootstrap(): Promise<void> {
           }
         }
       }
-      sim.removeAtTile(bGx, bGy);
+      runSingleBuildStroke(() => sim.removeAtTile(bGx, bGy));
+      hud.refreshDock();
       return;
     }
 
     // 2. Move Building Mode (Pick up -> Relocate for 0G!)
     if (hud.moveModeActive) {
       if (hud.movingBuildingUid) {
-        const mb = sim.state.buildings.find((x) => x.uid === hud.movingBuildingUid);
+        const movingUid = hud.movingBuildingUid;
+        const mb = sim.state.buildings.find((x) => x.uid === movingUid);
         const mIt = mb ? getCatalogItem(mb.itemId) : undefined;
         const moveTarget = mIt
-          ? resolveBuildingPlacementTile(mIt, gPos.gx, gPos.gy, hud.rotation, hud.movingBuildingUid)
+          ? resolveBuildingPlacementTile(mIt, gPos.gx, gPos.gy, hud.rotation, movingUid)
           : { gx: gPos.gx, gy: gPos.gy };
         const { bw: mBw, bh: mBh } = mIt
           ? sim.getBuildingFootprint(mIt, hud.rotation)
@@ -1331,15 +1713,16 @@ async function bootstrap(): Promise<void> {
         }
         const finalMoveGx = tappedInsidePendingMove ? hud.pendingTouchTile!.gx : moveTarget.gx;
         const finalMoveGy = tappedInsidePendingMove ? hud.pendingTouchTile!.gy : moveTarget.gy;
-        const res = sim.moveBuilding(hud.movingBuildingUid, finalMoveGx, finalMoveGy, hud.rotation);
+        const res = runSingleBuildStroke(() =>
+          sim.moveBuilding(movingUid, finalMoveGx, finalMoveGy, hud.rotation)
+        );
         if (!res.ok) {
           hud.showToast(res.reason ?? 'Không thể đặt tại ô này!', '⚠️');
           return;
         }
-        hud.movingBuildingUid = null;
-        hud.moveModeActive = false;
-        hud.pendingTouchTile = null;
+        hud.clearBuildToolModes();
         hud.refreshAll();
+        hud.showToast(`✋ Đã dời "${mIt?.name ?? 'công trình'}" sang vị trí mới!`, '✨');
         return;
       }
 
@@ -1363,56 +1746,40 @@ async function bootstrap(): Promise<void> {
         if (b) {
           hud.movingBuildingUid = b.uid;
           hud.rotation = b.rotation;
+          hoverTile = { gx: b.gx, gy: b.gy };
           hud.refreshFloatingBanner();
           const it = getCatalogItem(b.itemId);
-          hud.showToast(`Đã nhấc "${it?.name ?? 'công trình'}" — Nhấp ô mới để hạ xuống (Phím R xoay)!`, '✋');
+          hud.showToast(
+            `✋ Đang nhấc "${it?.name ?? 'công trình'}" — chạm ô mới để đặt xuống!`,
+            '✋'
+          );
           return;
         }
       }
     }
 
-    // 3. Active building placement mode
+    // 3. Active One-Tap Building Placement Mode
     if (hud.selectedCatalogItem) {
       const placedItem = hud.selectedCatalogItem;
       const targetTile = resolveBuildingPlacementTile(placedItem, gPos.gx, gPos.gy, hud.rotation);
-      const { bw, bh } = sim.getBuildingFootprint(placedItem, hud.rotation);
-      const tappedInsidePending =
-        Boolean(hud.pendingTouchTile) &&
-        gPos.gx >= hud.pendingTouchTile!.gx &&
-        gPos.gx < hud.pendingTouchTile!.gx + bw &&
-        gPos.gy >= hud.pendingTouchTile!.gy &&
-        gPos.gy < hud.pendingTouchTile!.gy + bh;
-
-      if (
-        isTouch &&
-        !isDragPaintableItem(placedItem) &&
-        !tappedInsidePending &&
-        (!hud.pendingTouchTile ||
-          hud.pendingTouchTile.gx !== targetTile.gx ||
-          hud.pendingTouchTile.gy !== targetTile.gy)
-      ) {
-        hoverTile = targetTile;
-        hud.pendingTouchTile = {
-          gx: targetTile.gx,
-          gy: targetTile.gy,
-          label: placedItem.name,
-        };
-        hud.refreshTouchConfirmBar();
-        return;
-      }
-      const placeGx = tappedInsidePending ? hud.pendingTouchTile!.gx : targetTile.gx;
-      const placeGy = tappedInsidePending ? hud.pendingTouchTile!.gy : targetTile.gy;
-      const check = sim.canPlaceItem(placedItem, placeGx, placeGy, hud.rotation);
+      hoverTile = targetTile;
+      const check = sim.canPlaceItem(placedItem, targetTile.gx, targetTile.gy, hud.rotation);
       if (!check.ok) {
         hud.showToast(check.reason ?? 'Không thể đặt tại ô này!', '⚠️');
         return;
       }
-      sim.placeItem(placedItem, placeGx, placeGy, hud.rotation);
+      const placedOk = runSingleBuildStroke(() =>
+        sim.placeItem(placedItem, targetTile.gx, targetTile.gy, hud.rotation)
+      );
+      if (!placedOk) return;
+      hud.recordRecentDecorItem(placedItem.id);
       hud.pendingTouchTile = null;
       if (!isRepeatableCatalogItem(placedItem)) {
         hud.selectedCatalogItem = null;
         hoverTile = null;
         hud.showToast(`🔨 Đã khởi công "${placedItem.name}" thành công!`, '✨');
+      } else if (isTouch) {
+        hoverTile = findBestPreviewSpotNearCamera(placedItem, hud.rotation);
       }
       hud.refreshAll();
       return;
@@ -1432,6 +1799,7 @@ async function bootstrap(): Promise<void> {
       'zone_plaque',
       'villager',
       'building',
+      'building_cutaway',
     ] as const) {
       let best: (typeof renderer.hotspots)[number] | null = null;
       let bestDist = Infinity;
@@ -1457,7 +1825,8 @@ async function bootstrap(): Promise<void> {
           const u = (sx - hs.boxLeft) / hs.boxW;
           const v = (sy - hs.boxTop) / hs.boxH;
           const alphaHit = inBox && sprites.hitTestAlpha(hs.spriteKey, u, v, Boolean(hs.flipX));
-          const padFallback = hs.kind === 'building' && d <= hs.radius * 0.5;
+          const padFallback =
+            (hs.kind === 'building' || hs.kind === 'building_cutaway') && d <= hs.radius * 0.5;
           if (!alphaHit && !padFallback) continue;
           if (best === null || d < bestDist * 0.82) {
             best = hs;
@@ -1559,6 +1928,7 @@ async function bootstrap(): Promise<void> {
           return;
         }
         if (best.kind === 'zone_plaque') {
+          hud.clearBuildToolModes();
           hud.closeSeedTray();
           hud.inspectSelection = { kind: 'zone', zoneId: best.id as ZoneId };
           hud.refreshAll();
@@ -1569,7 +1939,7 @@ async function bootstrap(): Promise<void> {
           hud.refreshAll();
           return;
         }
-        if (best.kind === 'building') {
+        if (best.kind === 'building' || best.kind === 'building_cutaway') {
           const b = sim.state.buildings.find((x) => x.uid === best.id);
           if (b) {
             if (!sim.isVisitingNeighbor && b.awaitingUnveil) {
@@ -1657,12 +2027,17 @@ async function bootstrap(): Promise<void> {
               return;
             } else if (bItem?.isFarmlandPlot && !b.cropId && Date.now() >= b.constructEndsAt) {
               if (hud.activeSeedCropId) {
-                const sowRes = sim.plantCropOnPlot(b.uid, hud.activeSeedCropId);
+                const activeCrop = hud.activeSeedCropId;
+                const sowRes = sim.plantCropOnPlot(b.uid, activeCrop);
                 if (sowRes.needSeedAcquire) {
+                  hud.activeSeedCropId = null;
                   hud.inspectSelection = null;
                   hud.refreshAll();
-                  hud.openSeedQuizDialog(hud.activeSeedCropId, b.uid);
+                  hud.openSeedQuizDialog(activeCrop, b.uid);
                   return;
+                }
+                if (!sim.state.sandboxMode && sim.getSeedCount(activeCrop) <= 0) {
+                  hud.activeSeedCropId = null;
                 }
                 hud.showToast(sowRes.msg, sowRes.ok ? '🌱' : '🪙');
                 hud.inspectSelection = null;
@@ -1719,6 +2094,7 @@ async function bootstrap(): Promise<void> {
               sim.harvestBuildingBubble(b.uid);
             }
           }
+          hud.clearBuildToolModes();
           hud.closeSeedTray();
           hud.closePastureTray();
           hud.inspectSelection = { kind: 'building', uid: best.id };
@@ -2017,17 +2393,89 @@ async function bootstrap(): Promise<void> {
 
       renderer.activeSeedBrushCropId = hud.activeSeedCropId;
       renderer.activePastureBrushAnimalId = hud.activePastureAnimalId;
-      renderer.render(
-        sim,
-        cam,
-        effectiveHoverTile,
-        hud.selectedCatalogItem,
-        hud.rotation,
-        hud.bulldozerActive,
-        hud.inspectSelection?.kind === 'building' ? hud.inspectSelection.uid : null,
-        hud.movingBuildingUid,
-        hud.pincerPicked?.label ?? null
-      );
+
+      if (directGpuSettings && !gpuOverlay) {
+        const wantWebgl2 =
+          !gpuInitFailed &&
+          Boolean(gpuWorldRenderer && !gpuWorldRenderer.gpuDevice.contextLost) &&
+          (sim.state.settings.rendererMode ?? 'webgl2') !== 'canvas';
+        const nextMode = wantWebgl2 ? 'webgl2' : 'canvas';
+        if (directGpuSettings.mode !== nextMode) {
+          directGpuSettings.mode = nextMode;
+          if (directGpuCanvas) {
+            directGpuCanvas.style.display = wantWebgl2 ? 'block' : 'none';
+          }
+          if (wantWebgl2) {
+            canvas.style.position = 'relative';
+            canvas.style.zIndex = '1';
+            canvas.style.background = 'transparent';
+          } else {
+            canvas.style.position = '';
+            canvas.style.zIndex = '';
+            canvas.style.background = '';
+          }
+        }
+      }
+
+      const activeGpuSettings = gpuOverlay?.settings ?? directGpuSettings;
+      const gpuMode =
+        gpuWorldRenderer && !gpuWorldRenderer.gpuDevice.contextLost
+          ? (activeGpuSettings?.mode ?? 'canvas')
+          : 'canvas';
+      const selectedBuildingUid =
+        hud.inspectSelection?.kind === 'building' ? hud.inspectSelection.uid : null;
+      if (gpuMode !== 'webgl2') {
+        renderer.render(
+          sim,
+          cam,
+          effectiveHoverTile,
+          hud.selectedCatalogItem,
+          hud.rotation,
+          hud.bulldozerActive,
+          selectedBuildingUid,
+          hud.movingBuildingUid,
+          hud.pincerPicked?.label ?? null
+        );
+      }
+
+      if (gpuWorldRenderer && activeGpuSettings && !gpuWorldRenderer.gpuDevice.contextLost) {
+        if (gpuMode !== 'canvas') {
+          const ptrWorld = { wx: 0, wy: 0, active: false };
+          gpuWorldRenderer.renderFrame(
+            sim,
+            cam,
+            activeGpuSettings,
+            ptrWorld,
+            Date.now(),
+            {
+              hoverTile: effectiveHoverTile,
+              selectedCatalogItem: hud.selectedCatalogItem,
+              rotation: hud.rotation,
+              bulldozerActive: hud.bulldozerActive,
+              selectedBuildingUid,
+              movingBuildingUid: hud.movingBuildingUid,
+              hotspotsOut: gpuMode === 'webgl2' ? renderer.hotspots : undefined,
+              skipReadyBubbleSprites: gpuMode === 'webgl2',
+            }
+          );
+          if (gpuMode === 'webgl2') {
+            renderer.renderWorldUiOverlays(
+              sim,
+              cam,
+              selectedBuildingUid,
+              hud.movingBuildingUid,
+              Boolean(hud.movingBuildingUid || hud.selectedCatalogItem || hud.bulldozerActive),
+              true,
+              effectiveHoverTile,
+              hud.selectedCatalogItem,
+              hud.rotation,
+              hud.bulldozerActive,
+              hud.pincerPicked?.label ?? null
+            );
+          }
+        }
+        gpuOverlay?.updateTelemetry(gpuWorldRenderer.stats, now);
+      }
 
       minimapFrame++;
       if (!cachedAnyDialogOpen && minimapFrame % 6 === 0 && !hud.photoModeActive) {

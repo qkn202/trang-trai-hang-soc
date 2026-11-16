@@ -275,10 +275,9 @@ export function questsGrantBuildingIngredientDrop(sim: ParkSimulation,
 }
 
 export function questsHarvestBuildingBubble(sim: ParkSimulation, uid: string): boolean {
-    if (sim.isVisitingNeighbor) return false;
     if (sim.isVisitingNeighbor || sim.isHeadmasterPreview) return false;
     const b = sim.state.buildings.find((x) => x.uid === uid);
-    if (!b || b.itemId === 'burrow_honeydukes_canon') return false;
+    if (!b) return false;
     const item = getCatalogItem(b.itemId);
 
     if (item?.isFarmlandPlot) {
@@ -645,7 +644,7 @@ export function questsGetStoryAutoActionPreview(sim: ParkSimulation): {
     return {
       kind: 'open_match3',
       shortLabel: '🧩 Giải Đố Tăng Cấp',
-      longLabel: '🧩 Chơi Tháp Giải Đố Kiếm Thêm XP & Sao Phép Thuật!',
+      longLabel: '🧩 Chơi Khảo Thí Pháp Thuật để tăng Cấp Giải Đố & nhận Sao Phép Thuật!',
       starCost: 0,
       goldCost: 0,
     };
@@ -748,7 +747,7 @@ export function questsCompleteStoryStepWithStar(sim: ParkSimulation): {
         return {
           ok: false,
           reason: 'locked_level',
-          msg: `🔒 Cần đạt Cấp ${z.unlockLevel} để mở "${z.name}" — Hãy chơi Giải Đố & thu hoạch Vàng tích XP!`,
+          msg: `🔒 Cần đạt Cấp Giải Đố ${z.unlockLevel} để mở "${z.name}" — Hãy thắng các màn Khảo Thí Pháp Thuật mới để tăng cấp!`,
         };
       }
       if (!sim.state.sandboxMode && sim.state.match3.stars < zStars) {
@@ -792,7 +791,7 @@ export function questsCompleteStoryStepWithStar(sim: ParkSimulation): {
         return {
           ok: false,
           reason: 'locked_level',
-          msg: `🔒 "${item.name}" mở khóa ở Cấp ${item.unlockLevel} — Hãy chơi Giải Đố kiếm thêm Sao & XP!`,
+          msg: `🔒 "${item.name}" mở khóa ở Cấp Giải Đố ${item.unlockLevel} — Hãy thắng các màn Khảo Thí Pháp Thuật mới để tăng cấp & tích Sao!`,
         };
       }
 
@@ -860,7 +859,7 @@ export function questsCompleteStoryStepWithStar(sim: ParkSimulation): {
     return {
       ok: false,
       reason: 'open_match3',
-      msg: `🧩 Hãy tích lũy XP từ Công Viên & Tháp Giải Đố để hoàn thành "${story.title}"!`,
+      msg: `🧩 Hãy thắng các màn Khảo Thí Pháp Thuật mới để tăng Cấp Giải Đố & hoàn thành "${story.title}"!`,
     };
 }
 
@@ -1083,7 +1082,11 @@ export function questsFulfillFarmOwlOrder(sim: ParkSimulation, orderId: string):
     questsRecordQuestProgress(sim, 'harvest_galleons', undefined, order.rewardGalleons);
 
     sim.owlSeedCounter += 1;
-    barn.owlOrders[idx] = createCanonFarmOwlOrder(sim.state.level, sim.owlSeedCounter + idx * 3);
+    barn.owlOrders[idx] = createCanonFarmOwlOrder(
+      sim.state.level,
+      sim.owlSeedCounter + idx * 3,
+      sim.state.buildings
+    );
 
     sim.audio.playOwlHoot(0.045);
     sim.audio.playHarvestBubble();
@@ -1108,7 +1111,11 @@ export function questsRefreshFarmOwlOrder(sim: ParkSimulation, orderId: string):
       (r) => r.orderId !== orderId
     );
     sim.owlSeedCounter += 1;
-    barn.owlOrders[idx] = createCanonFarmOwlOrder(sim.state.level, sim.owlSeedCounter + idx * 5);
+    barn.owlOrders[idx] = createCanonFarmOwlOrder(
+      sim.state.level,
+      sim.owlSeedCounter + idx * 5,
+      sim.state.buildings
+    );
     sim.audio.playOwlHoot(0.03);
     sim.onToast?.('🦉 Cú đưa thư vừa mang tới một mảnh giấy da cừu đặt hàng mới!', '✉️');
     sim.saveToStorage();

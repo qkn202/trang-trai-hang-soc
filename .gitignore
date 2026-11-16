@@ -23,4 +23,3 @@ __pycache__/
 # Only ignore regenerated local copies outside public/.
 *.mp3
 !public/audio/*.mp3
-.github/workflows/

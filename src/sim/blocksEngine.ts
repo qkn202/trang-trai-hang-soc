@@ -514,14 +514,14 @@ export class RunicBlockPuzzleEngine {
     } else {
       this.targetLines =
         this.stage <= 20
-          ? 5 + Math.floor(this.stage / 4)
+          ? 7 + Math.floor(this.stage / 3)
           : this.stage <= 100
-            ? 10 + Math.floor((this.stage - 20) / 10)
+            ? 13 + Math.floor((this.stage - 20) / 8)
             : this.stage <= 320
-              ? 18 + Math.floor((this.stage - 100) / 24)
+              ? 23 + Math.floor((this.stage - 100) / 18)
               : this.stage <= 580
-                ? 27 + Math.floor((this.stage - 320) / 34)
-                : Math.min(40, 35 + Math.floor((this.stage - 580) / 40));
+                ? 35 + Math.floor((this.stage - 320) / 26)
+                : Math.min(50, 45 + Math.floor((this.stage - 580) / 35));
       this.initBlockBlastStage();
       const baseBlastTitle =
         this.obsidianRunesCount > 0
@@ -599,8 +599,8 @@ export class RunicBlockPuzzleEngine {
     // Partition mold into connected polyominoes (guaranteed 100% solvable!)
     const generated: PolyominoPiece[] = [];
     let colorIdx = 0;
-    const minPieceSize = this.stage >= 240 ? 4 : 3;
-    const sizeSpan = this.stage >= 420 ? 3 : 3; // 3..5 early, 4..6 late
+    const minPieceSize = this.stage >= 120 ? 4 : 3;
+    const sizeSpan = 3; // 3..5 early, 4..6 from stage 120+
     while (unassigned.size > 0) {
       const sortedKeys = Array.from(unassigned).sort((a, b) => {
         const [ar, ac] = a.split(',').map(Number);
@@ -719,11 +719,11 @@ export class RunicBlockPuzzleEngine {
       placedCoords.push([r, c]);
       placedPairs++;
     }
-    // Stages 140..777 (or Milestone Boss >= 100): Upgrade 1..3 symmetric pairs into 2-Layer Obsidian Rune Seals!
-    if ((this.stage >= 140 || (this.milestoneBoss && this.stage >= 100)) && placedCoords.length > 0) {
+    // Stages 45..777 (or Milestone Boss >= 30): Upgrade 1..3 symmetric pairs into 2-Layer Obsidian Rune Seals!
+    if ((this.stage >= 45 || (this.milestoneBoss && this.stage >= 30)) && placedCoords.length > 0) {
       const targetObsidianPairs = Math.min(
         placedCoords.length,
-        this.stage >= 480 ? 3 : this.stage >= 260 ? 2 : 1
+        this.stage >= 360 ? 3 : this.stage >= 140 ? 2 : 1
       );
       for (let i = 0; i < targetObsidianPairs; i++) {
         const [or, oc] = placedCoords[i];
@@ -740,24 +740,26 @@ export class RunicBlockPuzzleEngine {
   public dealBlastHand(): void {
     const hand: PolyominoPiece[] = [];
     const hardChance =
-      this.stage <= 20
+      this.stage <= 5
         ? 0
-        : this.stage <= 120
-          ? 0.16
-          : this.stage <= 320
-            ? 0.28
-            : this.stage <= 550
+        : this.stage <= 40
+          ? 0.14
+          : this.stage <= 140
+            ? 0.26
+            : this.stage <= 320
               ? 0.38
-              : 0.46;
-    const allPool = this.stage > 20 ? [...BLAST_SHAPES, ...BLAST_HARD_PENTOMINOES] : BLAST_SHAPES;
+              : this.stage <= 550
+                ? 0.48
+                : 0.58;
+    const allPool = this.stage > 5 ? [...BLAST_SHAPES, ...BLAST_HARD_PENTOMINOES] : BLAST_SHAPES;
 
     for (let i = 0; i < 3; i++) {
       const useHard = this.rng() < hardChance;
       const sourcePool = useHard ? BLAST_HARD_PENTOMINOES : BLAST_SHAPES;
       let shape = sourcePool[Math.floor(this.rng() * sourcePool.length)];
-      // Rescue first slot only on early/mid stages (or when board has plenty of open room)
+      // Rescue first slot only on early stages (or when board has plenty of open room)
       const occupiedCells = this.grid.flat().filter((x) => x !== null).length;
-      if (i === 0 && (this.stage <= 180 || occupiedCells <= 34)) {
+      if (i === 0 && (this.stage <= 50 || occupiedCells <= 22)) {
         const fitting = allPool.filter((sh) => this.anyPlacementForCells(sh));
         if (fitting.length > 0 && !this.anyPlacementForCells(shape)) {
           shape = fitting[Math.floor(this.rng() * fitting.length)];
@@ -1134,8 +1136,8 @@ export class TileMatchZenEngine {
   private buildLayeredPyramid(): void {
     const slots: { gx: number; gy: number; layer: number }[] = [];
 
-    // Layer 0: 4x4 or 5x4 symmetric base
-    const baseCols = this.stage <= 2 ? 4 : 5;
+    // Layer 0: 4x4 on stage 1, 5x4 symmetric base from stage 2+
+    const baseCols = this.stage <= 1 ? 4 : 5;
     const baseRows = 4;
     const offX0 = (7 - baseCols) * 0.5;
     const offY0 = 0.5;
@@ -1152,8 +1154,8 @@ export class TileMatchZenEngine {
       }
     }
 
-    // Layer 2: Central crown (2x2 or 3x2)
-    const l2Cols = this.stage <= 2 ? 2 : 3;
+    // Layer 2: Central crown (2x2 on stage 1, 3x2 from stage 2+)
+    const l2Cols = this.stage <= 1 ? 2 : 3;
     const offX2 = (7 - l2Cols) * 0.5;
     for (let r = 0; r < 2; r++) {
       for (let c = 0; c < l2Cols; c++) {
@@ -1175,7 +1177,7 @@ export class TileMatchZenEngine {
     const totalTriples = slots.length / 3;
     const symbolPoolCount = Math.min(
       TILE_MATCH_SYMBOLS.length,
-      this.stage <= 2 ? 6 : this.stage <= 5 ? 8 : 10
+      this.stage <= 1 ? 6 : this.stage <= 2 ? 8 : 10
     );
 
     const symbols: string[] = [];

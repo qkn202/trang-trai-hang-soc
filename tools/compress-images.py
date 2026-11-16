@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 """
-Nén tối ưu toàn bộ ảnh PNG/JPG trong public/ cho Trang Trại Hang Sóc:
-- PNG RGBA (public/sprites, public/paintings/{chess,sudoku,caro}, public/icons):
-  8-bit RGBA palette (PNG-8 + tRNS) với khoá cứng alpha=0 (0% lem nền),
-  Median-Cut + K-Means (kmeans=4) cho vùng đục và K-Means premultiplied cho rìa bán trong suốt.
-- JPEG (public/paintings/*.jpg):
-  Progressive JPEG quality=82, optimize=True.
+Nén tối ưu toàn bộ ảnh PNG/WebP/JPG WebApp trong public/ cho Trang Trại Hang Sóc:
+- Mặc định nén `paintings` và `icons` (giữ nguyên `public/sprites/` theo AGENTS.md;
+  chỉ chạm `sprites` khi truyền cờ `--include-sprites`).
+- PNG RGBA: 8-bit RGBA palette (PNG-8 + tRNS) với khoá cứng alpha=0 (0% lem nền),
+  downscale `candy-hogwarts` về 160x160 (chuẩn RULES.m3).
+- WebP (`paintings/candy-hogwarts`, `candy-yule`, `floo-items`): quality=80, alpha_quality=85, method=6.
+- JPEG (`public/paintings/*.jpg`, `public/icons/*.jpg`):
+  downscale tranh `paintings` >1280px về max width 1280px (giữ nguyên kích thước chuẩn `public/icons/*.jpg`),
+  Progressive JPEG quality=76, subsampling=2 (4:2:0), optimize=True.
 - Chỉ ghi đè khi dung lượng mới giảm ít nhất 5% (không bao giờ làm phình file đã tối ưu).
 """
 
 from __future__ import annotations
 
 import io
+import sys
 from pathlib import Path
 import numpy as np
 from PIL import Image
@@ -115,15 +119,42 @@ def compress_png(path: Path) -> tuple[int, int, bool]:
     orig = path.read_bytes()
     orig_len = len(orig)
     with Image.open(io.BytesIO(orig)) as im:
-        if im.mode == 'P':
+        is_candy_tile = path.parent.name == 'candy-hogwarts' and max(im.size) > 160
+        work = im
+        if is_candy_tile:
+            work = im.convert('RGBA').resize((160, 160), Image.Resampling.LANCZOS)
+
+        if work.mode == 'P' and not is_candy_tile:
             buf = io.BytesIO()
-            im.save(buf, format='PNG', optimize=True, compress_level=9)
+            work.save(buf, format='PNG', optimize=True, compress_level=9)
             cand = buf.getvalue()
         else:
-            q = quantize_rgba_clean(im)
+            q = quantize_rgba_clean(work)
             buf = io.BytesIO()
             q.save(buf, format='PNG', optimize=True, compress_level=9)
             cand = buf.getvalue()
+
+    if len(cand) < int(orig_len * 0.95):
+        path.write_bytes(cand)
+        return orig_len, len(cand), True
+    return orig_len, orig_len, False
+
+
+def compress_webp(path: Path) -> tuple[int, int, bool]:
+    orig = path.read_bytes()
+    orig_len = len(orig)
+    with Image.open(io.BytesIO(orig)) as im:
+        is_candy_tile = path.parent.name == 'candy-hogwarts' and max(im.size) > 160
+        if is_candy_tile:
+            work = im.convert('RGBA').resize((160, 160), Image.Resampling.LANCZOS)
+        elif 'A' in im.getbands() or im.mode == 'P':
+            work = im.convert('RGBA')
+        else:
+            work = im.convert('RGB')
+
+        buf = io.BytesIO()
+        work.save(buf, format='WEBP', quality=80, alpha_quality=85, method=6)
+        cand = buf.getvalue()
 
     if len(cand) < int(orig_len * 0.95):
         path.write_bytes(cand)
@@ -136,8 +167,19 @@ def compress_jpg(path: Path) -> tuple[int, int, bool]:
     orig_len = len(orig)
     with Image.open(io.BytesIO(orig)) as im:
         rgb = im.convert('RGB')
+        w, h = rgb.size
+        if 'paintings' in path.parts and w > 1280:
+            new_h = int(round(h * (1280.0 / w)))
+            rgb = rgb.resize((1280, new_h), Image.Resampling.LANCZOS)
         buf = io.BytesIO()
-        rgb.save(buf, format='JPEG', quality=82, optimize=True, progressive=True)
+        rgb.save(
+            buf,
+            format='JPEG',
+            quality=76,
+            subsampling=2,
+            optimize=True,
+            progressive=True,
+        )
         cand = buf.getvalue()
 
     if len(cand) < int(orig_len * 0.95):
@@ -147,25 +189,37 @@ def compress_jpg(path: Path) -> tuple[int, int, bool]:
 
 
 def main() -> None:
+    include_sprites = '--include-sprites' in sys.argv[1:]
+    target_subs = ['paintings', 'icons']
+    if include_sprites:
+        target_subs.append('sprites')
+
     total_before = 0
     total_after = 0
     changed_count = 0
     total_count = 0
 
-    for sub in ['sprites', 'paintings', 'icons']:
+    for sub in target_subs:
         folder = PUBLIC_DIR / sub
+        if not folder.exists():
+            continue
         sub_before = 0
         sub_after = 0
         sub_changed = 0
         files = sorted(
             f
             for f in folder.rglob('*')
-            if f.is_file() and f.suffix.lower() in ('.png', '.jpg', '.jpeg')
+            if f.is_file()
+            and not f.name.startswith('.')
+            and f.suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp')
         )
         for f in files:
             total_count += 1
-            if f.suffix.lower() == '.png':
+            ext = f.suffix.lower()
+            if ext == '.png':
                 b0, b1, ok = compress_png(f)
+            elif ext == '.webp':
+                b0, b1, ok = compress_webp(f)
             else:
                 b0, b1, ok = compress_jpg(f)
             sub_before += b0

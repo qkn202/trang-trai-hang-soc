@@ -14,6 +14,41 @@ export interface ErrorEventPayload {
   type?: string;
 }
 
+const SENSITIVE_PARAM_RE = /^(?:burrow-ticket|hpvn-ticket|ticket|token|id_token|idtoken|access_token|auth|secret|key)$/i;
+
+export function sanitizeTelemetryText(raw: string): string {
+  if (!raw) return '';
+  return raw.replace(
+    /((?:#|[?&])(?:burrow-ticket|hpvn-ticket|ticket|token|id_token|idtoken|access_token)=)[^&#\s'")]+/gi,
+    '$1[REDACTED]'
+  );
+}
+
+export function sanitizeTelemetryUrl(rawUrl: string): string {
+  if (!rawUrl) return '';
+  const hashStripped = rawUrl.split('#')[0] ?? '';
+  try {
+    const base =
+      typeof window !== 'undefined' && window.location?.origin
+        ? window.location.origin
+        : 'https://hangsoc.local';
+    const parsed = new URL(hashStripped, base);
+    parsed.hash = '';
+    for (const k of Array.from(parsed.searchParams.keys())) {
+      if (SENSITIVE_PARAM_RE.test(k)) {
+        parsed.searchParams.delete(k);
+      }
+    }
+    if (/^https?:\/\//i.test(hashStripped)) {
+      return parsed.toString();
+    }
+    const qs = parsed.searchParams.toString();
+    return `${parsed.pathname}${qs ? `?${qs}` : ''}`;
+  } catch {
+    return sanitizeTelemetryText(hashStripped);
+  }
+}
+
 export class ErrorMonitor {
   public readonly analytics: Analytics;
   public readonly maxErrorsPerSession: number;
@@ -28,12 +63,18 @@ export class ErrorMonitor {
 
   private recordDeduplicatedError(payload: ErrorEventPayload): void {
     if (this.errorCountThisSession >= this.maxErrorsPerSession) return;
-    const sig = `${payload.type || 'err'}|${payload.msg.slice(0, 160)}|${payload.line ?? 0}|${payload.col ?? 0}`;
+    const cleanPayload: ErrorEventPayload = {
+      ...payload,
+      msg: sanitizeTelemetryText(payload.msg),
+      ...(payload.stack ? { stack: sanitizeTelemetryText(payload.stack) } : {}),
+      ...(payload.url ? { url: sanitizeTelemetryUrl(payload.url) } : {}),
+    };
+    const sig = `${cleanPayload.type || 'err'}|${cleanPayload.msg.slice(0, 160)}|${cleanPayload.line ?? 0}|${cleanPayload.col ?? 0}`;
     if (this.seenSignatures.has(sig)) return;
     this.seenSignatures.add(sig);
     this.errorCountThisSession += 1;
     try {
-      this.analytics.track('error', payload as unknown as Record<string, unknown>);
+      this.analytics.track('error', cleanPayload as unknown as Record<string, unknown>);
     } catch {
       // Bỏ qua lỗi gửi track
     }

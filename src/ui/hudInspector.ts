@@ -123,7 +123,9 @@ import {
   BUILD_HUD_CATEGORIES,
   HEATMAP_CYCLE,
   InspectSelection,
+  clearBuildToolModes,
   escapeHtml,
+  getCatalogCardImageSrc,
 } from "./hudShared";
 import type { GameHUD } from './hud';
 
@@ -589,10 +591,11 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         )
       );
       hud.syncHudFocusVisibility();
+      const inspThumbSrc = getCatalogCardImageSrc(item);
       panel.innerHTML = `
         <div class="inspector-header-bar" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:${hud.inspectorCollapsed ? '0' : '8px'};">
           <div style="display:flex;gap:10px;align-items:center;min-width:0;">
-            ${item.spriteKey ? `<img src="/sprites/${item.spriteKey}.png" alt="${escapeHtml(item.name)}" class="inspector-thumb" />` : ''}
+            ${inspThumbSrc ? `<img src="${inspThumbSrc}" alt="${escapeHtml(item.name)}" class="inspector-thumb" />` : ''}
             <div style="min-width:0;">
               <div style="font-size:14px;font-weight:800;color:#45230c;">${escapeHtml(item.name)}</div>
               <div style="font-size:12.5px;color:#b45309;font-weight:800;">${'★'.repeat(b.stars)}${'☆'.repeat(5 - b.stars)}</div>
@@ -862,22 +865,58 @@ export function inspectorRenderInspector(hud: GameHUD): void {
             : ''
         }
 
+        ${
+          (item.id === 'burrow_owl_post' || item.id === 'eeylops_owl_emporium') && !isBuilding
+            ? `
+              <button id="btnInspOpenOwlOrders" type="button" class="brass-btn gold-cta" style="width:100%;margin-bottom:8px;">
+                🦉 Mở Bảng Đơn Hàng Cú
+              </button>
+            `
+            : ''
+        }
+
+        ${
+          item.id === 'burrow_feast_marquee' && !isBuilding
+            ? `
+              <button id="btnInspOpenFeastMarquee" type="button" class="brass-btn gold-cta" style="width:100%;margin-bottom:8px;">
+                🎪 Mở Đại Tiệc Mùa Gặt
+              </button>
+            `
+            : ''
+        }
+
+        ${
+          item.id === 'floo_fireplace_gate' && !isBuilding
+            ? `
+              <button id="btnInspOpenNeighbors" type="button" class="brass-btn gold-cta" style="width:100%;margin-bottom:8px;">
+                🔥 Mở Sổ Hàng Xóm &amp; Cổng Floo
+              </button>
+            `
+            : ''
+        }
+
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           ${
             !isBuilding && b.stars < 5
-              ? `<button id="btnUpgStar" type="button" class="brass-btn" style="flex:1 1 170px;">
+              ? `<button id="btnUpgStar" type="button" class="brass-btn" style="flex:1 1 100%;">
                   ⬆️ ${b.stars + 1}★ (🌟${getUpgradePuzzleStarCost(b.stars, item)} + 🪙${upgCost.toLocaleString('vi-VN')})
                 </button>`
               : !isBuilding
-                ? `<div style="width:100%;text-align:center;font-size:12px;font-weight:800;color:#15803d;">🌟 5★ Tối Đa</div>`
+                ? `<div style="width:100%;text-align:center;font-size:12px;font-weight:800;color:var(--green-deep);">🌟 5★ Tối Đa</div>`
                 : ''
           }
-          ${
-            !b.isIndestructible
-              ? `<button id="btnMoveThis" type="button" class="brass-btn" style="flex:0 1 auto;" title="Dời công trình">✋ Dời</button>`
-              : ''
-          }
         </div>
+        ${
+          !b.isIndestructible && !hud.sim.isVisitingNeighbor
+            ? `
+              <div class="inspector-build-actions" role="group" aria-label="Thao tác công trình">
+                <button id="btnMoveThis" type="button" class="brass-btn" title="Dời công trình miễn phí (0G)">✋ Dời</button>
+                <button id="btnRotateThis" type="button" class="brass-btn" title="Xoay hướng công trình 90°">🔄 Xoay</button>
+                <button id="btnDeleteThis" type="button" class="brass-btn inspector-delete-btn" title="Xóa công trình">🧹 Xóa</button>
+              </div>
+            `
+            : ''
+        }
       `;
 
       const priceInput = panel.querySelector('#inpBuildingPrice') as HTMLInputElement | null;
@@ -917,11 +956,13 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         hud.refreshAll();
       });
       panel.querySelector('#btnInspPlayMinigameSpeed')?.addEventListener('click', () => {
+        hud.sim.preferredSpeedupBuildingUid = b.uid;
         hud.inspectSelection = null;
         hud.refreshAll();
         hud.openTrialMinigame();
       });
       panel.querySelector('#btnInspQuizSpeed')?.addEventListener('click', () => {
+        hud.sim.preferredSpeedupBuildingUid = b.uid;
         hud.inspectSelection = null;
         hud.refreshAll();
         hud.openSeedQuizDialog(hud.activeSeedCropId ?? 'ottery_wheat');
@@ -954,7 +995,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
           const res = hud.sim.plantCropOnPlot(b.uid, cid);
           if (res.needSeedAcquire) {
             const targetUid = b.uid;
-            hud.activeSeedCropId = cid;
+            hud.activeSeedCropId = null;
             hud.inspectSelection = null;
             hud.refreshAll();
             hud.openSeedQuizDialog(cid, targetUid);
@@ -962,7 +1003,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
           }
           hud.showToast(res.msg, res.ok ? '🌱' : '🪙');
           if (res.ok) {
-            hud.activeSeedCropId = cid;
+            hud.activeSeedCropId = null;
             hud.seedTrayOpen = false;
             hud.inspectSelection = null;
             hud.refreshAll();
@@ -988,7 +1029,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
           const res = hud.sim.stockAnimalOnPasture(b.uid, aid);
           hud.showToast(res.msg, res.ok ? PASTURE_ANIMALS[aid]?.emoji ?? '🐾' : '🪙');
           if (res.ok) {
-            hud.activePastureAnimalId = aid;
+            hud.activePastureAnimalId = null;
             hud.pastureTrayOpen = false;
             hud.inspectSelection = null;
             hud.refreshAll();
@@ -1075,20 +1116,70 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         hud.refreshAll();
         hud.openMatch3Dialog();
       });
+      panel.querySelector('#btnInspOpenOwlOrders')?.addEventListener('click', () => {
+        hud.inspectSelection = null;
+        hud.activeQuestTab = 'orders';
+        hud.refreshAll();
+        hud.renderQuestDialog();
+        (hud.root.querySelector('#questDialog') as HTMLDialogElement | null)?.showModal();
+      });
+      panel.querySelector('#btnInspOpenFeastMarquee')?.addEventListener('click', () => {
+        hud.inspectSelection = null;
+        hud.refreshAll();
+        hud.openHarvestFeastDialog();
+      });
+      panel.querySelector('#btnInspOpenNeighbors')?.addEventListener('click', () => {
+        hud.inspectSelection = null;
+        hud.refreshAll();
+        hud.openNeighborDialog('friends');
+      });
       panel.querySelector('#btnUpgStar')?.addEventListener('click', () => {
         const res = hud.sim.upgradeBuildingStar(b.uid);
         hud.showToast(res.msg, res.ok ? '🌟' : '🪙');
         inspectorRenderInspector(hud);
       });
       panel.querySelector('#btnMoveThis')?.addEventListener('click', () => {
+        clearBuildToolModes(hud);
         hud.moveModeActive = true;
         hud.movingBuildingUid = b.uid;
         hud.rotation = b.rotation;
-        hud.pendingTouchTile = null;
         hud.inspectSelection = null;
         hud.collapseBuildDock();
+        hud.onStartMoveBuilding?.(b.uid);
         hud.refreshAll();
-        hud.showToast(`Đang nhấc "${item.name}" — Nhấp vào ô đất mới để đặt xuống!`, '✋');
+        hud.showToast(`✋ Đang nhấc "${item.name}" — chạm ô đất mới trên bản đồ để đặt xuống!`, '✋');
+      });
+      panel.querySelector('#btnRotateThis')?.addEventListener('click', () => {
+        const res = hud.sim.rotatePlacedBuilding(b.uid);
+        if (!res.ok) {
+          hud.showToast(res.reason ?? 'Không thể xoay công trình tại vị trí này!', '⚠️');
+          return;
+        }
+        hud.rotation = res.newRotation ?? b.rotation;
+        inspectorRenderInspector(hud);
+        hud.refreshHeader();
+        hud.refreshDock();
+        hud.showToast(
+          `🔄 Đã xoay "${item.name}" (${(res.newRotation ?? 0) * 90}°)`,
+          '🔄'
+        );
+      });
+      panel.querySelector('#btnDeleteThis')?.addEventListener('click', () => {
+        hud.sim.beginBuildStroke();
+        let removed = false;
+        try {
+          removed = hud.sim.removeAtTile(b.gx, b.gy, false);
+        } finally {
+          hud.sim.commitBuildStroke();
+        }
+        if (removed) {
+          hud.inspectSelection = null;
+          hud.refreshAll();
+          hud.showToast(
+            `🧹 Đã xóa "${item.name}" (có thể bấm ↶ Hoàn tác trong Xây Dựng nếu nhầm).`,
+            '🧹'
+          );
+        }
       });
       return;
     }
@@ -1151,6 +1242,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         hud.showToast(`Đã phân công khu tuần tra cho ${st.name}!`, '📍');
       });
       panel.querySelector('#btnPickInspStaff')?.addEventListener('click', () => {
+        clearBuildToolModes(hud);
         hud.pincerActive = true;
         hud.pincerPicked = { kind: 'staff', id: st.id, label: st.name };
         hud.inspectSelection = null;

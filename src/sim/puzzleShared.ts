@@ -189,6 +189,34 @@ export const JIGSAW_PAINTINGS: JigsawPaintingDef[] = [
     imageUrl: '/paintings/potions_runes_sudoku_bg.jpg',
     accentColor: '#10b981',
   },
+  {
+    id: 'p20_yule_express',
+    title: 'Tàu Tốc Hành Hogwarts Vượt Đèo Tuyết Giáng Sinh',
+    subtitle: 'Đầu máy hơi nước đỏ thẫm phun khói sao vàng băng qua cầu cạn đá phủ tuyết dưới cực quang đêm đông.',
+    imageUrl: '/paintings/jigsaw_yule_express.jpg',
+    accentColor: '#dc2626',
+  },
+  {
+    id: 'p21_yule_great_hall',
+    title: 'Đại Sảnh Đường Mười Hai Cây Thông Giáng Sinh',
+    subtitle: 'Mười hai cây thông phủ sương bạc khổng lồ toả sáng dưới bầu trời tuyết rơi phép thuật và hàng nến bay.',
+    imageUrl: '/paintings/jigsaw_yule_great_hall.jpg',
+    accentColor: '#f59e0b',
+  },
+  {
+    id: 'p22_yule_burrow',
+    title: 'Đêm Đoàn Viên Giáng Sinh Ấm Áp Tại Hang Sóc',
+    subtitle: 'Mái nhà nghiêng phủ tuyết dày rực ánh đèn vàng, vòng nguyệt quế nhựa ruồi và khói bếp thơm bánh quế.',
+    imageUrl: '/paintings/jigsaw_yule_burrow.jpg',
+    accentColor: '#ea580c',
+  },
+  {
+    id: 'p23_yule_ball',
+    title: 'Dạ Vũ Giáng Sinh Cung Điện Băng Pha Lê',
+    subtitle: 'Sảnh khiêu vũ lấp lánh nhũ băng lam ngọc, đài phun nước đóng băng và dàn đèn chùm sao tuyết huyền ảo.',
+    imageUrl: '/paintings/jigsaw_yule_ball.jpg',
+    accentColor: '#38bdf8',
+  },
 ];
 
 export function isArcadeSubModeLocked(stage: number): boolean {

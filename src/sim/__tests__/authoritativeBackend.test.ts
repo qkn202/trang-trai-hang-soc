@@ -1313,4 +1313,106 @@ describe('Authoritative Backend (HPVNN / hagridfarm Architecture)', () => {
       )
     ).rejects.toMatchObject({ reason: 'daily-cap' });
   });
+
+  it('P0-7, P1-6 & P1-8: chặn cộng Galleon không xác thực, khóa race-condition trần ngày song song và bảo toàn 2 tài khoản trùng biệt danh trên BXH', async () => {
+    const store = new MemoryBackendKVStore();
+    const backend = new BurrowAuthoritativeBackend({
+      store,
+    });
+
+    // 1. P0-7: Tài khoản guest / header giả mạo bị từ chối khi gọi settleBurrowWallet credit
+    await expect(
+      backend.handleCallable(
+        'settleBurrowWallet',
+        {
+          direction: 'credit',
+          amount: 500,
+          requestId: 'guest_credit_attempt_1',
+        },
+        {
+          uid: 'hs_guest_unverified_01',
+          house: 'Hufflepuff',
+          role: 'member',
+          authenticatedVia: 'hmac-jwt',
+        }
+      )
+    ).rejects.toMatchObject({ reason: 'unauthorized' });
+
+    await expect(
+      backend.handleCallable(
+        'settleBurrowWallet',
+        {
+          direction: 'credit',
+          amount: 500,
+          requestId: 'legacy_header_credit_attempt_1',
+        },
+        {
+          uid: 'real_user_legacy_hdr',
+          house: 'Ravenclaw',
+          role: 'member',
+          authenticatedVia: 'legacy-header',
+        }
+      )
+    ).rejects.toMatchObject({ reason: 'unauthorized' });
+
+    // 2. P0-7 & P1-8: Bắn 5 request settleBurrowWallet credit song song (mỗi cái 1000G) ở Lv.1 (trần 2500G/ngày) -> tối đa 2 request thành công!
+    const racerId = {
+      uid: 'concurrent_racer_uid',
+      house: 'Gryffindor' as const,
+      role: 'member' as const,
+      authenticatedVia: 'hmac-jwt' as const,
+    };
+    const results = await Promise.allSettled(
+      [1, 2, 3, 4, 5].map((idx) =>
+        backend.handleCallable(
+          'settleBurrowWallet',
+          {
+            direction: 'credit',
+            amount: 1000,
+            requestId: `race_credit_${idx}`,
+          },
+          racerId
+        )
+      )
+    );
+    const fulfilled = results.filter((r) => r.status === 'fulfilled');
+    const rejected = results.filter((r) => r.status === 'rejected');
+    expect(fulfilled).toHaveLength(2);
+    expect(rejected).toHaveLength(3);
+    const finalWallet = await backend.getOrCreateWallet('concurrent_racer_uid');
+    expect(finalWallet.spendable).toBe(1000 + 2000);
+
+    // 3. P1-6: Hai người chơi thật khác UID nhưng trùng tên hiển thị không đè mất nhau trên BXH Jigsaw
+    await backend.submitLeaderboardScore({
+      uid: 'player_twin_a',
+      gameId: 'jigsaw',
+      entry: {
+        name: 'Phù Thủy Song Sinh',
+        house: 'Gryffindor',
+        primaryValue: 18,
+        ratingScore: 4200,
+        totalWins: 18,
+        bestStreak: 5,
+      },
+    });
+    await backend.submitLeaderboardScore({
+      uid: 'player_twin_b',
+      gameId: 'jigsaw',
+      entry: {
+        name: 'Phù Thủy Song Sinh',
+        house: 'Ravenclaw',
+        primaryValue: 22,
+        ratingScore: 5100,
+        totalWins: 22,
+        bestStreak: 7,
+      },
+    });
+    const lbEntries = await backend.getLeaderboardEntries('jigsaw');
+    expect(lbEntries.some((e) => e.userId === 'player_twin_a' && e.ratingScore === 4200)).toBe(
+      true
+    );
+    expect(lbEntries.some((e) => e.userId === 'player_twin_b' && e.ratingScore === 5100)).toBe(
+      true
+    );
+  });
 });

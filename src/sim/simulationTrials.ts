@@ -169,6 +169,7 @@ import {
   submitPlayerCloudLeaderboardEntry,
   syncAllPlayerCloudLeaderboards,
 } from './minigameLeaderboard';
+import type { ProofOfPlayEnvelope } from './proofOfPlay';
 import {
   createInitialPuzzleArcadeState,
   JIGSAW_PAINTINGS,
@@ -617,7 +618,7 @@ export function trialsGetAllPersonalLeaderboardSummaries(sim: ParkSimulation): P
 
 export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation, 
     bonusCoinsFromMoves = 0,
-    sessionMetrics?: { sessionScore?: number }
+    sessionMetrics?: { sessionScore?: number; proofOfPlay?: ProofOfPlayEnvelope }
   ): {
     starsEarned: number;
     goldEarned: number;
@@ -753,7 +754,12 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
       streak: m3.winStreak,
       previousRankOverride: prevLbRank,
     });
-    void submitPlayerCloudLeaderboardEntry(sim.state, 'match3');
+    void submitPlayerCloudLeaderboardEntry(
+      sim.state,
+      'match3',
+      '/api/leaderboard',
+      sessionMetrics?.proofOfPlay
+    );
 
     sim.audio.playLevelUp();
     if (starsEarned > 0) sim.onRewardFly?.('stars', starsEarned);
@@ -1031,7 +1037,11 @@ export function trialsCraftPhoenixTalismanFromBarn(sim: ParkSimulation): { ok: b
 export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation, 
     mode: PuzzleArcadeMode,
     reward: PuzzleRewardSpec,
-    sessionMetrics?: { sessionScore?: number; efficiency?: number }
+    sessionMetrics?: {
+      sessionScore?: number;
+      efficiency?: number;
+      proofOfPlay?: ProofOfPlayEnvelope;
+    }
   ): {
     starsEarned: number;
     sandEarned: number;
@@ -1184,7 +1194,12 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
         streak: m3.winStreak,
         previousRankOverride: prevLbRank,
       });
-      void submitPlayerCloudLeaderboardEntry(sim.state, mode);
+      void submitPlayerCloudLeaderboardEntry(
+        sim.state,
+        mode,
+        '/api/leaderboard',
+        sessionMetrics?.proofOfPlay
+      );
     }
 
     sim.audio.playLevelUp();

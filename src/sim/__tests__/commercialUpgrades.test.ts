@@ -486,15 +486,62 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
         expect((s.notes[peerBlank.r][peerBlank.c] & (1 << ans)) !== 0).toBe(true);
       }
 
-      // Nhập trùng số đề bài cùng hàng → cả ô nhập lẫn ô đề bài cùng báo xung đột đỏ nhạt
+      // Khi chưa điền kín 81 ô: nhập số sai/trùng KHÔNG báo lỗi sớm và KHÔNG chỉ điểm ô sai
       if (rowGivenCol >= 0) {
         const dupDigit = s.grid[blank.r][rowGivenCol];
         s.selectCell(blank.r, blank.c);
         const dupRes = s.inputDigit(dupDigit);
-        expect(dupRes.conflict).toBe(true);
-        expect(s.hasConflict(blank.r, blank.c)).toBe(true);
-        expect(s.hasConflict(blank.r, rowGivenCol)).toBe(true);
+        expect(dupRes.conflict).toBe(false);
+        expect(dupRes.fullBoardError).toBe(false);
+        expect(s.mistakesCount).toBe(0);
+        expect(s.isWrongCell(blank.r, blank.c)).toBe(false);
+        expect(s.hasConflict(blank.r, blank.c)).toBe(false);
+        expect(s.hasConflict(blank.r, rowGivenCol)).toBe(false);
       }
+
+      // Kiểm tra độ khó cao hơn (từ màn 1 đã có >= 40 ô trống) & chỉ báo lỗi khi điền xong toàn bộ 81/81 ô (không lộ ô sai)
+      const hardStage1 = new SudokuPuzzleEngine(1);
+      expect(81 - hardStage1.filledCount).toBeGreaterThanOrEqual(40);
+
+      const blindCheck = new SudokuPuzzleEngine(35);
+      const allBlanks: Array<{ r: number; c: number }> = [];
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (!blindCheck.given[r][c]) allBlanks.push({ r, c });
+        }
+      }
+      expect(allBlanks.length).toBeGreaterThanOrEqual(45);
+
+      // Điền sai ô đầu tiên, điền đúng tất cả các ô còn lại trừ ô cuối cùng -> vẫn 0 lỗi
+      const firstCell = allBlanks[0];
+      const lastCell = allBlanks[allBlanks.length - 1];
+      const wrongFirst = (blindCheck.solution[firstCell.r][firstCell.c] % 9) + 1;
+      blindCheck.selectCell(firstCell.r, firstCell.c);
+      expect(blindCheck.inputDigit(wrongFirst).fullBoardError).toBe(false);
+      for (let i = 1; i < allBlanks.length - 1; i++) {
+        const b = allBlanks[i];
+        blindCheck.selectCell(b.r, b.c);
+        expect(blindCheck.inputDigit(blindCheck.solution[b.r][b.c]).fullBoardError).toBe(false);
+      }
+      expect(blindCheck.mistakesCount).toBe(0);
+      expect(blindCheck.fullBoardMismatch).toBe(false);
+
+      // Điền nốt ô thứ 81 -> lúc này mới báo bảng có lỗi, nhưng tuyệt đối không đánh dấu ô nào sai
+      blindCheck.selectCell(lastCell.r, lastCell.c);
+      const finalCheck = blindCheck.inputDigit(blindCheck.solution[lastCell.r][lastCell.c]);
+      expect(blindCheck.filledCount).toBe(81);
+      expect(finalCheck.fullBoardError).toBe(true);
+      expect(blindCheck.fullBoardMismatch).toBe(true);
+      expect(blindCheck.mistakesCount).toBe(1);
+      expect(blindCheck.isWrongCell(firstCell.r, firstCell.c)).toBe(false);
+      expect(blindCheck.hasConflict(firstCell.r, firstCell.c)).toBe(false);
+
+      // Sửa lại ô đầu tiên cho đúng -> thắng màn ngay khi đủ 81/81 ô chuẩn
+      blindCheck.selectCell(firstCell.r, firstCell.c);
+      const winCheck = blindCheck.inputDigit(blindCheck.solution[firstCell.r][firstCell.c]);
+      expect(winCheck.won).toBe(true);
+      expect(blindCheck.status).toBe('won');
+      expect(blindCheck.fullBoardMismatch).toBe(false);
 
       // Bộ đếm thời gian mm:ss
       expect(s.formatElapsedTime()).toBe('00:00');
@@ -502,7 +549,7 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
       expect(s.formatElapsedTime()).toBe('01:05');
     });
 
-    it('Sudoku Xoá Ô (Del) hoạt động khi đang chọn ô điền, khi lỡ bấm sang ô đề bài/ô trống hoặc khi vừa chạm ngưỡng sai', () => {
+    it('Sudoku Xoá Ô (Del) hoạt động khi đang chọn ô điền, khi lỡ bấm sang ô đề bài/ô trống hoặc khi vừa chạm ngưỡng sai lúc điền kín bảng', () => {
       const se = new SudokuPuzzleEngine(20);
       const blank = se.selected!;
       expect(blank).toBeTruthy();
@@ -515,7 +562,7 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
       expect(se.clearSelectedCell()).toBe(true);
       expect(se.grid[blank.r][blank.c]).toBe(0);
 
-      // 2. Điền sai rồi bấm sang một ô gốc đề bài (given), bấm Xoá vẫn tự tìm và xoá ô sai vừa nhập
+      // 2. Điền số rồi bấm sang một ô gốc đề bài (given), bấm Xoá xoá theo lịch sử edit gần nhất (không dò ô sai)
       se.selected = { ...blank };
       se.inputDigit(wrongDigit);
       expect(se.grid[blank.r][blank.c]).toBe(wrongDigit);
@@ -531,10 +578,18 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
       expect(se.grid[blank.r][blank.c]).toBe(0);
       expect(se.selected).toEqual(blank);
 
-      // 3. Khi chạm ngưỡng sai (status === 'lost'), nút Xoá Ô vẫn xoá được ô sai và mở khoá tiếp tục chơi
+      // 3. Điền kín 81 ô nhưng có lỗi ở lần kiểm tra cuối (status === 'lost'), nút Xoá Ô vẫn xoá được và mở khoá tiếp tục chơi
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (!se.given[r][c] && (r !== blank.r || c !== blank.c)) {
+            se.grid[r][c] = se.solution[r][c];
+          }
+        }
+      }
       se.mistakesCount = se.maxMistakes - 1;
       se.selected = { ...blank };
       const lostRes = se.inputDigit(wrongDigit);
+      expect(se.filledCount).toBe(81);
       expect(lostRes.lost).toBe(true);
       expect(se.status).toBe('lost');
       expect(se.clearSelectedCell()).toBe(true);
@@ -773,14 +828,15 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
       const expectedNoteMask = eng1.notes[c1.r][c1.c];
       expect(expectedNoteMask & ((1 << 2) | (1 << 7))).toBe((1 << 2) | (1 << 7));
 
-      // 3. Tắt Nháp, điền sai 1 lần ở ô trống thứ ba để tăng bộ đếm lỗi
+      // 3. Tắt Nháp, điền sai 1 số ở ô trống thứ ba (khi chưa kín 81 ô nên chưa báo lỗi ngay) & giả lập 1 lần từng nộp sai trước đó
       const c2 = blankCells[2];
       eng1.pencilMode = false;
       eng1.selectCell(c2.r, c2.c);
       const wrongDigit = (eng1.solution[c2.r][c2.c] % 9) + 1;
       const resErr = eng1.inputDigit(wrongDigit);
-      expect(resErr.conflict).toBe(true);
-      expect(eng1.mistakesCount).toBe(1);
+      expect(resErr.conflict).toBe(false);
+      expect(eng1.mistakesCount).toBe(0);
+      eng1.mistakesCount = 1;
 
       // 4. Dùng 1 Gợi Ý ở ô trống thứ tư và chạy đồng hồ 137.4 giây
       const c3 = blankCells[3];

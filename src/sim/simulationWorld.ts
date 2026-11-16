@@ -502,6 +502,32 @@ export function worldAutoBuildCoasterForStation(sim: ParkSimulation, uid: string
     return true;
 }
 
+const DRAG_PAINTABLE_FENCE_IDS = new Set([
+  'yule_holly_hedgerow',
+  'yule_candy_cane_fence',
+  'yule_lantern_stone_wall',
+]);
+
+export function isDragPaintableCatalogItem(item: CatalogItem): boolean {
+  return (
+    item.category === 'path' ||
+    item.category === 'terrain' ||
+    Boolean(item.isCoasterTrackPiece) ||
+    Boolean(item.isZooFence) ||
+    Boolean(item.elevationDelta) ||
+    (item.width === 1 && item.height === 1 && DRAG_PAINTABLE_FENCE_IDS.has(item.id))
+  );
+}
+
+export function isRepeatableCatalogItem(item: CatalogItem): boolean {
+  return (
+    isDragPaintableCatalogItem(item) ||
+    item.category === 'decor' ||
+    Boolean(item.isFarmlandPlot) ||
+    Boolean(item.connectableGroup)
+  );
+}
+
 export function worldMoveBuilding(sim: ParkSimulation, 
     uid: string,
     newGx: number,
@@ -513,6 +539,9 @@ export function worldMoveBuilding(sim: ParkSimulation,
     }
     const b = sim.state.buildings.find((x) => x.uid === uid);
     if (!b) return { ok: false, reason: 'Không tìm thấy công trình' };
+    if (b.isIndestructible) {
+      return { ok: false, reason: 'Nhà Hang Sóc 6 Tầng là tổ ấm cố định của gia đình Weasley!' };
+    }
     const item = getCatalogItem(b.itemId);
     if (!item) return { ok: false, reason: 'Dữ liệu không hợp lệ' };
 
@@ -526,9 +555,54 @@ export function worldMoveBuilding(sim: ParkSimulation,
     worldRebuildGrid(sim, );
     sim.audio.playPlace();
     sim.spawnFloatingText(newGx + 0.5, newGy + 0.5, '✋ Đã di dời!', '#93c5fd');
-    sim.saveToStorage();
-    sim.onUiChange?.();
+    sim.noteBuildMutation();
+    if (!sim.suppressPerActionSave) {
+      sim.saveToStorage();
+      sim.onUiChange?.();
+    }
     return { ok: true };
+}
+
+export function worldRotatePlacedBuilding(
+  sim: ParkSimulation,
+  uid: string,
+  step: 1 | -1 = 1
+): { ok: boolean; reason?: string; newRotation?: 0 | 1 | 2 | 3 } {
+  if (sim.isVisitingNeighbor) {
+    return { ok: false, reason: 'Chế độ Khách Tham Quan — không thể xoay công trình vườn bạn!' };
+  }
+  const b = sim.state.buildings.find((x) => x.uid === uid);
+  if (!b) return { ok: false, reason: 'Không tìm thấy công trình' };
+  if (b.isIndestructible) {
+    return { ok: false, reason: 'Nhà Hang Sóc 6 Tầng là tổ ấm cố định của gia đình Weasley!' };
+  }
+  const item = getCatalogItem(b.itemId);
+  if (!item) return { ok: false, reason: 'Dữ liệu không hợp lệ' };
+
+  const nextRot = (((b.rotation + step) % 4 + 4) % 4) as 0 | 1 | 2 | 3;
+  const check = worldCanPlaceItem(sim, item, b.gx, b.gy, nextRot, uid);
+  if (!check.ok) {
+    return { ok: false, reason: check.reason };
+  }
+
+  const ownStroke = !sim.pendingBuildStroke;
+  if (ownStroke) sim.beginBuildStroke();
+  try {
+    b.rotation = nextRot;
+    sim.rideQueues.delete(uid);
+    worldRebuildGrid(sim);
+    sim.audio.playPlace();
+    sim.onBuildingTactile?.(uid);
+    sim.spawnFloatingText(b.gx + 0.5, b.gy + 0.5, `🔄 Xoay ${nextRot * 90}°`, '#93c5fd');
+    sim.noteBuildMutation();
+    if (!sim.suppressPerActionSave) {
+      sim.saveToStorage();
+      sim.onUiChange?.();
+    }
+  } finally {
+    if (ownStroke) sim.commitBuildStroke();
+  }
+  return { ok: true, newRotation: nextRot };
 }
 
 export function worldGetBuildingFootprint(sim: ParkSimulation, item: CatalogItem, rotation: 0 | 1 | 2 | 3): { bw: number; bh: number } {
@@ -538,7 +612,22 @@ export function worldGetBuildingFootprint(sim: ParkSimulation, item: CatalogItem
     };
 }
 
+export function worldGetStashedDecorCount(sim: ParkSimulation, item: CatalogItem): number {
+  if (
+    item.elevationDelta ||
+    item.isCoasterTrackPiece ||
+    item.isZooFence ||
+    item.category === 'terrain' ||
+    item.category === 'path'
+  ) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(sim.state.stashedDecorInventory?.[item.id] ?? 0));
+}
+
 export function worldIsCatalogItemUnlocked(sim: ParkSimulation, item: CatalogItem): boolean {
+  if (worldGetStashedDecorCount(sim, item) > 0) return true;
+  if (item.id.startsWith('yule_') && sim.state.yuleEvent?.unlockedAssetIds.includes(item.id)) return true;
   if (sim.state.sandboxMode || sim.state.level >= item.unlockLevel) {
     return true;
   }
@@ -564,20 +653,23 @@ export function worldCanPlaceItem(sim: ParkSimulation,
     if (sim.isVisitingNeighbor) {
       return { ok: false, reason: 'Chế độ Khách Tham Quan — không thể xây/sửa thung lũng của bạn bè!' };
     }
+    const fromStash = !ignoreBuildingUid && worldGetStashedDecorCount(sim, item) > 0;
     if (!ignoreBuildingUid) {
-      if (!worldIsCatalogItemUnlocked(sim, item)) {
+      if (!fromStash && !worldIsCatalogItemUnlocked(sim, item)) {
         return { ok: false, reason: `Mở khóa bản vẽ ở Cấp Giải Đố ${item.unlockLevel}` };
       }
       const starCost = sim.getEffectiveItemStarCost(item);
-      if (starCost > 0) {
-        if (!sim.state.sandboxMode && (sim.state.match3?.stars ?? 0) < starCost) {
-          return {
-            ok: false,
-            reason: `Cần ${starCost} 🌟 Sao Phép Thuật (Vượt Bùa Gặt Honeydukes, Ngũ Ấn Đạo Tặc, Số Học Huyền Bí, Cờ Phù Thủy hoặc Sinh Vật Huyền Bí để nhận Sao!)`,
-          };
+      if (!fromStash) {
+        if (starCost > 0) {
+          if (!sim.state.sandboxMode && (sim.state.match3?.stars ?? 0) < starCost) {
+            return {
+              ok: false,
+              reason: `Cần ${starCost} 🌟 Sao Phép Thuật (Vượt Bùa Gặt Honeydukes, Ngũ Ấn Đạo Tặc, Số Học Huyền Bí, Cờ Phù Thủy hoặc Sinh Vật Huyền Bí để nhận Sao!)`,
+            };
+          }
+        } else if (!sim.state.sandboxMode && sim.state.galleons < item.cost) {
+          return { ok: false, reason: `Thiếu Vàng Galleon (${item.cost}G)` };
         }
-      } else if (!sim.state.sandboxMode && sim.state.galleons < item.cost) {
-        return { ok: false, reason: `Thiếu Vàng Galleon (${item.cost}G)` };
       }
     }
 
@@ -677,7 +769,8 @@ export function worldPlaceItem(sim: ParkSimulation, item: CatalogItem, gx: numbe
       sim.addXp(item.xpPerCollect);
       sim.audio.playPlace();
       sim.spawnFloatingText(gx, gy, `Độ cao +${nextE}`, '#cbd5e1');
-      sim.onUiChange?.();
+      sim.noteBuildMutation();
+      if (!sim.suppressPerActionSave) sim.onUiChange?.();
       return true;
     }
 
@@ -694,7 +787,8 @@ export function worldPlaceItem(sim: ParkSimulation, item: CatalogItem, gx: numbe
       sim.addXp(item.xpPerCollect);
       sim.audio.playPlace();
       sim.spawnFloatingText(gx, gy, `🛤️ +${item.xpPerCollect} ⭐`, '#fde047');
-      sim.onUiChange?.();
+      sim.noteBuildMutation();
+      if (!sim.suppressPerActionSave) sim.onUiChange?.();
       return true;
     }
 
@@ -710,7 +804,8 @@ export function worldPlaceItem(sim: ParkSimulation, item: CatalogItem, gx: numbe
       worldRecomputeAllCoastersAndBiomes(sim, );
       sim.addXp(item.xpPerCollect);
       sim.audio.playPlace();
-      sim.onUiChange?.();
+      sim.noteBuildMutation();
+      if (!sim.suppressPerActionSave) sim.onUiChange?.();
       return true;
     }
 
@@ -736,7 +831,8 @@ export function worldPlaceItem(sim: ParkSimulation, item: CatalogItem, gx: numbe
       sim.recordQuestProgress('place_paths', item.id, 1);
       sim.audio.playPlace();
       sim.spawnFloatingText(gx, gy, `+${item.xpPerCollect} ⭐`, '#fde047');
-      sim.onUiChange?.();
+      sim.noteBuildMutation();
+      if (!sim.suppressPerActionSave) sim.onUiChange?.();
       return true;
     }
 
@@ -758,13 +854,28 @@ export function worldPlaceItem(sim: ParkSimulation, item: CatalogItem, gx: numbe
       sim.recordQuestProgress('place_paths', item.id, 1);
       sim.audio.playPlace();
       sim.spawnFloatingText(gx, gy, `+${item.xpPerCollect} ⭐`, '#fde047');
-      sim.onUiChange?.();
+      sim.noteBuildMutation();
+      if (!sim.suppressPerActionSave) sim.onUiChange?.();
       return true;
     }
 
-    // 6. Regular Building / Ride / Creature / Decor (Star-only instant build for major blueprints; Gold-only for plots & expandable connectable yards!)
+    // 6. Regular Building / Ride / Creature / Decor (Star-only instant build for major blueprints; Gold-only for plots & expandable connectable yards; 0G if placing from Stashed Decor Inventory!)
     const starCost = sim.getEffectiveItemStarCost(item);
-    if (!sim.state.sandboxMode) {
+    const fromStash = worldGetStashedDecorCount(sim, item) > 0;
+    let restoredStar = 1;
+    if (fromStash) {
+      const inv = (sim.state.stashedDecorInventory ??= {});
+      const rem = Math.max(0, (inv[item.id] ?? 1) - 1);
+      if (rem <= 0) delete inv[item.id];
+      else inv[item.id] = rem;
+      const starArr = sim.state.stashedDecorStars?.[item.id];
+      if (Array.isArray(starArr) && starArr.length > 0) {
+        restoredStar = Math.max(1, Math.min(5, Math.floor(starArr.pop() ?? 1)));
+        if (starArr.length === 0 && sim.state.stashedDecorStars) {
+          delete sim.state.stashedDecorStars[item.id];
+        }
+      }
+    } else if (!sim.state.sandboxMode) {
       if (starCost > 0) {
         if (sim.state.match3) {
           sim.state.match3.stars = Math.max(0, sim.state.match3.stars - starCost);
@@ -777,7 +888,7 @@ export function worldPlaceItem(sim: ParkSimulation, item: CatalogItem, gx: numbe
 
     const now = Date.now();
     const baseBuildSec = Math.max(item.buildDurationSec, computeRealTimeBuildSeconds(item));
-    const durMs = sim.state.sandboxMode ? 0 : Math.round(baseBuildSec * 1000);
+    const durMs = sim.state.sandboxMode || fromStash ? 0 : Math.round(baseBuildSec * 1000);
     const durSecActual = Math.ceil(durMs / 1000);
     const uid = `b_${now}_${Math.floor(Math.random() * 9999)}`;
 
@@ -788,7 +899,7 @@ export function worldPlaceItem(sim: ParkSimulation, item: CatalogItem, gx: numbe
       gx,
       gy,
       rotation,
-      stars: 1,
+      stars: fromStash ? restoredStar : 1,
       placedAt: now,
       constructEndsAt: now + durMs,
       lastTickAt: now + durMs,
@@ -832,7 +943,14 @@ export function worldPlaceItem(sim: ParkSimulation, item: CatalogItem, gx: numbe
       sim.onBuildingCompleted?.(newBuilding.uid);
     }
 
-    if (durMs > 0) {
+    if (fromStash) {
+      sim.spawnFloatingText(
+        gx + item.width * 0.5,
+        gy + item.height * 0.5,
+        '📦 Kho 0G!',
+        '#a7f3d0'
+      );
+    } else if (durMs > 0) {
       const waitLabel = formatDurationCompactVi(durSecActual);
       sim.spawnFloatingText(
         gx + item.width * 0.5,
@@ -868,8 +986,11 @@ export function worldPlaceItem(sim: ParkSimulation, item: CatalogItem, gx: numbe
       sim.recordQuestProgress('place_paths', item.id, 1);
     }
     sim.checkAndToastAchievements?.();
-    sim.saveToStorage();
-    sim.onUiChange?.();
+    sim.noteBuildMutation();
+    if (!sim.suppressPerActionSave) {
+      sim.saveToStorage();
+      sim.onUiChange?.();
+    }
     return true;
 }
 
@@ -1216,7 +1337,8 @@ export function worldRemoveAtTile(
       sim.addXp(4);
       sim.audio.playSpell();
       sim.spawnFloatingText(gx, gy, 'Scourgify! +4 ⭐', '#67e8f9');
-      sim.onUiChange?.();
+      sim.noteBuildMutation();
+      if (!sim.suppressPerActionSave) sim.onUiChange?.();
       return true;
     }
 
@@ -1229,7 +1351,8 @@ export function worldRemoveAtTile(
       worldRecomputeAllCoastersAndBiomes(sim, );
       sim.audio.playPlace();
       sim.spawnFloatingText(gx, gy, 'Tháo ray +8 🪙', '#fcd34d');
-      sim.onUiChange?.();
+      sim.noteBuildMutation();
+      if (!sim.suppressPerActionSave) sim.onUiChange?.();
       return true;
     }
 
@@ -1241,7 +1364,8 @@ export function worldRemoveAtTile(
       if (!sim.state.sandboxMode) sim.state.galleons += 5;
       worldRecomputeAllCoastersAndBiomes(sim, );
       sim.audio.playPlace();
-      sim.onUiChange?.();
+      sim.noteBuildMutation();
+      if (!sim.suppressPerActionSave) sim.onUiChange?.();
       return true;
     }
 
@@ -1291,8 +1415,11 @@ export function worldRemoveAtTile(
               : `Hoàn +${refund} 🪙`,
         '#fcd34d'
       );
-      sim.saveToStorage();
-      sim.onUiChange?.();
+      sim.noteBuildMutation();
+      if (!sim.suppressPerActionSave) {
+        sim.saveToStorage();
+        sim.onUiChange?.();
+      }
       return true;
     }
 
@@ -1304,7 +1431,8 @@ export function worldRemoveAtTile(
       if (!sim.state.sandboxMode) sim.state.galleons += 3;
       worldRecomputeAllCoastersAndBiomes(sim, );
       sim.audio.playPlace();
-      sim.onUiChange?.();
+      sim.noteBuildMutation();
+      if (!sim.suppressPerActionSave) sim.onUiChange?.();
       return true;
     }
 

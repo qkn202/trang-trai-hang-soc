@@ -93,10 +93,10 @@ describe('renderer.ts - On-Device Performance & Weather Particles Budget', () =>
     expect(juice.flash.alpha).toBeGreaterThan(0);
   });
 
-  it('Toàn bộ 22 loại cây trồng & hoa sử dụng sprite 2.5D riêng biệt ui_icon_crop_* (không còn SVG phẳng)', () => {
+  it('Toàn bộ 34 loại cây trồng & hoa sử dụng sprite 2.5D riêng biệt ui_icon_crop_* (không còn SVG phẳng)', () => {
     const spriteKeySet = new Set<string>(SPRITE_KEYS);
     const cropEntries = Object.values(FARM_CROPS);
-    expect(cropEntries).toHaveLength(22);
+    expect(cropEntries).toHaveLength(34);
 
     const uniqueIconKeys = new Set<string>();
     for (const crop of cropEntries) {
@@ -108,7 +108,7 @@ describe('renderer.ts - On-Device Performance & Weather Particles Budget', () =>
       expect(src).toBe(`/sprites/ui_icon_crop_${crop.id}.png`);
       expect(src.startsWith('data:')).toBe(false);
     }
-    expect(uniqueIconKeys.size).toBe(22);
+    expect(uniqueIconKeys.size).toBe(34);
   });
 
   it('resolveBuildingInWorldTimerInfo hiển thị đúng đồng hồ đếm ngược xây dựng, tưới cây, chăn thả, lò bánh & chu kỳ sản xuất', () => {

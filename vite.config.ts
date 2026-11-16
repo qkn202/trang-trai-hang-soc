@@ -18,6 +18,8 @@ const COMPRESSIBLE_EXTS = new Set([
   '.ico',
   '.xml',
   '.txt',
+  '.bin',
+  '.md',
 ]);
 const MIN_COMPRESS_BYTES = 256;
 
@@ -41,6 +43,34 @@ function sendJsonMaybeGzip(
   }
   res.setHeader('Content-Length', String(rawBuf.byteLength));
   res.end(rawBuf);
+}
+
+function cleanMacMetadata(dir: string): void {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.name === '.DS_Store' || entry.name.startsWith('._')) {
+      fs.rmSync(full, { recursive: true, force: true });
+      continue;
+    }
+    if (entry.isDirectory()) {
+      cleanMacMetadata(full);
+    }
+  }
+}
+
+function collectRawFiles(dir: string, out: string[] = []): string[] {
+  if (!fs.existsSync(dir)) return out;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === '.DS_Store' || entry.name.startsWith('._')) continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      collectRawFiles(full, out);
+    } else if (entry.isFile() && !entry.name.endsWith('.gz') && !entry.name.endsWith('.br')) {
+      out.push(full);
+    }
+  }
+  return out;
 }
 
 function collectCompressibleFiles(dir: string, out: string[] = []): string[] {
@@ -296,6 +326,7 @@ export default defineConfig({
       closeBundle() {
         if (!resolvedViteConfig) return;
         const outDir = path.resolve(resolvedViteConfig.root, resolvedViteConfig.build.outDir);
+        cleanMacMetadata(outDir);
 
         if (process.env.VITE_ALLOW_SANDBOX !== '1') {
           for (const devFile of [
@@ -315,15 +346,23 @@ export default defineConfig({
         const swPath = path.join(outDir, 'sw.js');
         const assetsDir = path.join(outDir, 'assets');
         if (fs.existsSync(swPath) && fs.existsSync(assetsDir)) {
+          const hash = crypto.createHash('sha256');
           const assetEntries = fs
             .readdirSync(assetsDir)
             .filter((name) => !name.endsWith('.gz') && !name.endsWith('.br'))
             .sort();
-          const buildHash = crypto
-            .createHash('sha256')
-            .update(assetEntries.join('|'))
-            .digest('hex')
-            .slice(0, 8);
+          hash.update(assetEntries.join('|'));
+          for (const subDir of ['sprites', 'paintings', 'audio', 'fonts', 'icons', 'atlases']) {
+            const fullSub = path.join(outDir, subDir);
+            if (!fs.existsSync(fullSub)) continue;
+            const nestedFiles = collectRawFiles(fullSub).sort();
+            for (const filePath of nestedFiles) {
+              const rel = path.relative(fullSub, filePath).split(path.sep).join('/');
+              const st = fs.statSync(filePath);
+              hash.update(`|${subDir}/${rel}:${st.size}`);
+            }
+          }
+          const buildHash = hash.digest('hex').slice(0, 8);
           const swRaw = fs.readFileSync(swPath, 'utf8');
           const verMatch = swRaw.match(/const CACHE_VERSION = ['"](v\d+)[^'"]*['"];/);
           const verPrefix = verMatch ? verMatch[1] : 'v36';
@@ -343,7 +382,7 @@ export default defineConfig({
             : `${resolvedViteConfig.base}/`;
           const baseNoTrail = baseWithSlash.slice(0, -1);
           const assetPrefixRe =
-            /(['"(`=])\/((?:sprites|paintings|audio|fonts|icons)\/|(?:manifest\.webmanifest|offline\.html|favicon\.ico))/g;
+            /(['"(`=])\/((?:sprites|paintings|audio|fonts|icons|atlases)\/|(?:manifest\.webmanifest|offline\.html|favicon\.ico))/g;
 
           const rewriteFilePaths = (filePath: string) => {
             if (!fs.existsSync(filePath)) return;
@@ -430,6 +469,16 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) {
+            if (
+              id.includes('pixi.js') ||
+              id.includes('@pixi/') ||
+              id.includes('/earcut/') ||
+              id.includes('/eventemitter3/') ||
+              id.includes('/ismobilejs/') ||
+              id.includes('/@xmldom/')
+            ) {
+              return 'vendor-pixi';
+            }
             return 'vendor';
           }
           if (id.includes('/src/data/quizPacks/')) {

@@ -11,6 +11,12 @@
  *  8. Bộ Callable RPC riêng miền `Burrow` (`*Burrow*`), hoàn toàn độc lập và không chạm tới backend Hagrid Farm.
  */
 
+import {
+  clampUnverifiedLeaderboardStats,
+  verifyProofOfPlayEnvelope,
+  type ProofOfPlayEnvelope,
+} from '../src/sim/proofOfPlay';
+
 export interface MemberIdentityProfile {
   house?: HogwartsHouseName;
   username?: string;
@@ -74,6 +80,37 @@ export class MemoryBackendKVStore implements BackendKVStore {
     this.map.delete(key);
   }
 
+  public async transact<T>(
+    _keys: string[],
+    fn: (txStore: Pick<BackendKVStore, 'get' | 'put' | 'delete'>) => Promise<T>
+  ): Promise<T> {
+    const staged = new Map<
+      string,
+      { op: 'put'; value: string; options?: { expirationTtl?: number } } | { op: 'delete' }
+    >();
+    const result = await fn({
+      get: async (key: string) => {
+        const st = staged.get(key);
+        if (st) return st.op === 'put' ? st.value : null;
+        return this.get(key);
+      },
+      put: async (key: string, value: string, options?: { expirationTtl?: number }) => {
+        staged.set(key, { op: 'put', value, options });
+      },
+      delete: async (key: string) => {
+        staged.set(key, { op: 'delete' });
+      },
+    });
+    for (const [key, mut] of staged.entries()) {
+      if (mut.op === 'delete') {
+        await this.delete(key);
+      } else {
+        await this.put(key, mut.value, mut.options);
+      }
+    }
+    return result;
+  }
+
   public dumpEntries(): Record<string, string> {
     const out: Record<string, string> = {};
     const now = this.nowFn();
@@ -131,7 +168,8 @@ export type ServerRefusalReason =
   | 'server-misconfigured'
   | 'sandbox-forbidden'
   | 'friend-code-taken'
-  | 'payload-too-large';
+  | 'payload-too-large'
+  | 'invalid-proof-of-play';
 
 export class BurrowServerError extends Error {
   public readonly definitive = true;
@@ -184,7 +222,7 @@ const GENERIC_SERVER_PLAYER_NAMES = new Set([
 function isGeneratedGuestBackendUid(uid: unknown): boolean {
   const clean = typeof uid === 'string' ? uid.trim() : '';
   if (!clean) return true;
-  return /^(hs_[a-z0-9]+_[a-z0-9]+|anon(?:ymous)?(?:_user)?|local_player)$/i.test(clean);
+  return /^(hs_[a-z0-9_-]+|guest_[a-z0-9_-]+|anon(?:ymous)?(?:_user)?|local_player)$/i.test(clean);
 }
 
 function isPlaceholderServerFriendCode(code: unknown): boolean {
@@ -284,7 +322,12 @@ function deduplicateVisitDirectoryRows(
       const exCode = (ex.friendCode || '').trim().toUpperCase();
       if (hasCode && !isPlaceholderServerFriendCode(exCode) && exCode === code) return true;
       const exNick = normalizeDistinctServerNickname(ex.username);
-      return nick !== null && exNick !== null && nick === exNick;
+      return (
+        nick !== null &&
+        exNick !== null &&
+        nick === exNick &&
+        (isGeneratedGuestBackendUid(ex.uid) || isGeneratedGuestBackendUid(row.uid))
+      );
     });
 
     if (idx >= 0) {
@@ -416,11 +459,17 @@ function deduplicateServerLeaderboardItems(
     const nick = normalizeDistinctServerNickname(item.name);
 
     const idx = out.findIndex((ex) => {
-      if (String(ex.userId || '').trim() === uid) return true;
+      const exUid = String(ex.userId || '').trim();
+      if (exUid === uid) return true;
       const exCode = String(ex.friendCode || '').trim().toUpperCase();
       if (hasCode && !isPlaceholderServerFriendCode(exCode) && exCode === code) return true;
       const exNick = normalizeDistinctServerNickname(ex.name);
-      return nick !== null && exNick !== null && nick === exNick;
+      return (
+        nick !== null &&
+        exNick !== null &&
+        nick === exNick &&
+        (isGeneratedGuestBackendUid(exUid) || isGeneratedGuestBackendUid(uid))
+      );
     });
 
     if (idx >= 0) {
@@ -794,6 +843,7 @@ export interface BurrowAuthoritativeStateDoc {
   };
   achievementsClaimed: string[];
   clearanceUsed: boolean;
+  usedPopNonces?: string[];
   minigameRecords: Record<
     string,
     {
@@ -984,7 +1034,7 @@ export function extractSanitizedPublicValleySave(
 ): Record<string, unknown> {
   const cleanBuildings: Array<Record<string, unknown>> = [];
   if (Array.isArray(saveBody.buildings)) {
-    for (const rawB of saveBody.buildings.slice(0, 260)) {
+    for (const rawB of saveBody.buildings.slice(0, 600)) {
       if (!rawB || typeof rawB !== 'object') continue;
       const b = rawB as Record<string, unknown>;
       if (typeof b.uid !== 'string' || typeof b.itemId !== 'string') continue;
@@ -2091,9 +2141,44 @@ export class BurrowAuthoritativeBackend {
     ledger: GringottsLedgerEntry[],
     prevLedgerLength: number
   ): Promise<void> {
-    await this.writeJson(`burrow_wallets:${uid}`, wallet);
-    await this.writeJson(`burrow_ledger:${uid}`, ledger.slice(-500));
     const newEntries = ledger.slice(prevLedgerLength);
+    if (newEntries.length > 0 && typeof this.store.mutateWallet === 'function') {
+      const persistedWallet = await this.store.mutateWallet(uid, (liveCurrent) => {
+        const base: GringottsWalletDoc = liveCurrent
+          ? structuredClone(liveCurrent)
+          : {
+              uid,
+              balance: this.initialGalleons,
+              bankBalance: this.initialBankGalleons,
+              spendable: this.initialGalleons + this.initialBankGalleons,
+              frozen: false,
+              updatedAt: this.now(),
+            };
+        const tempLedger: GringottsLedgerEntry[] = [];
+        for (const entry of newEntries) {
+          if (entry.type === 'debit') {
+            this.debitWalletInMemory(base, tempLedger, {
+              requestId: entry.requestId,
+              cost: entry.amount,
+              sourceType: entry.sourceType,
+              reasonCode: entry.reasonCode,
+            });
+          } else {
+            this.creditWalletInMemory(base, tempLedger, {
+              requestId: entry.requestId,
+              amount: entry.amount,
+              sourceType: entry.sourceType,
+              reasonCode: entry.reasonCode,
+            });
+          }
+        }
+        return base;
+      });
+      Object.assign(wallet, persistedWallet);
+    } else {
+      await this.writeJson(`burrow_wallets:${uid}`, wallet);
+    }
+    await this.writeJson(`burrow_ledger:${uid}`, ledger.slice(-500));
     if (newEntries.length > 0 && typeof this.store.appendLedgerEntries === 'function') {
       await this.store.appendLedgerEntries(uid, newEntries);
     }
@@ -3635,9 +3720,14 @@ export class BurrowAuthoritativeBackend {
         }
         if (typeof data.gameId === 'string' && data.entry && typeof data.entry === 'object') {
           if (SCORED_SERVER_LEADERBOARD_GAMES.has(data.gameId)) {
+            const rawEntryObj = data.entry as Record<string, unknown>;
+            const mergedIncomingEntry =
+              data.proofOfPlay !== undefined && rawEntryObj.proofOfPlay === undefined
+                ? { ...rawEntryObj, proofOfPlay: data.proofOfPlay }
+                : rawEntryObj;
             pendingLeaderboardSubmissions.push({
               gameId: data.gameId,
-              entry: data.entry as Record<string, unknown>,
+              entry: mergedIncomingEntry,
               awardImprovementCup: true,
             });
           }
@@ -4107,12 +4197,29 @@ export class BurrowAuthoritativeBackend {
     const reasonCode = (rawReason.replace(/[^a-zA-Z0-9_:-]/g, '').slice(0, 64) ||
       (direction === 'debit' ? 'burrow_spend' : 'burrow_earn'));
 
-    const nextDaily = structuredClone(daily);
+    if (
+      direction === 'credit' &&
+      (identity.authenticatedVia === 'legacy-header' ||
+        identity.authenticatedVia === 'hpvn-header' ||
+        isGeneratedGuestBackendUid(identity.uid))
+    ) {
+      throw new BurrowServerError(
+        'unauthorized',
+        'Cần phiên đăng nhập xác thực để quyết toán thu nhập vào Ví Gringotts.',
+        {},
+        401
+      );
+    }
+
     const boundedClientLevel = Math.min(
       state.level + 2,
       Math.min(100, Math.max(1, Math.floor(Number(data.clientLevel) || 1)))
     );
     const maxLevelHint = Math.max(state.level, boundedClientLevel);
+    const dailyGalleonCap =
+      maxLevelHint >= 25
+        ? salesConfig.masteryDailyCapGalleons
+        : salesConfig.dailyCapGalleons;
 
     if (direction === 'credit') {
       if (salesConfig.marketOff) {
@@ -4131,10 +4238,67 @@ export class BurrowAuthoritativeBackend {
           { maxSingleCredit: MAX_SINGLE_SETTLE_CREDIT, requested: rawAmount }
         );
       }
-      const dailyGalleonCap =
-        maxLevelHint >= 25
-          ? salesConfig.masteryDailyCapGalleons
-          : salesConfig.dailyCapGalleons;
+    }
+
+    const dailyKey = `burrow_daily:${identity.uid}:${daily.dayKey}`;
+    const reserveNowMs = this.now();
+    let nextDaily = structuredClone(daily);
+
+    if (typeof this.store.transact === 'function') {
+      const txCheck = await this.store.transact([dailyKey], async (txStore) => {
+        const rawLive = await txStore.get(dailyKey);
+        const liveDaily: BurrowDailyDoc = rawLive
+          ? (JSON.parse(rawLive) as BurrowDailyDoc)
+          : structuredClone(daily);
+        if (!liveDaily.ops || typeof liveDaily.ops !== 'object') {
+          liveDaily.ops = {};
+        }
+        const existingOp = liveDaily.ops[reqId];
+        if (existingOp) {
+          if (existingOp.hash !== hash || existingOp.receipt?.pending === true) {
+            throw new BurrowServerError(
+              'request-id-conflict',
+              'Mã giao dịch này đang được xử lý hoặc đã dùng cho nội dung khác.'
+            );
+          }
+          return { replayReceipt: existingOp.receipt, liveDaily };
+        }
+        if (direction === 'credit') {
+          if (liveDaily.marketEarnedGalleons + rawAmount > dailyGalleonCap) {
+            throw new BurrowServerError(
+              'daily-cap',
+              `Đã chạm trần thu nhập ${dailyGalleonCap} G/ngày từ Thung Lũng Hang Sóc.`,
+              {
+                earnedToday: liveDaily.marketEarnedGalleons,
+                dailyCap: dailyGalleonCap,
+              }
+            );
+          }
+          liveDaily.marketEarnedGalleons += rawAmount;
+        }
+        liveDaily.ops[reqId] = {
+          hash,
+          receipt: { pending: true },
+          committedAt: reserveNowMs,
+        };
+        await txStore.put(dailyKey, JSON.stringify(liveDaily), { expirationTtl: 86_400 * 14 });
+        return { replayReceipt: null as Record<string, unknown> | null, liveDaily };
+      });
+
+      if (txCheck.replayReceipt) {
+        const wallet = await this.getOrCreateWallet(identity.uid);
+        return this.buildSnapshotResponse({
+          identity,
+          state,
+          wallet,
+          daily: txCheck.liveDaily,
+          salesConfig,
+          knownCatalogHash: typeof clientCatalogHash === 'string' ? clientCatalogHash : undefined,
+          receipt: txCheck.replayReceipt,
+        });
+      }
+      nextDaily = txCheck.liveDaily;
+    } else if (direction === 'credit') {
       if (nextDaily.marketEarnedGalleons + rawAmount > dailyGalleonCap) {
         throw new BurrowServerError(
           'daily-cap',
@@ -4153,21 +4317,51 @@ export class BurrowAuthoritativeBackend {
     let committedEntry: GringottsLedgerEntry | null = null;
 
     let updatedWallet: GringottsWalletDoc;
-    if (typeof this.store.mutateWallet === 'function') {
-      updatedWallet = await this.store.mutateWallet(identity.uid, (liveCurrent) => {
-        const base: GringottsWalletDoc = liveCurrent
-          ? structuredClone(liveCurrent)
-          : {
-              uid: identity.uid,
-              balance: this.initialGalleons,
-              bankBalance: this.initialBankGalleons,
-              spendable: this.initialGalleons + this.initialBankGalleons,
-              frozen: false,
-              updatedAt: this.now(),
-            };
-        const tempLedger: GringottsLedgerEntry[] = [];
+    try {
+      if (typeof this.store.mutateWallet === 'function') {
+        updatedWallet = await this.store.mutateWallet(identity.uid, (liveCurrent) => {
+          const base: GringottsWalletDoc = liveCurrent
+            ? structuredClone(liveCurrent)
+            : {
+                uid: identity.uid,
+                balance: this.initialGalleons,
+                bankBalance: this.initialBankGalleons,
+                spendable: this.initialGalleons + this.initialBankGalleons,
+                frozen: false,
+                updatedAt: this.now(),
+              };
+          const tempLedger: GringottsLedgerEntry[] = [];
+          if (direction === 'debit') {
+            this.debitWalletInMemory(base, tempLedger, {
+              requestId: reqId,
+              cost: rawAmount,
+              sourceType,
+              reasonCode,
+              refusalReason: 'insufficient-balance',
+            });
+          } else {
+            this.creditWalletInMemory(base, tempLedger, {
+              requestId: reqId,
+              amount: rawAmount,
+              sourceType,
+              reasonCode,
+            });
+          }
+          committedEntry = tempLedger[0] ?? null;
+          return base;
+        });
+        if (committedEntry) {
+          nextLedger.push(committedEntry);
+        }
+        await this.writeJson(`burrow_ledger:${identity.uid}`, nextLedger.slice(-500));
+        if (committedEntry && typeof this.store.appendLedgerEntries === 'function') {
+          await this.store.appendLedgerEntries(identity.uid, [committedEntry]);
+        }
+      } else {
+        const currentWallet = await this.getOrCreateWallet(identity.uid);
+        updatedWallet = structuredClone(currentWallet);
         if (direction === 'debit') {
-          this.debitWalletInMemory(base, tempLedger, {
+          this.debitWalletInMemory(updatedWallet, nextLedger, {
             requestId: reqId,
             cost: rawAmount,
             sourceType,
@@ -4175,43 +4369,38 @@ export class BurrowAuthoritativeBackend {
             refusalReason: 'insufficient-balance',
           });
         } else {
-          this.creditWalletInMemory(base, tempLedger, {
+          this.creditWalletInMemory(updatedWallet, nextLedger, {
             requestId: reqId,
             amount: rawAmount,
             sourceType,
             reasonCode,
           });
         }
-        committedEntry = tempLedger[0] ?? null;
-        return base;
-      });
-      if (committedEntry) {
-        nextLedger.push(committedEntry);
+        await this.persistWalletAndLedger(identity.uid, updatedWallet, nextLedger, prevLedgerLen);
       }
-      await this.writeJson(`burrow_ledger:${identity.uid}`, nextLedger.slice(-500));
-      if (committedEntry && typeof this.store.appendLedgerEntries === 'function') {
-        await this.store.appendLedgerEntries(identity.uid, [committedEntry]);
+    } catch (err) {
+      if (typeof this.store.transact === 'function') {
+        await this.store
+          .transact([dailyKey], async (txStore) => {
+            const rawLive = await txStore.get(dailyKey);
+            if (!rawLive) return;
+            const liveDaily = JSON.parse(rawLive) as BurrowDailyDoc;
+            if (liveDaily.ops?.[reqId]?.receipt?.pending === true) {
+              delete liveDaily.ops[reqId];
+              if (direction === 'credit') {
+                liveDaily.marketEarnedGalleons = Math.max(
+                  0,
+                  liveDaily.marketEarnedGalleons - rawAmount
+                );
+              }
+              await txStore.put(dailyKey, JSON.stringify(liveDaily), {
+                expirationTtl: 86_400 * 14,
+              });
+            }
+          })
+          .catch(() => {});
       }
-    } else {
-      const currentWallet = await this.getOrCreateWallet(identity.uid);
-      updatedWallet = structuredClone(currentWallet);
-      if (direction === 'debit') {
-        this.debitWalletInMemory(updatedWallet, nextLedger, {
-          requestId: reqId,
-          cost: rawAmount,
-          sourceType,
-          reasonCode,
-          refusalReason: 'insufficient-balance',
-        });
-      } else {
-        this.creditWalletInMemory(updatedWallet, nextLedger, {
-          requestId: reqId,
-          amount: rawAmount,
-          sourceType,
-          reasonCode,
-        });
-      }
-      await this.persistWalletAndLedger(identity.uid, updatedWallet, nextLedger, prevLedgerLen);
+      throw err;
     }
 
     const nowMs = this.now();
@@ -4224,12 +4413,20 @@ export class BurrowAuthoritativeBackend {
       pocketBalance: updatedWallet.balance,
       requestId: reqId,
     };
-    nextDaily.ops[reqId] = { hash, receipt, committedAt: nowMs };
-    await this.writeJson(
-      `burrow_daily:${identity.uid}:${nextDaily.dayKey}`,
-      nextDaily,
-      86_400 * 14
-    );
+    if (typeof this.store.transact === 'function') {
+      nextDaily = await this.store.transact([dailyKey], async (txStore) => {
+        const rawLive = await txStore.get(dailyKey);
+        const liveDaily: BurrowDailyDoc = rawLive
+          ? (JSON.parse(rawLive) as BurrowDailyDoc)
+          : nextDaily;
+        liveDaily.ops[reqId] = { hash, receipt, committedAt: nowMs };
+        await txStore.put(dailyKey, JSON.stringify(liveDaily), { expirationTtl: 86_400 * 14 });
+        return liveDaily;
+      });
+    } else {
+      nextDaily.ops[reqId] = { hash, receipt, committedAt: nowMs };
+      await this.writeJson(dailyKey, nextDaily, 86_400 * 14);
+    }
 
     return this.buildSnapshotResponse({
       identity,
@@ -4840,7 +5037,7 @@ export class BurrowAuthoritativeBackend {
         state.playerName = soc.playerDisplayName.trim().slice(0, 42);
       }
       if (typeof soc.playerAvatarUrl === 'string' && soc.playerAvatarUrl.trim()) {
-        state.avatarUrl = soc.playerAvatarUrl.trim().slice(0, 260);
+        state.avatarUrl = soc.playerAvatarUrl.trim().slice(0, 600);
       }
 
       // Ép khóa ngày xã hội theo đồng hồ máy chủ Việt Nam `UTC+7` & giữ mức cao nhất để chống reset lậu
@@ -5018,7 +5215,7 @@ export class BurrowAuthoritativeBackend {
   ): Promise<void> {
     const items = this.extractScoredLeaderboardEntriesFromSave(saveBody, state);
     if (items.length === 0) return;
-    await this.withScopeLocks(['lb:match3', 'lb:sudoku', 'lb:blocks'], async () => {
+    await this.withScopeLocks(['lb:match3', 'lb:sudoku', 'lb:blocks', 'lb:jigsaw'], async () => {
       for (const item of items) {
         await this.upsertLeaderboardEntryUnlocked({
           uid: state.uid,
@@ -5172,22 +5369,67 @@ export class BurrowAuthoritativeBackend {
       state?.friendCode || (!isPlaceholderCode ? rawEntryCode : '') || `HS-${fnv1aHashHex(uid).slice(0, 4).toUpperCase()}-01`;
 
     const nowMs = this.now();
-    const incomingPrimary = Math.max(
+    const rawPrimary = Math.max(
       0,
       Math.min(maxPrimary, Math.floor(Number(params.entry.primaryValue) || 0))
     );
-    const incomingRating = Math.max(
+    const rawRating = Math.max(
       0,
       Math.min(9_999_999, Math.floor(Number(params.entry.ratingScore) || 0))
     );
-    const incomingWins = Math.max(
+    const rawWins = Math.max(
       0,
       Math.min(999_999, Math.floor(Number(params.entry.totalWins) || 0))
     );
-    const incomingStreak = Math.max(
+    const rawStreak = Math.max(
       0,
       Math.min(99_999, Math.floor(Number(params.entry.bestStreak) || 0))
     );
+
+    const rawPop = params.entry.proofOfPlay;
+    const requiresPop = rawPop !== undefined || params.entry.requireProofOfPlay === true;
+    let popVerifiedNow = false;
+    if (requiresPop) {
+      const verdict = verifyProofOfPlayEnvelope(rawPop, {
+        expectedGameId: gameId,
+        claimedPrimaryStage: rawPrimary,
+        claimedRatingScore: rawRating,
+        seenNonces: state?.usedPopNonces ?? [],
+      });
+      if (!verdict.ok) {
+        throw new BurrowServerError(
+          'invalid-proof-of-play',
+          verdict.messageVi ?? 'Bằng chứng ván chơi (Proof-of-Play) không hợp lệ!',
+          { gameId, popReason: verdict.reason ?? 'invalid-schema' },
+          422
+        );
+      }
+      popVerifiedNow = true;
+      if (state) {
+        const popEnv = rawPop as ProofOfPlayEnvelope;
+        const nextNonces = [...(state.usedPopNonces ?? []), popEnv.nonce];
+        state.usedPopNonces = nextNonces.slice(-64);
+      }
+    }
+
+    const clampedStats = popVerifiedNow
+      ? {
+          primaryValue: rawPrimary,
+          ratingScore: rawRating,
+          totalWins: rawWins,
+          bestStreak: rawStreak,
+        }
+      : clampUnverifiedLeaderboardStats({
+          gameId,
+          primaryValue: rawPrimary,
+          ratingScore: rawRating,
+          totalWins: rawWins,
+          bestStreak: rawStreak,
+        });
+    const incomingPrimary = clampedStats.primaryValue;
+    const incomingRating = clampedStats.ratingScore;
+    const incomingWins = clampedStats.totalWins;
+    const incomingStreak = clampedStats.bestStreak;
 
     const kvKey = `burrow_lb:${gameId}`;
     const existing = (await this.readJson<Array<Record<string, unknown>>>(kvKey)) ?? [];
@@ -5208,7 +5450,7 @@ export class BurrowAuthoritativeBackend {
         (targetNick !== null &&
           itemNick !== null &&
           itemNick === targetNick &&
-          (!isGeneratedGuestBackendUid(uid) || isGeneratedGuestBackendUid(itemUid)));
+          (!isGeneratedGuestBackendUid(uid) && isGeneratedGuestBackendUid(itemUid)));
 
       if (isSamePlayerGhost) {
         prev = prev
@@ -5249,6 +5491,7 @@ export class BurrowAuthoritativeBackend {
       totalWins: bestWins,
       bestStreak: bestStreak,
       detailLabelVi: String(params.entry.detailLabelVi || prev?.detailLabelVi || '').slice(0, 64),
+      popVerified: Boolean(popVerifiedNow || (prev?.popVerified && incomingPrimary <= prevPrimary)),
       updatedAt: nowMs,
     };
 

@@ -135,8 +135,86 @@ export const BUILD_HUD_CATEGORIES: ReadonlyArray<BuildingCategory> = [
   'shop',
   'creature',
   'decor',
-  'staff',
 ];
+
+const CUSTOM_CATALOG_PREVIEW_IDS = new Set([
+  'path_cobble',
+  'path_snow_brick',
+  'path_wood_pier',
+  'marble_bench',
+  'floating_candles_post',
+  'patronus_ward_lantern',
+]);
+
+export function isWinterChristmasBuildItem(
+  item: Pick<CatalogItem, 'id' | 'yuleCollection'>
+): boolean {
+  return Boolean(item.yuleCollection) || item.id.startsWith('yule_') || item.id === 'snowy_pines';
+}
+
+export function getCatalogCardImageSrc(
+  item: Pick<CatalogItem, 'id' | 'spriteKey'>
+): string | null {
+  if (item.spriteKey) {
+    return `/sprites/${item.spriteKey}.png`;
+  }
+  if (CUSTOM_CATALOG_PREVIEW_IDS.has(item.id)) {
+    return `/paintings/catalog/${item.id}.png`;
+  }
+  return null;
+}
+
+export interface BuildToolModeHost {
+  selectedCatalogItem: CatalogItem | null;
+  moveModeActive: boolean;
+  movingBuildingUid: string | null;
+  bulldozerActive: boolean;
+  pincerActive: boolean;
+  pincerPicked: { kind: 'staff'; id: string; label: string } | null;
+  pendingTouchTile: { gx: number; gy: number; label: string } | null;
+  onBuildStateReset?: (() => void) | null;
+}
+
+export function clearBuildToolModes(hud: BuildToolModeHost): void {
+  hud.selectedCatalogItem = null;
+  hud.moveModeActive = false;
+  hud.movingBuildingUid = null;
+  hud.bulldozerActive = false;
+  hud.pincerActive = false;
+  hud.pincerPicked = null;
+  hud.pendingTouchTile = null;
+  hud.onBuildStateReset?.();
+}
+
+export const RECENT_DECOR_STORAGE_KEY = 'hangsoc_recent_decor_v1';
+const MAX_RECENT_DECOR_ITEMS = 12;
+
+export function loadRecentDecorIds(): string[] {
+  try {
+    if (typeof localStorage === 'undefined') return [];
+    const raw = localStorage.getItem(RECENT_DECOR_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((x): x is string => typeof x === 'string' && x.length > 0)
+      .slice(0, MAX_RECENT_DECOR_ITEMS);
+  } catch {
+    return [];
+  }
+}
+
+export function pushRecentDecorId(current: ReadonlyArray<string>, itemId: string): string[] {
+  const next = [itemId, ...current.filter((id) => id !== itemId)].slice(0, MAX_RECENT_DECOR_ITEMS);
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(RECENT_DECOR_STORAGE_KEY, JSON.stringify(next));
+    }
+  } catch {
+    // Ignore storage quota errors
+  }
+  return next;
+}
 
 export const HEATMAP_CYCLE: Array<{ mode: HeatmapMode; label: string }> = [
   { mode: 'none', label: '🌡️ Nhiệt' },

@@ -7,8 +7,21 @@
  *    và tự động nhận thông báo `helpers` khi bạn bè sang chăm giúp thung lũng.
  */
 
-import { isGeneratedGuestUserId, useServerCalendarDayKey } from '../sim/neighborSocial';
-import type { HomeOwlLanternMark, HouseName, VerifiedRealPlayerProfile } from '../types/game';
+import {
+  isGeneratedGuestUserId,
+  prepareGameStateForPersistence,
+  useServerCalendarDayKey,
+} from '../sim/neighborSocial';
+import {
+  CURRENT_SAVE_SCHEMA_VERSION,
+  resolveCloudSaveConflict,
+} from '../sim/retentionAndNarrative';
+import type {
+  GameState,
+  HomeOwlLanternMark,
+  HouseName,
+  VerifiedRealPlayerProfile,
+} from '../types/game';
 
 export const SAVE_KEY = 'burrow_hogsmeade_777_v3';
 export const USER_ID_STORAGE_KEY = 'hangsoc_client_uid_v1';
@@ -17,6 +30,61 @@ export const SESSION_AUTH_ENDPOINT = '/api/auth/session';
 export const FRIEND_REGISTER_ENDPOINT = '/api/friends/register';
 export const FRIEND_LOOKUP_ENDPOINT = '/api/friends/lookup';
 export const DEFAULT_SYNC_INTERVAL_MS = 60_000;
+
+let cachedBootHpvnTicket: string | null = null;
+
+export function resolveApiUrl(endpoint: string): string {
+  if (!endpoint || /^https?:\/\//i.test(endpoint)) {
+    return endpoint;
+  }
+  const winCfg =
+    typeof window !== 'undefined'
+      ? (
+          window as Window & {
+            __HPVN_CONFIG__?: { apiOrigin?: string };
+          }
+        ).__HPVN_CONFIG__
+      : undefined;
+  const envOrigin = (
+    import.meta as ImportMeta & { env?: Record<string, string | undefined> }
+  ).env?.VITE_API_ORIGIN;
+  const rawOrigin = (winCfg?.apiOrigin ?? envOrigin ?? '').trim();
+  if (!rawOrigin) {
+    return endpoint;
+  }
+  const cleanOrigin = rawOrigin.replace(/\/+$/, '');
+  const cleanPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  return `${cleanOrigin}${cleanPath}`;
+}
+
+export function consumeHpvnTicketFromWindowHash(): string | null {
+  if (typeof window === 'undefined' || !window.location) {
+    return cachedBootHpvnTicket;
+  }
+  const rawHash = window.location.hash ? window.location.hash.slice(1) : '';
+  if (rawHash) {
+    const params = new URLSearchParams(rawHash);
+    const found = params.get('burrow-ticket') ?? params.get('hpvn-ticket');
+    if (found) {
+      cachedBootHpvnTicket = found;
+      params.delete('burrow-ticket');
+      params.delete('hpvn-ticket');
+      try {
+        if (window.history && typeof window.history.replaceState === 'function') {
+          const restHash = params.toString();
+          const cleanUrl = `${window.location.pathname}${window.location.search || ''}${
+            restHash ? `#${restHash}` : ''
+          }`;
+          window.history.replaceState(window.history.state, '', cleanUrl);
+        }
+      } catch {
+        // Ignore history restrictions in sandboxed iframes
+      }
+      return found;
+    }
+  }
+  return cachedBootHpvnTicket;
+}
 
 let cachedSessionToken: string | null = null;
 let cachedSessionExpiresAt = 0;
@@ -86,11 +154,9 @@ export async function acquireSessionBearerToken(uid = getOrCreateClientUserId())
     const getIdTokenFn =
       globalWin?.__HPVN_CONFIG__?.getIdToken ?? globalWin?.__HPVN_GET_ID_TOKEN__;
     const idToken = getIdTokenFn ? await getIdTokenFn().catch(() => null) : null;
-    const rawHash = typeof window !== 'undefined' && window.location?.hash ? window.location.hash.slice(1) : '';
-    const hashParams = rawHash ? new URLSearchParams(rawHash) : null;
-    const ticket = hashParams ? hashParams.get('burrow-ticket') ?? hashParams.get('hpvn-ticket') : null;
+    const ticket = consumeHpvnTicketFromWindowHash();
 
-    const res = await fetch(SESSION_AUTH_ENDPOINT, {
+    const res = await fetch(resolveApiUrl(SESSION_AUTH_ENDPOINT), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -152,11 +218,7 @@ async function withSaveStorageLock<T>(fn: () => Promise<T> | T): Promise<T> {
 }
 
 function hasEmbeddedHpvnTicketInHash(): boolean {
-  if (typeof window === 'undefined' || !window.location?.hash) return false;
-  const hash = window.location.hash.slice(1);
-  if (!hash) return false;
-  const params = new URLSearchParams(hash);
-  return Boolean(params.get('burrow-ticket') || params.get('hpvn-ticket'));
+  return Boolean(consumeHpvnTicketFromWindowHash());
 }
 
 function isAwaitingEmbeddedTicketUid(userId: string): boolean {
@@ -201,14 +263,14 @@ export async function registerRealPlayerProfileOnline(
       parkName: parsed.parkName || 'Trang Trại Hang Sóc',
       level: parsed.level || 1,
       housePoints: parsed.housePoints,
-      buildings: Array.isArray(parsed.buildings) ? parsed.buildings.slice(0, 260) : undefined,
+      buildings: Array.isArray(parsed.buildings) ? parsed.buildings.slice(0, 600) : undefined,
       tileOverrides: parsed.tileOverrides,
       unlockedZones: parsed.unlockedZones,
     });
     const gz = await tryGzipText(payload);
     const headers = buildAuthHeaders(userId, { 'Content-Type': 'application/json' });
     if (gz) headers['Content-Encoding'] = 'gzip';
-    const res = await fetch(FRIEND_REGISTER_ENDPOINT, {
+    const res = await fetch(resolveApiUrl(FRIEND_REGISTER_ENDPOINT), {
       method: 'POST',
       headers,
       body: gz ?? payload,
@@ -249,7 +311,7 @@ export async function lookupRealPlayerByFriendCode(rawCode: string): Promise<{
   }
 
   try {
-    const res = await fetch(`${FRIEND_LOOKUP_ENDPOINT}?code=${encodeURIComponent(cleaned)}`, {
+    const res = await fetch(`${resolveApiUrl(FRIEND_LOOKUP_ENDPOINT)}?code=${encodeURIComponent(cleaned)}`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
     });
@@ -488,9 +550,48 @@ export function shouldHydrateFromServerSave(
     return true;
   }
 
-  // Bản lưu trên đám mây vượt tiến trình cấp độ rõ rệt so với máy hiện tại
-  if (serverLevel > localLevel + 1) {
+  const localStars = Math.floor(
+    Number(
+      (localParsed.match3 as { stars?: number } | undefined)?.stars ??
+        localParsed.totalMagicStarsEarned ??
+        localParsed.magicStars ??
+        0
+    )
+  );
+  const serverStars = Math.floor(
+    Number(
+      (serverJson.match3 as { stars?: number } | undefined)?.stars ??
+        serverJson.totalMagicStarsEarned ??
+        serverJson.magicStars ??
+        0
+    )
+  );
+  const conflict = resolveCloudSaveConflict(
+    {
+      slotId: 'slot_1',
+      label: 'Local',
+      parkName: typeof localParsed.parkName === 'string' ? localParsed.parkName : 'Hang Sóc',
+      savedAt: localSavedAt,
+      level: localLevel,
+      magicStarsEarned: localStars,
+      schemaVersion: CURRENT_SAVE_SCHEMA_VERSION,
+    },
+    {
+      slotId: 'slot_1',
+      label: 'Remote',
+      parkName: typeof serverJson.parkName === 'string' ? serverJson.parkName : 'Hang Sóc',
+      savedAt: serverSavedAt,
+      level: serverLevel,
+      magicStarsEarned: serverStars,
+      schemaVersion: CURRENT_SAVE_SCHEMA_VERSION,
+    },
+    'highest_progress'
+  );
+  if (conflict.winner === 'remote' && conflict.reason !== 'tie_breaker_timestamp') {
     return true;
+  }
+  if (conflict.winner === 'local' && conflict.reason !== 'tie_breaker_timestamp') {
+    return false;
   }
 
   return serverSavedAt > localSavedAt || (localSavedAt === 0 && serverSavedAt > 0);
@@ -634,8 +735,11 @@ export class CloudSave {
       this.isUploading = true;
 
       try {
-        const url = `${this.endpoint}?userId=${encodeURIComponent(userId)}`;
-        const jsonText = JSON.stringify(parsed);
+        const slimPayload = prepareGameStateForPersistence(
+          parsed as unknown as GameState
+        ) as unknown as SaveMetadataGuard;
+        const url = `${resolveApiUrl(this.endpoint)}?userId=${encodeURIComponent(userId)}`;
+        const jsonText = JSON.stringify(slimPayload);
         const rawUtf8Bytes =
           typeof TextEncoder !== 'undefined'
             ? new TextEncoder().encode(jsonText).byteLength
@@ -712,7 +816,7 @@ export class CloudSave {
       const userId = this.getUserId();
 
       try {
-        const url = `${this.endpoint}?userId=${encodeURIComponent(userId)}`;
+        const url = `${resolveApiUrl(this.endpoint)}?userId=${encodeURIComponent(userId)}`;
         const res = await fetch(url, {
           method: 'GET',
           headers: buildAuthHeaders(userId, { Accept: 'application/json' }),
@@ -851,7 +955,15 @@ export class CloudSave {
             void this.uploadNow({ keepalive: true });
           });
         } else {
-          void this.uploadNow();
+          void this.downloadNow()
+            .catch(() => false)
+            .then((hydratedFromRemote) => {
+              if (!hydratedFromRemote) {
+                return this.uploadNow();
+              }
+              return false;
+            })
+            .catch(() => {});
         }
       });
     }

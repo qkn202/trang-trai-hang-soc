@@ -91,7 +91,34 @@ export type FarmCropId =
   | 'forest_bluebell'
   | 'blush_peony'
   | 'moonlight_flower'
-  | 'phoenix_fireflower';
+  | 'phoenix_fireflower'
+  | 'yule_poinsettia'
+  | 'yule_snowdrop'
+  | 'yule_hellebore'
+  | 'yule_holly_sprig'
+  | 'yule_paperwhite'
+  | 'yule_frost_cranberry'
+  | 'yule_amaryllis'
+  | 'yule_mistletoe'
+  | 'yule_dwarf_fir'
+  | 'yule_edelweiss'
+  | 'yule_winter_camellia'
+  | 'yule_frost_orchid';
+
+export type YuleCollectionId =
+  | 'burrow'
+  | 'hogwarts'
+  | 'hogsmeade'
+  | 'express'
+  | 'creatures'
+  | 'modular'
+  | 'landmarks'
+  | 'book_lore'
+  | 'yule_trees'
+  | 'yule_flowers'
+  | 'hogwarts_crests';
+
+export type YuleThemeMode = 'auto' | 'on' | 'off';
 
 export type FarmGoodId =
   | 'pumpkin_pie'
@@ -280,6 +307,7 @@ export interface CatalogItem {
   connectableGroup?: ConnectablePlotGroup; // Auto-merges shared wooden borders with same-group 2x2 neighbors
   workshopGroupId?: string; // Canon workshop recipe family ('molly_kitchen', 'knitting_loom', etc.)
   isThemeParkLegacy?: boolean; // Hidden theme-park coaster/ride/restroom legacy item
+  yuleCollection?: YuleCollectionId; // Christmas × Harry Potter 11-collection sub-filter tag
 }
 
 export interface TileOverrideData {
@@ -1246,6 +1274,14 @@ export interface RetentionNarrativeState {
   activeSaveSlotId: SaveSlotId;
 }
 
+export interface YuleEventState {
+  schemaVersion: number;
+  claimedMainDays: number[];
+  claimedSideTaskIds: string[];
+  unlockedAssetIds: string[];
+  purchasedAssetIds: string[];
+}
+
 export interface GameState {
   version: number;
   parkName: string;
@@ -1258,6 +1294,8 @@ export interface GameState {
   parkEntryFee: number; // 0..50 Galleons gate fee
   unlockedZones: ZoneId[];
   buildings: PlacedBuilding[];
+  /** Bảo toàn công trình từ bản mở rộng mới hơn khi mở trên tab/thiết bị cache cũ */
+  unknownBuildings?: PlacedBuilding[];
   tileOverrides: Record<string, TileOverrideData>;
   storyQuestIndex: number;
   storyQuestProgress: Record<string, number>;
@@ -1308,6 +1346,7 @@ export interface GameState {
     updatedAt: number;
   };
   retention?: RetentionNarrativeState;
+  yuleEvent?: YuleEventState;
   staffPatrolZones: Record<string, ZoneId | 'all'>;
   lastProphetHeadline?: {
     title: string;
@@ -1348,6 +1387,10 @@ export interface GameState {
     weatherOverride: WeatherOverride;
     timeOverride: TimeOverride;
     activeFestival: 'auto' | FestivalType;
+    yuleThemeMode?: YuleThemeMode;
+    rendererMode?: 'webgl2' | 'canvas';
+    youtubeBgmEnabled?: boolean;
+    youtubeBgmUrl?: string;
   };
   lastSavedAt: number;
 }

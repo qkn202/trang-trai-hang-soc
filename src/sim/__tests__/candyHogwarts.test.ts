@@ -936,4 +936,55 @@ describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
 
     engine.destroy();
   });
+
+  it('renders mobile-safe responsive action classes on Match3 out_of_moves rescue overlay without rigid flex-0% overflow', () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => storage.get(k) ?? null,
+      setItem: (k: string, v: string) => storage.set(k, v),
+      removeItem: (k: string) => storage.delete(k),
+      clear: () => storage.clear(),
+    });
+
+    const contentEl = {
+      innerHTML: '',
+      querySelector: () => null,
+      querySelectorAll: () => [],
+    };
+    const dialogEl = {
+      open: false,
+      returnValue: '',
+      addEventListener: () => {},
+      showModal() {
+        this.open = true;
+      },
+      close() {
+        this.open = false;
+      },
+    };
+    const rootStub = {
+      querySelector: (sel: string) => {
+        if (sel === '#match3Dialog') return dialogEl;
+        if (sel === '#match3DialogContent') return contentEl;
+        return null;
+      },
+    } as unknown as HTMLElement;
+
+    const sim = new ParkSimulation(new MagicalAudio());
+    sim.state.phoenixTalismans = 12;
+    const ctrl = new Match3ModalController(rootStub, sim, () => {}, () => {});
+    ctrl.open(15);
+
+    const eng = (ctrl as unknown as { engine: CandyHogwartsEngine | null }).engine;
+    expect(eng).not.toBeNull();
+    eng!.status = 'out_of_moves';
+    ctrl.renderDOM();
+
+    expect(contentEl.innerHTML).toContain('m3-overlay-actions');
+    expect(contentEl.innerHTML).toContain('id="btnM3RescuePhoenixTalisman"');
+    expect(contentEl.innerHTML).toContain('m3-overlay-btn-full');
+    expect(contentEl.innerHTML).toContain('m3-overlay-btn-primary');
+    expect(contentEl.innerHTML).toContain('m3-overlay-btn-half');
+    expect(contentEl.innerHTML).not.toContain('flex:1.4;min-width:170px');
+  });
 });

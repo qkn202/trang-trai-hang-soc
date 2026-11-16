@@ -83,6 +83,7 @@ import {
   NEIGHBOR_PRESET_NOTES,
 } from '../sim/neighborSocial';
 import {
+  AchievementCategory,
   BuildingCategory,
   CatalogItem,
   CraftedGoodId,
@@ -112,6 +113,7 @@ import {
   SuitcaseExpeditionId,
   TimeOverride,
   WeatherOverride,
+  YuleCollectionId,
   ZoneId,
 } from '../types/game';
 import { LeaderboardModalController } from './leaderboardModal';
@@ -122,16 +124,21 @@ import {
 import type { Match3ModalController } from './match3Modal';
 import type { PuzzleArcadeModalController } from './puzzleArcadeModal';
 import { SeedQuizModalController } from './seedQuizModal';
+import { DEFAULT_YOUTUBE_BGM_URL, YouTubeBgmController } from './youtubeBgmPlayer';
 
 import {
   BUILD_HUD_CATEGORIES,
   HEATMAP_CYCLE,
   InspectSelection,
+  clearBuildToolModes,
   escapeHtml,
+  loadRecentDecorIds,
+  pushRecentDecorId,
 } from "./hudShared";
 export {
   BUILD_HUD_CATEGORIES,
   HEATMAP_CYCLE,
+  clearBuildToolModes,
   escapeHtml,
 } from "./hudShared";
 export { formatToastMessage };
@@ -162,6 +169,8 @@ import {
   headerShowToast,
   headerShowOfflineModal,
   headerRefreshFloatingBanner,
+  headerRefreshYuleBanner,
+  headerYuleReadyToasts,
   headerRefreshTouchConfirmBar,
   headerRefreshAll,
   headerRefreshHeaderClock,
@@ -237,8 +246,12 @@ export class GameHUD {
   public cam: Camera;
   public gameCanvas: HTMLCanvasElement;
   public activeCategory: BuildingCategory | null = null;
+  public christmasTabActive = false;
+  public activeChristmasFilter: 'all' | 'recent' | YuleCollectionId = 'all';
   public selectedCatalogItem: CatalogItem | null = null;
   public rotation: 0 | 1 | 2 | 3 = 0;
+  public activeDecorFilter: 'all' | 'recent' | 'yule_all' | 'classic' | YuleCollectionId = 'all';
+  public recentDecorIds: string[] = [];
   public bulldozerActive = false;
   public moveModeActive = false;
   public movingBuildingUid: string | null = null;
@@ -258,6 +271,9 @@ export class GameHUD {
   public onTouchCancelPlace: (() => void) | null = null;
   public onSelectCatalogItem: ((item: CatalogItem) => void) | null = null;
   public onAutoPlaceSelected: (() => void) | null = null;
+  public onBuildStateReset: (() => void) | null = null;
+  public onRotateActivePlacement: (() => void) | null = null;
+  public onStartMoveBuilding: ((uid: string) => void) | null = null;
   public onCameraJump: (() => void) | null = null;
   public photoModeActive = false;
   public inspectSelection: InspectSelection = null;
@@ -277,6 +293,7 @@ export class GameHUD {
   public activeWorkshopTab: 'barn' | 'brew' | 'cargo' | 'synergy' = 'barn';
   public activeQuestTab: 'orders' | 'quests' = 'orders';
   public activeAlbumTab: 'cup' | 'achievements' | 'friendship' | 'login7' = 'cup';
+  public activeAchievementFilterCat: AchievementCategory | 'all' = 'all';
   public selectedOwlOrderId: string | null = null;
   public lastWsBrewId: string | null = null;
   public activeSuitcaseTab: 'care' | 'morph' | 'expedition' = 'care';
@@ -304,6 +321,7 @@ export class GameHUD {
   public lastRenderedTutorialSig = '';
   public lastFocusedTutorialStepKey = '';
   public ribbonBannerTimer = 0;
+  public yuleReadySig = '';
   public pendingBulldozeWarning: BulldozeHazardWarning | null = null;
   public drawerEdgeObserver: IntersectionObserver | null = null;
   private dialogOpenObserver: MutationObserver | null = null;
@@ -313,6 +331,7 @@ export class GameHUD {
   private puzzleArcadeModalPromise: Promise<PuzzleArcadeModalController> | null = null;
   public seedQuizModal!: SeedQuizModalController;
   public leaderboardModal!: LeaderboardModalController;
+  public youtubeBgm!: YouTubeBgmController;
 
   public root: HTMLElement;
   public sprites?: SpriteRegistry;
@@ -329,6 +348,7 @@ export class GameHUD {
     this.cam = cam;
     this.gameCanvas = gameCanvas;
     this.sprites = sprites;
+    this.recentDecorIds = loadRecentDecorIds();
     this.questCollapsed = window.innerHeight <= 520 || window.innerWidth <= 640;
     this.tutorialMinimized = Boolean(this.sim.state.tutorial?.minimized);
     this.minimapCollapsed =
@@ -363,12 +383,12 @@ export class GameHUD {
       () => this.refreshAll(),
       (msg, icon) => this.showToast(msg, icon),
       (cropId, pendingPlotUid) => {
-        this.activeSeedCropId = cropId;
         const c = FARM_CROPS[cropId];
         if (pendingPlotUid) {
           const selB = this.sim.state.buildings.find((x) => x.uid === pendingPlotUid);
           if (selB && getCatalogItem(selB.itemId)?.isFarmlandPlot && !selB.cropId) {
             const res = this.sim.plantCropOnPlot(selB.uid, cropId);
+            this.activeSeedCropId = null;
             this.seedTrayOpen = false;
             this.pendingSowPlotUid = null;
             this.inspectSelection = null;
@@ -377,14 +397,17 @@ export class GameHUD {
             return;
           }
         }
+        this.activeSeedCropId = this.sim.getSeedCount(cropId) > 0 || this.sim.state.sandboxMode ? cropId : null;
         this.seedTrayOpen = false;
         this.pendingSowPlotUid = null;
         this.inspectSelection = null;
         this.refreshAll();
-        this.showToast(
-          `🌱 Đang cầm hạt ${c.emoji} ${c.name} (Túi còn ${this.sim.getSeedCount(cropId)} hạt) — Nhấp hoặc kéo lướt qua Thửa Đất trống để gieo!`,
-          c.emoji
-        );
+        if (this.activeSeedCropId) {
+          this.showToast(
+            `🌱 Đang cầm hạt ${c.emoji} ${c.name} (Túi còn ${this.sim.getSeedCount(cropId)} hạt) — Nhấp hoặc kéo lướt qua Thửa Đất trống để gieo!`,
+            c.emoji
+          );
+        }
       }
     );
     this.seedQuizModal.onOpenLeaderboard = () => this.openLeaderboardDialog('match3');
@@ -419,6 +442,13 @@ export class GameHUD {
     };
     this.wireBulldozeConfirmDialog();
     this.wireDraggableBanner();
+    this.youtubeBgm = new YouTubeBgmController(this.sim.audio, {
+      onToast: (msg, icon) => this.showToast(msg, icon ?? '🎵'),
+      onStatusChange: () => {
+        const lbl = this.root.querySelector('#lblYoutubeBgmStatus') as HTMLElement | null;
+        if (lbl) lbl.textContent = this.youtubeBgm.getStatusText();
+      },
+    });
     this.bindEvents();
     this.applyStoredA11ySettings();
     this.refreshAll();
@@ -427,6 +457,8 @@ export class GameHUD {
     window.setInterval(() => {
       this.refreshHeaderClock();
       this.refreshFloatingBanner();
+      headerRefreshYuleBanner(this);
+      headerYuleReadyToasts(this);
       this.match3Modal?.tickLiveHeaderTimer();
       const wsDialog = this.root.querySelector('#workshopDialog') as HTMLDialogElement | null;
       if (wsDialog?.open) {
@@ -463,6 +495,51 @@ export class GameHUD {
 
   private mountDOM(): void { return shellMountDOM(this); }
 
+  public clearBuildToolModes(): void {
+    clearBuildToolModes(this);
+  }
+
+  public recordRecentDecorItem(itemId: string): void {
+    const it = getCatalogItem(itemId);
+    if (!it || it.category !== 'decor') return;
+    this.recentDecorIds = pushRecentDecorId(this.recentDecorIds, itemId);
+  }
+
+  public triggerRotateAction(): void {
+    if (this.sim.isVisitingNeighbor) {
+      this.showToast('Chế độ Khách Tham Quan — không thể xoay công trình vườn bạn!', '🏡');
+      return;
+    }
+    if (
+      !this.selectedCatalogItem &&
+      !(this.moveModeActive && this.movingBuildingUid) &&
+      this.inspectSelection?.kind === 'building'
+    ) {
+      const targetUid = this.inspectSelection.uid;
+      const b = this.sim.state.buildings.find((x) => x.uid === targetUid);
+      const item = b ? getCatalogItem(b.itemId) : undefined;
+      const res = this.sim.rotatePlacedBuilding(targetUid);
+      if (!res.ok) {
+        this.showToast(res.reason ?? 'Không thể xoay công trình tại vị trí này!', '⚠️');
+        return;
+      }
+      this.rotation = res.newRotation ?? this.rotation;
+      this.refreshAll();
+      this.showToast(
+        `🔄 Đã xoay "${item?.name ?? 'công trình'}" (${(res.newRotation ?? 0) * 90}°)`,
+        '🔄'
+      );
+      return;
+    }
+
+    this.rotation = ((this.rotation + 1) % 4) as 0 | 1 | 2 | 3;
+    this.onRotateActivePlacement?.();
+    this.refreshDock();
+    this.refreshFloatingBanner();
+    this.refreshTouchConfirmBar();
+    this.showToast(`🔄 Hướng đặt công trình: ${this.rotation * 90}°`, '🔄');
+  }
+
   private wireBulldozeConfirmDialog(): void {
     const dlg = this.root.querySelector('#bulldozeConfirmDialog') as HTMLDialogElement | null;
     if (!dlg) return;
@@ -473,7 +550,20 @@ export class GameHUD {
       const pending = this.pendingBulldozeWarning;
       this.pendingBulldozeWarning = null;
       if (action === 'confirm' && pending) {
-        this.sim.removeAtTile(pending.gx, pending.gy, true);
+        this.sim.beginBuildStroke();
+        let removed = false;
+        try {
+          removed = this.sim.removeAtTile(pending.gx, pending.gy, true);
+        } finally {
+          this.sim.commitBuildStroke();
+        }
+        if (
+          removed &&
+          this.inspectSelection?.kind === 'building' &&
+          this.inspectSelection.uid === pending.uid
+        ) {
+          this.inspectSelection = null;
+        }
         this.refreshAll();
       }
     });
@@ -941,12 +1031,26 @@ export class GameHUD {
     };
   }
 
+  public syncYouTubeBgm(): void {
+    if (!this.youtubeBgm) return;
+    const cfg = this.getEffectiveA11ySettings();
+    const vol0to1 = Math.max(0, Math.min(1, (cfg.volumes.master ?? 0.85) * (cfg.volumes.music ?? 0.85)));
+    const st = this.sim.state;
+    this.youtubeBgm.sync({
+      youtubeEnabled: Boolean(st.settings.youtubeBgmEnabled),
+      bgmEnabled: Boolean(st.settings.bgmEnabled),
+      rawUrl: st.settings.youtubeBgmUrl || DEFAULT_YOUTUBE_BGM_URL,
+      volume0to1: vol0to1,
+    });
+  }
+
   public applyStoredA11ySettings(): void {
     const cfg = this.getEffectiveA11ySettings();
     applyA11ySettingsToDocument(cfg);
     if (this.sim.audio?.ceiling) {
       syncA11yVolumesToAudio(cfg, this.sim.audio);
     }
+    this.syncYouTubeBgm();
   }
 
   public playStoryCutscene(chapterId: string): void {

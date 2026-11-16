@@ -184,10 +184,15 @@ Script `validate-sprites.mjs` kiểm tra đủ **172 sprite**, kích thước, t
   - `potions_runes_sudoku_bg.jpg` — Hầm Độc Dược & Cổ Ngữ ánh đèn đồng ấm (môn *Ma Trận Cửu Bảo Bối 9×9*).
   - `marauder_caro_bg.jpg` — Phòng Sinh Hoạt Chung Gryffindor & Bản Đồ Đạo Tặc (môn *Trận Pháp Ngũ Ấn Đạo Tặc 13×13*).
 - **8 bức tranh phong cảnh thế giới phù thủy (`p1_hogwarts_express.jpg` … `p8_hogwarts_moon.jpg`):** Minh hoạ sưu tầm trong kho tư liệu thung lũng.
-- **23 tệp PNG quân cờ & vật phẩm bàn cờ 2.5D nền trong suốt:**
+- **23 tệp PNG quân cờ & vật phẩm bàn cờ 2.5D nền trong suốt** (cùng bộ skin mùa lễ hội `chess-yule/`, `candy-yule/`, `caro-yule/`, `sudoku-yule/`, `jigsaw_yule_*.jpg` và `yule_*_bg.jpg`):
   - `public/paintings/chess/` (`12` file: `wk.png`..`wp.png`, `bk.png`..`bp.png`) — Bộ quân Cờ Phù Thủy Harry Potter Chibi 2.5D cẩm thạch kem vàng & hắc diện thạch.
   - `public/paintings/sudoku/` (`9` file: `relic_1.png`..`relic_9.png`) — 9 Bảo Bối Hogwarts trên bàn *Ma Trận Cửu Bảo Bối 9×9*.
   - `public/paintings/caro/` (`2` file: `phoenix_seal.png`, `dark_mark_seal.png`) — Cặp ấn sáp đối kháng Hội Phượng Hoàng & Tử Thần Thực Tử trên bàn *Trận Pháp Ngũ Ấn Đạo Tặc 13×13*.
+
+### 4.8 Bộ Sưu Tập Giáng Sinh × Harry Potter Mùa Tuyết (`104` sprite `yule_*` + `12` hạt hoa/cây `ui_icon_crop_yule_*` → Tổng `288` sprite)
+
+- **`104` sprite trang trí thế giới (`yule_*`, `≤ 380×380 px`, tỷ lệ `0.55..2.0`, Plinth-Free):** Bao gồm 11 Bộ Sưu Tập (*Gia Đình Hang Sóc*, *Dạ Vũ Đại Sảnh Đường*, *Phố Tuyết Hogsmeade*, *Sân Ga 9¾ & Cú Đưa Thư*, *Sinh Vật Trú Đông*, *Hàng Rào & Hồ Băng Mô-đun*, *Địa Danh Phù Thủy*, *Điển Tích 7 Tập Truyện*, *Rừng Thông & Đại Thụ Tuyết*, *Vườn Hoa Mùa Đông & Thảo Dược*, *4 Linh Vật 4 Nhà Chuẩn Truyện & Trường Hogwarts Thu Nhỏ `3×3`*).
+- **`12` sprite khóm hoa & cây Giáng Sinh gieo trồng trên luống nông trại (`ui_icon_crop_yule_*`, `160×160 px` vuông):** Hoa Trạng Nguyên, Hoa Hồng Giáng Sinh *Hellebore*, Hoa Xuyên Tuyết, Hoa Loa Kèn *Amaryllis*, Hoa Thủy Tiên Trắng, Bụi Nhựa Ruồi, Tầm Gửi Ngọc Trai, Hoa Nhung Tuyết *Edelweiss*, Hoa Trà My Đông, Hoa Lan Chuông Băng, Nam Việt Quất Tuyết & Cây Thông Non Ươm Tuyết.
 
 ---
 
@@ -196,9 +201,9 @@ Script `validate-sprites.mjs` kiểm tra đủ **172 sprite**, kích thước, t
 ```
 public/sprites/<key>.png
         │
-        ├─► src/engine/spriteLoader.ts   ← SPRITE_KEYS (danh sách 172 key) & ghép rào liền mạch mask12
+        ├─► src/engine/spriteLoader.ts   ← SPRITE_KEYS (danh sách 288 key) & ghép rào liền mạch mask12
         │      ├─► engine/groundBlend.ts ← hoà chân công trình tự nhiên vào cỏ (PLINTH_KEYS rỗng 0 mục)
-        │      ├─► engine/toon.ts        ← tuỳ chọn viền nâu Storybook (bỏ qua m3_*, ui_icon_*)
+        │      ├─► engine/toon.ts        ← tuỳ chọn viền nâu Storybook (bỏ qua m3_*, ui_icon_*, yule_*)
         │      ├─► mipmap 0.5x           ← vẽ nét mịn khi thu nhỏ toàn thung lũng
         │      └─► alpha bitmask 1/4     ← click chọn chính xác theo hình dáng công trình
         │
@@ -214,9 +219,9 @@ public/sprites/<key>.png
 ## 6. Checklist bàn giao
 
 1. PNG RGBA, nền trong suốt 100%, **không vẽ đế thớt dưới chân công trình/sinh vật**, không để sót mảng trắng khép kín bên trong.
-2. Đúng tên file trong danh mục **172 sprite**.
+2. Đúng tên file trong danh mục **288 sprite**.
 3. Đúng kích thước & tỉ lệ canvas theo nhóm (`160×160` vuông cho toàn bộ `m3_*` và `ui_icon_*`; `316×360` cho `npc_molly_*`).
-4. `node tools/validate-sprites.mjs` báo đủ `172` sprite, `0` lỗi, `0` cảnh báo.
+4. `node tools/validate-sprites.mjs` báo đủ `288` sprite, `0` lỗi, `0` cảnh báo.
 5. Nén ≤ 300KB (`pngquant -f 4 --strip`).
 
 ---

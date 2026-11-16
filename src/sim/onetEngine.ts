@@ -200,117 +200,117 @@ const ONET_PROGRESSION_TIERS: readonly OnetTierSpec[] = [
     cols: 6,
     speciesCount: 6,
     timeStartSec: 90,
-    timeEndSec: 86,
-    matchBonusSec: 2.0,
+    timeEndSec: 80,
+    matchBonusSec: 1.0,
     maxLives: 6,
   },
-  // Bậc 2 (Màn 4–7): 4 × 8 = 32 ô (16 cặp, 8 loài)
+  // Bậc 2 (Màn 4–7): 4 × 8 = 32 ô (16 cặp, 12 loài)
   {
     minStage: 4,
     maxStage: 7,
     rows: 4,
     cols: 8,
-    speciesCount: 8,
-    timeStartSec: 110,
-    timeEndSec: 104,
-    matchBonusSec: 2.0,
+    speciesCount: 12,
+    timeStartSec: 86,
+    timeEndSec: 80,
+    matchBonusSec: 1.0,
     maxLives: 6,
   },
-  // Bậc 3 (Màn 8–12): 5 × 8 = 40 ô (20 cặp, 10 loài)
+  // Bậc 3 (Màn 8–12): 5 × 8 = 40 ô (20 cặp, 15 loài)
   {
     minStage: 8,
     maxStage: 12,
     rows: 5,
     cols: 8,
-    speciesCount: 10,
-    timeStartSec: 125,
-    timeEndSec: 117,
-    matchBonusSec: 2.0,
-    maxLives: 7,
+    speciesCount: 15,
+    timeStartSec: 96,
+    timeEndSec: 88,
+    matchBonusSec: 1.0,
+    maxLives: 6,
   },
-  // Bậc 4 (Màn 13–19): 6 × 8 = 48 ô (24 cặp, 12 loài)
+  // Bậc 4 (Màn 13–19): 6 × 8 = 48 ô (24 cặp, 18 loài)
   {
     minStage: 13,
     maxStage: 19,
     rows: 6,
     cols: 8,
-    speciesCount: 12,
-    timeStartSec: 140,
-    timeEndSec: 130,
-    matchBonusSec: 1.8,
-    maxLives: 7,
+    speciesCount: 18,
+    timeStartSec: 106,
+    timeEndSec: 98,
+    matchBonusSec: 0.9,
+    maxLives: 6,
   },
-  // Bậc 5 (Màn 20–29): 6 × 10 = 60 ô (30 cặp, 15 loài)
+  // Bậc 5 (Màn 20–29): 6 × 10 = 60 ô (30 cặp, 22 loài)
   {
     minStage: 20,
     maxStage: 29,
     rows: 6,
     cols: 10,
-    speciesCount: 15,
-    timeStartSec: 162,
-    timeEndSec: 150,
-    matchBonusSec: 1.8,
-    maxLives: 8,
+    speciesCount: 22,
+    timeStartSec: 122,
+    timeEndSec: 112,
+    matchBonusSec: 0.9,
+    maxLives: 6,
   },
-  // Bậc 6 (Màn 30–44): 6 × 12 = 72 ô (36 cặp, 18 loài)
+  // Bậc 6 (Màn 30–44): 6 × 12 = 72 ô (36 cặp, 26 loài)
   {
     minStage: 30,
     maxStage: 44,
     rows: 6,
     cols: 12,
-    speciesCount: 18,
-    timeStartSec: 182,
-    timeEndSec: 168,
-    matchBonusSec: 1.6,
-    maxLives: 8,
+    speciesCount: 26,
+    timeStartSec: 138,
+    timeEndSec: 126,
+    matchBonusSec: 0.8,
+    maxLives: 6,
   },
-  // Bậc 7 (Màn 45–64): 7 × 12 = 84 ô (42 cặp, 21 loài)
+  // Bậc 7 (Màn 45–64): 7 × 12 = 84 ô (42 cặp, 30 loài)
   {
     minStage: 45,
     maxStage: 64,
     rows: 7,
     cols: 12,
-    speciesCount: 21,
-    timeStartSec: 200,
-    timeEndSec: 185,
-    matchBonusSec: 1.6,
-    maxLives: 9,
+    speciesCount: 30,
+    timeStartSec: 152,
+    timeEndSec: 140,
+    matchBonusSec: 0.8,
+    maxLives: 5,
   },
-  // Bậc 8 (Màn 65–94): 8 × 12 = 96 ô (48 cặp, 24 loài)
+  // Bậc 8 (Màn 65–94): 8 × 12 = 96 ô (48 cặp, 33 loài)
   {
     minStage: 65,
     maxStage: 94,
     rows: 8,
     cols: 12,
-    speciesCount: 24,
-    timeStartSec: 218,
-    timeEndSec: 200,
-    matchBonusSec: 1.5,
-    maxLives: 9,
+    speciesCount: 33,
+    timeStartSec: 166,
+    timeEndSec: 152,
+    matchBonusSec: 0.75,
+    maxLives: 5,
   },
-  // Bậc 9 (Màn 95–139): 8 × 14 = 112 ô (56 cặp, 28 loài)
+  // Bậc 9 (Màn 95–139): 8 × 14 = 112 ô (56 cặp, 35 loài)
   {
     minStage: 95,
     maxStage: 139,
     rows: 8,
     cols: 14,
-    speciesCount: 28,
-    timeStartSec: 240,
-    timeEndSec: 220,
-    matchBonusSec: 1.5,
-    maxLives: 10,
+    speciesCount: 35,
+    timeStartSec: 182,
+    timeEndSec: 166,
+    matchBonusSec: 0.7,
+    maxLives: 5,
   },
-  // Bậc 10 (Màn 140–199): 9 × 14 = 126 ô (63 cặp, 32 loài)
+  // Bậc 10 (Màn 140–199): 9 × 14 = 126 ô (63 cặp, 36 loài)
   {
     minStage: 140,
     maxStage: 199,
     rows: 9,
     cols: 14,
-    speciesCount: 32,
-    timeStartSec: 258,
-    timeEndSec: 236,
-    matchBonusSec: 1.4,
-    maxLives: 10,
+    speciesCount: 36,
+    timeStartSec: 196,
+    timeEndSec: 178,
+    matchBonusSec: 0.65,
+    maxLives: 5,
   },
   // Bậc 11 (Màn 200–399): 9 × 16 = 144 ô (72 cặp, đủ 36 loài chuẩn Pikachu 2003)
   {
@@ -319,10 +319,10 @@ const ONET_PROGRESSION_TIERS: readonly OnetTierSpec[] = [
     rows: 9,
     cols: 16,
     speciesCount: 36,
-    timeStartSec: 280,
-    timeEndSec: 250,
-    matchBonusSec: 1.3,
-    maxLives: 10,
+    timeStartSec: 212,
+    timeEndSec: 188,
+    matchBonusSec: 0.6,
+    maxLives: 5,
   },
   // Bậc 12 (Màn 400–777): 10 × 16 = 160 ô (80 cặp, đại trận kiện tướng)
   {
@@ -331,10 +331,10 @@ const ONET_PROGRESSION_TIERS: readonly OnetTierSpec[] = [
     rows: 10,
     cols: 16,
     speciesCount: 36,
-    timeStartSec: 295,
-    timeEndSec: 245,
-    matchBonusSec: 1.2,
-    maxLives: 10,
+    timeStartSec: 220,
+    timeEndSec: 180,
+    matchBonusSec: 0.55,
+    maxLives: 5,
   },
 ];
 
@@ -463,7 +463,7 @@ export class CreatureOnetEngine {
       : locName;
 
     this.lives = this.maxLives;
-    this.freeHintsLeft = this.stage <= 25 ? 3 : this.stage <= 140 ? 2 : 1;
+    this.freeHintsLeft = this.stage <= 8 ? 2 : this.stage <= 45 ? 1 : 0;
     this.paidHintsLeft = 3;
     this.paidShufflesLeft = 3;
     this.hintGoldCost = Math.min(190, 45 + Math.floor(this.stage / 7));
@@ -596,13 +596,13 @@ export class CreatureOnetEngine {
       Array.from({ length: this.cols }, (_, c) => deck[r * this.cols + c])
     );
 
-    // Higher stages scatter adjacent identical pairs slightly to reward 2- and 3-segment paths
+    // Higher stages scatter adjacent identical pairs from stage 2+ to reward 2- and 3-segment paths
     const antiClumpProb =
-      this.stage <= 9
+      this.stage <= 1
         ? 0
-        : Math.min(0.75, 0.18 + ((this.stage - 9) / 768) * 0.57);
+        : Math.min(0.88, 0.28 + ((this.stage - 2) / 775) * 0.6);
     if (antiClumpProb > 0) {
-      const passes = this.stage >= 300 ? 2 : 1;
+      const passes = this.stage >= 150 ? 2 : 1;
       for (let pass = 0; pass < passes; pass++) {
         for (let r = 0; r < this.rows; r++) {
           for (let c = 0; c < this.cols; c++) {
@@ -1138,6 +1138,9 @@ export class CreatureOnetEngine {
     const waypoints = this.findConnectionPath(prev, { r, c });
     if (!waypoints) {
       this.combo = 0;
+      if (this.stage >= 4 && this.timeRemainingSec > 0) {
+        this.timeRemainingSec = Math.max(0, this.timeRemainingSec - 2);
+      }
       this.selected = { r, c };
       return { action: 'blocked' };
     }

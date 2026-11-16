@@ -449,7 +449,7 @@ export function splitWordIntoKidTiles(rawWord: string, lang: QuizLanguageId): st
   // If multi-word phrase (e.g. "every morning" or "bear fruit"), split by spaces or into syllable chunks
   if (core.includes(' ')) {
     const parts = core.split(/\s+/).filter(Boolean);
-    if (parts.length >= 2 && parts.length <= 6) {
+    if (parts.length >= 2 && parts.length <= 7) {
       return parts;
     }
   }
@@ -476,10 +476,12 @@ function getDistractorLexiconEntries(
   excludeMeaningVi: string,
   levelBand: number,
   count = 3,
-  excludeId?: string
+  excludeId?: string,
+  preferPosVi?: string
 ): QuizLexiconEntry[] {
   const targetShortVi = formatShortKidMeaningVi(excludeMeaningVi).toLowerCase();
   const targetWordLower = excludeWord.trim().toLowerCase();
+  const targetLen = excludeWord.trim().length;
   const sameLang = QUIZ_LEXICON_BANK.filter(
     (e) =>
       e.lang === lang &&
@@ -488,9 +490,17 @@ function getDistractorLexiconEntries(
   );
   const strictPool = sameLang
     .filter((e) => formatShortKidMeaningVi(e.meaningVi).toLowerCase() !== targetShortVi)
-    .sort((a, b) => Math.abs(a.levelBand - levelBand) - Math.abs(b.levelBand - levelBand));
+    .sort((a, b) => {
+      const posDiffA = preferPosVi && a.posVi === preferPosVi ? 0 : preferPosVi ? 1 : 0;
+      const posDiffB = preferPosVi && b.posVi === preferPosVi ? 0 : preferPosVi ? 1 : 0;
+      if (posDiffA !== posDiffB) return posDiffA - posDiffB;
+      const bandDiffA = Math.abs(a.levelBand - levelBand);
+      const bandDiffB = Math.abs(b.levelBand - levelBand);
+      if (bandDiffA !== bandDiffB) return bandDiffA - bandDiffB;
+      return Math.abs(a.word.trim().length - targetLen) - Math.abs(b.word.trim().length - targetLen);
+    });
 
-  const picked = shuffleArray(strictPool.slice(0, Math.max(count * 4, 12))).slice(0, count);
+  const picked = shuffleArray(strictPool.slice(0, Math.max(count + 3, 6))).slice(0, count);
   if (picked.length < count) {
     const pickedIds = new Set(picked.map((p) => p.id));
     for (const fallback of shuffleArray(sameLang)) {
@@ -562,15 +572,23 @@ function buildFromCurated(item: CuratedQuizItem, isReview: boolean): ActiveQuizC
     base.promptVi = `🧩 Nhìn tranh "${heroVisual.shortVi}" và ghép các mảnh chữ:`;
     base.stemText = heroVisual.shortVi;
     base.stemPhonetic = primaryNote.phonetic;
-    let expectedTiles = splitWordIntoKidTiles(primaryNote.word, item.lang);
-    if (expectedTiles.length < 2) {
-      const sentenceParts = Array.isArray(item.orderedTokens)
-        ? item.orderedTokens.filter((tok: string) => Boolean(tok && tok.trim().length > 0))
-        : [];
-      expectedTiles =
-        sentenceParts.length >= 2 && sentenceParts.length <= 6
-          ? sentenceParts
-          : splitWordIntoKidTiles(item.fullSentence, item.lang);
+    const sentenceParts = Array.isArray(item.orderedTokens)
+      ? item.orderedTokens.filter((tok: string) => Boolean(tok && tok.trim().length > 0))
+      : [];
+    const preferFullSentence =
+      (item.tier !== 'beginner' || item.levelBand >= 3) &&
+      sentenceParts.length >= 2 &&
+      sentenceParts.length <= 7;
+    let expectedTiles = preferFullSentence
+      ? sentenceParts
+      : splitWordIntoKidTiles(primaryNote.word, item.lang);
+    if (preferFullSentence || expectedTiles.length < 2) {
+      if (expectedTiles.length < 2) {
+        expectedTiles =
+          sentenceParts.length >= 2 && sentenceParts.length <= 7
+            ? sentenceParts
+            : splitWordIntoKidTiles(item.fullSentence, item.lang);
+      }
       base.promptVi = `🧩 Nhìn tranh "${heroVisual.shortVi}" và ghép câu "${item.translationVi}":`;
       base.stemText = item.translationVi;
       base.stemPhonetic = item.fullPhonetic;
@@ -598,7 +616,9 @@ function buildFromCurated(item: CuratedQuizItem, isReview: boolean): ActiveQuizC
     primaryNote.word,
     primaryNote.meaningVi,
     item.levelBand,
-    3
+    3,
+    undefined,
+    primaryNote.posVi
   );
   const tagged = [
     {
@@ -809,7 +829,13 @@ function buildLexiconTilesChallenge(
   const usedSprites = new Set<string>();
   const heroVisual = getQuizVisualCardMeta(target.meaningVi, target.word, target.id, usedSprites);
 
-  let expectedTiles = splitWordIntoKidTiles(target.word, target.lang);
+  const wordTiles = splitWordIntoKidTiles(target.word, target.lang);
+  const preferSentence = target.tier !== 'beginner' || target.levelBand >= 3;
+  const sentenceTiles = splitWordIntoKidTiles(target.exampleSentence, target.lang);
+  let expectedTiles =
+    preferSentence && sentenceTiles.length >= 2 ? sentenceTiles : wordTiles;
+  const usingSentence =
+    (preferSentence && sentenceTiles.length >= 2) || wordTiles.length < 2;
   let promptVi = `🧩 Nhìn tranh "${heroVisual.shortVi}" và ghép các mảnh chữ:`;
   let stemText = heroVisual.shortVi;
   let stemPhonetic = target.phonetic;
@@ -818,11 +844,8 @@ function buildLexiconTilesChallenge(
   let ttsPromptText = target.word;
   let translationVi = heroVisual.shortVi;
 
-  if (expectedTiles.length < 2) {
-    expectedTiles = splitWordIntoKidTiles(target.exampleSentence, target.lang);
-    if (expectedTiles.length < 2) {
-      expectedTiles = [target.word, target.exampleSentence];
-    }
+  if (usingSentence) {
+    expectedTiles = sentenceTiles.length >= 2 ? sentenceTiles : [target.word, target.exampleSentence];
     promptVi = `🧩 Nhìn tranh "${heroVisual.shortVi}" và ghép câu "${target.exampleVi}":`;
     stemText = target.exampleVi;
     stemPhonetic = target.examplePhonetic;
@@ -882,13 +905,15 @@ function buildMatchPairsChallenge(
 ): ActiveQuizChallenge {
   const usedSprites = new Set<string>();
   const anchorVis = getQuizVisualCardMeta(anchor.meaningVi, anchor.word, anchor.id, usedSprites);
+  const peerCount = anchor.levelBand >= 2 || anchor.tier !== 'beginner' ? 3 : 2;
   const peers = getDistractorLexiconEntries(
     anchor.lang,
     anchor.word,
     anchor.meaningVi,
     anchor.levelBand,
-    2,
-    anchor.id
+    peerCount,
+    anchor.id,
+    anchor.posVi
   );
 
   const trio = [anchor, ...peers];
@@ -947,15 +972,15 @@ function buildMatchPairsChallenge(
 }
 
 export function computeTargetBand(profile: LanguageProfileState, parkLevel: number): number {
-  // Blend user's adaptive masteryScore (80% weight) with park progression level 1..100 (20% weight)
+  // Blend user's adaptive masteryScore with accelerated progression curve
   const clampedPark = Math.max(1, Math.min(100, parkLevel));
-  let blended = profile.masteryScore * 0.8 + clampedPark * 0.2;
+  let blended = profile.masteryScore * 0.8 + clampedPark * 0.25 + 6;
   if (profile.tier === 'beginner') {
-    blended = Math.max(1, Math.min(38, blended));
+    blended = Math.max(1, Math.min(45, blended));
   } else if (profile.tier === 'intermediate') {
-    blended = Math.max(31, Math.min(75, blended));
+    blended = Math.max(35, Math.min(80, blended));
   } else {
-    blended = Math.max(71, Math.min(100, blended));
+    blended = Math.max(75, Math.min(100, blended));
   }
   return Math.max(1, Math.min(10, Math.ceil(blended / 10)));
 }
@@ -1305,14 +1330,14 @@ export function recordQuizAttempt(
     prof.streak += 1;
     prof.bestStreak = Math.max(prof.bestStreak, prof.streak);
 
-    const gain = prof.streak >= 3 ? 6 : 4;
+    const gain = prof.streak >= 5 ? 4 : 3;
     prof.masteryScore = Math.min(100, prof.masteryScore + gain);
 
     let tierAutoPromoted: QuizProficiencyTier | undefined;
-    if (prof.tier === 'beginner' && prof.masteryScore >= 38 && prof.streak >= 3) {
+    if (prof.tier === 'beginner' && prof.masteryScore >= 45 && prof.streak >= 5) {
       prof.tier = 'intermediate';
       tierAutoPromoted = 'intermediate';
-    } else if (prof.tier === 'intermediate' && prof.masteryScore >= 75 && prof.streak >= 3) {
+    } else if (prof.tier === 'intermediate' && prof.masteryScore >= 82 && prof.streak >= 5) {
       prof.tier = 'advanced';
       tierAutoPromoted = 'advanced';
     }
@@ -1353,9 +1378,9 @@ export function recordQuizAttempt(
     };
   }
 
-  // Wrong answer -> gentle adaptive step down + drop to Leitner Box 1 (review in 2 turns)!
+  // Wrong answer -> steeper penalty + drop to Leitner Box 1 (review in 2 turns)!
   prof.streak = 0;
-  prof.masteryScore = Math.max(1, prof.masteryScore - 4);
+  prof.masteryScore = Math.max(1, prof.masteryScore - 7);
 
   const prevSrs = prof.srsBoxes[challenge.qId];
   prof.srsBoxes[challenge.qId] = {

@@ -171,6 +171,7 @@ export class MagicalAudio {
   private ctx: AudioContext | null = null;
   public enabled = true; // SFX enabled
   public bgmEnabled = true; // Cozy Symphonic Celesta BGM enabled
+  public externalBgmActive = false; // True when streaming direct YouTube BGM (0 server bandwidth)
   public readonly ceiling = new AudioCeilingController();
   private unlocked = false;
   private streakCount = 0;
@@ -211,7 +212,7 @@ export class MagicalAudio {
       }
       this.ensureSfxAtlasLoaded();
       // If BGM should be active, trigger play on the currently targeted slot
-      if (this.bgmEnabled) {
+      if (this.bgmEnabled && !this.externalBgmActive) {
         const active = this.activeSlotId === 'A' ? this.slotA : this.slotB;
         if (active.audio && active.audio.paused && active.targetGain > 0) {
           active.audio.play().then(() => {
@@ -436,8 +437,8 @@ export class MagicalAudio {
     }
   }
 
-  /** Fade out all BGM tracks (e.g. when player disables BGM). */
-  private stopBgm(): void {
+  /** Fade out all BGM tracks (e.g. when player disables BGM or enables YouTube BGM). */
+  public stopBgm(): void {
     this.slotA.targetGain = 0;
     this.slotA.gain = 0;
     if (this.slotA.audio && !this.slotA.audio.paused) {
@@ -693,7 +694,7 @@ export class MagicalAudio {
     this.setRainIntensity(rainTarget);
 
     // 1. Adaptive 5-Mood Background Music & Crossfade
-    if (this.bgmEnabled) {
+    if (this.bgmEnabled && !this.externalBgmActive) {
       const effectiveTime: 'dawn' | 'day' | 'dusk' | 'night' =
         timeOfDay ?? (isNight ? 'night' : 'day');
       const mood = pickBgmMood(

@@ -343,6 +343,14 @@ export function creaturesCastAccioHarvestAll(sim: ParkSimulation): void {
         }
         continue;
       }
+      if (it?.isAnimalPasturePlot) {
+        if (b.pastureAnimalId && b.pastureReadyAt && now >= b.pastureReadyAt) {
+          if (sim.harvestAnimalPasture(b.uid).ok) {
+            count++;
+          }
+        }
+        continue;
+      }
       let remainingGoods: FarmGoodId[] = [];
       let collectedAnyGood = false;
       if (b.readyFarmGoods && b.readyFarmGoods.length > 0) {
@@ -481,8 +489,12 @@ export function creaturesAddCreatureBondXp(sim: ParkSimulation, b: PlacedBuildin
     }
 }
 
+function getHomeCreatureBuildings(sim: ParkSimulation): PlacedBuilding[] {
+  return (sim.homeStateWhileVisiting ?? sim.state).buildings;
+}
+
 export function creaturesRenameCreature(sim: ParkSimulation, uid: string, rawName: string): { ok: boolean; name: string; msg: string } {
-    const b = sim.state.buildings.find((x) => x.uid === uid);
+    const b = getHomeCreatureBuildings(sim).find((x) => x.uid === uid);
     if (!b) return { ok: false, name: '', msg: 'Không tìm thấy sinh vật này.' };
     const item = getCatalogItem(b.itemId);
     if (!item?.isCreatureHabitat) {
@@ -505,7 +517,7 @@ export function creaturesRenameCreature(sim: ParkSimulation, uid: string, rawNam
 
 export function creaturesGroomCreature(sim: ParkSimulation, uid: string): { ok: boolean; msg: string } {
     const now = Date.now();
-    const b = sim.state.buildings.find((x) => x.uid === uid);
+    const b = getHomeCreatureBuildings(sim).find((x) => x.uid === uid);
     if (!b) return { ok: false, msg: 'Không tìm thấy chuồng thú.' };
     const item = getCatalogItem(b.itemId);
     if (!item?.isCreatureHabitat || now < b.constructEndsAt) {
@@ -543,7 +555,9 @@ export function creaturesGroomCreature(sim: ParkSimulation, uid: string): { ok: 
     }
 
     sim.audio.playHarvestBubble();
-    sim.spawnFloatingText(b.gx + 1, b.gy + 1, `🪮 Chải lông êm ái! +30 💝`, '#f9a8d4');
+    if (!sim.isVisitingNeighbor) {
+      sim.spawnFloatingText(b.gx + 1, b.gy + 1, `🪮 Chải lông êm ái! +30 💝`, '#f9a8d4');
+    }
     sim.saveToStorage();
     sim.onUiChange?.();
     return {
@@ -554,7 +568,7 @@ export function creaturesGroomCreature(sim: ParkSimulation, uid: string): { ok: 
 
 export function creaturesTrainCreatureTrick(sim: ParkSimulation, uid: string): { ok: boolean; msg: string } {
     const now = Date.now();
-    const b = sim.state.buildings.find((x) => x.uid === uid);
+    const b = getHomeCreatureBuildings(sim).find((x) => x.uid === uid);
     if (!b) return { ok: false, msg: 'Không tìm thấy chuồng thú.' };
     const item = getCatalogItem(b.itemId);
     if (!item?.isCreatureHabitat || now < b.constructEndsAt) {
@@ -584,7 +598,9 @@ export function creaturesTrainCreatureTrick(sim: ParkSimulation, uid: string): {
     const trickLabel = profile?.trickName ?? 'Vũ Điệu Phép Thuật';
     const petLabel = b.creatureNickname || item.creatureName || item.name;
     sim.audio.playSpell();
-    sim.spawnFloatingText(b.gx + 1, b.gy + 1, `🎾 ${trickLabel}! +45 💝`, '#fde047');
+    if (!sim.isVisitingNeighbor) {
+      sim.spawnFloatingText(b.gx + 1, b.gy + 1, `🎾 ${trickLabel}! +45 💝`, '#fde047');
+    }
     sim.saveToStorage();
     sim.onUiChange?.();
     return {
@@ -602,7 +618,7 @@ export function creaturesStartMorphIncubation(sim: ParkSimulation, habitatUid: s
     if (sim.state.suitcase.activeIncubation) {
       return { ok: false, msg: 'Lồng Ấp Cổ Ngữ đang ấp một quả trứng khác rồi!' };
     }
-    const b = sim.state.buildings.find((x) => x.uid === habitatUid);
+    const b = getHomeCreatureBuildings(sim).find((x) => x.uid === habitatUid);
     if (!b) return { ok: false, msg: 'Không tìm thấy sinh vật để kết tinh trứng cổ ngữ.' };
     const item = getCatalogItem(b.itemId);
     if (!item?.isCreatureHabitat || now < b.constructEndsAt) {
@@ -672,7 +688,7 @@ export function creaturesClaimMorphIncubation(sim: ParkSimulation): {
       return { ok: false, msg: `Trứng đang kết tinh phép thuật (${left}s nữa)!` };
     }
 
-    const b = sim.state.buildings.find((x) => x.uid === inc.habitatUid);
+    const b = getHomeCreatureBuildings(sim).find((x) => x.uid === inc.habitatUid);
     const item = getCatalogItem(inc.itemId);
     const roll = Math.random();
     let hatchedMorph: CreatureMorphVariant = 'normal';
@@ -701,12 +717,14 @@ export function creaturesClaimMorphIncubation(sim: ParkSimulation): {
       }
       b.creatureHappiness = 100;
       creaturesAddCreatureBondXp(sim, b, item, 40);
-      sim.spawnFloatingText(
-        b.gx + 1,
-        b.gy + 1,
-        `${MORPH_INFO[hatchedMorph].badge}!`,
-        hatchedMorph === 'radiant' ? '#fde047' : '#38bdf8'
-      );
+      if (!sim.isVisitingNeighbor) {
+        sim.spawnFloatingText(
+          b.gx + 1,
+          b.gy + 1,
+          `${MORPH_INFO[hatchedMorph].badge}!`,
+          hatchedMorph === 'radiant' ? '#fde047' : '#38bdf8'
+        );
+      }
     }
 
     const profile = getSpeciesProfile(inc.itemId);
@@ -736,7 +754,7 @@ export function creaturesStartSuitcaseExpedition(sim: ParkSimulation,
       return { ok: false, msg: `Cần Công viên đạt Cấp ${exp.minParkLevel} để mở tuyến "${exp.name}"!` };
     }
 
-    const b = sim.state.buildings.find((x) => x.uid === habitatUid);
+    const b = getHomeCreatureBuildings(sim).find((x) => x.uid === habitatUid);
     if (!b) return { ok: false, msg: 'Hãy chọn một sinh vật khỏe mạnh để cử đi thám hiểm.' };
     const item = getCatalogItem(b.itemId);
     if (!item?.isCreatureHabitat || now < b.constructEndsAt) {
@@ -791,7 +809,7 @@ export function creaturesClaimSuitcaseExpedition(sim: ParkSimulation): { ok: boo
     }
 
     const exp = SUITCASE_EXPEDITIONS.find((e) => e.id === act.expeditionId) ?? SUITCASE_EXPEDITIONS[0];
-    const b = sim.state.buildings.find((x) => x.uid === act.habitatUid);
+    const b = getHomeCreatureBuildings(sim).find((x) => x.uid === act.habitatUid);
     const item = b ? getCatalogItem(b.itemId) : undefined;
 
     const bondMult = getBondIncomeMultiplier(b?.creatureBondLevel ?? 1);
@@ -821,9 +839,11 @@ export function creaturesClaimSuitcaseExpedition(sim: ParkSimulation): { ok: boo
 
     if (b && item) {
       creaturesAddCreatureBondXp(sim, b, item, 35);
-      sim.tryDropWizardCard(b.gx + 1, b.gy + 1, exp.cardDropChance);
-      sim.spawnFloatingText(b.gx + 1, b.gy + 1, `🧭 +${rewardGold}G ${herbParts.join(' ')}`, '#fde047');
-    } else {
+      if (!sim.isVisitingNeighbor) {
+        sim.tryDropWizardCard(b.gx + 1, b.gy + 1, exp.cardDropChance);
+        sim.spawnFloatingText(b.gx + 1, b.gy + 1, `🧭 +${rewardGold}G ${herbParts.join(' ')}`, '#fde047');
+      }
+    } else if (!sim.isVisitingNeighbor) {
       sim.tryDropWizardCard(24, 24, exp.cardDropChance);
     }
 

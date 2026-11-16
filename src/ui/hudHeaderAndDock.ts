@@ -3,6 +3,7 @@
 
 import {
   CATALOG,
+  computeRealTimeBuildSeconds,
   FARM_CROPS,
   FARM_GOODS,
   formatDurationCompactVi,
@@ -66,11 +67,13 @@ import {
   getItemPriceBounds,
   getUpgradeCost,
   IS_SANDBOX_BUILD_ENABLED,
+  isDragPaintableCatalogItem,
   isSandboxRuntimeAllowed,
   MAX_PHOENIX_TALISMANS,
   ParkSimulation,
   PHOENIX_FORGE_GOLD_COST,
 } from '../sim/simulation';
+import { worldGetStashedDecorCount } from '../sim/simulationWorld';
 import {
   FRIENDSHIP_CHEST_TOKEN_COST,
   getMinigameKindLabelVi,
@@ -108,6 +111,7 @@ import {
   SuitcaseExpeditionId,
   TimeOverride,
   WeatherOverride,
+  YuleCollectionId,
   ZoneId,
 } from '../types/game';
 import { LeaderboardModalController } from './leaderboardModal';
@@ -122,12 +126,18 @@ import {
   BUILD_HUD_CATEGORIES,
   HEATMAP_CYCLE,
   InspectSelection,
+  clearBuildToolModes,
   escapeHtml,
+  getCatalogCardImageSrc,
+  isWinterChristmasBuildItem,
 } from "./hudShared";
 import type { GameHUD } from './hud';
 
 export function headerTogglePhotoMode(hud: GameHUD, force?: boolean): void {
     hud.photoModeActive = typeof force === 'boolean' ? force : !hud.photoModeActive;
+    if (typeof document !== 'undefined') {
+      document.body.dataset.photoMode = hud.photoModeActive ? 'true' : 'false';
+    }
     const isVisiting = hud.sim.isVisitingNeighbor;
     (hud.root.querySelector('#hudFrameTop') as HTMLElement).classList.toggle('hidden', hud.photoModeActive);
     (hud.root.querySelector('#bottomDockWrap') as HTMLElement).classList.toggle(
@@ -142,9 +152,18 @@ export function headerTogglePhotoMode(hud: GameHUD, force?: boolean): void {
       hud.moveModeActive ||
       hud.bulldozerActive ||
       hud.pincerActive;
+    const isBottomToolOverlayOpen =
+      hud.buildSheetOpen ||
+      Boolean(hud.activeCategory) ||
+      hud.mapToolsExpanded ||
+      hud.seedTrayOpen ||
+      hud.pastureTrayOpen;
     hud.root
       .querySelector('#tsCornerRight')
-      ?.classList.toggle('hidden', hud.photoModeActive || isVisiting || isMapEditActive);
+      ?.classList.toggle(
+        'hidden',
+        hud.photoModeActive || isVisiting || isMapEditActive || isBottomToolOverlayOpen
+      );
     hud.root
       .querySelector('#visitorDockBar')
       ?.classList.toggle('hidden', hud.photoModeActive || !isVisiting);
@@ -184,8 +203,29 @@ export function headerSyncHudFocusVisibility(hud: GameHUD): void {
     if (!shell) return;
     const focused = headerIsBuildingFocusMode(hud);
     const rolled = hud.hudRolledUp && !hud.photoModeActive && !focused;
+    const isVisiting = hud.sim.isVisitingNeighbor;
+    const isMapEditActive =
+      Boolean(hud.selectedCatalogItem) ||
+      hud.moveModeActive ||
+      hud.bulldozerActive ||
+      hud.pincerActive;
+    const sheetOrTrayOpen =
+      !hud.photoModeActive &&
+      !isVisiting &&
+      (hud.buildSheetOpen ||
+        Boolean(hud.activeCategory) ||
+        hud.mapToolsExpanded ||
+        hud.seedTrayOpen ||
+        hud.pastureTrayOpen);
     shell.classList.toggle('hud-building-focus', focused);
     shell.classList.toggle('hud-compact-rolled', rolled);
+    shell.classList.toggle('hud-sheet-or-tray-open', sheetOrTrayOpen);
+    hud.root
+      .querySelector('#tsCornerRight')
+      ?.classList.toggle(
+        'hidden',
+        hud.photoModeActive || isVisiting || isMapEditActive || sheetOrTrayOpen
+      );
     const btnRoll = hud.root.querySelector('#btnToggleHudRollup') as HTMLButtonElement | null;
     if (btnRoll) {
       btnRoll.setAttribute('aria-pressed', String(hud.hudRolledUp));
@@ -235,6 +275,8 @@ export function headerSyncHudFocusVisibility(hud: GameHUD): void {
       drawer?.classList.add('hidden');
       const swipeBar = hud.root.querySelector('#buildDrawerSwipeBar') as HTMLElement | null;
       swipeBar?.classList.add('hidden');
+      const decorFilterBar = hud.root.querySelector('#decorCollectionFilterBar') as HTMLElement | null;
+      decorFilterBar?.classList.add('hidden');
       const secBar = hud.root.querySelector('#secondaryMapToolsBar') as HTMLElement | null;
       secBar?.classList.add('hidden');
     }
@@ -265,6 +307,7 @@ export function headerCloseHudPopovers(hud: GameHUD): void {
 export function headerCollapseBuildDock(hud: GameHUD): void {
     hud.buildSheetOpen = false;
     hud.activeCategory = null;
+    hud.christmasTabActive = false;
     hud.mapToolsExpanded = false;
 }
 
@@ -282,8 +325,10 @@ export function headerHideOpenFloatingTrays(hud: GameHUD): void {
     headerCollapseBuildDock(hud);
     hud.seedTrayOpen = false;
     hud.pendingSowPlotUid = null;
+    hud.activeSeedCropId = null;
     hud.pastureTrayOpen = false;
     hud.pendingStockPastureUid = null;
+    hud.activePastureAnimalId = null;
 }
 
 export function headerPositionFloatingPopover(hud: GameHUD, triggerEl: HTMLElement | null, popoverEl: HTMLElement | null): void {
@@ -608,6 +653,12 @@ export function headerShowToast(hud: GameHUD, msg: string, icon = '🦉'): void 
     const stack = headerSyncToastStackHost(hud);
     if (!stack) return;
 
+    let trimGuard = 0;
+    while ((stack.children?.length ?? 0) >= 2 && stack.firstElementChild && trimGuard < 8) {
+      trimGuard++;
+      stack.firstElementChild.remove();
+    }
+
     const item = document.createElement('div');
     item.className = 'parchment-dark owl-toast';
     item.textContent = formatToastMessage(msg, icon);
@@ -666,8 +717,8 @@ export function headerRefreshFloatingBanner(hud: GameHUD): void {
     if (hud.pincerActive) {
       banner.classList.remove('hidden');
       txt.textContent = hud.pincerPicked
-        ? `🤏 Đang gắp ${hud.pincerPicked.label} — Nhấp ô để thả`
-        : '🤏 Điều phối nhân sự (G) — Nhấp ô cử tới • G/Esc thoát';
+        ? `🤏 Đang gắp ${hud.pincerPicked.label} — Chạm ô để thả`
+        : '🤏 Điều phối nhân sự — Chạm ô để thả • Esc hủy';
       btnSec.classList.add('hidden');
       btnExit.textContent = '✕';
       return;
@@ -782,9 +833,47 @@ export function headerRefreshTouchConfirmBar(hud: GameHUD): void {
     lbl.textContent = `📍 ${hud.pendingTouchTile.label}`;
 }
 
+export function headerRefreshYuleBanner(hud: GameHUD): void {
+    const banner = hud.root.querySelector('#yuleEventBanner') as HTMLButtonElement | null;
+    const title = hud.root.querySelector('#yuleEventBannerTitle') as HTMLElement | null;
+    const task = hud.root.querySelector('#yuleEventBannerTask') as HTMLElement | null;
+    const progress = hud.root.querySelector('#yuleEventBannerProgress') as HTMLElement | null;
+    if (!banner || !title || !task || !progress) return;
+    const status = hud.sim.getYuleEventStatus();
+    if (hud.photoModeActive || hud.sim.isVisitingNeighbor || !status.active || !status.dayDef) { banner.classList.add('hidden'); return; }
+    const main = status.dayDef.main;
+    const current = hud.sim.getYuleTaskProgress(main.id);
+    const target = hud.sim.getYuleTaskTarget(main.id);
+    const claimed = status.claimedMainDays.includes(status.day);
+    title.textContent = `🎄 Yule • Ngày ${status.day}/36`;
+    task.textContent = claimed ? 'Đã nhận phần thưởng' : main.titleVi;
+    progress.textContent = claimed ? '✓' : `${Math.min(current, target)}/${target}`;
+    banner.classList.remove('hidden');
+}
+
+export function headerYuleReadyToasts(hud: GameHUD): void {
+    const status = hud.sim.getYuleEventStatus();
+    if (!status.active || !status.dayDef || hud.photoModeActive || hud.sim.isVisitingNeighbor) {
+      hud.yuleReadySig = '';
+      return;
+    }
+    const defs = [status.dayDef.main, ...status.dayDef.side];
+    const ready = defs.filter((t) => {
+      const isMain = t === status.dayDef!.main;
+      const claimed = isMain ? status.claimedMainDays.includes(status.day) : status.claimedSideTaskIds.includes(t.id);
+      return !claimed && hud.sim.getYuleTaskProgress(t.id) >= t.amount;
+    });
+    if (ready.length === 0) { hud.yuleReadySig = ''; return; }
+    const sig = ready.map((t) => t.id).join('|');
+    if (hud.yuleReadySig === sig) return;
+    hud.yuleReadySig = sig;
+    hud.showToast(`🎄 Yule: ${ready.length} nhiệm vụ sẵn sàng — mở bảng Nhiệm Vụ để nhận!`, '🎄');
+}
+
 export function headerRefreshAll(hud: GameHUD): void {
     const isVisiting = hud.sim.isVisitingNeighbor;
     if (isVisiting) {
+      clearBuildToolModes(hud);
       hud.inspectSelection = null;
       hud.seedTrayOpen = false;
       hud.activeSeedCropId = null;
@@ -794,6 +883,8 @@ export function headerRefreshAll(hud: GameHUD): void {
       hud.pendingStockPastureUid = null;
     }
     headerRefreshHeader(hud);
+    headerRefreshYuleBanner(hud);
+    headerYuleReadyToasts(hud);
     headerRefreshQuestTracker(hud);
     headerRefreshDock(hud);
     hud.renderSeedTray();
@@ -810,9 +901,18 @@ export function headerRefreshAll(hud: GameHUD): void {
       hud.moveModeActive ||
       hud.bulldozerActive ||
       hud.pincerActive;
+    const isBottomToolOverlayOpen =
+      hud.buildSheetOpen ||
+      Boolean(hud.activeCategory) ||
+      hud.mapToolsExpanded ||
+      hud.seedTrayOpen ||
+      hud.pastureTrayOpen;
     hud.root
       .querySelector('#tsCornerRight')
-      ?.classList.toggle('hidden', hud.photoModeActive || isVisiting || isMapEditActive);
+      ?.classList.toggle(
+        'hidden',
+        hud.photoModeActive || isVisiting || isMapEditActive || isBottomToolOverlayOpen
+      );
     hud.root
       .querySelector('#btnOpenSeedSilo')
       ?.classList.toggle('hidden', isVisiting);
@@ -858,6 +958,15 @@ export function headerRefreshHeaderClock(hud: GameHUD): void {
     }
 
     const fest = hud.sim.getActiveFestival(now);
+    const winterMapActive =
+      typeof hud.sim.isWinterMainMapActive === 'function' && hud.sim.isWinterMainMapActive();
+    if (typeof document !== 'undefined') {
+      const wantYule =
+        hud.sim.isYuleVisualThemeActive(now) || winterMapActive ? 'true' : 'false';
+      if (document.documentElement.dataset.yuleTheme !== wantYule) {
+        document.documentElement.dataset.yuleTheme = wantYule;
+      }
+    }
     const lblFest = hud.root.querySelector('#lblFestival') as HTMLElement | null;
     if (lblFest) {
       if (fest === 'halloween') {
@@ -865,10 +974,13 @@ export function headerRefreshHeaderClock(hud: GameHUD): void {
         lblFest.textContent = '🎃 +35% XP';
       } else if (fest === 'christmas') {
         lblFest.classList.remove('hidden');
-        lblFest.textContent = '🎄 +25% 🪙';
-      } else if (fest === 'quidditch_cup') {
+        lblFest.textContent = '🎄 Giáng Sinh +25% 🪙';
+      } else if (fest === 'quidditch_cup' && !winterMapActive) {
         lblFest.classList.remove('hidden');
         lblFest.textContent = '🏆 +Cúp';
+      } else if (winterMapActive) {
+        lblFest.classList.remove('hidden');
+        lblFest.textContent = '🎄 Đồi Tuyết Giáng Sinh';
       } else {
         lblFest.classList.add('hidden');
       }
@@ -1120,11 +1232,20 @@ export function headerRefreshHeader(hud: GameHUD): void {
       }
     }
 
-    // House Cup reward ready badge
+    // House Cup + 52 Achievements + 7-Day Login reward ready badge
     const totalHousePts = Object.values(st.housePoints).reduce((a, b) => a + b, 0);
     const cupReady = totalHousePts >= st.houseCupMilestoneTier * 300;
-    const cardBadge = hud.root.querySelector('#badgeCardCount') as HTMLElement;
-    cardBadge.classList.toggle('hidden', !cupReady);
+    const retentionReady = hud.sim.getClaimableRetentionCount();
+    const albumReadyCount = (cupReady ? 1 : 0) + retentionReady.total;
+    const cardBadge = hud.root.querySelector('#badgeCardCount') as HTMLElement | null;
+    if (cardBadge) {
+      if (albumReadyCount > 0) {
+        cardBadge.textContent = String(albumReadyCount);
+        cardBadge.classList.remove('hidden');
+      } else {
+        cardBadge.classList.add('hidden');
+      }
+    }
 
     hud.refreshSuitcaseBadge();
     const suitcaseBadgeEl = hud.root.querySelector('#badgeSuitcaseCount') as HTMLElement | null;
@@ -1137,7 +1258,7 @@ export function headerRefreshHeader(hud: GameHUD): void {
     const manageDot = hud.root.querySelector('#badgeManageMenuDot') as HTMLElement | null;
     if (manageDot) {
       const manageCount =
-        crateReadyCount + (cupReady ? 1 : 0) + feastClaimableCount + suitcaseReadyCount;
+        crateReadyCount + albumReadyCount + feastClaimableCount + suitcaseReadyCount;
       if (manageCount > 0) {
         manageDot.textContent = String(manageCount);
         manageDot.classList.remove('hidden');
@@ -1177,9 +1298,6 @@ export function headerSyncProgressiveHudVisibility(hud: GameHUD): void {
     hud.root
       .querySelector('#btnOpenSuitcase')
       ?.classList.toggle('hidden', isEarlyOnboarding && !ownsHabitat);
-    hud.root
-      .querySelector('[data-cat="staff"]')
-      ?.classList.toggle('hidden', isEarlyOnboarding && hud.activeCategory !== 'staff');
 
     // Auto-expand radar when entering Lv100 preview if still untouched
     if (hud.sim.isHeadmasterPreview && hud.minimapCollapsed) {
@@ -1296,37 +1414,60 @@ export function headerRefreshDock(hud: GameHUD): void {
       el.setAttribute('aria-pressed', String(active));
     };
 
+    const isChristmasActive =
+      hud.activeCategory === 'decor' && Boolean(hud.christmasTabActive);
     hud.root.querySelectorAll<HTMLButtonElement>('[data-cat]').forEach((btn) => {
-      syncToggle(btn, btn.dataset.cat === hud.activeCategory);
+      const cat = btn.dataset.cat;
+      const isCatActive =
+        cat === hud.activeCategory && !(cat === 'decor' && isChristmasActive);
+      syncToggle(btn, isCatActive);
     });
-    syncToggle(hud.root.querySelector('#btnPincerTool') as HTMLElement | null, hud.pincerActive);
+    hud.root.querySelectorAll<HTMLButtonElement>('[data-decor-event]').forEach((btn) => {
+      syncToggle(btn, isChristmasActive);
+    });
     syncToggle(hud.root.querySelector('#btnMoveTool') as HTMLElement | null, hud.moveModeActive);
     syncToggle(hud.root.querySelector('#btnBulldoze') as HTMLElement | null, hud.bulldozerActive);
-    const btnRotCam = hud.root.querySelector('#btnRotateCam') as HTMLButtonElement | null;
-    if (btnRotCam) {
+    const btnRotate = hud.root.querySelector('#btnRotate') as HTMLButtonElement | null;
+    if (btnRotate) {
+      const rotDeg = (hud.rotation ?? 0) * 90;
+      btnRotate.textContent = rotDeg > 0 ? `🔄 Xoay ${rotDeg}°` : '🔄 Xoay';
+    }
+    const btnMenuRotCam = hud.root.querySelector('#btnMenuRotateCam') as HTMLButtonElement | null;
+    if (btnMenuRotCam) {
       const vr = hud.cam.viewRot ?? 0;
-      btnRotCam.textContent = COMPASS_LABELS_VI[vr];
-      syncToggle(btnRotCam, vr !== 0);
+      btnMenuRotCam.textContent = COMPASS_LABELS_VI[vr];
     }
     syncToggle(
-      hud.root.querySelector('#btnCutaway') as HTMLElement | null,
+      hud.root.querySelector('#btnMenuCutaway') as HTMLElement | null,
       Boolean(hud.sim.state.settings.cutawayMode)
     );
-    syncToggle(hud.root.querySelector('#btnGrid') as HTMLElement | null, hud.sim.state.settings.showGrid);
-
-    const secToolsActive = hud.mapToolsExpanded;
-    const secBar = hud.root.querySelector('#secondaryMapToolsBar') as HTMLElement | null;
-    const btnMapTools = hud.root.querySelector('#btnToggleMapTools') as HTMLButtonElement | null;
-    if (secBar) {
-      secBar.classList.toggle('hidden', !secToolsActive);
+    syncToggle(
+      hud.root.querySelector('#btnMenuGrid') as HTMLElement | null,
+      hud.sim.state.settings.showGrid
+    );
+    const undoBtn = hud.root.querySelector('#btnBuildUndo') as HTMLButtonElement | null;
+    const redoBtn = hud.root.querySelector('#btnBuildRedo') as HTMLButtonElement | null;
+    const undoDisabled =
+      hud.sim.isVisitingNeighbor ||
+      (typeof hud.sim.canUndoBuild === 'function' ? !hud.sim.canUndoBuild() : true);
+    const redoDisabled =
+      hud.sim.isVisitingNeighbor ||
+      (typeof hud.sim.canRedoBuild === 'function' ? !hud.sim.canRedoBuild() : true);
+    if (undoBtn) {
+      undoBtn.setAttribute('aria-disabled', String(undoDisabled));
     }
-    if (btnMapTools) {
-      btnMapTools.setAttribute('aria-expanded', String(secToolsActive));
-      syncToggle(btnMapTools, secToolsActive);
+    if (redoBtn) {
+      redoBtn.setAttribute('aria-disabled', String(redoDisabled));
     }
+    const accioBtn = hud.root.querySelector('#btnAccioAll') as HTMLButtonElement | null;
+    if (accioBtn) accioBtn.disabled = hud.sim.isVisitingNeighbor;
 
     const isSheetActive =
       hud.buildSheetOpen || Boolean(hud.activeCategory) || hud.mapToolsExpanded;
+    const secBar = hud.root.querySelector('#secondaryMapToolsBar') as HTMLElement | null;
+    if (secBar) {
+      secBar.classList.toggle('hidden', !isSheetActive);
+    }
     const isBuildModeActive =
       isSheetActive ||
       Boolean(hud.selectedCatalogItem) ||
@@ -1335,6 +1476,7 @@ export function headerRefreshDock(hud: GameHUD): void {
       hud.pincerActive;
     const dockWrap = hud.root.querySelector('#bottomDockWrap') as HTMLElement | null;
     dockWrap?.classList.toggle('ts-dock-open', isSheetActive);
+    headerSyncHudFocusVisibility(hud);
     syncToggle(
       hud.root.querySelector('#btnToggleBuildDock') as HTMLElement | null,
       isBuildModeActive
@@ -1342,6 +1484,7 @@ export function headerRefreshDock(hud: GameHUD): void {
 
     const drawer = hud.root.querySelector('#buildDrawer') as HTMLElement;
     const swipeBar = hud.root.querySelector('#buildDrawerSwipeBar') as HTMLElement | null;
+    const decorFilterBar = hud.root.querySelector('#decorCollectionFilterBar') as HTMLElement | null;
     const minimap = hud.root.querySelector('#minimapWrap') as HTMLElement;
     if (!hud.activeCategory || !BUILD_HUD_CATEGORIES.includes(hud.activeCategory)) {
       hud.activeCategory = null;
@@ -1349,31 +1492,150 @@ export function headerRefreshDock(hud: GameHUD): void {
       hud.drawerEdgeObserver = null;
       drawer.classList.add('hidden');
       swipeBar?.classList.add('hidden');
+      decorFilterBar?.classList.add('hidden');
       minimap.classList.toggle('hidden', hud.photoModeActive || !hud.minimapHudVisible);
       return;
     }
     drawer.classList.remove('hidden');
+    if (drawer.dataset) {
+      drawer.dataset.christmasDrawer = String(isChristmasActive);
+    }
     minimap.classList.add('hidden'); // Give full room while build drawer is open!
 
-    if (hud.activeCategory === 'staff') {
-      headerRenderStaffDrawer(hud, drawer);
-      headerSyncBuildDrawerScrollAffordance(hud, drawer);
-      return;
+    const recentIds = hud.recentDecorIds ?? [];
+    const recentOrder = new Map(recentIds.map((id, idx) => [id, idx]));
+
+    if (decorFilterBar) {
+      if (hud.activeCategory === 'decor' && isChristmasActive) {
+        decorFilterBar.classList.remove('hidden');
+        const recentWinterCount = recentIds.filter((id) => {
+          const it = getCatalogItem(id);
+          return Boolean(it && isWinterChristmasBuildItem(it));
+        }).length;
+        const activeCf = hud.activeChristmasFilter ?? 'all';
+        const christmasChips: Array<{
+          id: 'all' | 'recent' | YuleCollectionId;
+          label: string;
+        }> = [
+          { id: 'all', label: '✨ Tất cả (105)' },
+          {
+            id: 'recent',
+            label: recentWinterCount > 0 ? `🕘 Gần đây (${recentWinterCount})` : '🕘 Gần đây',
+          },
+          { id: 'yule_trees', label: '🌲 Cây tuyết' },
+          { id: 'yule_flowers', label: '🌺 Hoa đông' },
+          { id: 'modular', label: '❄️ Hàng rào' },
+          { id: 'landmarks', label: '🏰 Địa danh' },
+          { id: 'hogwarts_crests', label: '🦁 4 Nhà' },
+          { id: 'burrow', label: '🧣 Hang Sóc' },
+          { id: 'hogwarts', label: '🕯️ Dạ vũ' },
+          { id: 'hogsmeade', label: '🍺 Hogsmeade' },
+          { id: 'express', label: '🚂 Cú & Tàu' },
+          { id: 'creatures', label: '🦌 Sinh vật' },
+          { id: 'book_lore', label: '📖 Điển tích' },
+        ];
+        decorFilterBar.innerHTML = christmasChips
+          .map((ch) => {
+            const isAct = activeCf === ch.id;
+            return `<button type="button" role="tab" aria-selected="${isAct}" data-decor-filter="${ch.id}" class="decor-filter-chip ${isAct ? 'active is-active' : ''}">${ch.label}</button>`;
+          })
+          .join('');
+        decorFilterBar.querySelectorAll<HTMLButtonElement>('[data-decor-filter]').forEach((chip) => {
+          chip.addEventListener('click', () => {
+            hud.activeChristmasFilter = (chip.dataset.decorFilter ?? 'all') as typeof hud.activeChristmasFilter;
+            drawer.scrollLeft = 0;
+            headerRefreshDock(hud);
+          });
+        });
+      } else if (hud.activeCategory === 'decor') {
+        decorFilterBar.classList.remove('hidden');
+        const recentClassicCount = recentIds.filter((id) => {
+          const it = getCatalogItem(id);
+          return Boolean(it && it.category === 'decor' && !isWinterChristmasBuildItem(it));
+        }).length;
+        const activeDf = hud.activeDecorFilter === 'recent' ? 'recent' : 'all';
+        const classicChips: Array<{ id: 'all' | 'recent'; label: string }> = [
+          { id: 'all', label: '✨ Tất cả' },
+          {
+            id: 'recent',
+            label: recentClassicCount > 0 ? `🕘 Gần đây (${recentClassicCount})` : '🕘 Gần đây',
+          },
+        ];
+        decorFilterBar.innerHTML = classicChips
+          .map((ch) => {
+            const isAct = activeDf === ch.id;
+            return `<button type="button" role="tab" aria-selected="${isAct}" data-decor-filter="${ch.id}" class="decor-filter-chip ${isAct ? 'active is-active' : ''}">${ch.label}</button>`;
+          })
+          .join('');
+        decorFilterBar.querySelectorAll<HTMLButtonElement>('[data-decor-filter]').forEach((chip) => {
+          chip.addEventListener('click', () => {
+            hud.activeDecorFilter = (chip.dataset.decorFilter ?? 'all') as typeof hud.activeDecorFilter;
+            drawer.scrollLeft = 0;
+            headerRefreshDock(hud);
+          });
+        });
+      } else {
+        decorFilterBar.classList.add('hidden');
+      }
     }
 
-    const items = CATALOG.filter(
-      (c) =>
-        c.category === hud.activeCategory &&
-        c.category !== 'terrain' &&
-        !c.isThemeParkLegacy
-    );
+    const isRecentSubFilter =
+      hud.activeCategory === 'decor' &&
+      (isChristmasActive
+        ? (hud.activeChristmasFilter ?? 'all') === 'recent'
+        : hud.activeDecorFilter === 'recent');
+
+    const items = CATALOG.filter((c) => {
+      if (c.category === 'terrain' || c.isThemeParkLegacy) {
+        return false;
+      }
+      if (hud.activeCategory === 'creature') {
+        return c.category === 'creature' || c.id === 'farmland_plot';
+      }
+      if (c.category !== hud.activeCategory) {
+        return false;
+      }
+      if (hud.activeCategory === 'decor') {
+        const isWinter = isWinterChristmasBuildItem(c);
+        if (isChristmasActive) {
+          if (!isWinter) return false;
+          const cf = hud.activeChristmasFilter ?? 'all';
+          if (cf === 'recent') return recentOrder.has(c.id);
+          if (cf === 'all') return true;
+          if (c.id === 'snowy_pines') {
+            return cf === 'yule_trees' || cf === 'hogsmeade';
+          }
+          return c.yuleCollection === cf;
+        }
+        if (isWinter) return false;
+        if (hud.activeDecorFilter === 'recent') return recentOrder.has(c.id);
+        return true;
+      }
+      return true;
+    });
+    if (isRecentSubFilter) {
+      items.sort((a, b) => (recentOrder.get(a.id) ?? 999) - (recentOrder.get(b.id) ?? 999));
+    } else if (hud.activeCategory === 'creature') {
+      items.sort((a, b) => (a.id === 'farmland_plot' ? -1 : b.id === 'farmland_plot' ? 1 : 0));
+    }
     const sandbox = hud.sim.state.sandboxMode;
     const curStars = hud.sim.state.match3?.stars ?? 0;
     const curGold = hud.sim.state.galleons;
 
+    if (items.length === 0 && isRecentSubFilter) {
+      drawer.innerHTML = `
+        <div class="catalog-empty-hint">
+          🕘 Chưa có vật phẩm vừa đặt gần đây — hãy chọn một món trong <strong>✨ Tất cả</strong> nhé!
+        </div>
+      `;
+      headerSyncBuildDrawerScrollAffordance(hud, drawer);
+      return;
+    }
+
     drawer.innerHTML = items
       .map((item) => {
-        const locked = !hud.sim.isCatalogItemUnlocked(item);
+        const stashedQty = worldGetStashedDecorCount(hud.sim, item);
+        const locked = stashedQty === 0 && !hud.sim.isCatalogItemUnlocked(item);
         const selected = hud.selectedCatalogItem?.id === item.id;
         const fallbackEmoji = item.elevationDelta
           ? item.elevationDelta > 0
@@ -1390,8 +1652,9 @@ export function headerRefreshDock(hud: GameHUD): void {
                   : item.category === 'terrain'
                     ? '🌿'
                     : '🕯️';
-        const imgTag = item.spriteKey
-          ? `<img src="/sprites/${item.spriteKey}.png" alt="${item.name}" class="catalog-card-img" />`
+        const cardImgSrc = getCatalogCardImageSrc(item);
+        const imgTag = cardImgSrc
+          ? `<img src="${cardImgSrc}" alt="${escapeHtml(item.name)}" class="catalog-card-img" />`
           : `<div style="height:64px;display:flex;align-items:center;justify-content:center;font-size:28px;">${fallbackEmoji}</div>`;
 
         const starCost = hud.sim.getEffectiveItemStarCost(item);
@@ -1399,38 +1662,47 @@ export function headerRefreshDock(hud: GameHUD): void {
           starCost > 0 && !item.connectableGroup && item.category !== 'decor';
         const alreadyBuilt =
           isMajorStarBlueprint && hud.sim.state.buildings.some((b) => b.itemId === item.id);
-        const shortStars = !sandbox && !locked && starCost > 0 && curStars < starCost;
-        const shortGold = !sandbox && !locked && starCost === 0 && curGold < item.cost;
-        const isShortResource = (shortStars && !alreadyBuilt) || shortGold;
-        const buildTag =
-          item.buildDurationSec > 0
-            ? `🔨 ${formatDurationCompactVi(item.buildDurationSec)}`
-            : '⚡';
-        const subInfo = locked
-          ? `🔒 Cấp ${item.unlockLevel}`
-          : alreadyBuilt
-            ? shortStars
-              ? `✅ Đã xây • 🌟 ${curStars}/${starCost}`
-              : `✅ Đã xây • 🌟 ${starCost}`
-            : shortStars
-              ? `🌟 ${curStars}/${starCost} • ${buildTag}`
-              : starCost > 0
-                ? `🌟 ${starCost} • ${buildTag}`
-                : shortGold
-                  ? `🪙 ${curGold.toLocaleString('vi-VN')}/${item.cost.toLocaleString('vi-VN')}G`
-                  : `🪙 ${item.cost.toLocaleString('vi-VN')}G`;
+        const shortStars = stashedQty === 0 && !sandbox && !locked && starCost > 0 && curStars < starCost;
+        const shortGold = stashedQty === 0 && !sandbox && !locked && starCost === 0 && curGold < item.cost;
+        const isShortResource = stashedQty === 0 && ((shortStars && !alreadyBuilt) || shortGold);
+        const realBuildSec = computeRealTimeBuildSeconds(item);
+        const buildSuffix =
+          realBuildSec > 0 ? ` • ⏱️ ${formatDurationCompactVi(realBuildSec)}` : '';
+        const basePriceTxt =
+          starCost > 0
+            ? `🌟 ${starCost}`
+            : `🪙 ${item.cost.toLocaleString('vi-VN')}G`;
+        const subInfo =
+          stashedQty > 0
+            ? `📦 Kho: ${stashedQty} • 0G`
+            : locked
+              ? `🔒 Cấp ${item.unlockLevel} • ${basePriceTxt}${buildSuffix}`
+              : alreadyBuilt
+                ? shortStars
+                  ? `✅ Đã xây • 🌟 ${curStars}/${starCost}`
+                  : `✅ Đã xây • 🌟 ${starCost}`
+                : shortStars
+                  ? `🌟 ${curStars}/${starCost}${buildSuffix}`
+                  : starCost > 0
+                    ? `🌟 ${starCost}${buildSuffix}`
+                    : shortGold
+                      ? `🪙 ${curGold.toLocaleString('vi-VN')}/${item.cost.toLocaleString('vi-VN')}G${buildSuffix}`
+                      : `🪙 ${item.cost.toLocaleString('vi-VN')}G${buildSuffix}`;
+
+        const isWinterCard = isChristmasActive && isWinterChristmasBuildItem(item);
 
         return `
           <button
             type="button"
-            class="catalog-card ${locked ? 'locked' : ''} ${isShortResource ? 'short-resource' : ''}"
+            class="catalog-card ${isWinterCard ? 'yule-festive-card' : ''} ${locked ? 'locked' : ''} ${isShortResource ? 'short-resource' : ''}"
             data-item-id="${item.id}"
             data-selected="${selected}"
             aria-pressed="${selected}"
             ${locked || isShortResource ? 'aria-disabled="true"' : ''}
           >
+            ${isWinterCard ? '<span class="yule-card-twinkle" aria-hidden="true">❄</span>' : ''}
             ${imgTag}
-            <div style="font-size:12px;font-weight:800;line-height:1.25;">${escapeHtml(item.name)}</div>
+            <div class="catalog-card-title">${escapeHtml(item.name)}</div>
             <div class="catalog-card-sub ${isShortResource ? 'is-short' : ''}">${subInfo}</div>
           </button>
         `;
@@ -1443,7 +1715,8 @@ export function headerRefreshDock(hud: GameHUD): void {
         if (!item) return;
         const needStars = hud.sim.getEffectiveItemStarCost(item);
         const haveStars = hud.sim.state.match3?.stars ?? 0;
-        if (!hud.sim.isCatalogItemUnlocked(item)) {
+        const hasInStash = worldGetStashedDecorCount(hud.sim, item) > 0;
+        if (!hasInStash && !hud.sim.isCatalogItemUnlocked(item)) {
           const wp = hud.sim.getWinsProgressForCurrentLevel();
           let winsNeeded = Math.max(1, wp.required - wp.current);
           for (let l = hud.sim.state.level + 1; l < item.unlockLevel; l++) {
@@ -1459,6 +1732,7 @@ export function headerRefreshDock(hud: GameHUD): void {
           return;
         }
         if (
+          !hasInStash &&
           !hud.sim.state.sandboxMode &&
           needStars > 0 &&
           haveStars < needStars
@@ -1468,13 +1742,7 @@ export function headerRefreshDock(hud: GameHUD): void {
               ? hud.sim.state.buildings.find((b) => b.itemId === item.id)
               : undefined;
           if (existingBuilt) {
-            hud.selectedCatalogItem = null;
-            hud.bulldozerActive = false;
-            hud.moveModeActive = false;
-            hud.movingBuildingUid = null;
-            hud.pincerActive = false;
-            hud.pincerPicked = null;
-            hud.pendingTouchTile = null;
+            clearBuildToolModes(hud);
             hud.inspectSelection = { kind: 'building', uid: existingBuilt.uid };
             centerCameraOnGrid(
               hud.cam,
@@ -1500,6 +1768,7 @@ export function headerRefreshDock(hud: GameHUD): void {
           return;
         }
         if (
+          !hasInStash &&
           !hud.sim.state.sandboxMode &&
           needStars === 0 &&
           hud.sim.state.galleons < item.cost
@@ -1512,28 +1781,18 @@ export function headerRefreshDock(hud: GameHUD): void {
           );
           return;
         }
+        clearBuildToolModes(hud);
         hud.selectedCatalogItem = item;
-        hud.bulldozerActive = false;
-        hud.moveModeActive = false;
-        hud.movingBuildingUid = null;
-        hud.pincerActive = false;
-        hud.pincerPicked = null;
-        hud.pendingTouchTile = null;
         hud.inspectSelection = null;
         headerCollapseBuildDock(hud);
         headerRefreshAll(hud);
         hud.onSelectCatalogItem?.(item);
-        const isBrushItem =
-          item.category === 'path' ||
-          item.category === 'terrain' ||
-          Boolean(item.isCoasterTrackPiece) ||
-          Boolean(item.isZooFence) ||
-          Boolean(item.elevationDelta);
+        const isBrushItem = isDragPaintableCatalogItem(item);
         headerShowToast(
           hud,
           isBrushItem
-            ? `🏗️ Đã chọn "${item.name}" — Nhấp hoặc kéo trên bản đồ để đặt!`
-            : `🏗️ Đã chọn "${item.name}" — Bấm "⚡ Đặt Ngay" trên thanh nổi hoặc nhấp ô xanh để khởi công!`,
+            ? `🏗️ Đã chọn "${item.name}" — Chạm hoặc kéo liên tục trên bản đồ để đặt!`
+            : `🏗️ Đã chọn "${item.name}" — Chạm một lần vào ô xanh để đặt ngay (hoặc bấm ⚡ Đặt Ngay)!`,
           '🔨'
         );
       });
@@ -1662,20 +1921,21 @@ export function headerRenderStaffDrawer(hud: GameHUD, drawer: HTMLElement): void
       btn.addEventListener('click', () => {
         const st = hud.sim.staff.find((x) => x.id === btn.dataset.pickStaff);
         if (!st) return;
+        clearBuildToolModes(hud);
         hud.pincerActive = true;
         hud.pincerPicked = { kind: 'staff', id: st.id, label: st.name };
         headerCollapseBuildDock(hud);
         headerRefreshAll(hud);
-        headerShowToast(hud, `Đang gắp ${st.name} — Nhấp vào bất kỳ ô nào trên bản đồ để thả xuống!`, '🤏');
+        headerShowToast(hud, `Đang gắp ${st.name} — Chạm vào ô bất kỳ trên bản đồ để thả xuống!`, '🤏');
       });
     });
 }
 
 const BUILD_CATEGORY_TITLES_VI: Partial<Record<BuildingCategory, string>> = {
   path: '🛣️ Đường Đá & Lối Dạo',
-  shop: '🏭 Xưởng & Cửa Tiệm',
-  creature: '🦄 Đồng Cỏ & Thú Phép',
-  decor: '🌸 Vườn Hoa & Cảnh Quan',
+  shop: '🏠 Nhà & Xưởng Chế Biến',
+  creature: '🌾 Sản Xuất, Đồng Cỏ & Thú',
+  decor: '🌳 Vườn Hoa & Trang Trí',
   staff: '🧙 Phụ Tá Điền Trang',
 };
 
@@ -1696,7 +1956,10 @@ export function headerSyncBuildDrawerScrollAffordance(hud: GameHUD, drawer: HTML
     }
 
     if (catLbl) {
-      const titleVi = BUILD_CATEGORY_TITLES_VI[hud.activeCategory] ?? '🏗️ Danh Mục Xây Dựng';
+      const titleVi =
+        hud.activeCategory === 'decor' && hud.christmasTabActive
+          ? '🎄 Giáng Sinh & Mùa Đông'
+          : (BUILD_CATEGORY_TITLES_VI[hud.activeCategory] ?? '🏗️ Danh Mục Xây Dựng');
       const starsTxt = hud.sim.state.sandboxMode
         ? '∞'
         : String(hud.sim.state.match3?.stars ?? 0);
@@ -1763,15 +2026,10 @@ export function headerSyncBuildDrawerScrollAffordance(hud: GameHUD, drawer: HTML
 }
 
 export function headerSyncContextualMapToolsBar(hud: GameHUD): void {
-    const secToolsActive = hud.mapToolsExpanded;
+    const isSheetActive =
+      hud.buildSheetOpen || Boolean(hud.activeCategory) || hud.mapToolsExpanded;
     const secBar = hud.root.querySelector('#secondaryMapToolsBar') as HTMLElement | null;
-    const btnMapTools = hud.root.querySelector('#btnToggleMapTools') as HTMLButtonElement | null;
     if (secBar) {
-      secBar.classList.toggle('hidden', !secToolsActive);
-    }
-    if (btnMapTools) {
-      btnMapTools.setAttribute('aria-expanded', String(secToolsActive));
-      btnMapTools.setAttribute('data-active', String(secToolsActive));
-      btnMapTools.setAttribute('aria-pressed', String(secToolsActive));
+      secBar.classList.toggle('hidden', !isSheetActive);
     }
 }

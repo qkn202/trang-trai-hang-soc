@@ -151,6 +151,7 @@ import {
   BUILD_HUD_CATEGORIES,
   HEATMAP_CYCLE,
   InspectSelection,
+  clearBuildToolModes,
   escapeHtml,
 } from './hudShared';
 import type { GameHUD } from './hud';
@@ -226,13 +227,7 @@ function clearHudActiveMapTools(hud: GameHUD): void {
     window.clearTimeout(hud.flooAutoAdvanceTimer);
     hud.flooAutoAdvanceTimer = 0;
   }
-  hud.selectedCatalogItem = null;
-  hud.moveModeActive = false;
-  hud.movingBuildingUid = null;
-  hud.bulldozerActive = false;
-  hud.pincerActive = false;
-  hud.pincerPicked = null;
-  hud.pendingTouchTile = null;
+  clearBuildToolModes(hud);
   hud.inspectSelection = null;
   hud.rideCamUid = null;
   hud.closeSeedTray();

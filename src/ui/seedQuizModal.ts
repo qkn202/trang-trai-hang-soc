@@ -418,6 +418,13 @@ export class SeedQuizModalController {
     if (dlg && typeof dlg.addEventListener === 'function' && !this.dialogCloseBound) {
       this.dialogCloseBound = true;
       dlg.addEventListener('close', () => {
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          try {
+            window.speechSynthesis.cancel();
+          } catch {
+            // Ignore TTS cancel errors
+          }
+        }
         sharedMinigameViewport.clearDialogOrientation(dlg, modalInner);
       });
     }
@@ -525,13 +532,18 @@ export class SeedQuizModalController {
       })
       .join('');
 
-    // 2. Language Tabs (EN / KO / ZH / ES / JA)
+    // 2. Language Tabs (EN / KO / ZH / ES / JA) — concise Vietnamese labels prevent header clipping
+    const SHORT_LANG_TAB_VI: Record<QuizLanguageId, string> = {
+      en: 'Anh',
+      ko: 'Hàn',
+      zh: 'Trung',
+      es: 'TBN',
+      ja: 'Nhật',
+    };
     const langTabsHtml = ALL_LANG_IDS.map((lid) => {
       const m = QUIZ_LANGUAGES[lid];
       const p = quiz.profiles[lid];
       const isAct = lid === activeLang;
-      const shortTier =
-        p.tier === 'beginner' ? 'Tập Sự' : p.tier === 'intermediate' ? 'O.W.L.' : 'N.E.W.T.';
       return `
         <button
           type="button"
@@ -542,8 +554,8 @@ export class SeedQuizModalController {
         >
           <span class="sq-lang-flag">${m.flag}</span>
           <span class="sq-lang-text">
-            <strong>${escapeHtml(m.nameVi)}</strong>
-            <small>${escapeHtml(shortTier)} • Lv.${p.masteryScore}</small>
+            <strong>${SHORT_LANG_TAB_VI[lid]}</strong>
+            <small>Lv.${p.masteryScore}</small>
           </span>
         </button>
       `;
@@ -613,6 +625,13 @@ export class SeedQuizModalController {
               <span class="sq-wallet-chip sq-wallet-talisman" title="Bùa Phượng Hoàng (${talismanProg}/8 câu)">
                 🔥 <strong>${talismanCount}</strong> <small>(${talismanProg}/8)</small>
               </span>
+              <button
+                id="btnSqToggleYuleSkin"
+                type="button"
+                class="sq-wallet-chip yule-skin-toggle-pill ${this.sim.isYuleVisualThemeActive() ? 'is-yule-active' : ''}"
+                aria-pressed="${this.sim.isYuleVisualThemeActive()}"
+                title="Bật/Tắt giao diện Thư Viện Giáng Sinh"
+              >🎄</button>
               ${(() => {
                 const nowMs = Date.now();
                 const actives = this.sim.getActiveConstructions(nowMs);
@@ -628,7 +647,7 @@ export class SeedQuizModalController {
               })()}
             </div>
           </div>
-          <div class="sq-crop-strip" role="group" aria-label="Danh sách 22 loại hạt giống và hoa">${cropPillsHtml}</div>
+          <div class="sq-crop-strip" role="group" aria-label="Danh sách 34 loại hạt giống và hoa">${cropPillsHtml}</div>
         </div>
 
         <!-- TWO ACQUISITION OPTIONS -->
@@ -1343,6 +1362,33 @@ export class SeedQuizModalController {
       quiz.autoSpeak = chkAuto.checked;
       this.sim.saveToStorage();
     });
+
+    container.querySelector('#btnSqToggleYuleSkin')?.addEventListener('click', () => {
+      this.sim.audio.playClick();
+      const active = this.sim.toggleYuleVisualTheme();
+      if (typeof document !== 'undefined') {
+        document.documentElement.dataset.yuleTheme = active ? 'true' : 'false';
+      }
+      this.onRefreshHud();
+      this.render();
+    });
+
+    // Horizontal wheel scrolling for the 34-seed crop strip on desktop mouse wheels
+    const sqCropStrip = container.querySelector('.sq-crop-strip') as HTMLElement | null;
+    sqCropStrip?.addEventListener(
+      'wheel',
+      (ev) => {
+        if (
+          sqCropStrip.scrollWidth > sqCropStrip.clientWidth + 4 &&
+          Math.abs(ev.deltaY) > Math.abs(ev.deltaX) &&
+          ev.deltaY !== 0
+        ) {
+          sqCropStrip.scrollLeft += ev.deltaY;
+          ev.preventDefault();
+        }
+      },
+      { passive: false }
+    );
 
     // Language switch (EN / KO / ZH / ES / JA)
     container.querySelectorAll<HTMLButtonElement>('[data-sq-lang]').forEach((btn) => {

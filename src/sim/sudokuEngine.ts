@@ -144,42 +144,44 @@ export class SudokuPuzzleEngine {
   public freeHintsLeft: number;
   public paidHintsLeft: number;
   public mistakesCount = 0;
+  /** Bật khi người chơi đã điền kín 81/81 ô nhưng bảng chưa khớp nghiệm đúng (không tiết lộ ô sai) */
+  public fullBoardMismatch = false;
   public status: 'playing' | 'won' | 'lost' = 'playing';
 
   constructor(stage: number) {
     this.stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(stage)));
     this.milestoneBoss = getMilestoneBossMeta(this.stage);
 
-    let targetBlanks = 32;
-    if (this.stage <= 25) {
-      this.classicDifficultyVi = 'Dễ';
-      targetBlanks = 31 + Math.floor((this.stage - 1) / 6); // 31..35
-    } else if (this.stage <= 90) {
-      this.classicDifficultyVi = 'Trung Bình';
-      targetBlanks = 37 + Math.floor((this.stage - 26) / 16); // 37..41
-    } else if (this.stage <= 220) {
+    let targetBlanks = 42;
+    if (this.stage <= 15) {
+      this.classicDifficultyVi = 'Khó Vừa';
+      targetBlanks = 41 + Math.floor((this.stage - 1) / 5); // 41..43 ô trống (40..38 số gợi sẵn)
+    } else if (this.stage <= 60) {
       this.classicDifficultyVi = 'Khó';
-      targetBlanks = 43 + Math.floor((this.stage - 91) / 32); // 43..47
-    } else if (this.stage <= 420) {
+      targetBlanks = 45 + Math.floor((this.stage - 16) / 12); // 45..48 ô trống (36..33 số gợi sẵn)
+    } else if (this.stage <= 160) {
       this.classicDifficultyVi = 'Chuyên Gia';
-      targetBlanks = 48 + Math.floor((this.stage - 221) / 50); // 48..52
-    } else if (this.stage <= 620) {
+      targetBlanks = 50 + Math.floor((this.stage - 61) / 34); // 50..52 ô trống (31..29 số gợi sẵn)
+    } else if (this.stage <= 340) {
       this.classicDifficultyVi = 'Bậc Thầy';
-      targetBlanks = 53 + Math.floor((this.stage - 421) / 90); // 53..55
+      targetBlanks = 53 + Math.floor((this.stage - 161) / 60); // 53..55 ô trống (28..26 số gợi sẵn)
+    } else if (this.stage <= 560) {
+      this.classicDifficultyVi = 'Đại Pháp Sư';
+      targetBlanks = 56 + Math.floor((this.stage - 341) / 115); // 56..57 ô trống (25..24 số gợi sẵn)
     } else {
       this.classicDifficultyVi = 'Cực Khó';
-      targetBlanks = this.stage >= 720 ? 57 : 56; // 24..25 givens
+      targetBlanks = this.stage >= 680 ? 59 : 58; // 58..59 ô trống (23..22 số gợi sẵn)
     }
 
     this.difficultyLabel = this.milestoneBoss
       ? `👑 Mốc ${this.stage} • ${this.classicDifficultyVi}`
       : this.classicDifficultyVi;
 
-    // Standard Classic Sudoku 3-mistakes limit & 1+ free hint
+    // Tăng độ khó: chỉ chấm lỗi khi điền kín 81 ô (tối đa 3 lần nộp sai) & siết lượt gợi ý miễn phí
     this.maxMistakes = 3;
-    this.freeHintsLeft = this.stage <= 25 ? 2 : 1;
-    this.paidHintsLeft = 2;
-    this.hintGoldCost = Math.min(240, 80 + Math.floor(this.stage / 6));
+    this.freeHintsLeft = this.stage <= 10 ? 1 : 0;
+    this.paidHintsLeft = 1;
+    this.hintGoldCost = Math.min(320, 120 + Math.floor(this.stage / 4));
 
     const stars = getStageStarReward(this.stage);
     const effectiveCap =
@@ -247,7 +249,7 @@ export class SudokuPuzzleEngine {
     let blanks = 0;
     for (const pair of pairs) {
       if (blanks >= targetBlanks) break;
-      if (blanks + pair.length > targetBlanks && pair.length === 2 && targetBlanks < 50) continue;
+      if (blanks + pair.length > targetBlanks) continue;
       const saved = pair.map(([r, c]) => puzzle[r][c]);
       for (const [r, c] of pair) puzzle[r][c] = 0;
 
@@ -260,18 +262,37 @@ export class SudokuPuzzleEngine {
       }
     }
 
-    // Pass 2: bounded single-cell carving so high stages (300..777) reach 51..57 blanks in < 10ms
+    // Pass 2: anti-clump single-cell carving (ưu tiên đục bớt các hàng/cột/khối 3×3 còn dày số để triệt tiêu ô dễ đoán)
     if (blanks < targetBlanks) {
-      const singles: Array<[number, number]> = [];
+      const rowClues = new Int32Array(9);
+      const colClues = new Int32Array(9);
+      const boxClues = new Int32Array(9);
+      const singles: Array<{ r: number; c: number; score: number }> = [];
       for (let r = 0; r < 9; r++) {
         for (let c = 0; c < 9; c++) {
-          if (puzzle[r][c] !== 0) singles.push([r, c]);
+          if (puzzle[r][c] !== 0) {
+            rowClues[r]++;
+            colClues[c]++;
+            boxClues[Math.floor(r / 3) * 3 + Math.floor(c / 3)]++;
+          }
         }
       }
-      shuffleWithRng(singles, rng);
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (puzzle[r][c] !== 0) {
+            const b = Math.floor(r / 3) * 3 + Math.floor(c / 3);
+            singles.push({
+              r,
+              c,
+              score: rowClues[r] + colClues[c] + boxClues[b] * 1.25 + rng() * 0.95,
+            });
+          }
+        }
+      }
+      singles.sort((a, b) => b.score - a.score);
       let singleChecks = 0;
-      for (const [r, c] of singles) {
-        if (blanks >= targetBlanks || singleChecks >= 36) break;
+      for (const { r, c } of singles) {
+        if (blanks >= targetBlanks || singleChecks >= 54) break;
         singleChecks++;
         const saved = puzzle[r][c];
         puzzle[r][c] = 0;
@@ -291,6 +312,7 @@ export class SudokuPuzzleEngine {
     this.undoStack = [];
     this.editHistory = [];
     this.elapsedSec = 0;
+    this.fullBoardMismatch = false;
 
     // Select first blank cell by default for immediate keyboard/pad play
     outer: for (let r = 0; r < 9; r++) {
@@ -363,6 +385,7 @@ export class SudokuPuzzleEngine {
       this.status = 'playing';
       this.mistakesCount = Math.max(0, Math.min(this.mistakesCount, this.maxMistakes - 1));
     }
+    this.fullBoardMismatch = this.filledCount === 81 && !this.checkSolved();
 
     const selVal = this.selected ? this.grid[this.selected.r]?.[this.selected.c] ?? 0 : 0;
     this.highlightDigit = selVal > 0 ? selVal : 0;
@@ -376,38 +399,23 @@ export class SudokuPuzzleEngine {
     this.highlightDigit = val >= 1 && val <= 9 ? val : 0;
   }
 
-  public isWrongCell(r: number, c: number): boolean {
-    const val = this.grid[r]?.[c] ?? 0;
-    if (val === 0 || this.given[r]?.[c]) return false;
-    return val !== this.solution[r]?.[c];
-  }
-
-  public hasConflict(r: number, c: number): boolean {
-    const val = this.grid[r]?.[c] ?? 0;
-    if (val === 0) return false;
-    if (this.isWrongCell(r, c)) return true;
-    for (let i = 0; i < 9; i++) {
-      if (i !== c && this.grid[r][i] === val) return true;
-      if (i !== r && this.grid[i][c] === val) return true;
-    }
-    const br = Math.floor(r / 3) * 3;
-    const bc = Math.floor(c / 3) * 3;
-    for (let dr = 0; dr < 3; dr++) {
-      for (let dc = 0; dc < 3; dc++) {
-        const nr = br + dr;
-        const nc = bc + dc;
-        if ((nr !== r || nc !== c) && this.grid[nr][nc] === val) return true;
-      }
-    }
+  /** Không bao giờ chỉ điểm ô sai để người chơi tự rà soát khi đã điền kín bảng */
+  public isWrongCell(_r: number, _c: number): boolean {
     return false;
   }
 
+  /** Không hiển thị xung đột đỏ ở từng ô/hàng/cột/khối 3×3 */
+  public hasConflict(_r: number, _c: number): boolean {
+    return false;
+  }
+
+  /** Đếm số lượng chữ số 1..9 đang xuất hiện trên bàn chơi (không đối chiếu đáp án để tránh lộ ô sai) */
   public getRemainingDigitCounts(): number[] {
     const placed = new Array<number>(10).fill(0);
     for (let r = 0; r < 9; r++) {
       for (let c = 0; c < 9; c++) {
         const v = this.grid[r][c];
-        if (v >= 1 && v <= 9 && v === this.solution[r][c]) placed[v]++;
+        if (v >= 1 && v <= 9) placed[v]++;
       }
     }
     return placed.map((cnt, d) => (d === 0 ? 0 : Math.max(0, 9 - cnt)));
@@ -454,36 +462,58 @@ export class SudokuPuzzleEngine {
   public inputDigit(digit: number): {
     changed: boolean;
     conflict: boolean;
+    fullBoardError: boolean;
     lost: boolean;
     won: boolean;
   } {
     if (this.status !== 'playing' || digit < 1 || digit > 9) {
-      return { changed: false, conflict: false, lost: this.status === 'lost', won: false };
+      return {
+        changed: false,
+        conflict: false,
+        fullBoardError: this.fullBoardMismatch,
+        lost: this.status === 'lost',
+        won: false,
+      };
     }
     this.eraseMode = false;
 
     if (!this.selected) {
       this.highlightDigit = this.highlightDigit === digit ? 0 : digit;
-      return { changed: false, conflict: false, lost: false, won: false };
+      return {
+        changed: false,
+        conflict: false,
+        fullBoardError: this.fullBoardMismatch,
+        lost: false,
+        won: false,
+      };
     }
 
     const { r, c } = this.selected;
     if (this.given[r][c]) {
       // Tapping a number on the pad while viewing a locked/clue cell highlights all instances of that digit
       this.highlightDigit = digit;
-      return { changed: false, conflict: false, lost: false, won: false };
+      return {
+        changed: false,
+        conflict: false,
+        fullBoardError: this.fullBoardMismatch,
+        lost: false,
+        won: false,
+      };
     }
 
     if (this.pencilMode) {
-      // Protect already-valid filled digits from accidental overwrite when Notes mode is ON
-      if (this.grid[r][c] !== 0 && !this.isWrongCell(r, c)) {
+      // Xử lý đồng nhất cho mọi ô đã điền số (không phân biệt đúng/sai để tránh lộ đáp án)
+      if (this.grid[r][c] !== 0) {
         this.highlightDigit = digit;
-        return { changed: false, conflict: false, lost: false, won: false };
+        return {
+          changed: false,
+          conflict: false,
+          fullBoardError: this.fullBoardMismatch,
+          lost: false,
+          won: false,
+        };
       }
       this.pushUndoSnapshot();
-      if (this.grid[r][c] !== 0) {
-        this.grid[r][c] = 0;
-      }
       this.notes[r][c] ^= 1 << digit;
       if (this.notes[r][c] !== 0) {
         this.recordCellEdit(r, c);
@@ -491,7 +521,13 @@ export class SudokuPuzzleEngine {
         this.editHistory = this.editHistory.filter((item) => item.r !== r || item.c !== c);
       }
       this.highlightDigit = (this.notes[r][c] & (1 << digit)) !== 0 ? digit : 0;
-      return { changed: true, conflict: false, lost: false, won: false };
+      return {
+        changed: true,
+        conflict: false,
+        fullBoardError: this.fullBoardMismatch,
+        lost: false,
+        won: false,
+      };
     }
 
     this.pushUndoSnapshot();
@@ -499,30 +535,37 @@ export class SudokuPuzzleEngine {
     if (this.grid[r][c] === digit) {
       this.grid[r][c] = 0;
       this.highlightDigit = 0;
+      this.fullBoardMismatch = false;
       this.editHistory = this.editHistory.filter((item) => item.r !== r || item.c !== c);
-      return { changed: true, conflict: false, lost: false, won: false };
+      return { changed: true, conflict: false, fullBoardError: false, lost: false, won: false };
     }
 
     this.grid[r][c] = digit;
     this.notes[r][c] = 0;
     this.highlightDigit = digit;
     this.recordCellEdit(r, c);
-    const conflict = digit !== this.solution[r][c] || this.hasConflict(r, c);
-    if (conflict) {
-      this.mistakesCount += 1;
-      if (this.mistakesCount >= this.maxMistakes) {
-        this.status = 'lost';
-        return { changed: true, conflict: true, lost: true, won: false };
-      }
-    } else {
-      this.prunePeerNotes(r, c, digit);
+    // Luôn tỉa ghi chú cùng hàng/cột/khối 3×3 bất kể đúng hay sai để không rò rỉ đáp án
+    this.prunePeerNotes(r, c, digit);
+
+    // Chỉ kiểm tra đúng/sai khi người chơi đã điền kín toàn bộ 81/81 ô trên bàn
+    if (this.filledCount < 81) {
+      this.fullBoardMismatch = false;
+      return { changed: true, conflict: false, fullBoardError: false, lost: false, won: false };
     }
 
-    if (!conflict && this.checkSolved()) {
+    if (this.checkSolved()) {
+      this.fullBoardMismatch = false;
       this.status = 'won';
-      return { changed: true, conflict: false, lost: false, won: true };
+      return { changed: true, conflict: false, fullBoardError: false, lost: false, won: true };
     }
-    return { changed: true, conflict, lost: false, won: false };
+
+    this.fullBoardMismatch = true;
+    this.mistakesCount += 1;
+    if (this.mistakesCount >= this.maxMistakes) {
+      this.status = 'lost';
+      return { changed: true, conflict: true, fullBoardError: true, lost: true, won: false };
+    }
+    return { changed: true, conflict: true, fullBoardError: true, lost: false, won: false };
   }
 
   public clearCellAt(r: number, c: number): boolean {
@@ -535,6 +578,7 @@ export class SudokuPuzzleEngine {
     this.notes[r][c] = 0;
     this.selected = { r, c };
     this.highlightDigit = 0;
+    this.fullBoardMismatch = false;
     this.editHistory = this.editHistory.filter((item) => item.r !== r || item.c !== c);
     if (this.status === 'lost') {
       this.status = 'playing';
@@ -548,29 +592,13 @@ export class SudokuPuzzleEngine {
     if (this.selected && this.clearCellAt(this.selected.r, this.selected.c)) {
       return true;
     }
-    // 1. Prioritize clearing the most recently edited wrong cell
-    for (let i = this.editHistory.length - 1; i >= 0; i--) {
-      const { r, c } = this.editHistory[i];
-      if (this.isWrongCell(r, c) && this.clearCellAt(r, c)) {
-        return true;
-      }
-    }
-    // 2. Any wrong cell on the board
-    for (let r = 0; r < 9; r++) {
-      for (let c = 0; c < 9; c++) {
-        if (this.isWrongCell(r, c) && this.clearCellAt(r, c)) {
-          return true;
-        }
-      }
-    }
-    // 3. Most recently user-edited cell in editHistory
+    // Xoá theo đúng lịch sử ô người chơi vừa nhập gần nhất (tuyệt đối không dò isWrongCell để tránh lộ vị trí ô sai)
     for (let i = this.editHistory.length - 1; i >= 0; i--) {
       const { r, c } = this.editHistory[i];
       if (this.clearCellAt(r, c)) {
         return true;
       }
     }
-    // 4. Fallback scan for any user-entered cell on the board
     for (let r = 8; r >= 0; r--) {
       for (let c = 8; c >= 0; c--) {
         if (!this.given[r][c] && (this.grid[r][c] !== 0 || this.notes[r][c] !== 0)) {
@@ -593,26 +621,9 @@ export class SudokuPuzzleEngine {
     }
 
     let target: { r: number; c: number } | null = null;
-    if (
-      this.selected &&
-      !this.given[this.selected.r][this.selected.c] &&
-      this.grid[this.selected.r][this.selected.c] !==
-        this.solution[this.selected.r][this.selected.c]
-    ) {
+    if (this.selected && !this.given[this.selected.r][this.selected.c] && this.grid[this.selected.r][this.selected.c] === 0) {
       target = { ...this.selected };
     } else {
-      for (let r = 0; r < 9 && !target; r++) {
-        for (let c = 0; c < 9; c++) {
-          if (
-            !this.given[r][c] &&
-            this.grid[r][c] !== 0 &&
-            this.grid[r][c] !== this.solution[r][c]
-          ) {
-            target = { r, c };
-            break;
-          }
-        }
-      }
       for (let r = 0; r < 9 && !target; r++) {
         for (let c = 0; c < 9; c++) {
           if (!this.given[r][c] && this.grid[r][c] === 0) {
@@ -620,6 +631,10 @@ export class SudokuPuzzleEngine {
             break;
           }
         }
+      }
+      // Nếu bàn đã điền kín hết mà người chơi dùng Gợi Ý trực tiếp tại ô đang chọn thì khoá chuẩn ô đang chọn đó
+      if (!target && this.selected && !this.given[this.selected.r][this.selected.c]) {
+        target = { ...this.selected };
       }
     }
 
@@ -636,9 +651,11 @@ export class SudokuPuzzleEngine {
     this.highlightDigit = ans;
 
     if (this.checkSolved()) {
+      this.fullBoardMismatch = false;
       this.status = 'won';
       return { ok: true, r: target.r, c: target.c, digit: ans, won: true };
     }
+    this.fullBoardMismatch = this.filledCount === 81;
     return { ok: true, r: target.r, c: target.c, digit: ans, won: false };
   }
 
@@ -663,18 +680,28 @@ export class SudokuPuzzleEngine {
       this.status = 'playing';
     }
 
+    // Ưu tiên mở các ô đang trống (không ưu tiên dò ô người chơi điền sai để giữ nguyên luật không chỉ điểm ô sai)
     const candidates: Array<{ r: number; c: number; priority: number }> = [];
     for (let r = 0; r < 9; r++) {
       for (let c = 0; c < 9; c++) {
         if (this.given[r][c]) continue;
-        if (this.grid[r][c] !== this.solution[r][c]) {
-          const isSel = this.selected?.r === r && this.selected?.c === c;
-          const isWrong = this.grid[r][c] !== 0;
+        const isSel = this.selected?.r === r && this.selected?.c === c;
+        const isEmpty = this.grid[r][c] === 0;
+        if (isEmpty || isSel) {
           candidates.push({
             r,
             c,
-            priority: isWrong ? 0 : isSel ? 1 : 2,
+            priority: isEmpty && isSel ? 0 : isEmpty ? 1 : 2,
           });
+        }
+      }
+    }
+    if (candidates.length === 0) {
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (!this.given[r][c]) {
+            candidates.push({ r, c, priority: 3 });
+          }
         }
       }
     }
@@ -693,14 +720,17 @@ export class SudokuPuzzleEngine {
     }
 
     if (this.checkSolved()) {
+      this.fullBoardMismatch = false;
       this.status = 'won';
+    } else {
+      this.fullBoardMismatch = this.filledCount === 81;
     }
 
     return {
       ok: true,
       revealed,
       won: this.status === 'won',
-      msg: `🔥 Bùa Phượng Hoàng: Điền đúng ${revealed} ô & cộng +2 lượt chống sai!`,
+      msg: `🔥 Bùa Phượng Hoàng: Điền chuẩn ${revealed} ô & cộng +2 lượt kiểm tra bảng!`,
     };
   }
 
@@ -820,6 +850,7 @@ export class SudokuPuzzleEngine {
         : 0;
     this.elapsedSec = Math.max(0, Number.isFinite(snap.elapsedSec) ? snap.elapsedSec : 0);
     this.status = snap.status;
+    this.fullBoardMismatch = this.filledCount === 81 && !this.checkSolved();
     this.editHistory = Array.isArray(snap.editHistory)
       ? snap.editHistory
           .filter(

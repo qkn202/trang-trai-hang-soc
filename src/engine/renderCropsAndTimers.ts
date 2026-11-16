@@ -39,7 +39,7 @@ import {
   TILE_H,
   TILE_W,
 } from './isometric';
-import { SpriteRegistry } from './spriteLoader';
+import { resolveCatalogPropSpriteKey, SpriteRegistry } from './spriteLoader';
 import { computeWaterShoreLoops, WaterLoop } from './waterOutlines';
 import { JuiceFX } from './juiceFx';
 import {
@@ -474,6 +474,12 @@ export function cropsDrawInWorldWaitTimers(self: IsometricRenderer,
       const info = resolveBuildingInWorldTimerInfo(b, item, now, activeFestival, isSelected);
       if (!info) continue;
 
+      // Keep pastures visually open so grazing hens, sheep, cows & beasts are never hidden behind a giant white timer pill;
+      // show passive grazing countdown only when the player selects/inspects the pasture!
+      if (info.kind === 'grazing_pasture' && !isSelected) {
+        continue;
+      }
+
       // Keep bird's-eye overview clean at extreme zoom-out while preserving actionable & build timers
       if (
         zoom < 0.42 &&
@@ -508,12 +514,10 @@ export function cropsDrawInWorldWaitTimers(self: IsometricRenderer,
         zLift = 42 + Math.max(bw, bh) * 15;
       } else if (info.kind === 'water_crop') {
         zLift = 12;
-      } else if (
-        info.kind === 'growing_crop' ||
-        info.kind === 'feed_pasture' ||
-        info.kind === 'grazing_pasture'
-      ) {
+      } else if (info.kind === 'growing_crop') {
         zLift = 14;
+      } else if (info.kind === 'feed_pasture' || info.kind === 'grazing_pasture') {
+        zLift = 52;
       } else if (hasFloatingBubble) {
         zLift = 16 + Math.max(bw, bh) * 5;
       } else if (item.connectableGroup) {
@@ -1108,7 +1112,8 @@ export function cropsDrawGhostPlacement(self: IsometricRenderer,
     cam: Camera,
     viewW: number,
     viewH: number,
-    ignoreBuildingUid?: string
+    ignoreBuildingUid?: string,
+    skipSprite = false
   ): void {
     const ctx = self.ctx;
     const check = sim.canPlaceItem(item, gx, gy, rotation, ignoreBuildingUid);
@@ -1134,20 +1139,45 @@ export function cropsDrawGhostPlacement(self: IsometricRenderer,
     ctx.lineTo(pBottom.sx, pBottom.sy);
     ctx.lineTo(pLeft.sx, pLeft.sy);
     ctx.closePath();
-    ctx.fillStyle = check.ok ? 'rgba(74, 222, 128, 0.36)' : 'rgba(248, 113, 113, 0.42)';
+    ctx.fillStyle = check.ok ? 'rgba(74, 222, 128, 0.36)' : 'rgba(248, 113, 113, 0.44)';
     ctx.fill();
     ctx.strokeStyle = check.ok ? '#4ade80' : '#f87171';
-    ctx.lineWidth = 2.4;
+    ctx.lineWidth = 2.6;
     ctx.stroke();
 
-    const baseSprite = self.sprites.get(item.spriteKey);
+    // Subtle per-tile grid lines inside multi-tile rotated footprints so snap is unmistakable
+    if (bw > 1 || bh > 1) {
+      ctx.save();
+      ctx.strokeStyle = check.ok ? 'rgba(187, 247, 208, 0.65)' : 'rgba(254, 202, 202, 0.72)';
+      ctx.lineWidth = 1.2;
+      for (let ix = 1; ix < bw; ix++) {
+        const a = gridToScreen(gx + ix, gy, cam, viewW, viewH, zOff);
+        const b = gridToScreen(gx + ix, gy + bh, cam, viewW, viewH, zOff);
+        ctx.beginPath();
+        ctx.moveTo(a.sx, a.sy);
+        ctx.lineTo(b.sx, b.sy);
+        ctx.stroke();
+      }
+      for (let iy = 1; iy < bh; iy++) {
+        const a = gridToScreen(gx, gy + iy, cam, viewW, viewH, zOff);
+        const b = gridToScreen(gx + bw, gy + iy, cam, viewW, viewH, zOff);
+        ctx.beginPath();
+        ctx.moveTo(a.sx, a.sy);
+        ctx.lineTo(b.sx, b.sy);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    const resolvedSpriteKey = resolveCatalogPropSpriteKey(item.id, item.spriteKey);
+    const baseSprite = !skipSprite ? self.sprites.get(resolvedSpriteKey) : undefined;
     if (baseSprite) {
       const isNonSquare = item.width !== item.height;
       const footprintW = (bw + bh) * (TILE_W * 0.5) * cam.zoom;
       const scaleMult = item.spriteScale ?? (isNonSquare ? 1.0 : 1.05);
       const drawW = footprintW * scaleMult;
       const drawH = drawW * (baseSprite.height / baseSprite.width);
-      const ghostStageKey = (item.isFarmlandPlot ? 'crop_plot_tilled' : item.spriteKey) as
+      const ghostStageKey = (item.isFarmlandPlot ? 'crop_plot_tilled' : resolvedSpriteKey) as
         | 'crop_plot_tilled'
         | 'burrow_pumpkin_gnomes'
         | 'burrow_chicken_coop'

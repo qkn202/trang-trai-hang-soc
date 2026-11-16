@@ -68,7 +68,8 @@ export function terrainDrawSkyBackdrop(self: IsometricRenderer,
     viewW: number,
     viewH: number,
     period: 'dawn' | 'day' | 'dusk' | 'night',
-    weather: WeatherForecastSlot
+    weather: WeatherForecastSlot,
+    yuleAurora = false
   ): void {
     const ctx = self.ctx;
     const isNightLike = period === 'night' || period === 'dusk';
@@ -91,6 +92,10 @@ export function terrainDrawSkyBackdrop(self: IsometricRenderer,
       sky.addColorStop(0, '#6fa3d4');
       sky.addColorStop(0.55, '#bcd0e4');
       sky.addColorStop(1, '#f6cfae');
+    } else if (yuleAurora) {
+      sky.addColorStop(0, '#3d9fe3');
+      sky.addColorStop(0.52, '#a3daf8');
+      sky.addColorStop(1, '#f0f8ff');
     } else {
       sky.addColorStop(0, '#62bae6');
       sky.addColorStop(0.52, '#a7def4');
@@ -107,6 +112,64 @@ export function terrainDrawSkyBackdrop(self: IsometricRenderer,
         const sy = (i * 67) % Math.max(120, viewH * 0.45);
         const tw = 1.2 + Math.sin(self.tick * 0.05 + i) * 0.65;
         ctx.fillRect(sx, sy, tw, tw);
+      }
+
+      // Magical Yule Aurora ribbons shimmering gently across the winter night sky
+      if (yuleAurora) {
+        const phase = self.reducedMotion ? 0.6 : self.tick * 0.014;
+        const ribbons: ReadonlyArray<{
+          yFrac: number;
+          amp: number;
+          colTop: string;
+          colMid: string;
+        }> = [
+          {
+            yFrac: 0.14,
+            amp: 16,
+            colTop: 'rgba(52, 211, 153, 0)',
+            colMid: period === 'night' ? 'rgba(52, 211, 153, 0.20)' : 'rgba(52, 211, 153, 0.11)',
+          },
+          {
+            yFrac: 0.21,
+            amp: 20,
+            colTop: 'rgba(56, 189, 248, 0)',
+            colMid: period === 'night' ? 'rgba(56, 189, 248, 0.17)' : 'rgba(56, 189, 248, 0.10)',
+          },
+          {
+            yFrac: 0.27,
+            amp: 14,
+            colTop: 'rgba(192, 132, 252, 0)',
+            colMid: period === 'night' ? 'rgba(192, 132, 252, 0.13)' : 'rgba(251, 191, 36, 0.09)',
+          },
+        ];
+        ctx.save();
+        for (let r = 0; r < ribbons.length; r++) {
+          const rb = ribbons[r];
+          const baseY = viewH * rb.yFrac;
+          const bandH = Math.max(42, viewH * 0.11);
+          const grad = ctx.createLinearGradient(0, baseY - bandH * 0.5, 0, baseY + bandH * 0.65);
+          grad.addColorStop(0, rb.colTop);
+          grad.addColorStop(0.48, rb.colMid);
+          grad.addColorStop(1, rb.colTop);
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          const steps = 10;
+          for (let s = 0; s <= steps; s++) {
+            const x = (s / steps) * viewW;
+            const wave = Math.sin(s * 0.72 + phase + r * 1.4) * rb.amp;
+            const y = baseY - bandH * 0.42 + wave;
+            if (s === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          for (let s = steps; s >= 0; s--) {
+            const x = (s / steps) * viewW;
+            const wave = Math.sin(s * 0.72 + phase + r * 1.4 + 0.45) * rb.amp;
+            ctx.lineTo(x, baseY + bandH * 0.52 + wave);
+          }
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.restore();
       }
     }
 
@@ -197,6 +260,8 @@ export function terrainDrawFloatingIslandRim(self: IsometricRenderer,
     const hw = TILE_W * 0.5 * cam.zoom;
     const hh = TILE_H * 0.5 * cam.zoom;
     const rimDepth = 54 * cam.zoom;
+    const isWinter =
+      typeof sim.isWinterMainMapActive === 'function' && sim.isWinterMainMapActive();
 
     const toScreenRot = (rx: number, ry: number, zOff = 0) => {
       const wx = (rx - ry) * (TILE_W * 0.5);
@@ -270,18 +335,24 @@ export function terrainDrawFloatingIslandRim(self: IsometricRenderer,
       ctx.lineTo(p.sx, p.sy + hh * 2 + drop);
       ctx.lineTo(p.sx - hw, p.sy + hh + drop * 0.92);
       ctx.closePath();
-      ctx.fillStyle = isNightLike ? '#3b3345' : '#9c7a5b';
+      ctx.fillStyle = isWinter
+        ? isNightLike
+          ? '#2c3952'
+          : '#6c7e96'
+        : isNightLike
+          ? '#3b3345'
+          : '#9c7a5b';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(42, 26, 16, 0.42)';
+      ctx.strokeStyle = isWinter ? 'rgba(15, 23, 42, 0.45)' : 'rgba(42, 26, 16, 0.42)';
       ctx.lineWidth = Math.max(0.8, 1.1 * cam.zoom);
       ctx.stroke();
 
       // Grassy / snowy / mossy overhang lip
       const lipCol =
-        cell?.terrain === 'snow'
+        isWinter || cell?.terrain === 'snow'
           ? isNightLike
-            ? '#9fb6d0'
-            : '#f1f6fc'
+            ? '#a3bad4'
+            : '#f8fbff'
           : cell?.terrain === 'water'
             ? '#38bdf8'
             : isNightLike
@@ -291,10 +362,23 @@ export function terrainDrawFloatingIslandRim(self: IsometricRenderer,
       ctx.beginPath();
       ctx.moveTo(p.sx - hw, p.sy + hh);
       ctx.lineTo(p.sx, p.sy + hh * 2);
-      ctx.lineTo(p.sx, p.sy + hh * 2 + 5.5 * cam.zoom);
-      ctx.lineTo(p.sx - hw, p.sy + hh + 5.5 * cam.zoom);
+      ctx.lineTo(p.sx, p.sy + hh * 2 + (isWinter ? 7.2 : 5.5) * cam.zoom);
+      ctx.lineTo(p.sx - hw, p.sy + hh + (isWinter ? 7.2 : 5.5) * cam.zoom);
       ctx.closePath();
       ctx.fill();
+
+      if (isWinter && cell?.terrain !== 'water' && rx0 % 2 === 0) {
+        const ix = p.sx - hw * 0.46;
+        const iy = p.sy + hh * 1.54 + 5.5 * cam.zoom;
+        const iLen = (9 + (rx0 % 3) * 4) * cam.zoom;
+        ctx.fillStyle = isNightLike ? 'rgba(186, 230, 253, 0.72)' : 'rgba(224, 242, 254, 0.94)';
+        ctx.beginPath();
+        ctx.moveTo(ix - 2.2 * cam.zoom, iy);
+        ctx.lineTo(ix + 2.2 * cam.zoom, iy + 1.1 * cam.zoom);
+        ctx.lineTo(ix, iy + iLen);
+        ctx.closePath();
+        ctx.fill();
+      }
     }
 
     // 3. Right-Front Floating Cliff Skirt (rx = GRID_SIZE, ry0 = 0..GRID_SIZE-1)
@@ -314,17 +398,23 @@ export function terrainDrawFloatingIslandRim(self: IsometricRenderer,
       ctx.lineTo(p.sx + hw, p.sy + hh + drop * 0.92);
       ctx.lineTo(p.sx, p.sy + hh * 2 + drop);
       ctx.closePath();
-      ctx.fillStyle = isNightLike ? '#2a2434' : '#785c43';
+      ctx.fillStyle = isWinter
+        ? isNightLike
+          ? '#1e293d'
+          : '#52637a'
+        : isNightLike
+          ? '#2a2434'
+          : '#785c43';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(42, 26, 16, 0.45)';
+      ctx.strokeStyle = isWinter ? 'rgba(15, 23, 42, 0.48)' : 'rgba(42, 26, 16, 0.45)';
       ctx.lineWidth = Math.max(0.8, 1.1 * cam.zoom);
       ctx.stroke();
 
       const lipCol =
-        cell?.terrain === 'snow'
+        isWinter || cell?.terrain === 'snow'
           ? isNightLike
             ? '#8aa2be'
-            : '#e2edf8'
+            : '#e6f0fa'
           : cell?.terrain === 'water'
             ? '#0ea5e9'
             : isNightLike
@@ -334,10 +424,23 @@ export function terrainDrawFloatingIslandRim(self: IsometricRenderer,
       ctx.beginPath();
       ctx.moveTo(p.sx, p.sy + hh * 2);
       ctx.lineTo(p.sx + hw, p.sy + hh);
-      ctx.lineTo(p.sx + hw, p.sy + hh + 5.5 * cam.zoom);
-      ctx.lineTo(p.sx, p.sy + hh * 2 + 5.5 * cam.zoom);
+      ctx.lineTo(p.sx + hw, p.sy + hh + (isWinter ? 7.2 : 5.5) * cam.zoom);
+      ctx.lineTo(p.sx, p.sy + hh * 2 + (isWinter ? 7.2 : 5.5) * cam.zoom);
       ctx.closePath();
       ctx.fill();
+
+      if (isWinter && cell?.terrain !== 'water' && ry0 % 2 === 1) {
+        const ix = p.sx + hw * 0.46;
+        const iy = p.sy + hh * 1.54 + 5.5 * cam.zoom;
+        const iLen = (8.5 + (ry0 % 3) * 3.8) * cam.zoom;
+        ctx.fillStyle = isNightLike ? 'rgba(147, 197, 253, 0.68)' : 'rgba(207, 236, 252, 0.92)';
+        ctx.beginPath();
+        ctx.moveTo(ix - 2.1 * cam.zoom, iy + 1.0 * cam.zoom);
+        ctx.lineTo(ix + 2.1 * cam.zoom, iy);
+        ctx.lineTo(ix, iy + iLen);
+        ctx.closePath();
+        ctx.fill();
+      }
     }
     ctx.restore();
 }
@@ -358,6 +461,8 @@ export function terrainRenderGroundTilesLayer(self: IsometricRenderer,
     const hw = TILE_W * 0.5 * cam.zoom;
     const hh = TILE_H * 0.5 * cam.zoom;
     const margin = Math.max(130, 280 * cam.zoom);
+    const isWinter =
+      typeof sim.isWinterMainMapActive === 'function' && sim.isWinterMainMapActive();
 
     terrainDrawFloatingIslandRim(self, sim, cam, viewW, viewH, isNightLike);
 
@@ -440,58 +545,84 @@ export function terrainRenderGroundTilesLayer(self: IsometricRenderer,
           }
         }
 
-        // 2b. Top Diamond Surface (expanded 0.45px so adjacent sunlit meadow tiles fuse seamlessly!)
-        const shw = hw + 0.45;
-        const shh = hh + 0.35;
+        // 2b. Top Diamond Surface (expanded 0.9px so adjacent sunlit meadow / winter snow tiles fuse seamlessly without grid seams!)
+        const shw = hw + 0.9;
+        const shh = hh + 0.7;
         ctx.beginPath();
-        ctx.moveTo(p.sx, p.sy - 0.35);
+        ctx.moveTo(p.sx, p.sy - 0.7);
         ctx.lineTo(p.sx + shw, p.sy + hh);
         ctx.lineTo(p.sx, p.sy + hh + shh);
         ctx.lineTo(p.sx - shw, p.sy + hh);
         ctx.closePath();
 
-        ctx.fillStyle = isNightLike ? pal.night : pal.day;
+        if (isWinter && (cell.terrain === 'grass' || cell.terrain === 'forest')) {
+          ctx.fillStyle = unlocked
+            ? isNightLike
+              ? '#b4c9e4'
+              : '#eef6ff'
+            : isNightLike
+              ? '#9bb4d4'
+              : '#deecfa';
+        } else if (isWinter && cell.terrain === 'water') {
+          ctx.fillStyle = isNightLike ? '#0c3f63' : '#1f83a8';
+        } else {
+          ctx.fillStyle = isNightLike ? pal.night : pal.day;
+        }
         ctx.fill();
 
-        // AAA 2.5D Multi-Layered Sunlit Rolling Meadow Relief, Clover Patches, Wildflowers & Sculpted Devon Stone Walls
+        // AAA 2.5D Seamless Sunlit Rolling Meadow OR Crisp Winter Christmas Snowdrifts & Holly Sprigs
         if (!cell.buildingUid && cell.path === 'none') {
-          const hillMacro = Math.sin(gx * 0.17 + gy * 0.13) + Math.cos(gx * 0.11 - gy * 0.19);
-          const meadowWave = Math.sin(gx * 0.39 + gy * 0.27) + Math.cos(gx * 0.23 - gy * 0.34);
-          if ((cell.terrain === 'grass' || cell.terrain === 'forest') && !isNightLike) {
-            // Layer 1: High-contrast warm golden-olive hill crests vs deep forest-emerald valley hollows (Mockup 1)
-            if (hillMacro > 0.04) {
-              const sunAmt = Math.min(0.48, (hillMacro - 0.04) * (unlocked ? 0.28 : 0.19));
-              ctx.fillStyle = `rgba(222, 242, 82, ${sunAmt.toFixed(3)})`;
-              ctx.fill();
-              if (hillMacro > 0.55 && unlocked) {
-                ctx.fillStyle = 'rgba(254, 245, 134, 0.24)';
+          const hillMacro = Math.sin(gx * 0.14 + gy * 0.11) + Math.cos(gx * 0.09 - gy * 0.15);
+          const meadowWave = Math.sin(gx * 0.26 + gy * 0.19) + Math.cos(gx * 0.17 - gy * 0.24);
+          if ((cell.terrain === 'grass' || cell.terrain === 'forest') && isWinter) {
+            if (!isNightLike) {
+              if (hillMacro > 0.02) {
+                const sunAmt = Math.min(0.44, (hillMacro - 0.02) * (unlocked ? 0.26 : 0.18));
+                ctx.fillStyle = `rgba(255, 255, 255, ${sunAmt.toFixed(3)})`;
+                ctx.fill();
+              } else if (hillMacro < -0.04) {
+                const shadeAmt = Math.min(0.24, (-hillMacro - 0.04) * (unlocked ? 0.14 : 0.10));
+                ctx.fillStyle = `rgba(148, 186, 224, ${shadeAmt.toFixed(3)})`;
                 ctx.fill();
               }
-            } else if (hillMacro < -0.06) {
-              const shadeAmt = Math.min(0.38, (-hillMacro - 0.06) * (unlocked ? 0.22 : 0.16));
-              ctx.fillStyle = `rgba(20, 74, 26, ${shadeAmt.toFixed(3)})`;
+              if (meadowWave > 0.26 && unlocked) {
+                ctx.fillStyle = 'rgba(255, 250, 234, 0.34)';
+                ctx.fill();
+              }
+            } else {
+              if (hillMacro > 0.22) {
+                ctx.fillStyle = 'rgba(186, 230, 253, 0.11)';
+                ctx.fill();
+              } else if (hillMacro < -0.22) {
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.18)';
+                ctx.fill();
+              }
+            }
+          } else if ((cell.terrain === 'grass' || cell.terrain === 'forest') && !isNightLike) {
+            // Smooth low-frequency sunlit glade wash (gentle gradient across neighbor tiles — zero stepped mosaic!)
+            if (hillMacro > 0.02) {
+              const sunAmt = Math.min(0.26, (hillMacro - 0.02) * (unlocked ? 0.15 : 0.10));
+              ctx.fillStyle = `rgba(218, 240, 88, ${sunAmt.toFixed(3)})`;
+              ctx.fill();
+            } else if (hillMacro < -0.04) {
+              const shadeAmt = Math.min(0.20, (-hillMacro - 0.04) * (unlocked ? 0.11 : 0.08));
+              ctx.fillStyle = `rgba(26, 86, 32, ${shadeAmt.toFixed(3)})`;
               ctx.fill();
             }
-            // Layer 2: Sun-dappled micro meadow patches
-            if (meadowWave > 0.24) {
-              ctx.fillStyle = unlocked
-                ? 'rgba(244, 252, 146, 0.24)'
-                : 'rgba(226, 252, 168, 0.15)';
-              ctx.fill();
-            } else if (meadowWave < -0.32) {
-              ctx.fillStyle = 'rgba(22, 86, 34, 0.18)';
+            if (meadowWave > 0.30 && unlocked) {
+              ctx.fillStyle = 'rgba(238, 248, 136, 0.13)';
               ctx.fill();
             }
           } else if ((cell.terrain === 'grass' || cell.terrain === 'forest') && isNightLike) {
             if (hillMacro > 0.28) {
-              ctx.fillStyle = 'rgba(74, 222, 180, 0.08)';
+              ctx.fillStyle = 'rgba(74, 222, 180, 0.06)';
               ctx.fill();
             } else if (hillMacro < -0.28) {
-              ctx.fillStyle = 'rgba(6, 18, 24, 0.22)';
+              ctx.fillStyle = 'rgba(6, 18, 24, 0.15)';
               ctx.fill();
             }
           } else if (cell.terrain === 'stone') {
-            // Hogsmeade Stone Plaza: warm bevelled cobblestone slabs instead of flat grey!
+            // Hogsmeade Stone Plaza: warm bevelled cobblestone slabs (with soft snow-dusted rims in winter!)
             const stTone = (gx + gy) % 2 === 0
               ? (isNightLike ? '#6c6372' : '#ead7b7')
               : (isNightLike ? '#5d5564' : '#d8c19d');
@@ -505,45 +636,157 @@ export function terrainRenderGroundTilesLayer(self: IsometricRenderer,
             ctx.ellipse(p.sx - 4.5 * cam.zoom, p.sy + hh, 5.2 * cam.zoom, 2.7 * cam.zoom, 0, 0, Math.PI * 2);
             ctx.ellipse(p.sx + 4.8 * cam.zoom, p.sy + hh - 1.5 * cam.zoom, 4.8 * cam.zoom, 2.5 * cam.zoom, 0, 0, Math.PI * 2);
             ctx.fill();
-          }
-
-          const hVal = Math.abs((gx * 37 + gy * 23 + ((gx ^ gy) * 7)) % 23);
-          if (cell.terrain === 'grass') {
-            // Painterly emerald clover & sunlit chartreuse grass cushions
-            if (hVal < 16) {
-              ctx.fillStyle = isNightLike
-                ? '#295740'
-                : hillMacro > 0.22
-                  ? '#7bc43a'
-                  : hVal % 2 === 0
-                    ? '#4d9832'
-                    : '#3f8429';
+            if (isWinter && (gx + gy) % 3 === 0) {
+              ctx.fillStyle = isNightLike ? 'rgba(203, 213, 225, 0.65)' : 'rgba(255, 255, 255, 0.88)';
               ctx.beginPath();
-              ctx.ellipse(p.sx - 3.8 * cam.zoom, p.sy + hh + 0.6 * cam.zoom, 4.1 * cam.zoom, 2.0 * cam.zoom, 0, 0, Math.PI * 2);
-              ctx.ellipse(p.sx + 1.8 * cam.zoom, p.sy + hh - 1.2 * cam.zoom, 3.5 * cam.zoom, 1.7 * cam.zoom, 0, 0, Math.PI * 2);
+              ctx.ellipse(p.sx - 5.2 * cam.zoom, p.sy + hh - 1.2 * cam.zoom, 3.0 * cam.zoom, 1.3 * cam.zoom, -0.2, 0, Math.PI * 2);
               ctx.fill();
             }
-            // Sculpted 3-blade grass tufts with sunlit tips
-            if (cam.zoom >= 0.52 && hVal % 2 === 0) {
+          }
+
+          const hVal = Math.abs((gx * 73 + gy * 41 + ((gx ^ (gy * 3)) * 19)) % 29);
+          const jx = (((gx * 17 + gy * 31) % 11) - 5) * 1.15 * cam.zoom;
+          const jy = (((gx * 29 + gy * 13) % 9) - 4) * 0.65 * cam.zoom;
+          if (cell.terrain === 'grass' && isWinter && meadowWave > -0.22) {
+            // 1. Sculpted 3D Snow-Pillow Mounds with cool ice-blue base crescents
+            if (meadowWave > 0.16 && hVal < 12) {
+              ctx.fillStyle = isNightLike ? 'rgba(68, 92, 128, 0.52)' : 'rgba(162, 198, 232, 0.56)';
+              ctx.beginPath();
+              ctx.ellipse(p.sx + jx, p.sy + hh + jy + 1.1 * cam.zoom, 5.4 * cam.zoom, 2.5 * cam.zoom, 0, 0, Math.PI * 2);
+              ctx.ellipse(p.sx + jx + 3.6 * cam.zoom, p.sy + hh + jy, 3.9 * cam.zoom, 1.9 * cam.zoom, 0, 0, Math.PI * 2);
+              ctx.fill();
+
+              ctx.fillStyle = isNightLike ? 'rgba(198, 218, 242, 0.72)' : 'rgba(255, 255, 255, 0.92)';
+              ctx.beginPath();
+              ctx.ellipse(p.sx + jx, p.sy + hh + jy, 5.1 * cam.zoom, 2.3 * cam.zoom, 0, 0, Math.PI * 2);
+              ctx.ellipse(p.sx + jx + 3.6 * cam.zoom, p.sy + hh + jy - 0.9 * cam.zoom, 3.7 * cam.zoom, 1.75 * cam.zoom, 0, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            // 2. Frosted Blue-Spruce & Silver-Frost Tufts peeking gently through snow
+            if (cam.zoom >= 0.52 && hVal < 8) {
+              const bx = p.sx + jx * 1.2;
+              const by = p.sy + hh + jy * 1.1;
+              ctx.lineCap = 'round';
+              ctx.strokeStyle = isNightLike ? 'rgba(51, 92, 82, 0.78)' : 'rgba(30, 88, 66, 0.78)';
+              ctx.lineWidth = Math.max(1.1, 1.65 * cam.zoom);
+              ctx.beginPath();
+              ctx.moveTo(bx - 1.8 * cam.zoom, by);
+              ctx.quadraticCurveTo(bx - 2.6 * cam.zoom, by - 2.2 * cam.zoom, bx - 3.4 * cam.zoom, by - 3.9 * cam.zoom);
+              ctx.moveTo(bx, by + 0.3 * cam.zoom);
+              ctx.quadraticCurveTo(bx, by - 2.7 * cam.zoom, bx + 0.2 * cam.zoom, by - 4.7 * cam.zoom);
+              ctx.moveTo(bx + 1.8 * cam.zoom, by);
+              ctx.quadraticCurveTo(bx + 2.6 * cam.zoom, by - 2.1 * cam.zoom, bx + 3.4 * cam.zoom, by - 3.7 * cam.zoom);
+              ctx.stroke();
+
+              // Crisp white frost tips on needles
+              ctx.strokeStyle = isNightLike ? 'rgba(203, 224, 248, 0.78)' : 'rgba(255, 255, 255, 0.95)';
+              ctx.lineWidth = Math.max(0.9, 1.25 * cam.zoom);
+              ctx.beginPath();
+              ctx.moveTo(bx - 2.7 * cam.zoom, by - 2.5 * cam.zoom);
+              ctx.lineTo(bx - 3.4 * cam.zoom, by - 3.9 * cam.zoom);
+              ctx.moveTo(bx + 0.1 * cam.zoom, by - 2.9 * cam.zoom);
+              ctx.lineTo(bx + 0.2 * cam.zoom, by - 4.7 * cam.zoom);
+              ctx.stroke();
+            }
+            // 3. Festive Christmas Holly Leaves & Bright Scarlet Winterberries (`nhựa ruồi Giáng Sinh`)!
+            if (meadowWave > 0.24 && hVal <= 4) {
+              const fx1 = p.sx + 4.0 * cam.zoom;
+              const fy1 = p.sy + hh + 1.0 * cam.zoom;
+              // Deep emerald holly leaf pair
+              ctx.fillStyle = isNightLike ? '#14532d' : '#15803d';
+              ctx.beginPath();
+              ctx.ellipse(fx1 - 2.4 * cam.zoom, fy1 + 0.5 * cam.zoom, 2.8 * cam.zoom, 1.35 * cam.zoom, -0.35, 0, Math.PI * 2);
+              ctx.ellipse(fx1 + 2.3 * cam.zoom, fy1 + 0.6 * cam.zoom, 2.7 * cam.zoom, 1.3 * cam.zoom, 0.35, 0, Math.PI * 2);
+              ctx.fill();
+
+              // Three glossy crimson holly berries + snow glint
+              ctx.fillStyle = isNightLike ? '#b91c1c' : '#dc2626';
+              ctx.beginPath();
+              ctx.arc(fx1 - 0.9 * cam.zoom, fy1, 1.45 * cam.zoom, 0, Math.PI * 2);
+              ctx.arc(fx1 + 1.0 * cam.zoom, fy1 + 0.2 * cam.zoom, 1.35 * cam.zoom, 0, Math.PI * 2);
+              ctx.arc(fx1 + 0.1 * cam.zoom, fy1 - 1.2 * cam.zoom, 1.4 * cam.zoom, 0, Math.PI * 2);
+              ctx.fill();
+
+              ctx.fillStyle = '#ffffff';
+              ctx.beginPath();
+              ctx.arc(fx1 - 1.2 * cam.zoom, fy1 - 0.4 * cam.zoom, 0.55 * cam.zoom, 0, Math.PI * 2);
+              ctx.fill();
+            } else if (!isNightLike && (hVal === 7 || hVal === 19 || hVal === 25) && cam.zoom >= 0.55) {
+              // 4-point diamond winter sun-sparkle glint on fresh powder snow
+              const sxG = p.sx + jx * 0.9;
+              const syG = p.sy + hh + jy * 0.9;
+              const rG = 2.6 * cam.zoom;
+              ctx.strokeStyle = 'rgba(255, 255, 255, 0.94)';
+              ctx.lineWidth = Math.max(0.9, 1.2 * cam.zoom);
+              ctx.beginPath();
+              ctx.moveTo(sxG - rG, syG);
+              ctx.lineTo(sxG + rG, syG);
+              ctx.moveTo(sxG, syG - rG);
+              ctx.lineTo(sxG, syG + rG);
+              ctx.stroke();
+            } else if (unlocked && hVal === 14 && gx >= 10 && gx <= 26 && gy >= 21 && gy <= 30) {
+              // Warm honey-limestone garden stepping stones dusted with snow rims
+              ctx.fillStyle = isNightLike ? '#47403a' : '#8a7254';
+              ctx.beginPath();
+              ctx.ellipse(p.sx - 2.2 * cam.zoom, p.sy + hh + 1.3 * cam.zoom, 4.2 * cam.zoom, 2.1 * cam.zoom, 0.12, 0, Math.PI * 2);
+              ctx.ellipse(p.sx + 3.6 * cam.zoom, p.sy + hh - 0.6 * cam.zoom, 3.1 * cam.zoom, 1.6 * cam.zoom, -0.15, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.fillStyle = isNightLike ? '#8a8175' : '#ead8b8';
+              ctx.beginPath();
+              ctx.ellipse(p.sx - 2.2 * cam.zoom, p.sy + hh + 0.3 * cam.zoom, 4.1 * cam.zoom, 2.0 * cam.zoom, 0.12, 0, Math.PI * 2);
+              ctx.ellipse(p.sx + 3.6 * cam.zoom, p.sy + hh - 1.4 * cam.zoom, 3.0 * cam.zoom, 1.5 * cam.zoom, -0.15, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.fillStyle = isNightLike ? '#cbd5e1' : '#ffffff';
+              ctx.beginPath();
+              ctx.ellipse(p.sx - 2.8 * cam.zoom, p.sy + hh - 0.6 * cam.zoom, 2.5 * cam.zoom, 0.95 * cam.zoom, 0, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          } else if (cell.terrain === 'grass' && meadowWave > -0.18) {
+            // Clustered painterly clover cushions (jittered per-tile so zero repetitive wallpaper grid!)
+            if (meadowWave > 0.22 && hVal < 11) {
+              ctx.fillStyle = isNightLike
+                ? 'rgba(42, 92, 68, 0.52)'
+                : hillMacro > 0.18
+                  ? 'rgba(132, 204, 62, 0.55)'
+                  : 'rgba(84, 164, 48, 0.46)';
+              ctx.beginPath();
+              ctx.ellipse(p.sx + jx, p.sy + hh + jy, 4.8 * cam.zoom, 2.3 * cam.zoom, 0, 0, Math.PI * 2);
+              ctx.ellipse(p.sx + jx + 3.2 * cam.zoom, p.sy + hh + jy - 1.1 * cam.zoom, 3.6 * cam.zoom, 1.8 * cam.zoom, 0, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            // Soft curved multi-blade sunlit grass tufts (2-tone body + warm sunlit tip, never dark needles!)
+            if (cam.zoom >= 0.52 && hVal < 10) {
               const bladeSway =
                 forStaticCache || self.reducedMotion
                   ? 0
-                  : Math.sin(self.tick * 0.045 + gx * 0.6 + gy * 0.4) * 1.4 * cam.zoom;
-              const bx = p.sx + ((hVal % 5) - 2) * 3.4 * cam.zoom;
-              const by = p.sy + hh + ((hVal % 3) - 1) * 1.8 * cam.zoom;
-              ctx.strokeStyle = isNightLike ? '#3c7a57' : '#357822';
-              ctx.lineWidth = Math.max(1.05, 1.55 * cam.zoom);
+                  : Math.sin(self.tick * 0.042 + gx * 0.6 + gy * 0.4) * 1.25 * cam.zoom;
+              const bx = p.sx + jx * 1.25;
+              const by = p.sy + hh + jy * 1.15;
+              ctx.lineCap = 'round';
+              ctx.strokeStyle = isNightLike ? 'rgba(64, 128, 92, 0.78)' : 'rgba(72, 152, 38, 0.82)';
+              ctx.lineWidth = Math.max(1.15, 1.75 * cam.zoom);
               ctx.beginPath();
-              ctx.moveTo(bx - 2.2 * cam.zoom, by);
-              ctx.lineTo(bx - 3.4 * cam.zoom + bladeSway, by - 5.2 * cam.zoom);
-              ctx.moveTo(bx, by + 0.5 * cam.zoom);
-              ctx.lineTo(bx + bladeSway * 1.15, by - 6.3 * cam.zoom);
-              ctx.moveTo(bx + 2.2 * cam.zoom, by);
-              ctx.lineTo(bx + 3.3 * cam.zoom + bladeSway, by - 4.8 * cam.zoom);
+              ctx.moveTo(bx - 2.1 * cam.zoom, by);
+              ctx.quadraticCurveTo(bx - 2.8 * cam.zoom, by - 2.6 * cam.zoom, bx - 3.8 * cam.zoom + bladeSway, by - 4.6 * cam.zoom);
+              ctx.moveTo(bx, by + 0.4 * cam.zoom);
+              ctx.quadraticCurveTo(bx + bladeSway * 0.5, by - 3.2 * cam.zoom, bx + bladeSway * 1.1, by - 5.6 * cam.zoom);
+              ctx.moveTo(bx + 2.1 * cam.zoom, by);
+              ctx.quadraticCurveTo(bx + 2.8 * cam.zoom, by - 2.5 * cam.zoom, bx + 3.7 * cam.zoom + bladeSway, by - 4.4 * cam.zoom);
               ctx.stroke();
+
+              if (!isNightLike) {
+                ctx.strokeStyle = 'rgba(176, 228, 72, 0.75)';
+                ctx.lineWidth = Math.max(0.85, 1.15 * cam.zoom);
+                ctx.beginPath();
+                ctx.moveTo(bx - 2.9 * cam.zoom + bladeSway * 0.6, by - 2.8 * cam.zoom);
+                ctx.lineTo(bx - 3.8 * cam.zoom + bladeSway, by - 4.6 * cam.zoom);
+                ctx.moveTo(bx + bladeSway * 0.6, by - 3.3 * cam.zoom);
+                ctx.lineTo(bx + bladeSway * 1.1, by - 5.6 * cam.zoom);
+                ctx.stroke();
+              }
             }
-            // Lush wildflower clusters: golden buttercups, cream daisies with amber centers, lavender & wild rose!
-            if (hVal <= 5) {
+            // Cozy clustered cottage wildflowers (cream daisies with amber centers, buttercups, lavender & blush rose)
+            if (meadowWave > 0.28 && hVal <= 4) {
               const flowerCol = isNightLike
                 ? hVal % 2 === 0
                   ? 'rgba(110, 231, 183, 0.82)'
@@ -616,8 +859,20 @@ export function terrainRenderGroundTilesLayer(self: IsometricRenderer,
               const wallFaceDark = isNightLike ? '#4f5163' : '#8b7e6e';
               const wallFaceMid = isNightLike ? '#63667a' : '#a69886';
               const wallCapLight = isNightLike ? '#8b8ea3' : '#e6dccb';
-              const mossBase = isNightLike ? '#265c3e' : '#53a634';
-              const mossHighlight = isNightLike ? '#3c8459' : '#8ce04a';
+              const mossBase = isWinter
+                ? isNightLike
+                  ? '#94a8c4'
+                  : '#cbd5e1'
+                : isNightLike
+                  ? '#265c3e'
+                  : '#53a634';
+              const mossHighlight = isWinter
+                ? isNightLike
+                  ? '#dbeafe'
+                  : '#ffffff'
+                : isNightLike
+                  ? '#3c8459'
+                  : '#8ce04a';
 
               const drawStonePillar = (px: number, py: number) => {
                 const pw = Math.max(3.6, 6.2 * cam.zoom);
@@ -716,10 +971,16 @@ export function terrainRenderGroundTilesLayer(self: IsometricRenderer,
                   ctx.beginPath();
                   ctx.ellipse(mx, my, 4.2 * cam.zoom, 2.0 * cam.zoom, shadedRight ? 0.22 : -0.22, 0, Math.PI * 2);
                   ctx.fill();
-                  if (!isNightLike) {
+                  if (!isNightLike || isWinter) {
                     ctx.fillStyle = mossHighlight;
                     ctx.beginPath();
-                    ctx.ellipse(mx - 0.8 * cam.zoom, my - 0.5 * cam.zoom, 2.3 * cam.zoom, 1.0 * cam.zoom, 0, 0, Math.PI * 2);
+                    ctx.ellipse(mx - 0.8 * cam.zoom, my - 0.5 * cam.zoom, 2.5 * cam.zoom, 1.15 * cam.zoom, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                  }
+                  if (isWinter && (gx + gy) % 3 === 0 && mPos < 0.5) {
+                    ctx.fillStyle = '#dc2626';
+                    ctx.beginPath();
+                    ctx.arc(mx + 1.8 * cam.zoom, my - 0.2 * cam.zoom, 1.05 * cam.zoom, 0, Math.PI * 2);
                     ctx.fill();
                   }
                 }
@@ -811,12 +1072,12 @@ export function terrainRenderGroundTilesLayer(self: IsometricRenderer,
           }
         }
 
-        // 2g. Sunlit Enchanted Forest Mist Glaze on Locked Zones (bright pastel mist in day, never dark grey!)
+        // 2g. Sunlit Enchanted Forest Mist Glaze on Locked Zones (bright pastel mist in day, frosty snow mist in winter!)
         if (!unlocked) {
           ctx.fillStyle = isNightLike
-            ? 'rgba(20, 28, 54, 0.46)'
-            : cell.terrain === 'snow'
-              ? 'rgba(238, 246, 255, 0.26)'
+            ? 'rgba(20, 28, 54, 0.44)'
+            : isWinter || cell.terrain === 'snow'
+              ? 'rgba(232, 244, 255, 0.28)'
               : 'rgba(218, 242, 216, 0.22)';
           ctx.beginPath();
           ctx.moveTo(p.sx, p.sy - 0.35);
@@ -864,7 +1125,9 @@ export function terrainDrawCachedOrLiveGround(self: IsometricRenderer,
     }
 
     const viewRot = cam.viewRot ?? 0;
-    const stateKey = `aaa_v5|${viewRot}|${isNightLike ? 1 : 0}|${sim.stateRevision}|${sim.state.sandboxMode ? 1 : 0}|${self.activeMovingUid ?? ''}`;
+    const isWinter =
+      typeof sim.isWinterMainMapActive === 'function' && sim.isWinterMainMapActive();
+    const stateKey = `aaa_v6|${viewRot}|${isNightLike ? 1 : 0}|${isWinter ? 1 : 0}|${sim.stateRevision}|${sim.state.sandboxMode ? 1 : 0}|${self.activeMovingUid ?? ''}`;
     const zoomChanged = Math.abs(cam.zoom - self.groundCacheLastLiveZoom) > 1e-4;
     self.groundCacheLastLiveZoom = cam.zoom;
     self.groundCacheZoomStableFrames = zoomChanged
@@ -1064,6 +1327,8 @@ export function terrainDrawAutoTiledPath(self: IsometricRenderer,
     const connW = hasNeighborRot(rx0 - 1, ry0); // Screen top-left edge
 
     const { gx: tileGx, gy: tileGy } = rotTileToWorldTile(rx0, ry0, viewRot);
+    const isWinter =
+      typeof sim.isWinterMainMapActive === 'function' && sim.isWinterMainMapActive();
 
     // Rustic Flat Isometric Oak Plank Boardwalk Bridge when path crosses water — EXCEPT at the 2 scenic 2.5D Arched Stone River Bridges!
     if (overWater) {
@@ -1168,6 +1433,14 @@ export function terrainDrawAutoTiledPath(self: IsometricRenderer,
         ctx.strokeStyle = isNight ? '#8c5830' : '#deb887';
         ctx.lineWidth = Math.max(1.2, 1.9 * zoom);
         ctx.stroke();
+        if (isWinter) {
+          ctx.strokeStyle = isNight ? '#cbd5e1' : '#ffffff';
+          ctx.lineWidth = Math.max(1.1, 1.75 * zoom);
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y - 1.1 * zoom);
+          ctx.lineTo(p2.x, p2.y - 1.1 * zoom);
+          ctx.stroke();
+        }
       }
 
       ctx.restore();
@@ -1281,10 +1554,21 @@ export function terrainDrawAutoTiledPath(self: IsometricRenderer,
         if (groundTerrain === 'grass') {
           const mx = (a.x + bPt.x) * 0.5;
           const my = (a.y + bPt.y) * 0.5;
-          ctx.fillStyle = isNight ? '#2c6144' : '#5bb538';
-          ctx.beginPath();
-          ctx.ellipse(mx, my, 3.0 * zoom, 1.45 * zoom, 0, 0, Math.PI * 2);
-          ctx.fill();
+          if (isWinter) {
+            ctx.fillStyle = isNight ? '#8da3c2' : '#cbd5e1';
+            ctx.beginPath();
+            ctx.ellipse(mx, my + 0.6 * zoom, 3.6 * zoom, 1.65 * zoom, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = isNight ? '#dbeafe' : '#ffffff';
+            ctx.beginPath();
+            ctx.ellipse(mx, my - 0.1 * zoom, 3.2 * zoom, 1.35 * zoom, 0, 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            ctx.fillStyle = isNight ? '#2c6144' : '#5bb538';
+            ctx.beginPath();
+            ctx.ellipse(mx, my, 3.0 * zoom, 1.45 * zoom, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
       }
       ctx.restore();
@@ -1742,7 +2026,8 @@ export function terrainDrawLockedForestProp(self: IsometricRenderer,
     sy: number,
     zoom: number,
     shadowVec: { dx: number; dy: number; alpha: number },
-    isNight: boolean
+    isNight: boolean,
+    isWinter = false
   ): void {
     const rawSp = self.sprites.get(prop.spriteKey);
     if (!rawSp) return;
@@ -1750,14 +2035,34 @@ export function terrainDrawLockedForestProp(self: IsometricRenderer,
     const isGroundCover =
       prop.spriteKey === 'env_flower_patch' ||
       prop.spriteKey === 'env_bush_flowers' ||
-      prop.spriteKey === 'env_mossy_rock';
-    const baseW = (isGroundCover ? 34 : 58) * prop.scale * zoom;
+      prop.spriteKey === 'env_mossy_rock' ||
+      prop.spriteKey === 'yule_holly_hedgerow' ||
+      prop.spriteKey === 'yule_snowdrop_moss_log' ||
+      prop.spriteKey === 'yule_edelweiss_alpine_rockery' ||
+      prop.spriteKey === 'yule_puffskein_snowballs';
+    const isRigidProp =
+      prop.spriteKey === 'env_mossy_rock' ||
+      prop.spriteKey === 'yule_hogsmeade_twin_lamp' ||
+      prop.spriteKey === 'yule_hogsmeade_arch' ||
+      prop.spriteKey === 'yule_snowy_signpost' ||
+      prop.spriteKey === 'yule_butterbeer_hot_cart' ||
+      prop.spriteKey === 'yule_roasted_chestnut_stand' ||
+      prop.spriteKey === 'yule_owl_post_box' ||
+      prop.spriteKey === 'yule_hedwig_gift_sleigh' ||
+      prop.spriteKey === 'yule_burrow_gnome_snowman' ||
+      prop.spriteKey === 'yule_poinsettia_tiered_stand' ||
+      prop.spriteKey === 'yule_puffskein_snowballs';
+    const baseW = (isGroundCover ? 36 : 58) * prop.scale * zoom;
     const drawH = baseW * (rawSp.height / rawSp.width);
     const sp = self.sprites.getMip(prop.spriteKey, baseW * self.dpr) ?? rawSp;
 
     ctx.save();
-    // Soft dappled forest canopy shadow
-    ctx.fillStyle = isNight ? 'rgba(10, 14, 28, 0.26)' : 'rgba(34, 62, 28, 0.2)';
+    // Soft dappled forest / winter snow canopy shadow
+    ctx.fillStyle = isNight
+      ? 'rgba(10, 14, 28, 0.28)'
+      : isWinter
+        ? 'rgba(44, 72, 110, 0.22)'
+        : 'rgba(34, 62, 28, 0.2)';
     ctx.beginPath();
     ctx.ellipse(
       sx + shadowVec.dx * 0.35 * zoom,
@@ -1770,25 +2075,57 @@ export function terrainDrawLockedForestProp(self: IsometricRenderer,
     );
     ctx.fill();
 
+    // Warm Christmas lantern & fairy-light glow on scenic festive landmarks!
+    const isWarmYuleLandmark =
+      prop.spriteKey === 'yule_great_hall_tree' ||
+      prop.spriteKey === 'yule_hogsmeade_twin_lamp' ||
+      prop.spriteKey === 'yule_hogsmeade_arch' ||
+      prop.spriteKey === 'yule_butterbeer_hot_cart' ||
+      prop.spriteKey === 'yule_roasted_chestnut_stand' ||
+      prop.spriteKey === 'yule_ribbon_house_pine';
+    const isIcyYuleLandmark =
+      prop.spriteKey === 'yule_blue_spruce_starlight' ||
+      prop.spriteKey === 'yule_birch_fairy_grove' ||
+      prop.spriteKey === 'yule_glowing_puffapod_bush';
+    if (isWarmYuleLandmark || isIcyYuleLandmark) {
+      const pulse = self.reducedMotion
+        ? 1
+        : 0.9 + 0.1 * Math.sin(self.tick * 0.06 + prop.gx * 1.7 + prop.gy);
+      const glowR = baseW * (prop.spriteKey === 'yule_great_hall_tree' ? 0.68 : 0.56) * pulse;
+      const glowY = sy - drawH * 0.48;
+      const g = ctx.createRadialGradient(sx, glowY, 2, sx, glowY, glowR);
+      if (isIcyYuleLandmark) {
+        g.addColorStop(0, isNight ? 'rgba(125, 211, 252, 0.46)' : 'rgba(186, 230, 253, 0.28)');
+        g.addColorStop(1, 'rgba(125, 211, 252, 0)');
+      } else {
+        g.addColorStop(0, isNight ? 'rgba(253, 224, 71, 0.52)' : 'rgba(254, 240, 138, 0.32)');
+        g.addColorStop(0.55, isNight ? 'rgba(251, 146, 60, 0.24)' : 'rgba(251, 191, 36, 0.12)');
+        g.addColorStop(1, 'rgba(251, 191, 36, 0)');
+      }
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(sx, glowY, glowR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     // 2.5D Traveling Wind Gust Shear: roots stay planted on soil while canopy sways organically!
-    const isRock = prop.spriteKey === 'env_mossy_rock';
     const windWave =
-      self.reducedMotion || isRock
+      self.reducedMotion || isRigidProp
         ? 0
         : Math.sin(self.tick * 0.036 - prop.gx * 0.28 - prop.gy * 0.19) *
-          (isGroundCover ? 0.028 : 0.046);
+          (isGroundCover ? 0.024 : 0.042);
     ctx.translate(sx, sy + 4 * zoom);
     if (windWave !== 0) {
       ctx.transform(1, 0, windWave, 1, 0, 0);
     }
     if (prop.flipX) ctx.scale(-1, 1);
-    ctx.globalAlpha = isNight ? 0.86 : 0.96;
+    ctx.globalAlpha = isNight ? 0.92 : 0.98;
     ctx.drawImage(sp, -baseW * 0.5, -drawH, baseW, drawH);
     ctx.restore();
 }
 
 /**
- * AAA Scenic 2.5D Arched Mossy Stone Bridge spanning River Ottery crossings (`gy = 22` & `gy = 34`),
+ * AAA Scenic 2.5D Arched Mossy / Snowy Stone Bridge spanning River Ottery crossings (`gy = 22` & `gy = 34`),
  * complete with foaming whitewater mist & river-boulder abutments (Mockup 1).
  */
 export function terrainDrawScenicRiverBridge(
@@ -1799,7 +2136,8 @@ export function terrainDrawScenicRiverBridge(
   cam: Camera,
   viewW: number,
   viewH: number,
-  isNight: boolean
+  isNight: boolean,
+  isWinter = false
 ): void {
   const rawBridge = self.sprites.get('hogsmeade_stone_bridge');
   if (!rawBridge) return;
@@ -1811,7 +2149,7 @@ export function terrainDrawScenicRiverBridge(
   const sp = self.sprites.getMip('hogsmeade_stone_bridge', drawW * self.dpr) ?? rawBridge;
 
   ctx.save();
-  // 1. Foaming whitewater mist & shimmering turquoise arch reflection beneath bridge
+  // 1. Foaming whitewater / icy winter mist & shimmering turquoise arch reflection beneath bridge
   const mistPulse = self.reducedMotion ? 1 : 0.88 + Math.sin(self.tick * 0.06 + gyCenter) * 0.12;
   const mistGrad = ctx.createRadialGradient(
     pt.sx,
@@ -1823,33 +2161,46 @@ export function terrainDrawScenicRiverBridge(
   );
   mistGrad.addColorStop(
     0,
-    isNight ? `rgba(165, 243, 252, ${0.28 * mistPulse})` : `rgba(255, 255, 255, ${0.56 * mistPulse})`
+    isNight ? `rgba(165, 243, 252, ${0.28 * mistPulse})` : `rgba(255, 255, 255, ${0.62 * mistPulse})`
   );
-  mistGrad.addColorStop(0.55, isNight ? 'rgba(56, 189, 248, 0.12)' : 'rgba(224, 247, 250, 0.28)');
+  mistGrad.addColorStop(0.55, isNight ? 'rgba(56, 189, 248, 0.14)' : 'rgba(224, 247, 250, 0.34)');
   mistGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
   ctx.fillStyle = mistGrad;
   ctx.beginPath();
   ctx.ellipse(pt.sx, pt.sy + 6 * zoom, drawW * 0.46, drawW * 0.22, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // 2. Warm bridge arch shadow cast into river current
+  // 2. Bridge arch shadow cast into river current
   ctx.fillStyle = isNight ? 'rgba(8, 22, 38, 0.44)' : 'rgba(14, 58, 72, 0.34)';
   ctx.beginPath();
   ctx.ellipse(pt.sx + 4 * zoom, pt.sy + 9 * zoom, drawW * 0.38, drawW * 0.16, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // 3. 2.5D Painted Arched Mossy Stone Bridge Sprite
+  // 3. 2.5D Painted Arched Stone Bridge Sprite
   const rotMod = (cam.viewRot ?? 0) % 4;
+  ctx.save();
   ctx.translate(pt.sx, pt.sy + drawH * 0.34);
   if (rotMod === 1 || rotMod === 3) {
     ctx.scale(-1, 1);
   }
   ctx.drawImage(sp, -drawW * 0.5, -drawH, drawW, drawH);
+
+  // Soft snow-cap cushions along arched stone bridge parapet in winter!
+  if (isWinter) {
+    ctx.strokeStyle = isNight ? 'rgba(219, 234, 254, 0.78)' : 'rgba(255, 255, 255, 0.94)';
+    ctx.lineWidth = Math.max(2.2, 3.8 * zoom);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-drawW * 0.38, -drawH * 0.44);
+    ctx.quadraticCurveTo(0, -drawH * 0.68, drawW * 0.38, -drawH * 0.44);
+    ctx.stroke();
+  }
+  ctx.restore();
   ctx.restore();
 }
 
 /**
- * AAA Chunky 2.5D Isometric Stacked Grey-Limestone & Velvet-Emerald Moss Dry-Stone Homestead Wall Segment
+ * AAA Chunky 2.5D Isometric Stacked Grey-Limestone & Moss / Snow-Capped Dry-Stone Homestead Wall Segment
  * (depth-sorted in `renderer.ts` along the River Ottery bank & Hang Sóc homestead terraces — Mockup 1).
  */
 export function terrainDrawSculptedHomesteadWallSeg(
@@ -1862,7 +2213,8 @@ export function terrainDrawSculptedHomesteadWallSeg(
   cam: Camera,
   viewW: number,
   viewH: number,
-  isNight: boolean
+  isNight: boolean,
+  isWinter = false
 ): void {
   const ctx = self.ctx;
   const zoom = cam.zoom;
@@ -1886,9 +2238,27 @@ export function terrainDrawSculptedHomesteadWallSeg(
   const outlineCol = isNight ? '#1c1b26' : '#382618';
   const wallFaceDark = isNight ? '#505368' : '#857a6e';
   const wallFaceLight = isNight ? '#686b82' : '#aba092';
-  const wallCapLight = isNight ? '#9397b0' : '#ebe3d5';
-  const mossDark = isNight ? '#1f5438' : '#3f8f29';
-  const mossBright = isNight ? '#388558' : '#87dc42';
+  const wallCapLight = isWinter
+    ? isNight
+      ? '#b8cae3'
+      : '#f8fbff'
+    : isNight
+      ? '#9397b0'
+      : '#ebe3d5';
+  const mossDark = isWinter
+    ? isNight
+      ? '#94a8c6'
+      : '#cbd5e1'
+    : isNight
+      ? '#1f5438'
+      : '#3f8f29';
+  const mossBright = isWinter
+    ? isNight
+      ? '#dbeafe'
+      : '#ffffff'
+    : isNight
+      ? '#388558'
+      : '#87dc42';
 
   ctx.save();
   ctx.lineJoin = 'round';
@@ -1901,7 +2271,11 @@ export function terrainDrawSculptedHomesteadWallSeg(
     const ph = wallH * 1.32;
 
     // Ground shadow
-    ctx.fillStyle = isNight ? 'rgba(8, 12, 24, 0.52)' : 'rgba(34, 48, 22, 0.38)';
+    ctx.fillStyle = isNight
+      ? 'rgba(8, 12, 24, 0.52)'
+      : isWinter
+        ? 'rgba(38, 64, 102, 0.32)'
+        : 'rgba(34, 48, 22, 0.38)';
     ctx.beginPath();
     ctx.ellipse(cx + 3 * zoom, cy + 3 * zoom, pw * 0.85, pw * 0.45, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -1925,7 +2299,7 @@ export function terrainDrawSculptedHomesteadWallSeg(
     ctx.lineTo(cx + pw * 0.46, cy - ph * 0.28);
     ctx.stroke();
 
-    // Rounded limestone capstone + moss cushion
+    // Rounded limestone capstone + moss / snow cushion
     ctx.fillStyle = wallCapLight;
     ctx.strokeStyle = outlineCol;
     ctx.lineWidth = Math.max(1.1, 1.55 * zoom);
@@ -1936,12 +2310,23 @@ export function terrainDrawSculptedHomesteadWallSeg(
 
     ctx.fillStyle = mossDark;
     ctx.beginPath();
-    ctx.ellipse(cx - 1.2 * zoom, cy - ph - 0.8 * zoom, pw * 0.38, pw * 0.22, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx - 1.2 * zoom, cy - ph - 0.8 * zoom, pw * 0.44, pw * 0.25, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (!isNight) {
+    if (!isNight || isWinter) {
       ctx.fillStyle = mossBright;
       ctx.beginPath();
-      ctx.ellipse(cx - 1.8 * zoom, cy - ph - 1.2 * zoom, pw * 0.22, pw * 0.12, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx - 1.5 * zoom, cy - ph - 1.3 * zoom, pw * 0.32, pw * 0.17, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (isWinter) {
+      // Festive holly wreath berry accent on gate pillar!
+      ctx.fillStyle = '#15803d';
+      ctx.beginPath();
+      ctx.ellipse(cx + 1.8 * zoom, cy - ph * 0.78, 2.8 * zoom, 1.5 * zoom, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.arc(cx + 1.8 * zoom, cy - ph * 0.78, 1.35 * zoom, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
@@ -1952,8 +2337,12 @@ export function terrainDrawSculptedHomesteadWallSeg(
   const nx = alongRightEdge ? -4.2 * zoom : 4.2 * zoom;
   const ny = -2.2 * zoom;
 
-  // 1. Cast shadow on sunlit grass
-  ctx.strokeStyle = isNight ? 'rgba(8, 12, 24, 0.54)' : 'rgba(30, 52, 20, 0.38)';
+  // 1. Cast shadow on sunlit grass / snow
+  ctx.strokeStyle = isNight
+    ? 'rgba(8, 12, 24, 0.54)'
+    : isWinter
+      ? 'rgba(38, 64, 102, 0.32)'
+      : 'rgba(30, 52, 20, 0.38)';
   ctx.lineWidth = Math.max(5, 9.5 * zoom);
   ctx.beginPath();
   ctx.moveTo(ax + 3.2 * zoom, ay + 3.2 * zoom);
@@ -1991,7 +2380,7 @@ export function terrainDrawSculptedHomesteadWallSeg(
   }
   ctx.stroke();
 
-  // 4. Chunky 3D Bevelled Cream-Limestone Top Capstone Coping Quad
+  // 4. Chunky 3D Bevelled Cream-Limestone / Snow-Blanketed Top Capstone Coping Quad
   ctx.fillStyle = wallCapLight;
   ctx.strokeStyle = outlineCol;
   ctx.lineWidth = Math.max(1.05, 1.5 * zoom);
@@ -2004,7 +2393,7 @@ export function terrainDrawSculptedHomesteadWallSeg(
   ctx.fill();
   ctx.stroke();
 
-  // 5. Plump Velvet-Emerald Moss Cushions & Base Clover Tufts
+  // 5. Plump Snow-Cap Cushions & Icicles (Winter) OR Velvet-Emerald Moss Cushions (Summer)
   const seed = (gx * 17 + gy * 31) % 5;
   for (const mT of [0.24, 0.68]) {
     if (seed === 2 && mT > 0.5) continue;
@@ -2012,21 +2401,39 @@ export function terrainDrawSculptedHomesteadWallSeg(
     const my = ay + (by - ay) * mT - wallH + ny * 0.42;
     ctx.fillStyle = mossDark;
     ctx.beginPath();
-    ctx.ellipse(mx, my, 5.4 * zoom, 2.5 * zoom, alongRightEdge ? 0.22 : -0.22, 0, Math.PI * 2);
+    ctx.ellipse(mx, my, 5.8 * zoom, 2.6 * zoom, alongRightEdge ? 0.22 : -0.22, 0, Math.PI * 2);
     ctx.fill();
-    if (!isNight) {
+    if (!isNight || isWinter) {
       ctx.fillStyle = mossBright;
       ctx.beginPath();
-      ctx.ellipse(mx - 1.1 * zoom, my - 0.6 * zoom, 3.1 * zoom, 1.35 * zoom, 0, 0, Math.PI * 2);
+      ctx.ellipse(mx - 0.9 * zoom, my - 0.6 * zoom, 3.8 * zoom, 1.65 * zoom, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (isWinter && mT < 0.5 && seed <= 2) {
+      // Delicate crystal icicle hanging off the stone coping!
+      const ix = ax + (bx - ax) * 0.44;
+      const iy = ay + (by - ay) * 0.44 - wallH + 1.0 * zoom;
+      ctx.fillStyle = isNight ? 'rgba(186, 230, 253, 0.8)' : 'rgba(224, 242, 254, 0.96)';
+      ctx.beginPath();
+      ctx.moveTo(ix - 1.5 * zoom, iy);
+      ctx.lineTo(ix + 1.5 * zoom, iy);
+      ctx.lineTo(ix, iy + 5.6 * zoom);
+      ctx.closePath();
       ctx.fill();
     }
   }
-  // Base grass tuft hugging stone foot
+  // Base snow-drift cushion (winter) or grass tuft (summer) hugging stone foot
   const fx = (ax + bx) * 0.5;
   const fy = (ay + by) * 0.5 + 1.8 * zoom;
-  ctx.fillStyle = isNight ? '#24593c' : '#4fa330';
+  ctx.fillStyle = isWinter
+    ? isNight
+      ? '#b8cae3'
+      : '#ffffff'
+    : isNight
+      ? '#24593c'
+      : '#4fa330';
   ctx.beginPath();
-  ctx.ellipse(fx, fy, 4.5 * zoom, 1.9 * zoom, 0, 0, Math.PI * 2);
+  ctx.ellipse(fx, fy, 4.8 * zoom, 2.0 * zoom, 0, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.restore();
