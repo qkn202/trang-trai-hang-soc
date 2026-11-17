@@ -39,7 +39,7 @@ describe('P3 — Retention & Narrative (52 Achievements, 3 Save Slots + Autosave
     expect(ACHIEVEMENT_REGISTRY[51].id).toBe('ach_52');
 
     const sim = new ParkSimulation(new MagicalAudio());
-    sim.state.stats.totalGalleonsHarvested = 500;
+    sim.state.stats.totalSickleHarvested = 500;
     sim.state.stats.minigamesWon = 20;
 
     const unlocked = evaluateAchievements(sim.state, 1000);
@@ -52,7 +52,7 @@ describe('P3 — Retention & Narrative (52 Achievements, 3 Save Slots + Autosave
     const galleonsBefore = sim.state.galleons;
     const claimRes = claimAchievementReward(sim.state, unlocked[0], 2000);
     expect(claimRes.ok).toBe(true);
-    expect(sim.state.galleons).toBe(galleonsBefore + claimRes.rewardGalleons);
+    expect(sim.state.galleons).toBe(galleonsBefore + claimRes.rewardSickle);
 
     // Duplicate claim must fail
     expect(claimAchievementReward(sim.state, unlocked[0], 3000).ok).toBe(false);

@@ -83,7 +83,7 @@ export function refreshFarmStatus(sim?: ParkSimulation): void {
       </thead>
       <tbody>
         <tr><th scope="row">Cấp độ trang trại</th><td>Cấp ${level}</td></tr>
-        <tr><th scope="row">Vàng Galleon</th><td>${galleons} Galleons</td></tr>
+        <tr><th scope="row">Sickle</th><td>${galleons} Sickle</td></tr>
         <tr><th scope="row">Sao Phép Thuật (🌟)</th><td>${stars}</td></tr>
         <tr><th scope="row">Cát Xoay Thời Gian (⏳)</th><td>${sand}</td></tr>
         <tr><th scope="row">Đơn Hàng Cú Đưa Thư</th><td>${owlOrdersText}</td></tr>

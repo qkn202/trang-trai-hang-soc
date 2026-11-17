@@ -106,6 +106,14 @@ class MockEl {
   get firstElementChild(): MockEl | null {
     return this.children[0] ?? null;
   }
+  get childElementCount(): number {
+    return this.children.length;
+  }
+  replaceChildren(...nodes: MockEl[]): void {
+    for (const c of this.children) c.parentElement = null;
+    this.children = [];
+    for (const n of nodes) this.appendChild(n);
+  }
   addEventListener(): void {}
   querySelector(): MockEl | null {
     return null;
@@ -120,7 +128,7 @@ describe('Full-Game Loop 9/10 UX Polish & Hardening', () => {
     storageMap.clear();
   });
 
-  it('caps #toastStack at <= 2 active toasts and promotes it inside topmost open dialog', () => {
+  it('HPVN: shows one toast at a time (the rest wait in line) and promotes #toastStack inside topmost open dialog', () => {
     const stack = new MockEl();
     const openDialog = new MockEl();
     openDialog.tagName = 'DIALOG';
@@ -137,6 +145,7 @@ describe('Full-Game Loop 9/10 UX Polish & Hardening', () => {
     vi.stubGlobal('document', mockDocument);
     vi.stubGlobal('window', {
       setTimeout: () => 1,
+      clearTimeout: () => {},
     });
 
     try {
@@ -155,10 +164,9 @@ describe('Full-Game Loop 9/10 UX Polish & Hardening', () => {
       headerShowToast(fakeHud, 'Thông báo 4', '🦉');
 
       expect(stack.parentElement).toBe(openDialog);
-      expect(stack.children.length).toBeLessThanOrEqual(2);
-      expect(stack.children.length).toBe(2);
-      expect(stack.children[0].textContent).toContain('Thông báo 3');
-      expect(stack.children[1].textContent).toContain('Thông báo 4');
+      // HPVN: one toast on screen, each shown for a minimum time before the next (hudHeaderAndDock pumpToast)
+      expect(stack.children.length).toBe(1);
+      expect(stack.children[0].dataset.msg).toContain('Thông báo 1');
     } finally {
       vi.stubGlobal('document', origDoc);
       vi.stubGlobal('window', origWin);
@@ -239,12 +247,9 @@ describe('Full-Game Loop 9/10 UX Polish & Hardening', () => {
     );
     ctrl.render();
 
-    expect(contentEl.innerHTML).toContain('<strong>Anh</strong>');
-    expect(contentEl.innerHTML).toContain('<strong>Hàn</strong>');
-    expect(contentEl.innerHTML).toContain('<strong>Trung</strong>');
-    expect(contentEl.innerHTML).toContain('<strong>TBN</strong>');
-    expect(contentEl.innerHTML).toContain('<strong>Nhật</strong>');
-    expect(contentEl.innerHTML).not.toContain('<strong>Tiếng Anh</strong>');
+    // HPVN: the tab row is one segmented control with plain labels (no <strong>, no flag)
+    for (const label of ['Anh', 'Hàn', 'Trung', 'TBN', 'Nhật']) expect(contentEl.innerHTML).toContain(`>${label}</button>`);
+    expect(contentEl.innerHTML).not.toContain('>Tiếng Anh</button>');
 
     expect(resolveMinigameOrientation('auto', 390, 844, false, false).effectiveLayout).toBe('portrait');
     expect(resolveMinigameOrientation('auto', 1280, 800, false, false).effectiveLayout).toBe('landscape');
@@ -266,8 +271,8 @@ describe('Full-Game Loop 9/10 UX Polish & Hardening', () => {
     expect(css).toContain('.hud-shell-root.hud-sheet-or-tray-open .ts-corner-left');
     expect(css).toContain('@media (max-width: 680px) and (pointer: coarse)');
 
-    expect(puzzleModal).toContain('Nước chuẩn tối ưu');
-    expect(farmUi).toContain('class="seed-tray-title-row"');
+    expect(puzzleModal).toContain('isOptimalMove'); // HPVN label: «Nước N · chuẩn: X»
+    expect(farmUi).toContain('class="hs-tray-head"'); // HPVN tray head
     expect(mainTs).toContain('isEligiblePlot');
     expect(mainTs).toContain('isEligiblePasture');
     expect(shellTs).toContain('attachHorizontalWheel');

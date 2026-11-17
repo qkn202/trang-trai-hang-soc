@@ -160,7 +160,7 @@ export const MORPH_INFO: Record<
     textColor: '#5c2d0c',
   },
   mystic: {
-    badge: '🌙 Biến Thể Lam Tinh (+35%G)',
+    badge: '🌙 Biến Thể Lam Tinh (+35% Sickle)', // HPVN: Sickle wording
     shortLabel: 'Lam Tinh',
     incomeMult: 1.35,
     wonderBonus: 0.6,
@@ -169,7 +169,7 @@ export const MORPH_INFO: Record<
     textColor: '#0369a1',
   },
   radiant: {
-    badge: '✨ Hoàng Kim Thần Thoại (+75%G)',
+    badge: '✨ Hoàng Kim Thần Thoại (+75% Sickle)', // HPVN: Sickle wording
     shortLabel: 'Hoàng Kim',
     incomeMult: 1.75,
     wonderBonus: 1.3,
@@ -229,7 +229,7 @@ export const SUITCASE_EXPEDITIONS: SuitcaseExpeditionDef[] = [
     emoji: '🏔️',
     minParkLevel: 35,
     durationSec: 120,
-    description: 'Chuyến thám hiểm xa mang về rương Vàng Galleon cổ đại, Bụi Ánh Sao và Hạt Ca-cao Phép quý hiếm!',
+    description: 'Chuyến thám hiểm xa mang về rương Sickle cổ đại, Bụi Ánh Sao và Hạt Ca-cao Phép quý hiếm!',
     baseGold: 112,
     baseXp: 290,
     guaranteedIngredients: [

@@ -85,7 +85,7 @@ export const CREATURE_ONET_SPECIES: readonly OnetSpeciesDef[] = [
   definePikachuSpecies('hippogriff', 'Bằng Mã Buckbeak', 'beast_hippogriff'),
   definePikachuSpecies('dragon', 'Rồng Lửa Gringotts', 'beast_dragon'),
   definePikachuSpecies('thestral', 'Vong Mã Thestral', 'beast_thestral'),
-  definePikachuSpecies('puffskein', 'Bông Xù Puffskein', 'beast_puffskein'),
+  definePikachuSpecies('puffskein', 'Quái Lùng Nhùng', 'beast_puffskein'),
   definePikachuSpecies('bowtruckle', 'Tinh Cây Bowtruckle', 'hagrid_bowtruckle'),
   definePikachuSpecies('sheep', 'Cừu Mây Hang Sóc', 'beast_sheep'),
   definePikachuSpecies('cow', 'Bò Sữa Đồng Ottery', 'beast_cow'),
@@ -1384,7 +1384,7 @@ export class CreatureOnetEngine {
       ok: true,
       clearedPairs,
       won: false,
-      msg: `🔥 Phượng Hoàng Fawkes đã ghép ${clearedPairs} cặp, +${bonusTimeSec}s giờ, +2 ❤️ & +1 🔍!`,
+      msg: `🔥 Phượng Hoàng Fawkes đã ghép ${clearedPairs} cặp, +${bonusTimeSec}s giờ, +2 ❤️ & +1 gợi ý!`,
     };
   }
 

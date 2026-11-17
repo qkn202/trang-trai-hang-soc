@@ -22,7 +22,6 @@ import {
   getWinsRequiredForNextLevel,
   MAX_LEVEL,
 } from '../data/levels';
-import { HOUSES } from '../data/names';
 import {
   createDailyQuests,
   createOwlOrderQuest,
@@ -138,6 +137,7 @@ import {
   FRIENDSHIP_CHEST_TOKEN_COST,
   getGardenHelpMetaVi,
   getLocalCalendarResetKey,
+  getVietnamCalendarKey,
   getMinigameKindLabelVi,
   getPresetNoteMeta,
   isNpcNeighborProfile,
@@ -216,35 +216,6 @@ export function questsTryDropWizardCard(sim: ParkSimulation, _gx: number, _gy: n
     // Chocolate Frog Wizard Card collection removed per design update.
 }
 
-export function questsAwardHousePoints(sim: ParkSimulation, house: HouseName, pts: number): void {
-    sim.state.housePoints[house] = (sim.state.housePoints[house] ?? 0) + pts;
-}
-
-export function questsClaimHouseCupReward(sim: ParkSimulation): boolean {
-    const totalPts = Object.values(sim.state.housePoints).reduce((a, b) => a + b, 0);
-    const target = sim.state.houseCupMilestoneTier * 300;
-    if (totalPts < target) return false;
-
-    const entries = Object.entries(sim.state.housePoints) as Array<[HouseName, number]>;
-    entries.sort((a, b) => b[1] - a[1]);
-    const winner = entries[0][0];
-    const rewardGold = Math.max(1, Math.round((180 + sim.state.houseCupMilestoneTier * 140) / 5));
-    const rewardXp = 90 + sim.state.houseCupMilestoneTier * 65;
-
-    sim.state.galleons += rewardGold;
-    sim.state.timeSand += 1;
-    sim.state.houseCupMilestoneTier += 1;
-    questsAddXp(sim, rewardXp);
-    sim.audio.playLevelUp();
-    sim.onToast?.(
-      `🏆 Nhà ${winner} dẫn đầu Cúp Nhà! Thưởng Quản Lý +${rewardGold}G, +${rewardXp} XP & +1 ⏳!`,
-      '🏆'
-    );
-    sim.saveToStorage();
-    sim.onUiChange?.();
-    return true;
-}
-
 export function questsGrantBuildingIngredientDrop(sim: ParkSimulation, 
     b: PlacedBuilding,
     item: CatalogItem | undefined,
@@ -295,7 +266,7 @@ export function questsHarvestBuildingBubble(sim: ParkSimulation, uid: string): b
     }
 
     const hasGoods = Boolean(b.readyFarmGoods && b.readyFarmGoods.length > 0);
-    if (b.storedGalleons <= 0 && !hasGoods) return false;
+    if (b.storedSickle <= 0 && !hasGoods) return false;
 
     const counts = new Map<FarmGoodId, number>();
     const remainingGoods: FarmGoodId[] = [];
@@ -308,7 +279,7 @@ export function questsHarvestBuildingBubble(sim: ParkSimulation, uid: string): b
           remainingGoods.push(gid);
         }
       }
-      if (counts.size === 0 && b.storedGalleons <= 0) {
+      if (counts.size === 0 && b.storedSickle <= 0) {
         sim.onToast?.(
           '📦 Kho Nông Sản Đỏ đã đầy! Hãy giao Đơn Hàng Cú hoặc nâng cấp Kho trước khi thu hàng xưởng nhé.',
           '📦'
@@ -324,9 +295,9 @@ export function questsHarvestBuildingBubble(sim: ParkSimulation, uid: string): b
       }
     }
 
-    const g = b.storedGalleons;
+    const g = b.storedSickle;
     const x = b.storedXp;
-    b.storedGalleons = 0;
+    b.storedSickle = 0;
     b.storedXp = 0;
     b.readyBubbles = remainingGoods.length > 0 ? Math.min(8, remainingGoods.length) : 0;
     b.harvestCycleCount = (b.harvestCycleCount ?? 0) + 1;
@@ -345,7 +316,7 @@ export function questsHarvestBuildingBubble(sim: ParkSimulation, uid: string): b
 
     sim.state.galleons += g;
     sim.state.finance.harvestRevenue += g;
-    sim.state.stats.totalGalleonsHarvested += g;
+    sim.state.stats.totalSickleHarvested += g;
     questsAddXp(sim, x);
     questsAddHarvestFeastPoints(sim, hasGoods ? 10 : 4);
     if (g > 0) {
@@ -405,7 +376,7 @@ export function questsAddXp(sim: ParkSimulation, amount: number): void {
       sim.onRewardFly?.('galleons', bonusGold);
       sim.onRewardFly?.('sand', bonusSand);
       sim.onToast?.(
-        `🎁 Rương Mùa Gặt Điền Trang! Nhận +${bonusGold}G +${bonusSand} ⏳ Cát${boosterGiftTag} hỗ trợ Giải Đố!`,
+        `🎁 Rương Mùa Gặt Điền Trang! Nhận +${bonusGold} Sickle +${bonusSand} ⏳ Cát${boosterGiftTag} hỗ trợ Giải Đố!`,
         '🎁'
       );
       sim.saveToStorage();
@@ -447,7 +418,7 @@ export function questsComputeObjectiveSnapshot(sim: ParkSimulation,
       if (type === 'cast_spells') return Math.max(tracked, sim.state.stats.spellsCastByGuests);
       if (type === 'feed_creatures') return Math.max(tracked, sim.state.stats.creaturesFed);
       if (type === 'upgrade_star') return Math.max(tracked, sim.state.stats.starUpgradesDone);
-      if (type === 'harvest_galleons') return Math.max(tracked, sim.state.stats.totalGalleonsHarvested);
+      if (type === 'harvest_galleons') return Math.max(tracked, sim.state.stats.totalSickleHarvested);
       if (type === 'win_minigame' && !targetId) return Math.max(tracked, sim.state.stats.minigamesWon ?? 0);
       return tracked;
     }
@@ -477,16 +448,16 @@ export function questsRecordQuestProgress(sim: ParkSimulation, type: QuestObject
 export function questsClaimQuest(sim: ParkSimulation, questId: string): boolean {
     const story = questsGetActiveStoryQuest(sim);
     if (story && story.id === questId && story.completed) {
-      sim.state.galleons += story.rewardGalleons;
+      sim.state.galleons += story.rewardSickle;
       sim.state.timeSand += story.rewardTimeSand;
       sim.state.storyClaimedIds.push(story.id);
       sim.state.storyQuestIndex += 1;
       questsAddXp(sim, story.rewardXp);
       sim.audio.playLevelUp();
-      sim.onRewardFly?.('galleons', story.rewardGalleons);
+      sim.onRewardFly?.('galleons', story.rewardSickle);
       if (story.rewardTimeSand > 0) sim.onRewardFly?.('sand', story.rewardTimeSand);
       sim.onToast?.(
-        `Hoàn thành ${story.title}! Nhận +${story.rewardGalleons}G & +${story.rewardXp} XP!`,
+        `Hoàn thành ${story.title}! Nhận +${story.rewardSickle} Sickle & +${story.rewardXp} XP!`,
         '🦉'
       );
       sim.saveToStorage();
@@ -498,7 +469,7 @@ export function questsClaimQuest(sim: ParkSimulation, questId: string): boolean 
     if (owlIdx !== -1) {
       const q = sim.state.owlQuests[owlIdx];
       q.claimed = true;
-      sim.state.galleons += q.rewardGalleons;
+      sim.state.galleons += q.rewardSickle;
       sim.state.timeSand += q.rewardTimeSand;
       questsAddXp(sim, q.rewardXp);
       sim.owlSeedCounter++;
@@ -514,9 +485,9 @@ export function questsClaimQuest(sim: ParkSimulation, questId: string): boolean 
         canUpgradeStar,
       });
       sim.audio.playHarvestBubble();
-      sim.onRewardFly?.('galleons', q.rewardGalleons);
+      sim.onRewardFly?.('galleons', q.rewardSickle);
       if (q.rewardTimeSand > 0) sim.onRewardFly?.('sand', q.rewardTimeSand);
-      sim.onToast?.(`Đã giao thư Cú! +${q.rewardGalleons}G & +${q.rewardXp} XP`, '✉️');
+      sim.onToast?.(`Đã giao thư Cú! +${q.rewardSickle} Sickle & +${q.rewardXp} XP`, '✉️');
       sim.saveToStorage();
       sim.onUiChange?.();
       return true;
@@ -525,13 +496,13 @@ export function questsClaimQuest(sim: ParkSimulation, questId: string): boolean 
     const daily = sim.state.dailyQuests.find((q) => q.id === questId && q.completed && !q.claimed);
     if (daily) {
       daily.claimed = true;
-      sim.state.galleons += daily.rewardGalleons;
+      sim.state.galleons += daily.rewardSickle;
       sim.state.timeSand += daily.rewardTimeSand;
       questsAddXp(sim, daily.rewardXp);
       sim.audio.playSpell();
-      sim.onRewardFly?.('galleons', daily.rewardGalleons);
+      sim.onRewardFly?.('galleons', daily.rewardSickle);
       if (daily.rewardTimeSand > 0) sim.onRewardFly?.('sand', daily.rewardTimeSand);
-      sim.onToast?.(`Nhận thưởng Nhiệm Vụ Hàng Ngày! +${daily.rewardGalleons}G`, '📰');
+      sim.onToast?.(`Nhận thưởng Nhiệm Vụ Hàng Ngày! +${daily.rewardSickle} Sickle`, '📰');
       sim.saveToStorage();
       sim.onUiChange?.();
       return true;
@@ -554,7 +525,7 @@ export function questsGetStoryAutoActionPreview(sim: ParkSimulation): {
     if (story.completed) {
       return {
         kind: 'claim_free',
-        shortLabel: `🎁 Nhận +${story.rewardGalleons}G`,
+        shortLabel: `🎁 Nhận +${story.rewardSickle} Sickle`,
         longLabel: '🎁 Nhận Phần Thưởng Nhiệm Vụ Cốt Truyện!',
         starCost: 0,
         goldCost: 0,
@@ -677,7 +648,7 @@ export function questsCompleteStoryStepWithStar(sim: ParkSimulation): {
         return {
           ok: false,
           reason: 'missing_gold',
-          msg: `Cần ít nhất ${unitGold} 🪙 Galleon để lát Đường Đá tự động!`,
+          msg: `Cần ít nhất ${unitGold} 🪙 Sickle để lát Đường Đá tự động!`,
         };
       }
       const unlockedSet = new Set(sim.state.unlockedZones);
@@ -733,7 +704,7 @@ export function questsCompleteStoryStepWithStar(sim: ParkSimulation): {
       const claimed = questsClaimQuest(sim, story.id);
       if (claimed) sim.launchFireworksShow(4);
       const msg = claimed
-        ? `🪨 Đã lát tự động ${laid} ô Đường Đá & hoàn thành "${story.title}" (+${story.rewardGalleons}G)!`
+        ? `🪨 Đã lát tự động ${laid} ô Đường Đá & hoàn thành "${story.title}" (+${story.rewardSickle} Sickle)!`
         : `🪨 Đã lát thêm ${laid} ô Đường Đá cho "${story.title}"!`;
       sim.onToast?.(msg, '🪨');
       return { ok: laid > 0, msg, placedGx: lastGx, placedGy: lastGy };
@@ -761,7 +732,7 @@ export function questsCompleteStoryStepWithStar(sim: ParkSimulation): {
         return {
           ok: false,
           reason: 'missing_gold',
-          msg: `Cần ${z.unlockCost.toLocaleString('vi-VN')} 🪙 Galleon để phá phong ấn "${z.name}"!`,
+          msg: `Cần ${z.unlockCost.toLocaleString('vi-VN')} 🪙 Sickle để phá phong ấn "${z.name}"!`,
         };
       }
       const uRes = sim.unlockZone(z.id);
@@ -775,7 +746,7 @@ export function questsCompleteStoryStepWithStar(sim: ParkSimulation): {
       const cy = (z.y1 + z.y2) * 0.5;
       return {
         ok: true,
-        msg: `🗺️ Đã phá phong ấn "${z.name}" & nhận thưởng "${story.title}" (+${story.rewardGalleons}G)!`,
+        msg: `🗺️ Đã phá phong ấn "${z.name}" & nhận thưởng "${story.title}" (+${story.rewardSickle} Sickle)!`,
         placedGx: cx,
         placedGy: cy,
       };
@@ -807,7 +778,7 @@ export function questsCompleteStoryStepWithStar(sim: ParkSimulation): {
         return {
           ok: false,
           reason: 'missing_gold',
-          msg: `Cần ${item.cost.toLocaleString('vi-VN')} 🪙 Galleon để xây "${item.name}"!`,
+          msg: `Cần ${item.cost.toLocaleString('vi-VN')} 🪙 Sickle để xây "${item.name}"!`,
         };
       }
 
@@ -845,7 +816,7 @@ export function questsCompleteStoryStepWithStar(sim: ParkSimulation): {
       const claimed = questsClaimQuest(sim, story.id);
       if (claimed) sim.launchFireworksShow(4);
       const msg = claimed
-        ? `🔨 Đã khởi công "${item.name}"${waitTag} & hoàn thành "${story.title}" (+${story.rewardGalleons}G)!`
+        ? `🔨 Đã khởi công "${item.name}"${waitTag} & hoàn thành "${story.title}" (+${story.rewardSickle} Sickle)!`
         : `🔨 Đã đặt ${placedCount} "${item.name}"${waitTag} cho nhiệm vụ "${story.title}"!`;
       sim.onToast?.(msg, '🔨');
       return {
@@ -874,9 +845,9 @@ export function questsClaimOwlPostDelivery(sim: ParkSimulation, gx: number, gy: 
     sim.audio.playOwlHoot(0.036);
     sim.audio.playCardFound();
     sim.onRewardFly?.('galleons', gold, gx, gy);
-    sim.spawnFloatingText(gx, gy, `🦉 Bưu kiện Cú +${gold}G +${xp}⭐`, '#fde047');
+    sim.spawnFloatingText(gx, gy, `🦉 Bưu kiện Cú +${gold} Sickle +${xp}⭐`, '#fde047');
     sim.onToast?.(
-      `🦉 Cú Tuyết vừa chuyển phát bưu kiện ấm áp từ Hogsmeade (+${gold} Vàng Galleon, +${xp} XP)!`,
+      `🦉 Cú Tuyết vừa chuyển phát bưu kiện ấm áp từ Hogsmeade (+${gold} Sickle, +${xp} XP)!`,
       '🦉'
     );
     sim.saveToStorage();
@@ -1046,8 +1017,8 @@ export function questsFulfillFarmOwlOrder(sim: ParkSimulation, orderId: string):
       (r) => r.orderId !== order.id
     );
 
-    sim.state.galleons += order.rewardGalleons;
-    sim.state.finance.shopRevenue += order.rewardGalleons;
+    sim.state.galleons += order.rewardSickle;
+    sim.state.finance.shopRevenue += order.rewardSickle;
     sim.state.stats.butterbeerServed += 1;
     if (order.rewardMugglePlug) {
       barn.goods.muggle_plug_kit = (barn.goods.muggle_plug_kit ?? 0) + order.rewardMugglePlug;
@@ -1079,7 +1050,7 @@ export function questsFulfillFarmOwlOrder(sim: ParkSimulation, orderId: string):
     questsAddXp(sim, order.rewardXp);
     questsAddHarvestFeastPoints(sim, order.isFeastMarquee ? 30 : 22);
     questsRecordQuestProgress(sim, 'serve_butterbeer', undefined, 1);
-    questsRecordQuestProgress(sim, 'harvest_galleons', undefined, order.rewardGalleons);
+    questsRecordQuestProgress(sim, 'harvest_galleons', undefined, order.rewardSickle);
 
     sim.owlSeedCounter += 1;
     barn.owlOrders[idx] = createCanonFarmOwlOrder(
@@ -1090,10 +1061,10 @@ export function questsFulfillFarmOwlOrder(sim: ParkSimulation, orderId: string):
 
     sim.audio.playOwlHoot(0.045);
     sim.audio.playHarvestBubble();
-    sim.onRewardFly?.('galleons', order.rewardGalleons, 14.5, 19.5);
+    sim.onRewardFly?.('galleons', order.rewardSickle, 14.5, 19.5);
     const plugTag = order.rewardMugglePlug ? ` +${order.rewardMugglePlug} 🔌 Phích Cắm` : '';
     const sandTag = sandBonus > 0 ? ` +${sandBonus} ⏳ Cát` : '';
-    const msg = `🦉 Cú ${order.owlName} giao đơn cho ${order.senderName}! Nhận +${order.rewardGalleons}G${sandTag}${talismanTag}${boosterTag}${plugTag}!`;
+    const msg = `🦉 Cú ${order.owlName} giao đơn cho ${order.senderName}! Nhận +${order.rewardSickle} Sickle${sandTag}${talismanTag}${boosterTag}${plugTag}!`;
     sim.onToast?.(msg, '🦉');
     sim.advanceTutorialStep('build_and_owl_order');
     sim.checkAndToastAchievements?.();
@@ -1102,10 +1073,25 @@ export function questsFulfillFarmOwlOrder(sim: ParkSimulation, orderId: string):
     return { ok: true, msg };
 }
 
+// HPVN: 3 free owl-order rerolls per VN day per farm (the count survives delivering an order)
+export const OWL_REROLLS_PER_DAY = 3;
+
+export function questsGetOwlRerollsLeft(sim: ParkSimulation): number {
+    const used = sim.state.owlRerollDaily?.dayKey === getVietnamCalendarKey() ? sim.state.owlRerollDaily.count : 0;
+    return Math.max(0, OWL_REROLLS_PER_DAY - used);
+}
+
 export function questsRefreshFarmOwlOrder(sim: ParkSimulation, orderId: string): boolean {
     const barn = sim.ensureFarmBarn();
     const idx = barn.owlOrders.findIndex((o) => o.id === orderId);
     if (idx === -1) return false;
+    if (questsGetOwlRerollsLeft(sim) <= 0) {
+      sim.onToast?.('Hết lượt đổi hôm nay', '✉️');
+      return false;
+    }
+    const dayKey = getVietnamCalendarKey();
+    const prevUsed = sim.state.owlRerollDaily?.dayKey === dayKey ? sim.state.owlRerollDaily.count : 0;
+    sim.state.owlRerollDaily = { dayKey, count: prevUsed + 1 };
     const social = sim.ensureNeighborSocial();
     social.playerOwlHelpRequests = social.playerOwlHelpRequests.filter(
       (r) => r.orderId !== orderId
@@ -1174,7 +1160,7 @@ export function questsQuickHarvestHerbs(sim: ParkSimulation): { ok: boolean; msg
     sim.onUiChange?.();
     return {
       ok: true,
-      msg: `🌿 Đã thu hoạch rổ Thảo Dược tươi (+${2 * bonus}🌿 +${2 * bonus}🎃 +${bonus}✨ +${bonus}🍫)!`,
+      msg: `🌿 Đã thu hoạch rổ Thảo Dược tươi (+${2 * bonus}🌿 +${2 * bonus}🎃 +${bonus} Bột Sao +${bonus} Ca-cao)!`,
     };
 }
 
@@ -1252,11 +1238,10 @@ export function questsUseCraftedGood(sim: ParkSimulation, goodId: CraftedGoodId)
       sim.state.galleons += gold;
       sim.state.finance.shopRevenue += gold;
       questsAddXp(sim, 65);
-      msg = `🎁 Mở Hộp Quà Hoàng Kim nhận +${gold} Galleon & +65 XP!`;
+      msg = `🎁 Mở Hộp Quà Hoàng Kim nhận +${gold} Sickle & +65 XP!`;
     } else if (goodId === 'dragon_firework') {
       sim.launchFireworksShow(12);
-      for (const h of HOUSES) questsAwardHousePoints(sim, h, 15);
-      msg = '🎆 ĐẠI TIỆC PHÁO HOA RỒNG LỬA RỰC SÁNG BẦU TRỜI (+15 Điểm mỗi Nhà & Khách cực vui)!';
+      msg = '🎆 ĐẠI TIỆC PHÁO HOA RỒNG LỬA RỰC SÁNG BẦU TRỜI (Khách cực vui)!'; // HPVN: house points are the server's
     }
     sim.audio.playLevelUp();
     sim.onToast?.(msg, '✨');
@@ -1277,11 +1262,11 @@ export function questsFulfillCargoCrate(sim: ParkSimulation, crateId: string): {
       sim.state.supply.goods[crate.goodId] -= crate.qtyRequired;
     }
     crate.fulfilled = true;
-    sim.state.galleons += crate.rewardGalleons;
-    sim.state.finance.harvestRevenue += crate.rewardGalleons;
+    sim.state.galleons += crate.rewardSickle;
+    sim.state.finance.harvestRevenue += crate.rewardSickle;
     sim.state.timeSand += crate.rewardTimeSand;
     questsAddXp(sim, crate.rewardXp);
-    questsRecordQuestProgress(sim, 'harvest_galleons', undefined, crate.rewardGalleons);
+    questsRecordQuestProgress(sim, 'harvest_galleons', undefined, crate.rewardSickle);
     sim.audio.playHarvestBubble();
 
     const allDone = sim.state.supply.cargoCrates.every((c) => c.fulfilled);
@@ -1299,7 +1284,7 @@ export function questsFulfillCargoCrate(sim: ParkSimulation, crateId: string): {
       );
       sim.audio.playTrainWhistle();
       sim.launchFireworksShow(6);
-      const msg = `🚂 Tuuu!! Tàu Hàng Tốc Hành xuất bến! Thưởng trọn chuyến +${bonusG}G, +${bonusXp} XP & +2⏳ Cát Thời Gian!`;
+      const msg = `🚂 Tuuu!! Tàu Hàng Tốc Hành xuất bến! Thưởng trọn chuyến +${bonusG} Sickle, +${bonusXp} XP & +2⏳ Cát Thời Gian!`;
       sim.onToast?.(msg, '🚂');
       sim.saveToStorage();
       sim.onUiChange?.();
@@ -1310,7 +1295,7 @@ export function questsFulfillCargoCrate(sim: ParkSimulation, crateId: string): {
     sim.onUiChange?.();
     return {
       ok: true,
-      msg: `📦 Đã chất kiện hàng lên tàu (+${crate.rewardGalleons}G, +${crate.rewardXp} XP, +${crate.rewardTimeSand}⏳)!`,
+      msg: `📦 Đã chất kiện hàng lên tàu (+${crate.rewardSickle} Sickle, +${crate.rewardXp} XP, +${crate.rewardTimeSand}⏳)!`,
     };
 }
 
@@ -1326,38 +1311,28 @@ export function questsUnveilBuilding(sim: ParkSimulation, uid: string): RibbonUn
     }
 
     target.awaitingUnveil = undefined;
-    const unveiledSet = new Set(sim.state.unveiledItemIds ?? []);
-    if (unveiledSet.has(item.id)) {
-      sim.saveToStorage();
-      sim.onUiChange?.();
-      sim.onToast?.(
-        `Công trình "${item.name}" xây lại đã mở hoạt động (thưởng cắt băng mỗi loại chỉ nhận 1 lần)!`,
-        '🎀'
-      );
-      return null;
-    }
-    unveiledSet.add(item.id);
-    sim.state.unveiledItemIds = Array.from(unveiledSet);
-    const finishXpSet = new Set(sim.state.finishXpItemIds ?? []);
-    if (!finishXpSet.has(item.id)) {
-      finishXpSet.add(item.id);
-      sim.state.finishXpItemIds = Array.from(finishXpSet);
-    }
-
-    const bonusGalleons = Math.max(
+    // HPVN: the ribbon-cut reward pays once per building type per farm (place -> cut -> delete -> refund loop)
+    const paidItems = (sim.state.ribbonPaidItems ??= []);
+    const firstOfType = !paidItems.includes(item.id);
+    const bonusSickle = !firstOfType ? 0 : Math.max(
       6,
       Math.round((item.baseIncome || 5) * 1.6 + Math.max(1, item.unlockLevel) * 0.8)
     );
-    const bonusXp = Math.max(15, Math.round(Math.max(8, item.xpPerCollect) * 1.6));
-    const feastPoints = 25;
+    const bonusXp = !firstOfType ? 0 : Math.max(15, Math.round(Math.max(8, item.xpPerCollect) * 1.6));
+    const feastPoints = firstOfType ? 25 : 0;
 
-    sim.state.galleons += bonusGalleons;
-    sim.state.finance.harvestRevenue += bonusGalleons;
-    questsAddXp(sim, bonusXp);
-    const feast = questsEnsureHarvestFeast(sim);
-    feast.unveilsCompleted = (feast.unveilsCompleted ?? 0) + 1;
-    questsAddHarvestFeastPoints(sim, feastPoints);
-    questsRecordQuestProgress(sim, 'harvest_galleons', undefined, bonusGalleons);
+    if (firstOfType) {
+      paidItems.push(item.id);
+      const finishXpItems = (sim.state.finishXpItemIds ??= []);
+      if (!finishXpItems.includes(item.id)) finishXpItems.push(item.id);
+      sim.state.galleons += bonusSickle;
+      sim.state.finance.harvestRevenue += bonusSickle;
+      questsAddXp(sim, bonusXp);
+      const feast = questsEnsureHarvestFeast(sim);
+      feast.unveilsCompleted = (feast.unveilsCompleted ?? 0) + 1;
+      questsAddHarvestFeastPoints(sim, feastPoints);
+      questsRecordQuestProgress(sim, 'harvest_galleons', undefined, bonusSickle);
+    }
 
     const targetZoneId = getZoneAt(target.gx, target.gy).id;
     let speakerName = 'Bà Molly Weasley';
@@ -1392,11 +1367,13 @@ export function questsUnveilBuilding(sim: ParkSimulation, uid: string): RibbonUn
       sim.audio.playBuildComplete();
     }
     sim.onBuildingTactile?.(target.uid);
-    sim.onRewardFly?.('galleons', bonusGalleons, cx, cy);
+    if (firstOfType) sim.onRewardFly?.('galleons', bonusSickle, cx, cy);
     sim.spawnFloatingText(
       cx,
       cy,
-      `🎀 Khánh thành! +${bonusGalleons}G +${bonusXp}⭐ +${feastPoints}🍁`,
+      firstOfType
+        ? `🎀 Khánh thành! +${bonusSickle} Sickle +${bonusXp}⭐ +${feastPoints}🍁`
+        : '🎀 Khánh thành!',
       '#fde047'
     );
 
@@ -1406,7 +1383,7 @@ export function questsUnveilBuilding(sim: ParkSimulation, uid: string): RibbonUn
       buildingName: item.name,
       gx: cx,
       gy: cy,
-      bonusGalleons,
+      bonusSickle,
       bonusXp,
       feastPoints,
       speakerName,
@@ -1483,10 +1460,10 @@ export function questsGrantHarvestFeastTierRewardInternal(sim: ParkSimulation, t
     feast.claimedTiers.push(def.tier);
     feast.claimedTiers.sort((a, b) => a - b);
 
-    if (def.rewardGalleons && def.rewardGalleons > 0) {
-      sim.state.galleons += def.rewardGalleons;
-      sim.state.finance.harvestRevenue += def.rewardGalleons;
-      sim.onRewardFly?.('galleons', def.rewardGalleons);
+    if (def.rewardSickle && def.rewardSickle > 0) {
+      sim.state.galleons += def.rewardSickle;
+      sim.state.finance.harvestRevenue += def.rewardSickle;
+      sim.onRewardFly?.('galleons', def.rewardSickle);
     }
     if (def.rewardXp && def.rewardXp > 0) {
       questsAddXp(sim, def.rewardXp);

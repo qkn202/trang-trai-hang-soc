@@ -1,5 +1,5 @@
 // P5 — Production & Ship:
-// 1. SlidingWindowRateLimiter (chống spam /api/save & /api/track theo userId/IP)
+// 1. SlidingWindowRateLimiter (chống spam lưu & ghi sự kiện theo userId/IP)
 // 2. Cloud Save Schema Validator & Rollback Backup Snapshot (khôi phục an toàn nếu cloud save lỗi)
 // 3. ProductionTelemetryCollector (Crash-free session, FPS avg/p5, Asset-load latency, Offline Recovery Queue)
 
@@ -93,7 +93,7 @@ export function createRollbackSaveBackup(
     backedUpAt: Date.now(),
     state,
   });
-  const target = storage ?? (typeof localStorage !== 'undefined' ? localStorage : undefined);
+  const target = storage; // HPVN: no browser storage in the frame
   try {
     target?.setItem(ROLLBACK_BACKUP_KEY, snapshot);
   } catch {
@@ -105,7 +105,7 @@ export function createRollbackSaveBackup(
 export function restoreRollbackSaveBackup(
   storage?: Pick<Storage, 'getItem'>
 ): { ok: boolean; backedUpAt?: number; state?: GameState } {
-  const target = storage ?? (typeof localStorage !== 'undefined' ? localStorage : undefined);
+  const target = storage; // HPVN: no browser storage in the frame
   const raw = target?.getItem(ROLLBACK_BACKUP_KEY);
   if (!raw) return { ok: false };
   try {

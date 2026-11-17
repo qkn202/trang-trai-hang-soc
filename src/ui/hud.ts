@@ -1,3 +1,4 @@
+import { shareFarmPhoto } from '../hpvn/bridge';
 import {
   CATALOG,
   FARM_CROPS,
@@ -58,7 +59,6 @@ import {
 } from '../engine/isometric';
 import { SpriteRegistry } from '../engine/spriteLoader';
 import {
-  BulldozeHazardWarning,
   FARM_HARVEST_CHEST_XP,
   formatHarvestFeastRewardVi,
   getItemPriceBounds,
@@ -116,15 +116,14 @@ import {
   YuleCollectionId,
   ZoneId,
 } from '../types/game';
-import { LeaderboardModalController } from './leaderboardModal';
+import type { LeaderboardModalController } from './leaderboardModal';
 import {
   lookupRealPlayerByFriendCode,
   registerRealPlayerProfileOnline,
 } from './cloudSave';
 import type { Match3ModalController } from './match3Modal';
 import type { PuzzleArcadeModalController } from './puzzleArcadeModal';
-import { SeedQuizModalController } from './seedQuizModal';
-import { DEFAULT_YOUTUBE_BGM_URL, YouTubeBgmController } from './youtubeBgmPlayer';
+import type { SeedQuizModalController } from './seedQuizModal';
 
 import {
   BUILD_HUD_CATEGORIES,
@@ -163,7 +162,7 @@ import {
   headerToggleManagePopover,
   headerToggleWeatherPopover,
   headerRenderWeatherPopover,
-  headerAnimateGalleonsTo,
+  headerAnimateSickleTo,
   headerSpawnFlyReward,
   headerSyncToastStackHost,
   headerShowToast,
@@ -288,11 +287,12 @@ export class GameHUD {
   public hudRolledUp = false;
   public inspectorCollapsed = false;
   public lastInspectedKey = '';
-  public displayedGalleons = -1;
+  public displayedSickle = -1;
   public galleonRollRaf = 0;
   public activeWorkshopTab: 'barn' | 'brew' | 'cargo' | 'synergy' = 'barn';
   public activeQuestTab: 'orders' | 'quests' = 'orders';
-  public activeAlbumTab: 'cup' | 'achievements' | 'friendship' | 'login7' = 'cup';
+  public activeAlbumTab: 'profile' | 'cup' | 'leaderboard' = 'cup';
+  public activeProfileSubTab: 'login7' | 'achievements' | 'friendship' = 'login7';
   public activeAchievementFilterCat: AchievementCategory | 'all' = 'all';
   public selectedOwlOrderId: string | null = null;
   public lastWsBrewId: string | null = null;
@@ -322,16 +322,16 @@ export class GameHUD {
   public lastFocusedTutorialStepKey = '';
   public ribbonBannerTimer = 0;
   public yuleReadySig = '';
-  public pendingBulldozeWarning: BulldozeHazardWarning | null = null;
   public drawerEdgeObserver: IntersectionObserver | null = null;
   private dialogOpenObserver: MutationObserver | null = null;
   public match3Modal: Match3ModalController | null = null;
   public puzzleArcadeModal: PuzzleArcadeModalController | null = null;
+  public leaderboardModal: LeaderboardModalController | null = null;
   private match3ModalPromise: Promise<Match3ModalController> | null = null;
   private puzzleArcadeModalPromise: Promise<PuzzleArcadeModalController> | null = null;
-  public seedQuizModal!: SeedQuizModalController;
-  public leaderboardModal!: LeaderboardModalController;
-  public youtubeBgm!: YouTubeBgmController;
+  // HPVN: the quiz and leaderboard modals load on first open, like Match-3 and the puzzle arcade.
+  private seedQuizModalPromise: Promise<SeedQuizModalController> | null = null;
+  private leaderboardModalPromise: Promise<LeaderboardModalController> | null = null;
 
   public root: HTMLElement;
   public sprites?: SpriteRegistry;
@@ -377,78 +377,7 @@ export class GameHUD {
       });
     }
     window.addEventListener('resize', () => this.updateTutorialHudSpotlight());
-    this.seedQuizModal = new SeedQuizModalController(
-      this.root,
-      this.sim,
-      () => this.refreshAll(),
-      (msg, icon) => this.showToast(msg, icon),
-      (cropId, pendingPlotUid) => {
-        const c = FARM_CROPS[cropId];
-        if (pendingPlotUid) {
-          const selB = this.sim.state.buildings.find((x) => x.uid === pendingPlotUid);
-          if (selB && getCatalogItem(selB.itemId)?.isFarmlandPlot && !selB.cropId) {
-            const res = this.sim.plantCropOnPlot(selB.uid, cropId);
-            this.activeSeedCropId = null;
-            this.seedTrayOpen = false;
-            this.pendingSowPlotUid = null;
-            this.inspectSelection = null;
-            this.showToast(res.msg, res.ok ? '🌱' : '🪙');
-            this.refreshAll();
-            return;
-          }
-        }
-        this.activeSeedCropId = this.sim.getSeedCount(cropId) > 0 || this.sim.state.sandboxMode ? cropId : null;
-        this.seedTrayOpen = false;
-        this.pendingSowPlotUid = null;
-        this.inspectSelection = null;
-        this.refreshAll();
-        if (this.activeSeedCropId) {
-          this.showToast(
-            `🌱 Đang cầm hạt ${c.emoji} ${c.name} (Túi còn ${this.sim.getSeedCount(cropId)} hạt) — Nhấp hoặc kéo lướt qua Thửa Đất trống để gieo!`,
-            c.emoji
-          );
-        }
-      }
-    );
-    this.seedQuizModal.onOpenLeaderboard = () => this.openLeaderboardDialog('match3');
-    this.leaderboardModal = new LeaderboardModalController(this.root, this.sim);
-    this.leaderboardModal.onJumpToGame = (gid) => {
-      const m3Dlg = this.root.querySelector('#match3Dialog') as HTMLDialogElement | null;
-      const paDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
-      const sqDlg = this.root.querySelector('#seedQuizDialog') as HTMLDialogElement | null;
-      if (gid === 'match3') {
-        paDlg?.close();
-        sqDlg?.close();
-        this.openMatch3Dialog();
-      } else if (gid === 'seedquiz') {
-        m3Dlg?.close();
-        paDlg?.close();
-        this.openSeedQuizDialog();
-      } else {
-        m3Dlg?.close();
-        sqDlg?.close();
-        this.openPuzzleArcadeDialog(gid);
-      }
-    };
-    this.leaderboardModal.onVisitNeighbor = (nid) => {
-      (this.root.querySelector('#match3Dialog') as HTMLDialogElement | null)?.close();
-      (this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null)?.close();
-      (this.root.querySelector('#seedQuizDialog') as HTMLDialogElement | null)?.close();
-      (this.root.querySelector('#neighborDialog') as HTMLDialogElement | null)?.close();
-      this.enterVisitFromHud(nid);
-    };
-    this.leaderboardModal.onOpenNeighborBook = () => {
-      this.openNeighborDialog('friends');
-    };
-    this.wireBulldozeConfirmDialog();
     this.wireDraggableBanner();
-    this.youtubeBgm = new YouTubeBgmController(this.sim.audio, {
-      onToast: (msg, icon) => this.showToast(msg, icon ?? '🎵'),
-      onStatusChange: () => {
-        const lbl = this.root.querySelector('#lblYoutubeBgmStatus') as HTMLElement | null;
-        if (lbl) lbl.textContent = this.youtubeBgm.getStatusText();
-      },
-    });
     this.bindEvents();
     this.applyStoredA11ySettings();
     this.refreshAll();
@@ -538,69 +467,6 @@ export class GameHUD {
     this.refreshFloatingBanner();
     this.refreshTouchConfirmBar();
     this.showToast(`🔄 Hướng đặt công trình: ${this.rotation * 90}°`, '🔄');
-  }
-
-  private wireBulldozeConfirmDialog(): void {
-    const dlg = this.root.querySelector('#bulldozeConfirmDialog') as HTMLDialogElement | null;
-    if (!dlg) return;
-
-    dlg.addEventListener('close', () => {
-      const action = dlg.returnValue;
-      dlg.returnValue = '';
-      const pending = this.pendingBulldozeWarning;
-      this.pendingBulldozeWarning = null;
-      if (action === 'confirm' && pending) {
-        this.sim.beginBuildStroke();
-        let removed = false;
-        try {
-          removed = this.sim.removeAtTile(pending.gx, pending.gy, true);
-        } finally {
-          this.sim.commitBuildStroke();
-        }
-        if (
-          removed &&
-          this.inspectSelection?.kind === 'building' &&
-          this.inspectSelection.uid === pending.uid
-        ) {
-          this.inspectSelection = null;
-        }
-        this.refreshAll();
-      }
-    });
-
-    this.sim.onRequestBulldozeConfirm = (warning) => {
-      this.openBulldozeConfirmDialog(warning);
-    };
-  }
-
-  public openBulldozeConfirmDialog(warning: BulldozeHazardWarning): void {
-    const dlg = this.root.querySelector('#bulldozeConfirmDialog') as HTMLDialogElement | null;
-    const body = this.root.querySelector('#bulldozeConfirmBody') as HTMLElement | null;
-    if (!dlg || !body) {
-      this.sim.removeAtTile(warning.gx, warning.gy, true);
-      return;
-    }
-    this.pendingBulldozeWarning = warning;
-    body.innerHTML = `
-      <div class="quest-card-mini bulldoze-confirm-card">
-        <div class="bulldoze-confirm-lead">
-          <strong>${escapeHtml(warning.buildingName)}</strong> hiện có:
-        </div>
-        <div class="bulldoze-confirm-hazard">
-          🌾 ${escapeHtml(warning.hazardSummaryVi)}
-        </div>
-        <div class="bulldoze-confirm-note">
-          Nếu phá dỡ ngay bây giờ, phần vụ mùa / sản vật / mẻ đang chạy trên ô này sẽ bị mất vĩnh viễn.
-        </div>
-        <div class="bulldoze-confirm-refund">
-          💰 Khi xóa: <strong>${escapeHtml(warning.refundSummaryVi)}</strong>
-        </div>
-      </div>
-    `;
-    dlg.returnValue = '';
-    if (!dlg.open) {
-      dlg.showModal();
-    }
   }
 
   private wireDraggableBanner(): void {
@@ -801,6 +667,94 @@ export class GameHUD {
     focusHabitatUid?: string
   ): void { return suitcaseUiOpenSuitcaseDialog(this, tab, focusHabitatUid); }
 
+  private getSeedQuizModal(): Promise<SeedQuizModalController> {
+    this.seedQuizModalPromise ??= import('./seedQuizModal').then(({ SeedQuizModalController }) => {
+      const modal = new SeedQuizModalController(
+        this.root,
+        this.sim,
+        () => this.refreshAll(),
+        (msg, icon) => this.showToast(msg, icon),
+        (cropId, pendingPlotUid) => {
+          const c = FARM_CROPS[cropId];
+          if (pendingPlotUid) {
+            const selB = this.sim.state.buildings.find((x) => x.uid === pendingPlotUid);
+            if (selB && getCatalogItem(selB.itemId)?.isFarmlandPlot && !selB.cropId) {
+              const res = this.sim.plantCropOnPlot(selB.uid, cropId);
+              this.activeSeedCropId = null;
+              this.seedTrayOpen = false;
+              this.pendingSowPlotUid = null;
+              this.inspectSelection = null;
+              this.showToast(res.msg, res.ok ? '🌱' : '🪙');
+              this.refreshAll();
+              return;
+            }
+          }
+          this.activeSeedCropId = this.sim.getSeedCount(cropId) > 0 ? cropId : null;
+          this.seedTrayOpen = false;
+          this.pendingSowPlotUid = null;
+          this.inspectSelection = null;
+          this.refreshAll();
+          if (this.activeSeedCropId) {
+            this.showToast(
+              `${c.name} · ${this.sim.getSeedCount(cropId)} hạt · chạm hoặc kéo qua ô đất trống để gieo`,
+              c.emoji
+            );
+          }
+        }
+      );
+      modal.onOpenLeaderboard = () => this.openLeaderboardDialog('match3');
+      return modal;
+    }).catch((err) => {
+      this.seedQuizModalPromise = null;
+      console.error(err);
+      this.showToast('Chưa mở được Học Viện — hãy bấm lại nhé.');
+      throw err;
+    });
+    return this.seedQuizModalPromise;
+  }
+
+  public getLeaderboardModal(): Promise<LeaderboardModalController> {
+    this.leaderboardModalPromise ??= import('./leaderboardModal').then(({ LeaderboardModalController }) => {
+      const modal = new LeaderboardModalController(this.root, this.sim);
+      this.leaderboardModal = modal;
+      modal.onJumpToGame = (gid) => {
+        const m3Dlg = this.root.querySelector('#match3Dialog') as HTMLDialogElement | null;
+        const paDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
+        const sqDlg = this.root.querySelector('#seedQuizDialog') as HTMLDialogElement | null;
+        if (gid === 'match3') {
+          paDlg?.close();
+          sqDlg?.close();
+          this.openMatch3Dialog();
+        } else if (gid === 'seedquiz') {
+          m3Dlg?.close();
+          paDlg?.close();
+          this.openSeedQuizDialog();
+        } else {
+          m3Dlg?.close();
+          sqDlg?.close();
+          this.openPuzzleArcadeDialog(gid);
+        }
+      };
+      modal.onVisitNeighbor = (nid) => {
+        (this.root.querySelector('#match3Dialog') as HTMLDialogElement | null)?.close();
+        (this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null)?.close();
+        (this.root.querySelector('#seedQuizDialog') as HTMLDialogElement | null)?.close();
+        (this.root.querySelector('#neighborDialog') as HTMLDialogElement | null)?.close();
+        this.enterVisitFromHud(nid);
+      };
+      modal.onOpenNeighborBook = () => {
+        this.openNeighborDialog('friends');
+      };
+      return modal;
+    }).catch((err) => {
+      this.leaderboardModalPromise = null;
+      console.error(err);
+      this.showToast('Chưa mở được Bảng Xếp Hạng — hãy bấm lại nhé.');
+      throw err;
+    });
+    return this.leaderboardModalPromise;
+  }
+
   public async getMatch3Modal(): Promise<Match3ModalController> {
     if (this.match3Modal) return this.match3Modal;
     if (!this.match3ModalPromise) {
@@ -815,6 +769,11 @@ export class GameHUD {
         this.match3Modal.onSwitchToPuzzleArcade = (mode) => this.openPuzzleArcadeDialog(mode);
         this.match3Modal.onOpenLeaderboard = () => this.openLeaderboardDialog('match3');
         return this.match3Modal;
+      }).catch((err) => {
+        this.match3ModalPromise = null;
+        console.error(err);
+        this.showToast('Chưa mở được màn chơi — hãy bấm lại nhé.');
+        throw err;
       });
     }
     return this.match3ModalPromise;
@@ -836,33 +795,52 @@ export class GameHUD {
           this.puzzleArcadeModal.onOpenLeaderboard = (mode) => this.openLeaderboardDialog(mode);
           return this.puzzleArcadeModal;
         }
-      );
+      ).catch((err) => {
+        this.puzzleArcadeModalPromise = null;
+        console.error(err);
+        this.showToast('Chưa mở được màn chơi — hãy bấm lại nhé.');
+        throw err;
+      });
     }
     return this.puzzleArcadeModalPromise;
   }
 
   public openLeaderboardDialog(gameId?: LeaderboardGameId, scope?: LeaderboardScope): void {
     this.closeHudPopovers();
+    (this.root.querySelector('#neighborDialog') as HTMLDialogElement | null)?.close();
     const fallbackGame: LeaderboardGameId = gameId ?? this.sim.getLastPlayedMinigame();
-    this.leaderboardModal.open(fallbackGame, scope);
+    this.activeAlbumTab = 'leaderboard';
+    void this.getLeaderboardModal().then((m) => {
+      m.configure(fallbackGame, scope);
+      this.renderAlbumDialog();
+      const dlg = this.root.querySelector('#albumDialog') as HTMLDialogElement | null;
+      if (dlg && !dlg.open) {
+        dlg.showModal();
+      }
+      m.syncCloud();
+    }, () => {});
   }
 
   public openMatch3Dialog(overrideLevel?: number, allowDevJump = false): void {
+    this.closeHudPopovers();
+    this.hideOpenFloatingTrays();
     this.sim.setLastPlayedMinigame('match3');
     void this.getMatch3Modal().then((m) => {
       m.open(overrideLevel, allowDevJump);
       headerSyncToastStackHost(this);
-    });
+    }, () => {});
   }
 
   public openPuzzleArcadeDialog(mode?: PuzzleArcadeMode): void {
+    this.closeHudPopovers();
+    this.hideOpenFloatingTrays();
     if (mode) {
       this.sim.setLastPlayedMinigame(mode);
     }
     void this.getPuzzleArcadeModal().then((m) => {
       m.open(mode);
       headerSyncToastStackHost(this);
-    });
+    }, () => {});
   }
 
   public openSeedQuizDialog(
@@ -874,11 +852,14 @@ export class GameHUD {
     subView?: 'practice' | 'codex'
   ): void {
     this.closeHudPopovers();
+    this.hideOpenFloatingTrays();
     if (!targetPlotUid) {
       this.sim.setLastPlayedMinigame('seedquiz');
     }
-    this.seedQuizModal.open(cropId, targetPlotUid, lang, tier, format, subView);
-    headerSyncToastStackHost(this);
+    void this.getSeedQuizModal().then((m) => {
+      m.open(cropId, targetPlotUid, lang, tier, format, subView);
+      headerSyncToastStackHost(this);
+    }, () => {});
   }
 
   public openLastPlayedMinigame(): void {
@@ -922,7 +903,7 @@ export class GameHUD {
 
   private renderWeatherPopover(): void { return headerRenderWeatherPopover(this); }
 
-  private animateGalleonsTo(target: number): void { return headerAnimateGalleonsTo(this, target); }
+  private animateSickleTo(target: number): void { return headerAnimateSickleTo(this, target); }
 
   public spawnFlyReward(
     kind: FlyRewardKind,
@@ -954,6 +935,19 @@ export class GameHUD {
   public renderSeedTray(): void { return farmUiRenderSeedTray(this); }
 
   public renderPastureTray(): void { return farmUiRenderPastureTray(this); }
+
+  /** HPVN: small confirm dialog (parchment style); resolves true only on «Vẫn xóa». */
+  public askConfirm(text: string): Promise<boolean> {
+    const dlg = this.root.querySelector('#confirmDialog') as HTMLDialogElement;
+    (dlg.querySelector('#confirmDialogText') as HTMLElement).textContent = text;
+    return new Promise((resolve) => {
+      let ok = false;
+      (dlg.querySelector('#btnConfirmDelete') as HTMLButtonElement).onclick = () => { ok = true; dlg.close(); };
+      (dlg.querySelector('#btnConfirmKeep') as HTMLButtonElement).onclick = () => dlg.close();
+      dlg.onclose = () => { dlg.onclose = null; resolve(ok); };
+      dlg.showModal();
+    });
+  }
 
   public refreshTouchConfirmBar(): void { return headerRefreshTouchConfirmBar(this); }
 
@@ -1031,26 +1025,12 @@ export class GameHUD {
     };
   }
 
-  public syncYouTubeBgm(): void {
-    if (!this.youtubeBgm) return;
-    const cfg = this.getEffectiveA11ySettings();
-    const vol0to1 = Math.max(0, Math.min(1, (cfg.volumes.master ?? 0.85) * (cfg.volumes.music ?? 0.85)));
-    const st = this.sim.state;
-    this.youtubeBgm.sync({
-      youtubeEnabled: Boolean(st.settings.youtubeBgmEnabled),
-      bgmEnabled: Boolean(st.settings.bgmEnabled),
-      rawUrl: st.settings.youtubeBgmUrl || DEFAULT_YOUTUBE_BGM_URL,
-      volume0to1: vol0to1,
-    });
-  }
-
   public applyStoredA11ySettings(): void {
     const cfg = this.getEffectiveA11ySettings();
     applyA11ySettingsToDocument(cfg);
     if (this.sim.audio?.ceiling) {
       syncA11yVolumesToAudio(cfg, this.sim.audio);
     }
-    this.syncYouTubeBgm();
   }
 
   public playStoryCutscene(chapterId: string): void {

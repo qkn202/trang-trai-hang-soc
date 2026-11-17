@@ -208,7 +208,7 @@ export function suitcaseUiUpdateSuitcaseLiveTimers(hud: GameHUD): void {
           trainBtn.textContent =
             trainWait > 0
               ? `🎾 (${trainWait}s)`
-              : '🎾 Tập (20G • +45💝)';
+              : '🎾 Tập (20 Sickle • +45💝)';
         }
       }
     }
@@ -238,32 +238,33 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
     hud.lastSuitcaseIncReady = Boolean(sc.activeIncubation && now >= sc.activeIncubation.endsAt);
     hud.lastSuitcaseExpReady = Boolean(sc.activeExpedition && now >= sc.activeExpedition.endsAt);
 
-    const incStatusLabel = sc.activeIncubation
-      ? now >= sc.activeIncubation.endsAt
-        ? '🐣 Nở!'
-        : '🥚 Ấp'
-      : '🧬';
-    const expStatusLabel = sc.activeExpedition
-      ? now >= sc.activeExpedition.endsAt
-        ? '🎒 Về!'
-        : '🧭 Đi'
-      : `${discoveredCount}/${totalCompendiumEntries}`;
+    // HPVN: tab labels are text only; after the name a small count, a dot while it runs, a red «!» when it waits to be
+    // collected (like Floo's); the words go to the accessible name
+    const tabCount = (v: string | number) => (v ? `<span class="nb-tab-badge">${v}</span>` : '');
+    const tabState = (job: { endsAt: number } | null | undefined, done: string, running: string, idle = '') =>
+      job
+        ? now >= job.endsAt
+          ? `<span class="nb-tab-badge" aria-label="${done}">!</span>`
+          : `<span class="nb-tab-badge hs-tab-dot" aria-label="${running}"></span>`
+        : idle;
+    const incStatusLabel = tabState(sc.activeIncubation, 'trứng đã nở', 'đang ấp');
+    const expStatusLabel = tabState(sc.activeExpedition, 'đã về', 'đang đi', tabCount(`${discoveredCount}/${totalCompendiumEntries}`));
 
     const summaryHtml = `
       <div class="suitcase-summary-bar">
         <span>🐾 <strong>${habitats.length}</strong></span>
         <span>📖 <strong>${discoveredCount}/${totalCompendiumEntries}</strong> (+${masteryPct}%)</span>
-        <span>✨ <strong>${st.sandboxMode ? '∞' : starlightQty}</strong> • ⏳ <strong>${st.sandboxMode ? '∞' : st.timeSand}</strong></span>
+        <span>Bụi Sao <strong>${st.sandboxMode ? '∞' : starlightQty}</strong> • ⏳ <strong>${st.sandboxMode ? '∞' : st.timeSand}</strong></span>
       </div>
       <div class="workshop-tabs" role="group" aria-label="Vali Sinh Vật">
         <button type="button" data-sc-tab="care" data-active="${hud.activeSuitcaseTab === 'care'}" aria-pressed="${hud.activeSuitcaseTab === 'care'}" class="brass-btn">
-          🐾 Chăm Sóc (${habitats.length})
+          Chăm Sóc ${tabCount(habitats.length)}
         </button>
         <button type="button" data-sc-tab="morph" data-active="${hud.activeSuitcaseTab === 'morph'}" aria-pressed="${hud.activeSuitcaseTab === 'morph'}" class="brass-btn">
-          🧬 Ấp Trứng (${incStatusLabel})
+          Ấp Trứng ${incStatusLabel}
         </button>
         <button type="button" data-sc-tab="expedition" data-active="${hud.activeSuitcaseTab === 'expedition'}" aria-pressed="${hud.activeSuitcaseTab === 'expedition'}" class="brass-btn">
-          🧭 Thám Hiểm (${expStatusLabel})
+          Thám Hiểm ${expStatusLabel}
         </button>
       </div>
     `;
@@ -273,13 +274,12 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
     if (hud.activeSuitcaseTab === 'care') {
       if (habitats.length === 0) {
         bodyHtml = `
-          <div class="quest-card-mini" style="text-align:center;padding:22px 14px;">
-            <div style="font-size:32px;margin-bottom:6px;">🧳✨</div>
-            <div style="font-size:15px;font-weight:800;color:#45230c;margin-bottom:10px;">
+          <div class="quest-card-mini" style="text-align:center;">
+            <div class="hs-card-title" style="color:#45230c;margin-bottom:10px;">
               Chưa có chuồng thú
             </div>
             <button id="btnScOpenCreatureBuild" type="button" class="brass-btn gold-cta">
-              🐾 Xây Chuồng
+              🐾 Xây chuồng
             </button>
           </div>
         `;
@@ -320,12 +320,12 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
                 const isSel = hb.uid === b.uid;
                 return `
                   <button type="button" data-select-pet="${escapeHtml(hb.uid)}" aria-pressed="${isSel}" class="suitcase-pet-chip">
-                    <img src="/sprites/${hp?.beastSpriteKey ?? hi.spriteKey}.png" alt="" class="suitcase-pet-chip-img" style="filter:${hmMeta.cssFilter};" />
+                    <img src="/game/trang-trai-hang-soc/sprites/${hp?.beastSpriteKey ?? hi.spriteKey}.webp" alt="" class="suitcase-pet-chip-img" style="filter:${hmMeta.cssFilter};" />
                     <div style="min-width:0;">
-                      <div style="font-size:12.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px;">
+                      <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px;">
                         ${escapeHtml(hName)}
                       </div>
-                      <div style="font-size:11.5px;color:#78350f;font-weight:700;">
+                      <div style="font-size:11px;color:#78350f;font-weight:700;">
                         💝 Lv.${hb.creatureBondLevel ?? 1}
                       </div>
                     </div>
@@ -340,7 +340,7 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
           ${stripHtml}
           <div class="suitcase-care-layout">
             <div class="suitcase-diorama" style="background:${profile.dioramaGradient};">
-              <div style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:12px;font-weight:800;">
+              <div style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:12px;font-weight:700;">
                 <span>🏡 ${escapeHtml(profile.sanctuaryRoomTitle)}</span>
                 <span class="morph-pill ${morph === 'radiant' ? 'radiant' : morph === 'mystic' ? 'mystic' : ''}" style="color:#1e293b;">
                   ${morphMeta.badge}
@@ -349,7 +349,7 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
 
               <button id="btnScPetStage" type="button" class="suitcase-diorama-stage" aria-label="Vuốt ve ${escapeHtml(displayPetName)}" title="Vuốt ve" style="background:none;border:none;">
                 <img
-                  src="/sprites/${profile.beastSpriteKey}.png"
+                  src="/game/trang-trai-hang-soc/sprites/${profile.beastSpriteKey}.webp"
                   alt="${escapeHtml(displayPetName)}"
                   class="suitcase-diorama-img"
                   style="filter:${morphMeta.cssFilter} drop-shadow(0 0 18px ${morphMeta.glowColor});"
@@ -357,10 +357,10 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
               </button>
 
               <div style="text-align:center;width:100%;">
-                <div style="font-size:15px;font-weight:800;text-shadow:0 1px 4px rgba(0,0,0,0.65);">
+                <div style="font-size:16px;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,0.65);">
                   ${profile.emoji} ${escapeHtml(displayPetName)}
                 </div>
-                <div style="font-size:11.5px;opacity:0.92;margin-top:2px;">
+                <div style="font-size:12px;opacity:0.92;margin-top:2px;">
                   ${escapeHtml(profile.morphNames[morph])}${isAwayOnExp ? ' • 🧭' : ''}
                 </div>
               </div>
@@ -368,7 +368,7 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
 
             <div class="suitcase-care-details">
               <form id="formSuitcaseRename" class="suitcase-rename-form">
-                <label for="inpSuitcasePetName" style="font-size:12.5px;font-weight:800;color:#5c2d0c;">
+                <label for="inpSuitcasePetName" style="font-size:13px;font-weight:700;color:#5c2d0c;">
                   🏷️
                 </label>
                 <input
@@ -385,19 +385,19 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
                 <button type="submit" class="brass-btn" style="padding:5px 11px;">Lưu</button>
               </form>
 
-              <div class="quest-card-mini" style="margin-top:0;">
-                <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;font-weight:800;margin-bottom:4px;">
+              <div class="quest-card-mini">
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;margin-bottom:4px;">
                   <span>💝 Lv.${bondLv}/${MAX_BOND_LEVEL} (+${bondBonusPct}%)</span>
                   <span style="color:#b45309;">${bondLv >= MAX_BOND_LEVEL ? 'MAX' : `${bondXp}/${bondReq}`}</span>
                 </div>
                 <progress max="${bondReq}" value="${bondProgressVal}" aria-label="Điểm gắn kết sinh vật"></progress>
                 <div style="font-size:12px;margin-top:5px;color:#5c2d0c;">
-                  🍬 ${escapeHtml(profile.favoriteTreat)} • <strong>+${prod.galleons.toLocaleString('vi-VN')}🪙 / ${formatDurationCompactVi(item.cycleSec)}</strong>
+                  🍬 ${escapeHtml(profile.favoriteTreat)} · <strong>+${prod.galleons.toLocaleString('vi-VN')} Sickle / ${formatDurationCompactVi(item.cycleSec)}</strong>
                 </div>
               </div>
 
-              <div class="quest-card-mini" style="margin-top:0;">
-                <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:800;margin-bottom:4px;">
+              <div class="quest-card-mini">
+                <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:4px;">
                   <span>🥩 ${hunger}%</span>
                   <span>🌿 ${bio?.score ?? 60}% ${b.hasBabyOffspring ? '• 🐣' : ''}</span>
                 </div>
@@ -406,16 +406,16 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
 
               <div class="suitcase-actions-grid">
                 <button id="btnScFeed" type="button" class="brass-btn">
-                  🥩 Ăn (${st.sandboxMode ? '0G' : `${feedCost}G`} • +22💝)
+                  🥩 Ăn (${st.sandboxMode ? '0 Sickle' : `${feedCost} Sickle`} · +22💝)
                 </button>
                 <button id="btnScGroom" type="button" class="brass-btn ${groomWait === 0 ? 'gold-cta' : ''}">
                   ${groomWait > 0 ? `🪮 (${groomWait}s)` : '🪮 Chải (+30💝)'}
                 </button>
                 <button id="btnScTrain" type="button" class="brass-btn">
-                  ${trainWait > 0 ? `🎾 (${trainWait}s)` : '🎾 Tập (20G • +45💝)'}
+                  ${trainWait > 0 ? `🎾 (${trainWait}s)` : '🎾 Tập (20 Sickle · +45💝)'}
                 </button>
                 <button id="btnScLocate" type="button" class="brass-btn">
-                  📍 Tới Chuồng
+                  📍 Tới chuồng
                 </button>
               </div>
             </div>
@@ -434,13 +434,13 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
         const pct = isReady ? 100 : Math.min(100, Math.round(((now - inc.startedAt) / totalMs) * 100));
 
         incChamberHtml = `
-          <div class="quest-card-mini" style="margin-bottom:12px;border-color:#d97706;background:linear-gradient(180deg,#fffbeb,#fef3c7);">
+          <div class="quest-card-mini">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
-              <div style="font-size:14px;font-weight:800;color:#78350f;">
+              <div style="font-size:14px;font-weight:700;color:#78350f;">
                 🥚 ${escapeHtml(incProfile?.speciesName ?? incItem?.name ?? 'Trứng')}
-                ${inc.boostedWithStarlight ? '<span style="color:#0369a1;"> • ✨ ×2</span>' : ''}
+                ${inc.boostedWithStarlight ? '<span style="color:#0369a1;"> · Bụi Sao ×2</span>' : ''}
               </div>
-              <span data-suitcase-inc-left="1" style="font-size:13px;font-weight:800;color:#b45309;">
+              <span data-suitcase-inc-left="1" style="font-size:13px;font-weight:700;color:#b45309;">
                 ${isReady ? '✨ Nở!' : `${leftSec}s`}
               </span>
             </div>
@@ -448,7 +448,7 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
             <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
               ${
                 isReady
-                  ? `<button id="btnScClaimEgg" type="button" class="brass-btn gold-cta">🐣 Tách Vỏ</button>`
+                  ? `<button id="btnScClaimEgg" type="button" class="brass-btn gold-cta">🐣 Tách vỏ</button>`
                   : `<button id="btnScSpeedEgg" type="button" class="brass-btn gold-cta">⏳ 1 Cát</button>`
               }
             </div>
@@ -456,9 +456,9 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
         `;
       } else {
         incChamberHtml = `
-          <div class="quest-card-mini" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
-            <div style="font-size:13.5px;font-weight:800;color:#7c2d12;">🧬 Lồng Ấp (75s)</div>
-            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:800;color:#0369a1;cursor:pointer;">
+          <div class="quest-card-mini" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+            <div class="hs-card-title" style="color:#7c2d12;">🧬 Lồng ấp (75s)</div>
+            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#0369a1;cursor:pointer;">
               <input id="chkScStarlight" type="checkbox" ${hud.useStarlightForIncubation && (st.sandboxMode || starlightQty > 0) ? 'checked' : ''} />
               ✨ +1 Bụi Sao
             </label>
@@ -480,9 +480,9 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
                   return `
                     <div class="crate-card">
                       <div style="display:flex;gap:10px;align-items:center;">
-                        <img src="/sprites/${hp?.beastSpriteKey ?? hi.spriteKey}.png" alt="" style="width:52px;height:52px;object-fit:contain;filter:${MORPH_INFO[curMorph].cssFilter};" />
+                        <img src="/game/trang-trai-hang-soc/sprites/${hp?.beastSpriteKey ?? hi.spriteKey}.webp" alt="" style="width:52px;height:52px;object-fit:contain;filter:${MORPH_INFO[curMorph].cssFilter};" />
                         <div style="min-width:0;">
-                          <div style="font-size:13.5px;font-weight:800;color:#45230c;">${escapeHtml(petLabel)}</div>
+                          <div class="hs-card-title" style="color:#45230c;">${escapeHtml(petLabel)}</div>
                           <div style="font-size:12px;color:#78350f;"><strong>${MORPH_INFO[curMorph].badge}</strong></div>
                         </div>
                       </div>
@@ -500,7 +500,7 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
                         class="brass-btn ${!inc ? 'gold-cta' : ''}"
                         ${inc ? 'disabled' : ''}
                       >
-                        ${inc ? '🥚 Đang ấp' : `🥚 Ấp (${st.sandboxMode ? '0G' : `${cost}G`})`}
+                        ${inc ? '🥚 Đang ấp' : `🥚 Ấp (${st.sandboxMode ? '0 Sickle' : `${cost} Sickle`})`}
                       </button>
                     </div>
                   `;
@@ -526,12 +526,12 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
         const pct = isReady ? 100 : Math.min(100, Math.round(((now - actExp.startedAt) / totalMs) * 100));
 
         expSectionHtml = `
-          <div class="quest-card-mini" style="margin-bottom:14px;border-color:#15803d;background:rgba(220,252,231,0.82);">
+          <div class="quest-card-mini">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
-              <div style="font-size:14px;font-weight:800;color:#14532d;">
-                ${expDef.emoji} ${escapeHtml(petLabel)} • ${escapeHtml(expDef.name)}
+              <div style="font-size:14px;font-weight:700;color:#14532d;">
+                ${expDef.emoji} ${escapeHtml(petLabel)} · ${escapeHtml(expDef.name)}
               </div>
-              <span data-suitcase-exp-left="1" style="font-size:13px;font-weight:800;color:#15803d;">
+              <span data-suitcase-exp-left="1" style="font-size:13px;font-weight:700;color:#15803d;">
                 ${isReady ? '🎒 Đã về!' : `${leftSec}s`}
               </span>
             </div>
@@ -547,7 +547,7 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
         `;
       } else if (habitats.length === 0) {
         expSectionHtml = `
-          <div class="quest-card-mini" style="margin-bottom:14px;font-size:13px;">
+          <div class="quest-card-mini" style="font-size:13px;">
             🧭 Chưa có chuồng thú
           </div>
         `;
@@ -560,8 +560,8 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
           MORPH_INFO[cb.creatureMorph ?? 'normal'].incomeMult;
 
         expSectionHtml = `
-          <div class="quest-card-mini" style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-            <label for="selScExpPet" style="font-size:13px;font-weight:800;color:#45230c;">
+          <div class="quest-card-mini" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+            <label for="selScExpPet" style="font-size:13px;font-weight:700;color:#45230c;">
               🐾 Thú:
             </label>
             <select id="selScExpPet" class="suitcase-select" style="max-width:340px;">
@@ -588,11 +588,11 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
                 .join(' ');
               return `
                 <div class="crate-card">
-                  <div style="font-size:13.5px;font-weight:800;color:#45230c;">
-                    ${exp.emoji} ${escapeHtml(exp.name)} <span style="font-size:11.5px;color:#78350f;">(${exp.durationSec}s)</span>
+                  <div class="hs-card-title" style="color:#45230c;">
+                    ${exp.emoji} ${escapeHtml(exp.name)} <span style="font-size:12px;color:#78350f;">(${exp.durationSec}s)</span>
                   </div>
                   <div style="font-size:12px;font-weight:700;color:#15803d;">
-                    +${estGold}🪙 • +${estXp}⭐ • ${herbsText}
+                    +${estGold} Sickle · +${estXp} ⭐ · ${herbsText}
                   </div>
                   <button
                     type="button"
@@ -600,7 +600,7 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
                     class="brass-btn ${locked ? '' : 'gold-cta'}"
                     ${locked ? 'disabled' : ''}
                   >
-                    ${locked ? `🔒 Lv.${exp.minParkLevel}` : '🧭 Cử Đi'}
+                    ${locked ? `🔒 Lv.${exp.minParkLevel}` : '🧭 Cử đi'}
                   </button>
                 </div>
               `;
@@ -610,9 +610,9 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
       }
 
       const compendiumHtml = `
-        <div class="quest-card-mini" style="margin-bottom:10px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:800;margin-bottom:4px;">
-            <span>📖 Sổ Tay (${discoveredCount}/${totalCompendiumEntries})</span>
+        <div class="quest-card-mini">
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;margin-bottom:4px;">
+            <span>📖 Sổ tay (${discoveredCount}/${totalCompendiumEntries})</span>
             <span style="color:#15803d;">+${masteryPct}%</span>
           </div>
           <progress max="${totalCompendiumEntries}" value="${discoveredCount}" aria-label="Tiến độ Sổ Tay"></progress>
@@ -622,9 +622,9 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
             return `
               <div class="crate-card" style="gap:6px;">
                 <div style="display:flex;gap:8px;align-items:center;">
-                  <img src="/sprites/${sp.beastSpriteKey}.png" alt="" style="width:44px;height:44px;object-fit:contain;" />
+                  <img src="/game/trang-trai-hang-soc/sprites/${sp.beastSpriteKey}.webp" alt="" style="width:44px;height:44px;object-fit:contain;" />
                   <div>
-                    <div style="font-size:13px;font-weight:800;color:#45230c;">${sp.emoji} ${escapeHtml(sp.speciesName)}</div>
+                    <div style="font-size:13px;font-weight:700;color:#45230c;">${sp.emoji} ${escapeHtml(sp.speciesName)}</div>
                   </div>
                 </div>
                 <div style="display:flex;gap:4px;flex-wrap:wrap;">

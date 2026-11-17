@@ -304,10 +304,10 @@ export function worldRebuildGrid(sim: ParkSimulation): void {
 }
 
 export function worldIsBuildingConnected(sim: ParkSimulation, uid: string): boolean {
+    // HPVN: called per building per frame; the set answers first, the building scan runs only for a miss.
+    if (sim.connectedBuildingUids.size === 0 || sim.connectedBuildingUids.has(uid)) return true;
     const b = sim.state.buildings.find((x) => x.uid === uid);
-    if (b && getCatalogItem(b.itemId)?.isRuralFarmstead) return true;
-    if (sim.connectedBuildingUids.size === 0) return true;
-    return sim.connectedBuildingUids.has(uid);
+    return Boolean(b && getCatalogItem(b.itemId)?.isRuralFarmstead);
 }
 
 export function worldRecomputeAllCoastersAndBiomes(sim: ParkSimulation): void {
@@ -668,7 +668,7 @@ export function worldCanPlaceItem(sim: ParkSimulation,
             };
           }
         } else if (!sim.state.sandboxMode && sim.state.galleons < item.cost) {
-          return { ok: false, reason: `Thiếu Vàng Galleon (${item.cost}G)` };
+          return { ok: false, reason: `Thiếu Sickle (${item.cost} Sickle)` };
         }
       }
     }
@@ -859,7 +859,7 @@ export function worldPlaceItem(sim: ParkSimulation, item: CatalogItem, gx: numbe
       return true;
     }
 
-    // 6. Regular Building / Ride / Creature / Decor (Star-only instant build for major blueprints; Gold-only for plots & expandable connectable yards; 0G if placing from Stashed Decor Inventory!)
+    // 6. Regular Building / Ride / Creature / Decor (Star-only instant build for major blueprints; Gold-only for plots & expandable connectable yards; 0 Sickle if placing from Stashed Decor Inventory!)
     const starCost = sim.getEffectiveItemStarCost(item);
     const fromStash = worldGetStashedDecorCount(sim, item) > 0;
     let restoredStar = 1;
@@ -903,7 +903,7 @@ export function worldPlaceItem(sim: ParkSimulation, item: CatalogItem, gx: numbe
       placedAt: now,
       constructEndsAt: now + durMs,
       lastTickAt: now + durMs,
-      storedGalleons: 0,
+      storedSickle: 0,
       storedXp: 0,
       readyBubbles: 0,
       durability: 100,
@@ -947,7 +947,7 @@ export function worldPlaceItem(sim: ParkSimulation, item: CatalogItem, gx: numbe
       sim.spawnFloatingText(
         gx + item.width * 0.5,
         gy + item.height * 0.5,
-        '📦 Kho 0G!',
+        '📦 Kho 0 Sickle!',
         '#a7f3d0'
       );
     } else if (durMs > 0) {
@@ -1013,7 +1013,7 @@ export function worldUnlockZone(sim: ParkSimulation, zoneId: ZoneId): { ok: bool
       };
     }
     if (!sim.state.sandboxMode && sim.state.galleons < z.unlockCost) {
-      return { ok: false, msg: `Cần ${z.unlockCost} Vàng Galleon để mở "${z.name}"` };
+      return { ok: false, msg: `Cần ${z.unlockCost} Sickle để mở "${z.name}"` };
     }
 
     if (!sim.state.sandboxMode) {
@@ -1096,6 +1096,17 @@ export function worldFindSmartSpotForStoryBuilding(
 
     let best: { gx: number; gy: number; score: number; roadAnchor?: [number, number] } | null = null;
 
+    // HPVN: a fresh farm has no house yet, so no road is «connected»; fall back to the starter lanes (any path tile)
+    let roadTiles = sim.connectedPathTiles;
+    if (roadTiles.size === 0) {
+      roadTiles = new Set<string>();
+      for (let ry = 0; ry < GRID_SIZE; ry++) {
+        for (let rx = 0; rx < GRID_SIZE; rx++) {
+          if (sim.grid[ry][rx].path !== 'none') roadTiles.add(`${rx},${ry}`);
+        }
+      }
+    }
+
     for (let gy = 0; gy <= GRID_SIZE - bh; gy++) {
       for (let gx = 0; gx <= GRID_SIZE - bw; gx++) {
         // Check footprint cells are unlocked, empty, flat, and not overwriting existing paths
@@ -1136,14 +1147,14 @@ export function worldFindSmartSpotForStoryBuilding(
             if (isInside) continue;
             const nx = gx + dx;
             const ny = gy + dy;
-            if (sim.connectedPathTiles.has(`${nx},${ny}`)) {
+            if (roadTiles.has(`${nx},${ny}`)) {
               touchingRoad = true;
             }
           }
         }
 
         if (!touchingRoad) {
-          for (const pk of sim.connectedPathTiles) {
+          for (const pk of roadTiles) {
             const [px, py] = pk.split(',').map(Number);
             const clX = Math.max(gx, Math.min(gx + bw - 1, px));
             const clY = Math.max(gy, Math.min(gy + bh - 1, py));
@@ -1201,13 +1212,30 @@ export function worldFindSmartSpotForStoryBuilding(
     return { gx: best.gx, gy: best.gy };
 }
 
-export interface BulldozeHazardWarning {
-  uid: string;
-  gx: number;
-  gy: number;
-  buildingName: string;
-  hazardSummaryVi: string;
-  refundSummaryVi: string;
+// HPVN: what a demolition would silently destroy (ready crop, ready animals, running/ready workshop job); null = nothing to warn about
+export function worldGetRemovalLossText(sim: ParkSimulation, gx: number, gy: number): string | null {
+    if (sim.isVisitingNeighbor || gx < 0 || gy < 0 || gx >= GRID_SIZE || gy >= GRID_SIZE) return null;
+    const uid = sim.grid[gy][gx].buildingUid;
+    const b = uid ? sim.state.buildings.find((x) => x.uid === uid) : undefined;
+    if (!b || b.isIndestructible) return null;
+    const item = getCatalogItem(b.itemId);
+    const name = item?.name ?? 'công trình';
+    const now = Date.now();
+    if (b.cropId && b.cropReadyAt && now >= b.cropReadyAt) {
+      const crop = FARM_CROPS[b.cropId];
+      return `${name} đang có ${crop.emoji} ${crop.name} đã chín chưa thu hoạch. Xóa bây giờ sẽ mất cả vụ này.`;
+    }
+    if (b.pastureAnimalId && b.pastureReadyAt && now >= b.pastureReadyAt) {
+      const animal = PASTURE_ANIMALS[b.pastureAnimalId];
+      return `${name} đang có ${animal.name} đã sẵn sàng thu hoạch. Xóa bây giờ sẽ mất cả đàn thú và sản vật.`;
+    }
+    if (b.workshopQueue && b.workshopQueue.length > 0) {
+      const jobs = b.workshopQueue
+        .map((s) => `${FARM_GOODS[s.goodId]?.emoji ?? ''} ${FARM_GOODS[s.goodId]?.name ?? s.goodId} (${now >= s.endsAt ? 'đã xong, chưa thu' : 'đang làm'})`)
+        .join(', ');
+      return `${name} đang có mẻ: ${jobs}. Xóa bây giờ sẽ mất nguyên liệu và thành phẩm.`;
+    }
+    return null;
 }
 
 function computeBuildingBulldozeRefund(
@@ -1238,88 +1266,7 @@ function computeBuildingBulldozeRefund(
   };
 }
 
-export function worldGetBulldozeHazardWarning(
-  sim: ParkSimulation,
-  gx: number,
-  gy: number
-): BulldozeHazardWarning | null {
-  if (gx < 0 || gy < 0 || gx >= GRID_SIZE || gy >= GRID_SIZE) return null;
-  const cell = sim.grid[gy]?.[gx];
-  if (!cell?.buildingUid) return null;
-  const b = sim.state.buildings.find((x) => x.uid === cell.buildingUid);
-  if (!b || b.isIndestructible) return null;
-
-  const item = getCatalogItem(b.itemId);
-  const now = Date.now();
-  const hazards: string[] = [];
-
-  if (b.cropId && b.cropId in FARM_CROPS) {
-    const cropMeta = FARM_CROPS[b.cropId];
-    const isRipe = b.cropReadyAt !== undefined && now >= b.cropReadyAt;
-    if (isRipe) {
-      hazards.push(`vụ mùa chín ${cropMeta.emoji} ${cropMeta.name} chưa thu hoạch`);
-    } else {
-      const leftSec = Math.max(1, Math.ceil(((b.cropReadyAt ?? now) - now) / 1000));
-      hazards.push(
-        `luống ${cropMeta.emoji} ${cropMeta.name} đang lớn (còn ${formatDurationCompactVi(leftSec)})`
-      );
-    }
-  }
-
-  if (b.pastureAnimalId && b.pastureAnimalId in PASTURE_ANIMALS) {
-    const aniMeta = PASTURE_ANIMALS[b.pastureAnimalId];
-    const isReady = b.pastureReadyAt !== undefined && now >= b.pastureReadyAt;
-    if (isReady) {
-      hazards.push(`sản vật từ ${aniMeta.emoji} ${aniMeta.name} đang chờ thu hoạch`);
-    } else {
-      const leftSec = Math.max(1, Math.ceil(((b.pastureReadyAt ?? now) - now) / 1000));
-      hazards.push(
-        `đàn ${aniMeta.emoji} ${aniMeta.name} đang chăn thả (còn ${formatDurationCompactVi(leftSec)})`
-      );
-    }
-  }
-
-  const readyGoodsCount = b.readyFarmGoods?.length ?? 0;
-  if (readyGoodsCount > 0) {
-    hazards.push(`${readyGoodsCount} thành phẩm ra lò chưa cất vào Kho Đỏ`);
-  }
-
-  const queueCount = b.workshopQueue?.length ?? 0;
-  if (queueCount > 0) {
-    hazards.push(`${queueCount} mẻ xưởng đang chế biến (sẽ mất nguyên liệu đã đưa vào lò)`);
-  }
-
-  if (b.awaitingUnveil) {
-    hazards.push('lễ cắt băng khánh thành 🎀 chưa thực hiện');
-  }
-
-  if (hazards.length === 0) return null;
-
-  const { refund, starRefund } = computeBuildingBulldozeRefund(sim, b, item);
-  const refundSummaryVi = b.builtInSandbox
-    ? 'Công trình Sandbox (không hoàn tài nguyên)'
-    : starRefund > 0 && refund > 0
-      ? `Hoàn +${starRefund} 🌟 Sao & +${refund} 🪙 Sickle`
-      : starRefund > 0
-        ? `Hoàn +${starRefund} 🌟 Sao Phép Thuật`
-        : `Hoàn +${refund} 🪙 Sickle (65%)`;
-
-  return {
-    uid: b.uid,
-    gx,
-    gy,
-    buildingName: item?.name ?? 'Công trình',
-    hazardSummaryVi: hazards.join('; '),
-    refundSummaryVi,
-  };
-}
-
-export function worldRemoveAtTile(
-  sim: ParkSimulation,
-  gx: number,
-  gy: number,
-  force = false
-): boolean {
+export function worldRemoveAtTile(sim: ParkSimulation, gx: number, gy: number): boolean {
     if (sim.isVisitingNeighbor) {
       sim.onToast?.('Chế độ Khách Tham Quan — không thể ủi/dọn vườn bạn bè!', '🛡️');
       return false;
@@ -1376,13 +1323,6 @@ export function worldRemoveAtTile(
       if (b.isIndestructible) {
         sim.onToast?.('Nhà Hang Sóc 6 Tầng là tổ ấm trung tâm của gia đình Weasley!', '🏠');
         return false;
-      }
-      if (!force && sim.onRequestBulldozeConfirm) {
-        const hazard = worldGetBulldozeHazardWarning(sim, gx, gy);
-        if (hazard) {
-          sim.onRequestBulldozeConfirm(hazard);
-          return false;
-        }
       }
       const item = getCatalogItem(b.itemId);
       const { refund, starRefund } = computeBuildingBulldozeRefund(sim, b, item);

@@ -1,3 +1,5 @@
+import { shareFarmPhoto } from '../hpvn/bridge';
+import { avatarGlyph } from '../hpvn/emoji';
 // Tách tự động từ src/ui/hud.ts (P0 — tách god file theo domain).
 // Pattern delegation: hàm nhận `hud` để giữ nguyên state, không đổi hành vi.
 
@@ -70,12 +72,6 @@ import {
   PHOENIX_FORGE_GOLD_COST,
 } from '../sim/simulation';
 import {
-  hydrateCloudLeaderboardsFromSnapshot,
-  normalizeClientHogwartsHouse,
-  setPlayerHogwartsHouse,
-  syncAllPlayerCloudLeaderboards,
-} from '../sim/minigameLeaderboard';
-import {
   canHelpFlooVisitRow,
   detectFreshFlooHelpersToast,
   FLOO_VISIT_UNLOCK_LEVEL,
@@ -126,10 +122,7 @@ import {
   WeatherOverride,
   ZoneId,
 } from '../types/game';
-import {
-  type AuthoritativeSnapshot,
-  formatServerRefusalVi,
-} from './authoritativeClient';
+import onlineServices, { type AuthoritativeSnapshot, formatServerRefusalVi } from '../hpvn/social';
 import {
   getOrCreateClientUserId,
   isUnplayedFreshSave,
@@ -139,12 +132,12 @@ import {
 import {
   formatFlooShareMessage,
   renderValleyPostcardCanvas,
+  postcardSpritesReady,
   type ValleyPostcardMeta,
   valleyPostcardToWebpDataUrl,
-} from './hpvnBridge';
+} from '../hpvn/postcard';
 import { LeaderboardModalController } from './leaderboardModal';
 import type { Match3ModalController } from './match3Modal';
-import onlineServices from './onlineBootstrap';
 import type { PuzzleArcadeModalController } from './puzzleArcadeModal';
 import { SeedQuizModalController } from './seedQuizModal';
 import {
@@ -163,6 +156,12 @@ const HOUSE_LABEL_MAP: Record<HouseName, string> = {
   Slytherin: '🐍 Slytherin',
 };
 
+// HPVN: a model garden's weather and time of day by the names Cài Đặt and the Floo postcard use (it showed «fireflies · dusk»)
+const HONOR_SKY_VI: Record<string, string> = {
+  clear: 'Nắng ấm', cloudy: 'Mây nhẹ', rain: 'Mưa phùn', storm: 'Giông phép', snow: 'Tuyết rơi', fog: 'Sương mù', fireflies: 'Đom đóm',
+  dawn: 'Bình minh', day: 'Ngày', dusk: 'Chiều', night: 'Đêm',
+};
+
 const HOUSE_CREST_MAP: Record<HouseName, string> = {
   Gryffindor: '🦁',
   Ravenclaw: '🦅',
@@ -171,10 +170,10 @@ const HOUSE_CREST_MAP: Record<HouseName, string> = {
 };
 
 function getPlayerPrimaryHouse(hud: GameHUD): HouseName {
-  return hud.sim.getPlayerHouse();
+  return hud.sim.getPlayerHouse(); // HPVN: the one house (HPVN's when locked), same as the Cup and the leaderboard
 }
 
-function buildAvatarBadgeHtml(
+export function buildAvatarBadgeHtml(
   avatarUrl: string | undefined,
   fallbackEmojiOrName: string,
   extraClass = ''
@@ -187,7 +186,7 @@ function buildAvatarBadgeHtml(
   return `<span class="floo-avatar-shell ${extraClass}"><span class="floo-avatar-fallback">${escapeHtml(fallback)}</span></span>`;
 }
 
-function wireAvatarImgFallbacks(container: ParentNode): void {
+export function wireAvatarImgFallbacks(container: ParentNode): void {
   container.querySelectorAll<HTMLImageElement>('img.floo-avatar-img').forEach((img) => {
     img.addEventListener(
       'error',
@@ -236,8 +235,6 @@ function clearHudActiveMapTools(hud: GameHUD): void {
   hud.closeHudPopovers();
 }
 
-const initialLeaderboardSyncedUids = new Set<string>();
-
 export function socialUiApplyAuthoritativeSnapshotIdentity(
   hud: GameHUD,
   rawSnap: unknown
@@ -245,15 +242,10 @@ export function socialUiApplyAuthoritativeSnapshotIdentity(
   if (!rawSnap || typeof rawSnap !== 'object') return;
   const snap = rawSnap as Partial<AuthoritativeSnapshot>;
   const social = hud.sim.ensureNeighborSocial();
-  const homeOrActive = hud.sim.homeStateWhileVisiting ?? hud.sim.state;
   let changed = false;
 
   if (typeof snap.uid === 'string' && snap.uid.trim()) {
     setAuthenticatedUserId(snap.uid);
-  }
-
-  if (hydrateCloudLeaderboardsFromSnapshot(snap.leaderboards)) {
-    changed = true;
   }
 
   const serverFriendCode =
@@ -269,14 +261,15 @@ export function socialUiApplyAuthoritativeSnapshotIdentity(
     changed = true;
   }
 
-  // Đồng bộ số dư trực tiếp từ Ví Galleon Gringotts của HPVN (`galleons_accounts/{uid}`) ngay khi vào game & sau mỗi giao dịch
+  // Đồng bộ số dư trực tiếp từ Ví Sickle Gringotts của HPVN (`galleons_accounts/{uid}`) ngay khi vào game & sau mỗi giao dịch
   if (
     snap.wallet &&
     typeof snap.wallet.spendable === 'number' &&
     Number.isFinite(snap.wallet.spendable)
   ) {
-    const nextGalleons = Math.max(0, Math.floor(snap.wallet.spendable));
-    onlineServices.syncWalletBaseline(nextGalleons);
+    const homeOrActive = hud.sim.homeStateWhileVisiting ?? hud.sim.state;
+    const nextSickle = Math.max(0, Math.floor(snap.wallet.spendable));
+    onlineServices.syncWalletBaseline(nextSickle);
     if (
       !homeOrActive.sandboxMode &&
       !homeOrActive.sandboxTainted &&
@@ -287,12 +280,12 @@ export function socialUiApplyAuthoritativeSnapshotIdentity(
         homeOrActive as unknown as Record<string, unknown>
       );
       // Chỉ ghi đè số dư cục bộ khi có biên lai giao dịch mới (`snap.receipt`), save mới tinh chưa chơi,
-      // hoặc số dư trên ví diễn đàn cao hơn (tránh xóa mất Galleon vừa cày offline khi mới mở lại mạng)
-      if (hasReceipt || isFreshLocal || nextGalleons >= homeOrActive.galleons) {
-        if (homeOrActive.galleons !== nextGalleons) {
-          homeOrActive.galleons = nextGalleons;
+      // hoặc số dư trên ví diễn đàn cao hơn (tránh xóa mất Sickle vừa cày offline khi mới mở lại mạng)
+      if (hasReceipt || isFreshLocal || nextSickle >= homeOrActive.galleons) {
+        if (homeOrActive.galleons !== nextSickle) {
+          homeOrActive.galleons = nextSickle;
           if (hud.sim.homeStateWhileVisiting) {
-            hud.sim.state.galleons = nextGalleons;
+            hud.sim.state.galleons = nextSickle;
           }
           changed = true;
         }
@@ -304,33 +297,6 @@ export function socialUiApplyAuthoritativeSnapshotIdentity(
     snap.profile && typeof snap.profile === 'object'
       ? (snap.profile as Record<string, unknown>)
       : null;
-  const serverHouse = normalizeClientHogwartsHouse(
-    profile?.house ?? snap.garden?.progression?.house
-  );
-  const houseSource = String(
-    profile?.houseSource ?? snap.garden?.progression?.houseSource ?? ''
-  );
-  if (serverHouse) {
-    const isHpvnHouse = houseSource === 'hpvn';
-    const currentLb = homeOrActive.minigameLeaderboard;
-    if (isHpvnHouse || !currentLb?.playerHouseExplicit) {
-      if (
-        currentLb?.playerHouse !== serverHouse ||
-        Boolean(currentLb?.playerHouseLockedByServer) !== isHpvnHouse
-      ) {
-        setPlayerHogwartsHouse(homeOrActive, serverHouse, {
-          lockedByServer: isHpvnHouse,
-        });
-        if (hud.sim.homeStateWhileVisiting) {
-          setPlayerHogwartsHouse(hud.sim.state, serverHouse, {
-            lockedByServer: isHpvnHouse,
-          });
-        }
-        changed = true;
-      }
-    }
-  }
-
   if (profile) {
     const serverName = typeof profile.username === 'string' ? profile.username.trim() : '';
     if (
@@ -346,28 +312,6 @@ export function socialUiApplyAuthoritativeSnapshotIdentity(
     if (serverAvatar && social.playerAvatarUrl !== serverAvatar) {
       social.playerAvatarUrl = serverAvatar;
       changed = true;
-    }
-  }
-
-  // Tự động đẩy các kỷ lục màn đã vượt sẵn có từ local lên BXH máy chủ ngay lần đồng bộ đầu tiên trong phiên
-  if (
-    typeof snap.uid === 'string' &&
-    snap.uid.trim() &&
-    !initialLeaderboardSyncedUids.has(snap.uid) &&
-    !homeOrActive.sandboxMode &&
-    !homeOrActive.sandboxTainted &&
-    !hud.sim.isHeadmasterPreview
-  ) {
-    initialLeaderboardSyncedUids.add(snap.uid);
-    const m3Cleared = Math.max(
-      0,
-      homeOrActive.match3?.maxClearedLevel ?? Math.max(0, (homeOrActive.match3?.currentLevel ?? 1) - 1)
-    );
-    const sudokuCleared = Math.max(0, homeOrActive.puzzleArcade?.sudokuCleared ?? 0);
-    const blockCleared = Math.max(0, homeOrActive.puzzleArcade?.blockCleared ?? 0);
-    const jigsawCleared = Math.max(0, homeOrActive.puzzleArcade?.jigsawCleared ?? 0);
-    if (m3Cleared > 0 || sudokuCleared > 0 || blockCleared > 0 || jigsawCleared > 0) {
-      void syncAllPlayerCloudLeaderboards(homeOrActive).catch(() => {});
     }
   }
 
@@ -397,26 +341,6 @@ export function socialUiApplyAuthoritativeSnapshotIdentity(
       social.lastSeenHelperAt = freshCheck.seenAt;
       changed = true;
       hud.showToast(freshCheck.textVi, '🤝');
-    }
-  }
-
-  if (snap.houseCup && typeof snap.houseCup === 'object') {
-    const hc = snap.houseCup as Record<string, unknown>;
-    const houses =
-      hc.houses && typeof hc.houses === 'object' ? (hc.houses as Record<string, unknown>) : null;
-    if (houses && typeof hc.weekKey === 'string') {
-      hud.sim.state.weeklyHouseCupServerStandings = {
-        weekKey: hc.weekKey,
-        totals: {
-          Gryffindor: Math.max(0, Math.floor(Number(houses.Gryffindor) || 0)),
-          Slytherin: Math.max(0, Math.floor(Number(houses.Slytherin) || 0)),
-          Ravenclaw: Math.max(0, Math.floor(Number(houses.Ravenclaw) || 0)),
-          Hufflepuff: Math.max(0, Math.floor(Number(houses.Hufflepuff) || 0)),
-        },
-        playerContribution: Math.max(0, Math.floor(Number(hc.memberTodayPoints) || 0)),
-        updatedAt: Date.now(),
-      };
-      changed = true;
     }
   }
 
@@ -457,16 +381,13 @@ export async function socialUiRefreshFlooDirectory(
     }
 
     if (!hud.sim.isVisitingNeighbor && !isSandboxOrPreview) {
-      const lbState = hud.sim.state.minigameLeaderboard;
-      const shouldSendExplicitHouse =
-        Boolean(lbState?.playerHouseExplicit) && !lbState?.playerHouseLockedByServer;
       await onlineServices.authoritativeClient
         .syncProfile({
           playerName: displayName,
           parkName: hud.sim.state.parkName || 'Trang Trại Hang Sóc',
           avatarUrl: social.playerAvatarUrl || '',
           avatarEmoji: HOUSE_CREST_MAP[house],
-          ...(shouldSendExplicitHouse ? { house, houseExplicit: true } : {}),
+          house,
           level: hud.sim.state.level,
           scene: {
             weather:
@@ -519,27 +440,31 @@ export async function socialUiRefreshFlooDirectory(
   }
 }
 
-export function socialUiShareValleyToFloo(hud: GameHUD): void {
-  const meta = buildPlayerPostcardMeta(hud);
-  const cardCanvas = renderValleyPostcardCanvas(hud.gameCanvas, meta);
-  const image = valleyPostcardToWebpDataUrl(cardCanvas, 0.55);
-  const bonus = hud.sim.recordFlooShareOrPostcard('shareFloo');
+let flooShareBusy = false; // HPVN: one send in flight at a time (double tap sent twice)
 
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(
-      new CustomEvent('hpvn:share-floo', {
-        detail: {
-          ...meta,
-          tourId: getOrCreateClientUserId(),
-          image: image || undefined,
-        },
-      })
-    );
-  }
-  if (bonus.rewarded) {
-    hud.showToast(bonus.msg, '🔥');
-  }
-  hud.refreshAll();
+export function socialUiShareValleyToFloo(hud: GameHUD): void {
+  if (flooShareBusy) return;
+  flooShareBusy = true;
+  const buttons = hud.root.querySelectorAll<HTMLButtonElement>('#btnPostcardShareFloo, #btnFlooQuickInvite, #btnHonorShareFloo');
+  buttons.forEach((b) => (b.disabled = true));
+  const meta = buildPlayerPostcardMeta(hud);
+
+  // HPVN: the postcard prefills a Floo message the member sends themself; the daily gift pays only once that worked
+  void postcardSpritesReady()
+    .then(() => shareFarmPhoto(renderValleyPostcardCanvas(hud.gameCanvas, meta), `Trang trại Hang Sóc của mình, cấp ${hud.sim.state.level}!`)) // HPVN: the park name is already «Trang Trại Hang Sóc»
+    .then(() => {
+      const bonus = hud.sim.recordFlooShareOrPostcard('shareFloo');
+      hud.showToast(bonus.msg, '🔥');
+    })
+    .catch(() => hud.showToast('Chưa mở được Mạng Floo, thử lại nhé.', '⚠️'))
+    .finally(() => {
+      flooShareBusy = false;
+      buttons.forEach((b) => (b.disabled = false));
+      hud.refreshAll();
+      if ((hud.root.querySelector('#neighborDialog') as HTMLDialogElement | null)?.open) {
+        socialUiRenderNeighborDialog(hud);
+      }
+    });
 }
 
 export function socialUiOpenNeighborDialog(
@@ -862,7 +787,7 @@ export function socialUiRenderVisitorDockBar(hud: GameHUD): void {
             <span class="visitor-lv-tag">🏛️ Vườn Mẫu · Lv.${honorTour.level}</span>
           </div>
           <div class="visitor-sub-row">
-            <span>${escapeHtml(honorTour.ownerName)} · ${escapeHtml(HOUSE_LABEL_MAP[honorTour.house])}</span>
+            <span><span class="hs-raw">${escapeHtml(honorTour.ownerName)}</span> · ${escapeHtml(HOUSE_LABEL_MAP[honorTour.house])}</span>
           </div>
         </div>
       </div>
@@ -949,7 +874,7 @@ export function socialUiRenderVisitorDockBar(hud: GameHUD): void {
                   data-floo-jump="${escapeHtml(r.uid)}"
                   title="${escapeHtml(r.username)} (Lv.${r.level})"
                 >
-                  ${buildAvatarBadgeHtml(r.avatarUrl, r.avatarEmoji || r.username, 'floo-strip-avatar')}
+                  ${buildAvatarBadgeHtml(r.avatarUrl, avatarGlyph(r.avatarEmoji, r.username), 'floo-strip-avatar')}
                   ${burn ? '<span class="floo-mini-fire" aria-hidden="true">🔥</span>' : ''}
                 </button>
               `;
@@ -972,17 +897,17 @@ export function socialUiRenderVisitorDockBar(hud: GameHUD): void {
     ${stripHtml}
     <div class="visitor-dock-main-row">
       <div class="visitor-dock-head">
-        ${buildAvatarBadgeHtml(nb.avatarUrl, nb.avatarEmoji || nb.name, 'visitor-avatar-pill')}
+        ${buildAvatarBadgeHtml(nb.avatarUrl, avatarGlyph(nb.avatarEmoji, nb.name), 'visitor-avatar-pill')}
         <div class="visitor-meta-col">
           <div class="visitor-title-row">
-            <strong>${escapeHtml(nb.name)}</strong>
+            <strong class="hs-raw">${escapeHtml(nb.name)}</strong>
             <span class="visitor-lv-tag">Lv.${nb.level}</span>
             ${isBurning ? '<span class="floo-fire-tag">🔥 Đang cháy</span>' : ''}
           </div>
           <div class="visitor-sub-row">
             <span>🔥 Còn <strong>${helpsLeft}/${MAX_DAILY_FRIEND_HELPS}</strong> lượt</span>
             <span>•</span>
-            <span>🍀 <strong>${social.friendshipTokens}/${FRIENDSHIP_CHEST_TOKEN_COST}</strong></span>
+            <span>Rương Tình Bạn <strong>${social.friendshipTokens}/${FRIENDSHIP_CHEST_TOKEN_COST}</strong></span>
           </div>
         </div>
       </div>
@@ -1051,13 +976,12 @@ export function socialUiRenderVisitorDockBar(hud: GameHUD): void {
           hud.flooHelpsLeft = rpcRes.helpsLeft;
         }
       } catch (err) {
+        // HPVN: a member's farm is helped only when the server counted it (no offline reward)
         const refusal = formatServerRefusalVi(err);
-        if (refusal.reason === 'already-helped' || refusal.reason === 'daily-help-cap' || refusal.reason === 'host-help-cap') {
-          hud.showToast(`${refusal.icon} ${refusal.text}`, refusal.icon);
-          void socialUiRefreshFlooDirectory(hud, true);
-          hud.refreshAll();
-          return;
-        }
+        hud.showToast(`${refusal.icon} ${refusal.text}`, refusal.icon);
+        void socialUiRefreshFlooDirectory(hud, true);
+        hud.refreshAll();
+        return;
       }
     }
 
@@ -1093,16 +1017,16 @@ export function socialUiRenderVisitorDockBar(hud: GameHUD): void {
     const extBtn = bar.querySelector('#btnVisitorExtinguish') as HTMLButtonElement | null;
     if (extBtn) extBtn.disabled = true;
     try {
-      let paidGalleons = 0;
+      let paidSickle = 0;
       if (nb.remoteUserId) {
         const fireRes = await onlineServices.authoritativeClient.fireOut({
           hostUid: nb.remoteUserId,
         });
-        paidGalleons = Math.max(0, Math.floor(Number(fireRes?.price || 0)));
+        paidSickle = Math.max(0, Math.floor(Number(fireRes?.price || 0)));
       }
-      if (paidGalleons > 0) {
+      if (paidSickle > 0) {
         const homeOrActive = hud.sim.homeStateWhileVisiting ?? hud.sim.state;
-        homeOrActive.galleons = Math.max(0, homeOrActive.galleons - paidGalleons);
+        homeOrActive.galleons = Math.max(0, homeOrActive.galleons - paidSickle);
         if (hud.sim.homeStateWhileVisiting) {
           hud.sim.state.galleons = homeOrActive.galleons;
         }
@@ -1113,8 +1037,8 @@ export function socialUiRenderVisitorDockBar(hud: GameHUD): void {
       hud.flooDirectoryRows = clearFire(hud.flooDirectoryRows);
       hud.flooQueueRows = clearFire(hud.flooQueueRows);
       hud.showToast(
-        paidGalleons > 0
-          ? `🧯 Đã dập tắt đám cháy giúp thung lũng ${nb.name} (-${paidGalleons} G)!`
+        paidSickle > 0
+          ? `🧯 Đã dập tắt đám cháy giúp thung lũng ${nb.name} (-${paidSickle} Sickle)!`
           : `🧯 Đã dập tắt đám cháy giúp thung lũng ${nb.name}!`,
         '🧯'
       );
@@ -1223,43 +1147,19 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
     hud.sim.state.sandboxMode ||
     hud.sim.isHeadmasterPreview;
 
-  const topStatsHtml = `
-    <div class="nb-summary-ribbon">
-      <div class="nb-stat-pill token">
-        <span>🍀</span>
-        <strong>${social.friendshipTokens}/${FRIENDSHIP_CHEST_TOKEN_COST}</strong>
-        ${
-          chestReady
-            ? `<button id="btnNbQuickOpenChest" type="button" class="brass-btn gold-cta nb-mini-cta">🎁 Mở Rương</button>`
-            : ''
-        }
-      </div>
-      <div class="nb-stat-pill">
-        <span>🔥 <strong>${helpsLeftToday}/${MAX_DAILY_FRIEND_HELPS}</strong></span>
-        <span>•</span>
-        <span>⚔️ <strong>${rescuesGivenLeft}/${MAX_DAILY_MINIGAME_RESCUES}</strong></span>
-        <span>•</span>
-        <span>🦉 <strong>${owlHelpLeft}/${MAX_DAILY_OWL_HELP_REQUESTS}</strong></span>
-      </div>
-    </div>
-  `;
-
   const tabsHtml = `
-    <div class="workshop-tabs" role="group" aria-label="Cổng Floo và Hàng Xóm">
+    <div class="workshop-tabs nb-tabs" role="group" aria-label="Cổng Floo">
       <button type="button" data-nbtab="friends" data-active="${hud.activeNeighborTab === 'friends'}" aria-pressed="${hud.activeNeighborTab === 'friends'}" class="brass-btn">
-        🔥 Cổng Floo
+        <span class="hs-long">Cổng Floo</span><span class="hs-short">Floo</span>
       </button>
       <button type="button" data-nbtab="postcard" data-active="${hud.activeNeighborTab === 'postcard'}" aria-pressed="${hud.activeNeighborTab === 'postcard'}" class="brass-btn">
-        🖼️ Bưu Thiếp ${!social.dailyFlooShareClaimed ? '(!)' : ''}
+        Bưu Thiếp ${!social.dailyFlooShareClaimed ? '<span class="nb-tab-badge" aria-label="có quà">!</span>' : ''}
       </button>
       <button type="button" data-nbtab="chest" data-active="${hud.activeNeighborTab === 'chest'}" aria-pressed="${hud.activeNeighborTab === 'chest'}" class="brass-btn">
-        🎁 Rương &amp; SOS ${chestReady || mySos?.rescuedAt ? '(!)' : ''}
+        <span class="hs-long">Rương &amp; SOS</span><span class="hs-short">Rương</span> ${chestReady || mySos?.rescuedAt ? '<span class="nb-tab-badge" aria-label="có quà">!</span>' : ''}
       </button>
       <button type="button" data-nbtab="log" data-active="${hud.activeNeighborTab === 'log'}" aria-pressed="${hud.activeNeighborTab === 'log'}" class="brass-btn">
-        📜 Lưu Bút (${social.activityLog.length})
-      </button>
-      <button id="btnNbOpenFriendsLeaderboard" type="button" class="brass-btn gold-cta">
-        🏆 BXH
+        Lưu Bút ${social.activityLog.length ? `<span class="nb-tab-badge">${social.activityLog.length}</span>` : ''}
       </button>
     </div>
   `;
@@ -1268,68 +1168,31 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
 
   if (hud.activeNeighborTab === 'friends') {
     const quickAlertBanners: string[] = [];
-    if (mySos?.rescuedAt) {
-      const km = getMinigameKindLabelVi(mySos.kind);
-      quickAlertBanners.push(`
-        <div class="nb-alert-banner ready">
-          <span>🎉 <strong>${escapeHtml(mySos.rescuerEmoji ?? '🦉')} ${escapeHtml(mySos.rescuerName ?? 'Bạn HPVN')}</strong> đã vượt hộ <strong>${km.icon} Màn ${mySos.stage}</strong>!</span>
-          <button id="btnNbClaimMySos" type="button" class="brass-btn gold-cta nb-mini-cta">🎉 Nhận</button>
-        </div>
-      `);
-    } else if (mySos) {
-      const km = getMinigameKindLabelVi(mySos.kind);
-      quickAlertBanners.push(`
-        <div class="nb-alert-banner">
-          <span>🦉 Đang treo cầu viện <strong>${km.icon} Màn ${mySos.stage}</strong> trên Cổng Floo…</span>
-        </div>
-      `);
-    }
-
     if (social.homeLanternMarks.length > 0) {
       quickAlertBanners.push(`
         <div class="nb-alert-banner ready">
-          <span>🏮 Có <strong>${social.homeLanternMarks.length} Đèn Lồng Chúc Phúc</strong> tại vườn nhà</span>
-          <button id="btnNbClaimAllLanterns" type="button" class="brass-btn gold-cta nb-mini-cta">🏮 Nhận (+${social.homeLanternMarks.length}🍀)</button>
+          <span>🏮 <strong>${social.homeLanternMarks.length} Đèn Lồng</strong> tại vườn</span>
+          <button id="btnNbClaimAllLanterns" type="button" class="brass-btn gold-cta nb-mini-cta">Nhận +${social.homeLanternMarks.length} 🍀</button>
         </div>
       `);
     }
 
-    // 1. Thẻ Định Danh Thành Viên HPVN (Tự động kết nối — không cần mã kết bạn)
     const identityCardHtml = `
       <section class="floo-identity-card">
         <div class="floo-identity-main">
           ${buildAvatarBadgeHtml(social.playerAvatarUrl, HOUSE_CREST_MAP[playerHouse], 'floo-identity-avatar')}
           <div class="floo-identity-fields">
+            <strong class="hs-card-title hs-raw">${escapeHtml(playerDisplayName)}</strong>
             <div class="floo-identity-badges">
               <span class="nb-badge-pill">Lv.${hud.sim.state.level}</span>
               <span class="nb-badge-pill house">${HOUSE_LABEL_MAP[playerHouse]}</span>
-              <span class="floo-verified-tag">✓ Thành viên HPVN tự động</span>
+              <span class="floo-verified-tag">HPVN</span>
             </div>
-            <form id="frmFlooIdentityName" class="floo-name-form">
-              <label for="inpFlooDisplayName" class="sr-only">Biệt danh trên Cổng Floo</label>
-              <input
-                id="inpFlooDisplayName"
-                name="displayName"
-                type="text"
-                maxlength="32"
-                value="${escapeHtml(playerDisplayName)}"
-                placeholder="Biệt danh phù thủy của bạn"
-                autocomplete="off"
-              />
-              <button type="submit" class="brass-btn nb-mini-cta">Lưu tên</button>
-            </form>
           </div>
-        </div>
-        <div class="floo-identity-ctas">
-          <button id="btnFlooOpenPostcardTab" type="button" class="brass-btn">🖼️ Bưu Thiếp</button>
-          <button id="btnFlooQuickInvite" type="button" class="brass-btn gold-cta">
-            🔥 Rủ Bạn Trên Mạng Floo ${!social.dailyFlooShareClaimed ? '(+10G)' : ''}
-          </button>
         </div>
       </section>
     `;
 
-    // 2. Khu Cổng Bay Floo Cộng Đồng (Cấp 1–9 khóa ấm áp · Cấp 10+ mở lưới portal)
     let flooHearthHtml = '';
     if (!isFlooUnlocked) {
       const lvPct = Math.min(
@@ -1341,9 +1204,9 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
           <div class="floo-hearth-head">
             <div class="floo-hearth-flame" aria-hidden="true">🔥</div>
             <div class="floo-hearth-copy">
-              <div class="floo-hearth-title">Cổng Bay Floo Cộng Đồng HPVN — Mở Ở Cấp ${FLOO_VISIT_UNLOCK_LEVEL}</div>
+              <h3 class="floo-hearth-title">Cổng Floo Cộng Đồng · Mở Cấp ${FLOO_VISIT_UNLOCK_LEVEL}</h3>
               <div class="floo-hearth-sub">
-                Đang ở <strong>Cấp ${hud.sim.state.level}/${FLOO_VISIT_UNLOCK_LEVEL}</strong> · Khi đạt Cấp ${FLOO_VISIT_UNLOCK_LEVEL}, lò sưởi tự động kết nối thung lũng các thành viên HPVN mà không cần nhập mã kết bạn!
+                Cấp ${hud.sim.state.level}/${FLOO_VISIT_UNLOCK_LEVEL} · Tự kết nối vườn thành viên HPVN
               </div>
               <div class="quest-bar floo-lv-bar">
                 <div class="quest-bar-fill" style="width:${lvPct}%"></div>
@@ -1377,12 +1240,12 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
                 ${uniqueHelpers
                   .slice(0, 6)
                   .map((h) =>
-                    buildAvatarBadgeHtml(h.avatarUrl, h.avatarEmoji || h.name, 'floo-helper-chip')
+                    buildAvatarBadgeHtml(h.avatarUrl, avatarGlyph(h.avatarEmoji, h.name), 'floo-helper-chip')
                   )
                   .join('')}
               </div>
               <div class="floo-helpers-text">
-                🤝 <strong>${escapeHtml(formatFlooHelperNamesVi(uniqueHelpers))}</strong> đã sang chăm giúp · mẻ sản xuất nhanh hơn <strong>${uniqueHelpers.length * 15} phút</strong>!
+                <strong>${escapeHtml(formatFlooHelperNamesVi(uniqueHelpers))}</strong> đã giúp · −${uniqueHelpers.length * 15} phút
               </div>
             </div>
           `
@@ -1400,12 +1263,12 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
                     visitingNb?.remoteUserId === row.uid ||
                     visitingNb?.id === `player_${row.uid}`;
                   const statusLabel = isBurn
-                    ? '🔥 Đang cháy · cần dập!'
+                    ? '🔥 Đang cháy'
                     : row.helped
-                      ? '✓ Đã chăm giúp'
+                      ? '✓ Đã giúp'
                       : row.growing > 0
-                        ? `🌱 ${row.growing} mẻ đang lớn`
-                        : '🌿 Thung lũng yên bình';
+                        ? `🌱 ${row.growing} mẻ`
+                        : '🌿 Yên bình';
                   return `
                     <button
                       type="button"
@@ -1414,11 +1277,11 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
                       data-floo-portal="${escapeHtml(row.uid)}"
                     >
                       <div class="floo-portal-ring">
-                        ${buildAvatarBadgeHtml(row.avatarUrl, row.avatarEmoji || row.username, 'floo-portal-avatar')}
+                        ${buildAvatarBadgeHtml(row.avatarUrl, avatarGlyph(row.avatarEmoji, row.username), 'floo-portal-avatar')}
                         ${isBurn ? '<span class="floo-portal-fire-badge" aria-hidden="true">🔥</span>' : ''}
                         <span class="floo-portal-lv">Lv.${row.level}</span>
                       </div>
-                      <strong class="floo-portal-name">${escapeHtml(row.username)}</strong>
+                      <strong class="floo-portal-name hs-raw">${escapeHtml(row.username)}</strong>
                       <span class="floo-portal-park">${escapeHtml((row.house ? HOUSE_CREST_MAP[row.house] : '') || '🪄')} ${escapeHtml(row.parkName || '')}</span>
                       <span class="floo-portal-status">${statusLabel}</span>
                     </button>
@@ -1429,15 +1292,10 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
           `
           : `
             <div class="nb-panel-card">
-              ${
-                hud.flooLoading
-                  ? '🔥 Đang thắp lửa kết nối Cổng Bay Floo Cộng Đồng HPVN…'
-                  : '🌿 Lò sưởi đang lắng nghe các thung lũng thành viên HPVN trực tuyến — bấm Làm mới hoặc Khoe Vườn để rủ bạn ghé thăm!'
-              }
+              ${hud.flooLoading ? 'Đang kết nối Cổng Floo…' : 'Chưa có vườn trực tuyến.'}
             </div>
           `;
 
-      // Tương trợ Co-op (Đơn Cú & Giải Cứu Màn Khó) cho các thành viên đã đồng bộ từ Cổng Floo
       const coopNeighbors = social.neighbors.filter(
         (nb) =>
           nb.owlHelpCrates.some((c) => !c.fulfilledByPlayerToday) ||
@@ -1447,7 +1305,7 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
         coopNeighbors.length > 0
           ? `
             <section class="floo-coop-board">
-              <div class="nb-section-title">🦉 Bảng Tương Trợ Cộng Đồng (Đơn Cú &amp; Giải Cứu Khảo Thí)</div>
+              <h3 class="nb-section-title">Tương trợ</h3>
               <div class="nb-friends-list">
                 ${coopNeighbors
                   .slice(0, 6)
@@ -1469,9 +1327,9 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
                             <img src="${meta.iconSrc}" alt="${escapeHtml(meta.name)}" class="nb-crate-icon" />
                             <div class="nb-crate-info">
                               <div class="nb-crate-title">${crate.qty} ${escapeHtml(meta.name)} <span class="nb-crate-stock">(${hud.sim.state.sandboxMode ? '∞' : have}/${crate.qty})</span></div>
-                              <div class="nb-crate-rew">+${crate.rewardTokens}🍀 • +${crate.rewardGalleons}G</div>
+                              <div class="nb-crate-rew">+${crate.rewardTokens} 🍀 · +${crate.rewardSickle} Sickle</div>
                             </div>
-                            <button type="button" class="brass-btn ${enough ? 'gold-cta' : ''} nb-mini-cta" data-nb-crate="${escapeHtml(nb.id)}|${escapeHtml(crate.id)}" ${!enough ? 'disabled' : ''}>📦 Đóng giúp</button>
+                            <button type="button" class="brass-btn ${enough ? 'gold-cta' : ''} nb-mini-cta" data-nb-crate="${escapeHtml(nb.id)}|${escapeHtml(crate.id)}" ${!enough ? 'disabled' : ''}>Đóng giúp</button>
                           </div>
                         `;
                       })
@@ -1483,9 +1341,9 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
                           <div class="nb-coop-section sos">
                             <div class="nb-sos-row">
                               <div class="nb-sos-info">
-                                <div class="nb-sos-title">⚔️ ${sosMeta.icon} ${escapeHtml(sosMeta.nameVi)} • <strong>Màn ${sos.stage}</strong></div>
+                                <div class="nb-sos-title">${sosMeta.icon} ${escapeHtml(sosMeta.nameVi)} · <strong>Màn ${sos.stage}</strong></div>
                               </div>
-                              <button type="button" class="brass-btn gold-cta nb-mini-cta" data-nb-rescue="${escapeHtml(nb.id)}" ${!rescueCheck.ok ? 'disabled' : ''}>⚔️ Cứu hộ</button>
+                              <button type="button" class="brass-btn gold-cta nb-mini-cta" data-nb-rescue="${escapeHtml(nb.id)}" ${!rescueCheck.ok ? 'disabled' : ''}>Cứu hộ</button>
                             </div>
                           </div>
                         `
@@ -1494,15 +1352,15 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
                     return `
                       <article class="nb-friend-card ${hud.focusedNeighborId === nb.id ? 'focused' : ''}" data-neighbor-card="${escapeHtml(nb.id)}">
                         <div class="nb-card-head">
-                          ${buildAvatarBadgeHtml(nb.avatarUrl, nb.avatarEmoji || nb.name, 'nb-avatar-circle')}
+                          ${buildAvatarBadgeHtml(nb.avatarUrl, avatarGlyph(nb.avatarEmoji, nb.name), 'nb-avatar-circle')}
                           <div class="nb-head-info">
                             <div class="nb-name-row">
-                              <strong class="nb-friend-name">${escapeHtml(nb.name)}</strong>
+                              <strong class="nb-friend-name hs-raw">${escapeHtml(nb.name)}</strong>
                               <span class="nb-badge-pill">Lv.${nb.level}</span>
                               <span class="nb-badge-pill house">${HOUSE_LABEL_MAP[nb.house]}</span>
                             </div>
                           </div>
-                          <button type="button" class="brass-btn nb-mini-cta" data-nb-visit="${escapeHtml(nb.id)}">🔥 Bay tới</button>
+                          <button type="button" class="brass-btn nb-mini-cta" data-nb-visit="${escapeHtml(nb.id)}">Bay tới</button>
                         </div>
                         ${cratesHtml ? `<div class="nb-coop-section"><div class="nb-crate-list">${cratesHtml}</div></div>` : ''}
                         ${sosHtml}
@@ -1520,17 +1378,17 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
           <div class="floo-hearth-head">
             <div class="floo-hearth-flame" aria-hidden="true">🔥</div>
             <div class="floo-hearth-copy">
-              <div class="floo-hearth-title">Cổng Bay Floo Cộng Đồng HPVN</div>
+              <h3 class="floo-hearth-title">Cổng Floo Cộng Đồng</h3>
               <div class="floo-hearth-sub">
-                Còn <strong>${helpsLeftToday}/${MAX_DAILY_FRIEND_HELPS} lượt chăm giúp</strong> hôm nay · <strong>${helpableCount}</strong> thung lũng đang chờ tiếp sức (-15 phút)
+                Giúp vườn: ${helpsLeftToday}/${MAX_DAILY_FRIEND_HELPS} · ${helpableCount} vườn chờ (−15p)
               </div>
             </div>
             <div class="floo-hearth-actions">
-              <button id="btnFlooRefreshDir" type="button" class="brass-btn nb-mini-cta" ${hud.flooLoading ? 'disabled' : ''}>
-                ${hud.flooLoading ? '⏳…' : '🔄'}
+              <button id="btnFlooRefreshDir" type="button" class="brass-btn nb-mini-cta" aria-label="Làm mới" ${hud.flooLoading ? 'disabled' : ''}>
+                ${hud.flooLoading ? '…' : 'Làm mới'}
               </button>
               <button id="btnFlooQuickJump" type="button" class="brass-btn gold-cta" ${orderedRows.length === 0 ? 'disabled' : ''}>
-                🔥 Bay Floo
+                Bay Floo
               </button>
             </div>
           </div>
@@ -1541,13 +1399,12 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
       `;
     }
 
-    // 3. Khu Vườn Mẫu Danh Dự Hogwarts (Mở sẵn ngay từ Cấp 1 — không bao giờ trống rỗng!)
     const honorGardensHtml = `
       <section class="honor-gardens-section">
         <div class="honor-gardens-header">
-          <div class="nb-section-title">🏛️ Vườn Mẫu Danh Dự Hogwarts (Mở Từ Cấp 1)</div>
+          <h3 class="nb-section-title">Vườn mẫu</h3>
           <span class="honor-daily-pill">
-            ${!social.dailyHonorTourClaimed ? '🎁 +8G · +15 XP cảm hứng đầu ngày' : '✓ Đã nhận quà cảm hứng hôm nay'}
+            ${!social.dailyHonorTourClaimed ? '+8 Sickle · +15 XP/ngày' : '✓ Đã nhận hôm nay'}
           </span>
         </div>
         <div class="honor-gardens-grid">
@@ -1556,19 +1413,18 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
             return `
               <article class="honor-garden-card ${isCurrentTour ? 'visiting' : ''}">
                 <div class="honor-garden-top">
-                  <span class="honor-garden-emoji" aria-hidden="true">${escapeHtml(g.avatarEmoji)}</span>
+                  <span class="honor-garden-emoji" aria-hidden="true">${escapeHtml(avatarGlyph(g.avatarEmoji, g.ownerName))}</span>
                   <div class="honor-garden-meta">
                     <strong class="honor-garden-title">${escapeHtml(g.titleVi)}</strong>
-                    <span class="honor-garden-owner">${escapeHtml(g.ownerName)} · Lv.${g.level} · ${HOUSE_LABEL_MAP[g.house]}</span>
+                    <span class="honor-garden-owner"><span class="hs-raw">${escapeHtml(g.ownerName)}</span> · Lv.${g.level} · ${HOUSE_LABEL_MAP[g.house]}</span>
                   </div>
                 </div>
-                <p class="honor-garden-desc">${escapeHtml(g.descVi)}</p>
                 <div class="honor-garden-foot">
-                  <span class="nb-badge-pill">✨ ${escapeHtml(g.weather)} · ${escapeHtml(g.atmosphere)}</span>
+                  <span class="nb-badge-pill">${escapeHtml(HONOR_SKY_VI[g.weather] ?? g.weather)} · ${escapeHtml(HONOR_SKY_VI[g.atmosphere] ?? g.atmosphere)}</span>
                   ${
                     isCurrentTour
-                      ? `<button type="button" id="btnNbExitCurrentVisit" class="brass-btn visitor-home-cta nb-mini-cta">🏡 Về vườn</button>`
-                      : `<button type="button" class="brass-btn gold-cta nb-mini-cta" data-honor-tour="${escapeHtml(g.id)}">🧭 Tham Quan</button>`
+                      ? `<button type="button" id="btnNbExitCurrentVisit" class="brass-btn visitor-home-cta nb-mini-cta">Về vườn</button>`
+                      : `<button type="button" class="brass-btn gold-cta nb-mini-cta" data-honor-tour="${escapeHtml(g.id)}">Tham quan</button>`
                   }
                 </div>
               </article>
@@ -1593,9 +1449,9 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
     bodyHtml = `
       <section class="nb-panel-card highlight floo-postcard-wrap">
         <div class="honor-gardens-header">
-          <div class="nb-section-title">🖼️ Bưu Thiếp Thung Lũng &amp; Rủ Bạn Qua Mạng Floo</div>
+          <h3 class="nb-section-title">Bưu thiếp</h3>
           <span class="honor-daily-pill">
-            ${!social.dailyFlooShareClaimed ? '🎁 +10G · +1 🍀 · +15 điểm Lễ Hội' : '✓ Đã nhận quà Bưu Thiếp hôm nay'}
+            ${!social.dailyFlooShareClaimed ? '+10 Sickle · +1 🍀' : '✓ Đã nhận hôm nay'}
           </span>
         </div>
         <div class="floo-postcard-stage">
@@ -1603,11 +1459,8 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
         </div>
         <div class="floo-postcard-caption">${escapeHtml(previewMsg)}</div>
         <div class="floo-postcard-actions">
-          <button id="btnPostcardDownload" type="button" class="brass-btn">
-            💾 Lưu Bưu Thiếp Về Máy
-          </button>
           <button id="btnPostcardShareFloo" type="button" class="brass-btn gold-cta">
-            🔥 Khoe Vườn &amp; Rủ Bạn Trên Mạng Floo
+            Chia sẻ lên Floo
           </button>
         </div>
       </section>
@@ -1625,20 +1478,20 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
                     <div class="nb-crate-title">${r.qty} ${escapeHtml(meta.name)}</div>
                     <div class="nb-crate-rew">${
                       r.fulfilledAt
-                        ? `✓ ${escapeHtml(r.helperEmoji ?? '🦉')} ${escapeHtml(r.helperName ?? 'Bạn HPVN')}`
-                        : '🦉 Đang gọi hỗ trợ trên Cổng Floo…'
+                        ? `✓ ${escapeHtml(r.helperEmoji ?? '🦉')} <span class="hs-raw">${escapeHtml(r.helperName ?? 'Bạn HPVN')}</span>`
+                        : 'Đang chờ bạn giúp'
                     }</div>
                   </div>
                 </div>
               `;
             })
             .join('')
-        : `<div class="floo-muted-note">Chưa có kiện hàng nào đang nhờ bạn bè đóng phụ.</div>`;
+        : `<div class="floo-muted-note">Chưa có đơn nhờ giúp.</div>`;
 
     bodyHtml = `
       <div class="nb-chest-grid">
         <section class="nb-panel-card highlight">
-          <div class="nb-section-title">🎁 Rương Tình Bạn (${social.friendshipTokens}/${FRIENDSHIP_CHEST_TOKEN_COST} 🍀)</div>
+          <h3 class="nb-section-title">Rương Tình Bạn (${social.friendshipTokens}/${FRIENDSHIP_CHEST_TOKEN_COST})</h3>
           <div class="quest-bar floo-lv-bar">
             <div class="quest-bar-fill" style="width:${chestPct}%"></div>
           </div>
@@ -1646,18 +1499,18 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
             <span class="owl-rew-pill gold">🌟 +2</span>
             <span class="owl-rew-pill plug">🔥 +1</span>
             <span class="owl-rew-pill xp">🌱 +2</span>
-            <span class="owl-rew-pill gold">🪙 +150G</span>
+            <span class="owl-rew-pill gold">🪙 +150 Sickle</span>
           </div>
           <div class="floo-chest-foot">
             <span class="floo-chest-count">Đã mở: ${social.chestsOpened}</span>
             <button id="btnNbOpenFriendshipChest" type="button" class="brass-btn gold-cta" ${!chestReady ? 'disabled' : ''}>
-              🎁 Mở Rương (${FRIENDSHIP_CHEST_TOKEN_COST} 🍀)
+              Mở rương (${FRIENDSHIP_CHEST_TOKEN_COST} 🍀)
             </button>
           </div>
         </section>
 
         <section class="nb-panel-card">
-          <div class="nb-section-title">🆘 Cầu Viện Khảo Thí &amp; Đơn Cú</div>
+          <h3 class="nb-section-title">SOS &amp; Đơn Cú</h3>
           <div class="floo-sos-wrap">
             ${
               mySos
@@ -1665,27 +1518,27 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
                   <div class="nb-alert-banner ${mySos.rescuedAt ? 'ready' : ''}">
                     <span>${
                       mySos.rescuedAt
-                        ? `🎉 <strong>${escapeHtml(mySos.rescuerEmoji ?? '🦉')} ${escapeHtml(mySos.rescuerName ?? 'Bạn HPVN')}</strong> đã cứu <strong>Màn ${mySos.stage}</strong>!`
-                        : `🦉 Đang gọi cứu <strong>Màn ${mySos.stage}</strong>…`
+                        ? `<strong>${escapeHtml(mySos.rescuerEmoji ?? '🦉')} ${escapeHtml(mySos.rescuerName ?? 'Bạn HPVN')}</strong> đã cứu <strong>Màn ${mySos.stage}</strong>`
+                        : `Đang gọi cứu <strong>Màn ${mySos.stage}</strong>`
                     }</span>
                     ${
                       mySos.rescuedAt
-                        ? `<button id="btnNbClaimMySos" type="button" class="brass-btn gold-cta nb-mini-cta">🎉 Nhận</button>`
+                        ? `<button id="btnNbClaimMySos" type="button" class="brass-btn gold-cta nb-mini-cta">Nhận</button>`
                         : ''
                     }
                   </div>
                 `
-                : `<div class="floo-muted-note">⚔️ Lượt nhận giải cứu hôm nay: ${rescuesReceivedLeft}/${MAX_DAILY_MINIGAME_RESCUES}</div>`
+                : `<div class="floo-muted-note">Cứu hộ: ${rescuesGivenLeft}/${MAX_DAILY_MINIGAME_RESCUES} · Nhận cứu: ${rescuesReceivedLeft}/${MAX_DAILY_MINIGAME_RESCUES}</div>`
             }
           </div>
           <div>
-            <div class="floo-sub-heading">🦉 Đơn Cú Nhờ Bạn (${owlHelpLeft}/${MAX_DAILY_OWL_HELP_REQUESTS}):</div>
+            <div class="floo-sub-heading">Đơn Cú nhờ bạn (${owlHelpLeft}/${MAX_DAILY_OWL_HELP_REQUESTS})</div>
             <div class="nb-crate-list">${owlReqsHtml}</div>
           </div>
         </section>
 
         <section class="nb-panel-card">
-          <div class="nb-section-title">🏮 Lời Chúc Khi Sang Chăm Giúp Vườn Bạn</div>
+          <h3 class="nb-section-title">Lời nhắn thăm vườn</h3>
           <div class="nb-preset-notes">
             ${NEIGHBOR_PRESET_NOTES.map((n) => {
               const active = n.id === social.selectedPresetNoteId;
@@ -1716,13 +1569,12 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
               `;
             })
             .join('')
-        : `<div class="nb-panel-card">Lưu bút Cổng Floo hiện đang trống.</div>`;
+        : `<div class="nb-panel-card">Chưa có lưu bút.</div>`;
 
     bodyHtml = `<div class="nb-log-list">${logItemsHtml}</div>`;
   }
 
   box.innerHTML = `
-    ${topStatsHtml}
     ${tabsHtml}
     ${bodyHtml}
   `;
@@ -1732,7 +1584,8 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
   // Vẽ canvas Bưu Thiếp ngay khi đang ở tab Bưu Thiếp
   const postcardCanvas = box.querySelector('#flooPostcardCanvas') as HTMLCanvasElement | null;
   if (postcardCanvas) {
-    renderValleyPostcardCanvas(hud.gameCanvas, buildPlayerPostcardMeta(hud), postcardCanvas);
+    const meta = buildPlayerPostcardMeta(hud);
+    void postcardSpritesReady().then(() => renderValleyPostcardCanvas(hud.gameCanvas, meta, postcardCanvas)); // HPVN: crests, star first
   }
 
   box.querySelectorAll<HTMLButtonElement>('[data-nbtab]').forEach((btn) => {
@@ -1754,22 +1607,6 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
 
   box.querySelector('#btnPostcardShareFloo')?.addEventListener('click', () => {
     socialUiShareValleyToFloo(hud);
-    socialUiRenderNeighborDialog(hud);
-  });
-
-  box.querySelector('#btnPostcardDownload')?.addEventListener('click', () => {
-    const card =
-      (box.querySelector('#flooPostcardCanvas') as HTMLCanvasElement | null) ??
-      renderValleyPostcardCanvas(hud.gameCanvas, buildPlayerPostcardMeta(hud));
-    const webpUrl = valleyPostcardToWebpDataUrl(card, 0.72);
-    if (webpUrl) {
-      const a = document.createElement('a');
-      a.href = webpUrl;
-      a.download = `buu-thiep-hang-soc-lv${hud.sim.state.level}.${webpUrl.startsWith('data:image/webp') ? 'webp' : 'png'}`;
-      a.click();
-    }
-    const bonus = hud.sim.recordFlooShareOrPostcard('postcard');
-    hud.showToast(bonus.msg, '🖼️');
     socialUiRenderNeighborDialog(hud);
   });
 
@@ -1823,10 +1660,14 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
   };
   box.querySelector('#btnNbQuickOpenChest')?.addEventListener('click', handleOpenChest);
   box.querySelector('#btnNbOpenFriendshipChest')?.addEventListener('click', handleOpenChest);
-  box.querySelector('#btnNbOpenFriendsLeaderboard')?.addEventListener('click', () => {
-    hud.sim.audio.playClick();
-    hud.openLeaderboardDialog(undefined, 'friends');
-  });
+  // the BXH chip sits in the static dialog header, so assign (not add) its handler on every render
+  const bxhBtn = hud.root.querySelector('#btnNbOpenFriendsLeaderboard') as HTMLButtonElement | null;
+  if (bxhBtn) {
+    bxhBtn.onclick = () => {
+      hud.sim.audio.playClick();
+      hud.openLeaderboardDialog(undefined, 'friends');
+    };
+  }
 
   box.querySelectorAll<HTMLButtonElement>('#btnNbClaimMySos').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -1916,7 +1757,7 @@ export function socialUiPanCameraToTutorialTarget(hud: GameHUD): void {
       hud.pastureTrayOpen ||
       hud.buildSheetOpen ||
       Boolean(hud.activeCategory);
-    const gridBias = bottomSheetBusy ? -0.35 : 0.95;
+    const gridBias = bottomSheetBusy ? -0.35 : hud.tutorialMinimized ? 0 : 0.95;
     centerCameraOnGrid(
       hud.cam,
       worldTarget.gx + worldTarget.bw * 0.5 + gridBias,
@@ -1987,7 +1828,7 @@ export function socialUiResolveTutorialHudTarget(hud: GameHUD): { el: HTMLElemen
       if (hud.seedTrayOpen) {
         return {
           el: hud.root.querySelector('#btnSeedTrayOpenQuiz') as HTMLElement | null,
-          label: '🪄 Nhận 0G',
+          label: '🪄 Nhận 0 Sickle',
         };
       }
       return {
@@ -2124,6 +1965,10 @@ export function socialUiRenderTutorialCoach(hud: GameHUD): void {
       return;
     }
 
+    if (hud.sim.state.tutorial && typeof hud.sim.state.tutorial.minimized === 'boolean') {
+      hud.tutorialMinimized = hud.sim.state.tutorial.minimized;
+    }
+
     const bottomSheetBusy =
       hud.seedTrayOpen ||
       hud.pastureTrayOpen ||
@@ -2147,11 +1992,11 @@ export function socialUiRenderTutorialCoach(hud: GameHUD): void {
       if (hud.tutorialMinimized) {
         card.innerHTML = `
           <div class="tutorial-mini-bar">
-            <img src="/sprites/${step.pose}.png" alt="" class="tutorial-mini-avatar" />
+            <img src="/game/trang-trai-hang-soc/sprites/${step.pose}.webp" alt="" class="tutorial-mini-avatar" />
             <div class="tutorial-mini-info">
               <h2 id="tutorialCoachTitle" class="tutorial-mini-title">${escapeHtml(step.title)}</h2>
             </div>
-            <button id="btnTutorialExpand" type="button" data-tutorial-focus class="brass-btn gold-cta">▴ Mở</button>
+            <button id="btnTutorialExpand" type="button" data-tutorial-focus class="brass-btn gold-cta">Mở</button>
             <button
               id="btnTutorialSkipMini"
               type="button"
@@ -2165,24 +2010,23 @@ export function socialUiRenderTutorialCoach(hud: GameHUD): void {
       } else {
         const extraActionBtn =
           step.id === 'earn_magic_star'
-            ? `<button id="btnTutorialSecondaryCta" type="button" class="brass-btn">♟️ 4 Môn</button>`
+            ? `<button id="btnTutorialSecondaryCta" type="button" class="brass-btn">4 Môn</button>`
             : step.id === 'build_and_owl_order'
               ? `<button id="btnTutorialSecondaryCta" type="button" class="brass-btn">${
-                  deliverableOwlCount > 0 ? '🔨 Xây' : '🦉 Đơn Cú'
+                  deliverableOwlCount > 0 ? 'Xây' : 'Đơn Cú'
                 }</button>`
               : '';
 
         const primaryLabel =
           step.id === 'build_and_owl_order'
             ? deliverableOwlCount > 0
-              ? '🦉 Giao Đơn!'
-              : '🔨 Xây Dựng'
+              ? 'Giao đơn'
+              : 'Xây dựng'
             : step.ctaLabel;
 
         card.innerHTML = `
           <div class="tutorial-portrait-col">
-            <div class="tutorial-portrait-halo" aria-hidden="true"></div>
-            <img src="/sprites/${step.pose}.png" alt="" class="tutorial-molly-img" />
+            <img src="/game/trang-trai-hang-soc/sprites/${step.pose}.webp" alt="" class="tutorial-molly-img" />
             <div
               class="tutorial-step-dots"
               role="progressbar"
@@ -2196,9 +2040,7 @@ export function socialUiRenderTutorialCoach(hud: GameHUD): void {
           </div>
           <div class="tutorial-body-col">
             <div class="tutorial-top-row">
-              <div class="tutorial-speaker-pill">
-                🥧 ${escapeHtml(step.speakerName)}
-              </div>
+              <div class="tutorial-speaker-pill">${escapeHtml(step.speakerName)}</div>
               <div class="tutorial-top-controls">
                 <button
                   id="btnTutorialMinimize"
@@ -2219,7 +2061,7 @@ export function socialUiRenderTutorialCoach(hud: GameHUD): void {
             <h2 id="tutorialCoachTitle" class="tutorial-coach-title">${escapeHtml(step.title)}</h2>
             <div class="tutorial-hint-strip">${escapeHtml(step.hintVi)}</div>
             <div class="tutorial-footer-row">
-              <span class="tutorial-reward-pill">🎁 ${escapeHtml(step.rewardLabel)}</span>
+              <span class="tutorial-reward-pill">Thưởng: ${escapeHtml(step.rewardLabel)}</span>
               <div class="tutorial-cta-group">
                 ${extraActionBtn}
                 <button
@@ -2293,8 +2135,14 @@ export function socialUiHandleTutorialPrimaryAction(hud: GameHUD, stepId: string
     if (stepId === 'harvest_wheat') {
       const target = hud.sim.getTutorialWorldTarget();
       if (target) {
+        hud.tutorialMinimized = true;
+        hud.sim.ensureTutorialState().minimized = true;
+        hud.sim.saveToStorage();
+        hud.cam.zoom = Math.max(hud.cam.zoom, 1.1);
         socialUiPanCameraToTutorialTarget(hud);
-        hud.showToast('🌾 Nhấp trực tiếp vào ô Lúa Mì đang sáng vàng để gặt nhé!', '🌾');
+        hud.sim.onBuildingTactile?.(target.uid);
+        socialUiRenderTutorialCoach(hud);
+        hud.showToast('Chạm vào ô Lúa Mì chín vàng để gặt!', '🌾');
       } else {
         const plotItem = getCatalogItem('farmland_plot');
         if (plotItem) {
@@ -2313,7 +2161,6 @@ export function socialUiHandleTutorialPrimaryAction(hud: GameHUD, stepId: string
     }
 
     if (stepId === 'pasture_harvest_and_stock') {
-      socialUiPanCameraToTutorialTarget(hud);
       const now = Date.now();
       const hasReadyPasture = hud.sim.state.buildings.some(
         (b) =>
@@ -2323,8 +2170,17 @@ export function socialUiHandleTutorialPrimaryAction(hud: GameHUD, stepId: string
           now >= b.pastureReadyAt
       );
       if (hasReadyPasture && !hud.sim.state.tutorial?.pastureHarvestedInStep3) {
-        hud.showToast('👆 Nhấp vào ô Đồng Cỏ đang có bong bóng trứng để thu hoạch trước nhé!', '🥚');
+        const target = hud.sim.getTutorialWorldTarget();
+        hud.tutorialMinimized = true;
+        hud.sim.ensureTutorialState().minimized = true;
+        hud.sim.saveToStorage();
+        hud.cam.zoom = Math.max(hud.cam.zoom, 1.1);
+        socialUiPanCameraToTutorialTarget(hud);
+        if (target) hud.sim.onBuildingTactile?.(target.uid);
+        socialUiRenderTutorialCoach(hud);
+        hud.showToast('Chạm vào ô Đồng Cỏ có trứng để thu hoạch!', '🥚');
       } else {
+        socialUiPanCameraToTutorialTarget(hud);
         hud.openPastureTray('ottery_sheep');
       }
       return;

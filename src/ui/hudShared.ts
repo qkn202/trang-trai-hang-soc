@@ -156,10 +156,10 @@ export function getCatalogCardImageSrc(
   item: Pick<CatalogItem, 'id' | 'spriteKey'>
 ): string | null {
   if (item.spriteKey) {
-    return `/sprites/${item.spriteKey}.png`;
+    return `/game/trang-trai-hang-soc/sprites/${item.spriteKey}.webp`;
   }
   if (CUSTOM_CATALOG_PREVIEW_IDS.has(item.id)) {
-    return `/paintings/catalog/${item.id}.png`;
+    return `/game/trang-trai-hang-soc/paintings/catalog/${item.id}.webp`;
   }
   return null;
 }
@@ -189,37 +189,20 @@ export function clearBuildToolModes(hud: BuildToolModeHost): void {
 export const RECENT_DECOR_STORAGE_KEY = 'hangsoc_recent_decor_v1';
 const MAX_RECENT_DECOR_ITEMS = 12;
 
+// HPVN: nothing on the device (owner 13/11): the recent list lives for this visit only
 export function loadRecentDecorIds(): string[] {
-  try {
-    if (typeof localStorage === 'undefined') return [];
-    const raw = localStorage.getItem(RECENT_DECOR_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((x): x is string => typeof x === 'string' && x.length > 0)
-      .slice(0, MAX_RECENT_DECOR_ITEMS);
-  } catch {
-    return [];
-  }
+  return [];
 }
 
 export function pushRecentDecorId(current: ReadonlyArray<string>, itemId: string): string[] {
   const next = [itemId, ...current.filter((id) => id !== itemId)].slice(0, MAX_RECENT_DECOR_ITEMS);
-  try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(RECENT_DECOR_STORAGE_KEY, JSON.stringify(next));
-    }
-  } catch {
-    // Ignore storage quota errors
-  }
   return next;
 }
 
 export const HEATMAP_CYCLE: Array<{ mode: HeatmapMode; label: string }> = [
-  { mode: 'none', label: '🌡️ Nhiệt' },
-  { mode: 'cleanliness', label: '🧹 Vệ Sinh' },
-  { mode: 'wonder', label: '✨ Kỳ Diệu' },
-  { mode: 'biome', label: '🌿 Sinh Thái' },
+  { mode: 'none', label: 'Nhiệt' },
+  { mode: 'cleanliness', label: 'Vệ Sinh' },
+  { mode: 'wonder', label: 'Kỳ Diệu' },
+  { mode: 'biome', label: 'Sinh Thái' },
 ];
 

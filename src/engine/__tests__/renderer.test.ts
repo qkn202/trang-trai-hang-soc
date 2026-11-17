@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { FARM_CROPS, getCatalogItem, getFarmItemIconSrc } from '../../data/catalog';
 import { GRID_SIZE } from '../../data/zones';
 import { PlacedBuilding } from '../../types/game';
-import { auditIos16SourceCompatibility } from '../../ui/hpvnBridge';
 import { Camera, rotateGridRect, worldIso } from '../isometric';
 import {
   computeVisibleRotatedTileWindow,
@@ -16,6 +15,34 @@ import {
   MAX_WEATHER_PARTICLES,
   resolveBuildingInWorldTimerInfo,
 } from '../renderer';
+
+// HPVN: upstream keeps this helper in src/ui/hpvnBridge.ts, which the HPVN patch removes (its own backend).
+/**
+ * Kiểm toán mã nguồn tương thích iOS Safari 16.0+ (không regex lookbehind, không ES2024+ chưa polyfill).
+ */
+function auditIos16SourceCompatibility(sourceText = ''): {
+  compatible: boolean;
+  issues: string[];
+} {
+  const issues: string[] = [];
+  const text = String(sourceText);
+  const lbPos = '(' + '?<=';
+  const lbNeg = '(' + '?<!';
+  if (text.includes(lbPos) || text.includes(lbNeg)) {
+    issues.push('Contains regex lookbehind unsupported on iOS Safari 16.0-16.3');
+  }
+  if (/\b(?:Object|Map)\.groupBy\b/.test(text)) {
+    issues.push('Contains unguarded groupBy (Safari 17.4+)');
+  }
+  if (/\bPromise\.withResolvers\b/.test(text)) {
+    issues.push('Contains unguarded withResolvers (Safari 17.4+)');
+  }
+  if (/\bArray\.fromAsync\b/.test(text)) {
+    issues.push('Contains unguarded fromAsync (Safari 16.4+)');
+  }
+  return { compatible: issues.length === 0, issues };
+}
+
 
 describe('renderer.ts - On-Device Performance & Weather Particles Budget', () => {
   it('Hằng số MAX_WEATHER_PARTICLES bằng 400', () => {
@@ -105,7 +132,7 @@ describe('renderer.ts - On-Device Performance & Weather Particles Budget', () =>
       uniqueIconKeys.add(crop.iconKey);
 
       const src = getFarmItemIconSrc(crop.id);
-      expect(src).toBe(`/sprites/ui_icon_crop_${crop.id}.png`);
+      expect(src).toBe(`/game/trang-trai-hang-soc/sprites/ui_icon_crop_${crop.id}.webp`);
       expect(src.startsWith('data:')).toBe(false);
     }
     expect(uniqueIconKeys.size).toBe(34);
@@ -123,7 +150,7 @@ describe('renderer.ts - On-Device Performance & Weather Particles Budget', () =>
       placedAt: now - 10_000,
       constructEndsAt: now - 5_000,
       lastTickAt: now - 8_000,
-      storedGalleons: 0,
+      storedSickle: 0,
       storedXp: 0,
       readyBubbles: 0,
       durability: 100,
@@ -224,7 +251,7 @@ describe('renderer.ts - On-Device Performance & Weather Particles Budget', () =>
     expect(passiveInfo?.remainSec).toBe(coopItem.cycleSec - 8);
 
     // Khi đã có bong bóng thu hoạch và chưa chọn -> ẩn timer chu kỳ phụ để nhường bong bóng
-    const readyCoop: PlacedBuilding = { ...waitingCoop, storedGalleons: 42, readyBubbles: 1 };
+    const readyCoop: PlacedBuilding = { ...waitingCoop, storedSickle: 42, readyBubbles: 1 };
     expect(resolveBuildingInWorldTimerInfo(readyCoop, coopItem, now, 'none', false)).toBeNull();
     expect(resolveBuildingInWorldTimerInfo(readyCoop, coopItem, now, 'none', true)?.kind).toBe(
       'passive_cycle'

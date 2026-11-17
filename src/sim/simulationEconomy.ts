@@ -325,7 +325,7 @@ export function economyUpgradeBuildingStar(sim: ParkSimulation, uid: string): { 
       };
     }
     if (!sim.state.sandboxMode && sim.state.galleons < cost) {
-      return { ok: false, msg: `Cần ${cost} Galleon để nâng lên ${b.stars + 1}★` };
+      return { ok: false, msg: `Cần ${cost} Sickle để nâng lên ${b.stars + 1}★` };
     }
 
     if (!sim.state.sandboxMode) {
@@ -431,7 +431,7 @@ export function economyApplyConstructionReductionFromGameplay(sim: ParkSimulatio
       });
 
     if (actives.length === 0 || budgetSec <= 0) {
-      return { reducedSec: anyEcoReduced ? budgetSec : 0, activeCount: actives.length };
+      return { reducedSec: anyEcoReduced ? budgetSec : 0, activeCount: actives.length, ecoReduced: anyEcoReduced };
     }
 
     let remainingMs = budgetSec * 1000;
@@ -488,6 +488,7 @@ export function economyApplyConstructionReductionFromGameplay(sim: ParkSimulatio
         floorSec: firstB ? economyGetBuildingMinFloorSec(sim, firstB) : undefined,
         allActiveAtFloor: atFloorCount === actives.length,
         activeCount: actives.length,
+        ecoReduced: anyEcoReduced,
       };
     }
 
@@ -506,6 +507,7 @@ export function economyApplyConstructionReductionFromGameplay(sim: ParkSimulatio
       hitMinFloor: primaryHitFloor,
       allActiveAtFloor: false,
       activeCount: actives.length,
+      ecoReduced: anyEcoReduced,
     };
 }
 
@@ -676,12 +678,10 @@ export function economyTickProductionToTimestamp(sim: ParkSimulation, now: numbe
           !item.isCoasterTrackPiece &&
           item.category !== 'decor' &&
           (item.buildDurationSec > 0 || b.constructEndsAt > (b.placedAt || 0));
-        const unveiledSet = new Set(sim.state.unveiledItemIds ?? []);
         const finishXpSet = new Set(sim.state.finishXpItemIds ?? []);
-        const alreadyUnveiledType = unveiledSet.has(item.id);
         const alreadyClaimedFinishXp = finishXpSet.has(item.id);
 
-        if (canCeremonialUnveil && !alreadyUnveiledType && !sim.state.sandboxMode && !sim.isHeadmasterPreview) {
+        if (canCeremonialUnveil && !sim.state.sandboxMode && !sim.isHeadmasterPreview) {
           b.awaitingUnveil = true;
         }
         const finishXp = alreadyClaimedFinishXp ? 0 : Math.max(4, item.xpPerCollect);
@@ -717,9 +717,7 @@ export function economyTickProductionToTimestamp(sim: ParkSimulation, now: numbe
               ? `${item.creatureName ?? item.name} vừa nở sau thời gian ấp trứng!`
               : b.awaitingUnveil
                 ? `Công trình "${item.name}" đã hoàn tất — nhấp vào dải băng đỏ trên bản đồ để Cắt Băng Khánh Thành!`
-                : alreadyUnveiledType
-                  ? `Công trình "${item.name}" đã xây lại xong & sẵn sàng hoạt động!`
-                  : `Công trình "${item.name}" đã hoàn tất xây dựng & sẵn sàng hoạt động!`,
+                : `Công trình "${item.name}" đã hoàn tất xây dựng & sẵn sàng hoạt động!`,
             item.isCreatureHabitat ? '🐣' : b.awaitingUnveil ? '🎀' : '🏗️'
           );
         }
@@ -733,7 +731,7 @@ export function economyTickProductionToTimestamp(sim: ParkSimulation, now: numbe
           const gMeta = FARM_GOODS[doneSlot.goodId];
           b.readyFarmGoods = [...(b.readyFarmGoods ?? []), doneSlot.goodId];
           b.readyBubbles = Math.min(8, b.readyBubbles + 1);
-          b.storedGalleons += Math.max(8, Math.round(gMeta.sellValue * 0.45));
+          b.storedSickle += Math.max(8, Math.round(gMeta.sellValue * 0.45));
           b.storedXp += gMeta.xp;
           finishedAnySlot = true;
           if (!silent) {
@@ -754,7 +752,7 @@ export function economyTickProductionToTimestamp(sim: ParkSimulation, now: numbe
         if (b.cropId && b.cropReadyAt && now >= b.cropReadyAt) {
           const cMeta = FARM_CROPS[b.cropId];
           b.readyBubbles = Math.max(1, b.readyBubbles);
-          b.storedGalleons = Math.max(cMeta.sellValue, b.storedGalleons);
+          b.storedSickle = Math.max(cMeta.sellValue, b.storedSickle);
           b.storedXp = Math.max(cMeta.xp, b.storedXp);
         }
         b.lastTickAt = now;
@@ -767,7 +765,7 @@ export function economyTickProductionToTimestamp(sim: ParkSimulation, now: numbe
           const aMeta = PASTURE_ANIMALS[b.pastureAnimalId];
           if (aMeta) {
             b.readyBubbles = Math.max(1, b.readyBubbles);
-            b.storedGalleons = Math.max(aMeta.sellValue, b.storedGalleons);
+            b.storedSickle = Math.max(aMeta.sellValue, b.storedSickle);
             b.storedXp = Math.max(aMeta.xp, b.storedXp);
           }
         }
@@ -797,7 +795,7 @@ export function economyTickProductionToTimestamp(sim: ParkSimulation, now: numbe
           const addCycles = Math.min(cycles, maxCap - b.readyBubbles);
           const prod = economyGetBuildingProductionPerCycle(sim, b, item);
           b.readyBubbles += addCycles;
-          b.storedGalleons += prod.galleons * addCycles;
+          b.storedSickle += prod.galleons * addCycles;
           b.storedXp += prod.xp * addCycles;
           if (
             addCycles > 0 &&

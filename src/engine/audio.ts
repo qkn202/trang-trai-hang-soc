@@ -125,11 +125,11 @@ const FALLBACK_PROFILES: Record<BgmMood, FallbackProfile> = {
  * recordings rendered offline by tools/make-bgm.py across 5 adaptive moods.
  */
 export const BGM_TRACKS: Record<BgmMood, string> = {
-  day: '/audio/bgm_day.mp3',
-  night: '/audio/bgm_night.mp3',
-  festival: '/audio/bgm_festival.mp3',
-  storm: '/audio/bgm_storm.mp3',
-  rain: '/audio/bgm_rain.mp3',
+  day: '/game/trang-trai-hang-soc/audio/bgm_day.mp3',
+  night: '/game/trang-trai-hang-soc/audio/bgm_night.mp3',
+  festival: '/game/trang-trai-hang-soc/audio/bgm_festival.mp3',
+  storm: '/game/trang-trai-hang-soc/audio/bgm_storm.mp3',
+  rain: '/game/trang-trai-hang-soc/audio/bgm_rain.mp3',
 };
 
 export type SfxAtlasCueId =
@@ -144,7 +144,7 @@ export type SfxAtlasCueId =
   | 'build_complete'
   | 'fanfare_win';
 
-export const SFX_ATLAS_URL = '/audio/sfx_atlas.mp3';
+export const SFX_ATLAS_URL = '/game/trang-trai-hang-soc/audio/sfx_atlas.mp3';
 
 export const SFX_ATLAS_CUES: Record<SfxAtlasCueId, { offset: number; duration: number }> = {
   click: { offset: 0.0, duration: 0.35 },
@@ -228,7 +228,8 @@ export class MagicalAudio {
   }
 
   private ensureSfxAtlasLoaded(): void {
-    if (this.sfxAtlasBuffer || this.sfxAtlasLoading || typeof window === 'undefined') return;
+    // HPVN: SFX off = no atlas download; the tap listeners stay, so turning SFX on loads it on the next tap.
+    if (!this.enabled || this.sfxAtlasBuffer || this.sfxAtlasLoading || typeof window === 'undefined') return;
     if (typeof fetch !== 'function') return;
     const ctx = this.ensureCtx();
     if (!ctx) return;
@@ -437,7 +438,7 @@ export class MagicalAudio {
     }
   }
 
-  /** Fade out all BGM tracks (e.g. when player disables BGM or enables YouTube BGM). */
+  /** Fade out all BGM tracks (e.g. when player disables BGM). */
   public stopBgm(): void {
     this.slotA.targetGain = 0;
     this.slotA.gain = 0;

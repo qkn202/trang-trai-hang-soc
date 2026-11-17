@@ -43,7 +43,6 @@ export const MINIGAME_ZOOM_MAX = 3;
 export const MINIGAME_JIGSAW_ZOOM_MAX = 6;
 export const MINIGAME_ZOOM_STEP = 0.15;
 
-const ORIENT_STORAGE_KEY = 'hangsoc_minigame_orient_v1';
 const SINGLE_FINGER_PAN_THRESHOLD_PX = 8;
 const POST_PINCH_TAP_GUARD_MS = 110;
 
@@ -290,15 +289,7 @@ export class MinigameViewportManager {
   private stageCleanupByHost = new Map<'arcade' | 'match3', () => void>();
 
   constructor() {
-    // Xoá trạng thái khoá hướng cũ trong sessionStorage để bàn chơi luôn tự thích ứng tự nhiên
-    try {
-      if (typeof sessionStorage !== 'undefined') {
-        sessionStorage.removeItem(ORIENT_STORAGE_KEY);
-      }
-    } catch {
-      // Ignore storage access errors
-    }
-
+    // HPVN: no device storage; the orientation choice lasts for this page only
     if (typeof window !== 'undefined') {
       window.addEventListener('keydown', (ev) => {
         if (ev.code === 'Space') {

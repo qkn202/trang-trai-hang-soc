@@ -91,7 +91,7 @@ export function getCachedNeighborValleySnapshot(
 
 /**
  * Tách bản đồ bạn bè nặng (`valleyBuildings` / `valleyTileOverrides`) sang bộ nhớ đệm phiên chạy
- * và gộp bảo toàn `unknownBuildings` trước khi serialize sang localStorage / Cloud Save (tránh HTTP 413 & trần 1 MiB).
+ * và gộp bảo toàn `unknownBuildings` trước khi serialize bản lưu (tránh HTTP 413 & trần 1 MiB).
  */
 export function prepareGameStateForPersistence(state: GameState): GameState {
   const baseBuildings = Array.isArray(state.buildings) ? state.buildings : [];
@@ -263,6 +263,11 @@ export function getVietnamCalendarKey(nowMs = Date.now()): string {
   return `${y}-${m}-${day}`;
 }
 
+/** HPVN: seconds left until the next Vietnam midnight (UTC+7), when the daily quests reset. */
+export function secondsToVietnamMidnight(nowMs = Date.now()): number {
+  return Math.ceil((86_400_000 - ((nowMs + 7 * 3600_000) % 86_400_000)) / 1000);
+}
+
 /**
  * Chuẩn ngày lịch YYYY-MM-DD (ưu tiên khóa ngày máy chủ VN khi trực tuyến, fallback lịch địa phương khi ngoại tuyến).
  */
@@ -310,19 +315,19 @@ function hashSeed(input: string): number {
 const OWL_CRATE_POOL: ReadonlyArray<{
   itemId: FarmItemId;
   qty: number;
-  rewardGalleons: number;
+  rewardSickle: number;
   rewardXp: number;
 }> = [
-  { itemId: 'ottery_wheat', qty: 3, rewardGalleons: 11, rewardXp: 20 },
-  { itemId: 'honey_carrot', qty: 2, rewardGalleons: 12, rewardXp: 22 },
-  { itemId: 'garden_pumpkin', qty: 2, rewardGalleons: 14, rewardXp: 24 },
-  { itemId: 'golden_corn', qty: 2, rewardGalleons: 13, rewardXp: 22 },
-  { itemId: 'ruby_strawberry', qty: 2, rewardGalleons: 15, rewardXp: 26 },
-  { itemId: 'cinnamon_apple_pie', qty: 1, rewardGalleons: 19, rewardXp: 32 },
-  { itemId: 'fine_wheat_flour', qty: 1, rewardGalleons: 16, rewardXp: 25 },
-  { itemId: 'farm_egg_wool', qty: 1, rewardGalleons: 16, rewardXp: 28 },
-  { itemId: 'blossom_honey_jar', qty: 1, rewardGalleons: 18, rewardXp: 30 },
-  { itemId: 'frothy_butterbeer', qty: 1, rewardGalleons: 21, rewardXp: 35 },
+  { itemId: 'ottery_wheat', qty: 3, rewardSickle: 11, rewardXp: 20 },
+  { itemId: 'honey_carrot', qty: 2, rewardSickle: 12, rewardXp: 22 },
+  { itemId: 'garden_pumpkin', qty: 2, rewardSickle: 14, rewardXp: 24 },
+  { itemId: 'golden_corn', qty: 2, rewardSickle: 13, rewardXp: 22 },
+  { itemId: 'ruby_strawberry', qty: 2, rewardSickle: 15, rewardXp: 26 },
+  { itemId: 'cinnamon_apple_pie', qty: 1, rewardSickle: 19, rewardXp: 32 },
+  { itemId: 'fine_wheat_flour', qty: 1, rewardSickle: 16, rewardXp: 25 },
+  { itemId: 'farm_egg_wool', qty: 1, rewardSickle: 16, rewardXp: 28 },
+  { itemId: 'blossom_honey_jar', qty: 1, rewardSickle: 18, rewardXp: 30 },
+  { itemId: 'frothy_butterbeer', qty: 1, rewardSickle: 21, rewardXp: 35 },
 ];
 
 const SOS_NOTES_BY_KIND: Record<MinigameTrialKind, string> = {
@@ -346,7 +351,7 @@ function buildDailyNeighborCrates(neighborId: string, name: string, daySeed: num
     senderName: name,
     itemId: p.itemId,
     qty: p.qty,
-    rewardGalleons: p.rewardGalleons,
+    rewardSickle: p.rewardSickle,
     rewardXp: p.rewardXp,
     rewardTokens: 2,
     fulfilledByPlayerToday: false,
@@ -607,7 +612,7 @@ export function classifyBuildingGardenHelpKind(
 }
 
 /**
- * Adapter chuẩn bị sẵn cho tầng Backend sau này (/api/social, Firebase, WebSocket...).
+ * Adapter chuẩn bị sẵn cho tầng Backend sau này (HPVN chưa nối, mọi hàng xóm là cục bộ).
  * Hiện tại dùng LocalMockNeighborSocialAdapter lưu đồng bộ trong GameState.
  */
 export interface NeighborValleySnapshot {
@@ -637,7 +642,7 @@ function makePlaced(
     placedAt: nowMs - 86400_000,
     constructEndsAt: 0,
     lastTickAt: nowMs,
-    storedGalleons: 0,
+    storedSickle: 0,
     storedXp: 0,
     readyBubbles: 0,
     durability: 100,
@@ -844,10 +849,8 @@ export function pickSimulatedHomeLanternMark(
 // HAGRIDFARM / HPVN FLOO PORTAL DIRECTORY, AVATAR RESOLVER & HONOR GARDENS
 // ============================================================================
 
-const HPVN_STORAGE_BUCKET_PREFIXES = [
-  'https://firebasestorage.googleapis.com/v0/b/hpvnn-archive.firebasestorage.app/o',
-  'https://firebasestorage.googleapis.com/v0/b/hpvnn-archive.appspot.com/o',
-] as const;
+// HPVN: no Storage bucket links reach the frame; only archive avatar paths are rewritten.
+const HPVN_STORAGE_BUCKET_PREFIXES: readonly string[] = [];
 
 function inferDefaultReferrerOrigin(): string {
   try {
@@ -1017,188 +1020,6 @@ export function normalizeSceneTimeOverride(raw?: string): TimeOverride | undefin
   return undefined;
 }
 
-const GENERIC_PLAYER_NICKNAMES = new Set([
-  'trang trại hang sóc',
-  'phù thủy hang sóc',
-  'người chơi trực tuyến',
-  'điền trang phép thuật',
-  'tân phù thủy hang sóc',
-  'người chơi thật',
-  'bạn',
-  'bạn hpvn',
-  'khách',
-  'anonymous',
-  'anonymous_user',
-  'local_player',
-]);
-
-/**
- * Kiểm tra UID cục bộ tạm thời sinh trước khi đồng bộ xác thực HPVN (`hs_<ts>_<rand>`, `anonymous_user`, ...).
- */
-export function isGeneratedGuestUserId(uid: string | undefined | null): boolean {
-  const clean = typeof uid === 'string' ? uid.trim() : '';
-  if (!clean) return true;
-  return /^(hs_[a-z0-9_-]+|guest_[a-z0-9_-]+|anon(?:ymous)?(?:_user)?|local_player)$/i.test(clean);
-}
-
-/**
- * Kiểm tra mã kết bạn mặc định / placeholder / tổng hợp nội bộ (không dùng để gộp định danh).
- */
-export function isPlaceholderOrSyntheticFriendCode(code: string | undefined | null): boolean {
-  const clean = typeof code === 'string' ? code.trim().toUpperCase() : '';
-  if (!clean) return true;
-  if (
-    clean === 'HS-YOU1-01' ||
-    clean === 'HS-CLUD-00' ||
-    clean === 'HS-CLUD-01' ||
-    clean === 'HS-PLAYER-01' ||
-    clean.startsWith('FLOO-') ||
-    clean.startsWith('HS-SEED-')
-  ) {
-    return true;
-  }
-  return false;
-}
-
-/**
- * Chuẩn hóa biệt danh riêng của người chơi để khử trùng lặp an toàn (trả về `null` với tên mặc định / tự sinh).
- */
-export function normalizeDistinctPlayerNickname(rawName: string | undefined | null): string | null {
-  if (typeof rawName !== 'string') return null;
-  const stripped = rawName
-    .replace(/\s*\(Bạn\)\s*$/iu, '')
-    .trim()
-    .replace(/\s+/g, ' ')
-    .toLowerCase();
-  if (stripped.length < 2) return null;
-  if (GENERIC_PLAYER_NICKNAMES.has(stripped)) return null;
-  if (/^phù thủy\s+[a-z0-9_-]{1,12}$/iu.test(stripped)) return null;
-  if (/^thung lũng(?:\s+của)?\s+/iu.test(stripped)) return null;
-  if (/^người chơi\s+[a-z0-9-]*$/iu.test(stripped)) return null;
-  return stripped;
-}
-
-function neighborAuthorityRank(n: NeighborProfileState): number {
-  let score = 0;
-  if (n.remoteUserId && !isGeneratedGuestUserId(n.remoteUserId)) score += 100;
-  else if (n.remoteUserId) score += 20;
-  if (n.isVerifiedPlayer) score += 30;
-  if (!isPlaceholderOrSyntheticFriendCode(n.friendCode)) score += 15;
-  if (n.avatarUrl) score += 10;
-  if (n.house && n.house !== 'Gryffindor') score += 5;
-  score += Math.min(20, Math.max(0, Math.floor(n.level || 0) / 5));
-  return score;
-}
-
-function mergeDuplicateNeighborProfiles(
-  a: NeighborProfileState,
-  b: NeighborProfileState
-): NeighborProfileState {
-  const primary = neighborAuthorityRank(b) > neighborAuthorityRank(a) ? b : a;
-  const secondary = primary === a ? b : a;
-  const primaryHasDistinctCode = !isPlaceholderOrSyntheticFriendCode(primary.friendCode);
-  const secondaryHasDistinctCode = !isPlaceholderOrSyntheticFriendCode(secondary.friendCode);
-  const mergedMarks =
-    primary.helpedMarksToday.length >= secondary.helpedMarksToday.length
-      ? primary.helpedMarksToday
-      : secondary.helpedMarksToday;
-
-  return {
-    ...secondary,
-    ...primary,
-    remoteUserId:
-      primary.remoteUserId && !isGeneratedGuestUserId(primary.remoteUserId)
-        ? primary.remoteUserId
-        : secondary.remoteUserId && !isGeneratedGuestUserId(secondary.remoteUserId)
-          ? secondary.remoteUserId
-          : primary.remoteUserId || secondary.remoteUserId,
-    isVerifiedPlayer: Boolean(primary.isVerifiedPlayer || secondary.isVerifiedPlayer),
-    friendCode: primaryHasDistinctCode
-      ? primary.friendCode
-      : secondaryHasDistinctCode
-        ? secondary.friendCode
-        : primary.friendCode || secondary.friendCode,
-    name:
-      normalizeDistinctPlayerNickname(primary.name) !== null
-        ? primary.name
-        : normalizeDistinctPlayerNickname(secondary.name) !== null
-          ? secondary.name
-          : primary.name,
-    avatarUrl: primary.avatarUrl || secondary.avatarUrl,
-    level: Math.max(primary.level || 1, secondary.level || 1),
-    likesCount: Math.max(primary.likesCount || 0, secondary.likesCount || 0),
-    helpedViaFlooToday: Boolean(primary.helpedViaFlooToday || secondary.helpedViaFlooToday),
-    helpedMarksToday: mergedMarks,
-    valleyBuildings:
-      primary.valleyBuildings && primary.valleyBuildings.length > 0
-        ? primary.valleyBuildings
-        : secondary.valleyBuildings,
-    valleyTileOverrides: primary.valleyTileOverrides ?? secondary.valleyTileOverrides,
-    valleyUnlockedZones:
-      primary.valleyUnlockedZones && primary.valleyUnlockedZones.length > 0
-        ? primary.valleyUnlockedZones
-        : secondary.valleyUnlockedZones,
-  };
-}
-
-/**
- * Gộp các hồ sơ hàng xóm bị lặp của cùng 1 người chơi thật (cùng `remoteUserId`, `friendCode` hoặc biệt danh riêng)
- * và loại bỏ hồ sơ tự trỏ về chính chủ vườn.
- */
-export function deduplicateNeighborProfiles(
-  neighbors: ReadonlyArray<NeighborProfileState>,
-  options: {
-    ownUid?: string;
-    ownFriendCode?: string;
-    ownDisplayName?: string;
-  } = {}
-): NeighborProfileState[] {
-  const ownUid = options.ownUid?.trim() || '';
-  const ownCode = options.ownFriendCode?.trim().toUpperCase() || '';
-  const hasOwnDistinctCode = !isPlaceholderOrSyntheticFriendCode(ownCode);
-  const ownNick = normalizeDistinctPlayerNickname(options.ownDisplayName);
-
-  const result: NeighborProfileState[] = [];
-  for (const item of neighbors) {
-    if (!item || isNpcNeighborProfile(item)) continue;
-    const itemUid = item.remoteUserId?.trim() || '';
-    const itemCode = (item.friendCode || '').trim().toUpperCase();
-    const hasItemDistinctCode = !isPlaceholderOrSyntheticFriendCode(itemCode);
-    const itemNick = normalizeDistinctPlayerNickname(item.name);
-
-    if (
-      (ownUid && itemUid && itemUid === ownUid) ||
-      (hasOwnDistinctCode && hasItemDistinctCode && itemCode === ownCode) ||
-      (ownNick && itemNick && itemNick === ownNick && (!itemUid || isGeneratedGuestUserId(itemUid) || itemUid === ownUid))
-    ) {
-      continue;
-    }
-
-    const matchIdx = result.findIndex((existing) => {
-      const exUid = existing.remoteUserId?.trim() || '';
-      const exCode = (existing.friendCode || '').trim().toUpperCase();
-      const hasExDistinctCode = !isPlaceholderOrSyntheticFriendCode(exCode);
-      const exNick = normalizeDistinctPlayerNickname(existing.name);
-      return (
-        existing.id === item.id ||
-        (Boolean(itemUid) && Boolean(exUid) && itemUid === exUid) ||
-        (hasItemDistinctCode && hasExDistinctCode && itemCode === exCode) ||
-        (itemNick !== null &&
-          exNick !== null &&
-          itemNick === exNick &&
-          (!itemUid || !exUid || isGeneratedGuestUserId(itemUid) || isGeneratedGuestUserId(exUid)))
-      );
-    });
-
-    if (matchIdx >= 0) {
-      result[matchIdx] = mergeDuplicateNeighborProfiles(result[matchIdx], item);
-    } else {
-      result.push(item);
-    }
-  }
-  return result;
-}
-
 /**
  * Đồng bộ 1 dòng thành viên thực từ `visitBurrowGarden` vào hồ sơ `NeighborProfileState` (không cần Mã Kết Bạn).
  */
@@ -1207,23 +1028,15 @@ export function upsertFlooMemberToNeighborProfile(
   row: FlooVisitDirectoryRow,
   nowMs = Date.now()
 ): NeighborProfileState {
-  const existingRealUid =
-    existing?.remoteUserId && !isGeneratedGuestUserId(existing.remoteUserId)
-      ? existing.remoteUserId
-      : null;
-  const incomingIsGuest = isGeneratedGuestUserId(row.uid);
-  const keepExistingAuthority = Boolean(existingRealUid && incomingIsGuest);
-  const effectiveUid = keepExistingAuthority ? existingRealUid! : row.uid;
-  const cleanUid = String(effectiveUid || 'member').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 48);
+  const cleanUid = String(row.uid || 'member').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 48);
   const id = existing?.id || `player_${cleanUid}`;
   const seed = hashSeed(cleanUid);
   const houses: HouseName[] = ['Gryffindor', 'Ravenclaw', 'Hufflepuff', 'Slytherin'];
   const emojis = ['🧙‍♂️', '🧙‍♀️', '🦉', '🦊', '🦢', '🍀'];
   const kinds: MinigameTrialKind[] = ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw'];
   const validHouses = new Set<HouseName>(houses);
-  const house: HouseName = keepExistingAuthority
-    ? existing!.house
-    : row.house && validHouses.has(row.house)
+  const house: HouseName =
+    row.house && validHouses.has(row.house)
       ? row.house
       : existing?.house || houses[seed % houses.length];
   const resolvedName =
@@ -1231,9 +1044,7 @@ export function upsertFlooMemberToNeighborProfile(
   const resolvedParkName =
     (row.parkName || '').trim() || existing?.parkName || `Thung Lũng Của ${resolvedName}`;
   const level = Math.max(1, Math.min(100, Math.floor(Number(row.level) || existing?.level || 10)));
-  const avatarEmoji = keepExistingAuthority
-    ? existing!.avatarEmoji || row.avatarEmoji || emojis[seed % emojis.length]
-    : row.avatarEmoji || existing?.avatarEmoji || emojis[seed % emojis.length];
+  const avatarEmoji = row.avatarEmoji || existing?.avatarEmoji || emojis[seed % emojis.length];
   const resetKey = getLocalCalendarResetKey(nowMs);
   const daySeed = hashSeed(resetKey);
   const spot = existing
@@ -1257,13 +1068,12 @@ export function upsertFlooMemberToNeighborProfile(
 
   const updatedProfile: NeighborProfileState = {
     id,
-    remoteUserId: effectiveUid,
+    remoteUserId: row.uid,
     isVerifiedPlayer: true,
-    friendCode: keepExistingAuthority
-      ? existing!.friendCode || row.friendCode || `FLOO-${cleanUid.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) || 'HPVN'}`
-      : row.friendCode ||
-        existing?.friendCode ||
-        `FLOO-${cleanUid.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) || 'HPVN'}`,
+    friendCode:
+      row.friendCode ||
+      existing?.friendCode ||
+      `FLOO-${cleanUid.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) || 'HPVN'}`,
     name: resolvedName,
     titleVi: 'Thành Viên Mạng Floo HPVN',
     parkName: resolvedParkName,

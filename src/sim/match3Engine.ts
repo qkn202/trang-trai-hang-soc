@@ -1604,9 +1604,8 @@ export class Match3BoardEngine {
         }
       }
     }
-    if (slots.length < 3) return;
-
-    for (let attempt = 0; attempt < 15; attempt++) {
+    // HPVN: with fewer than 3 free gems there is nothing to shuffle, but the rocket below still keeps the board alive
+    for (let attempt = 0; slots.length >= 3 && attempt < 15; attempt++) {
       for (let i = pieces.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [pieces[i], pieces[j]] = [pieces[j], pieces[i]];

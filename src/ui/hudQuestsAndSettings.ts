@@ -1,6 +1,10 @@
 // Tách tự động từ src/ui/hud.ts (P0 — tách god file theo domain).
 // Pattern delegation: hàm nhận `hud` để giữ nguyên state, không đổi hành vi.
 
+import { avatarGlyph } from '../hpvn/emoji';
+import { fetchHouseCup, houseCup, houseWeekPoints } from '../hpvn/houseCup';
+import { renderFarmExchange } from '../hpvn/exchange';
+import { secondsToVietnamMidnight } from '../sim/neighborSocial'; // HPVN: real countdown to VN midnight
 import {
   CATALOG,
   FARM_CROPS,
@@ -72,8 +76,6 @@ import {
   getItemPriceBounds,
   getNpcScheduleForPeriod,
   getUpgradeCost,
-  IS_SANDBOX_BUILD_ENABLED,
-  isSandboxRuntimeAllowed,
   loadFromNamedSlot,
   MAX_PHOENIX_TALISMANS,
   ParkSimulation,
@@ -128,15 +130,9 @@ import {
   lookupRealPlayerByFriendCode,
   registerRealPlayerProfileOnline,
 } from './cloudSave';
-import { fetchWeeklyHouseCupStandingsOnline } from './authoritativeClient';
 import type { Match3ModalController } from './match3Modal';
 import type { PuzzleArcadeModalController } from './puzzleArcadeModal';
 import { SeedQuizModalController } from './seedQuizModal';
-import {
-  DEFAULT_YOUTUBE_BGM_URL,
-  parseYouTubeBgmSource,
-  YOUTUBE_BGM_PRESETS,
-} from './youtubeBgmPlayer';
 import {
   BUILD_HUD_CATEGORIES,
   HEATMAP_CYCLE,
@@ -181,11 +177,11 @@ export function questsUiShowRibbonUnveilBanner(hud: GameHUD, info: RibbonUnveilC
     if (!card) return;
     card.innerHTML = `
       <div class="ribbon-unveil-banner-inner">
-        <img src="/sprites/prop_ribbon_unveil.png" alt="" class="ribbon-unveil-banner-art" />
+        <img src="/game/trang-trai-hang-soc/sprites/prop_ribbon_unveil.webp" alt="" class="ribbon-unveil-banner-art" />
         <div class="ribbon-unveil-banner-body">
           <div class="ribbon-unveil-banner-kicker">🎀 ${escapeHtml(info.speakerEmoji)} ${escapeHtml(info.speakerName)}</div>
           <div class="ribbon-unveil-banner-title">${escapeHtml(info.buildingName)}</div>
-          <div class="ribbon-unveil-banner-rewards">+${info.bonusGalleons.toLocaleString('vi-VN')} 🪙 • +${info.bonusXp.toLocaleString('vi-VN')} ⭐ • +${info.feastPoints} 🍁</div>
+          <div class="ribbon-unveil-banner-rewards">${info.bonusSickle > 0 ? `+${info.bonusSickle.toLocaleString('vi-VN')} 🪙 • +${info.bonusXp.toLocaleString('vi-VN')} ⭐ • +${info.feastPoints} 🍁` : 'Thưởng khánh thành chỉ nhận một lần cho mỗi loại công trình'}</div>
         </div>
       </div>
     `;
@@ -231,7 +227,7 @@ export function questsUiRenderHarvestFeastDialog(hud: GameHUD): void {
           <div class="feast-tier-main">
             <div class="feast-tier-title">
               <span>${escapeHtml(tierDef.icon)} ${escapeHtml(tierDef.titleVi)}</span>
-              ${isGrand ? '<span class="feast-grand-pill">👑</span>' : ''}
+              ${isGrand ? '<span class="feast-grand-pill">Mốc lớn</span>' : ''}
             </div>
             <div class="feast-tier-reward">${escapeHtml(rewardLabel)}</div>
           </div>
@@ -325,30 +321,43 @@ export function questsUiRenderFinanceDialog(hud: GameHUD): void {
     const wagePerCycle = hud.sim.getHourlyStaffWage();
 
     box.innerHTML = `
-      <div class="grid-2col" style="margin-bottom:14px;">
-        <div class="quest-card-mini" style="padding:12px;">
-          <div style="font-size:14px;font-weight:800;color:#15803d;margin-bottom:6px;">📈 Thu</div>
-          <div style="font-size:12.5px;display:flex;flex-direction:column;gap:5px;">
-            <div style="display:flex;justify-content:space-between;"><span>🌾 Nông sản &amp; Đơn Cú:</span><strong>+${f.harvestRevenue.toLocaleString('vi-VN')} G</strong></div>
-            <div style="display:flex;justify-content:space-between;"><span>🍻 Cửa tiệm:</span><strong>+${(f.shopRevenue + f.ticketRevenue + f.gateRevenue).toLocaleString('vi-VN')} G</strong></div>
-            <hr style="border:none;border-top:1px solid rgba(138,90,43,0.25);margin:3px 0;" />
-            <div style="display:flex;justify-content:space-between;font-size:13.5px;color:#15803d;"><span>Tổng Thu:</span><strong>+${totalIn.toLocaleString('vi-VN')} G</strong></div>
+      <div class="grid-2col" style="margin-bottom:16px;">
+        <div class="quest-card-mini">
+          <h3 class="hs-section-title" style="color:#15803d;">📈 Thu</h3>
+          <div style="font-size:13px;display:flex;flex-direction:column;gap:6px;">
+            <div style="display:flex;justify-content:space-between;"><span>🌾 Nông sản &amp; Đơn Cú</span><strong>+${f.harvestRevenue.toLocaleString('vi-VN')} Sickle</strong></div>
+            <div style="display:flex;justify-content:space-between;"><span>🍻 Cửa tiệm</span><strong>+${(f.shopRevenue + f.ticketRevenue + f.gateRevenue).toLocaleString('vi-VN')} Sickle</strong></div>
+            <hr style="border:none;border-top:1px solid rgba(138,90,43,0.22);margin:2px 0;" />
+            <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;color:#15803d;"><span>Tổng thu</span><strong>+${totalIn.toLocaleString('vi-VN')} Sickle</strong></div>
           </div>
         </div>
 
-        <div class="quest-card-mini" style="padding:12px;">
-          <div style="font-size:14px;font-weight:800;color:#9a3412;margin-bottom:6px;">📉 Chi</div>
-          <div style="font-size:12.5px;display:flex;flex-direction:column;gap:5px;">
-            <div style="display:flex;justify-content:space-between;"><span>🏗️ Xây dựng &amp; Nâng Sao:</span><strong>-${f.constructionSpent.toLocaleString('vi-VN')} G</strong></div>
-            <div style="display:flex;justify-content:space-between;"><span>🧦 Phụ tá (${wagePerCycle}G/ca):</span><strong>-${f.staffWagesPaid.toLocaleString('vi-VN')} G</strong></div>
-            <hr style="border:none;border-top:1px solid rgba(138,90,43,0.25);margin:3px 0;" />
-            <div style="display:flex;justify-content:space-between;font-size:13.5px;color:${net >= 0 ? '#15803d' : '#b45309'};">
-              <span>Ròng:</span><strong>${net >= 0 ? '+' : ''}${net.toLocaleString('vi-VN')} G</strong>
+        <div class="quest-card-mini">
+          <h3 class="hs-section-title" style="color:#9a3412;">📉 Chi</h3>
+          <div style="font-size:13px;display:flex;flex-direction:column;gap:6px;">
+            <div style="display:flex;justify-content:space-between;"><span>🏗️ Xây &amp; Nâng sao</span><strong>-${f.constructionSpent.toLocaleString('vi-VN')} Sickle</strong></div>
+            <div style="display:flex;justify-content:space-between;"><span>🧦 Phụ tá (${wagePerCycle}/ca)</span><strong>-${f.staffWagesPaid.toLocaleString('vi-VN')} Sickle</strong></div>
+            <hr style="border:none;border-top:1px solid rgba(138,90,43,0.22);margin:2px 0;" />
+            <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;color:${net >= 0 ? '#15803d' : '#b45309'};">
+              <span>Ròng</span><strong>${net >= 0 ? '+' : ''}${net.toLocaleString('vi-VN')} Sickle</strong>
             </div>
           </div>
         </div>
       </div>
+      <div id="hpvnExchange"></div>
     `;
+    renderFarmExchange(box.querySelector('#hpvnExchange') as HTMLElement, hud); // HPVN: Quầy Gringotts (src/hpvn/exchange.ts)
+}
+
+// HPVN: everything in the Cúp tab is the server's (src/hpvn/houseCup.ts); a fetch re-renders the open tab.
+// Only a new reply re-renders: the cached answer (same object) would re-render, refetch the cache and loop forever.
+function refreshHouseCup(hud: GameHUD) {
+  const before = houseCup();
+  return fetchHouseCup().then((cup) => {
+    const dlg = hud.root.querySelector('#albumDialog') as HTMLDialogElement | null;
+    if (cup !== before && dlg?.open && hud.activeAlbumTab === 'cup') questsUiRenderAlbumDialog(hud);
+    return cup;
+  });
 }
 
 export function questsUiRenderAlbumDialog(hud: GameHUD): void {
@@ -365,306 +374,295 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
     const claimableLoginCount = DAY_1_TO_7_REWARDS.filter(
       (d) => d.day <= maxLoginDay && !ret.claimedLoginDays.includes(d.day)
     ).length;
+    const totalProfileBadge = claimableAchCount + claimableLoginCount;
 
+    // HPVN: unified Hồ Sơ, Cúp Nhà & Bảng Xếp Hạng hub (Đợt 8).
+    const tab = (id: GameHUD['activeAlbumTab'], label: string, badge = 0) =>
+      `<button type="button" role="tab" data-atab="${id}" aria-selected="${hud.activeAlbumTab === id}" class="hs-tab">${label}${
+        badge > 0 ? `<span class="hs-tab-badge">${badge}</span>` : ''
+      }</button>`;
     const tabsHtml = `
-      <div class="workshop-tabs" role="tablist" aria-label="Sổ Vàng Hang Sóc" style="margin-bottom:12px;">
-        <button type="button" data-atab="cup" data-active="${hud.activeAlbumTab === 'cup'}" aria-selected="${hud.activeAlbumTab === 'cup'}" class="brass-btn">
-          🏆 Cúp 4 Nhà
-        </button>
-        <button type="button" data-atab="achievements" data-active="${hud.activeAlbumTab === 'achievements'}" aria-selected="${hud.activeAlbumTab === 'achievements'}" class="brass-btn">
-          🎖️ Thành Tựu (${codex.unlocked}/${codex.total})${claimableAchCount > 0 ? ` • 🎁${claimableAchCount}` : ''}
-        </button>
-        <button type="button" data-atab="friendship" data-active="${hud.activeAlbumTab === 'friendship'}" aria-selected="${hud.activeAlbumTab === 'friendship'}" class="brass-btn">
-          💝 Tình Bạn &amp; Phim
-        </button>
-        <button type="button" data-atab="login7" data-active="${hud.activeAlbumTab === 'login7'}" aria-selected="${hud.activeAlbumTab === 'login7'}" class="brass-btn">
-          📅 Điểm Danh 7N${claimableLoginCount > 0 ? ` • 🎁${claimableLoginCount}` : ''}
-        </button>
+      <div class="hs-tabs" role="tablist" aria-label="Hồ Sơ, Cúp &amp; Xếp Hạng">
+        ${tab('profile', 'Hồ sơ', totalProfileBadge)}${tab('cup', 'Cúp Nhà')}${tab('leaderboard', 'Xếp hạng')}
       </div>
     `;
 
     let bodyHtml = '';
     if (hud.activeAlbumTab === 'cup') {
       const playerHouse = hud.sim.getPlayerHouse();
-      const serverWeekly = st.weeklyHouseCupServerStandings;
-      const houses: Array<{ house: HouseName; icon: string; pts: number }> = [
-        {
-          house: 'Gryffindor',
-          icon: '🦁',
-          pts: (st.housePoints.Gryffindor ?? 0) + (serverWeekly?.totals.Gryffindor ?? 0),
-        },
-        {
-          house: 'Slytherin',
-          icon: '🐍',
-          pts: (st.housePoints.Slytherin ?? 0) + (serverWeekly?.totals.Slytherin ?? 0),
-        },
-        {
-          house: 'Ravenclaw',
-          icon: '🦅',
-          pts: (st.housePoints.Ravenclaw ?? 0) + (serverWeekly?.totals.Ravenclaw ?? 0),
-        },
-        {
-          house: 'Hufflepuff',
-          icon: '🦡',
-          pts: (st.housePoints.Hufflepuff ?? 0) + (serverWeekly?.totals.Hufflepuff ?? 0),
-        },
-      ];
-      houses.sort((a, b) => b.pts - a.pts);
-      const maxHousePts = Math.max(100, houses[0]?.pts ?? 100);
-      const localTotalPts =
-        (st.housePoints.Gryffindor ?? 0) +
-        (st.housePoints.Slytherin ?? 0) +
-        (st.housePoints.Ravenclaw ?? 0) +
-        (st.housePoints.Hufflepuff ?? 0);
-      const milestoneTarget = st.houseCupMilestoneTier * 300;
-      const canClaimCup = localTotalPts >= milestoneTarget;
+      // HPVN: server numbers only (week totals per HPVN house, the member's day and milestone bank); nothing local.
+      const cup = houseCup();
+      refreshHouseCup(hud).catch(() => {});
+      const houses = (['Gryffindor', 'Slytherin', 'Ravenclaw', 'Hufflepuff'] as HouseName[])
+        .map((house) => ({ house, pts: houseWeekPoints(house) }))
+        .sort((x, y) => y.pts - x.pts);
+      const top = Math.max(1, houses[0].pts);
+      const noHouse = cup?.house === null;
+      const pts = (v: number) => `${v.toLocaleString('vi-VN')} đ`;
+      const row = (lead: string, name: string, value: string, pct: number | null, house = '', mine = false) => `
+        <li class="hs-cup-row"${house ? ` data-house="${house}" data-mine="${mine}"` : ''}>
+          ${lead || '<span></span>'}
+          <span class="hs-cup-name">${name}</span>
+          <span class="hs-cup-pts">${value}</span>
+          ${pct === null ? '' : `<span class="hs-cup-bar"><i style="width:${pct}%"></i></span>`}
+        </li>`;
+      const listHtml = houses
+        .map((h) => {
+          const mine = !noHouse && h.house === playerHouse;
+          const name = `${h.house}${mine ? '<span class="hs-cup-you">Nhà bạn</span>' : ''}`;
+          const crest = `<img class="hs-cup-crest" src="/game/trang-trai-hang-soc/sprites/crest-${h.house.toLowerCase()}.webp" alt="" width="32" height="32">`;
+          return row(crest, name, cup ? pts(h.pts) : '…', Math.round((h.pts / top) * 100), h.house, mine);
+        })
+        .join('');
+      const perTier = cup?.perTier ?? 300;
+      const bank = Math.min(perTier, cup?.memberBank ?? 0);
+      const meHtml = cup
+        ? noHouse
+          ? row('', 'Chưa phân Nhà trên HPVN', '0 đ', null)
+          : row('', 'Hôm nay', pts(cup.memberTodayPoints), null) +
+            row('', `Đợt ${cup.memberTier}`, `${bank} / ${pts(perTier)}`, Math.round((bank / perTier) * 100))
+        : '';
 
       bodyHtml = `
-        <div class="quest-card-mini" style="padding:13px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-            <div>
-              <div style="font-size:15px;font-weight:800;">🏆 Đồng Hồ Ngọc Cúp 4 Nhà Hogwarts</div>
-              <div style="font-size:12px;color:var(--ink-soft);">
-                Nhà của bạn: <strong>${playerHouse}</strong>${
-                  serverWeekly ? ` • Tuần HPVN ${escapeHtml(serverWeekly.weekKey)} (đóng góp: +${serverWeekly.playerContribution} đ)` : ' • Tích điểm khi thu hoạch, giao Đơn Cú & thắng Khảo Thí'
-                }
-              </div>
-            </div>
-            <span style="font-size:12px;font-weight:800;color:var(--ink-gold);">Đợt ${st.houseCupMilestoneTier}: ${localTotalPts} / ${milestoneTarget}</span>
-          </div>
-          <div class="aaa-hourglass-grid">
-            ${houses
-              .map((h, idx) => {
-                const pct = Math.min(100, Math.max(8, Math.round((h.pts / maxHousePts) * 100)));
-                const isMine = h.house === playerHouse;
-                return `
-                  <div class="aaa-hourglass-card" data-house="${h.house}" data-player-house="${isMine}">
-                    <div style="display:flex;justify-content:space-between;align-items:center;gap:4px;">
-                      <span style="font-size:13px;font-weight:800;">${idx === 0 ? '👑 ' : ''}${h.icon} ${h.house}</span>
-                      ${isMine ? `<span style="padding:1px 6px;border-radius:var(--radius-pill);background:var(--house-you-pill-bg);color:var(--house-you-pill-ink);font-size:10px;font-weight:800;">NHÀ BẠN</span>` : ''}
-                    </div>
-                    <div style="font-size:18px;font-weight:900;">${h.pts.toLocaleString('vi-VN')} đ</div>
-                    <div class="aaa-hourglass-tube">
-                      <div class="aaa-hourglass-fill" style="width:${pct}%;"></div>
-                    </div>
-                  </div>
-                `;
-              })
-              .join('')}
-          </div>
-          <progress max="${milestoneTarget}" value="${Math.min(milestoneTarget, localTotalPts)}" style="width:100%;"></progress>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
-            ${
-              canClaimCup
-                ? `<button id="btnClaimHouseCup" type="button" class="brass-btn gold-cta" style="flex:1 1 200px;">🏆 Nhận Thưởng Cúp Đợt ${st.houseCupMilestoneTier}</button>`
-                : ''
-            }
-            <button id="btnSyncServerHouseCup" type="button" class="brass-btn" style="flex:1 1 180px;font-size:12px;">🔄 Đồng Bộ Bảng Tuần HPVN</button>
-          </div>
+        <div class="hs-cup">
+          <div class="hs-cup-kicker"><span>${cup?.weekKey ? `Tuần ${cup.weekKey}` : 'Đang tải…'}</span></div>
+          <ol class="hs-cup-list">${listHtml}</ol>
+          ${meHtml ? `<ul class="hs-cup-me">${meHtml}</ul>` : ''}
+          <p class="hs-cup-note">Thắng màn mới Bùa Gặt, Số Học, Sinh Vật, Tranh Ghép: từ 20 đ/màn.</p>
         </div>
       `;
-    } else if (hud.activeAlbumTab === 'achievements') {
-      const nowAch = Date.now();
-      const metricByCat: Record<AchievementCategory, number> = {
-        farm: getCategoryMetricValue(st, 'farm', nowAch),
-        building: getCategoryMetricValue(st, 'building', nowAch),
-        puzzle: getCategoryMetricValue(st, 'puzzle', nowAch),
-        language: getCategoryMetricValue(st, 'language', nowAch),
-        social: getCategoryMetricValue(st, 'social', nowAch),
-        collection: getCategoryMetricValue(st, 'collection', nowAch),
-      };
-      const catFilterPills: Array<{ id: AchievementCategory | 'all'; label: string }> = [
-        { id: 'all', label: '✨ Tất cả' },
-        { id: 'farm', label: '🌾 Mùa vụ' },
-        { id: 'building', label: '🏰 Kiến trúc' },
-        { id: 'puzzle', label: '🪄 Khảo thí' },
-        { id: 'language', label: '📖 Đa ngữ' },
-        { id: 'social', label: '🦉 Xã hội' },
-        { id: 'collection', label: '🐸 Sưu tầm' },
-      ];
-      const activeCat = hud.activeAchievementFilterCat ?? 'all';
-      const visibleAchievements = ACHIEVEMENT_REGISTRY.filter(
-        (def) => activeCat === 'all' || def.category === activeCat
-      ).slice().sort((a, b) => {
-        const ea = ret.achievements[a.id];
-        const eb = ret.achievements[b.id];
-        const readyA = ea?.unlockedAt && !ea?.claimedAt ? 1 : 0;
-        const readyB = eb?.unlockedAt && !eb?.claimedAt ? 1 : 0;
-        if (readyA !== readyB) return readyB - readyA;
-        return 0;
-      });
-      bodyHtml = `
-        <div class="quest-card-mini" style="padding:12px;margin-bottom:10px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
-            <strong>🎖️ Sổ Vàng 52 Thành Tựu Hang Sóc</strong>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:12px;font-weight:800;color:var(--ink-gold);">Hoàn thành ${codex.completionPct}% (${codex.unlocked}/${codex.total})</span>
+    } else if (hud.activeAlbumTab === 'leaderboard') {
+      bodyHtml = `<div id="leaderboardTabMount"></div>`;
+    } else {
+      const playerHouse = hud.sim.getPlayerHouse();
+      const cup = houseCup();
+      const noHouse = cup?.house === null;
+      const crestSrc = noHouse
+        ? '/game/trang-trai-hang-soc/sprites/ui_trophy_cup.webp'
+        : `/game/trang-trai-hang-soc/sprites/crest-${playerHouse.toLowerCase()}.webp`;
+      const houseTag = noHouse ? 'Chưa phân Nhà' : playerHouse;
+      const psubBtn = (id: GameHUD['activeProfileSubTab'], label: string, badge = 0) =>
+        `<button type="button" role="tab" data-psub="${id}" aria-selected="${hud.activeProfileSubTab === id}" class="lb-scope-pill ${hud.activeProfileSubTab === id ? 'active' : ''}">${label}${
+          badge > 0 ? `<span class="hs-tab-badge">${badge}</span>` : ''
+        }</button>`;
+
+      let subBodyHtml = '';
+      if (hud.activeProfileSubTab === 'achievements') {
+        const nowAch = Date.now();
+        const metricByCat: Record<AchievementCategory, number> = {
+          farm: getCategoryMetricValue(st, 'farm', nowAch),
+          building: getCategoryMetricValue(st, 'building', nowAch),
+          puzzle: getCategoryMetricValue(st, 'puzzle', nowAch),
+          language: getCategoryMetricValue(st, 'language', nowAch),
+          social: getCategoryMetricValue(st, 'social', nowAch),
+          collection: getCategoryMetricValue(st, 'collection', nowAch),
+        };
+        const catFilterPills: Array<[AchievementCategory | 'all', string]> = [
+          ['all', 'Tất cả'],
+          ['farm', 'Mùa vụ'],
+          ['building', 'Kiến trúc'],
+          ['puzzle', 'Khảo thí'],
+          ['language', 'Đa ngữ'],
+          ['social', 'Xã hội'],
+          ['collection', 'Sưu tầm'],
+        ];
+        const activeCat = hud.activeAchievementFilterCat ?? 'all';
+        // ready-to-claim first, otherwise registry order
+        const visibleAchievements = ACHIEVEMENT_REGISTRY.filter((def) => activeCat === 'all' || def.category === activeCat)
+          .slice()
+          .sort((a, b) => {
+            const ready = (id: string) => (ret.achievements[id]?.unlockedAt && !ret.achievements[id]?.claimedAt ? 1 : 0);
+            return ready(b.id) - ready(a.id);
+          });
+        subBodyHtml = `
+          <div class="quest-card-mini">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+              <h3 class="hs-section-title" style="margin:0;">52 Thành tựu</h3>
+              <span style="font-size:12px;font-weight:700;color:var(--ink-gold);">${codex.unlocked}/${codex.total} (${codex.completionPct}%)</span>
               ${
                 claimableAchCount > 0
-                  ? `<button id="btnClaimAllAchievements" type="button" class="brass-btn gold-cta" style="padding:4px 11px;font-size:11.5px;">🎁 Nhận Tất Cả (${claimableAchCount})</button>`
+                  ? `<button id="btnClaimAllAchievements" type="button" class="brass-btn gold-cta" style="min-height:40px;padding:0 12px;font-size:12px;">Nhận tất cả (${claimableAchCount})</button>`
                   : ''
               }
             </div>
+            <progress max="${codex.total}" value="${codex.unlocked}" style="width:100%;margin-bottom:8px;"></progress>
+            <div class="lb-scope-pills" role="group" aria-label="Lọc thành tựu theo nhóm">
+              ${catFilterPills
+                .map(
+                  ([id, label]) =>
+                    `<button type="button" data-ach-cat="${id}" aria-pressed="${activeCat === id}" class="lb-scope-pill ${activeCat === id ? 'active' : ''}">${label}</button>`
+                )
+                .join('')}
+            </div>
           </div>
-          <progress max="${codex.total}" value="${codex.unlocked}" style="width:100%;margin-bottom:8px;"></progress>
-          <div style="display:flex;flex-wrap:wrap;gap:5px;">
-            ${catFilterPills
-              .map(
-                (p) => `
-                  <button type="button" data-ach-cat="${p.id}" data-active="${activeCat === p.id}" aria-pressed="${activeCat === p.id}" class="brass-btn" style="padding:3px 9px;font-size:11px;">
-                    ${p.label}
-                  </button>
-                `
-              )
-              .join('')}
-          </div>
-        </div>
-        <div class="aaa-codex-scroll">
-          ${visibleAchievements.map((def) => {
-            const entry = ret.achievements[def.id];
-            const unlocked = Boolean(entry?.unlockedAt);
-            const claimed = Boolean(entry?.claimedAt);
-            const curVal = Math.min(def.target, Math.max(0, metricByCat[def.category] ?? 0));
-            const curLabel = curVal.toLocaleString('vi-VN');
-            const targetLabel = def.target.toLocaleString('vi-VN');
-            return `
-              <div class="aaa-ach-card" data-unlocked="${unlocked}">
-                <div style="display:flex;align-items:center;gap:9px;min-width:0;flex:1;">
-                  <span style="font-size:22px;">${def.icon}</span>
-                  <div style="min-width:0;flex:1;">
-                    <div style="font-size:13px;font-weight:800;">${def.titleVi}</div>
-                    <div style="font-size:11.5px;color:var(--ink-soft);">${def.descVi} • Thưởng <strong>+${def.rewardGalleons}G, +${def.rewardStars} 🌟</strong></div>
+          <div class="aaa-codex-scroll">
+            ${visibleAchievements.map((def) => {
+              const entry = ret.achievements[def.id];
+              const unlocked = Boolean(entry?.unlockedAt);
+              const claimed = Boolean(entry?.claimedAt);
+              const curVal = Math.min(def.target, Math.max(0, metricByCat[def.category] ?? 0));
+              const curLabel = curVal.toLocaleString('vi-VN');
+              const targetLabel = def.target.toLocaleString('vi-VN');
+              return `
+                <div class="aaa-ach-card" data-unlocked="${unlocked}">
+                  <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
+                    <div style="min-width:0;flex:1;">
+                      <div class="hs-card-title">${def.titleVi}</div>
+                      <div style="font-size:12px;color:var(--ink-soft);">${def.descVi} · <strong>+${def.rewardSickle} Sickle, +${def.rewardStars} 🌟</strong></div>
+                      ${
+                        unlocked
+                          ? ''
+                          : `<progress max="${def.target}" value="${curVal}" style="width:100%;max-width:220px;height:6px;margin-top:4px;"></progress>`
+                      }
+                    </div>
+                  </div>
+                  <div style="flex-shrink:0;text-align:right;">
                     ${
-                      unlocked
-                        ? ''
-                        : `<progress max="${def.target}" value="${curVal}" style="width:100%;max-width:220px;height:6px;margin-top:4px;"></progress>`
+                      claimed
+                        ? `<span style="font-size:12px;font-weight:700;color:var(--farm-green-text);">✓ Đã nhận</span>`
+                        : unlocked
+                          ? `<button type="button" data-claim-ach="${def.id}" class="brass-btn gold-cta" style="min-height:40px;padding:0 12px;font-size:12px;">Nhận</button>`
+                          : `<span style="font-size:11px;font-weight:700;color:var(--ink-soft);">${curLabel}/${targetLabel}</span>`
                     }
                   </div>
                 </div>
-                <div style="flex-shrink:0;text-align:right;">
-                  ${
-                    claimed
-                      ? `<span style="font-size:11.5px;font-weight:800;color:var(--farm-green-text);">✓ Đã nhận</span>`
-                      : unlocked
-                        ? `<button type="button" data-claim-ach="${def.id}" class="brass-btn gold-cta" style="padding:4px 10px;font-size:11.5px;">🎁 Nhận</button>`
-                        : `<span style="font-size:11px;font-weight:700;color:var(--ink-soft);">🔒 ${curLabel}/${targetLabel}</span>`
-                  }
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      `;
-    } else if (hud.activeAlbumTab === 'friendship') {
-      const period = hud.sim.getRealTimePeriod();
-      const todayKey = getLocalDateKey();
-      bodyHtml = `
-        <div class="quest-card-mini" style="padding:12px;margin-bottom:10px;">
-          <div style="font-size:13.5px;font-weight:800;margin-bottom:8px;">🎬 Ký Ức Phim Cốt Truyện Hang Sóc</div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;">
-            ${STORY_CUTSCENE_CHAPTERS.map((chap) => {
-              const unlocked = st.level >= chap.unlockLevel || hud.sim.isHeadmasterPreview;
+              `;
+            }).join('')}
+          </div>
+        `;
+      } else if (hud.activeProfileSubTab === 'friendship') {
+        const period = hud.sim.getRealTimePeriod();
+        const todayKey = getLocalDateKey();
+        subBodyHtml = `
+          <div class="quest-card-mini">
+            <h3 class="hs-section-title">Phim cốt truyện</h3>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;">
+              ${STORY_CUTSCENE_CHAPTERS.map((chap) => {
+                const unlocked = st.level >= chap.unlockLevel || hud.sim.isHeadmasterPreview;
+                return `
+                  <div class="aaa-slot-card">
+                    <div style="font-size:13px;font-weight:700;">${chap.titleVi}</div>
+                    <div style="font-size:11px;color:var(--ink-soft);">Cấp ${chap.unlockLevel}</div>
+                    <button type="button" data-play-cutscene="${chap.id}" ${unlocked ? '' : 'disabled'} class="brass-btn ${unlocked ? 'gold-cta' : ''}" style="min-height:40px;font-size:12px;padding:0 10px;">
+                      ${unlocked ? 'Xem' : `Cấp ${chap.unlockLevel}`}
+                    </button>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+          <div class="aaa-codex-scroll">
+            ${VALLEY_VILLAGER_PROFILES.map((v) => {
+              const sched = getNpcScheduleForPeriod(v.id, period);
+              const f = ret.npcFriendship[v.id] ?? { villagerId: v.id, level: 1, xp: 0 };
+              const nextXp = f.level * 60;
+              const talkedToday = f.lastTalkedDayKey === todayKey;
               return `
                 <div class="aaa-slot-card">
-                  <div style="font-size:12.5px;font-weight:800;">${chap.titleVi}</div>
-                  <div style="font-size:11px;color:var(--ink-soft);">Yêu cầu: Cấp ${chap.unlockLevel}</div>
-                  <button type="button" data-play-cutscene="${chap.id}" ${unlocked ? '' : 'disabled'} class="brass-btn ${unlocked ? 'gold-cta' : ''}" style="font-size:11.5px;padding:4px 8px;">
-                    ${unlocked ? '🎬 Phát Phim Camera' : `🔒 Mở ở Cấp ${chap.unlockLevel}`}
-                  </button>
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                    <div>
+                      <strong class="hs-card-title">${v.nameVi}</strong>
+                      <span style="font-size:12px;color:var(--ink-soft);"> · ${v.titleVi}</span>
+                    </div>
+                    <span style="font-size:12px;font-weight:700;color:var(--berry);">Cấp ${f.level}/10 (${f.xp}/${nextXp})</span>
+                  </div>
+                  <div style="font-size:12px;color:var(--ink-soft);">${sched.activityVi}</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                    <button type="button" data-npc-talk="${v.id}" data-choice="0" ${talkedToday ? 'disabled' : ''} class="brass-btn" style="min-height:40px;font-size:12px;padding:0 10px;">
+                      ${talkedToday ? '✓ Đã trò chuyện' : 'Trò chuyện (+35 XP)'}
+                    </button>
+                    ${
+                      talkedToday
+                        ? ''
+                        : `<button type="button" data-npc-talk="${v.id}" data-choice="1" class="brass-btn" style="min-height:40px;font-size:12px;padding:0 10px;">Gợi chuyện (+25 XP)</button>`
+                    }
+                  </div>
                 </div>
               `;
             }).join('')}
           </div>
-        </div>
-        <div class="aaa-codex-scroll">
-          ${VALLEY_VILLAGER_PROFILES.map((v) => {
-            const sched = getNpcScheduleForPeriod(v.id, period);
-            const f = ret.npcFriendship[v.id] ?? { villagerId: v.id, level: 1, xp: 0 };
-            const nextXp = f.level * 60;
-            const talkedToday = f.lastTalkedDayKey === todayKey;
-            return `
-              <div class="aaa-slot-card">
-                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-                  <div>
-                    <strong style="font-size:13.5px;">${v.moodBubble} ${v.nameVi}</strong>
-                    <span style="font-size:11.5px;color:var(--ink-soft);"> • ${v.titleVi}</span>
+        `;
+      } else {
+        subBodyHtml = `
+          <div class="quest-card-mini">
+            <h3 class="hs-section-title">Điểm danh 7 ngày</h3>
+            <div class="aaa-slot-grid">
+              ${DAY_1_TO_7_REWARDS.map((d) => {
+                const claimed = ret.claimedLoginDays.includes(d.day);
+                const canClaim = !claimed && d.day <= maxLoginDay;
+                return `
+                  <div class="aaa-slot-card">
+                    <div style="font-size:13px;font-weight:700;">${d.titleVi}</div>
+                    <div style="font-size:12px;color:var(--ink-soft);">
+                      +${d.galleons} Sickle · +${d.magicStars} 🌟${d.phoenixTalismans > 0 ? ` · +${d.phoenixTalismans} Bùa` : ''}
+                    </div>
+                    ${
+                      claimed
+                        ? `<span style="font-size:12px;font-weight:700;color:var(--farm-green-text);">✓ Đã nhận</span>`
+                        : `<button type="button" data-claim-login="${d.day}" ${canClaim ? '' : 'disabled'} class="brass-btn ${canClaim ? 'gold-cta' : ''}" style="min-height:40px;font-size:12px;padding:0 10px;">
+                            ${canClaim ? 'Nhận' : 'Chờ mở'}
+                          </button>`
+                    }
                   </div>
-                  <span style="font-size:12px;font-weight:800;color:var(--berry);">💝 Cấp ${f.level}/10 (${f.xp}/${nextXp})</span>
-                </div>
-                <div style="font-size:12px;color:var(--ink-soft);">🕒 Hiện tại: ${sched.activityVi}</div>
-                <div style="display:flex;flex-wrap:wrap;gap:6px;">
-                  <button type="button" data-npc-talk="${v.id}" data-choice="0" ${talkedToday ? 'disabled' : ''} class="brass-btn" style="font-size:11.5px;padding:4px 9px;">
-                    ${talkedToday ? '✓ Đã trò chuyện hôm nay' : '☕ Hỏi thăm ấm áp (+35 XP)'}
-                  </button>
-                  ${
-                    talkedToday
-                      ? ''
-                      : `<button type="button" data-npc-talk="${v.id}" data-choice="1" class="brass-btn" style="font-size:11.5px;padding:4px 9px;">🪄 Bàn ý tưởng mới (+25 XP)</button>`
-                  }
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      `;
-    } else {
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      }
+
       bodyHtml = `
-        <div class="quest-card-mini" style="padding:12px;">
-          <div style="font-size:14px;font-weight:800;margin-bottom:8px;">📅 Lịch Quà Điểm Danh 7 Ngày Bà Molly</div>
-          <div class="aaa-slot-grid">
-            ${DAY_1_TO_7_REWARDS.map((d) => {
-              const claimed = ret.claimedLoginDays.includes(d.day);
-              const canClaim = !claimed && d.day <= maxLoginDay;
-              return `
-                <div class="aaa-slot-card">
-                  <div style="font-size:12.5px;font-weight:800;">${d.titleVi}</div>
-                  <div style="font-size:11.5px;color:var(--ink-soft);">
-                    +${d.galleons}G • +${d.magicStars} 🌟${d.phoenixTalismans > 0 ? ` • +${d.phoenixTalismans} 🔥` : ''}
-                  </div>
-                  ${
-                    claimed
-                      ? `<span style="font-size:11.5px;font-weight:800;color:var(--farm-green-text);">✓ Đã nhận quà</span>`
-                      : `<button type="button" data-claim-login="${d.day}" ${canClaim ? '' : 'disabled'} class="brass-btn ${canClaim ? 'gold-cta' : ''}" style="font-size:11.5px;padding:4px 8px;">
-                          ${canClaim ? '🎁 Nhận Ngay' : `🔒 Mở kế tiếp`}
-                        </button>`
-                  }
-                </div>
-              `;
-            }).join('')}
+        <div class="hs-profile-card" data-house="${escapeHtml(playerHouse)}">
+          <img class="hs-profile-crest" src="${crestSrc}" alt="" width="36" height="36" />
+          <div class="hs-profile-info">
+            <div class="hs-profile-head">
+              <strong class="hs-profile-name">${escapeHtml(st.parkName)}</strong>
+              <span class="hs-profile-house">${escapeHtml(houseTag)}</span>
+            </div>
+            <div class="hs-profile-meta">Cấp ${st.level} · ${escapeHtml(getPlayerTitle(st.level))} · 🌟 ${(st.match3?.stars ?? 0).toLocaleString('vi-VN')} · Thành tựu ${codex.unlocked}/${codex.total}</div>
           </div>
         </div>
+        <div class="lb-scope-pills hs-profile-subtabs" role="tablist" aria-label="Chi tiết hồ sơ">
+          ${psubBtn('login7', 'Điểm danh', claimableLoginCount)}${psubBtn('achievements', 'Thành tựu', claimableAchCount)}${psubBtn('friendship', 'Dân làng')}
+        </div>
+        ${subBodyHtml}
       `;
     }
 
     box.innerHTML = tabsHtml + bodyHtml;
 
+    if (hud.activeAlbumTab === 'leaderboard') {
+      const mount = box.querySelector('#leaderboardTabMount') as HTMLElement | null;
+      if (hud.leaderboardModal) {
+        hud.leaderboardModal.render(mount);
+      } else {
+        if (mount) mount.innerHTML = `<p class="hs-lb-note">Đang tải…</p>`;
+        void hud.getLeaderboardModal().then((m) => {
+          m.configure(hud.sim.getLastPlayedMinigame());
+          if (hud.activeAlbumTab === 'leaderboard') {
+            m.render();
+            m.syncCloud();
+          }
+        }, () => {});
+      }
+    }
+
     box.querySelectorAll<HTMLButtonElement>('[data-atab]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        hud.activeAlbumTab = btn.dataset.atab as GameHUD['activeAlbumTab'];
+        const nextTab = btn.dataset.atab as GameHUD['activeAlbumTab'];
+        hud.activeAlbumTab = nextTab;
         questsUiRenderAlbumDialog(hud);
+        if (nextTab === 'leaderboard' && hud.leaderboardModal) {
+          hud.leaderboardModal.syncCloud();
+        }
       });
     });
 
-    box.querySelector('#btnClaimHouseCup')?.addEventListener('click', () => {
-      if (hud.sim.claimHouseCupReward()) {
+    box.querySelectorAll<HTMLButtonElement>('[data-psub]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        hud.activeProfileSubTab = btn.dataset.psub as GameHUD['activeProfileSubTab'];
         questsUiRenderAlbumDialog(hud);
-      }
-    });
-
-    box.querySelector('#btnSyncServerHouseCup')?.addEventListener('click', async () => {
-      try {
-        const snap = await fetchWeeklyHouseCupStandingsOnline();
-        if (snap) {
-          st.weeklyHouseCupServerStandings = snap;
-          hud.sim.saveToStorage();
-          hud.showToast(`🏆 Đã đồng bộ Bảng Cúp 4 Nhà tuần ${snap.weekKey}!`, '🏆');
-          questsUiRenderAlbumDialog(hud);
-          return;
-        }
-        hud.showToast('Đang hiển thị điểm Cúp 4 Nhà tại Thung Lũng của bạn!', '🏆');
-      } catch {
-        hud.showToast('Chưa kết nối máy chủ HPVN — đang dùng bảng điểm cục bộ.', '🦉');
-      }
+      });
     });
 
     box.querySelector('#btnClaimAllAchievements')?.addEventListener('click', () => {
@@ -735,10 +733,10 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
     const tabsSwitchHtml = `
       <div class="workshop-tabs" role="group" aria-label="Đơn Hàng Cú & Nhiệm Vụ" style="margin-bottom:12px;">
         <button type="button" data-qtab="orders" data-active="${hud.activeQuestTab === 'orders'}" aria-pressed="${hud.activeQuestTab === 'orders'}" class="brass-btn">
-          🦉 Đơn Cú (${readyOwlCount}/${barn.owlOrders.length})
+          Đơn Cú <span class="nb-tab-badge">${readyOwlCount}/${barn.owlOrders.length}</span>
         </button>
         <button type="button" data-qtab="quests" data-active="${hud.activeQuestTab === 'quests'}" aria-pressed="${hud.activeQuestTab === 'quests'}" class="brass-btn">
-          📖 Nhiệm Vụ ${readyQuestCount > 0 ? `(${readyQuestCount})` : ''}
+          Nhiệm Vụ ${readyQuestCount > 0 ? `<span class="nb-tab-badge">${readyQuestCount}</span>` : ''}
         </button>
       </div>
     `;
@@ -759,8 +757,8 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
               ? order.portraitSprite
               : null;
           const avatarHtml = safePortraitKey
-            ? `<img src="/sprites/${safePortraitKey}.png" alt="${escapeHtml(order.senderName)}" class="owl-note-portrait" />`
-            : `<span class="owl-note-emoji">${escapeHtml(order.portraitEmoji)}</span>`;
+            ? `<img src="/game/trang-trai-hang-soc/sprites/${safePortraitKey}.webp" alt="${escapeHtml(order.senderName)}" class="owl-note-portrait" />`
+            : `<span class="owl-note-emoji">${escapeHtml(avatarGlyph(order.portraitEmoji, order.senderName))}</span>`;
           const miniIcons = order.requirements
             .slice(0, 3)
             .map((req) => {
@@ -775,7 +773,6 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
               class="owl-pin-note ${isSel ? 'selected' : ''} ${isReady ? 'ready' : ''}"
               data-select-owl="${escapeHtml(order.id)}"
             >
-              <span class="owl-red-pin" aria-hidden="true"></span>
               <div class="owl-note-avatar-box">${avatarHtml}</div>
               <div class="owl-note-info">
                 <div class="owl-note-sender">${escapeHtml(order.senderName)}</div>
@@ -796,8 +793,8 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
                 <div class="owl-detail-title">${escapeHtml(selectedOrder.senderName)}</div>
                 <div class="owl-detail-sub">🦉 ${escapeHtml(selectedOrder.owlName)}</div>
               </div>
-              <button type="button" id="btnRefreshOwlOrder" class="brass-btn" style="padding:4px 9px;font-size:11.5px;" title="Đổi đơn">
-                🔄 Đổi
+              <button type="button" id="btnRefreshOwlOrder" class="brass-btn" style="padding:4px 9px;font-size:12px;" ${hud.sim.getOwlRerollsLeft() > 0 ? `title="Đổi đơn (còn ${hud.sim.getOwlRerollsLeft()} lượt hôm nay)"` : 'disabled title="Hết lượt đổi hôm nay"'}>
+                ${hud.sim.getOwlRerollsLeft() > 0 ? `🔄 Đổi (${hud.sim.getOwlRerollsLeft()})` : 'Hết lượt đổi'}
               </button>
             </div>
 
@@ -837,7 +834,7 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
 
             <div class="owl-reward-box">
               <div class="owl-reward-pills">
-                <span class="owl-rew-pill gold">🪙 +${selectedOrder.rewardGalleons}</span>
+                <span class="owl-rew-pill gold">🪙 +${selectedOrder.rewardSickle}</span>
                 <span class="owl-rew-pill xp">⭐ +${selectedOrder.rewardXp}</span>
                 ${
                   selectedOrder.rewardMugglePlug
@@ -869,7 +866,7 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
               id="btnSendOwlOrder"
               class="owl-green-send-btn ${canSendSelected ? 'ready' : 'not-ready'}"
             >
-              🦉 ${canSendSelected ? 'Giao Hàng!' : 'Mở Kho'}
+              ${canSendSelected ? 'Giao hàng' : 'Mở Kho'}
             </button>
           </div>
         </div>
@@ -932,16 +929,16 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
     const renderCard = (q: NonNullable<typeof story>, tag: string, isStory = false) => {
       const pct = Math.min(100, Math.round((q.progress / Math.max(1, q.targetAmount)) * 100));
       return `
-        <div class="quest-card-mini" style="padding:12px;color:var(--ink);">
+        <div class="quest-card-mini" style="color:var(--ink);">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-            <span style="font-size:13.5px;font-weight:800;color:var(--ink);">${escapeHtml(q.giverEmoji)} ${escapeHtml(q.title)}</span>
+            <span class="hs-card-title" style="color:var(--ink);">${escapeHtml(q.giverEmoji)} ${escapeHtml(q.title)}</span>
             <span style="font-size:12px;font-weight:700;color:var(--brand-strong);white-space:nowrap;flex-shrink:0;">${escapeHtml(tag)}</span>
           </div>
           ${isStory && q.dialogue ? `<div style="font-size:12px;color:var(--ink-soft);margin-top:4px;line-height:1.35;">${escapeHtml(q.dialogue)}</div>` : ''}
           <div class="quest-bar"><div class="quest-bar-fill" style="width:${pct}%"></div></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;font-weight:700;color:var(--ink);">
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;color:var(--ink);">
             <span>${Math.min(q.progress, q.targetAmount)}/${q.targetAmount}</span>
-            <span>🪙${q.rewardGalleons} • ⭐${q.rewardXp} ${q.rewardTimeSand > 0 ? `• ⏳${q.rewardTimeSand}` : ''}</span>
+            <span>🪙${q.rewardSickle} · ⭐${q.rewardXp} ${q.rewardTimeSand > 0 ? `· ⏳${q.rewardTimeSand}` : ''}</span>
           </div>
           ${
             q.claimed
@@ -965,26 +962,19 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
     const trialBannerHtml =
       reqTrial && !hud.sim.state.sandboxMode && !hud.sim.isHeadmasterPreview
         ? `
-        <div class="quest-card-mini trial-quest-card" style="margin-bottom:12px;">
+        <div class="quest-card-mini trial-quest-card">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-            <div style="font-size:13.5px;font-weight:900;">
-              🔥 Đề Cử (${wpModal.current}/${wpModal.required}): ${reqTrial.icon} ${escapeHtml(reqTrial.shortVi)}
+            <div class="hs-card-title">
+              🔥 Đề Cử (${wpModal.current}/${wpModal.required}): ${reqTrial.icon} ${escapeHtml(reqTrial.shortVi)} (${fmtStagePill(reqTrial.kind)})
             </div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;">
-              <button type="button" data-modal-open-trial="match3" class="brass-btn ${reqTrial.kind === 'match3' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🍓 (${fmtStagePill('match3')})</button>
-              <button type="button" data-modal-open-trial="caro" class="brass-btn ${reqTrial.kind === 'caro' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🗺️ (${fmtStagePill('caro')})</button>
-              <button type="button" data-modal-open-trial="sudoku" class="brass-btn ${reqTrial.kind === 'sudoku' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🔮 (${fmtStagePill('sudoku')})</button>
-              <button type="button" data-modal-open-trial="chess" class="brass-btn ${reqTrial.kind === 'chess' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🏰 (${fmtStagePill('chess')})</button>
-              <button type="button" data-modal-open-trial="blocks" class="brass-btn ${reqTrial.kind === 'blocks' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🦄 (${fmtStagePill('blocks')})</button>
-              <button type="button" data-modal-open-trial="jigsaw" class="brass-btn ${reqTrial.kind === 'jigsaw' ? 'gold-cta' : ''}" style="padding:5px 10px;font-size:11.5px;">🧩 (${fmtStagePill('jigsaw')})</button>
-            </div>
+            <button type="button" data-modal-open-trial="${reqTrial.kind}" class="brass-btn gold-cta" style="padding:6px 14px;font-size:13px;">▶️ Chơi</button>
           </div>
         </div>
       `
         : '';
 
     const storyChapterTag = story
-      ? `Ch.${story.chapter ?? 1} • ${hud.sim.state.storyQuestIndex + 1}/${STORY_QUESTS.length}`
+      ? `Ch.${story.chapter ?? 1} · ${hud.sim.state.storyQuestIndex + 1}/${STORY_QUESTS.length}`
       : '';
     const yule = hud.sim.getYuleEventStatus();
     const yuleMain = yule.dayDef?.main;
@@ -1004,17 +994,17 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
       ${yuleHtml}
       ${tabsSwitchHtml}
       ${trialBannerHtml}
-      <h3 style="font-size:15px;font-weight:800;margin-bottom:6px;">📖 Cốt Truyện</h3>
+      <h3 class="hs-section-title">📖 Cốt Truyện</h3>
       ${story ? renderCard(story, storyChapterTag, true) : `<div class="quest-card-mini">🎉 Đã hoàn thành!</div>`}
 
-      <h3 style="font-size:15px;font-weight:800;margin:14px 0 6px;">🦉 Xoay Vòng</h3>
+      <h3 class="hs-section-title" style="margin-top:14px;">🦉 Xoay Vòng</h3>
       <div class="grid-2col">
         ${hud.sim.state.owlQuests.map((q) => renderCard(q, 'Xoay vòng')).join('')}
       </div>
 
-      <h3 style="font-size:15px;font-weight:800;margin:14px 0 6px;">📰 Hàng Ngày</h3>
+      <h3 class="hs-section-title" style="margin-top:14px;">📰 Hàng Ngày</h3>
       <div class="grid-2col">
-        ${hud.sim.state.dailyQuests.map((q) => renderCard(q, '00:00')).join('')}
+        ${hud.sim.state.dailyQuests.map((q) => renderCard(q, `⏳ ${formatDurationCountdownVi(secondsToVietnamMidnight())}`)).join('')}
       </div>
     `;
 
@@ -1071,78 +1061,96 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
     });
 }
 
+let activeRoadmapTab: 'zones' | 'milestones' = 'zones';
+
 export function questsUiRenderRoadmapDialog(hud: GameHUD): void {
     const box = hud.root.querySelector('#roadmapDialogContent') as HTMLElement;
     const unlockedSet = new Set(hud.sim.state.unlockedZones);
     const reqTrial = hud.sim.getRequiredLevelTrial();
+    const unlockedCount = ZONES.filter((z) => unlockedSet.has(z.id) || hud.sim.state.sandboxMode).length;
 
-    const zonesHtml = ZONES.map((z) => {
-      const isOpen = unlockedSet.has(z.id) || hud.sim.state.sandboxMode;
-      const canOpen = !isOpen && hud.sim.state.level >= z.unlockLevel;
-      const zStarCost = getZonePuzzleStarCost(z);
-      return `
-        <div class="quest-card-mini" style="display:flex;flex-direction:column;justify-content:space-between;gap:6px;">
-          <div style="font-size:13.5px;font-weight:800;">${isOpen ? '✅' : '🌫️'} ${z.name}</div>
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:12px;font-weight:700;">
-            <span>Lv.${z.unlockLevel} • ${zStarCost > 0 ? `🌟 ${zStarCost}` : '✓'}</span>
-            <div style="display:flex;gap:5px;">
-              <button type="button" data-cam-zone="${z.id}" class="brass-btn" style="padding:4px 8px;font-size:12px;">👁️ Xem</button>
-              ${
-                canOpen
-                  ? `<button type="button" data-unlock-zone="${z.id}" class="brass-btn gold-cta" style="padding:4px 8px;font-size:12px;">🔓 Mở</button>`
-                  : ''
-              }
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('');
+    const tabsHtml = `
+      <div class="hs-tabs" role="tablist" aria-label="Bản Đồ &amp; Lộ Trình">
+        <button type="button" role="tab" data-rmtab="zones" aria-selected="${activeRoadmapTab === 'zones'}" class="hs-tab">Vùng đất <span class="hs-tab-badge">${unlockedCount}/${ZONES.length}</span></button>
+        <button type="button" role="tab" data-rmtab="milestones" aria-selected="${activeRoadmapTab === 'milestones'}" class="hs-tab">Cột mốc <span class="hs-tab-badge">Lv.${hud.sim.state.level}</span></button>
+      </div>
+    `;
 
-    const milestones = LEVELS.filter(
-      (l) => l.unlockedItemIds.length > 0 || l.unlockedZoneId || l.milestoneNote || l.level % 10 === 0
-    );
-
-    box.innerHTML = `
-      ${
-        reqTrial && !hud.sim.state.sandboxMode && !hud.sim.isHeadmasterPreview
-          ? (() => {
-              const wpR = hud.sim.getWinsProgressForCurrentLevel();
-              return `<div class="quest-card-mini trial-quest-card" style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
-              <div style="font-size:13.5px;font-weight:900;">
+    const trialCardHtml =
+      reqTrial && !hud.sim.state.sandboxMode && !hud.sim.isHeadmasterPreview
+        ? (() => {
+            const wpR = hud.sim.getWinsProgressForCurrentLevel();
+            return `<div class="quest-card-mini trial-quest-card" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+              <div class="hs-card-title">
                 🔥 Đề Cử Lv.${hud.sim.state.level} (${wpR.current}/${wpR.required}): ${reqTrial.icon} ${escapeHtml(reqTrial.shortVi)}
               </div>
-              <button type="button" id="btnRoadmapPlayTrial" class="brass-btn gold-cta" style="padding:6px 12px;font-size:12.5px;">
+              <button type="button" id="btnRoadmapPlayTrial" class="brass-btn gold-cta" style="padding:6px 14px;font-size:13px;">
                 ▶️ Chơi
               </button>
             </div>`;
-            })()
-          : ''
-      }
-      <h3 style="font-size:15px;font-weight:800;margin-bottom:8px;">🗺️ 10 Vùng Đất</h3>
-      <div class="grid-2col" style="margin-bottom:16px;">${zonesHtml}</div>
+          })()
+        : '';
 
-      <h3 style="font-size:15px;font-weight:800;margin-bottom:8px;">🌟 Cột Mốc (Lv.1 → 100)</h3>
-      <div style="display:flex;flex-direction:column;gap:6px;">
-        ${milestones
-          .map((m) => {
-            const reached = hud.sim.state.level >= m.level;
-            const itemNames = m.unlockedItemIds
-              .map((id) => getCatalogItem(id)?.name)
-              .filter(Boolean)
-              .join(', ');
-            return `
-              <div class="quest-card-mini" style="display:flex;justify-content:space-between;align-items:center;gap:10px;opacity:${reached ? '1' : '0.78'};">
-                <div>
-                  <span style="font-weight:800;font-size:13px;">${reached ? '🌟' : '🔒'} Lv.${m.level}</span>
-                  ${itemNames ? `<span style="font-size:12px;margin-left:6px;">${itemNames}</span>` : ''}
-                </div>
-                <span style="font-size:12px;font-weight:700;white-space:nowrap;">+🪙${m.rewardGalleons}</span>
+    let bodyHtml = '';
+    if (activeRoadmapTab === 'zones') {
+      const zonesHtml = ZONES.map((z) => {
+        const isOpen = unlockedSet.has(z.id) || hud.sim.state.sandboxMode;
+        const canOpen = !isOpen && hud.sim.state.level >= z.unlockLevel;
+        const zStarCost = getZonePuzzleStarCost(z);
+        return `
+          <div class="quest-card-mini" style="display:flex;flex-direction:column;justify-content:space-between;gap:6px;">
+            <div class="hs-card-title">${isOpen ? '✅' : '🌫️'} ${z.name}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:12px;font-weight:700;">
+              <span>Lv.${z.unlockLevel} · ${zStarCost > 0 ? `🌟 ${zStarCost}` : '✓'}</span>
+              <div style="display:flex;gap:5px;">
+                <button type="button" data-cam-zone="${z.id}" class="brass-btn" style="padding:4px 8px;font-size:12px;">👁️ Xem</button>
+                ${
+                  canOpen
+                    ? `<button type="button" data-unlock-zone="${z.id}" class="brass-btn gold-cta" style="padding:4px 8px;font-size:12px;">🔓 Mở</button>`
+                    : ''
+                }
               </div>
-            `;
-          })
-          .join('')}
-      </div>
-    `;
+            </div>
+          </div>
+        `;
+      }).join('');
+      bodyHtml = `${trialCardHtml}<div class="grid-2col">${zonesHtml}</div>`;
+    } else {
+      const milestones = LEVELS.filter(
+        (l) => l.unlockedItemIds.length > 0 || l.unlockedZoneId || l.milestoneNote || l.level % 10 === 0
+      );
+      bodyHtml = `
+        <div class="hs-card-list">
+          ${milestones
+            .map((m) => {
+              const reached = hud.sim.state.level >= m.level;
+              const itemNames = m.unlockedItemIds
+                .map((id) => getCatalogItem(id)?.name)
+                .filter(Boolean)
+                .join(', ');
+              return `
+                <div class="quest-card-mini" style="display:flex;justify-content:space-between;align-items:center;gap:10px;opacity:${reached ? '1' : '0.78'};">
+                  <div>
+                    <span style="font-weight:700;font-size:13px;">${reached ? '🌟' : '🔒'} Lv.${m.level}</span>
+                    ${itemNames ? `<span style="font-size:12px;margin-left:6px;">${itemNames}</span>` : ''}
+                  </div>
+                  <span style="font-size:12px;font-weight:700;white-space:nowrap;">+🪙${m.rewardSickle}</span>
+                </div>
+              `;
+            })
+            .join('')}
+        </div>
+      `;
+    }
+
+    box.innerHTML = tabsHtml + bodyHtml;
+
+    box.querySelectorAll<HTMLButtonElement>('[data-rmtab]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        activeRoadmapTab = btn.dataset.rmtab === 'milestones' ? 'milestones' : 'zones';
+        questsUiRenderRoadmapDialog(hud);
+      });
+    });
 
     box.querySelector('#btnRoadmapPlayTrial')?.addEventListener('click', () => {
       (hud.root.querySelector('#roadmapDialog') as HTMLDialogElement)?.close();
@@ -1166,320 +1174,127 @@ export function questsUiRenderRoadmapDialog(hud: GameHUD): void {
     });
 }
 
+// HPVN (owner 15/11 «thiết kế lại, tránh AI slop»): each settings group is one labelled row whose choices are one segmented
+// control (even cells, the chosen one gold, no icons) on an even grid: `cols` columns on a phone, `wide` from 980px
+// («Bình minh» needs a third of a 360px card; main.css «Cài Đặt»)
+function segRowHtml(label: string, attr: string, items: Array<[string, string]>, active: string, cols = items.length, wide = items.length): string {
+  const cells = items
+    .map(([v, l]) => `<button type="button" data-${attr}="${v}" data-active="${v === active}" aria-pressed="${v === active}">${l}</button>`)
+    .join('');
+  return `<div class="hs-set-row"><span class="hs-set-k">${label}</span><div class="hs-seg" role="group" aria-label="${label}" style="--hs-seg-cols:${cols};--hs-seg-wide:${wide}">${cells}</div></div>`;
+}
+
 export function questsUiRenderSettingsDialog(hud: GameHUD): void {
     const box = hud.root.querySelector('#settingsDialogContent') as HTMLElement;
     const st = hud.sim.state;
     const toonOn = hud.sprites ? hud.sprites.isToonEnabled() : true;
+    const a11y = hud.getEffectiveA11ySettings();
+    const isDev =
+      Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV) ||
+      (typeof window !== 'undefined' && Boolean(import.meta.env.DEV));
+    const volRows: Array<{ key: 'master' | 'music' | 'sfx' | 'voice'; label: string }> = [
+      { key: 'master', label: 'Tổng' },
+      { key: 'music', label: 'Nhạc nền' },
+      { key: 'sfx', label: 'Hiệu ứng' },
+      { key: 'voice', label: 'Giọng đọc' },
+    ];
+    const stashedCount = Object.values(st.stashedDecorInventory ?? {}).reduce((a, b) => a + b, 0);
 
     box.innerHTML = `
-      <div class="grid-2col" style="margin-bottom:14px;">
-        <div class="quest-card-mini">
-          <div style="font-size:13.5px;font-weight:800;margin-bottom:8px;">🎵 Âm Thanh &amp; Hiển Thị</div>
-          <div style="display:flex;flex-direction:column;gap:7px;">
-            <label class="switch-row">
-              <span>🎼 Nhạc nền (BGM)</span>
-              <input id="swBgm" type="checkbox" switch ${st.settings.bgmEnabled ? 'checked' : ''} />
-            </label>
-            <label class="switch-row">
-              <span>🔔 Âm hiệu ứng (SFX)</span>
-              <input id="swSfx" type="checkbox" switch ${st.settings.soundEnabled ? 'checked' : ''} />
-            </label>
-            <label class="switch-row">
-              <span>👁️ Nhìn xuyên nhà (V)</span>
-              <input id="swCutaway" type="checkbox" switch ${st.settings.cutawayMode ? 'checked' : ''} />
-            </label>
-            <label class="switch-row">
-              <span>✨ Hiện lưới ô</span>
-              <input id="swGrid" type="checkbox" switch ${st.settings.showGrid ? 'checked' : ''} />
-            </label>
-            ${
-              IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed()
-                ? `<label class="switch-row">
-                    <span>♾️ Sandbox (Dev)</span>
-                    <input id="swSandbox" type="checkbox" switch ${st.sandboxMode ? 'checked' : ''} />
-                  </label>`
-                : ''
-            }
-          </div>
-        </div>
-
-        <div class="quest-card-mini">
-          <div style="font-size:13.5px;font-weight:800;margin-bottom:6px;">🕒 Thời Gian &amp; Thời Tiết</div>
-          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">
-            ${(['realtime', 'dawn', 'day', 'dusk', 'night'] as TimeOverride[])
-              .map((t) => {
-                const labels: Record<TimeOverride, string> = {
-                  realtime: '🕒 24h',
-                  dawn: '🌅 Bình minh',
-                  day: '☀️ Ngày',
-                  dusk: '🌇 Chiều',
-                  night: '🌙 Đêm',
-                };
-                return `<button type="button" data-time="${t}" data-active="${st.settings.timeOverride === t}" aria-pressed="${st.settings.timeOverride === t}" class="brass-btn" style="padding:4px 8px;font-size:12px;">${labels[t]}</button>`;
-              })
-              .join('')}
-          </div>
-
-          ${
-            IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed()
-              ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">
-                  ${(['auto', 'halloween', 'christmas', 'quidditch_cup'] as Array<'auto' | FestivalType>)
-                    .map((f) => {
-                      const labels: Record<string, string> = {
-                        auto: '🎪 Tự động',
-                        halloween: '🎃 Halloween',
-                        christmas: '🎄 Giáng Sinh',
-                        quidditch_cup: '🏆 Quidditch',
-                      };
-                      return `<button type="button" data-fest="${f}" data-active="${st.settings.activeFestival === f}" aria-pressed="${st.settings.activeFestival === f}" class="brass-btn" style="padding:4px 8px;font-size:12px;">${labels[f]}</button>`;
-                    })
-                    .join('')}
-                </div>`
-              : ''
-          }
-
-          <div style="display:flex;flex-wrap:wrap;gap:5px;">
-            ${(['auto', 'clear', 'cloudy', 'rain', 'storm', 'snow', 'fog'] as WeatherOverride[])
-              .map((w) => {
-                const labels: Record<string, string> = {
-                  auto: '🌦️ Tự động',
-                  clear: '☀️ Nắng',
-                  cloudy: '⛅ Mây',
-                  rain: '🌧️ Mưa',
-                  storm: '⛈️ Giông',
-                  snow: '❄️ Tuyết',
-                  fog: '🌫️ Sương',
-                };
-                return `<button type="button" data-weather="${w}" data-active="${st.settings.weatherOverride === w}" aria-pressed="${st.settings.weatherOverride === w}" class="brass-btn" style="padding:4px 8px;font-size:12px;">${labels[w]}</button>`;
-              })
-              .join('')}
-          </div>
-
-          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;">
-            <button type="button" data-toon="on" data-active="${toonOn}" aria-pressed="${toonOn}" class="brass-btn" style="padding:4px 8px;font-size:12px;">🎨 Viền nâu</button>
-            <button type="button" data-toon="off" data-active="${!toonOn}" aria-pressed="${!toonOn}" class="brass-btn" style="padding:4px 8px;font-size:12px;">🖼️ 2.5D Gốc</button>
-          </div>
-
-          <div style="font-size:12px;font-weight:800;margin-top:10px;margin-bottom:5px;color:#78350f;">✨ Engine Đồ Hoạ (Bản đồ chính)</div>
-          <div style="display:flex;flex-wrap:wrap;gap:5px;">
-            ${(['webgl2', 'canvas'] as const)
-              .map((rm) => {
-                const curRm = st.settings.rendererMode ?? 'webgl2';
-                const labels: Record<'webgl2' | 'canvas', string> = {
-                  webgl2: '✨ Engine Mới (WebGL2 2.5D HDR)',
-                  canvas: '🎨 Cổ Điển (Canvas 2D)',
-                };
-                return `<button type="button" data-renderer-mode="${rm}" data-active="${curRm === rm}" aria-pressed="${curRm === rm}" class="brass-btn" style="padding:4px 8px;font-size:12px;">${labels[rm]}</button>`;
-              })
-              .join('')}
-          </div>
-
-          <div style="font-size:12px;font-weight:800;margin-top:10px;margin-bottom:5px;color:#78350f;">🎄 Giao Diện Giáng Sinh (Thung Lũng &amp; 7 Mini-Game)</div>
-          <div style="display:flex;flex-wrap:wrap;gap:5px;">
-            ${(['auto', 'on', 'off'] as const)
-              .map((ym) => {
-                const curMode = st.settings.yuleThemeMode ?? 'auto';
-                const labels: Record<'auto' | 'on' | 'off', string> = {
-                  auto: '🎄 Tự động (15/11–05/01)',
-                  on: '❄️ Luôn bật',
-                  off: '🌿 Tắt',
-                };
-                return `<button type="button" data-yule-theme-mode="${ym}" data-active="${curMode === ym}" aria-pressed="${curMode === ym}" class="brass-btn" style="padding:4px 8px;font-size:12px;">${labels[ym]}</button>`;
-              })
-              .join('')}
-          </div>
-        </div>
-      </div>
-
-      <div class="quest-card-mini" style="margin-bottom:14px;">
-        <div style="font-size:13.5px;font-weight:800;margin-bottom:6px;">📺 Nhạc Nền Trực Tiếp Từ YouTube (0 Băng Thông Máy Chủ)</div>
-        <div style="font-size:11.5px;opacity:0.86;margin-bottom:8px;">
-          Phát trực tiếp luồng nhạc từ CDN YouTube về trình duyệt người chơi, không tốn băng thông server của bạn.
-        </div>
-        <label class="switch-row" style="margin-bottom:8px;">
-          <span>🎶 Bật nhạc nền YouTube trực tiếp</span>
-          <input id="swYoutubeBgm" type="checkbox" switch ${st.settings.youtubeBgmEnabled ? 'checked' : ''} />
-        </label>
-        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;">
-          ${YOUTUBE_BGM_PRESETS.map((pr) => {
-            const isCur = (st.settings.youtubeBgmUrl || DEFAULT_YOUTUBE_BGM_URL).trim() === pr.url;
-            return `<button type="button" data-yt-preset="${escapeHtml(pr.url)}" data-active="${isCur}" aria-pressed="${isCur}" class="brass-btn" style="padding:4px 8px;font-size:11.5px;">${escapeHtml(pr.label)}</button>`;
-          }).join('')}
-        </div>
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-          <input
-            id="inpYoutubeBgmUrl"
-            type="url"
-            value="${escapeHtml(st.settings.youtubeBgmUrl || DEFAULT_YOUTUBE_BGM_URL)}"
-            placeholder="Dán link YouTube (watch?v=..., youtu.be/..., live/..., playlist...)"
-            style="flex:1 1 220px;padding:6px 9px;border-radius:8px;border:1.5px solid var(--border-brass);background:var(--surface-chip-top);color:var(--ink);font-size:12px;"
-          />
-          <button id="btnApplyYoutubeBgm" type="button" class="brass-btn gold-cta" style="padding:6px 11px;font-size:12px;">
-            ▶️ Phát Link
-          </button>
-        </div>
-        <div id="lblYoutubeBgmStatus" style="font-size:11.5px;margin-top:6px;font-weight:700;color:var(--ink-soft);">
-          ${escapeHtml(hud.youtubeBgm?.getStatusText() ?? 'Đang tắt (dùng nhạc nền tích hợp sẵn)')}
-        </div>
-      </div>
-
-      <div class="quest-card-mini" style="margin-bottom:14px;">
-        <div style="font-size:13.5px;font-weight:800;margin-bottom:8px;">🎚️ Bàn Trộn Âm Thanh 4 Kênh &amp; Tiếp Cận (A11y)</div>
-        ${(() => {
-          const a11y = hud.getEffectiveA11ySettings();
-          const volRows: Array<{ key: 'master' | 'music' | 'sfx' | 'voice'; label: string }> = [
-            { key: 'master', label: '🔊 Tổng (Master)' },
-            { key: 'music', label: '🎼 Nhạc nền' },
-            { key: 'sfx', label: '🔔 Hiệu ứng' },
-            { key: 'voice', label: '🗣️ Giọng đọc' },
-          ];
-          return `
-            <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
-              ${volRows
-                .map((r) => {
-                  const pct = Math.round((a11y.volumes[r.key] ?? 0.85) * 100);
-                  return `
-                    <label class="aaa-slider-row">
-                      <span>${r.label}</span>
-                      <input type="range" min="0" max="100" value="${pct}" data-vol-bus="${r.key}" />
-                      <span data-vol-val="${r.key}">${pct}%</span>
-                    </label>
-                  `;
-                })
-                .join('')}
-            </div>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px;">
-              <span style="font-size:12px;font-weight:700;">🎨 Chế độ màu:</span>
-              ${(
-                [
-                  ['none', 'Mặc định'],
-                  ['protanopia', 'Đỏ-Lục (P)'],
-                  ['deuteranopia', 'Lục-Đỏ (D)'],
-                  ['tritanopia', 'Xanh-Vàng (T)'],
-                ] as const
-              )
-                .map(
-                  ([mode, lbl]) =>
-                    `<button type="button" data-cb-mode="${mode}" data-active="${a11y.colorblindMode === mode}" aria-pressed="${a11y.colorblindMode === mode}" class="brass-btn" style="padding:3px 8px;font-size:11.5px;">${lbl}</button>`
-                )
-                .join('')}
-            </div>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
-              <span style="font-size:12px;font-weight:700;">🔠 Cỡ chữ:</span>
-              ${([100, 125, 150] as const)
-                .map(
-                  (sc) =>
-                    `<button type="button" data-font-scale="${sc}" data-active="${a11y.fontScale === sc}" aria-pressed="${a11y.fontScale === sc}" class="brass-btn" style="padding:3px 8px;font-size:11.5px;">${sc}%</button>`
-                )
-                .join('')}
-              <label class="switch-row" style="margin-left:auto;gap:6px;">
-                <span style="font-size:12px;">⚡ Tương phản cao</span>
-                <input id="swHighContrast" type="checkbox" switch ${a11y.highContrast ? 'checked' : ''} />
-              </label>
-            </div>
-          `;
-        })()}
-      </div>
-
-      <div class="quest-card-mini" style="margin-bottom:14px;">
-        <div style="font-size:13.5px;font-weight:800;margin-bottom:6px;">📐 Kiến Trúc Sư Điền Trang (Bố Cục &amp; Cất Nhanh)</div>
-        <div class="aaa-slot-grid" style="margin-bottom:8px;">
-          ${(['layout_1', 'layout_2', 'layout_3'] as LayoutPresetId[])
-            .map((pid, idx) => {
-              const saved = st.layoutPresets?.[pid];
-              const title = saved ? escapeHtml(saved.label) : `Bản Vẽ #${idx + 1}`;
+      <div class="quest-card-mini">
+        <h3 class="hs-section-title">Âm thanh</h3>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <label class="switch-row">
+            <span>Nhạc nền</span>
+            <input id="swBgm" type="checkbox" switch ${st.settings.bgmEnabled ? 'checked' : ''} />
+          </label>
+          <label class="switch-row">
+            <span>Hiệu ứng</span>
+            <input id="swSfx" type="checkbox" switch ${st.settings.soundEnabled ? 'checked' : ''} />
+          </label>
+          ${volRows
+            .map((r) => {
+              const pct = Math.round((a11y.volumes[r.key] ?? 0.85) * 100);
               return `
-                <div class="aaa-slot-card">
-                  <div style="font-size:12px;font-weight:800;">${title}</div>
-                  <div style="font-size:11px;color:var(--ink-soft);">${
-                    saved ? `${saved.placements.length} công trình đã lưu` : 'Chưa lưu vị trí'
-                  }</div>
-                  <div style="display:flex;gap:5px;">
-                    <button type="button" data-save-layout="${pid}" class="brass-btn" style="flex:1;padding:3px 6px;font-size:11px;">💾 Lưu</button>
-                    <button type="button" data-load-layout="${pid}" ${saved ? '' : 'disabled'} class="brass-btn ${saved ? 'gold-cta' : ''}" style="flex:1;padding:3px 6px;font-size:11px;">📐 Áp dụng</button>
-                  </div>
-                </div>
+                <label class="aaa-slider-row" style="font-size:12px;font-weight:700;">
+                  <span>${r.label}</span>
+                  <input type="range" min="0" max="100" value="${pct}" data-vol-bus="${r.key}" />
+                  <span data-vol-val="${r.key}">${pct}%</span>
+                </label>
               `;
             })
             .join('')}
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px;">
-          <button id="btnStashDecor" type="button" class="brass-btn">📦 Cất Nhanh Trang Trí</button>
-          <button id="btnRestoreDecor" type="button" class="brass-btn gold-cta">
-            🌸 Bày Lại Trang Trí (${Object.values(st.stashedDecorInventory ?? {}).reduce((a, b) => a + b, 0)})
-          </button>
-        </div>
-      </div>
-
-      <div class="quest-card-mini" style="margin-bottom:14px;">
-        <div style="font-size:13.5px;font-weight:800;margin-bottom:6px;">🗂️ 3 Hồ Sơ Lưu Game Độc Lập</div>
-        <div class="aaa-slot-grid">
-          ${(['slot_1', 'slot_2', 'slot_3'] as SaveSlotId[])
-            .map((sid, idx) => {
-              const info = loadFromNamedSlot(sid);
-              const isLockedSandboxSlot =
-                !isSandboxRuntimeAllowed() &&
-                Boolean(info.ok && (info.state?.sandboxMode || info.state?.sandboxTainted));
-              const canLoadSlot = Boolean(info.ok && !isLockedSandboxSlot);
-              return `
-                <div class="aaa-slot-card">
-                  <div style="font-size:12px;font-weight:800;">Hồ Sơ #${idx + 1}</div>
-                  <div style="font-size:11px;color:var(--ink-soft);">${
-                    isLockedSandboxSlot
-                      ? 'Ô lưu thử nghiệm (Đã khóa)'
-                      : info.ok && info.meta
-                        ? `${escapeHtml(info.meta.parkName)} • Cấp ${info.meta.level}`
-                        : 'Ô trống'
-                  }</div>
-                  <div style="display:flex;gap:5px;">
-                    <button type="button" data-save-slot="${sid}" class="brass-btn" style="flex:1;padding:3px 6px;font-size:11px;">💾 Ghi</button>
-                    <button type="button" data-load-slot="${sid}" ${canLoadSlot ? '' : 'disabled'} class="brass-btn ${canLoadSlot ? 'gold-cta' : ''}" style="flex:1;padding:3px 6px;font-size:11px;">📂 Tải</button>
-                  </div>
-                </div>
-              `;
-            })
-            .join('')}
-        </div>
-      </div>
-
-      <div class="quest-card-mini" style="margin-bottom:14px;">
-        <div style="font-size:13.5px;font-weight:800;margin-bottom:6px;">🔮 Tiện Ích</div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px;">
-          <button id="btnReplayTutorial" type="button" class="brass-btn gold-cta">
-            📖 Hướng Dẫn
-          </button>
-          ${
-            IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed()
-              ? `<button id="btnPreview100" type="button" class="brass-btn gold-cta">
-                  ${hud.sim.isHeadmasterPreview ? '↩️ Về Save' : '🌾 Xem Lv.100'}
-                </button>
-                <button id="btnTestFireworks" type="button" class="brass-btn">
-                  🎆 Pháo Hoa
-                </button>
-                <button id="btnTestEscape" type="button" class="brass-btn">
-                  🐾 Thả Niffler
-                </button>`
-              : ''
-          }
         </div>
       </div>
 
       <div class="quest-card-mini">
-        <div style="font-size:13.5px;font-weight:800;margin-bottom:6px;">💾 Dữ Liệu</div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px;">
-          ${
-            IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed()
-              ? `<button id="btnExportSave" type="button" class="brass-btn">📥 Xuất (.json)</button>
-                <label class="brass-btn" style="cursor:pointer;">
-                  📤 Nhập (.json)
-                  <input id="inpImportSave" type="file" accept=".json" style="display:none;" />
-                </label>`
-              : ''
-          }
-          <button id="btnResetPark" type="button" class="brass-btn" style="border-color:var(--aaa-danger-border);color:var(--aaa-danger-ink);">
-            🌱 Chơi Lại
+        <h3 class="hs-section-title">Hiển thị &amp; Trợ năng</h3>
+        ${segRowHtml('Kiểu vẽ', 'toon', [['on', 'Viền nâu'], ['off', '2.5D']], toonOn ? 'on' : 'off')}
+        ${segRowHtml('Đồ hoạ', 'renderer-mode', [['webgl2', 'WebGL2'], ['canvas', 'Cổ điển']], st.settings.rendererMode ?? 'webgl2')}
+        ${segRowHtml('Giáng Sinh', 'yule-theme-mode', [['auto', 'Tự động'], ['on', 'Luôn bật'], ['off', 'Tắt']], st.settings.yuleThemeMode ?? 'auto')}
+        ${segRowHtml('Chế độ màu', 'cb-mode', [['none', 'Mặc định'], ['protanopia', 'Đỏ-Lục'], ['deuteranopia', 'Lục-Đỏ'], ['tritanopia', 'Xanh-Vàng']], a11y.colorblindMode, 2, 4)}
+        ${segRowHtml('Cỡ chữ', 'font-scale', [['100', '100%'], ['125', '125%'], ['150', '150%']], String(a11y.fontScale))}
+        <label class="switch-row">
+          <span>Tương phản cao</span>
+          <input id="swHighContrast" type="checkbox" switch ${a11y.highContrast ? 'checked' : ''} />
+        </label>
+      </div>
+
+      <div class="quest-card-mini">
+        <h3 class="hs-section-title">Bầu trời &amp; Nhịp độ</h3>
+        ${segRowHtml('Giờ', 'time', [['realtime', 'Tự động'], ['dawn', 'Bình minh'], ['day', 'Ngày'], ['dusk', 'Chiều'], ['night', 'Đêm']], st.settings.timeOverride, 3)}
+        ${segRowHtml('Lễ hội', 'fest', [['auto', 'Tự động'], ['halloween', 'Halloween'], ['christmas', 'Giáng Sinh'], ['quidditch_cup', 'Quidditch']], st.settings.activeFestival, 2)}
+        ${segRowHtml('Thời tiết', 'weather', [['auto', 'Tự động'], ['clear', 'Nắng'], ['cloudy', 'Mây'], ['rain', 'Mưa'], ['storm', 'Giông'], ['snow', 'Tuyết'], ['fog', 'Sương']], st.settings.weatherOverride, 4, 7)}
+      </div>
+
+      <div class="quest-card-mini">
+        <h3 class="hs-section-title">Điền trang &amp; Cẩm nang</h3>
+        <div class="aaa-slot-grid" style="margin-bottom:8px;">
+          ${(['layout_1', 'layout_2', 'layout_3'] as LayoutPresetId[])
+            .map((pid, idx) => {
+              const saved = st.layoutPresets?.[pid];
+              const title = saved ? escapeHtml(saved.label) : `Bản vẽ #${idx + 1}`;
+              return `
+                <div class="aaa-slot-card">
+                  <div style="font-size:12px;font-weight:700;">${title}</div>
+                  <div style="font-size:11px;color:var(--ink-soft);">${
+                    saved ? `${saved.placements.length} công trình` : 'Trống'
+                  }</div>
+                  <div style="display:flex;gap:5px;">
+                    <button type="button" data-save-layout="${pid}" class="brass-btn" style="flex:1;padding:4px 6px;font-size:12px;">Lưu</button>
+                    <button type="button" data-load-layout="${pid}" ${saved ? '' : 'disabled'} class="brass-btn ${saved ? 'gold-cta' : ''}" style="flex:1;padding:4px 6px;font-size:12px;">Dùng</button>
+                  </div>
+                </div>
+              `;
+            })
+            .join('')}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+          <button id="btnStashDecor" type="button" class="brass-btn" style="font-size:12px;">Cất trang trí</button>
+          <button id="btnRestoreDecor" type="button" class="brass-btn ${stashedCount > 0 ? 'gold-cta' : ''}" ${stashedCount > 0 ? '' : 'disabled'} style="font-size:12px;">
+            Bày lại (${stashedCount})
+          </button>
+          <button id="btnReplayTutorial" type="button" class="brass-btn gold-cta" style="font-size:12px;">
+            Hướng dẫn
+          </button>
+          <button id="btnResetPark" type="button" class="brass-btn" style="font-size:12px;border-color:var(--aaa-danger-border);color:var(--aaa-danger-ink);">
+            Chơi lại
           </button>
         </div>
+        <div style="font-size:12px;color:var(--ink-soft);">Đã tự lưu trên HPVN.</div>
+        ${
+          isDev
+            ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
+                <label class="switch-row" style="width:100%;">
+                  <span>Sandbox (Dev)</span>
+                  <input id="swSandbox" type="checkbox" switch ${st.sandboxMode ? 'checked' : ''} />
+                </label>
+                <button id="btnPreview100" type="button" class="brass-btn" style="font-size:12px;">${hud.sim.isHeadmasterPreview ? 'Về Save' : 'Xem Lv.100'}</button>
+                <button id="btnTestFireworks" type="button" class="brass-btn" style="font-size:12px;">Pháo hoa</button>
+                <button id="btnTestEscape" type="button" class="brass-btn" style="font-size:12px;">Thả Niffler</button>
+              </div>`
+            : ''
+        }
       </div>
     `;
 
@@ -1491,65 +1306,7 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
     box.querySelector('#swBgm')?.addEventListener('change', (e) => {
       st.settings.bgmEnabled = (e.currentTarget as HTMLInputElement).checked;
       hud.sim.audio.bgmEnabled = st.settings.bgmEnabled;
-      hud.syncYouTubeBgm();
       hud.sim.saveToStorage();
-    });
-
-    box.querySelector('#swYoutubeBgm')?.addEventListener('change', (e) => {
-      const enabled = (e.currentTarget as HTMLInputElement).checked;
-      const inp = box.querySelector('#inpYoutubeBgmUrl') as HTMLInputElement | null;
-      const rawUrl = (inp?.value ?? st.settings.youtubeBgmUrl ?? DEFAULT_YOUTUBE_BGM_URL).trim();
-      if (enabled && !parseYouTubeBgmSource(rawUrl)) {
-        (e.currentTarget as HTMLInputElement).checked = false;
-        hud.showToast('Link YouTube chưa hợp lệ — hãy dán link watch?v=..., youtu.be/... hoặc live/... nhé!', '⚠️');
-        return;
-      }
-      st.settings.youtubeBgmEnabled = enabled;
-      st.settings.youtubeBgmUrl = rawUrl || DEFAULT_YOUTUBE_BGM_URL;
-      if (enabled && !st.settings.bgmEnabled) {
-        st.settings.bgmEnabled = true;
-        hud.sim.audio.bgmEnabled = true;
-        const swBgmEl = box.querySelector('#swBgm') as HTMLInputElement | null;
-        if (swBgmEl) swBgmEl.checked = true;
-      }
-      hud.syncYouTubeBgm();
-      hud.sim.saveToStorage();
-      questsUiRenderSettingsDialog(hud);
-    });
-
-    box.querySelectorAll<HTMLButtonElement>('[data-yt-preset]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const url = btn.dataset.ytPreset || DEFAULT_YOUTUBE_BGM_URL;
-        st.settings.youtubeBgmUrl = url;
-        st.settings.youtubeBgmEnabled = true;
-        if (!st.settings.bgmEnabled) {
-          st.settings.bgmEnabled = true;
-          hud.sim.audio.bgmEnabled = true;
-        }
-        hud.syncYouTubeBgm();
-        hud.sim.saveToStorage();
-        hud.showToast('🎶 Đã chuyển sang phát trực tiếp nhạc nền YouTube!', '🎵');
-        questsUiRenderSettingsDialog(hud);
-      });
-    });
-
-    box.querySelector('#btnApplyYoutubeBgm')?.addEventListener('click', () => {
-      const inp = box.querySelector('#inpYoutubeBgmUrl') as HTMLInputElement | null;
-      const rawUrl = (inp?.value ?? '').trim();
-      if (!parseYouTubeBgmSource(rawUrl)) {
-        hud.showToast('Link YouTube chưa hợp lệ — hãy dán link watch?v=..., youtu.be/... hoặc playlist!', '⚠️');
-        return;
-      }
-      st.settings.youtubeBgmUrl = rawUrl;
-      st.settings.youtubeBgmEnabled = true;
-      if (!st.settings.bgmEnabled) {
-        st.settings.bgmEnabled = true;
-        hud.sim.audio.bgmEnabled = true;
-      }
-      hud.syncYouTubeBgm();
-      hud.sim.saveToStorage();
-      hud.showToast('🎶 Đang phát trực tiếp link nhạc YouTube đã chọn!', '🎵');
-      questsUiRenderSettingsDialog(hud);
     });
 
     box.querySelector('#swSfx')?.addEventListener('change', (e) => {
@@ -1565,85 +1322,35 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
 
     box.querySelector('#swGrid')?.addEventListener('change', (e) => {
       st.settings.showGrid = (e.currentTarget as HTMLInputElement).checked;
+      hud.sim.saveToStorage(); // HPVN: kept in the save
       hud.refreshAll();
     });
 
-    if (IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed()) {
-      box.querySelector('#swSandbox')?.addEventListener('change', (e) => {
-        if (!isSandboxRuntimeAllowed()) return;
-        st.sandboxMode = (e.currentTarget as HTMLInputElement).checked;
-        if (st.sandboxMode) {
-          st.sandboxTainted = true;
-        }
-        hud.sim.saveToStorage();
-        hud.refreshAll();
-      });
-
-      box.querySelectorAll<HTMLButtonElement>('[data-fest]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          if (!isSandboxRuntimeAllowed()) return;
-          st.settings.activeFestival = btn.dataset.fest as 'auto' | FestivalType;
-          hud.sim.saveToStorage();
-          hud.refreshHeader();
-          questsUiRenderSettingsDialog(hud);
-        });
-      });
-
-      box.querySelector('#btnTestFireworks')?.addEventListener('click', () => {
-        if (!isSandboxRuntimeAllowed()) return;
-        (hud.root.querySelector('#settingsDialog') as HTMLDialogElement).close();
-        hud.sim.launchFireworksShow(12);
-      });
-
-      box.querySelector('#btnTestEscape')?.addEventListener('click', () => {
-        if (!isSandboxRuntimeAllowed()) return;
-        (hud.root.querySelector('#settingsDialog') as HTMLDialogElement).close();
-        hud.sim.triggerPlayfulEscape();
-      });
-
-      box.querySelector('#btnPreview100')?.addEventListener('click', () => {
-        if (!isSandboxRuntimeAllowed()) return;
-        hud.match3Modal?.resetSession();
-        hud.puzzleArcadeModal?.resetSession();
-        hud.sim.toggleHeadmasterPreview(100);
-        hud.refreshAll();
-        questsUiRenderSettingsDialog(hud);
-      });
-
-      box.querySelector('#btnExportSave')?.addEventListener('click', () => {
-        if (!isSandboxRuntimeAllowed()) return;
-        const blob = new Blob([hud.sim.exportSaveJson()], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `cong-vien-harry-potter-lv${st.level}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-        hud.showToast('Đã xuất file Save thành công!', '💾');
-      });
-
-      box.querySelector('#inpImportSave')?.addEventListener('change', (e) => {
-        if (!isSandboxRuntimeAllowed()) return;
-        const file = (e.target as HTMLInputElement).files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-          if (hud.sim.importSaveJson(String(reader.result))) {
-            hud.match3Modal?.resetSession();
-            hud.puzzleArcadeModal?.resetSession();
-            hud.showToast('Đã khôi phục công viên thành công!', '✨');
-            (hud.root.querySelector('#settingsDialog') as HTMLDialogElement).close();
-          } else {
-            hud.showToast('File Save không hợp lệ!', '⚠️');
-          }
-        };
-        reader.readAsText(file);
-      });
-    }
+    box.querySelector('#swSandbox')?.addEventListener('change', (e) => {
+      const devAllowed =
+        Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV) ||
+        (typeof window !== 'undefined' && Boolean(import.meta.env.DEV));
+      if (!devAllowed) return;
+      st.sandboxMode = (e.currentTarget as HTMLInputElement).checked;
+      if (st.sandboxMode) {
+        st.sandboxTainted = true;
+      }
+      hud.sim.saveToStorage();
+      hud.refreshAll();
+    });
 
     box.querySelectorAll<HTMLButtonElement>('[data-time]').forEach((btn) => {
       btn.addEventListener('click', () => {
         st.settings.timeOverride = btn.dataset.time as TimeOverride;
+        hud.sim.saveToStorage();
+        hud.refreshHeader();
+        questsUiRenderSettingsDialog(hud);
+      });
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-fest]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        st.settings.activeFestival = btn.dataset.fest as 'auto' | FestivalType;
         hud.sim.saveToStorage();
         hud.refreshHeader();
         questsUiRenderSettingsDialog(hud);
@@ -1663,6 +1370,8 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
       btn.addEventListener('click', () => {
         const on = btn.dataset.toon === 'on';
         hud.sprites?.setToonEnabled(on);
+        hud.sim.state.settings.toonEnabled = on; // HPVN: kept in the save
+        hud.sim.saveToStorage();
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('hangsoc:toon-changed'));
         }
@@ -1708,6 +1417,14 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
       hud.sim.restartTutorial();
       hud.panCameraToTutorialTarget();
       hud.refreshAll();
+    });
+
+    box.querySelector('#btnPreview100')?.addEventListener('click', () => {
+      hud.match3Modal?.resetSession();
+      hud.puzzleArcadeModal?.resetSession();
+      hud.sim.toggleHeadmasterPreview(100);
+      hud.refreshAll();
+      questsUiRenderSettingsDialog(hud);
     });
 
     box.querySelector('#btnResetPark')?.addEventListener('click', () => {

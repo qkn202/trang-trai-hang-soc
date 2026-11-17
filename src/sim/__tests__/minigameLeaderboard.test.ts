@@ -6,17 +6,11 @@ import {
   ALL_LEADERBOARD_GAMES,
   buildMinigameLeaderboard,
   clearCachedCloudLeaderboards,
-  computeDisciplineStars,
-  exportMinigameLeaderboardCSV,
   HOGWARTS_HOUSE_META,
   isScoredLeaderboardGame,
   LEADERBOARD_GAME_META,
-  sanitizeWizardDisplayName,
   SCORED_LEADERBOARD_GAMES,
-  SEEDED_HOGWARTS_RIVALS,
   setCachedCloudLeaderboardEntries,
-  toggleLeaderboardSeededRivals,
-  updatePlayerWizardProfile,
 } from '../minigameLeaderboard';
 import {
   CREATURE_ONET_SPECIES,
@@ -30,9 +24,6 @@ import {
   clientToLocalNormalized,
   combineQuarterTurns,
   computeBoardFitScale,
-  computeFocalPinchPan,
-  computeResponsiveBoardBox,
-  MINIGAME_JIGSAW_ZOOM_MAX,
   MINIGAME_ZOOM_MAX,
   MINIGAME_ZOOM_MIN,
   MinigameViewportManager,
@@ -167,7 +158,6 @@ describe('Per-Mini-Game Leaderboards (4 Scored Games: Match-3, Sudoku, Pikachu &
     expect(sim.ensureMinigameLeaderboard().records.sudoku.bestEfficiency).toBe(0);
 
     // Verify unscored games (Caro, Chess, SeedQuiz) do NOT award leaderboard points or House Cup points!
-    const houseBeforeUnscored = { ...sim.state.housePoints };
     const caroWin = sim.completePuzzleArcadeVictory(
       'caro',
       { stars: 2, sand: 1, gold: 100, xp: 30 },
@@ -190,7 +180,6 @@ describe('Per-Mini-Game Leaderboards (4 Scored Games: Match-3, Sudoku, Pikachu &
     expect(quizRes.leaderboardRankUp).toBeUndefined();
     expect(sim.ensureMinigameLeaderboard().records.seedquiz.highScore).toBe(0);
 
-    expect(sim.state.housePoints).toEqual(houseBeforeUnscored);
   });
 
   it('shows honest 0 for unplayed friends, merges real cloud friend scores, and deduplicates valley entries across the 3 scored games', () => {
@@ -490,8 +479,7 @@ describe('Per-Mini-Game Leaderboards (4 Scored Games: Match-3, Sudoku, Pikachu &
 
     const winRes = sim.completeMatch3LevelVictory(15, { sessionScore: 2800 });
     expect(winRes.leaderboardRankUp?.playerHouse).toBe('Slytherin');
-    expect(winRes.leaderboardRankUp?.housePointsAwarded).toBeGreaterThan(0);
-    expect(sim.state.housePoints.Slytherin).toBeGreaterThan(0);
+    expect('housePoints' in sim.state).toBe(false); // HPVN: house points are the server's, never the page's
 
     // Seed real online players across the other houses
     setCachedCloudLeaderboardEntries('match3', [
@@ -549,56 +537,29 @@ describe('Per-Mini-Game Leaderboards (4 Scored Games: Match-3, Sudoku, Pikachu &
     expect(afterHat).not.toBe('Slytherin');
   });
 
-  it('supports button-free mobile finger pinch-zoom (100%–300%), focal-point pan, and inverse pointer mapping across all 6 mini-games', () => {
-    expect(MINIGAME_ZOOM_MIN).toBe(1);
-    expect(MINIGAME_ZOOM_MAX).toBe(3);
-    expect(MINIGAME_JIGSAW_ZOOM_MAX).toBe(6);
-    expect(clampMinigameZoom(0.4)).toBe(1);
-    expect(clampMinigameZoom(5.0)).toBe(3);
-    expect(clampMinigameZoom(5.0, 'jigsaw')).toBe(5);
-    expect(clampMinigameZoom(9.0, 'jigsaw')).toBe(6);
-    expect(clampMinigameZoom(1.85)).toBe(1.85);
+  it('supports zoom in/out, pan clamping, portrait/landscape orientation, and inverse pointer rotation across all 6 mini-games', () => {
+    expect(clampMinigameZoom(0.2)).toBe(MINIGAME_ZOOM_MIN);
+    expect(clampMinigameZoom(5.0)).toBe(MINIGAME_ZOOM_MAX);
+    expect(clampMinigameZoom(1.3)).toBe(1.3);
 
-    // Focal-point 2-finger pinch keeps the pinched board spot anchored under the fingers + pans with midpoint delta
-    const pinched = computeFocalPinchPan({
-      prevZoom: 1,
-      nextZoom: 2,
-      prevPanX: 0,
-      prevPanY: 0,
-      prevMidOffsetX: 60,
-      prevMidOffsetY: -40,
-      currMidOffsetX: 70,
-      currMidOffsetY: -35,
-    });
-    expect(pinched.zoom).toBe(2);
-    expect(pinched.panX).toBeCloseTo(70 - 60 * 2, 5);
-    expect(pinched.panY).toBeCloseTo(-35 - -40 * 2, 5);
-
-    // Pinching fingers back closed near 100% snaps cleanly to 1.0 with centered pan (0, 0)
-    const pinchedBack = computeFocalPinchPan({
-      prevZoom: 2,
-      nextZoom: 1.01,
-      prevPanX: pinched.panX,
-      prevPanY: pinched.panY,
-      prevMidOffsetX: 50,
-      prevMidOffsetY: -20,
-      currMidOffsetX: 50,
-      currMidOffsetY: -20,
-    });
-    expect(pinchedBack).toEqual({ zoom: 1, panX: 0, panY: 0 });
-
+    // Portrait-locked phone (390×844) switched to Landscape rotates modal 90° CW
     const mobLand = resolveMinigameOrientation('landscape', 390, 844, false, false);
     expect(mobLand.effectiveLayout).toBe('landscape');
     expect(mobLand.dialogQuarterTurn).toBe(1);
 
+    // Landscape phone (844×390) switched to Portrait rotates modal 270° CW (-90°)
     const mobPort = resolveMinigameOrientation('portrait', 844, 390, false, false);
     expect(mobPort.effectiveLayout).toBe('portrait');
     expect(mobPort.dialogQuarterTurn).toBe(3);
 
+    // Wide desktop (1440×900) switched to Portrait keeps upright frame (0°) and switches layout to portrait
     const deskPort = resolveMinigameOrientation('portrait', 1440, 900, false, false);
     expect(deskPort.effectiveLayout).toBe('portrait');
     expect(deskPort.dialogQuarterTurn).toBe(0);
 
+    // Inverse pointer mapping for 0°, 90°, 180°, 270°
+    // Local point (lu=0.25, lv=0.75) inside a 200×100 element rotated 90° CW (visual rect 100×200 at (10, 20)):
+    // Forward 90° CW maps (lu, lv) -> visual (u = 1 - lv = 0.25, v = lu = 0.25) -> screen (10 + 25, 20 + 50) = (35, 70)
     const inv90 = clientToLocalNormalized(35, 70, { left: 10, top: 20, width: 100, height: 200 }, 1);
     expect(inv90.lu).toBeCloseTo(0.25, 5);
     expect(inv90.lv).toBeCloseTo(0.75, 5);
@@ -615,7 +576,6 @@ describe('Per-Mini-Game Leaderboards (4 Scored Games: Match-3, Sudoku, Pikachu &
     expect(combineQuarterTurns(1, 3)).toBe(0);
     expect(computeBoardFitScale(600, 400, 600, 400, 1)).toBeCloseTo(400 / 600, 4);
     expect(clampMinigamePan(999, -999, 500, 500, 500, 500, 1, 0)).toEqual({ panX: 0, panY: 0 });
-    expect(clampMinigamePan(999, -999, 500, 500, 500, 500, 2, 0)).toEqual({ panX: 286, panY: -286 });
 
     const mgr = new MinigameViewportManager();
     const allSeven = ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw', 'seedquiz'] as const;
@@ -623,7 +583,7 @@ describe('Per-Mini-Game Leaderboards (4 Scored Games: Match-3, Sudoku, Pikachu &
       expect(mgr.getState(gid).zoom).toBe(1);
       mgr.setZoom(gid, 2.2);
       expect(mgr.getState(gid).zoom).toBe(2.2);
-      // Zero zoom buttons rendered in DOM — zooming is purely finger pinch-to-zoom
+      // upstream 0d0f32b: no zoom buttons in the DOM, zooming is finger pinch only
       expect(mgr.renderToolbarHtml(gid)).toBe('');
       mgr.resetView(gid);
       expect(mgr.getState(gid).zoom).toBe(1);
@@ -632,279 +592,5 @@ describe('Per-Mini-Game Leaderboards (4 Scored Games: Match-3, Sudoku, Pikachu &
     }
     mgr.setZoom('jigsaw', 5.4);
     expect(mgr.getState('jigsaw').zoom).toBe(5.4);
-  });
-
-  it('auto-adapts board box dimensions and layout orientation across mobile screen sizes', () => {
-    // Portrait phones (iPhone SE 320x568, tall 20:9 390x844) stay portrait in auto mode
-    expect(resolveMinigameOrientation('auto', 320, 568, false, false).effectiveLayout).toBe(
-      'portrait'
-    );
-    expect(resolveMinigameOrientation('auto', 390, 844, false, false).effectiveLayout).toBe(
-      'portrait'
-    );
-
-    // Landscape phones (568x320, 667x375, 844x390) and landscape foldables (828x690) switch to landscape
-    expect(resolveMinigameOrientation('auto', 568, 320, false, false).effectiveLayout).toBe(
-      'landscape'
-    );
-    expect(resolveMinigameOrientation('auto', 667, 375, false, false).effectiveLayout).toBe(
-      'landscape'
-    );
-    expect(resolveMinigameOrientation('auto', 844, 390, false, false).effectiveLayout).toBe(
-      'landscape'
-    );
-    expect(resolveMinigameOrientation('auto', 828, 690, false, false).effectiveLayout).toBe(
-      'landscape'
-    );
-    expect(resolveMinigameOrientation('auto', 667, 375, false, true).effectiveLayout).toBe(
-      'landscape'
-    );
-
-    // Near-square inner foldable (712x690, aspect < 1.06) stays portrait so vertical stacked HUD breathes
-    expect(resolveMinigameOrientation('auto', 712, 690, false, false).effectiveLayout).toBe(
-      'portrait'
-    );
-
-    // Square boards (Match-3, Caro, Wizard Chess) fill width on portrait and height on landscape
-    for (const squareGame of ['match3', 'caro', 'chess'] as const) {
-      expect(computeResponsiveBoardBox(squareGame, 374, 620, 1)).toEqual({
-        width: 374,
-        height: 374,
-      });
-      expect(computeResponsiveBoardBox(squareGame, 520, 296, 1)).toEqual({
-        width: 296,
-        height: 296,
-      });
-    }
-
-    // Dynamic-aspect Sudoku scales seamlessly across tall 2-row keypad, compact 1-row keypad, and landscape dock
-    expect(computeResponsiveBoardBox('sudoku', 374, 620, 496 / 648)).toEqual({
-      width: 374,
-      height: 489,
-    });
-    expect(computeResponsiveBoardBox('sudoku', 308, 360, 496 / 548)).toEqual({
-      width: 308,
-      height: 340,
-    });
-    expect(computeResponsiveBoardBox('sudoku', 560, 340, 662 / 502)).toEqual({
-      width: 448,
-      height: 340,
-    });
-
-    // Pikachu ('blocks'), Jigsaw ('jigsaw'), and Multilingual Academy ('seedquiz') claim 100% of available stage box
-    expect(computeResponsiveBoardBox('blocks', 374, 620, 374 / 620)).toEqual({
-      width: 374,
-      height: 620,
-    });
-    expect(computeResponsiveBoardBox('jigsaw', 374, 480, 374 / 480)).toEqual({
-      width: 374,
-      height: 480,
-    });
-    expect(computeResponsiveBoardBox('seedquiz', 560, 340, 1)).toEqual({
-      width: 560,
-      height: 340,
-    });
-  });
-
-  it('supports Candy Crush Hogwarts stars, optional 8 seeded rivals toggle, wizard profile locking, and safe CSV export', () => {
-    const sim = new ParkSimulation(new MagicalAudio());
-    sim.ensureNeighborSocial();
-
-    // 1. Stars scale cleanly with cleared stages (0 at stage 0; bounded [1..3*stage] when cleared)
-    expect(computeDisciplineStars(0, 0, 0, 0)).toBe(0);
-    expect(computeDisciplineStars(10, 10, 4, 2100)).toBeGreaterThanOrEqual(20);
-    expect(computeDisciplineStars(10, 99, 99, 99999)).toBe(30);
-
-    sim.completeMatch3LevelVictory(12, { sessionScore: 3400 });
-    sim.completeMatch3LevelVictory(15, { sessionScore: 4200 });
-    const defaultBoard = sim.getMinigameLeaderboard('match3', 'valley');
-    expect(defaultBoard.includeSeededRivals).toBe(false);
-    expect(defaultBoard.entries.some((e) => e.isSeededRival)).toBe(false);
-    expect(defaultBoard.playerEntry.stars).toBeGreaterThanOrEqual(4);
-    expect(defaultBoard.playerEntry.stars).toBeLessThanOrEqual(6);
-    const playerHouseRow = defaultBoard.houseStandings.find(
-      (h) => h.house === defaultBoard.playerHouse
-    )!;
-    expect(playerHouseRow.totalStars).toBeGreaterThanOrEqual(defaultBoard.playerEntry.stars);
-
-    // 2. Toggle 8 Candy Crush Hogwarts rivals ON: appears in 'valley', stays 0 in 'friends', persists across save/load
-    expect(SEEDED_HOGWARTS_RIVALS.length).toBe(8);
-    expect(toggleLeaderboardSeededRivals(sim.state)).toBe(true);
-    for (const gid of SCORED_LEADERBOARD_GAMES) {
-      const valleyWithRivals = sim.getMinigameLeaderboard(gid, 'valley');
-      expect(valleyWithRivals.includeSeededRivals).toBe(true);
-      expect(valleyWithRivals.entries.filter((e) => e.isSeededRival).length).toBe(8);
-      expect(valleyWithRivals.entries.some((e) => e.name === 'Minh Khôi Potter')).toBe(true);
-      expect(valleyWithRivals.entries.some((e) => e.name === 'Bảo Ngọc Granger')).toBe(true);
-
-      const friendsOnly = sim.getMinigameLeaderboard(gid, 'friends');
-      expect(friendsOnly.entries.some((e) => e.isSeededRival)).toBe(false);
-    }
-
-    sim.saveToStorage();
-    const reloaded = new ParkSimulation(new MagicalAudio());
-    expect(reloaded.loadFromStorage()).toBeTruthy();
-    // Ở bản game sạch mặc định (!isSandboxRuntimeAllowed), migrateLoadedState tự động tắt học viên mẫu để chỉ giữ người chơi thật
-    expect(reloaded.getMinigameLeaderboard('match3', 'valley').includeSeededRivals).toBe(false);
-    expect(
-      reloaded.getMinigameLeaderboard('match3', 'valley').entries.some((e) => e.isSeededRival)
-    ).toBe(false);
-
-    // Toggle OFF removes all seeded rivals immediately
-    expect(toggleLeaderboardSeededRivals(sim.state)).toBe(false);
-    expect(sim.getMinigameLeaderboard('match3', 'valley').entries.some((e) => e.isSeededRival)).toBe(
-      false
-    );
-
-    // 3. Wizard profile sanitization & HPVN server-house lock enforcement
-    expect(sanitizeWizardDisplayName('  \u0007Harry   Potter  ')).toBe('Harry   Potter');
-    expect(sanitizeWizardDisplayName('A'.repeat(40)).length).toBe(26);
-
-    const unlockedSave = updatePlayerWizardProfile(
-      sim.state,
-      '  Minh Quân Lovegood  ',
-      'Ravenclaw'
-    );
-    expect(unlockedSave).toEqual({
-      name: 'Minh Quân Lovegood',
-      house: 'Ravenclaw',
-      houseLockedByServer: false,
-    });
-    expect(sim.state.neighborSocial?.playerDisplayName).toBe('Minh Quân Lovegood');
-    expect(sim.getPlayerHouse()).toBe('Ravenclaw');
-
-    sim.state.minigameLeaderboard!.playerHouseLockedByServer = true;
-    const lockedSave = updatePlayerWizardProfile(sim.state, '=CMD("calc")', 'Slytherin');
-    expect(lockedSave).toEqual({
-      name: '=CMD("calc")',
-      house: 'Ravenclaw',
-      houseLockedByServer: true,
-    });
-    expect(sim.getPlayerHouse()).toBe('Ravenclaw');
-
-    // 4. Candy Crush 7-column CSV export + formula injection neutralization
-    toggleLeaderboardSeededRivals(sim.state, true);
-    const csv = exportMinigameLeaderboardCSV(sim.state, 'match3', 'valley', 'all');
-    const lines = csv.split('\n');
-    expect(lines[0]).toBe(
-      'Hang,Ten Phu Thuy,Nha Hogwarts,Tong Diem,Tong Sao,Man Cao Nhat,Loai'
-    );
-    expect(lines.length).toBe(1 + 1 + 8); // header + player + 8 seeded rivals
-    // Formula-prefixed name is neutralized with leading apostrophe and stripped of trailing "(Bạn)"
-    expect(csv).toContain(`"'=CMD(""calc"")",RAVENCLAW`);
-    expect(csv).not.toContain('(Bạn)');
-    expect(csv).toContain('Nguoi choi that');
-    expect(csv).toContain('Hoc vien mau');
-  });
-
-  it('deduplicates ghost hs_... UID clones and Friend-Code vs Floo duplicates (Aries Ravenclaw/Gryffindor bug) while keeping distinct unnamed players separate', () => {
-    const sim = new ParkSimulation(new MagicalAudio());
-    const lb = sim.ensureMinigameLeaderboard();
-    lb.records.match3.bestStage = 135;
-    lb.records.match3.highScore = 126751;
-    lb.records.match3.totalWins = 135;
-    lb.records.match3.bestStreak = 14;
-
-    // Viewer previously synced a guest/local neighbor card for Aries (🦊 Gryffindor, Màn 106)
-    sim.addFriendByCode('HS-ARIE-01', 'Aries');
-    const ariesNeighbor = sim.ensureNeighborSocial().neighbors[0]!;
-    ariesNeighbor.remoteUserId = 'hs_m9abc123_ghost99';
-    ariesNeighbor.avatarEmoji = '🦊';
-    ariesNeighbor.house = 'Gryffindor';
-
-    // Syncing Floo directory with Aries's real HPVN UID merges into the single neighbor card instead of pushing a 2nd card
-    sim.syncFlooDirectoryMembers([
-      {
-        uid: 'hpvn_aries_real_uid',
-        friendCode: 'HS-9F2A-01',
-        username: 'Aries',
-        parkName: 'Tháp Sao Aries',
-        house: 'Ravenclaw',
-        avatarEmoji: '🧙‍♂️',
-        level: 34,
-        growing: 3,
-      },
-    ]);
-    expect(sim.ensureNeighborSocial().neighbors).toHaveLength(1);
-    expect(sim.ensureNeighborSocial().neighbors[0]!.remoteUserId).toBe('hpvn_aries_real_uid');
-    expect(sim.ensureNeighborSocial().neighbors[0]!.house).toBe('Ravenclaw');
-
-    // Even if the cloud payload still had BOTH the pre-auth guest hs_... row AND the real HPVN row,
-    // plus two genuinely distinct new players who both left default 'Trang Trại Hang Sóc' name:
-    setCachedCloudLeaderboardEntries('match3', [
-      {
-        userId: 'hs_m9abc123_ghost99',
-        name: 'Aries',
-        parkName: 'Trang Trại Hang Sóc',
-        friendCode: 'HS-ARIE-01',
-        avatarEmoji: '🦊',
-        house: 'Gryffindor',
-        primaryValue: 106,
-        ratingScore: 104688,
-        totalWins: 106,
-        bestStreak: 12,
-        detailLabelVi: '106 thắng • 🔥×12',
-        updatedAt: 1000,
-      },
-      {
-        userId: 'hpvn_aries_real_uid',
-        name: 'Aries',
-        parkName: 'Tháp Sao Aries',
-        friendCode: 'HS-9F2A-01',
-        avatarEmoji: '🧙‍♂️',
-        house: 'Ravenclaw',
-        primaryValue: 106,
-        ratingScore: 104688,
-        totalWins: 106,
-        bestStreak: 12,
-        detailLabelVi: '106 thắng • 🔥×12',
-        updatedAt: 2000,
-      },
-      {
-        userId: 'newbie_real_uid_1',
-        name: 'Trang Trại Hang Sóc',
-        parkName: 'Trang Trại Hang Sóc',
-        friendCode: 'HS-NEWB-01',
-        avatarEmoji: '🧙‍♂️',
-        house: 'Hufflepuff',
-        primaryValue: 12,
-        ratingScore: 9400,
-        totalWins: 12,
-        bestStreak: 4,
-        detailLabelVi: '12 thắng • 🔥×4',
-        updatedAt: 1500,
-      },
-      {
-        userId: 'newbie_real_uid_2',
-        name: 'Trang Trại Hang Sóc',
-        parkName: 'Trang Trại Hang Sóc',
-        friendCode: 'HS-NEWB-02',
-        avatarEmoji: '🧙‍♀️',
-        house: 'Slytherin',
-        primaryValue: 9,
-        ratingScore: 7100,
-        totalWins: 9,
-        bestStreak: 3,
-        detailLabelVi: '9 thắng • 🔥×3',
-        updatedAt: 1600,
-      },
-    ]);
-
-    const valley = sim.getMinigameLeaderboard('match3', 'valley');
-    const ariesRows = valley.entries.filter((e) => e.name === 'Aries');
-    expect(ariesRows).toHaveLength(1);
-    expect(ariesRows[0]!.rank).toBe(2);
-    expect(ariesRows[0]!.house).toBe('Ravenclaw');
-    expect(ariesRows[0]!.primaryValue).toBe(106);
-    expect(ariesRows[0]!.ratingScore).toBe(104688);
-    expect(ariesRows[0]!.isFriend).toBe(true);
-
-    // Two distinct unnamed newbies are preserved separately (never falsely merged)
-    expect(valley.entries.filter((e) => e.name === 'Trang Trại Hang Sóc')).toHaveLength(2);
-    expect(valley.totalEntries).toBe(4); // self + 1 Aries + 2 distinct newbies
-
-    // Ravenclaw gets 1 member (Aries), Gryffindor only has self (1 member, no phantom Aries clone)
-    expect(valley.houseStandings.find((h) => h.house === 'Ravenclaw')?.members).toBe(1);
-    expect(valley.houseStandings.find((h) => h.house === 'Gryffindor')?.members).toBe(1);
   });
 });

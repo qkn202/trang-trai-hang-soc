@@ -116,7 +116,7 @@ export const DISTRICT_SYNERGIES: DistrictSynergyDef[] = [
     maxRadius: 15,
     goldBonusPct: 28,
     xpBonusPct: 24,
-    description: 'Đàn gà nâu cục tác vui vầy bên những chú Puffskein lông kem tròn xoe tắm nắng.',
+    description: 'Đàn gà nâu cục tác vui vầy bên những chú quái lùng nhùng lông kem tròn xoe tắm nắng.',
   },
   {
     id: 'combo_bridge_fountain',
@@ -235,7 +235,7 @@ export const CRAFT_RECIPES: CraftRecipeDef[] = [
     inputs: { sweet_pumpkin: 2, magic_cacao: 1 },
     effectSummary:
       'Cấp cho quầy tiệm (+85% doanh thu Tiệm 4 phút & hồi đầy 5/5 ❤️ Tim Bùa Gặt Honeydukes) hoặc đóng kiện Tàu Hàng.',
-    directUseLabel: '🍻 Uống & Cấp Tiệm (+85% Vàng • Đầy ❤️)',
+    directUseLabel: '🍻 Uống & Cấp Tiệm (+85% Sickle • Đầy ❤️)',
   },
   {
     id: 'felix_potion',
@@ -252,7 +252,7 @@ export const CRAFT_RECIPES: CraftRecipeDef[] = [
     emoji: '🎁',
     brewSec: 3600,
     inputs: { magic_cacao: 2, starlight_dust: 1 },
-    effectSummary: 'Bán sỉ lễ hội nhận ngay Vàng Galleon lớn & +65 Sao XP!',
+    effectSummary: 'Bán sỉ lễ hội nhận ngay Sickle lớn & +65 Sao XP!',
     directUseLabel: '🎁 Mở Hộp Quà Hoàng Kim',
   },
   {
@@ -283,7 +283,7 @@ export function createCargoCrates(level: number, trainIndex: number): ExpressCar
       goodId,
       qtyRequired: qty,
       fulfilled: false,
-      rewardGalleons: baseG,
+      rewardSickle: baseG,
       rewardXp: baseXp,
       rewardTimeSand: slot === 2 ? 2 : 1,
     };

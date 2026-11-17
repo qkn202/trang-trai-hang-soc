@@ -57,7 +57,7 @@ const MILESTONE_BOSS_TITLES: Record<number, { guardian: string; title: string; t
   150: {
     guardian: 'Quý Bà Rosmerta & Chúa Ong Vàng',
     title: 'Bão Mật Hoa Thung Lũng Hogsmeade',
-    tag: 'Tổ Sáp Ong Vàng & Khiên Thùng Gỗ 3 Lớp',
+    tag: 'Tổ Sáp Ong Sickle & Khiên Thùng Gỗ 3 Lớp',
   },
   200: {
     guardian: 'Giáo Sư Minerva McGonagall',

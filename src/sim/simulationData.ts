@@ -285,6 +285,7 @@ export const CANON_OWL_SENDERS: Array<{
     senderId: 'hermione',
     senderName: 'Hermione Granger',
     senderTitle: 'Thư Viện Hogsmeade',
+    portraitSprite: 'villager_hermione_idle', // HPVN: 📚 has no sprite (the emoji filter left an empty portrait)
     portraitEmoji: '📚',
     owlName: 'Hedwig',
     notes: [
@@ -312,7 +313,7 @@ export const CANON_OWL_SENDERS: Array<{
     owlName: 'Hedwig',
     notes: [
       'Ta đặc biệt yêu thích một cốc Nước Táo Ép Mật dùng kèm kẹo sô-cô-la dâu mỗi tối đọc sách.',
-      'Những đôi tất len ấm và bánh táo nhà Weasley luôn là phép màu ngọt ngào nhất thế gian!',
+      'Những đôi vớ len ấm và bánh táo nhà Weasley luôn là phép màu ngọt ngào nhất thế gian!',
     ],
   },
   {
@@ -457,7 +458,7 @@ export function createCanonFarmOwlOrder(
     const meta = r.itemId in FARM_GOODS ? FARM_GOODS[r.itemId as FarmGoodId] : FARM_CROPS[r.itemId as FarmCropId];
     return acc + meta.xp * r.qty;
   }, 0);
-  const rewardGalleons = Math.max(1, Math.round(baseValue * 1.55 + Math.round((level * 6) / 5)));
+  const rewardSickle = Math.max(1, Math.round(baseValue * 1.55 + Math.round((level * 6) / 5)));
   const rewardXp = Math.round(baseXp * 1.6 + level * 4);
   const isFeastMarquee = seed % 3 === 2;
 
@@ -471,7 +472,7 @@ export function createCanonFarmOwlOrder(
     owlName: sender.owlName,
     noteVi: sender.notes[seed % sender.notes.length],
     requirements,
-    rewardGalleons: isFeastMarquee ? Math.round(rewardGalleons * 1.25) : rewardGalleons,
+    rewardSickle: isFeastMarquee ? Math.round(rewardSickle * 1.25) : rewardSickle,
     rewardXp: isFeastMarquee ? Math.round(rewardXp * 1.25) : rewardXp,
     rewardMugglePlug: seed % 3 === 0 ? 1 : undefined,
     isFeastMarquee,
@@ -555,7 +556,7 @@ export function createInitialFarmBarnState(): FarmBarnState {
           { itemId: 'ottery_wheat', qty: 2 },
           { itemId: 'farm_egg_wool', qty: 1 },
         ],
-        rewardGalleons: 33,
+        rewardSickle: 33,
         rewardXp: 70,
         rewardMugglePlug: 1,
       },
@@ -572,7 +573,7 @@ export function createInitialFarmBarnState(): FarmBarnState {
           { itemId: 'honey_carrot', qty: 2 },
           { itemId: 'garden_pumpkin', qty: 2 },
         ],
-        rewardGalleons: 30,
+        rewardSickle: 30,
         rewardXp: 65,
       },
       {
@@ -580,6 +581,7 @@ export function createInitialFarmBarnState(): FarmBarnState {
         senderId: 'hermione',
         senderName: 'Hermione Granger',
         senderTitle: 'Thư Viện Hogsmeade',
+        portraitSprite: 'villager_hermione_idle',
         portraitEmoji: '📚',
         owlName: 'Hedwig',
         noteVi: 'Khi nào dựng xong Lò Bánh Bà Molly, bồ nướng gửi mình mẻ Bánh Bí Ngô Kem Mật nha!',
@@ -587,7 +589,7 @@ export function createInitialFarmBarnState(): FarmBarnState {
           { itemId: 'pumpkin_pie', qty: 2 },
           { itemId: 'ottery_wheat', qty: 2 },
         ],
-        rewardGalleons: 44,
+        rewardSickle: 44,
         rewardXp: 90,
       },
       {
@@ -602,7 +604,7 @@ export function createInitialFarmBarnState(): FarmBarnState {
           { itemId: 'cinnamon_apple_pie', qty: 2 },
           { itemId: 'honey_carrot', qty: 2 },
         ],
-        rewardGalleons: 52,
+        rewardSickle: 52,
         rewardXp: 110,
         rewardMugglePlug: 1,
         isFeastMarquee: true,
@@ -652,8 +654,8 @@ export function formatHarvestFeastRewardVi(def: HarvestFeastTierDef): string {
   if (def.rewardTimeSand && def.rewardTimeSand > 0) {
     parts.push(`+${def.rewardTimeSand} ⏳ Cát Xoay`);
   }
-  if (def.rewardGalleons && def.rewardGalleons > 0) {
-    parts.push(`+${def.rewardGalleons.toLocaleString('vi-VN')}G`);
+  if (def.rewardSickle && def.rewardSickle > 0) {
+    parts.push(`+${def.rewardSickle.toLocaleString('vi-VN')} Sickle`);
   }
   if (def.rewardXp && def.rewardXp > 0) {
     parts.push(`+${def.rewardXp} ⭐`);
@@ -723,7 +725,7 @@ export const VALLEY_VILLAGER_PROFILES: readonly ValleyVillagerProfile[] = [
     favoriteItemIds: ['burrow_flower_garden', 'burrow_puffskein_pasture', 'burrow_animal_pasture'],
     greetingsVi: [
       'Những bụi Hoa Hồng Anh và Tulip Cầu Vồng nở rực cả ngọn đồi!',
-      'Bầy Puffskein Lông Vàng cứ lăn tròn đòi ăn dâu tây mãi thôi!',
+      'Bầy quái lùng nhùng Lông Vàng cứ lăn tròn đòi ăn dâu tây mãi thôi!',
     ],
   },
   {
@@ -750,7 +752,7 @@ export const VALLEY_VILLAGER_PROFILES: readonly ValleyVillagerProfile[] = [
     unlockLevel: 3,
     favoriteItemIds: ['burrow_greenhouse_canon', 'burrow_owl_post', 'burrow_cider_apiary'],
     greetingsVi: [
-      'Ôn từ vựng trong Sổ Tay Cổ Ngữ giúp nhận hạt giống 0G và giảm giờ xây nhanh lắm!',
+      'Ôn từ vựng trong Sổ Tay Cổ Ngữ giúp nhận hạt giống 0 Sickle và giảm giờ xây nhanh lắm!',
       'Mình vừa tra cứu xong công thức ủ Mật Ong Hoa Thạch Nam trong thư viện!',
     ],
   },
@@ -853,7 +855,7 @@ export function createInitialGameState(): GameState {
     gx: number,
     gy: number,
     readyBubbles = 0,
-    storedGalleons = 0,
+    storedSickle = 0,
     storedXp = 0,
     indestructible = false
   ): PlacedBuilding => ({
@@ -866,7 +868,7 @@ export function createInitialGameState(): GameState {
     placedAt: now,
     constructEndsAt: now,
     lastTickAt: now,
-    storedGalleons,
+    storedSickle,
     storedXp,
     readyBubbles,
     durability: 100,
@@ -927,13 +929,6 @@ export function createInitialGameState(): GameState {
     dailyQuests: createDailyQuests(1, dateKey),
     lastDailyResetKey: dateKey,
     collectedCards: {},
-    housePoints: {
-      Gryffindor: 0,
-      Slytherin: 0,
-      Ravenclaw: 0,
-      Hufflepuff: 0,
-    },
-    houseCupMilestoneTier: 1,
     supply: createInitialSupplyState(1),
     farmBarn: createInitialFarmBarnState(),
     languageQuiz: createInitialLanguageQuizState(),
@@ -966,7 +961,7 @@ export function createInitialGameState(): GameState {
       constructionSpent: 0,
     },
     stats: {
-      totalGalleonsHarvested: 0,
+      totalSickleHarvested: 0,
       farmHarvestsCount: 0,
       neighborHelpsDone: 0,
       butterbeerServed: 0,
@@ -1000,8 +995,6 @@ export function createInitialGameState(): GameState {
       activeFestival: 'auto',
       yuleThemeMode: 'auto',
       rendererMode: 'webgl2',
-      youtubeBgmEnabled: false,
-      youtubeBgmUrl: 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
     },
     lastSavedAt: now,
   };
@@ -1038,11 +1031,11 @@ export function sanitizeQuestList(raw: unknown, fallback: QuestDef[]): QuestDef[
       giverName: sanitizePlainText(rec.giverName, 64) || 'Cú Đưa Thư',
       giverTitle: sanitizePlainText(rec.giverTitle, 80),
       giverEmoji: sanitizePlainText(rec.giverEmoji, 8) || '🦉',
-      title: sanitizePlainText(rec.title, 120) || 'Nhiệm vụ phép thuật',
+      title: sanitizePlainText(rec.title, 200) || 'Nhiệm vụ phép thuật', // HPVN: 120 cut the closing ")" of the 130-char exam quest title
       dialogue: sanitizePlainText(rec.dialogue, 280),
       targetAmount: Math.round(clampFinite(rec.targetAmount, 1, 9999999, 1)),
       progress: Math.round(clampFinite(rec.progress, 0, 9999999, 0)),
-      rewardGalleons: Math.round(clampFinite(rec.rewardGalleons, 0, 9999999, 50)),
+      rewardSickle: Math.round(clampFinite(rec.rewardSickle, 0, 9999999, 50)),
       rewardXp: Math.round(clampFinite(rec.rewardXp, 0, 9999999, 25)),
       rewardTimeSand: Math.round(clampFinite(rec.rewardTimeSand, 0, 999, 0)),
       completed: Boolean(rec.completed),
@@ -1892,7 +1885,7 @@ export function migrateLoadedState(parsed: GameState): GameState {
       gy,
       rotation: rot,
       stars: Math.round(clampFinite(b.stars, 1, 5, 1)),
-      storedGalleons: Math.round(clampFinite(b.storedGalleons, 0, 9999999, 0)),
+      storedSickle: Math.round(clampFinite(b.storedSickle, 0, 9999999, 0)),
       storedXp: Math.round(clampFinite(b.storedXp, 0, 9999999, 0)),
       readyBubbles: Math.round(clampFinite(b.readyBubbles, 0, 50, 0)),
       durability: clampFinite(b.durability, 0, 100, 100),
@@ -2038,12 +2031,15 @@ export function migrateLoadedState(parsed: GameState): GameState {
                 itemId: r.itemId,
                 qty: Math.max(1, Math.min(99, Math.round(r.qty))),
               })),
-              rewardGalleons: Math.round(clampFinite(o.rewardGalleons, 1, 999999, 25)),
+              rewardSickle: Math.round(clampFinite(o.rewardSickle, 1, 999999, 25)),
               rewardXp: Math.round(clampFinite(o.rewardXp, 0, 999999, 20)),
               portraitSprite:
                 typeof o.portraitSprite === 'string' && !o.portraitSprite.startsWith('guest_')
                   ? o.portraitSprite
-                  : undefined,
+                  : typeof o.portraitSprite === 'string'
+                    ? undefined
+                    : // HPVN: a saved order keeps the sender's portrait added later (Hermione)
+                      CANON_OWL_SENDERS.find((c) => c.senderId === o.senderId)?.portraitSprite,
             };
           })
         : defBarn.owlOrders;
@@ -2154,8 +2150,8 @@ export function migrateLoadedState(parsed: GameState): GameState {
   }
 
   const unveiledSeedSet = new Set<string>(
-    Array.isArray(parsed.unveiledItemIds)
-      ? parsed.unveiledItemIds.filter((id): id is string => typeof id === 'string').slice(0, 200)
+    Array.isArray(parsed.ribbonPaidItems)
+      ? parsed.ribbonPaidItems.filter((id): id is string => typeof id === 'string').slice(0, 200)
       : []
   );
   const finishXpSeedSet = new Set<string>(
@@ -2196,15 +2192,13 @@ export function migrateLoadedState(parsed: GameState): GameState {
     parkEntryFee: 0,
     buildings: safeBuildings,
     unknownBuildings: preservedUnknownBuildings.length > 0 ? preservedUnknownBuildings : undefined,
-    unveiledItemIds: Array.from(unveiledSeedSet),
+    ribbonPaidItems: Array.from(unveiledSeedSet),
     finishXpItemIds: Array.from(finishXpSeedSet),
     storyClaimedIds: claimedList,
     storyQuestIndex: syncedStoryIdx,
     owlQuests: sanitizeQuestList(parsed.owlQuests, def.owlQuests),
     dailyQuests: sanitizeQuestList(parsed.dailyQuests, def.dailyQuests),
     collectedCards: parsed.collectedCards ?? {},
-    housePoints: parsed.housePoints ?? def.housePoints,
-    houseCupMilestoneTier: Math.round(clampFinite(parsed.houseCupMilestoneTier, 1, 9999, 1)),
     farmBarn: safeBarn,
     languageQuiz: sanitizeLanguageQuizState(parsed.languageQuiz),
     tutorial: (() => {
@@ -2212,7 +2206,7 @@ export function migrateLoadedState(parsed: GameState): GameState {
       if (!rawTut || typeof rawTut !== 'object') {
         const isUntouchedStarter =
           safeLevel <= 1 &&
-          (parsed.stats?.totalGalleonsHarvested ?? 0) <= 0 &&
+          (parsed.stats?.totalSickleHarvested ?? 0) <= 0 &&
           (parsed.match3?.totalStarsEarned ?? 0) <= 0;
         return createInitialTutorialState(isUntouchedStarter);
       }
@@ -2545,12 +2539,9 @@ export function migrateLoadedState(parsed: GameState): GameState {
           ? parsed.settings.yuleThemeMode
           : 'auto',
       rendererMode: parsed.settings?.rendererMode === 'canvas' ? 'canvas' : 'webgl2',
-      youtubeBgmEnabled: Boolean(parsed.settings?.youtubeBgmEnabled),
-      youtubeBgmUrl:
-        typeof parsed.settings?.youtubeBgmUrl === 'string' && parsed.settings.youtubeBgmUrl.trim()
-          ? parsed.settings.youtubeBgmUrl.trim().slice(0, 320)
-          : def.settings.youtubeBgmUrl,
-      showGrid: false,
+      // HPVN: the grid choice survives a reload (only the see-through house mode resets)
+      showGrid: typeof parsed.settings?.showGrid === 'boolean' ? parsed.settings.showGrid : false,
+      toonEnabled: typeof parsed.settings?.toonEnabled === 'boolean' ? parsed.settings.toonEnabled : undefined,
       cutawayMode: false,
     },
   };
@@ -2569,7 +2560,7 @@ export function migrateLoadedState(parsed: GameState): GameState {
       (typeof parsed.lastSavedAt === 'number' && parsed.lastSavedAt > 0) ||
         safeLevel > 1 ||
         (parsed.stats?.minigamesWon ?? 0) > 0 ||
-        (parsed.stats?.totalGalleonsHarvested ?? 0) > 0
+        (parsed.stats?.totalSickleHarvested ?? 0) > 0
     )
   );
   return migratedState;

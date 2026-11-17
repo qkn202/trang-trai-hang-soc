@@ -167,7 +167,6 @@ import {
   rollSortingHatHouse,
   setPlayerHogwartsHouse,
   submitPlayerCloudLeaderboardEntry,
-  syncAllPlayerCloudLeaderboards,
 } from './minigameLeaderboard';
 import type { ProofOfPlayEnvelope } from './proofOfPlay';
 import {
@@ -379,7 +378,7 @@ export function trialsAdvanceMasterPuzzleLevel(sim: ParkSimulation,
       sim.state.level += 1;
       sim.state.levelUpTrialCompletedLevel = sim.state.level;
       const info = getLevelInfo(sim.state.level);
-      sim.state.galleons += info.rewardGalleons;
+      sim.state.galleons += info.rewardSickle;
       sim.state.timeSand += info.rewardTimeSand;
       sim.recordQuestProgress('reach_level', undefined, sim.state.level);
       leveledUp = true;
@@ -429,7 +428,7 @@ export function trialsCanStartMatch3Level(sim: ParkSimulation): { ok: boolean; m
     const secs = String(leftSec % 60).padStart(2, '0');
     return {
       ok: false,
-      msg: `Đã hết ❤️ Tim! Tự hồi 1 Tim sau ${mins}:${secs}, hoặc dùng ${REFILL_HEARTS_GOLD_COST}G / Bia Bơ để hồi đầy ngay!`,
+      msg: `Đã hết ❤️ Tim! Tự hồi 1 Tim sau ${mins}:${secs}, hoặc dùng ${REFILL_HEARTS_GOLD_COST} Sickle / Bia Bơ để hồi đầy ngay!`,
     };
 }
 
@@ -463,7 +462,7 @@ export function trialsRefillMatch3Hearts(sim: ParkSimulation): { ok: boolean; ms
     if (!sim.state.sandboxMode && sim.state.galleons < REFILL_HEARTS_GOLD_COST) {
       return {
         ok: false,
-        msg: `Cần ${REFILL_HEARTS_GOLD_COST} Galleon (hoặc 1 Thùng Bia Bơ Ủ Tuyết) để hồi đầy 5 ❤️ Tim!`,
+        msg: `Cần ${REFILL_HEARTS_GOLD_COST} Sickle (hoặc 1 Thùng Bia Bơ Ủ Tuyết) để hồi đầy 5 ❤️ Tim!`,
       };
     }
     if (!sim.state.sandboxMode) {
@@ -484,7 +483,7 @@ export function trialsBuyMatch3ExtraMoves(sim: ParkSimulation, levelOverride?: n
       return {
         ok: false,
         cost,
-        msg: `Cần ${cost} Galleon từ Điền Trang để mua thêm +5 Lượt Đi!`,
+        msg: `Cần ${cost} Sickle từ Điền Trang để mua thêm +5 Lượt Đi!`,
       };
     }
     if (!sim.state.sandboxMode) {
@@ -493,7 +492,7 @@ export function trialsBuyMatch3ExtraMoves(sim: ParkSimulation, levelOverride?: n
     sim.audio.playSpell();
     sim.saveToStorage();
     sim.onUiChange?.();
-    return { ok: true, cost, msg: `🪄 Đã cộng thêm +5 Lượt Đi (-${cost}G) & giữ vững Chuỗi Thắng!` };
+    return { ok: true, cost, msg: `🪄 Đã cộng thêm +5 Lượt Đi (-${cost} Sickle) & giữ vững Chuỗi Thắng!` };
 }
 
 export function trialsSpendOrBuyMatch3Booster(sim: ParkSimulation, boosterId: Match3BoosterId): { ok: boolean; msg: string } {
@@ -513,13 +512,13 @@ export function trialsSpendOrBuyMatch3Booster(sim: ParkSimulation, boosterId: Ma
     if (sim.state.galleons < def.goldCost) {
       return {
         ok: false,
-        msg: `Hết ${def.shortLabel} — Cần ${def.goldCost}G từ Công Viên để mua & dùng ngay!`,
+        msg: `Hết ${def.shortLabel} — Cần ${def.goldCost} Sickle từ Công Viên để mua & dùng ngay!`,
       };
     }
     sim.state.galleons -= def.goldCost;
     sim.saveToStorage();
     sim.onUiChange?.();
-    return { ok: true, msg: `Đã mua & kích hoạt ${def.emoji} ${def.name} (-${def.goldCost}G)!` };
+    return { ok: true, msg: `Đã mua & kích hoạt ${def.emoji} ${def.name} (-${def.goldCost} Sickle)!` };
 }
 
 export function trialsEnsureMinigameLeaderboard(sim: ParkSimulation): MinigameLeaderboardState {
@@ -532,18 +531,17 @@ export function trialsGetPlayerHouse(sim: ParkSimulation): HouseName {
     return getPlayerHogwartsHouse(sim.state);
 }
 
+// HPVN: a member's house is the HPVN house; the farm follows it and refuses any change
+export function trialsLockPlayerHouse(sim: ParkSimulation, house: HouseName): HouseName {
+    trialsEnsureMinigameLeaderboard(sim);
+    sim.lockedHouse = setPlayerHogwartsHouse(sim.state, house);
+    return sim.lockedHouse;
+}
+
 export function trialsSetPlayerHouse(sim: ParkSimulation, house: HouseName, activeGameId?: LeaderboardGameId): HouseName {
-    const lb = trialsEnsureMinigameLeaderboard(sim);
-    if (lb.playerHouseLockedByServer && lb.playerHouse) {
-      const lockedMeta = HOGWARTS_HOUSE_META[lb.playerHouse];
-      sim.audio.playClick();
-      sim.onToast?.(
-        `🏰 Nhà Hogwarts của bạn được đồng bộ chính thức theo tài khoản HPVN: ${lockedMeta.mascotEmoji} ${lb.playerHouse}!`,
-        lockedMeta.mascotEmoji
-      );
-      return lb.playerHouse;
-    }
-    const chosen = setPlayerHogwartsHouse(sim.state, house, { explicit: true });
+    if (sim.lockedHouse) return sim.lockedHouse;
+    trialsEnsureMinigameLeaderboard(sim);
+    const chosen = setPlayerHogwartsHouse(sim.state, house);
     const meta = HOGWARTS_HOUSE_META[chosen];
     sim.audio.playSpell();
     sim.onToast?.(
@@ -554,23 +552,13 @@ export function trialsSetPlayerHouse(sim: ParkSimulation, house: HouseName, acti
     sim.onUiChange?.();
     if (activeGameId && isScoredLeaderboardGame(activeGameId)) {
       void submitPlayerCloudLeaderboardEntry(sim.state, activeGameId);
-    } else {
-      void syncAllPlayerCloudLeaderboards(sim.state);
     }
     return chosen;
 }
 
 export function trialsRollPlayerSortingHat(sim: ParkSimulation, activeGameId?: LeaderboardGameId): HouseName {
-    const lb = trialsEnsureMinigameLeaderboard(sim);
-    if (lb.playerHouseLockedByServer && lb.playerHouse) {
-      const lockedMeta = HOGWARTS_HOUSE_META[lb.playerHouse];
-      sim.audio.playClick();
-      sim.onToast?.(
-        `🎩 Chiếc Nón Phân Loại mỉm cười: Hồ sơ HPVN của bạn đã thuộc về ${lockedMeta.mascotEmoji} ${lb.playerHouse}!`,
-        '🎩'
-      );
-      return lb.playerHouse;
-    }
+    if (sim.lockedHouse) return sim.lockedHouse;
+    trialsEnsureMinigameLeaderboard(sim);
     const chosen = rollSortingHatHouse(sim.state);
     const meta = HOGWARTS_HOUSE_META[chosen];
     sim.audio.playLevelUp();
@@ -582,8 +570,6 @@ export function trialsRollPlayerSortingHat(sim: ParkSimulation, activeGameId?: L
     sim.onUiChange?.();
     if (activeGameId && isScoredLeaderboardGame(activeGameId)) {
       void submitPlayerCloudLeaderboardEntry(sim.state, activeGameId);
-    } else {
-      void syncAllPlayerCloudLeaderboards(sim.state);
     }
     return chosen;
 }
@@ -754,12 +740,7 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
       streak: m3.winStreak,
       previousRankOverride: prevLbRank,
     });
-    void submitPlayerCloudLeaderboardEntry(
-      sim.state,
-      'match3',
-      '/api/leaderboard',
-      sessionMetrics?.proofOfPlay
-    );
+    void submitPlayerCloudLeaderboardEntry(sim.state, 'match3');
 
     sim.audio.playLevelUp();
     if (starsEarned > 0) sim.onRewardFly?.('stars', starsEarned);
@@ -792,13 +773,13 @@ export function trialsSpendPuzzleHelperGold(sim: ParkSimulation, goldCost: numbe
     if (sim.state.galleons < cost) {
       return {
         ok: false,
-        msg: `Cần ${cost}G từ Trang Trại (Đơn Hàng Cú & Thu Hoạch) để dùng thêm trợ giúp!`,
+        msg: `Cần ${cost} Sickle từ Trang Trại (Đơn Hàng Cú & Thu Hoạch) để dùng thêm trợ giúp!`,
       };
     }
     sim.state.galleons -= cost;
     sim.saveToStorage();
     sim.onUiChange?.();
-    return { ok: true, msg: `Đã dùng ${cost}G kích hoạt trợ giúp phép thuật!` };
+    return { ok: true, msg: `Đã dùng ${cost} Sickle kích hoạt trợ giúp phép thuật!` };
 }
 
 export const PHOENIX_TALISMAN_DISCIPLINES: readonly MinigameTrialKind[] = [
@@ -999,7 +980,7 @@ export function trialsCraftPhoenixTalismanFromBarn(sim: ParkSimulation): { ok: b
     if (cur >= MAX_PHOENIX_TALISMANS) {
       return {
         ok: false,
-        msg: `Túi Bùa Phượng Hoàng đã đầy tối đa (${MAX_PHOENIX_TALISMANS}/${MAX_PHOENIX_TALISMANS} 🔥)!`,
+        msg: `Túi Bùa Phượng Hoàng đã đầy tối đa (${MAX_PHOENIX_TALISMANS}/${MAX_PHOENIX_TALISMANS} Bùa)!`,
       };
     }
     const gid = trialsGetCraftablePhoenixBarnGood(sim);
@@ -1013,7 +994,7 @@ export function trialsCraftPhoenixTalismanFromBarn(sim: ParkSimulation): { ok: b
       if (sim.state.galleons < PHOENIX_FORGE_GOLD_COST) {
         return {
           ok: false,
-          msg: `Cần ${PHOENIX_FORGE_GOLD_COST}G + 1 thành phẩm Xưởng để rèn 1 🔥 Bùa Phượng Hoàng!`,
+          msg: `Cần ${PHOENIX_FORGE_GOLD_COST} Sickle + 1 thành phẩm Xưởng để rèn 1 🔥 Bùa Phượng Hoàng!`,
         };
       }
       sim.consumeFarmItemFromBarn(gid, 1);
@@ -1026,7 +1007,7 @@ export function trialsCraftPhoenixTalismanFromBarn(sim: ParkSimulation): { ok: b
     sim.addXp(18);
     sim.audio.playLevelUp();
     const msg = usedMeta
-      ? `🔥 Đã rèn +1 Bùa Trợ Chiến Phượng Hoàng từ 1 ${usedMeta.emoji} ${usedMeta.name} & ${PHOENIX_FORGE_GOLD_COST}G (Đang có: ${trialsGetPhoenixTalismanCount(sim)}/${MAX_PHOENIX_TALISMANS})!`
+      ? `🔥 Đã rèn +1 Bùa Trợ Chiến Phượng Hoàng từ 1 ${usedMeta.emoji} ${usedMeta.name} & ${PHOENIX_FORGE_GOLD_COST} Sickle (Đang có: ${trialsGetPhoenixTalismanCount(sim)}/${MAX_PHOENIX_TALISMANS})!`
       : `🔥 Đã rèn +1 Bùa Trợ Chiến Phượng Hoàng (Đang có: ${trialsGetPhoenixTalismanCount(sim)}/${MAX_PHOENIX_TALISMANS})!`;
     sim.onToast?.(msg, '🔥');
     sim.saveToStorage();
@@ -1194,12 +1175,7 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
         streak: m3.winStreak,
         previousRankOverride: prevLbRank,
       });
-      void submitPlayerCloudLeaderboardEntry(
-        sim.state,
-        mode,
-        '/api/leaderboard',
-        sessionMetrics?.proofOfPlay
-      );
+      void submitPlayerCloudLeaderboardEntry(sim.state, mode);
     }
 
     sim.audio.playLevelUp();

@@ -643,7 +643,7 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
 
       const hasFloatingBubble =
         now >= b.constructEndsAt &&
-        (b.storedGalleons > 0 ||
+        (b.storedSickle > 0 ||
           Boolean(b.readyFarmGoods && b.readyFarmGoods.length > 0) ||
           Boolean(item.isFarmlandPlot && b.cropId && b.cropReadyAt && now >= b.cropReadyAt) ||
           Boolean(

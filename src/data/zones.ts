@@ -50,8 +50,8 @@ export const ZONES: ZoneDef[] = [
   },
   {
     id: 'ho_den',
-    name: 'Đồng Cỏ Gà Nâu, Puffskein & Niffler',
-    subtitle: 'Rào gỗ chăn đàn gà mái nâu béo, Puffskein bông xù và Niffler ôm đồng xu vàng',
+    name: 'Đồng Cỏ Gà Nâu, Quái Lùng Nhùng & Niffler',
+    subtitle: 'Rào gỗ chăn đàn gà mái nâu béo, Quái Lùng Nhùng bông xù và Niffler ôm đồng xu vàng',
     x1: 26,
     y1: 42,
     x2: 51,

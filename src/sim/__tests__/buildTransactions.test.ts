@@ -102,7 +102,7 @@ describe('Build Mode Transactions (P0.3)', () => {
     sim.commitBuildStroke();
     const uid = sim.state.buildings.at(-1)!.uid;
     sim.beginBuildStroke();
-    expect(sim.removeAtTile(12, 16, true)).toBe(true);
+    expect(sim.removeAtTile(12, 16)).toBe(true);
     sim.commitBuildStroke();
     expect(sim.state.buildings.some((b) => b.uid === uid)).toBe(false);
     expect(sim.undoBuild()).toBe(true);

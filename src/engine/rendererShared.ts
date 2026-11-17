@@ -151,7 +151,7 @@ export function isTouchOrIOSDevice(): boolean {
 export const MAX_WEATHER_PARTICLES = 400;
 
 export function computeWeatherParticleBudget(
-  dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1,
+  dpr = typeof window !== 'undefined' ? Math.min(2.5, window.devicePixelRatio || 1) : 1,
   canvasWidth = 1200
 ): number {
   let budget = MAX_WEATHER_PARTICLES;
@@ -324,7 +324,7 @@ export function resolveBuildingInWorldTimerInfo(
   }
 
   const hasReadyOutput =
-    b.storedGalleons > 0 || Boolean(b.readyFarmGoods && b.readyFarmGoods.length > 0);
+    b.storedSickle > 0 || Boolean(b.readyFarmGoods && b.readyFarmGoods.length > 0);
   const maxCap = item.maxStorageCycles + (b.stars - 1) * 3;
   if (hasReadyOutput && (!isSelected || b.readyBubbles >= maxCap)) {
     return null;

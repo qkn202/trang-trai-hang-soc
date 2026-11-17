@@ -115,6 +115,7 @@ import {
   ZoneId,
 } from '../types/game';
 import { LeaderboardModalController } from './leaderboardModal';
+import { compactSickle } from '../hpvn/toolIcons';
 import {
   lookupRealPlayerByFriendCode,
   registerRealPlayerProfileOnline,
@@ -167,10 +168,14 @@ export function headerTogglePhotoMode(hud: GameHUD, force?: boolean): void {
     hud.root
       .querySelector('#visitorDockBar')
       ?.classList.toggle('hidden', hud.photoModeActive || !isVisiting);
+    hud.root
+      .querySelector('#inspectorPanel')
+      ?.classList.toggle('hidden', hud.photoModeActive || !hud.inspectSelection);
     (hud.root.querySelector('#minimapWrap') as HTMLElement).classList.toggle(
       'hidden',
       hud.photoModeActive || !hud.minimapHudVisible
     );
+    hud.root.querySelector('#btnToggleMinimapHud')?.setAttribute('aria-pressed', String(hud.minimapHudVisible)); // HPVN: gold when on
     (hud.root.querySelector('#photoModeBar') as HTMLElement).classList.toggle('hidden', !hud.photoModeActive);
     headerRefreshFloatingBanner(hud);
     headerRefreshTouchConfirmBar(hud);
@@ -181,7 +186,7 @@ export function headerTogglePhotoMode(hud: GameHUD, force?: boolean): void {
 export function headerIsBuildingFocusMode(hud: GameHUD): boolean {
     if (hud.photoModeActive) return false;
     return (
-      (Boolean(hud.inspectSelection) && !hud.inspectorCollapsed) ||
+      Boolean(hud.inspectSelection) ||
       (hud.seedTrayOpen && Boolean(hud.pendingSowPlotUid)) ||
       (hud.pastureTrayOpen && Boolean(hud.pendingStockPastureUid))
     );
@@ -246,8 +251,9 @@ export function headerSyncHudFocusVisibility(hud: GameHUD): void {
     ) as HTMLButtonElement | null;
     if (btnManageRoll) {
       btnManageRoll.textContent = hud.hudRolledUp
-        ? '📜 Mở HUD'
-        : '📜 Ẩn HUD';
+        ? 'Mở HUD'
+        : 'Ẩn HUD';
+      btnManageRoll.setAttribute('aria-pressed', String(hud.hudRolledUp)); // HPVN: a toggle that is on is gold in the ☰ menu
     }
     const roundOrb = hud.root.querySelector('#btnHudRoundOrb') as HTMLButtonElement | null;
     if (roundOrb) {
@@ -257,7 +263,7 @@ export function headerSyncHudFocusVisibility(hud: GameHUD): void {
     }
     const orbLbl = hud.root.querySelector('#lblHudRoundOrbTag');
     if (orbLbl) {
-      orbLbl.textContent = hud.hudRolledUp ? 'Mở HUD' : 'Thu HUD';
+      orbLbl.textContent = 'Hiện HUD';
     }
     const orbChevron = hud.root.querySelector('#svgRoundOrbChevron') as SVGPathElement | null;
     if (orbChevron) {
@@ -334,11 +340,17 @@ export function headerHideOpenFloatingTrays(hud: GameHUD): void {
 export function headerPositionFloatingPopover(hud: GameHUD, triggerEl: HTMLElement | null, popoverEl: HTMLElement | null): void {
     if (!triggerEl || !popoverEl) return;
     const rect = triggerEl.getBoundingClientRect();
-    const popW = Math.min(window.innerWidth - 16, Math.max(248, popoverEl.offsetWidth || 336));
-    const popH = Math.min(popoverEl.offsetHeight || 420, window.innerHeight - 16);
+    const cs = getComputedStyle(document.documentElement);
+    const pxVar = (name: string) => parseFloat(cs.getPropertyValue(name)) || 0;
+    const insetTop = Math.max(8, pxVar('--host-inset-top'));
+    const insetRight = Math.max(8, pxVar('--host-inset-right'));
+    const insetLeft = Math.max(8, pxVar('--host-inset-left'));
+    const insetBottom = Math.max(8, pxVar('--host-inset-bottom'), pxVar('--hpvn-safe-bottom'), pxVar('--hpvn-dock'));
+    const popW = Math.min(window.innerWidth - insetLeft - insetRight, Math.max(248, popoverEl.offsetWidth || 336));
+    const popH = Math.min(popoverEl.offsetHeight || 420, window.innerHeight - insetTop - insetBottom);
     const preferredLeft = rect.left < window.innerWidth * 0.5 ? rect.left : rect.right - popW;
-    const left = Math.max(8, Math.min(preferredLeft, window.innerWidth - popW - 8));
-    const top = Math.max(8, Math.min(rect.bottom + 8, window.innerHeight - popH - 8));
+    const left = Math.max(insetLeft, Math.min(preferredLeft, window.innerWidth - popW - insetRight));
+    const top = Math.max(insetTop, Math.min(rect.bottom + 8, window.innerHeight - insetBottom - popH));
     popoverEl.style.left = `${Math.round(left)}px`;
     popoverEl.style.top = `${Math.round(top)}px`;
 }
@@ -352,6 +364,11 @@ export function headerToggleManagePopover(hud: GameHUD, force?: boolean): void {
     const next = typeof force === 'boolean' ? force : !hud.manageMenuOpen;
     headerCloseHudPopovers(hud);
     if (!next) return;
+    if (headerHasOpenFloatingTray(hud) || hud.inspectSelection) {
+      headerHideOpenFloatingTrays(hud);
+      hud.inspectSelection = null;
+      hud.refreshAll();
+    }
     hud.manageMenuOpen = true;
     const pop = hud.root.querySelector('#managePopoverMenu') as HTMLElement | null;
     const btn = hud.root.querySelector('#btnToggleManageMenu') as HTMLElement | null;
@@ -448,8 +465,18 @@ export function headerRenderWeatherPopover(hud: GameHUD): void {
     }
 }
 
-export function headerAnimateGalleonsTo(hud: GameHUD, target: number): void {
-    const lbl = hud.root.querySelector('#lblGalleons') as HTMLElement | null;
+// HPVN: on phones a balance from 10.000 reads «12,9k» (compactSickle, toolIcons.ts); the full figure goes to the title and
+// the chip's label once the roll stops, and Gringotts / the barn show it whole
+function setSickleText(lbl: HTMLElement, n: number, final = true): void {
+    const full = n.toLocaleString('vi-VN');
+    lbl.textContent = window.matchMedia('(max-width: 599px)').matches ? compactSickle(n) : full;
+    if (!final) return;
+    lbl.title = `${full} Sickle`;
+    lbl.closest('button')?.setAttribute('aria-label', `${full} Sickle — Chạm để chơi kiếm thêm Sickle`);
+}
+
+export function headerAnimateSickleTo(hud: GameHUD, target: number): void {
+    const lbl = hud.root.querySelector('#lblSickle') as HTMLElement | null;
     if (!lbl) return;
     if (hud.sim.state.sandboxMode) {
       if (hud.galleonRollRaf) {
@@ -457,14 +484,14 @@ export function headerAnimateGalleonsTo(hud: GameHUD, target: number): void {
         hud.galleonRollRaf = 0;
       }
       lbl.textContent = '∞';
-      hud.displayedGalleons = target;
+      hud.displayedSickle = target;
       return;
     }
 
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (hud.displayedGalleons < 0 || reducedMotion || Math.abs(target - hud.displayedGalleons) <= 1) {
-      hud.displayedGalleons = target;
-      lbl.textContent = Math.round(target).toLocaleString('vi-VN');
+    if (hud.displayedSickle < 0 || reducedMotion || Math.abs(target - hud.displayedSickle) <= 1) {
+      hud.displayedSickle = target;
+      setSickleText(lbl, Math.round(target));
       return;
     }
 
@@ -473,19 +500,19 @@ export function headerAnimateGalleonsTo(hud: GameHUD, target: number): void {
       hud.galleonRollRaf = 0;
     }
 
-    const startVal = hud.displayedGalleons;
+    const startVal = hud.displayedSickle;
     const startAt = performance.now();
     const duration = 420;
     const step = (now: number) => {
       const t = Math.min(1, (now - startAt) / duration);
       const eased = 1 - Math.pow(1 - t, 3);
       const cur = Math.round(startVal + (target - startVal) * eased);
-      hud.displayedGalleons = cur;
-      lbl.textContent = cur.toLocaleString('vi-VN');
+      hud.displayedSickle = cur;
+      setSickleText(lbl, cur, t >= 1);
       if (t < 1) {
         hud.galleonRollRaf = requestAnimationFrame(step);
       } else {
-        hud.displayedGalleons = target;
+        hud.displayedSickle = target;
         hud.galleonRollRaf = 0;
       }
     };
@@ -596,24 +623,45 @@ export function headerSpawnFlyReward(hud: GameHUD,
     }
 }
 
-export function formatToastMessage(msg: string, icon = '🦉'): string {
+// HPVN: a toast is one plain line — the leading emoji (and the icon argument) is dropped here, for every caller
+export function formatToastMessage(msg: string, _icon = ''): string {
   const trimmed = msg.trim();
-  if (!trimmed) return icon.trim();
-  const cleanIcon = icon.trim();
-  if (!cleanIcon) return trimmed;
-  const stripVs = (s: string) => s.replace(/\uFE0F/g, '');
-  const normIcon = stripVs(cleanIcon);
-  let body = trimmed;
-  while (normIcon && stripVs(body).startsWith(`${normIcon} ${normIcon}`)) {
-    body = body.slice(cleanIcon.length).trimStart();
-  }
-  if (normIcon && stripVs(body).startsWith(normIcon)) {
-    return body;
-  }
-  if (cleanIcon === '🦉' && /^\p{Extended_Pictographic}/u.test(body)) {
-    return body;
-  }
-  return `${cleanIcon} ${body}`;
+  return trimmed.replace(/^(?:[\p{Extended_Pictographic}\p{Emoji_Modifier}\uFE0F\u200D]|\s)+/u, '') || trimmed;
+}
+
+// HPVN: one toast at a time; a newer one waits until the shown one has been up ~1.2 s (at most 3 waiting, oldest dropped)
+const TOAST_MIN_MS = 1200;
+const toastQueue: string[] = [];
+let toastShownAt = 0;
+let toastWait = 0;
+let toastShown: HTMLElement | null = null;
+
+export function headerShowToast(hud: GameHUD, msg: string, icon = '🦉'): void {
+    const text = formatToastMessage(msg, icon);
+    if (!text) return;
+    // the same message again: if it is showing now it stays another 3,5 s; if it is last in line, nothing to add
+    if (toastShown?.isConnected && toastShown.dataset.msg === text) return scheduleToastHide(toastShown);
+    if (text === toastQueue[toastQueue.length - 1]) return;
+    if (toastQueue.length >= 3) toastQueue.shift();
+    toastQueue.push(text);
+    pumpToast(hud);
+}
+
+let toastHide = 0;
+function scheduleToastHide(item: HTMLElement, stack?: HTMLElement | null): void {
+    window.clearTimeout(toastHide);
+    toastHide = window.setTimeout(() => {
+      const host = stack ?? item.parentElement;
+      item.remove();
+      const pop = host as (HTMLElement & { hidePopover?: () => void }) | null;
+      if (pop && !pop.childElementCount && typeof pop.hidePopover === 'function') {
+        try {
+          if (pop.matches(':popover-open')) pop.hidePopover();
+        } catch {
+          // Ignore if already closed
+        }
+      }
+    }, 3500);
 }
 
 export function headerSyncToastStackHost(hud: GameHUD): HTMLElement | null {
@@ -649,33 +697,54 @@ export function headerSyncToastStackHost(hud: GameHUD): HTMLElement | null {
     return stack;
 }
 
-export function headerShowToast(hud: GameHUD, msg: string, icon = '🦉'): void {
+function pumpToast(hud: GameHUD): void {
+    if (toastWait) return;
     const stack = headerSyncToastStackHost(hud);
-    if (!stack) return;
-
-    let trimGuard = 0;
-    while ((stack.children?.length ?? 0) >= 2 && stack.firstElementChild && trimGuard < 8) {
-      trimGuard++;
-      stack.firstElementChild.remove();
+    if (!stack) {
+      toastQueue.length = 0; // no stack to show them in: drop, so they do not all burst out later
+      return;
     }
 
+    const wait = stack.childElementCount ? toastShownAt + TOAST_MIN_MS - Date.now() : 0;
+    if (wait > 0) {
+      toastWait = window.setTimeout(() => { toastWait = 0; pumpToast(hud); }, wait);
+      return;
+    }
+    const text = toastQueue.shift();
+    if (!text) return;
     const item = document.createElement('div');
     item.className = 'parchment-dark owl-toast';
-    item.textContent = formatToastMessage(msg, icon);
-    stack.appendChild(item);
-    window.setTimeout(() => item.remove(), 3500);
+    item.dataset.msg = text; // HPVN: its text loses the emoji on screen, so the repeat check reads the message here
+    item.appendChild(document.createElement('span')).textContent = text; // the inner span carries the 2-line clamp
+    stack.replaceChildren(item);
+    const pop = stack as HTMLElement & { showPopover?: () => void; hidePopover?: () => void };
+    if (typeof pop.showPopover === 'function') {
+      try {
+        if (!stack.hasAttribute('popover')) stack.setAttribute('popover', 'manual');
+        if (stack.matches(':popover-open')) pop.hidePopover?.();
+        pop.showPopover();
+      } catch {
+        // Fallback to fixed stack when Popover API is unavailable
+      }
+    }
+    toastShown = item;
+    toastShownAt = Date.now();
+    scheduleToastHide(item, stack);
+    if (toastQueue.length) pumpToast(hud);
 }
 
 export function headerShowOfflineModal(hud: GameHUD, report: OfflineReport): void {
     const mins = Math.max(1, Math.round(report.awaySeconds / 60));
     const content = hud.root.querySelector('#offlineDialogContent')!;
+    // HPVN (đợt 4): bare rows, name left and figure right, then the one decision
     content.innerHTML = `
-      <div class="quest-card-mini" style="font-size:13.5px;display:flex;flex-direction:column;gap:6px;">
-        <div>⏱️ Vắng mặt: <strong>${mins} phút</strong></div>
-        <div>🪙 Vàng: <strong>+${report.galleonsEarned}G</strong></div>
-        <div>⭐ XP: <strong>+${report.xpEarned}</strong></div>
-        <div>🏗️ Hoàn tất: <strong>${report.buildingsFinished}</strong></div>
-      </div>
+      <dl class="hs-rows">
+        <div><dt>Vắng mặt</dt><dd>${mins.toLocaleString('vi-VN')} phút</dd></div>
+        <div><dt>Sickle</dt><dd>+${report.galleonsEarned.toLocaleString('vi-VN')} Sickle</dd></div>
+        <div><dt>XP</dt><dd>+${report.xpEarned.toLocaleString('vi-VN')}</dd></div>
+        <div><dt>Công trình xong</dt><dd>${report.buildingsFinished}</dd></div>
+      </dl>
+      <form method="dialog" class="hs-dlg-actions"><button type="submit" class="brass-btn gold-cta">Nhận</button></form>
     `;
     (hud.root.querySelector('#offlineDialog') as HTMLDialogElement).showModal();
 }
@@ -768,8 +837,8 @@ export function headerRefreshFloatingBanner(hud: GameHUD): void {
         effStars > 0
           ? `🌟 ${effStars}`
           : it.cost === 0
-            ? '0G'
-            : `${it.cost.toLocaleString('vi-VN')}G`;
+            ? '0 Sickle'
+            : `${it.cost.toLocaleString('vi-VN')} Sickle`;
       banner.classList.remove('hidden');
       txt.textContent = `🏗️ ${it.name} • ${costTxt}`;
       if (canAutoPlace && btnAutoPlace) {
@@ -803,7 +872,7 @@ export function headerRefreshFloatingBanner(hud: GameHUD): void {
     if (hud.activePastureAnimalId && !hud.pastureTrayOpen) {
       const a = PASTURE_ANIMALS[hud.activePastureAnimalId];
       banner.classList.remove('hidden');
-      txt.textContent = `🐾 ${a.emoji} ${a.name} (${a.cost.toLocaleString('vi-VN')}G)`;
+      txt.textContent = `🐾 ${a.emoji} ${a.name} (${a.cost.toLocaleString('vi-VN')} Sickle)`;
       btnSec.textContent = '🐾 Đổi';
       btnSec.classList.remove('hidden');
       btnExit.textContent = '✕';
@@ -951,7 +1020,9 @@ export function headerRefreshHeaderClock(hud: GameHUD): void {
     const lblClock = hud.root.querySelector('#lblClock') as HTMLElement | null;
     if (lblClock) {
       const speedBadge = hud.sim.simSpeed === 2 ? ' <span class="speed-mini-tag">2×</span>' : '';
-      lblClock.innerHTML = `${weather.icon} <span>${hh}:${mm}</span>${speedBadge}`;
+      lblClock.innerHTML = `<span>${hh}:${mm}</span>${speedBadge}`; // HPVN: no weather emoji; the weather is named in the label and in its popover
+      lblClock.setAttribute('aria-label', `${hh}:${mm} · ${weather.labelVi}`);
+      lblClock.title = weather.labelVi;
     }
     if (hud.weatherPopoverOpen) {
       headerRenderWeatherPopover(hud);
@@ -1013,7 +1084,8 @@ export function headerRefreshHeaderClock(hud: GameHUD): void {
       } else {
         btnBuilds.classList.remove('hidden');
         const nextLeft = Math.max(1, Math.ceil((actives[0].constructEndsAt - Date.now()) / 1000));
-        lblBuilds.textContent = `${actives.length} (${formatDurationCountdownVi(nextLeft)})`;
+        lblBuilds.textContent = String(actives.length);
+        btnBuilds.title = `Đang xây (${formatDurationCountdownVi(nextLeft)})`;
       }
     }
 }
@@ -1077,7 +1149,7 @@ export function headerRefreshHeader(hud: GameHUD): void {
       lblBarn.textContent = `${barnUsed}/${barn.capacity}`;
     }
 
-    headerAnimateGalleonsTo(hud, st.galleons);
+    headerAnimateSickleTo(hud, st.galleons);
     const starsStr = st.sandboxMode ? '∞' : String(st.match3?.stars ?? 0);
     const lblStars = hud.root.querySelector('#lblPuzzleStars') as HTMLElement | null;
     if (lblStars && st.match3) {
@@ -1101,36 +1173,36 @@ export function headerRefreshHeader(hud: GameHUD): void {
     const m3Info = hud.sim.getDisciplineStageInfo('match3');
     const lastGame = hud.sim.getLastPlayedMinigame();
     let playTag = '🍬 Bùa Gặt';
-    let playIcon = '/sprites/m3_farm_pinwheel.png';
+    let playIcon = '/game/trang-trai-hang-soc/sprites/m3_farm_pinwheel.webp';
     let playStageText = m3Info.isMaxed ? `👑 ${MAX_MINIGAME_STAGE}` : `Màn ${m3Info.currentStage}`;
     if (lastGame === 'caro') {
       const info = hud.sim.getDisciplineStageInfo('caro');
       playTag = '🗺️ Ngũ Ấn';
-      playIcon = '/sprites/ui_icon_jigsaw.png';
+      playIcon = '/game/trang-trai-hang-soc/sprites/ui_icon_jigsaw.webp';
       playStageText = info.isMaxed ? `👑 ${MAX_MINIGAME_STAGE}` : `Màn ${info.currentStage}`;
     } else if (lastGame === 'sudoku') {
       const info = hud.sim.getDisciplineStageInfo('sudoku');
       playTag = '🔢 Số Học';
-      playIcon = '/sprites/m3_piece_scroll.png';
+      playIcon = '/game/trang-trai-hang-soc/sprites/m3_piece_scroll.webp';
       playStageText = info.isMaxed ? `👑 ${MAX_MINIGAME_STAGE}` : `Màn ${info.currentStage}`;
     } else if (lastGame === 'blocks') {
       const info = hud.sim.getDisciplineStageInfo('blocks');
       playTag = '🦄 Sinh Vật';
-      playIcon = '/sprites/beast_niffler.png';
+      playIcon = '/game/trang-trai-hang-soc/sprites/beast_niffler.webp';
       playStageText = info.isMaxed ? `👑 ${MAX_MINIGAME_STAGE}` : `Màn ${info.currentStage}`;
     } else if (lastGame === 'chess') {
       const info = hud.sim.getDisciplineStageInfo('chess');
       playTag = '🏰 Cờ Phù Thủy';
-      playIcon = '/sprites/ui_icon_jigsaw.png';
+      playIcon = '/game/trang-trai-hang-soc/sprites/ui_icon_jigsaw.webp';
       playStageText = info.isMaxed ? `👑 ${MAX_MINIGAME_STAGE}` : `Màn ${info.currentStage}`;
     } else if (lastGame === 'jigsaw') {
       const info = hud.sim.getDisciplineStageInfo('jigsaw');
       playTag = '🧩 Tranh Ghép';
-      playIcon = '/sprites/ui_icon_jigsaw.png';
+      playIcon = '/game/trang-trai-hang-soc/sprites/ui_icon_jigsaw.webp';
       playStageText = info.isMaxed ? `👑 ${MAX_MINIGAME_STAGE}` : `Màn ${info.currentStage}`;
     } else if (lastGame === 'seedquiz') {
       playTag = '🪄 Thần Chú';
-      playIcon = '/sprites/ui_icon_seed_sack.png';
+      playIcon = '/game/trang-trai-hang-soc/sprites/ui_icon_seed_sack.webp';
       playStageText = 'Ôn Tập';
     }
 
@@ -1138,32 +1210,36 @@ export function headerRefreshHeader(hud: GameHUD): void {
     if (imgCornerPlay && imgCornerPlay.getAttribute('src') !== playIcon) {
       imgCornerPlay.setAttribute('src', playIcon);
     }
+    // HPVN: names and stages without emoji; the accessible name joins the three filtered lines
+    const playTagText = formatToastMessage(playTag);
+    const playStageLine = formatToastMessage(playStageText.replace('👑', 'Màn'));
+    // the level itself is on the HUD ring: the card only counts the wins toward the next one («53/54 màn»)
+    const playSubLine = st.level >= MAX_LEVEL
+      ? `Cấp ${MAX_LEVEL}`
+      : `${winsProg.current}/${winsProg.required} màn`;
+    const playSubSpoken = st.level >= MAX_LEVEL
+      ? `Cấp ${MAX_LEVEL}`
+      : `Lên cấp ${st.level + 1}: ${winsProg.current}/${winsProg.required} màn`;
     const badgeCornerBonus = hud.root.querySelector('#badgeCornerPlayBonus') as HTMLElement | null;
     if (badgeCornerBonus) {
-      badgeCornerBonus.textContent = playTag;
+      badgeCornerBonus.textContent = playTagText;
       badgeCornerBonus.classList.remove('hidden');
     }
     const lblCornerStage = hud.root.querySelector('#lblCornerPlayStage') as HTMLElement | null;
-    if (lblCornerStage) {
-      lblCornerStage.textContent = playStageText;
-    }
+    if (lblCornerStage) lblCornerStage.textContent = playStageLine;
     const lblCornerSub = hud.root.querySelector('#lblCornerPlaySub') as HTMLElement | null;
-    if (lblCornerSub) {
-      lblCornerSub.textContent =
-        st.level >= MAX_LEVEL
-          ? `👑 Cấp ${MAX_LEVEL}`
-          : `Cấp ${st.level + 1} (${winsProg.current}/${winsProg.required})`;
-    }
+    if (lblCornerSub) lblCornerSub.textContent = playSubLine;
     const btnCornerPlay = hud.root.querySelector('#btnCornerPlayPuzzle') as HTMLButtonElement | null;
     if (btnCornerPlay) {
-      const playSummary = `Chơi tiếp ${playTag} — ${playStageText}`;
+      const playSummary = `Chơi tiếp ${playTagText} — ${playStageLine} · ${playSubSpoken}`;
       btnCornerPlay.title = playSummary;
       btnCornerPlay.setAttribute('aria-label', playSummary);
     }
     hud.root.querySelectorAll<HTMLButtonElement>('[data-switch-minigame]').forEach((pill) => {
       const isCurrent = pill.dataset.switchMinigame === lastGame;
-      pill.dataset.active = String(isCurrent);
-      pill.setAttribute('aria-pressed', String(isCurrent));
+      pill.dataset.active = String(isCurrent); // HPVN 15/11: the game «Chơi» resumes; not a toggle, and no gold in the ☰ menu
+      if (isCurrent) pill.setAttribute('aria-current', 'true');
+      else pill.removeAttribute('aria-current');
     });
 
     const badgeBuildReady = hud.root.querySelector('#badgeBuildReadyCount') as HTMLElement | null;
@@ -1183,6 +1259,8 @@ export function headerRefreshHeader(hud: GameHUD): void {
       } else {
         badgeBuildReady.classList.add('hidden');
       }
+      // HPVN: the button's name carries the count its badge shows
+      badgeBuildReady.closest('button')?.setAttribute('aria-label', readyUnbuiltBlueprints > 0 && !hud.sim.isHeadmasterPreview ? `Xây Dựng · ${readyUnbuiltBlueprints} bản vẽ đủ sao` : 'Xây Dựng');
     }
     const lblM3Lv = hud.root.querySelector('#lblMatch3Lv') as HTMLElement | null;
     if (lblM3Lv && st.match3) {
@@ -1217,6 +1295,7 @@ export function headerRefreshHeader(hud: GameHUD): void {
     } else {
       badge.classList.add('hidden');
     }
+    badge.closest('button')?.setAttribute('aria-label', totalReady > 0 ? `Đơn Hàng Cú & Nhiệm Vụ · ${totalReady} xong` : shownQuestCount > 0 ? `Đơn Hàng Cú & Nhiệm Vụ · ${shownQuestCount} đơn` : 'Đơn Hàng Cú & Nhiệm Vụ');
 
     // Workshop & Cargo Train ready badge
     const crateReadyCount = st.supply.cargoCrates.filter(
@@ -1232,11 +1311,9 @@ export function headerRefreshHeader(hud: GameHUD): void {
       }
     }
 
-    // House Cup + 52 Achievements + 7-Day Login reward ready badge
-    const totalHousePts = Object.values(st.housePoints).reduce((a, b) => a + b, 0);
-    const cupReady = totalHousePts >= st.houseCupMilestoneTier * 300;
-    const retentionReady = hud.sim.getClaimableRetentionCount();
-    const albumReadyCount = (cupReady ? 1 : 0) + retentionReady.total;
+    // Achievements + 7-Day Login reward ready badge
+    // HPVN: no «cup reward ready» part: the server sends each «Cúp Đợt» reward on its own (src/hpvn/inbox.ts)
+    const albumReadyCount = hud.sim.getClaimableRetentionCount().total;
     const cardBadge = hud.root.querySelector('#badgeCardCount') as HTMLElement | null;
     if (cardBadge) {
       if (albumReadyCount > 0) {
@@ -1329,9 +1406,9 @@ export function headerRefreshQuestTracker(hud: GameHUD): void {
       const dInfo = hud.sim.getDisciplineStageInfo(reqTrial.kind);
       html += `
         <div class="quest-card-mini trial-quest-card">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;font-size:12px;font-weight:800;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;font-size:12px;font-weight:700;">
             <span>🔥 ${reqTrial.icon} ${escapeHtml(reqTrial.shortVi)} (${dInfo.currentStage}/${MAX_MINIGAME_STAGE}) • ${wp.current}/${wp.required}</span>
-            <button type="button" data-open-trial="${reqTrial.kind}" class="brass-btn gold-cta" style="padding:3px 8px;font-size:11.5px;">
+            <button type="button" data-open-trial="${reqTrial.kind}" class="brass-btn gold-cta" style="padding:3px 8px;font-size:12px;">
               ▶️ Chơi
             </button>
           </div>
@@ -1343,14 +1420,14 @@ export function headerRefreshQuestTracker(hud: GameHUD): void {
       const autoAct = hud.sim.getStoryAutoActionPreview();
       html += `
         <div class="quest-card-mini" style="border-color:var(--brand-color);background:var(--quest-accent-bg);">
-          <div style="font-size:12px;font-weight:800;color:var(--ink);">${escapeHtml(story.giverEmoji)} ${escapeHtml(story.title)}</div>
+          <div style="font-size:12px;font-weight:700;color:var(--ink);">${escapeHtml(story.giverEmoji)} ${escapeHtml(story.title)}</div>
           <div class="quest-bar"><div class="quest-bar-fill" style="width:${pct}%"></div></div>
           <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;flex-wrap:wrap;font-size:12px;font-weight:700;">
             <span>${Math.min(story.progress, story.targetAmount)}/${story.targetAmount}</span>
             ${
               story.completed
-                ? `<button type="button" data-claim="${escapeHtml(story.id)}" class="brass-btn gold-cta" style="padding:3px 8px;font-size:12px;">🎁 +${story.rewardGalleons}G</button>`
-                : `<button type="button" data-star-story="1" class="brass-btn gold-cta" style="padding:3px 8px;font-size:11.5px;" title="${escapeHtml(autoAct.longLabel)}">${escapeHtml(autoAct.shortLabel)}</button>`
+                ? `<button type="button" data-claim="${escapeHtml(story.id)}" class="brass-btn gold-cta" style="padding:3px 8px;font-size:12px;">🎁 +${story.rewardSickle} Sickle</button>`
+                : `<button type="button" data-star-story="1" class="brass-btn gold-cta" style="padding:3px 8px;font-size:12px;" title="${escapeHtml(autoAct.longLabel)}">${escapeHtml(autoAct.shortLabel)}</button>`
             }
           </div>
         </div>
@@ -1368,7 +1445,7 @@ export function headerRefreshQuestTracker(hud: GameHUD): void {
             ${
               q.completed
                 ? `<button type="button" data-claim="${escapeHtml(q.id)}" class="brass-btn gold-cta" style="padding:3px 8px;font-size:12px;">🎁 Nhận</button>`
-                : `<span>+${q.rewardGalleons}🪙 +${q.rewardXp}⭐</span>`
+                : `<span>+${q.rewardSickle}🪙 +${q.rewardXp}⭐</span>`
             }
           </div>
         </div>
@@ -1520,14 +1597,14 @@ export function headerRefreshDock(hud: GameHUD): void {
           { id: 'all', label: '✨ Tất cả (105)' },
           {
             id: 'recent',
-            label: recentWinterCount > 0 ? `🕘 Gần đây (${recentWinterCount})` : '🕘 Gần đây',
+            label: recentWinterCount > 0 ? `Gần đây (${recentWinterCount})` : 'Gần đây',
           },
           { id: 'yule_trees', label: '🌲 Cây tuyết' },
           { id: 'yule_flowers', label: '🌺 Hoa đông' },
           { id: 'modular', label: '❄️ Hàng rào' },
           { id: 'landmarks', label: '🏰 Địa danh' },
           { id: 'hogwarts_crests', label: '🦁 4 Nhà' },
-          { id: 'burrow', label: '🧣 Hang Sóc' },
+          { id: 'burrow', label: 'Hang Sóc' },
           { id: 'hogwarts', label: '🕯️ Dạ vũ' },
           { id: 'hogsmeade', label: '🍺 Hogsmeade' },
           { id: 'express', label: '🚂 Cú & Tàu' },
@@ -1558,7 +1635,7 @@ export function headerRefreshDock(hud: GameHUD): void {
           { id: 'all', label: '✨ Tất cả' },
           {
             id: 'recent',
-            label: recentClassicCount > 0 ? `🕘 Gần đây (${recentClassicCount})` : '🕘 Gần đây',
+            label: recentClassicCount > 0 ? `Gần đây (${recentClassicCount})` : 'Gần đây',
           },
         ];
         decorFilterBar.innerHTML = classicChips
@@ -1625,7 +1702,7 @@ export function headerRefreshDock(hud: GameHUD): void {
     if (items.length === 0 && isRecentSubFilter) {
       drawer.innerHTML = `
         <div class="catalog-empty-hint">
-          🕘 Chưa có vật phẩm vừa đặt gần đây — hãy chọn một món trong <strong>✨ Tất cả</strong> nhé!
+          Chưa có vật phẩm vừa đặt gần đây — hãy chọn một món trong <strong>✨ Tất cả</strong> nhé!
         </div>
       `;
       headerSyncBuildDrawerScrollAffordance(hud, drawer);
@@ -1671,10 +1748,10 @@ export function headerRefreshDock(hud: GameHUD): void {
         const basePriceTxt =
           starCost > 0
             ? `🌟 ${starCost}`
-            : `🪙 ${item.cost.toLocaleString('vi-VN')}G`;
+            : `🪙 ${item.cost.toLocaleString('vi-VN')} Sickle`;
         const subInfo =
           stashedQty > 0
-            ? `📦 Kho: ${stashedQty} • 0G`
+            ? `📦 Kho: ${stashedQty} • 0 Sickle`
             : locked
               ? `🔒 Cấp ${item.unlockLevel} • ${basePriceTxt}${buildSuffix}`
               : alreadyBuilt
@@ -1686,8 +1763,8 @@ export function headerRefreshDock(hud: GameHUD): void {
                   : starCost > 0
                     ? `🌟 ${starCost}${buildSuffix}`
                     : shortGold
-                      ? `🪙 ${curGold.toLocaleString('vi-VN')}/${item.cost.toLocaleString('vi-VN')}G${buildSuffix}`
-                      : `🪙 ${item.cost.toLocaleString('vi-VN')}G${buildSuffix}`;
+                      ? `🪙 ${curGold.toLocaleString('vi-VN')}/${item.cost.toLocaleString('vi-VN')} Sickle${buildSuffix}`
+                      : `🪙 ${item.cost.toLocaleString('vi-VN')} Sickle${buildSuffix}`;
 
         const isWinterCard = isChristmasActive && isWinterChristmasBuildItem(item);
 
@@ -1723,10 +1800,10 @@ export function headerRefreshDock(hud: GameHUD): void {
             winsNeeded += getWinsRequiredForNextLevel(l);
           }
           const starUnlockHint =
-            needStars > 0 ? ` hoặc tích đủ ${needStars} 🌟 Sao (hiện ${haveStars}/${needStars} 🌟)` : '';
+            needStars > 0 ? ` hoặc ${needStars} Sao (${haveStars}/${needStars})` : '';
           headerShowToast(
             hud,
-            `🔒 Bản vẽ "${item.name}" mở ở Cấp ${item.unlockLevel}${starUnlockHint} — Cần thêm ${winsNeeded.toLocaleString('vi-VN')} màn Giải Đố ở nút ▶️ góc phải!`,
+            `Mở ở Cấp ${item.unlockLevel}${starUnlockHint} · cần thêm ${winsNeeded.toLocaleString('vi-VN')} màn.`,
             '🔒'
           );
           return;
@@ -1754,7 +1831,7 @@ export function headerRefreshDock(hud: GameHUD): void {
             headerRefreshAll(hud);
             headerShowToast(
               hud,
-              `📍 Đã chọn "${item.name}" đang có trên bản đồ — Bấm "✋ Dời" ở bảng chi tiết để đổi vị trí (hoặc tích đủ ${needStars} 🌟 nếu muốn xây thêm)!`,
+              `Đã chọn "${item.name}" · bấm "✋ Dời" để đổi vị trí.`,
               '✋'
             );
             return;
@@ -1762,7 +1839,7 @@ export function headerRefreshDock(hud: GameHUD): void {
           const missing = needStars - haveStars;
           headerShowToast(
             hud,
-            `🌟 Thiếu ${missing} Sao Phép Thuật (hiện có ${haveStars}/${needStars} 🌟) để dựng "${item.name}" — Bấm nút ▶️ góc phải để kiếm thêm Sao nhé!`,
+            `Thiếu ${missing} Sao (${haveStars}/${needStars}).`,
             '🌟'
           );
           return;
@@ -1776,7 +1853,7 @@ export function headerRefreshDock(hud: GameHUD): void {
           const missingGold = item.cost - hud.sim.state.galleons;
           headerShowToast(
             hud,
-            `🪙 Thiếu ${missingGold.toLocaleString('vi-VN')}G (hiện có ${hud.sim.state.galleons.toLocaleString('vi-VN')}/${item.cost.toLocaleString('vi-VN')}G) để dựng "${item.name}"!`,
+            `🪙 Thiếu ${missingGold.toLocaleString('vi-VN')} Sickle (hiện có ${hud.sim.state.galleons.toLocaleString('vi-VN')}/${item.cost.toLocaleString('vi-VN')} Sickle) để dựng "${item.name}"!`,
             '🪙'
           );
           return;
@@ -1834,7 +1911,7 @@ export function headerRenderStaffDrawer(hud: GameHUD, drawer: HTMLElement): void
         key: 'auror',
         icon: '⚡',
         name: 'Thần Sáng Bảo An',
-        desc: 'Đuổi bắt thú sổng chuồng và thu hồi vàng Galleon về két.',
+        desc: 'Đuổi bắt thú sổng chuồng và thu hồi vàng Sickle về két.',
         baseCost: 320,
       },
       {
@@ -1863,8 +1940,8 @@ export function headerRenderStaffDrawer(hud: GameHUD, drawer: HTMLElement): void
         const cost = r.baseCost * (1 + count);
         return `
           <div class="catalog-card catalog-card-static" style="flex:0 0 156px;">
-            <div style="font-size:22px;">${r.icon} <span style="font-size:12px;font-weight:800;">${count}/${MAX_STAFF_PER_ROLE}</span></div>
-            <div style="font-size:12.5px;font-weight:800;">${r.name}</div>
+            <div style="font-size:18px;">${r.icon} <span style="font-size:12px;font-weight:700;">${count}/${MAX_STAFF_PER_ROLE}</span></div>
+            <div style="font-size:13px;font-weight:700;">${r.name}</div>
             <button
               type="button"
               data-hire="${r.key}"
@@ -1884,7 +1961,7 @@ export function headerRenderStaffDrawer(hud: GameHUD, drawer: HTMLElement): void
         const pZone = hud.sim.state.staffPatrolZones?.[s.id] ?? s.patrolZoneId ?? 'all';
         return `
           <div class="catalog-card catalog-card-static" style="flex:0 0 170px;background:rgba(254,243,199,0.92);">
-            <div style="font-size:12px;font-weight:800;color:#7c2d12;">🧙 ${escapeHtml(s.name)}</div>
+            <div style="font-size:12px;font-weight:700;color:#7c2d12;">🧙 <span class="hs-raw">${escapeHtml(s.name)}</span></div>
             <select data-patrol-staff="${escapeHtml(s.id)}" aria-label="Khu tuần tra" style="width:100%;margin-top:2px;padding:3px 5px;border-radius:6px;border:1px solid #9a5b1e;font-size:12px;background:#fffdf7;color:#3a2615;">
               ${zoneOptions(pZone)}
             </select>
@@ -1965,7 +2042,7 @@ export function headerSyncBuildDrawerScrollAffordance(hud: GameHUD, drawer: HTML
         : String(hud.sim.state.match3?.stars ?? 0);
       const goldTxt = hud.sim.state.sandboxMode
         ? '∞'
-        : `${hud.sim.state.galleons.toLocaleString('vi-VN')}G`;
+        : `${hud.sim.state.galleons.toLocaleString('vi-VN')} Sickle`;
       catLbl.textContent = `${titleVi} (${cards.length}) • 🌟 ${starsTxt} • 🪙 ${goldTxt}`;
     }
     swipeBar.classList.remove('hidden');

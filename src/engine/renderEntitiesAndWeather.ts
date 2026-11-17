@@ -57,6 +57,7 @@ import {
   rotTileToWorldTile,
 } from "./rendererShared";
 import type { IsometricRenderer } from './renderer';
+import { showsAfterStrip } from '../hpvn/emoji';
 
 export function entitiesGetCompletionPop(self: IsometricRenderer, 
     uid: string,
@@ -206,76 +207,41 @@ export function entitiesGetSunShadowVector(self: IsometricRenderer, period: 'daw
     return { dx: 9, dy: 4, alpha: 0.22 };
 }
 
-let topoNodeCap = 0;
-let topoHead = new Int32Array(0);
-let topoTail = new Int32Array(0);
-let topoInDeg = new Int32Array(0);
-let topoReady = new Int32Array(0);
-let topoEmitted = new Uint8Array(0);
-
-let topoEdgeCap = 0;
-let topoNext = new Int32Array(0);
-let topoTo = new Int32Array(0);
-
-function ensureTopoNodeBuffers(n: number): void {
-  if (n <= topoNodeCap) return;
-  topoNodeCap = Math.max(256, n * 2);
-  topoHead = new Int32Array(topoNodeCap);
-  topoTail = new Int32Array(topoNodeCap);
-  topoInDeg = new Int32Array(topoNodeCap);
-  topoReady = new Int32Array(topoNodeCap);
-  topoEmitted = new Uint8Array(topoNodeCap);
-}
-
-function ensureTopoEdgeCapacity(needed: number): void {
-  if (needed <= topoEdgeCap) return;
-  topoEdgeCap = Math.max(1024, topoEdgeCap * 2, needed);
-  const nextBuf = new Int32Array(topoEdgeCap);
-  const toBuf = new Int32Array(topoEdgeCap);
-  nextBuf.set(topoNext);
-  toBuf.set(topoTo);
-  topoNext = nextBuf;
-  topoTo = toBuf;
-}
-
 export function entitiesSortDrawablesTopological(self: IsometricRenderer, items: TopologicalDrawCmd[]): TopologicalDrawCmd[] {
     const n = items.length;
     if (n <= 1) return items;
-
-    ensureTopoNodeBuffers(n);
-    topoHead.fill(-1, 0, n);
-    topoTail.fill(-1, 0, n);
-    topoInDeg.fill(0, 0, n);
-    topoEmitted.fill(0, 0, n);
-
-    let edgeCount = 0;
     const eps = 0.04;
 
-    const addEdge = (u: number, v: number): void => {
-      ensureTopoEdgeCapacity(edgeCount + 1);
-      const e = edgeCount++;
-      topoTo[e] = v;
-      topoNext[e] = -1;
-      if (topoHead[u] === -1) {
-        topoHead[u] = e;
-        topoTail[u] = e;
-      } else {
-        topoNext[topoTail[u]] = e;
-        topoTail[u] = e;
-      }
-      topoInDeg[v]++;
-    };
+    // HPVN: the old loop tested every pair and pushed every edge into per-item arrays, each frame (a big
+    // farm has ~1.4k drawables and ~65k edges). Now: a sweep over items ordered by left iso edge (pairs that
+    // are horizontally disjoint are never visited) into flat typed arrays. Same edges and the same Kahn
+    // walk, so the draw order is identical (src/engine/__tests__/topoSort.test.ts compares it).
+    const isoL = new Float64Array(n);
+    const isoR = new Float64Array(n);
+    for (let k = 0; k < n; k++) {
+      isoL[k] = items[k].rxMin - items[k].ryMax;
+      isoR[k] = items[k].rxMax - items[k].ryMin;
+    }
+    const byLeft = new Int32Array(n);
+    for (let k = 0; k < n; k++) byLeft[k] = k;
+    byLeft.sort((u, v) => isoL[u] - isoL[v]);
 
-    for (let i = 0; i < n; i++) {
-      const a = items[i];
-      const aIsoL = a.rxMin - a.ryMax;
-      const aIsoR = a.rxMax - a.ryMin;
-      for (let j = i + 1; j < n; j++) {
+    let cap = 1024;
+    let src = new Int32Array(cap);
+    let dst = new Int32Array(cap);
+    let m = 0;
+    const inDeg = new Int32Array(n);
+    for (let p = 0; p < n; p++) {
+      const pi = byLeft[p];
+      for (let q = p + 1; q < n; q++) {
+        const pj = byLeft[q];
+        // Skip pair if horizontally disjoint in isometric screen X (every later item starts further right)
+        if (isoL[pj] >= isoR[pi] - eps) break;
+        if (isoR[pj] <= isoL[pi] + eps) continue;
+        const i = pi < pj ? pi : pj;
+        const j = pi < pj ? pj : pi;
+        const a = items[i];
         const b = items[j];
-        const bIsoL = b.rxMin - b.ryMax;
-        const bIsoR = b.rxMax - b.ryMin;
-        // Skip pair if horizontally disjoint in isometric screen X
-        if (aIsoR <= bIsoL + eps || bIsoR <= aIsoL + eps) continue;
 
         const aBehindB =
           (a.rxMax <= b.rxMin + eps && a.ryMin < b.ryMax - eps) ||
@@ -284,71 +250,86 @@ export function entitiesSortDrawablesTopological(self: IsometricRenderer, items:
           (b.rxMax <= a.rxMin + eps && b.ryMin < a.ryMax - eps) ||
           (b.ryMax <= a.ryMin + eps && b.rxMin < a.rxMax - eps);
 
+        let from: number;
+        let to: number;
         if (aBehindB && !bBehindA) {
-          addEdge(i, j);
+          from = i;
+          to = j;
         } else if (bBehindA && !aBehindB) {
-          addEdge(j, i);
+          from = j;
+          to = i;
+        } else continue;
+        if (m === cap) {
+          cap *= 2;
+          const src2 = new Int32Array(cap);
+          const dst2 = new Int32Array(cap);
+          src2.set(src);
+          dst2.set(dst);
+          src = src2;
+          dst = dst2;
         }
+        src[m] = from;
+        dst[m] = to;
+        m++;
+        inDeg[to]++;
       }
     }
 
-    let readyHead = 0;
-    let readyTail = 0;
+    // Group edges by source with targets in index order, as the old pair loop listed them:
+    // counting sort by target, then a stable counting sort by source.
+    const byDst = new Int32Array(m);
+    const slot = new Int32Array(n + 1);
+    for (let k = 0; k < m; k++) slot[dst[k] + 1]++;
+    for (let k = 0; k < n; k++) slot[k + 1] += slot[k];
+    for (let k = 0; k < m; k++) byDst[slot[dst[k]]++] = k;
+    const start = new Int32Array(n + 1);
+    for (let k = 0; k < m; k++) start[src[k] + 1]++;
+    for (let k = 0; k < n; k++) start[k + 1] += start[k];
+    const next = new Int32Array(m);
+    const fill = start.slice(0, n);
+    for (let k = 0; k < m; k++) {
+      const edge = byDst[k];
+      next[fill[src[edge]]++] = dst[edge];
+    }
+
+    const ready: number[] = [];
     for (let i = 0; i < n; i++) {
-      if (topoInDeg[i] === 0) {
-        const d = items[i].depth;
-        let lo = readyHead;
-        let hi = readyTail;
-        while (lo < hi) {
-          const mid = (lo + hi) >> 1;
-          if (items[topoReady[mid]].depth <= d) lo = mid + 1;
-          else hi = mid;
-        }
-        if (lo < readyTail) {
-          topoReady.copyWithin(lo + 1, lo, readyTail);
-        }
-        topoReady[lo] = i;
-        readyTail++;
-      }
+      if (inDeg[i] === 0) ready.push(i);
     }
+    ready.sort((u, v) => items[u].depth - items[v].depth);
 
-    const ordered: TopologicalDrawCmd[] = new Array(n);
-    let outIdx = 0;
+    const ordered: TopologicalDrawCmd[] = [];
+    const emitted = new Uint8Array(n);
 
-    while (readyHead < readyTail) {
-      const cur = topoReady[readyHead++];
-      topoEmitted[cur] = 1;
-      ordered[outIdx++] = items[cur];
-      for (let e = topoHead[cur]; e !== -1; e = topoNext[e]) {
-        const nxt = topoTo[e];
-        topoInDeg[nxt]--;
-        if (topoInDeg[nxt] === 0) {
+    while (ready.length > 0) {
+      const cur = ready.shift()!;
+      emitted[cur] = 1;
+      ordered.push(items[cur]);
+      for (let k = start[cur]; k < start[cur + 1]; k++) {
+        const nxt = next[k];
+        inDeg[nxt]--;
+        if (inDeg[nxt] === 0) {
+          // Binary insert by tie-breaker depth
           const d = items[nxt].depth;
-          let lo = readyHead;
-          let hi = readyTail;
+          let lo = 0;
+          let hi = ready.length;
           while (lo < hi) {
             const mid = (lo + hi) >> 1;
-            if (items[topoReady[mid]].depth <= d) lo = mid + 1;
+            if (items[ready[mid]].depth <= d) lo = mid + 1;
             else hi = mid;
           }
-          if (lo < readyTail) {
-            topoReady.copyWithin(lo + 1, lo, readyTail);
-          }
-          topoReady[lo] = nxt;
-          readyTail++;
+          ready.splice(lo, 0, nxt);
         }
       }
     }
 
-    if (outIdx < n) {
+    if (ordered.length < n) {
       const rest: TopologicalDrawCmd[] = [];
       for (let i = 0; i < n; i++) {
-        if (!topoEmitted[i]) rest.push(items[i]);
+        if (!emitted[i]) rest.push(items[i]);
       }
       rest.sort((a, b) => a.depth - b.depth);
-      for (let i = 0; i < rest.length; i++) {
-        ordered[outIdx++] = rest[i];
-      }
+      for (const r of rest) ordered.push(r);
     }
     return ordered;
 }
@@ -539,7 +520,7 @@ export function entitiesDrawValleyVillager(self: IsometricRenderer,
       radius: Math.max(20, 24 * zoom),
     });
 
-    if (v.bubbleTimer > 0 && zoom >= 0.48) {
+    if (v.bubbleTimer > 0 && zoom >= 0.48 && showsAfterStrip(v.moodBubble)) { // HPVN: no empty bubble once the emoji is gone
       const bob = self.reducedMotion ? 0 : Math.sin(self.tick * 0.09 + v.gx) * 2 * zoom;
       const bx = sx;
       const by = sy - baseH - 12 * zoom + bob;
@@ -812,7 +793,7 @@ export function entitiesDrawWeatherParticles(self: IsometricRenderer,
 
     if (!isSnow && !isGentleWinterSnow && !showFireflies && !showSunPollen) return;
 
-    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    const dpr = typeof window !== 'undefined' ? Math.min(2.5, window.devicePixelRatio || 1) : 1;
     const particleBudget = computeWeatherParticleBudget(dpr, Math.max(viewW, self.canvas.width));
     const rawLimit = Math.min(self.particles.length, particleBudget);
     const particleLimit = isGentleWinterSnow
@@ -1029,7 +1010,8 @@ export function entitiesDrawAndTickOwlPostEvent(self: IsometricRenderer,
     }
 
     // 3. Draw parcel resting on the cobblestone plaza (with clickable hotspot!)
-    if (self.owlParcel && !sim.isHeadmasterPreview) {
+    // HPVN: not while the tutorial points at a plot (the parcel would sit on it and eat the tap)
+    if (self.owlParcel && !sim.isHeadmasterPreview && !(sim.state.tutorial?.active && sim.getTutorialWorldTarget())) {
       const gxInt = Math.max(0, Math.min(GRID_SIZE - 1, Math.floor(self.owlParcel.gx)));
       const gyInt = Math.max(0, Math.min(GRID_SIZE - 1, Math.floor(self.owlParcel.gy)));
       const elev = sim.grid[gyInt]?.[gxInt]?.elevation ?? 0;

@@ -163,7 +163,7 @@ export interface FarmOwlOrder {
   owlName: 'Hedwig' | 'Errol' | 'Pigwidgeon';
   noteVi: string;
   requirements: FarmOrderRequirement[];
-  rewardGalleons: number;
+  rewardSickle: number;
   rewardXp: number;
   rewardMugglePlug?: number;
   isFeastMarquee?: boolean;
@@ -268,7 +268,7 @@ export interface CatalogItem {
   isCoasterTrackPiece?: boolean; // Paintable coaster rail tile
   isZooFence?: boolean; // Paintable Zoo Tycoon sanctuary fence tile
   buildDurationSec: number; // Real-time construction or egg incubation duration
-  baseIncome: number; // Galleons produced per cycle
+  baseIncome: number; // Sickle produced per cycle
   xpPerCollect: number; // XP earned when bubble is harvested
   cycleSec: number; // Seconds to generate a collectible bubble
   maxStorageCycles: number; // Offline storage cap (scales with stars)
@@ -355,7 +355,7 @@ export interface PlacedBuilding {
   placedAt: number;
   constructEndsAt: number; // Date.now() timestamp when ready
   lastTickAt: number;
-  storedGalleons: number;
+  storedSickle: number;
   storedXp: number;
   readyBubbles: number; // Number of cycles ready to harvest
   durability: number; // 0..100 for rides / containment wards
@@ -407,6 +407,8 @@ export interface BuildReductionResult {
   hitMinFloor?: boolean;
   allActiveAtFloor?: boolean;
   activeCount: number;
+  /** HPVN: crops / animals / workshop jobs were shortened too (not only buildings) */
+  ecoReduced?: boolean;
 }
 
 export interface GuestEntity {
@@ -490,7 +492,7 @@ export interface RibbonUnveilCelebration {
   speakerName: string;
   speakerEmoji: string;
   quoteVi: string;
-  bonusGalleons: number;
+  bonusSickle: number;
   bonusXp: number;
   feastPoints: number;
 }
@@ -500,7 +502,7 @@ export interface HarvestFeastTierDef {
   pointsRequired: number;
   titleVi: string;
   icon: string;
-  rewardGalleons?: number;
+  rewardSickle?: number;
   rewardXp?: number;
   rewardTimeSand?: number;
   rewardSeedCropId?: FarmCropId;
@@ -595,7 +597,7 @@ export interface QuestDef {
   targetId?: string;
   targetAmount: number;
   progress: number;
-  rewardGalleons: number;
+  rewardSickle: number;
   rewardXp: number;
   rewardTimeSand: number;
   completed: boolean;
@@ -605,7 +607,7 @@ export interface QuestDef {
 export interface LevelRewardInfo {
   level: number;
   xpRequired: number;
-  rewardGalleons: number;
+  rewardSickle: number;
   rewardTimeSand: number;
   titleUnlock?: string;
   unlockedItemIds: string[];
@@ -636,7 +638,7 @@ export interface ExpressCargoCrate {
   goodId: CraftedGoodId;
   qtyRequired: number;
   fulfilled: boolean;
-  rewardGalleons: number;
+  rewardSickle: number;
   rewardXp: number;
   rewardTimeSand: number;
 }
@@ -980,7 +982,6 @@ export interface LeaderboardRankChange {
   newRank: number;
   rankUpBy: number;
   totalEntries: number;
-  housePointsAwarded?: number;
   playerHouse?: HouseName;
   houseRank?: number;
 }
@@ -1018,7 +1019,7 @@ export interface NeighborOwlHelpCrate {
   senderName: string;
   itemId: FarmItemId;
   qty: number;
-  rewardGalleons: number;
+  rewardSickle: number;
   rewardXp: number;
   rewardTokens: number;
   fulfilledByPlayerToday?: boolean;
@@ -1231,6 +1232,7 @@ export interface NeighborSocialState {
   dailyGardenHelpsCount?: number; // Max 5 garden helps/day across all friends
   dailyHomeLanternsClaimedCount?: number; // Max 5 home lantern helps received/claimed per day
   dailyHonorTourClaimed?: boolean; // 1x/day inspiration gift from touring an Honor Garden
+  flooShareRewardDay?: string; // HPVN: VN day the postcard gift was last paid
   dailyFlooShareClaimed?: boolean; // 1x/day gift from sharing/saving a Valley Postcard to Floo
   lastSeenHelperAt?: number; // Latest helper notification timestamp shown as toast
   neighbors: NeighborProfileState[];
@@ -1283,6 +1285,18 @@ export interface YuleEventState {
 }
 
 export interface GameState {
+  /** HPVN: the mini-game dialog open at the last save (reopened after a reload) */
+  activeMinigameResume?: ActiveMinigameResumeRecord;
+  /** HPVN: the last server inbox entry (helps from other members) this save has applied */
+  hpvnInboxSeq?: number;
+  /** HPVN: the one-time «lương phụ tá» explanation toast was shown */
+  wageToastShown?: boolean;
+  /** HPVN: owl-order rerolls used on the current VN day */
+  owlRerollDaily?: { dayKey: string; count: number };
+  /** HPVN: rewarded correct quiz answers on the current VN day (cap per day) */
+  quizRewardDaily?: { dayKey: string; count: number };
+  /** HPVN: building types (itemId) whose ribbon-cut reward was already paid on this farm */
+  ribbonPaidItems?: string[];
   version: number;
   parkName: string;
   level: number;
@@ -1291,7 +1305,7 @@ export interface GameState {
   timeSand: number; // Cát Xoay Thời Gian (Time-Turner charges)
   sandboxMode: boolean;
   sandboxTainted?: boolean; // Đánh dấu vĩnh viễn hồ sơ từng bật Sandbox (chặn đẩy lên Cloud/BXH)
-  parkEntryFee: number; // 0..50 Galleons gate fee
+  parkEntryFee: number; // 0..50 Sickle gate fee
   unlockedZones: ZoneId[];
   buildings: PlacedBuilding[];
   /** Bảo toàn công trình từ bản mở rộng mới hơn khi mở trên tab/thiết bị cache cũ */
@@ -1304,8 +1318,6 @@ export interface GameState {
   dailyQuests: QuestDef[];
   lastDailyResetKey: string; // YYYY-MM-DD local date
   collectedCards: Record<string, number>; // Chocolate Frog Wizard Cards id -> count
-  housePoints: Record<HouseName, number>; // Hogwarts House Cup points
-  houseCupMilestoneTier: number;
   supply: SupplyChainState;
   farmBarn?: FarmBarnState;
   languageQuiz?: LanguageQuizState;
@@ -1327,9 +1339,8 @@ export interface GameState {
   plotSoilState?: Record<string, PlotSoilStateEntry>; // Persisted by "gx,gy" to prevent bulldoze-plot reset exploit
   morningDewPhials?: number; // 🧪 Bình Sương Mai (-15m targeted timer warp)
   examWinStreak?: number; // Consecutive minigame stage wins (x1 -> x3 timer reduction)
-  stashedDecorInventory?: Record<string, number>; // Quick-stashed decor items ready to re-place for 0G
+  stashedDecorInventory?: Record<string, number>; // Quick-stashed decor items ready to re-place for 0 Sickle
   stashedDecorStars?: Record<string, number[]>; // Preserves 1★–5★ upgrade tiers for stashed decor items
-  unveiledItemIds?: string[]; // Building types that have already claimed their one-time Ribbon Unveil reward
   finishXpItemIds?: string[]; // Building types that have already claimed their one-time construction finish XP
   layoutPresets?: Partial<Record<LayoutPresetId, LayoutPresetEntry>>;
   a11ySettings?: {
@@ -1338,12 +1349,6 @@ export interface GameState {
     highContrast: boolean;
     keyboardFocusVisible?: boolean;
     volumes: { master: number; music: number; sfx: number; ambience: number; voice: number };
-  };
-  weeklyHouseCupServerStandings?: {
-    weekKey: string;
-    totals: Record<HouseName, number>;
-    playerContribution: number;
-    updatedAt: number;
   };
   retention?: RetentionNarrativeState;
   yuleEvent?: YuleEventState;
@@ -1355,7 +1360,7 @@ export interface GameState {
   };
   finance: FinanceLedger;
   stats: {
-    totalGalleonsHarvested: number;
+    totalSickleHarvested: number;
     farmHarvestsCount?: number;
     neighborHelpsDone?: number;
     butterbeerServed: number;
@@ -1381,6 +1386,8 @@ export interface GameState {
   };
   settings: {
     showGrid: boolean;
+    /** HPVN: «Viền nâu» choice, kept across reloads (unset = the default look) */
+    toonEnabled?: boolean;
     cutawayMode?: boolean;
     soundEnabled: boolean;
     bgmEnabled: boolean;
@@ -1417,7 +1424,7 @@ export interface TutorialStepDef {
   hintVi: string;
   ctaLabel: string;
   rewardLabel: string;
-  rewardGalleons: number;
+  rewardSickle: number;
   rewardXp: number;
   rewardStars?: number;
   rewardTimeSand?: number;

@@ -1,24 +1,19 @@
 import {
   FARM_CROPS,
   formatDurationCompactVi,
-  getCatalogItem,
   getFarmItemIconSrc,
 } from '../data/catalog';
 import {
-  getLanguagePoolStats,
   isLanguageQuizPackLoaded,
   loadLanguageQuizPack,
-  QUIZ_FORMAT_LABELS,
   QUIZ_LANGUAGES,
   QUIZ_LEXICON_BANK,
   QuizLexiconEntry,
 } from '../data/languageQuizBank';
 import {
   ActiveQuizChallenge,
-  computeTargetBand,
   formatShortKidMeaningVi,
   generateNextQuizChallenge,
-  getProfileSrsSummary,
   getQuizVisualCardMeta,
   markQuizChallengeSkipped,
   QuizAttemptOutcome,
@@ -64,6 +59,7 @@ export class SeedQuizModalController {
   private targetCropId: FarmCropId = 'ottery_wheat';
   private pendingPlotUid: string | null = null;
   private challenge: ActiveQuizChallenge | null = null;
+  private capNoticeShown = false; // HPVN: daily-cap notice shown once
   private answeredOutcome: (QuizAttemptOutcome & { newSeedCount: number; cropName: string }) | null =
     null;
 
@@ -74,7 +70,6 @@ export class SeedQuizModalController {
   private matchedPairIds = new Set<string>();
   private flashWrongPairKey: string | null = null;
   private pairMistakes = 0;
-  private cropFilter: 'all' | 'flowers' | 'crops' = 'all';
   private activeSubView: 'practice' | 'codex' = 'practice';
   private codexQuery = '';
   private codexBoxFilter: 'all' | 'mastered' | 'learning' | 'unseen' = 'all';
@@ -363,7 +358,13 @@ export class SeedQuizModalController {
     }
 
     const crop = FARM_CROPS[this.targetCropId];
-    if (outcome.correct) {
+    if (outcome.correct && outcome.practice) {
+      // HPVN: past the daily cap the answer is practice only; say so once
+      if (!this.capNoticeShown) {
+        this.capNoticeShown = true;
+        this.onToast('Hôm nay đã nhận đủ 30 câu có thưởng, giờ là luyện tập', '📖');
+      }
+    } else if (outcome.correct) {
       const promoNote = outcome.tierAutoPromoted
         ? ` • Thăng hạng ${QUIZ_LANGUAGES[this.challenge.lang].tierLabels[outcome.tierAutoPromoted]}!`
         : '';
@@ -372,7 +373,9 @@ export class SeedQuizModalController {
         : '';
       const buildNote =
         outcome.buildReduction && outcome.buildReduction.reducedSec > 0
-          ? ` • 🔨 -${formatDurationCompactVi(outcome.buildReduction.reducedSec)} xây ${outcome.buildReduction.targetName ?? 'công trình'}!`
+          ? outcome.buildReduction.ecoReduced
+            ? ` • ⏱️ -${formatDurationCompactVi(outcome.buildReduction.reducedSec)} cho cây đang lớn, thú nuôi & xưởng${outcome.buildReduction.targetName ? `, xây ${outcome.buildReduction.targetName}` : ''}!`
+            : ` • 🔨 -${formatDurationCompactVi(outcome.buildReduction.reducedSec)} xây ${outcome.buildReduction.targetName ?? 'công trình'}!`
           : '';
       const rankNote =
         outcome.leaderboardRankUp && outcome.leaderboardRankUp.rankUpBy > 0
@@ -397,7 +400,7 @@ export class SeedQuizModalController {
   private handleSowEquippedSeed(): void {
     const count = this.sim.getSeedCount(this.targetCropId);
     if (count <= 0) {
-      this.onToast('Túi hạt đang trống — hãy mua bằng Vàng hoặc niệm 1 câu Thần Chú Đa Ngữ bên cạnh nhé!', '🌱');
+      this.onToast('Túi hạt đang trống — hãy mua bằng Sickle hoặc niệm 1 câu Thần Chú Đa Ngữ bên cạnh nhé!', '🌱');
       return;
     }
     const targetPlot = this.pendingPlotUid;
@@ -418,6 +421,7 @@ export class SeedQuizModalController {
     if (dlg && typeof dlg.addEventListener === 'function' && !this.dialogCloseBound) {
       this.dialogCloseBound = true;
       dlg.addEventListener('close', () => {
+        if (dlg.open) return;
         if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
           try {
             window.speechSynthesis.cancel();
@@ -425,7 +429,11 @@ export class SeedQuizModalController {
             // Ignore TTS cancel errors
           }
         }
-        sharedMinigameViewport.clearDialogOrientation(dlg, modalInner);
+        const inner =
+          typeof dlg.querySelector === 'function'
+            ? (dlg.querySelector('.sq-modal-inner') as HTMLElement | null)
+            : null;
+        sharedMinigameViewport.clearDialogOrientation(dlg, inner);
       });
     }
     sharedMinigameViewport.applyDialogOrientation(dlg, modalInner, true);
@@ -440,340 +448,124 @@ export class SeedQuizModalController {
     const profile = quiz.profiles[activeLang];
     const crop = FARM_CROPS[this.targetCropId];
     const seedCount = this.sim.getSeedCount(this.targetCropId);
-    const barnHarvestStock = this.sim.getFarmItemCount(this.targetCropId);
-    const galleons = this.sim.state.galleons;
 
-    const cost1 = crop.seedCost;
-    const cost3 = crop.seedCost * 3;
-    const canBuy1 = galleons >= cost1;
-    const canBuy3 = galleons >= cost3;
-
-    const targetBand = computeTargetBand(profile, this.sim.state.level);
-    const accuracyPct =
-      profile.totalAnswered > 0
-        ? Math.round((profile.totalCorrect / profile.totalAnswered) * 100)
-        : 100;
-    const srsSummary = getProfileSrsSummary(profile);
-    const poolStats = getLanguagePoolStats(activeLang);
-    const talismanCount = Math.max(0, Math.floor(this.sim.state.phoenixTalismans ?? 0));
-    const talismanProg = Math.max(0, Math.floor(this.sim.state.quizTalismanProgress ?? 0)) % 8;
-
-    // Pending plot hint if user clicked an empty plot
-    let plotContextBanner = '';
-    if (this.pendingPlotUid) {
-      const pb = this.sim.state.buildings.find((b) => b.uid === this.pendingPlotUid);
-      if (pb && getCatalogItem(pb.itemId)?.isFarmlandPlot && !pb.cropId) {
-        plotContextBanner = `
-          <div class="sq-plot-target-banner">
-            <span>🌾 <strong>[${pb.gx}, ${pb.gy}]</strong></span>
-            ${
-              seedCount > 0
-                ? `<button id="btnSqBannerSowNow" type="button" class="brass-btn sq-sow-cta">🌱 Gieo (×${seedCount})</button>`
-                : ''
-            }
-          </div>
-        `;
-      }
+    const headerSubBtn = dlg?.querySelector('#btnSqHeaderSubView') as HTMLButtonElement | null;
+    if (headerSubBtn) {
+      headerSubBtn.textContent = this.activeSubView === 'codex' ? 'Luyện tập' : 'Từ điển';
+      headerSubBtn.setAttribute('aria-pressed', String(this.activeSubView === 'codex'));
+      headerSubBtn.onclick = () => {
+        this.sim.audio.playClick();
+        this.activeSubView = this.activeSubView === 'codex' ? 'practice' : 'codex';
+        if (this.activeSubView === 'codex') {
+          const q = this.sim.ensureLanguageQuiz();
+          this.ensureActiveLangPackLoaded(q.activeLang);
+        }
+        this.render();
+      };
     }
 
-    // 1. Crop Strip (all 22 crops & flowers, filterable, unlocked clickable)
+    // 1. Compact Crop Target Select (grouped by Cây trồng / Hoa)
     const allCropList = Object.values(FARM_CROPS).sort(
       (a, b) => a.unlockLevel - b.unlockLevel || a.growSec - b.growSec
     );
-    const flowerTotal = allCropList.filter((c) => c.isFlowerCrop).length;
-    const harvestCropTotal = allCropList.length - flowerTotal;
-    const filteredCrops = allCropList.filter((c) => {
-      if (this.cropFilter === 'flowers') return Boolean(c.isFlowerCrop);
-      if (this.cropFilter === 'crops') return !c.isFlowerCrop;
-      return true;
-    });
-    const cropFilterPillsHtml = (
-      [
-        { id: 'all', label: `🌱 (${allCropList.length})` },
-        { id: 'flowers', label: `🌸 Hoa (${flowerTotal})` },
-        { id: 'crops', label: `🌾 Cây (${harvestCropTotal})` },
-      ] as const
-    )
-      .map(
-        (f) => `
-          <button
-            type="button"
-            class="seed-filter-pill ${this.cropFilter === f.id ? 'active' : ''}"
-            data-sq-crop-filter="${f.id}"
-            aria-pressed="${this.cropFilter === f.id}"
-          >${f.label}</button>
-        `
-      )
-      .join('');
-    const cropPillsHtml = filteredCrops
-      .map((c) => {
-        const locked = !this.sim.state.sandboxMode && this.sim.state.level < c.unlockLevel;
-        const active = c.id === this.targetCropId;
-        const sCount = this.sim.getSeedCount(c.id);
-        const cGrowLabel = formatDurationCompactVi(c.growSec);
-        return `
-          <button
-            type="button"
-            class="sq-crop-pill ${active ? 'active' : ''} ${locked ? 'locked' : ''}"
-            data-sq-crop="${c.id}"
-            aria-pressed="${active}"
-            ${locked ? 'disabled' : ''}
-            title="${locked ? `Lv.${c.unlockLevel} (⏱️ ${cGrowLabel})` : `${c.name} • ⏱️ ${cGrowLabel} • 🪙 ${c.seedCost.toLocaleString('vi-VN')}G`}"
-          >
-            <img src="${getFarmItemIconSrc(c.id)}" alt="" class="sq-crop-pill-img" />
-            <span class="sq-crop-pill-info">
-              <span class="sq-crop-pill-name">${escapeHtml(c.name)}</span>
-              <span class="sq-crop-pill-sub">
-                ${locked ? `🔒 Lv.${c.unlockLevel}` : `🌱 ${sCount} • ⏱️${cGrowLabel}`}
-              </span>
-            </span>
-          </button>
-        `;
-      })
-      .join('');
+    const renderCropOptions = (isFlowerGroup: boolean) =>
+      allCropList
+        .filter((c) => Boolean(c.isFlowerCrop) === isFlowerGroup)
+        .map((c) => {
+          const locked = !this.sim.state.sandboxMode && this.sim.state.level < c.unlockLevel;
+          const active = c.id === this.targetCropId;
+          const sCount = this.sim.getSeedCount(c.id);
+          const label = locked
+            ? `Cấp ${c.unlockLevel} · ${c.name}`
+            : `${c.name} (×${sCount})`;
+          return `<option value="${c.id}" ${active ? 'selected' : ''} ${locked ? 'disabled' : ''}>${escapeHtml(label)}</option>`;
+        })
+        .join('');
 
-    // 2. Language Tabs (EN / KO / ZH / ES / JA) — concise Vietnamese labels prevent header clipping
-    const SHORT_LANG_TAB_VI: Record<QuizLanguageId, string> = {
-      en: 'Anh',
-      ko: 'Hàn',
-      zh: 'Trung',
-      es: 'TBN',
-      ja: 'Nhật',
-    };
+    // 2. Language Tabs (Anh · Hàn · Trung · TBN · Nhật)
     const langTabsHtml = ALL_LANG_IDS.map((lid) => {
       const m = QUIZ_LANGUAGES[lid];
       const p = quiz.profiles[lid];
       const isAct = lid === activeLang;
+      const shortName = lid === 'es' ? 'TBN' : m.tabVi;
       return `
         <button
           type="button"
+          role="tab"
           class="sq-lang-tab ${isAct ? 'active' : ''}"
           data-sq-lang="${lid}"
-          aria-pressed="${isAct}"
-          title="${m.flag} ${escapeHtml(m.academyVi)} — ${escapeHtml(m.tierLabels[p.tier])}"
-        >
-          <span class="sq-lang-flag">${m.flag}</span>
-          <span class="sq-lang-text">
-            <strong>${SHORT_LANG_TAB_VI[lid]}</strong>
-            <small>Lv.${p.masteryScore}</small>
-          </span>
-        </button>
+          aria-selected="${isAct}"
+          title="${escapeHtml(m.nameVi)} · Cấp ${p.masteryScore}"
+        >${escapeHtml(shortName)}</button>
       `;
     }).join('');
 
-    // 3. Tier Selector Buttons
-    const tiers: Array<{ id: QuizProficiencyTier; icon: string; rewardTag: string }> = [
-      { id: 'beginner', icon: '🪄', rewardTag: '+1–2 🌱' },
-      { id: 'intermediate', icon: '🦉', rewardTag: '+2 🌱' },
-      { id: 'advanced', icon: '👑', rewardTag: '+2 🌱' },
+    // 3. Tier & Format Selects
+    const tiers: Array<{ id: QuizProficiencyTier; label: string }> = [
+      { id: 'beginner', label: 'Tập Sự' },
+      { id: 'intermediate', label: 'O.W.L.' },
+      { id: 'advanced', label: 'N.E.W.T.' },
     ];
-    const tierBtnsHtml = tiers
-      .map((t) => {
-        const isAct = profile.tier === t.id;
-        return `
-          <button
-            type="button"
-            class="sq-tier-btn ${isAct ? 'active' : ''}"
-            data-sq-tier="${t.id}"
-            aria-pressed="${isAct}"
-          >
-            <span>${t.icon} ${escapeHtml(langMeta.tierLabels[t.id])}</span>
-            <small>${t.rewardTag}</small>
-          </button>
-        `;
-      })
+    const tierOptionsHtml = tiers
+      .map(
+        (t) =>
+          `<option value="${t.id}" ${profile.tier === t.id ? 'selected' : ''}>${escapeHtml(t.label)}</option>`
+      )
       .join('');
 
-    // 4. Format Filter Chips
-    const formatOptsHtml = ALL_FORMAT_KEYS.map((fk) => {
-      const meta = QUIZ_FORMAT_LABELS[fk];
-      const isAct = quiz.preferredFormat === fk;
-      return `
-        <button
-          type="button"
-          class="sq-format-chip ${isAct ? 'active' : ''}"
-          data-sq-format="${fk}"
-          aria-pressed="${isAct}"
-        >
-          ${meta.icon} ${escapeHtml(meta.labelVi)}
-        </button>
-      `;
-    }).join('');
+    const formatNames: Record<'all' | QuizFormatKind, string> = {
+      all: 'Đủ dạng',
+      vocab_context: 'Nhìn tranh',
+      dialogue_reply: 'Đập bóng',
+      grammar_cloze: 'Điền từ',
+      sentence_builder: 'Ghép chữ',
+      match_pairs: 'Nối cặp',
+    };
+    const formatOptionsHtml = ALL_FORMAT_KEYS.map(
+      (fk) =>
+        `<option value="${fk}" ${quiz.preferredFormat === fk ? 'selected' : ''}>${escapeHtml(formatNames[fk])}</option>`
+    ).join('');
 
-    // 5. Challenge Interactive Body
     const challengeHtml = this.challenge ? this.renderChallengeStage(this.challenge) : '';
+    const isAnswered = this.answeredOutcome !== null;
 
     container.innerHTML = `
       <div class="sq-scroll-viewport" id="sqScrollViewport">
         <div class="sq-zoom-sizer" id="sqZoomSizer">
           <div class="sq-zoom-stage" id="sqZoomStage">
             <div class="sq-root">
-        ${plotContextBanner}
-
-        <!-- CROP SELECTOR BAR -->
-        <div class="sq-top-strip">
-          <div class="sq-top-strip-head">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-              <span class="sq-strip-title">🌱 Hạt giống:</span>
-              <div class="seed-filter-bar" role="group" aria-label="Bộ lọc nhóm hạt giống">${cropFilterPillsHtml}</div>
-            </div>
-            <div class="sq-wallet-pills">
-              <span class="sq-wallet-chip" title="Vàng Galleon">🪙 <strong>${galleons.toLocaleString('vi-VN')}G</strong></span>
-              <span class="sq-wallet-chip sq-wallet-seed" title="Túi hạt ${escapeHtml(crop.name)}">
-                🌱 ${escapeHtml(crop.name)}: <strong>×${seedCount}</strong>
-              </span>
-              <span class="sq-wallet-chip sq-wallet-talisman" title="Bùa Phượng Hoàng (${talismanProg}/8 câu)">
-                🔥 <strong>${talismanCount}</strong> <small>(${talismanProg}/8)</small>
-              </span>
-              <button
-                id="btnSqToggleYuleSkin"
-                type="button"
-                class="sq-wallet-chip yule-skin-toggle-pill ${this.sim.isYuleVisualThemeActive() ? 'is-yule-active' : ''}"
-                aria-pressed="${this.sim.isYuleVisualThemeActive()}"
-                title="Bật/Tắt giao diện Thư Viện Giáng Sinh"
-              >🎄</button>
-              ${(() => {
-                const nowMs = Date.now();
-                const actives = this.sim.getActiveConstructions(nowMs);
-                if (actives.length === 0) return '';
-                const b0 = actives[0];
-                const it0 = getCatalogItem(b0.itemId);
-                const remSec = Math.max(1, Math.ceil((b0.constructEndsAt - nowMs) / 1000));
-                const floorSec = this.sim.getBuildingMinFloorSec(b0);
-                const atFloor = remSec <= floorSec;
-                return `<span class="sq-wallet-chip" title="Giảm giờ xây công trình">
-                  🔨 ${escapeHtml(it0?.name ?? 'Đang xây')}: <strong>${formatDurationCompactVi(remSec)}</strong> <small>${atFloor ? '🔒' : '⚡'}</small>
-                </span>`;
-              })()}
-            </div>
-          </div>
-          <div class="sq-crop-strip" role="group" aria-label="Danh sách 34 loại hạt giống và hoa">${cropPillsHtml}</div>
-        </div>
-
-        <!-- TWO ACQUISITION OPTIONS -->
-        <div class="sq-options-layout">
-          <!-- OPTION 1: HIGH GOLD DIRECT PURCHASE -->
-          <aside class="sq-option-card sq-option-gold">
-            <div class="sq-option-ribbon sq-ribbon-gold">🪙 MUA HẠT</div>
-            <div class="sq-gold-crop-hero">
-              <img src="${getFarmItemIconSrc(crop.id)}" alt="${escapeHtml(crop.name)}" class="sq-gold-crop-img" />
-              <div class="sq-gold-crop-meta">
-                <h3>${escapeHtml(crop.name)}</h3>
-                <p>⏱️ <strong>${formatDurationCompactVi(crop.growSec)}</strong> • 🌾 <strong>+${crop.yieldQty}</strong></p>
-                <p>🏡 Kho: <strong>${barnHarvestStock}</strong></p>
-              </div>
-            </div>
-
-            <div class="sq-price-callout">
-              <div class="sq-price-val">🪙 ${cost1.toLocaleString('vi-VN')}G <small>/ hạt</small></div>
-            </div>
-
-            <div class="sq-gold-btn-stack">
-              <button
-                id="btnSqBuy1"
-                type="button"
-                class="brass-btn gold-cta sq-buy-btn"
-                ${canBuy1 ? '' : 'disabled'}
-              >
-                🪙 +1 Hạt (-${cost1.toLocaleString('vi-VN')}G)
-              </button>
-              <button
-                id="btnSqBuy3"
-                type="button"
-                class="brass-btn sq-buy-btn"
-                ${canBuy3 ? '' : 'disabled'}
-              >
-                🪙 +3 Hạt (-${cost3.toLocaleString('vi-VN')}G)
-              </button>
-            </div>
-
-            <div class="sq-seed-pocket-box ${seedCount > 0 ? 'has-seeds' : 'empty-seeds'}">
-              <div class="sq-pocket-status">
-                🌱 <strong>${escapeHtml(crop.name)}</strong>: <strong>×${seedCount}</strong>
-              </div>
-              <button
-                id="btnSqSowNow"
-                type="button"
-                class="brass-btn sq-sow-cta"
-                ${seedCount > 0 ? '' : 'disabled'}
-              >
-                🌱 Gieo (×${seedCount})
-              </button>
-            </div>
-          </aside>
-
-          <!-- OPTION 2: MULTI-LANGUAGE ADAPTIVE QUIZ -->
-          <section class="sq-option-card sq-option-quiz">
-            <div class="sq-quiz-top-header">
-              <span class="sq-option-ribbon sq-ribbon-quiz">🪄 ĐỐ NHẬN HẠT (0G • +1–2 🌱)</span>
-              <label class="sq-autospeak-toggle" title="Tự động phát âm bản xứ">
-                <input id="chkSqAutoSpeak" type="checkbox" ${quiz.autoSpeak ? 'checked' : ''} />
-                <span>🔊 Tự đọc</span>
-              </label>
-            </div>
-
-            <!-- 5 LANGUAGE TABS -->
-            <div class="sq-lang-tabs" role="tablist" aria-label="Chọn bộ môn thần chú đa ngữ">${langTabsHtml}</div>
-
-            <!-- PRACTICE VS SRS LEXICON CODEX SWITCH -->
-            <div class="sq-view-switch" role="tablist" aria-label="Chọn chế độ Luyện Thần Chú hoặc Sổ Tay Cổ Ngữ">
-              <button
-                type="button"
-                class="sq-view-tab ${this.activeSubView === 'practice' ? 'active' : ''}"
-                data-sq-subview="practice"
-                aria-selected="${this.activeSubView === 'practice'}"
-              >
-                🪄 Luyện
-              </button>
-              <button
-                type="button"
-                class="sq-view-tab ${this.activeSubView === 'codex' ? 'active' : ''}"
-                data-sq-subview="codex"
-                aria-selected="${this.activeSubView === 'codex'}"
-              >
-                📖 Từ Điển (${srsSummary.masteredCount}/${poolStats.lexiconCount})
-              </button>
-            </div>
-
-            ${
-              this.activeSubView === 'codex'
-                ? this.renderLexiconCodexPanel(activeLang, profile)
-                : `
-                  <!-- USER PROFICIENCY TIER + ADAPTIVE LEVEL 1..100 -->
-                  <div class="sq-tier-panel">
-                    <div class="sq-tier-row" role="group" aria-label="Chọn cấp bậc phù thủy O.W.L. và N.E.W.T.">${tierBtnsHtml}</div>
-                    <div class="sq-mastery-strip">
-                      <div class="sq-mastery-bar-wrap" title="Cấp ${profile.masteryScore}/100 (Quyển ${targetBand}/10)">
-                        <div class="sq-mastery-labels">
-                          <span>📈 ${langMeta.flag} <strong>Lv.${profile.masteryScore}/100</strong></span>
-                          <span>🎯 <strong>${profile.totalCorrect}/${profile.totalAnswered}</strong> (${accuracyPct}%)</span>
-                        </div>
-                        <div class="sq-mastery-track">
-                          <div class="sq-mastery-fill" style="width:${Math.max(4, profile.masteryScore)}%"></div>
-                        </div>
-                      </div>
-                      <div class="sq-streak-pills">
-                        <span class="sq-stat-pill" title="Chuỗi đúng liên tiếp">🔥 <strong>×${profile.streak}</strong></span>
-                        <button
-                          type="button"
-                          class="sq-stat-pill sq-stat-pill-btn ${srsSummary.dueCount > 0 ? 'has-review' : ''}"
-                          data-sq-subview="codex"
-                          title="Sổ Tay Cổ Ngữ SRS"
-                        >
-                          📦 <strong>${srsSummary.masteredCount}</strong> • 🔄 <strong>${srsSummary.dueCount}</strong> 📖
-                        </button>
-                      </div>
+              <div class="sq-lang-tabs" role="tablist" aria-label="Chọn ngôn ngữ">${langTabsHtml}</div>
+              ${
+                this.activeSubView === 'codex'
+                  ? this.renderLexiconCodexPanel(activeLang, profile)
+                  : `
+                    <div class="sq-setup-row" title="${escapeHtml(langMeta.tierLabels[profile.tier])}">
+                      <img src="${getFarmItemIconSrc(crop.id)}" alt="" width="22" height="22" class="sq-crop-pill-img" />
+                      <select id="selSqTargetCrop" class="sq-select sq-crop-select" aria-label="Chọn hạt giống nhận thưởng">
+                        <optgroup label="Cây trồng">${renderCropOptions(false)}</optgroup>
+                        <optgroup label="Hoa">${renderCropOptions(true)}</optgroup>
+                      </select>
+                      ${
+                        seedCount > 0
+                          ? `<button id="btnSqSowNow" type="button" class="brass-btn gold-cta sq-sow-cta">Gieo ×${seedCount}</button>`
+                          : ''
+                      }
+                      <select id="selSqTier" class="sq-select sq-tier-select" aria-label="Chọn cấp độ">${tierOptionsHtml}</select>
                     </div>
-                    <div class="sq-format-bar" role="group" aria-label="Chế độ bài tập Play-to-Learn">${formatOptsHtml}</div>
-                  </div>
-
-                  <!-- ACTIVE PLAY-TO-LEARN CHALLENGE & EXPLANATION -->
-                  ${challengeHtml}
-                `
-            }
-          </section>
-        </div>
-      </div>
+                    <div class="sq-tools-row">
+                      <select id="selSqFormat" class="sq-select sq-format-select" aria-label="Chọn dạng câu hỏi">${formatOptionsHtml}</select>
+                      <button id="btnSqAutoSpeak" type="button" class="brass-btn sq-tool-pill" aria-pressed="${quiz.autoSpeak}">Tự đọc</button>
+                      <button id="btnSqSpeakSlow" type="button" class="brass-btn sq-tool-pill" title="Nghe chậm">Chậm</button>
+                      ${
+                        !isAnswered
+                          ? `<button id="btnSqSkipQuestion" type="button" class="brass-btn sq-tool-pill" title="Đổi câu khác">Đổi</button>`
+                          : ''
+                      }
+                    </div>
+                    ${challengeHtml}
+                  `
+              }
+            </div>
           </div>
         </div>
       </div>
@@ -813,7 +605,6 @@ export class SeedQuizModalController {
   }
 
   private renderLexiconCodexPanel(lang: QuizLanguageId, profile: LanguageProfileState): string {
-    const langMeta = QUIZ_LANGUAGES[lang];
     const allEntries = this.getLanguageLexiconEntries(lang);
     let masteredCount = 0;
     let learningCount = 0;
@@ -827,10 +618,10 @@ export class SeedQuizModalController {
 
     const filterBtns = (
       [
-        { id: 'all', label: `📖 Tất cả (${allEntries.length})` },
-        { id: 'mastered', label: `🏆 Thuộc (${masteredCount})` },
-        { id: 'learning', label: `📚 Đang học (${learningCount})` },
-        { id: 'unseen', label: `✨ Mới (${unseenCount})` },
+        { id: 'all', label: `Tất cả (${allEntries.length})` },
+        { id: 'mastered', label: `Thuộc (${masteredCount})` },
+        { id: 'learning', label: `Đang học (${learningCount})` },
+        { id: 'unseen', label: `Mới (${unseenCount})` },
       ] as const
     )
       .map(
@@ -847,16 +638,12 @@ export class SeedQuizModalController {
 
     return `
       <div class="sq-codex-panel">
-        <div class="sq-codex-summary">
-          <span>📜 <strong>${langMeta.flag} ${escapeHtml(langMeta.nameVi)}</strong></span>
-          <span class="sq-codex-pack-tag">${isLanguageQuizPackLoaded(lang) ? `✅ ${allEntries.length} từ` : '⏳...'}</span>
-        </div>
         <div class="sq-codex-toolbar">
           <input
             id="inpSqCodexSearch"
             type="search"
             class="sq-codex-search"
-            placeholder="🔍 Tìm từ..."
+            placeholder="Tìm từ..."
             value="${escapeHtml(this.codexQuery)}"
             aria-label="Tra cứu Sổ Tay Cổ Ngữ"
           />
@@ -894,7 +681,7 @@ export class SeedQuizModalController {
     if (filtered.length === 0) {
       return `
         <div class="sq-codex-empty">
-          🪶 Không tìm thấy mục từ phù hợp bộ lọc hiện tại. Hãy thử từ khoá khác hoặc chuyển bộ lọc Hộp SRS nhé!
+          Không có mục từ phù hợp.
         </div>
       `;
     }
@@ -904,40 +691,37 @@ export class SeedQuizModalController {
         const { box, due } = this.getLexiconEntrySrsInfo(profile, entry.id);
         const vis = getQuizVisualCardMeta(entry.meaningVi, entry.word, entry.id);
         let badgeCls = 'is-unseen';
-        let badgeText = `✨ Quyển ${entry.levelBand}`;
+        let badgeText = `Quyển ${entry.levelBand}`;
         if (box >= 5) {
           badgeCls = 'is-box5';
-          badgeText = '🏆 Hộp 5/5 • Thuộc';
+          badgeText = 'Thuộc';
         } else if (box >= 1) {
           badgeCls = due ? 'is-due' : 'is-learning';
-          badgeText = `📦 Hộp ${box}/5${due ? ' • Ôn' : ''}`;
+          badgeText = `Hộp ${box}/5${due ? ' · Ôn' : ''}`;
         }
         return `
           <article class="sq-codex-row" role="listitem">
-            <div class="sq-codex-tts">
-              <img src="${vis.spriteSrc}" alt="" class="sq-codex-pic" />
-              <button
-                type="button"
-                class="sq-vocab-speak"
-                data-sq-codex-word="${escapeHtml(entry.id)}"
-                title="Nghe phát âm từ ${escapeHtml(entry.word)}"
-              >🔊</button>
-            </div>
+            <img src="${vis.spriteSrc}" alt="" class="sq-codex-pic" />
             <div class="sq-codex-body">
               <div class="sq-codex-head">
                 <strong class="sq-codex-word">${escapeHtml(entry.word)}</strong>
                 <span class="sq-vocab-ph">[${escapeHtml(entry.phonetic)}]</span>
                 <span class="sq-codex-meaning">— ${escapeHtml(vis.shortVi)}</span>
               </div>
+              <span class="sq-codex-srs ${badgeCls}">${badgeText}</span>
             </div>
-            <div class="sq-codex-srs ${badgeCls}">${badgeText}</div>
+            <button
+              type="button"
+              class="brass-btn sq-vocab-speak"
+              data-sq-codex-word="${escapeHtml(entry.id)}"
+              title="Nghe phát âm từ ${escapeHtml(entry.word)}"
+            >Nghe</button>
           </article>
         `;
       })
       .join('');
 
     return `
-      <div class="sq-codex-count">Hiển thị <strong>${filtered.length}</strong> / ${entries.length} mục từ</div>
       <div class="sq-codex-list" role="list">${rowsHtml}</div>
     `;
   }
@@ -964,9 +748,6 @@ export class SeedQuizModalController {
   }
 
   private renderChallengeStage(ch: ActiveQuizChallenge): string {
-    const langMeta = QUIZ_LANGUAGES[ch.lang];
-    const fmtMeta = QUIZ_FORMAT_LABELS[ch.format];
-    const crop = FARM_CROPS[this.targetCropId];
     const isAnswered = this.answeredOutcome !== null;
     const gameKind =
       ch.visualGameKind ??
@@ -980,7 +761,7 @@ export class SeedQuizModalController {
               ? 'pic_pairs'
               : 'word_flashcard');
 
-    const heroSprite = ch.heroSpriteSrc ?? '/sprites/ui_icon_seed_sack.png';
+    const heroSprite = ch.heroSpriteSrc ?? '/game/trang-trai-hang-soc/sprites/ui_icon_seed_sack.webp';
     const heroWord = ch.heroWord ?? ch.stemText;
     const heroPh = ch.heroPhonetic ?? ch.stemPhonetic ?? '';
     const heroShortVi = ch.heroShortVi ?? formatShortKidMeaningVi(ch.translationVi);
@@ -988,42 +769,35 @@ export class SeedQuizModalController {
     let heroBannerHtml = '';
     if (gameKind === 'pic_flashcard') {
       heroBannerHtml = `
-        <div class="sq-kid-hero-card is-audio-word">
-          <button id="btnSqHeroAudio" type="button" class="sq-kid-audio-orb" title="Chạm để nghe phát âm">
-            🔊
-          </button>
-          <div class="sq-kid-hero-text">
-            <div class="sq-kid-word-giant">${escapeHtml(heroWord)}</div>
-            ${heroPh ? `<div class="sq-kid-ph-pill">[${escapeHtml(heroPh)}]</div>` : ''}
+        <div class="sq-prompt-row">
+          <div class="sq-prompt-copy">
+            <strong class="sq-prompt-word">${escapeHtml(heroWord)}</strong>
+            ${heroPh ? `<span class="sq-prompt-ph">[${escapeHtml(heroPh)}]</span>` : ''}
           </div>
-          <span class="sq-kid-hint-tag">🖼️ Chạm tranh đúng!</span>
+          <button id="btnSqHeroAudio" type="button" class="brass-btn gold-cta sq-audio-btn">Nghe</button>
         </div>
       `;
     } else if (gameKind !== 'pic_pairs') {
       heroBannerHtml = `
-        <div class="sq-kid-hero-card is-picture-clue">
-          <div class="sq-kid-pic-frame">
-            <img src="${heroSprite}" alt="${escapeHtml(heroShortVi)}" class="sq-kid-hero-img" />
+        <div class="sq-prompt-row">
+          <img src="${heroSprite}" alt="" class="sq-prompt-img" />
+          <div class="sq-prompt-copy">
+            <strong class="sq-prompt-word">${escapeHtml(heroShortVi)}</strong>
+            ${heroPh ? `<span class="sq-prompt-ph">[${escapeHtml(heroPh)}]</span>` : ''}
           </div>
-          <div class="sq-kid-hero-text">
-            <div class="sq-kid-meaning-giant">${escapeHtml(heroShortVi)}</div>
-            ${heroPh ? `<div class="sq-kid-ph-pill">🔊 [${escapeHtml(heroPh)}]</div>` : ''}
-          </div>
-          <button id="btnSqHeroAudio" type="button" class="sq-kid-audio-orb small" title="Nghe phát âm gợi ý">
-            🔊
-          </button>
+          <button id="btnSqHeroAudio" type="button" class="brass-btn gold-cta sq-audio-btn">Nghe</button>
         </div>
       `;
     }
 
     let interactiveHtml = '';
-    if (gameKind === 'pic_flashcard' || gameKind === 'word_flashcard') {
+    if (gameKind === 'pic_flashcard' || gameKind === 'word_flashcard' || gameKind === 'bubble_pop') {
       const choices = ch.choices ?? [];
       const phs = ch.choicePhonetics ?? [];
       const sprites = ch.choiceSprites ?? [];
       const subs = ch.choiceSubtitles ?? [];
       interactiveHtml = `
-        <div class="sq-choice-grid sq-kid-flashcard-grid">
+        <div class="sq-choice-grid">
           ${choices
             .map((cText, idx) => {
               let stateCls = '';
@@ -1037,55 +811,21 @@ export class SeedQuizModalController {
               return `
                 <button
                   type="button"
-                  class="sq-choice-btn sq-kid-flashcard ${gameKind === 'pic_flashcard' ? 'is-pic-mode' : 'is-word-mode'} ${stateCls}"
+                  class="sq-choice-btn ${stateCls}"
                   data-sq-choice="${idx}"
                   ${isAnswered ? 'disabled' : ''}
                 >
-                  <div class="sq-kid-card-art">
-                    <img src="${spSrc}" alt="" class="sq-kid-card-img" />
-                  </div>
+                  <img src="${spSrc}" alt="" class="sq-kid-card-img" />
                   <div class="sq-kid-card-caption">
                     <span class="sq-choice-main">${escapeHtml(cText)}</span>
                     ${
-                      gameKind === 'word_flashcard' && phs[idx]
+                      gameKind !== 'pic_flashcard' && phs[idx]
                         ? `<small class="sq-choice-ph">[${escapeHtml(phs[idx])}]</small>`
                         : isAnswered && subTxt
                           ? `<small class="sq-choice-ph">${escapeHtml(subTxt)}</small>`
                           : ''
                     }
                   </div>
-                </button>
-              `;
-            })
-            .join('')}
-        </div>
-      `;
-    } else if (gameKind === 'bubble_pop') {
-      const choices = ch.choices ?? [];
-      const phs = ch.choicePhonetics ?? [];
-      const sprites = ch.choiceSprites ?? [];
-      interactiveHtml = `
-        <div class="sq-bubble-arena">
-          ${choices
-            .map((cText, idx) => {
-              let stateCls = '';
-              if (isAnswered) {
-                if (idx === ch.correctIndex) stateCls = 'is-correct is-popped';
-                else if (idx === this.selectedChoiceIdx) stateCls = 'is-wrong is-popped';
-                else stateCls = 'is-dimmed';
-              }
-              const spSrc = sprites[idx] ?? heroSprite;
-              return `
-                <button
-                  type="button"
-                  class="sq-bubble-btn bubble-slot-${idx % 4} ${stateCls}"
-                  data-sq-choice="${idx}"
-                  ${isAnswered ? 'disabled' : ''}
-                >
-                  <span class="sq-bubble-shine"></span>
-                  <img src="${spSrc}" alt="" class="sq-bubble-img" />
-                  <span class="sq-bubble-word">${escapeHtml(cText)}</span>
-                  ${phs[idx] ? `<small class="sq-bubble-ph">[${escapeHtml(phs[idx])}]</small>` : ''}
                 </button>
               `;
             })
@@ -1143,15 +883,9 @@ export class SeedQuizModalController {
             !isAnswered
               ? `
                 <div class="sq-sentence-actions">
-                  <button id="btnSqHintTile" type="button" class="brass-btn" title="Gợi ý 1 mảnh chữ">
-                    💡 Gợi ý chữ
-                  </button>
-                  <button id="btnSqResetSentence" type="button" class="brass-btn" ${this.placedTokenIndices.length === 0 ? 'disabled' : ''}>
-                    ↺ Xếp lại
-                  </button>
-                  <button id="btnSqCheckSentence" type="button" class="brass-btn gold-cta" ${this.placedTokenIndices.length === 0 ? 'disabled' : ''}>
-                    ✨ Kiểm Tra
-                  </button>
+                  <button id="btnSqHintTile" type="button" class="brass-btn" title="Gợi ý 1 mảnh chữ">Gợi ý</button>
+                  <button id="btnSqResetSentence" type="button" class="brass-btn" ${this.placedTokenIndices.length === 0 ? 'disabled' : ''}>Xếp lại</button>
+                  <button id="btnSqCheckSentence" type="button" class="brass-btn gold-cta" ${this.placedTokenIndices.length === 0 ? 'disabled' : ''}>Kiểm tra</button>
                 </div>
               `
               : ''
@@ -1164,7 +898,7 @@ export class SeedQuizModalController {
       interactiveHtml = `
         <div class="sq-pairs-wrap sq-kid-pairs-wrap">
           <div class="sq-pairs-col">
-            <div class="sq-pairs-col-title">${langMeta.flag} 🔊 Thẻ Từ</div>
+            <div class="sq-pairs-col-title">Từ vựng</div>
             ${lefts
               .map((card) => {
                 const matched = this.matchedPairIds.has(card.pairId);
@@ -1176,7 +910,6 @@ export class SeedQuizModalController {
                     data-sq-left-pair="${escapeHtml(card.pairId)}"
                     ${matched || isAnswered ? 'disabled' : ''}
                   >
-                    <span class="sq-pair-audio-tag">🔊</span>
                     <span class="sq-pair-word">${escapeHtml(card.word)}</span>
                     <small class="sq-pair-ph">[${escapeHtml(card.phonetic)}]</small>
                   </button>
@@ -1185,7 +918,7 @@ export class SeedQuizModalController {
               .join('')}
           </div>
           <div class="sq-pairs-col">
-            <div class="sq-pairs-col-title">🖼️ Thẻ Tranh 2.5D</div>
+            <div class="sq-pairs-col-title">Nghĩa</div>
             ${rights
               .map((card) => {
                 const matched = this.matchedPairIds.has(card.pairId);
@@ -1217,31 +950,7 @@ export class SeedQuizModalController {
       : '';
 
     return `
-      <div class="sq-stage-card sq-kid-stage-card">
-        <div class="sq-stage-meta-row">
-          <div class="sq-stage-badges">
-            <span class="sq-badge sq-badge-format">${fmtMeta.icon} ${escapeHtml(fmtMeta.labelVi)}</span>
-            ${
-              ch.isReview
-                ? `<span class="sq-badge sq-badge-review">🔄 Ôn (${ch.srsBox ?? 1}/5) • +2 ${crop.emoji}</span>`
-                : `<span class="sq-badge sq-badge-reward">🎁 +1–2 ${crop.emoji}</span>`
-            }
-          </div>
-          <div class="sq-tts-btns">
-            <button id="btnSqSpeakNormal" type="button" class="brass-btn sq-tts-btn" title="Nghe chuẩn (1.0x)">
-              🔊 Nghe
-            </button>
-            <button id="btnSqSpeakSlow" type="button" class="brass-btn sq-tts-btn" title="Nghe chậm (0.72x)">
-              🐢 Chậm
-            </button>
-            ${
-              !isAnswered
-                ? `<button id="btnSqSkipQuestion" type="button" class="brass-btn sq-tts-btn" title="Đổi câu">🔀 Đổi</button>`
-                : ''
-            }
-          </div>
-        </div>
-
+      <div class="sq-stage-card">
         ${heroBannerHtml}
         ${interactiveHtml}
         ${explanationHtml}
@@ -1254,141 +963,95 @@ export class SeedQuizModalController {
     outcome: QuizAttemptOutcome & { newSeedCount: number; cropName: string }
   ): string {
     const seedCount = this.sim.getSeedCount(this.targetCropId);
-    const heroSprite = ch.heroSpriteSrc ?? '/sprites/ui_icon_seed_sack.png';
     const heroWord = ch.heroWord ?? ch.fullSentence;
     const heroPh = ch.heroPhonetic ?? ch.fullPhonetic;
     const heroShortVi = ch.heroShortVi ?? formatShortKidMeaningVi(ch.translationVi);
 
     return `
-      <div class="sq-explain-card sq-kid-explain-card ${outcome.correct ? 'is-pass' : 'is-review'}">
-        <div class="sq-kid-result-row">
-          <img src="${heroSprite}" alt="" class="sq-kid-result-img" />
-          <div class="sq-kid-result-info">
-            <div class="sq-explain-status">
-              ${
-                outcome.correct
-                  ? `🎉 <strong>Giỏi lắm!</strong> +${outcome.seedsAwarded} 🌱 ${escapeHtml(outcome.cropName)} • +${outcome.xpAwarded} ⭐`
-                  : `💡 <strong>Thử nhớ từ này nhé!</strong> (+${outcome.xpAwarded} ⭐)`
-              }
-            </div>
-            <div class="sq-kid-result-word">
-              <strong>${escapeHtml(heroWord)}</strong>
-              <span class="sq-vocab-ph">[${escapeHtml(heroPh)}]</span>
-              <span>= 🇻🇳 <strong>${escapeHtml(heroShortVi)}</strong></span>
-            </div>
+      <div class="sq-explain-card ${outcome.correct ? 'is-pass' : 'is-review'}">
+        <div class="sq-explain-copy">
+          <div class="sq-explain-status">
             ${
-              outcome.buildReduction && outcome.buildReduction.reducedSec > 0
-                ? `<div class="sq-promo-callout">🔨 -${formatDurationCompactVi(outcome.buildReduction.reducedSec)} (${escapeHtml(outcome.buildReduction.targetName ?? 'công trình')})</div>`
-                : ''
+              outcome.practice
+                ? `<strong>Đúng</strong> · Đủ 30 câu thưởng hôm nay`
+                : outcome.correct
+                ? `<strong>Đúng</strong> · +${outcome.seedsAwarded} ${escapeHtml(outcome.cropName)} · +${outcome.xpAwarded} XP${
+                    outcome.buildReduction && outcome.buildReduction.reducedSec > 0
+                      ? ` · −${formatDurationCompactVi(outcome.buildReduction.reducedSec)}`
+                      : ''
+                  }`
+                : `<strong>Đáp án:</strong> ${escapeHtml(heroWord)}${heroPh ? ` [${escapeHtml(heroPh)}]` : ''} — ${escapeHtml(heroShortVi)}`
             }
           </div>
-          <div class="sq-explain-tts">
-            <button id="btnSqSpeakFull" type="button" class="brass-btn sq-tts-btn">🔊</button>
-            <button id="btnSqSpeakFullSlow" type="button" class="brass-btn sq-tts-btn">🐢</button>
-          </div>
-        </div>
-
-        <div class="sq-explain-actions">
           ${
-            seedCount > 0
-              ? `
-                <button id="btnSqExplainSow" type="button" class="brass-btn sq-sow-cta">
-                  🌱 Gieo (×${seedCount})
-                </button>
-              `
+            outcome.correct
+              ? `<div class="sq-kid-result-word"><strong>${escapeHtml(heroWord)}</strong>${heroPh ? ` <span class="sq-vocab-ph">[${escapeHtml(heroPh)}]</span>` : ''} — ${escapeHtml(heroShortVi)}</div>`
               : ''
           }
-          <button id="btnSqNextQuestion" type="button" class="brass-btn gold-cta">
-            ➡️ Chơi Tiếp (+1–2 🌱)
-          </button>
+        </div>
+        <div class="sq-explain-actions">
+          <button id="btnSqSpeakFull" type="button" class="brass-btn sq-tool-pill">Nghe</button>
+          ${
+            seedCount > 0
+              ? `<button id="btnSqExplainSow" type="button" class="brass-btn sq-tool-pill">Gieo ×${seedCount}</button>`
+              : ''
+          }
+          <button id="btnSqNextQuestion" type="button" class="brass-btn gold-cta sq-next-btn">Câu tiếp</button>
         </div>
       </div>
     `;
   }
 
   private bindRenderedEvents(container: HTMLElement): void {
-    // Filter crop group (All / Flowers / Crops)
-    container.querySelectorAll<HTMLButtonElement>('[data-sq-crop-filter]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const mode = btn.dataset.sqCropFilter as 'all' | 'flowers' | 'crops';
-        if (mode === 'all' || mode === 'flowers' || mode === 'crops') {
-          this.cropFilter = mode;
-          this.render();
-        }
-      });
+    const selTargetCrop = container.querySelector('#selSqTargetCrop') as HTMLSelectElement | null;
+    selTargetCrop?.addEventListener('change', () => {
+      const cid = selTargetCrop.value as FarmCropId;
+      if (cid && FARM_CROPS[cid]) {
+        this.targetCropId = cid;
+        this.render();
+      }
     });
 
-    // Select target crop
-    container.querySelectorAll<HTMLButtonElement>('[data-sq-crop]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const cid = btn.dataset.sqCrop as FarmCropId;
-        if (cid && FARM_CROPS[cid]) {
-          this.targetCropId = cid;
-          this.render();
-        }
-      });
-    });
-
-    // Option 1: Buy 1 or 3 seeds with high Gold
-    container.querySelector('#btnSqBuy1')?.addEventListener('click', () => {
-      const res = this.sim.buyCropSeedWithGold(this.targetCropId, 1);
-      this.onToast(res.msg, res.ok ? '🌱' : '🪙');
-      this.onRefreshHud();
-      this.render();
-    });
-
-    container.querySelector('#btnSqBuy3')?.addEventListener('click', () => {
-      const res = this.sim.buyCropSeedWithGold(this.targetCropId, 3);
-      this.onToast(res.msg, res.ok ? '🌱' : '🪙');
-      this.onRefreshHud();
-      this.render();
-    });
-
-    // Sow equipped seed buttons
     container.querySelector('#btnSqSowNow')?.addEventListener('click', () => {
-      this.handleSowEquippedSeed();
-    });
-    container.querySelector('#btnSqBannerSowNow')?.addEventListener('click', () => {
       this.handleSowEquippedSeed();
     });
     container.querySelector('#btnSqExplainSow')?.addEventListener('click', () => {
       this.handleSowEquippedSeed();
     });
 
-    // Auto-speak checkbox
-    const chkAuto = container.querySelector('#chkSqAutoSpeak') as HTMLInputElement | null;
-    chkAuto?.addEventListener('change', () => {
+    const btnAuto = container.querySelector('#btnSqAutoSpeak') as HTMLButtonElement | null;
+    btnAuto?.addEventListener('click', () => {
       const quiz = this.sim.ensureLanguageQuiz();
-      quiz.autoSpeak = chkAuto.checked;
+      quiz.autoSpeak = !quiz.autoSpeak;
+      btnAuto.setAttribute('aria-pressed', String(quiz.autoSpeak));
       this.sim.saveToStorage();
     });
 
-    container.querySelector('#btnSqToggleYuleSkin')?.addEventListener('click', () => {
-      this.sim.audio.playClick();
-      const active = this.sim.toggleYuleVisualTheme();
-      if (typeof document !== 'undefined') {
-        document.documentElement.dataset.yuleTheme = active ? 'true' : 'false';
+    const selTier = container.querySelector('#selSqTier') as HTMLSelectElement | null;
+    selTier?.addEventListener('change', () => {
+      const tier = selTier.value as QuizProficiencyTier;
+      const quiz = this.sim.ensureLanguageQuiz();
+      if (tier === 'beginner' || tier === 'intermediate' || tier === 'advanced') {
+        if (this.challenge && !this.answeredOutcome) {
+          markQuizChallengeSkipped(quiz, this.challenge);
+        }
+        setProfileTier(quiz, quiz.activeLang, tier);
+        this.loadNextQuestion(true);
       }
-      this.onRefreshHud();
-      this.render();
     });
 
-    // Horizontal wheel scrolling for the 34-seed crop strip on desktop mouse wheels
-    const sqCropStrip = container.querySelector('.sq-crop-strip') as HTMLElement | null;
-    sqCropStrip?.addEventListener(
-      'wheel',
-      (ev) => {
-        if (
-          sqCropStrip.scrollWidth > sqCropStrip.clientWidth + 4 &&
-          Math.abs(ev.deltaY) > Math.abs(ev.deltaX) &&
-          ev.deltaY !== 0
-        ) {
-          sqCropStrip.scrollLeft += ev.deltaY;
-          ev.preventDefault();
+    const selFormat = container.querySelector('#selSqFormat') as HTMLSelectElement | null;
+    selFormat?.addEventListener('change', () => {
+      const fk = selFormat.value as 'all' | QuizFormatKind;
+      const quiz = this.sim.ensureLanguageQuiz();
+      if (ALL_FORMAT_KEYS.includes(fk) && quiz.preferredFormat !== fk) {
+        if (this.challenge && !this.answeredOutcome) {
+          markQuizChallengeSkipped(quiz, this.challenge);
         }
-      },
-      { passive: false }
-    );
+        quiz.preferredFormat = fk;
+        this.loadNextQuestion(true);
+      }
+    });
 
     // Language switch (EN / KO / ZH / ES / JA)
     container.querySelectorAll<HTMLButtonElement>('[data-sq-lang]').forEach((btn) => {
@@ -1407,21 +1070,6 @@ export class SeedQuizModalController {
           } else {
             this.loadNextQuestion(true);
           }
-        }
-      });
-    });
-
-    // Sub-view switch (Practice vs SRS Lexicon Codex)
-    container.querySelectorAll<HTMLButtonElement>('[data-sq-subview]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const sv = btn.dataset.sqSubview as 'practice' | 'codex';
-        if ((sv === 'practice' || sv === 'codex') && this.activeSubView !== sv) {
-          this.activeSubView = sv;
-          if (sv === 'codex') {
-            const quiz = this.sim.ensureLanguageQuiz();
-            this.ensureActiveLangPackLoaded(quiz.activeLang);
-          }
-          this.render();
         }
       });
     });
@@ -1457,45 +1105,10 @@ export class SeedQuizModalController {
       this.bindCodexRowSpeakEvents(codexMount, quiz.activeLang);
     }
 
-    // Proficiency tier switch (Beginner / Intermediate / Advanced)
-    container.querySelectorAll<HTMLButtonElement>('[data-sq-tier]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const tier = btn.dataset.sqTier as QuizProficiencyTier;
-        const quiz = this.sim.ensureLanguageQuiz();
-        if (tier === 'beginner' || tier === 'intermediate' || tier === 'advanced') {
-          if (this.challenge && !this.answeredOutcome) {
-            markQuizChallengeSkipped(quiz, this.challenge);
-          }
-          setProfileTier(quiz, quiz.activeLang, tier);
-          this.loadNextQuestion(true);
-        }
-      });
-    });
-
-    // Format switch
-    container.querySelectorAll<HTMLButtonElement>('[data-sq-format]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const fk = btn.dataset.sqFormat as 'all' | QuizFormatKind;
-        const quiz = this.sim.ensureLanguageQuiz();
-        if (ALL_FORMAT_KEYS.includes(fk) && quiz.preferredFormat !== fk) {
-          if (this.challenge && !this.answeredOutcome) {
-            markQuizChallengeSkipped(quiz, this.challenge);
-          }
-          quiz.preferredFormat = fk;
-          this.loadNextQuestion(true);
-        }
-      });
-    });
-
     // TTS buttons
     container.querySelector('#btnSqHeroAudio')?.addEventListener('click', () => {
       if (!this.challenge) return;
       speakQuizText(this.challenge.ttsPromptText || this.challenge.fullSentence, this.challenge.lang, 0.94);
-    });
-    container.querySelector('#btnSqSpeakNormal')?.addEventListener('click', () => {
-      if (!this.challenge) return;
-      const txt = this.answeredOutcome ? this.challenge.fullSentence : this.challenge.ttsPromptText;
-      speakQuizText(txt, this.challenge.lang, 0.96);
     });
     container.querySelector('#btnSqSpeakSlow')?.addEventListener('click', () => {
       if (!this.challenge) return;
@@ -1505,10 +1118,6 @@ export class SeedQuizModalController {
     container.querySelector('#btnSqSpeakFull')?.addEventListener('click', () => {
       if (!this.challenge) return;
       speakQuizText(this.challenge.fullSentence, this.challenge.lang, 0.96);
-    });
-    container.querySelector('#btnSqSpeakFullSlow')?.addEventListener('click', () => {
-      if (!this.challenge) return;
-      speakQuizText(this.challenge.fullSentence, this.challenge.lang, 0.72);
     });
     container.querySelectorAll<HTMLButtonElement>('[data-sq-speak-word]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -1671,7 +1280,7 @@ export class SeedQuizModalController {
         const rightPid = btn.dataset.sqRightPair ?? '';
         if (!rightPid || this.matchedPairIds.has(rightPid)) return;
         if (!this.selectedLeftPairId) {
-          this.onToast('👆 Hãy chạm chọn 1 thẻ Từ bên trái trước rồi chạm Tranh 2.5D tương ứng nhé!', '🪄');
+          this.onToast('Chọn thẻ Từ bên trái trước.', '🪄');
           return;
         }
         if (this.selectedLeftPairId === rightPid) {

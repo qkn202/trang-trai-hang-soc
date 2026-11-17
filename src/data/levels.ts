@@ -34,7 +34,7 @@ const FEATURED_DISCIPLINE_ROTATION: ReadonlyArray<{
     kind: 'match3',
     icon: '🍬',
     shortVi: 'Bùa Gặt Honeydukes',
-    descVi: 'Vượt màn mới Bùa Gặt Honeydukes (777 màn) để tích tiến độ lên cấp + nhận thưởng Sao Đề Cử, +1 ⏳ Cát & +35% Vàng!',
+    descVi: 'Vượt màn mới Bùa Gặt Honeydukes (777 màn) để tích tiến độ lên cấp + nhận thưởng Sao Đề Cử, +1 ⏳ Cát & +35% Sickle!',
   },
   {
     kind: 'caro',
@@ -71,7 +71,7 @@ const FEATURED_DISCIPLINE_ROTATION: ReadonlyArray<{
 /**
  * Môn Đề Cử Cụ Dumbledore ở mỗi Cấp Điền Trang:
  * Vượt màn mới ở BẤT KỲ mini-game nào (chưa chạm trần 777/777) đều cộng +1 tiến độ lên cấp;
- * chơi đúng Môn Đề Cử nhận thêm +1 🌟 Sao mở màn cấp (và mỗi 5 trận đề cử), +1 ⏳ Cát & +35% Vàng!
+ * chơi đúng Môn Đề Cử nhận thêm +1 🌟 Sao mở màn cấp (và mỗi 5 trận đề cử), +1 ⏳ Cát & +35% Sickle!
  */
 export function getLevelTrialRequirement(
   level: number,
@@ -102,7 +102,7 @@ export function getLevelTrialRequirement(
 const TITLES_BY_MILESTONE: Record<number, string> = {
   1: 'Người Khai Hoang Đồi Hang Sóc',
   4: 'Người Gác Guồng Nước Đầm Sậy',
-  8: 'Người Chăn Puffskein & Gà Nâu',
+  8: 'Người Chăn Quái Lùng Nhùng & Gà Nâu',
   14: 'Trưởng Ban Đại Tiệc Lều Lụa',
   21: 'Nghệ Nhân Ngõ Đá Hogsmeade',
   30: 'Bậc Thầy Nhà Kính Bà Sprout',
@@ -120,7 +120,7 @@ const MILESTONE_NOTES: Record<number, string> = {
   4: 'Mở khóa Vùng Đất Ao Ếch & Đầm Lau Sậy + Khung Đan Áo Len Phép Chữ W!',
   6: 'Mở khóa Trạm Thư Cú Hang Sóc (Hedwig & Errol) nhận Đơn Hàng Cú!',
   7: 'Mở khóa Kho Tôn & Xe Bay Ford Anglia của ông Arthur Weasley!',
-  8: 'Mở khóa Vùng Đất Đồng Cỏ Puffskein + Guồng Nước Gỗ Đầm Sậy!',
+  8: 'Mở khóa Vùng Đất Đồng Cỏ Quái Lùng Nhùng + Guồng Nước Gỗ Đầm Sậy!',
   11: 'Mở khóa Khu Bảo Tồn Đào Mỏ (Niffler) tinh nghịch!',
   14: 'Mở khóa Vùng Đất Rạp Lều Lụa Trắng Hội Mùa Gặt!',
   17: 'Mở khóa Tiệm Kẹo Công Tước Mật (Honeydukes) — cổng tắt vào Gác Xép Bùa Gặt Honeydukes 777 màn!',
@@ -150,7 +150,7 @@ export const LEVELS: LevelRewardInfo[] = Array.from({ length: MAX_LEVEL }, (_, i
       ? 0
       : Math.round(35 + Math.pow(level - 1, 1.58) * 28);
 
-  const rewardGalleons = Math.round(40 + level * 25 + Math.pow(level, 1.45) * 6);
+  const rewardSickle = Math.round(40 + level * 25 + Math.pow(level, 1.45) * 6);
   const rewardTimeSand = level % 5 === 0 ? 3 : level % 2 === 0 ? 1 : 0;
 
   const unlockedItemIds = CATALOG.filter(
@@ -161,7 +161,7 @@ export const LEVELS: LevelRewardInfo[] = Array.from({ length: MAX_LEVEL }, (_, i
   return {
     level,
     xpRequired,
-    rewardGalleons,
+    rewardSickle,
     rewardTimeSand,
     titleUnlock: TITLES_BY_MILESTONE[level],
     unlockedItemIds,

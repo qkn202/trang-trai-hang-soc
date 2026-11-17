@@ -1,9 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  BurrowAuthoritativeBackend,
-  BurrowServerError,
-  MemoryBackendKVStore,
-} from '../../../server/burrowBackendCore';
 import { getCatalogItem } from '../../data/catalog';
 import { generateCandyHogwartsLevel } from '../../data/candyHogwartsLevels';
 import { MagicalAudio } from '../../engine/audio';
@@ -169,7 +164,7 @@ describe('Track A — Native-Grade Gameplay Feel, Proof-of-Play Anti-Cheat & 52 
   });
 
   describe('A3 — Deterministic Proof-of-Play (PoP) Anti-Cheat & Server Enforcement', () => {
-    it('niêm phong gói PoP < 1.2KB hợp lệ, xác thực chuỗi băm 64-bit trên BurrowAuthoritativeBackend và chặn giả mạo / phát lại', async () => {
+    it('niêm phong gói PoP < 1.2KB hợp lệ, xác thực chuỗi băm 64-bit (verifier thuần) và kẹp trần bản lưu cũ', async () => {
       const startEpoch = 1_760_000_000_000;
       let perfCursor = 1000;
       const recorder = new ProofOfPlayRecorder('match3', 12, 0x9e3779b9, startEpoch, perfCursor);
@@ -191,67 +186,7 @@ describe('Track A — Native-Grade Gameplay Feel, Proof-of-Play Anti-Cheat & 52 
       });
       expect(pureCheck.ok).toBe(true);
 
-      // Kiểm tra trực tiếp trên BurrowAuthoritativeBackend
-      const backend = new BurrowAuthoritativeBackend({ store: new MemoryBackendKVStore() });
-      const submitOk = await backend.submitLeaderboardScore({
-        uid: 'wizard_harry_01',
-        gameId: 'match3',
-        entry: {
-          name: 'Harry Potter',
-          parkName: 'Thung Lũng Hang Sóc',
-          house: 'Gryffindor',
-          primaryValue: 12,
-          ratingScore: 2220,
-          totalWins: 12,
-          bestStreak: 4,
-          proofOfPlay: envelope,
-        },
-      });
-      const savedRow = submitOk.entries.find((e) => e.userId === 'wizard_harry_01');
-      expect(savedRow).toBeDefined();
-      expect(savedRow?.primaryValue).toBe(12);
-      expect(savedRow?.popVerified).toBe(true);
-
-      // 1. Chặn phát lại (Replay Attack) cùng một nonce PoP
-      await expect(
-        backend.submitLeaderboardScore({
-          uid: 'wizard_harry_01',
-          gameId: 'match3',
-          entry: {
-            primaryValue: 12,
-            ratingScore: 2300,
-            totalWins: 13,
-            bestStreak: 5,
-            proofOfPlay: envelope,
-          },
-        })
-      ).rejects.toMatchObject({
-        reason: 'invalid-proof-of-play',
-        httpStatus: 422,
-      } satisfies Partial<BurrowServerError>);
-
-      // 2. Chặn gói tin bơm điểm giả mạo (sửa sessionScore hoặc chainHi trong DevTools)
-      const tamperedEnvelope = {
-        ...envelope,
-        nonce: 'tampered-fresh-nonce',
-        sessionScore: 999_999,
-      };
-      await expect(
-        backend.submitLeaderboardScore({
-          uid: 'wizard_cheater_99',
-          gameId: 'match3',
-          entry: {
-            primaryValue: 12,
-            ratingScore: 999_999,
-            totalWins: 12,
-            bestStreak: 12,
-            proofOfPlay: tamperedEnvelope,
-          },
-        })
-      ).rejects.toMatchObject({
-        reason: 'invalid-proof-of-play',
-        httpStatus: 422,
-      } satisfies Partial<BurrowServerError>);
+      // HPVN: the authoritative backend (server/) is not shipped; only the pure envelope check runs here
 
       // 3. Kẹp trần an toàn cho bản lưu cũ không kèm PoP (chống bơm ratingScore: 9_999_999)
       const clamped = clampUnverifiedLeaderboardStats({
@@ -270,7 +205,7 @@ describe('Track A — Native-Grade Gameplay Feel, Proof-of-Play Anti-Cheat & 52 
     it('tính chính xác số huy hiệu chờ nhận (getClaimableRetentionCount) và nhận gộp 1 chạm (claimAllAchievements)', () => {
       expect(ACHIEVEMENT_REGISTRY.length).toBe(52);
       const sim = new ParkSimulation(createMockAudio());
-      sim.state.stats.totalGalleonsHarvested = 800;
+      sim.state.stats.totalSickleHarvested = 800;
       sim.state.stats.minigamesWon = 25;
 
       const unlocked = evaluateAchievements(sim.state, 1000);
@@ -286,8 +221,8 @@ describe('Track A — Native-Grade Gameplay Feel, Proof-of-Play Anti-Cheat & 52 
 
       expect(batchRes.ok).toBe(true);
       expect(batchRes.claimedCount).toBe(unlocked.length);
-      expect(batchRes.rewardGalleons).toBeGreaterThan(0);
-      expect(sim.state.galleons).toBe(galleonsBefore + batchRes.rewardGalleons);
+      expect(batchRes.rewardSickle).toBeGreaterThan(0);
+      expect(sim.state.galleons).toBe(galleonsBefore + batchRes.rewardSickle);
       expect(sim.state.match3.stars).toBe(starsBefore + batchRes.rewardStars);
       expect(sim.getClaimableRetentionCount().claimableAchievements).toBe(0);
     });
