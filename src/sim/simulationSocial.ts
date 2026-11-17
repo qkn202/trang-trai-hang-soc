@@ -221,16 +221,51 @@ import {
   starIncomeMultiplier,
   VALLEY_VILLAGER_PROFILES,
 } from './simulationData';
+import { identity } from '../hpvn/bridge';
 import type { ParkSimulation } from './simulation';
+
+function normalizeSocialFriendCode(code?: string): string {
+  const norm = (code || '').trim().toUpperCase();
+  return norm && norm !== 'HS-CLUD-00' ? norm : '';
+}
 
 export function socialEnsureNeighborSocial(sim: ParkSimulation): NeighborSocialState {
     if (!sim.state.neighborSocial) {
       sim.state.neighborSocial = createInitialNeighborSocialState();
     }
     if (Array.isArray(sim.state.neighborSocial.neighbors)) {
-      const filtered = sim.state.neighborSocial.neighbors.filter((n) => !isNpcNeighborProfile(n));
-      if (filtered.length !== sim.state.neighborSocial.neighbors.length) {
-        sim.state.neighborSocial.neighbors = filtered;
+      const selfUid = (identity?.uid || '').trim();
+      const seenUids = new Map<string, NeighborProfileState>();
+      const seenCodes = new Map<string, NeighborProfileState>();
+      const deduped: NeighborProfileState[] = [];
+      let changed = false;
+
+      for (const n of sim.state.neighborSocial.neighbors) {
+        if (isNpcNeighborProfile(n)) {
+          changed = true;
+          continue;
+        }
+        const nUid = (n.remoteUserId || '').trim();
+        if (selfUid && nUid === selfUid) {
+          changed = true;
+          continue;
+        }
+        const nCode = normalizeSocialFriendCode(n.friendCode);
+        const dup = (nUid ? seenUids.get(nUid) : undefined) ?? (nCode ? seenCodes.get(nCode) : undefined);
+        if (dup) {
+          changed = true;
+          if (!dup.remoteUserId && nUid) dup.remoteUserId = nUid;
+          if (!dup.avatarUrl && n.avatarUrl) dup.avatarUrl = n.avatarUrl;
+          if (!normalizeSocialFriendCode(dup.friendCode) && nCode) dup.friendCode = n.friendCode;
+          continue;
+        }
+        deduped.push(n);
+        if (nUid) seenUids.set(nUid, n);
+        if (nCode) seenCodes.set(nCode, n);
+      }
+
+      if (changed || deduped.length !== sim.state.neighborSocial.neighbors.length) {
+        sim.state.neighborSocial.neighbors = deduped;
       }
     } else {
       sim.state.neighborSocial.neighbors = [];

@@ -278,6 +278,141 @@ describe('Per-Mini-Game Leaderboards (4 Scored Games: Match-3, Sudoku, Pikachu &
     expect(reloaded.ensureMinigameLeaderboard().records.blocks.bestEfficiency).toBe(14);
   });
 
+  it('deduplicates Floo friends & HPVN cloud entries by remoteUserId/userId even when friendCodes differ or are empty', () => {
+    const sim = new ParkSimulation(new MagicalAudio());
+    sim.setPlayerHouse('Gryffindor');
+
+    const synced = sim.syncFlooDirectoryMembers(
+      [
+        {
+          uid: 'hpvn_aries',
+          username: 'Aries',
+          parkName: 'Thung Lũng Aries',
+          house: 'Gryffindor',
+          level: 25,
+          growing: 2,
+        },
+        {
+          uid: 'hpvn_love_hp',
+          username: 'i_love_hp_forever',
+          parkName: 'Vườn Hufflepuff',
+          house: 'Hufflepuff',
+          level: 22,
+          growing: 1,
+        },
+      ],
+      'hpvn_self_uid'
+    );
+    expect(synced).toHaveLength(2);
+    expect(synced[0].friendCode.startsWith('FLOO-')).toBe(true);
+
+    setCachedCloudLeaderboardEntries('match3', [
+      {
+        userId: 'hpvn_aries',
+        name: 'Aries',
+        parkName: 'Thung Lũng Aries',
+        friendCode: '',
+        avatarEmoji: '🧙',
+        house: 'Ravenclaw',
+        primaryValue: 566,
+        ratingScore: 259248,
+        totalWins: 566,
+        bestStreak: 12,
+        detailLabelVi: '566 thắng',
+        updatedAt: Date.now(),
+      },
+      {
+        userId: 'hpvn_aries',
+        name: 'Aries',
+        parkName: 'Thung Lũng Aries',
+        friendCode: '',
+        avatarEmoji: '🧙',
+        house: 'Gryffindor',
+        primaryValue: 120,
+        ratingScore: 24000,
+        totalWins: 120,
+        bestStreak: 3,
+        detailLabelVi: '120 thắng',
+        updatedAt: Date.now() - 10_000,
+      },
+      {
+        userId: 'hpvn_love_hp',
+        name: 'i_love_hp_forever',
+        parkName: 'Vườn Hufflepuff',
+        friendCode: 'HS-OTHER-99',
+        avatarEmoji: '🧙',
+        house: 'Hufflepuff',
+        primaryValue: 529,
+        ratingScore: 223636,
+        totalWins: 529,
+        bestStreak: 9,
+        detailLabelVi: '529 thắng',
+        updatedAt: Date.now(),
+      },
+      {
+        userId: 'hpvn_ext_1',
+        name: 'Cao Thủ Ẩn Danh 1',
+        parkName: 'Hầm Slytherin 1',
+        friendCode: '',
+        avatarEmoji: '🐍',
+        house: 'Slytherin',
+        primaryValue: 180,
+        ratingScore: 42000,
+        totalWins: 180,
+        bestStreak: 5,
+        detailLabelVi: '180 thắng',
+        updatedAt: Date.now(),
+      },
+      {
+        userId: 'hpvn_ext_2',
+        name: 'Cao Thủ Ẩn Danh 2',
+        parkName: 'Hầm Slytherin 2',
+        friendCode: '',
+        avatarEmoji: '🐍',
+        house: 'Slytherin',
+        primaryValue: 160,
+        ratingScore: 39000,
+        totalWins: 160,
+        bestStreak: 4,
+        detailLabelVi: '160 thắng',
+        updatedAt: Date.now(),
+      },
+    ]);
+
+    const valley = sim.getMinigameLeaderboard('match3', 'valley');
+    const ariesRows = valley.entries.filter((e) => e.name === 'Aries');
+    expect(ariesRows).toHaveLength(1);
+    expect(ariesRows[0].isFriend).toBe(true);
+    expect(ariesRows[0].house).toBe('Ravenclaw');
+    expect(ariesRows[0].ratingScore).toBe(259248);
+    expect(ariesRows[0].primaryValue).toBe(566);
+
+    const loveHpRows = valley.entries.filter((e) => e.name === 'i_love_hp_forever');
+    expect(loveHpRows).toHaveLength(1);
+    expect(loveHpRows[0].isFriend).toBe(true);
+    expect(loveHpRows[0].ratingScore).toBe(223636);
+    expect(loveHpRows[0].primaryValue).toBe(529);
+
+    expect(valley.entries.some((e) => e.id === 'cloud:hpvn_ext_1')).toBe(true);
+    expect(valley.entries.some((e) => e.id === 'cloud:hpvn_ext_2')).toBe(true);
+    const slytherinHouse = valley.houseStandings.find((h) => h.house === 'Slytherin');
+    expect(slytherinHouse?.members).toBe(2);
+
+    // Duplicate neighbor record in save with same remoteUserId -> deduplicated in friends & valley
+    const social = sim.ensureNeighborSocial();
+    social.neighbors.push({
+      ...social.neighbors[0],
+      id: 'floo_dup_aries',
+      friendCode: 'HS-DUP-999',
+      remoteUserId: 'hpvn_aries',
+    });
+    const friendsAfterDup = sim.getMinigameLeaderboard('match3', 'friends');
+    expect(friendsAfterDup.entries.filter((e) => e.name === 'Aries')).toHaveLength(1);
+    const valleyAfterDup = sim.getMinigameLeaderboard('match3', 'valley');
+    expect(valleyAfterDup.entries.filter((e) => e.name === 'Aries')).toHaveLength(1);
+    expect(sim.ensureNeighborSocial().neighbors.filter((n) => n.remoteUserId === 'hpvn_aries')).toHaveLength(1);
+  });
+
   it('implements progressive Pikachu Onet Connect (24 -> 160 tiles across 12 tiers, 36 unique sprites, 9 shift modes, and countdown timer)', () => {
     expect(CREATURE_ONET_SPECIES.length).toBe(36);
     const uniqueSprites = new Set(CREATURE_ONET_SPECIES.map((s) => s.spriteKey));

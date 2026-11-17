@@ -552,6 +552,83 @@ function formatDetailDisplayVi(
   return `${totalWins} thắng • 🔥×${bestStreak}${bestRun}`;
 }
 
+function normalizeValidFriendCode(code?: string): string {
+  const norm = (code || '').trim().toUpperCase();
+  return norm && norm !== 'HS-CLUD-00' ? norm : '';
+}
+
+function toUidSlug(uid?: string): string {
+  return (uid || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
+}
+
+function normalizeMemberHandle(name?: string): string {
+  return (name || '').trim().toLowerCase();
+}
+
+function isBetterCloudEntry(
+  candidate: CloudLeaderboardEntry,
+  prev: CloudLeaderboardEntry
+): boolean {
+  const cPv = Math.max(0, Math.floor(candidate.primaryValue || 0));
+  const pPv = Math.max(0, Math.floor(prev.primaryValue || 0));
+  if (cPv !== pPv) return cPv > pPv;
+  const cRs = Math.max(0, Math.floor(candidate.ratingScore || 0));
+  const pRs = Math.max(0, Math.floor(prev.ratingScore || 0));
+  if (cRs !== pRs) return cRs > pRs;
+  const cTw = Math.max(0, Math.floor(candidate.totalWins || 0));
+  const pTw = Math.max(0, Math.floor(prev.totalWins || 0));
+  if (cTw !== pTw) return cTw > pTw;
+  return (candidate.updatedAt || 0) > (prev.updatedAt || 0);
+}
+
+function dedupeCloudEntries(
+  raw: ReadonlyArray<CloudLeaderboardEntry>
+): CloudLeaderboardEntry[] {
+  const result: CloudLeaderboardEntry[] = [];
+  const byUid = new Map<string, number>();
+  const byCode = new Map<string, number>();
+
+  for (const ce of raw) {
+    if (!ce) continue;
+    const uid = (ce.userId || '').trim();
+    const code = normalizeValidFriendCode(ce.friendCode);
+    const usableCode = code && !code.startsWith('FLOO-') ? code : '';
+    const existingIdx =
+      (uid ? byUid.get(uid) : undefined) ??
+      (usableCode ? byCode.get(usableCode) : undefined);
+
+    if (existingIdx === undefined) {
+      const idx = result.length;
+      result.push(ce);
+      if (uid) byUid.set(uid, idx);
+      if (usableCode) byCode.set(usableCode, idx);
+      continue;
+    }
+
+    const prev = result[existingIdx];
+    const nextBest = isBetterCloudEntry(ce, prev) ? ce : prev;
+    const other = nextBest === ce ? prev : ce;
+    const merged: CloudLeaderboardEntry = {
+      ...nextBest,
+      name: (nextBest.name || '').trim() || other.name,
+      avatarUrl: nextBest.avatarUrl || other.avatarUrl,
+      friendCode:
+        normalizeValidFriendCode(nextBest.friendCode) ||
+        normalizeValidFriendCode(other.friendCode) ||
+        nextBest.friendCode,
+    };
+    result[existingIdx] = merged;
+    if (uid) byUid.set(uid, existingIdx);
+    if (usableCode) byCode.set(usableCode, existingIdx);
+    const prevUid = (prev.userId || '').trim();
+    const prevCode = normalizeValidFriendCode(prev.friendCode);
+    if (prevUid) byUid.set(prevUid, existingIdx);
+    if (prevCode && !prevCode.startsWith('FLOO-')) byCode.set(prevCode, existingIdx);
+  }
+
+  return result;
+}
+
 function buildNeighborLeaderboardEntry(
   neighbor: NeighborProfileState,
   gameId: LeaderboardGameId,
@@ -562,16 +639,20 @@ function buildNeighborLeaderboardEntry(
     const rs = Math.max(0, Math.floor(cloudMatch.ratingScore || 0));
     const tw = Math.max(0, Math.floor(cloudMatch.totalWins || 0));
     const bs = Math.max(0, Math.floor(cloudMatch.bestStreak || 0));
+    const resolvedHouse: HouseName =
+      cloudMatch.house && ALL_HOGWARTS_HOUSES.includes(cloudMatch.house)
+        ? cloudMatch.house
+        : neighbor.house || 'Gryffindor';
     return {
       id: `friend:${neighbor.id}`,
-      name: neighbor.name,
+      name: (cloudMatch.name || '').trim() || neighbor.name,
       titleVi: neighbor.titleVi || 'Người Chơi Thật • Hàng Xóm',
-      parkName: neighbor.parkName,
-      friendCode: neighbor.friendCode,
-      avatarEmoji: neighbor.avatarEmoji || cloudMatch.avatarEmoji || '🧙',
-      avatarUrl: neighbor.avatarUrl || cloudMatch.avatarUrl,
+      parkName: (cloudMatch.parkName || '').trim() || neighbor.parkName,
+      friendCode: normalizeValidFriendCode(cloudMatch.friendCode) || neighbor.friendCode,
+      avatarEmoji: cloudMatch.avatarEmoji || neighbor.avatarEmoji || '🧙',
+      avatarUrl: cloudMatch.avatarUrl || neighbor.avatarUrl,
       portraitSprite: neighbor.portraitSprite,
-      house: neighbor.house || cloudMatch.house || 'Gryffindor',
+      house: resolvedHouse,
       isPlayer: false,
       isFriend: true,
       isCloudPlayer: true,
@@ -615,12 +696,23 @@ function buildNeighborLeaderboardEntry(
 
 export function buildPlayerLeaderboardEntry(
   state: GameState,
-  gameId: LeaderboardGameId
+  gameId: LeaderboardGameId,
+  selfCloud?: CloudLeaderboardEntry
 ): Omit<LeaderboardRowEntry, 'rank'> {
   const lb = ensureMinigameLeaderboardState(state);
   const rec = lb.records[gameId];
   const friendCode = state.neighborSocial?.playerFriendCode || 'HS-YOU1-01';
   const house = getPlayerHogwartsHouse(state);
+  const baseDisplayName =
+    identity?.displayName?.trim() ||
+    selfCloud?.name?.trim() ||
+    state.neighborSocial?.playerDisplayName?.trim() ||
+    state.parkName ||
+    'Trang Trại Hang Sóc';
+  const primaryValue = Math.max(rec.bestStage, Math.max(0, Math.floor(selfCloud?.primaryValue || 0)));
+  const ratingScore = Math.max(rec.highScore, Math.max(0, Math.floor(selfCloud?.ratingScore || 0)));
+  const totalWins = Math.max(rec.totalWins, Math.max(0, Math.floor(selfCloud?.totalWins || 0)));
+  const bestStreak = Math.max(rec.bestStreak, Math.max(0, Math.floor(selfCloud?.bestStreak || 0)));
   const playerTitle =
     state.level >= 80
       ? 'Đại Điền Chủ Thung Lũng'
@@ -632,28 +724,28 @@ export function buildPlayerLeaderboardEntry(
 
   return {
     id: 'player:self',
-    name: `${state.parkName || 'Trang Trại Hang Sóc'} (Bạn)`,
+    name: `${baseDisplayName} (Bạn)`,
     titleVi: `${playerTitle} • Cấp ${state.level}`,
     parkName: state.parkName || 'Trang Trại Hang Sóc',
     friendCode,
     avatarEmoji: '🧙‍♂️',
-    avatarUrl: state.neighborSocial?.playerAvatarUrl,
+    avatarUrl: state.neighborSocial?.playerAvatarUrl || selfCloud?.avatarUrl,
     house,
     isPlayer: true,
     isFriend: true,
-    primaryValue: rec.bestStage,
-    primaryDisplayVi: formatPrimaryDisplayVi(gameId, rec.bestStage),
-    ratingScore: rec.highScore,
-    ratingDisplayVi: `${rec.highScore.toLocaleString('vi-VN')} đ`,
-    totalWins: rec.totalWins,
-    bestStreak: rec.bestStreak,
+    primaryValue,
+    primaryDisplayVi: formatPrimaryDisplayVi(gameId, primaryValue),
+    ratingScore,
+    ratingDisplayVi: `${ratingScore.toLocaleString('vi-VN')} đ`,
+    totalWins,
+    bestStreak,
     detailDisplayVi: formatDetailDisplayVi(
       gameId,
-      rec.totalWins,
-      rec.bestStreak,
+      totalWins,
+      bestStreak,
       rec.bestEfficiency
     ),
-    league: getLeaderboardLeagueBadge(gameId, rec.bestStage),
+    league: getLeaderboardLeagueBadge(gameId, primaryValue),
   };
 }
 
@@ -739,44 +831,144 @@ function buildRawPoolForScoredGame(
   scope: Exclude<LeaderboardScope, 'personal'>,
   extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>
 ): Array<Omit<LeaderboardRowEntry, 'rank'>> {
-  const playerRaw = buildPlayerLeaderboardEntry(state, gameId);
-  const neighbors = (state.neighborSocial?.neighbors ?? []).filter(
-    (n) => !isNpcNeighborProfile(n)
-  );
   const effectiveCloud = extraCloudEntries ?? cloudEntriesMemoryCache[gameId] ?? [];
+  const dedupedCloud = dedupeCloudEntries(effectiveCloud);
+
   const cloudByCode = new Map<string, CloudLeaderboardEntry>();
   const cloudByUid = new Map<string, CloudLeaderboardEntry>();
-  for (const ce of effectiveCloud) {
-    if (!ce) continue;
-    if (ce.friendCode) cloudByCode.set(ce.friendCode.trim().toUpperCase(), ce);
-    if (ce.userId) cloudByUid.set(ce.userId, ce);
+  const cloudByUidSlug = new Map<string, CloudLeaderboardEntry>();
+  const cloudHandleCount = new Map<string, number>();
+  const cloudByHandleCandidate = new Map<string, CloudLeaderboardEntry>();
+
+  for (const ce of dedupedCloud) {
+    const uid = (ce.userId || '').trim();
+    const slug = toUidSlug(uid);
+    const code = normalizeValidFriendCode(ce.friendCode);
+    const handle = normalizeMemberHandle(ce.name);
+    if (uid && !cloudByUid.has(uid)) cloudByUid.set(uid, ce);
+    if (slug && !cloudByUidSlug.has(slug)) cloudByUidSlug.set(slug, ce);
+    if (code && !code.startsWith('FLOO-') && !cloudByCode.has(code)) {
+      cloudByCode.set(code, ce);
+    }
+    if (handle) {
+      cloudHandleCount.set(handle, (cloudHandleCount.get(handle) ?? 0) + 1);
+      if (!cloudByHandleCandidate.has(handle)) cloudByHandleCandidate.set(handle, ce);
+    }
   }
-  const friendCodeSet = new Set<string>(
-    neighbors.map((n) => n.friendCode.trim().toUpperCase())
+  const cloudByHandle = new Map<string, CloudLeaderboardEntry>();
+  for (const [handle, ce] of cloudByHandleCandidate) {
+    if (cloudHandleCount.get(handle) === 1) {
+      cloudByHandle.set(handle, ce);
+    }
+  }
+
+  const localUid = getClientLeaderboardUserId().trim();
+  const hasRealLocalUid = Boolean(localUid && localUid !== 'local_player');
+  const localSlug = toUidSlug(localUid);
+  const selfCloud = hasRealLocalUid
+    ? (cloudByUid.get(localUid) ?? (localSlug ? cloudByUidSlug.get(localSlug) : undefined))
+    : undefined;
+  const playerRaw = buildPlayerLeaderboardEntry(state, gameId, selfCloud);
+  const playerCode = normalizeValidFriendCode(playerRaw.friendCode);
+  const selfHandle = normalizeMemberHandle(identity?.displayName);
+
+  const rawNeighbors = (state.neighborSocial?.neighbors ?? []).filter(
+    (n) => !isNpcNeighborProfile(n)
   );
+  const seenFriendUids = new Set<string>();
+  const seenFriendSlugs = new Set<string>();
+  const seenFriendCodes = new Set<string>();
+  const neighbors: NeighborProfileState[] = [];
+
+  for (const n of rawNeighbors) {
+    const nUid = (n.remoteUserId || '').trim();
+    const nSlug = toUidSlug(nUid || (n.id.startsWith('floo_') ? n.id.slice(5) : ''));
+    const nCode = normalizeValidFriendCode(n.friendCode);
+    if (
+      (hasRealLocalUid && (nUid === localUid || (nSlug && nSlug === localSlug))) ||
+      (playerCode && nCode === playerCode)
+    ) {
+      continue;
+    }
+    if (
+      (nUid && seenFriendUids.has(nUid)) ||
+      (nSlug && seenFriendSlugs.has(nSlug)) ||
+      (nCode && seenFriendCodes.has(nCode))
+    ) {
+      continue;
+    }
+    neighbors.push(n);
+    if (nUid) seenFriendUids.add(nUid);
+    if (nSlug) seenFriendSlugs.add(nSlug);
+    if (nCode) seenFriendCodes.add(nCode);
+  }
+
+  const matchedCloudRefs = new Set<CloudLeaderboardEntry>();
+  const friendUidSet = new Set<string>();
+  const friendUidSlugSet = new Set<string>();
+  const friendCodeSet = new Set<string>();
+
   const friendEntries = neighbors.map((n) => {
-    const cMatch =
-      (n.remoteUserId ? cloudByUid.get(n.remoteUserId) : undefined) ??
-      cloudByCode.get(n.friendCode.trim().toUpperCase());
+    const nUid = (n.remoteUserId || '').trim();
+    const nSlug = toUidSlug(nUid || (n.id.startsWith('floo_') ? n.id.slice(5) : ''));
+    const nCode = normalizeValidFriendCode(n.friendCode);
+    if (nUid) friendUidSet.add(nUid);
+    if (nSlug) friendUidSlugSet.add(nSlug);
+    if (nCode) friendCodeSet.add(nCode);
+
+    let cMatch =
+      (nUid ? cloudByUid.get(nUid) : undefined) ??
+      (nSlug ? cloudByUidSlug.get(nSlug) : undefined) ??
+      (nCode && !nCode.startsWith('FLOO-') ? cloudByCode.get(nCode) : undefined) ??
+      ((n.isVerifiedPlayer || n.id.startsWith('floo_')) && !nUid
+        ? cloudByHandle.get(normalizeMemberHandle(n.name))
+        : undefined);
+
+    if (
+      cMatch &&
+      ((hasRealLocalUid && cMatch.userId.trim() === localUid) || matchedCloudRefs.has(cMatch))
+    ) {
+      cMatch = undefined;
+    }
+
+    if (cMatch) {
+      matchedCloudRefs.add(cMatch);
+      const cUid = cMatch.userId.trim();
+      if (cUid) {
+        friendUidSet.add(cUid);
+        const cSlug = toUidSlug(cUid);
+        if (cSlug) friendUidSlugSet.add(cSlug);
+      }
+      const cCode = normalizeValidFriendCode(cMatch.friendCode);
+      if (cCode) friendCodeSet.add(cCode);
+    }
+
     return buildNeighborLeaderboardEntry(n, gameId, cMatch);
   });
 
   const pool: Array<Omit<LeaderboardRowEntry, 'rank'>> = [playerRaw, ...friendEntries];
 
   if (scope === 'valley') {
-    const localUid = getClientLeaderboardUserId();
-    for (const ce of effectiveCloud) {
-      if (!ce || !ce.userId) continue;
-      const normCode = (ce.friendCode || '').trim().toUpperCase();
-      if (
-        ce.userId === localUid ||
-        normCode === playerRaw.friendCode.trim().toUpperCase() ||
-        friendCodeSet.has(normCode)
-      ) {
+    for (const ce of dedupedCloud) {
+      const ceUid = (ce?.userId || '').trim();
+      if (!ce || !ceUid) continue;
+      if (matchedCloudRefs.has(ce)) continue;
+      const ceSlug = toUidSlug(ceUid);
+      if (hasRealLocalUid && (ceUid === localUid || (ceSlug && ceSlug === localSlug))) {
+        continue;
+      }
+      if (hasRealLocalUid && selfHandle && normalizeMemberHandle(ce.name) === selfHandle) {
+        continue;
+      }
+      if (friendUidSet.has(ceUid) || (ceSlug && friendUidSlugSet.has(ceSlug))) {
+        continue;
+      }
+      const normCode = normalizeValidFriendCode(ce.friendCode);
+      if (normCode !== '' && (normCode === playerCode || friendCodeSet.has(normCode))) {
         continue;
       }
       pool.push({
-        id: `cloud:${ce.userId}`,
+        id: `cloud:${ceUid}`,
         name: ce.name || ce.parkName || 'Người Chơi Trực Tuyến',
         titleVi: 'Người Chơi Thật Trực Tuyến',
         parkName: ce.parkName || 'Điền Trang Phép Thuật',
@@ -846,9 +1038,7 @@ function buildUnifiedHouseCupStandings(
     for (const row of gPool) {
       const h: HouseName = ALL_HOGWARTS_HOUSES.includes(row.house) ? row.house : 'Gryffindor';
       const rec = map.get(h)!;
-      const memberKey = row.isPlayer
-        ? 'self'
-        : (row.friendCode || row.id).trim().toUpperCase();
+      const memberKey = row.isPlayer ? 'self' : row.id;
       rec.memberKeys.add(memberKey);
       rec.totalPrimaryValue += Math.max(0, row.primaryValue);
       rec.totalWins += Math.max(0, row.totalWins);
