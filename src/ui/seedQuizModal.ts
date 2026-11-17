@@ -29,6 +29,7 @@ import {
   QuizProficiencyTier,
 } from '../types/game';
 import { MINIGAME_ZOOM_STEP, sharedMinigameViewport } from './minigameViewControls';
+import { compactSickle } from '../hpvn/toolIcons';
 
 function escapeHtml(val: unknown): string {
   return String(val ?? '')
@@ -409,6 +410,15 @@ export class SeedQuizModalController {
     this.onEquipAndSow(this.targetCropId, targetPlot);
   }
 
+  private handleBuySeedsWithSickle(qty: number): void {
+    const res = this.sim.buyCropSeedWithGold(this.targetCropId, qty);
+    this.onToast(res.msg, res.ok ? '🌱' : '🪙');
+    if (res.ok) {
+      this.onRefreshHud();
+      this.render();
+    }
+  }
+
   public render(): void {
     const container = this.root.querySelector('#seedQuizDialogContent') as HTMLElement | null;
     if (!container) return;
@@ -528,6 +538,12 @@ export class SeedQuizModalController {
 
     const challengeHtml = this.challenge ? this.renderChallengeStage(this.challenge) : '';
     const isAnswered = this.answeredOutcome !== null;
+    const isSandbox = Boolean(this.sim.state.sandboxMode);
+    const galleons = this.sim.state.galleons;
+    const cost1 = crop.seedCost;
+    const cost3 = crop.seedCost * 3;
+    const buyCost1Label = isSandbox ? '0' : cost1.toLocaleString('vi-VN');
+    const buyCost3Label = isSandbox ? '0' : cost3.toLocaleString('vi-VN');
 
     container.innerHTML = `
       <div class="sq-scroll-viewport" id="sqScrollViewport">
@@ -551,6 +567,26 @@ export class SeedQuizModalController {
                           : ''
                       }
                       <select id="selSqTier" class="sq-select sq-tier-select" aria-label="Chọn cấp độ">${tierOptionsHtml}</select>
+                    </div>
+                    <div class="sq-buy-row" role="group" aria-label="Mua hạt giống bằng Sickle">
+                      <button
+                        id="btnSqBuy1"
+                        type="button"
+                        class="brass-btn sq-tool-pill sq-buy-pill"
+                        data-unaffordable="${!isSandbox && galleons < cost1}"
+                        title="Mua 1 hạt ${escapeHtml(crop.name)} (${cost1.toLocaleString('vi-VN')} Sickle)"
+                      >+1 hạt · 🪙${buyCost1Label}</button>
+                      <button
+                        id="btnSqBuy3"
+                        type="button"
+                        class="brass-btn sq-tool-pill sq-buy-pill"
+                        data-unaffordable="${!isSandbox && galleons < cost3}"
+                        title="Mua 3 hạt ${escapeHtml(crop.name)} (${cost3.toLocaleString('vi-VN')} Sickle)"
+                      >+3 hạt · 🪙${buyCost3Label}</button>
+                      <span class="sq-sickle-chip" title="Số dư Sickle hiện có">
+                        <span class="g-coin">S</span>
+                        <strong>${isSandbox ? '∞' : compactSickle(galleons)}</strong>
+                      </span>
                     </div>
                     <div class="sq-tools-row">
                       <select id="selSqFormat" class="sq-select sq-format-select" aria-label="Chọn dạng câu hỏi">${formatOptionsHtml}</select>
@@ -1017,6 +1053,12 @@ export class SeedQuizModalController {
     });
     container.querySelector('#btnSqExplainSow')?.addEventListener('click', () => {
       this.handleSowEquippedSeed();
+    });
+    container.querySelector('#btnSqBuy1')?.addEventListener('click', () => {
+      this.handleBuySeedsWithSickle(1);
+    });
+    container.querySelector('#btnSqBuy3')?.addEventListener('click', () => {
+      this.handleBuySeedsWithSickle(3);
     });
 
     const btnAuto = container.querySelector('#btnSqAutoSpeak') as HTMLButtonElement | null;

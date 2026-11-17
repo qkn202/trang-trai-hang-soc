@@ -8,6 +8,10 @@ import {
 import { SeedQuizModalController } from '../../ui/seedQuizModal';
 import { resolveMinigameOrientation } from '../../ui/minigameViewControls';
 import { getSudokuDigitFillColor } from '../../ui/puzzleArcadeModal';
+import { farmUiRenderSeedTray } from '../../ui/hudFarmAndWorkshop';
+import { FARM_CROPS } from '../../data/catalog';
+import { getVietnamCalendarKey } from '../neighborSocial';
+import { QUIZ_DAILY_REWARD_CAP } from '../simulationFarm';
 import type { GameHUD } from '../../ui/hud';
 
 async function loadNodeFsAndPath(): Promise<{
@@ -292,5 +296,121 @@ describe('Full-Game Loop 9/10 UX Polish & Hardening', () => {
     expect(puzzleModal).not.toContain('paSudokuTimer');
     expect(puzzleModal).not.toContain('this.sudokuEngine.tickTimer');
     expect(puzzleModal).not.toContain('this.sudokuEngine.elapsedSec');
+  });
+
+  it('allows buying seeds directly with Sickle in Học Viện Thần Chú (#btnSqBuy1 / #btnSqBuy3), even after the daily quiz cap', () => {
+    const sim = new ParkSimulation(createMockAudio());
+    const cropCost = FARM_CROPS.ottery_wheat.seedCost;
+    sim.state.sandboxMode = false;
+    sim.state.galleons = 5000;
+    sim.ensureFarmBarn().seeds = { ottery_wheat: 0 };
+    sim.state.quizRewardDaily = { dayKey: getVietnamCalendarKey(), count: QUIZ_DAILY_REWARD_CAP };
+
+    const clickHandlers = new Map<string, () => void>();
+    const makeBtnStub = (sel: string) => ({
+      addEventListener: (ev: string, fn: () => void) => {
+        if (ev === 'click') clickHandlers.set(sel, fn);
+      },
+      setAttribute: () => {},
+    });
+    const contentEl = new MockEl();
+    contentEl.querySelector = (sel?: string) => {
+      if (sel === '#btnSqBuy1' || sel === '#btnSqBuy3') {
+        return makeBtnStub(sel) as unknown as MockEl;
+      }
+      return null;
+    };
+    const dlgEl = new MockEl();
+    const rootWithQuery = {
+      querySelector: (sel: string) => {
+        if (sel === '#seedQuizDialogContent') return contentEl;
+        if (sel === '#seedQuizDialog') return dlgEl;
+        return null;
+      },
+      querySelectorAll: () => [],
+    } as unknown as HTMLElement;
+
+    const onRefreshHud = vi.fn();
+    const onToast = vi.fn();
+    const ctrl = new SeedQuizModalController(rootWithQuery, sim, onRefreshHud, onToast, () => {});
+    ctrl.render();
+
+    expect(contentEl.innerHTML).toContain('id="btnSqBuy1"');
+    expect(contentEl.innerHTML).toContain('id="btnSqBuy3"');
+    expect(contentEl.innerHTML).not.toContain('id="btnSqSowNow"');
+
+    clickHandlers.get('#btnSqBuy1')?.();
+    expect(sim.getSeedCount('ottery_wheat')).toBe(1);
+    expect(sim.state.galleons).toBe(5000 - cropCost);
+    expect(contentEl.innerHTML).toContain('id="btnSqSowNow"');
+    expect(contentEl.innerHTML).toContain('Gieo ×1');
+
+    clickHandlers.get('#btnSqBuy3')?.();
+    expect(sim.getSeedCount('ottery_wheat')).toBe(4);
+    expect(sim.state.galleons).toBe(5000 - cropCost * 4);
+    expect(contentEl.innerHTML).toContain('Gieo ×4');
+    expect(onRefreshHud).toHaveBeenCalledTimes(2);
+    expect(onToast).toHaveBeenCalledTimes(2);
+  });
+
+  it('buys 1 seed directly with Sickle when clicking "+ 🪙giá" in Seed Tray without redirecting to quiz', () => {
+    const sim = new ParkSimulation(createMockAudio());
+    const cropCost = FARM_CROPS.ottery_wheat.seedCost;
+    sim.state.sandboxMode = false;
+    sim.state.galleons = 2000;
+    sim.ensureFarmBarn().seeds = { ottery_wheat: 0 };
+
+    const acquireClicks = new Map<string, (ev: { stopPropagation: () => void }) => void>();
+    const trayEl = new MockEl();
+    trayEl.querySelectorAll = ((sel: string) => {
+      if (sel === '[data-acquire-seed]') {
+        return [
+          {
+            dataset: { acquireSeed: 'ottery_wheat' },
+            addEventListener: (
+              ev: string,
+              fn: (e: { stopPropagation: () => void }) => void
+            ) => {
+              if (ev === 'click') acquireClicks.set('ottery_wheat', fn);
+            },
+          },
+        ] as unknown as MockEl[];
+      }
+      return [];
+    }) as MockEl['querySelectorAll'];
+
+    const fakeHud = {
+      root: {
+        querySelector: (sel: string) => (sel === '#seedBrushTray' ? trayEl : null),
+      },
+      sim,
+      photoModeActive: false,
+      seedTrayOpen: true,
+      seedFilterMode: 'all' as const,
+      activeSeedCropId: null,
+      pendingSowPlotUid: 'plot_1',
+      inspectSelection: null,
+      showToast: vi.fn(),
+      refreshAll: vi.fn(),
+      syncHudFocusVisibility: vi.fn(),
+      openSeedQuizDialog: vi.fn(),
+    } as unknown as GameHUD;
+
+    farmUiRenderSeedTray(fakeHud);
+    const handler = acquireClicks.get('ottery_wheat');
+    expect(handler).toBeDefined();
+
+    const stopPropagation = vi.fn();
+    handler?.({ stopPropagation });
+
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
+    expect(fakeHud.openSeedQuizDialog).not.toHaveBeenCalled();
+    expect(fakeHud.seedTrayOpen).toBe(true);
+    expect(fakeHud.pendingSowPlotUid).toBe('plot_1');
+    expect(fakeHud.activeSeedCropId).toBe('ottery_wheat');
+    expect(sim.getSeedCount('ottery_wheat')).toBe(1);
+    expect(sim.state.galleons).toBe(2000 - cropCost);
+    expect(fakeHud.refreshAll).toHaveBeenCalledTimes(1);
+    expect(fakeHud.showToast).toHaveBeenCalledTimes(1);
   });
 });

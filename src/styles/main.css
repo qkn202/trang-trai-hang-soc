@@ -18704,7 +18704,7 @@ body:has(#tutorialCoachCard:not(.docked-top):popover-open) .owl-toast-stack[popo
 :is(#seedBrushTray, #pastureBrushTray) .seed-tray-scroll::-webkit-scrollbar {
   display: none;
 }
-:is(#seedBrushTray, #pastureBrushTray) .seed-card-slot {
+:is(#seedBrushTray, #pastureBrushTray, #inspectorPanel) .seed-card-slot {
   position: relative;
   flex: 0 0 112px;
   display: flex;
@@ -18715,22 +18715,26 @@ body:has(#tutorialCoachCard:not(.docked-top):popover-open) .owl-toast-stack[popo
   overflow: hidden;
   box-shadow: none;
 }
-:is(#seedBrushTray, #pastureBrushTray) .seed-card-slot.out-of-seeds:not(.locked),
+#inspectorPanel .seed-picker-grid > .seed-card-slot {
+  flex: initial;
+  min-inline-size: 0;
+}
+:is(#seedBrushTray, #pastureBrushTray, #inspectorPanel) .seed-card-slot.out-of-seeds:not(.locked),
 #inspectorPanel .seed-picker-grid > .seed-card.out-of-seeds:not(.locked) {
   border-style: dashed;
   border-color: rgba(122, 86, 56, 0.55);
 }
-:is(#seedBrushTray, #pastureBrushTray) .seed-card-slot.selected,
+:is(#seedBrushTray, #pastureBrushTray, #inspectorPanel) .seed-card-slot.selected,
 #inspectorPanel .seed-picker-grid > .seed-card.selected {
   border-color: var(--hs-gold-deep);
   background: #fdf0ca;
   box-shadow: inset 0 0 0 1px var(--hs-gold-deep);
 }
-:is(#seedBrushTray, #pastureBrushTray) .seed-card-slot.locked {
+:is(#seedBrushTray, #pastureBrushTray, #inspectorPanel) .seed-card-slot.locked {
   opacity: 0.58;
   filter: grayscale(0.45);
 }
-:is(#seedBrushTray, #pastureBrushTray) .seed-card-slot > .seed-tray-card {
+:is(#seedBrushTray, #pastureBrushTray, #inspectorPanel) .seed-card-slot > .seed-tray-card {
   flex: 1 1 auto;
   inline-size: 100%;
   display: flex;
@@ -18809,7 +18813,7 @@ body:has(#tutorialCoachCard:not(.docked-top):popover-open) .owl-toast-stack[popo
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-#seedBrushTray .seed-card-add-btn {
+:is(#seedBrushTray, #inspectorPanel) .seed-card-add-btn {
   position: relative;
   inset: auto;
   transform: none;
@@ -18831,15 +18835,15 @@ body:has(#tutorialCoachCard:not(.docked-top):popover-open) .owl-toast-stack[popo
   font-variant-numeric: tabular-nums;
   box-shadow: none;
 }
-#seedBrushTray .seed-card-add-btn::before {
+:is(#seedBrushTray, #inspectorPanel) .seed-card-add-btn::before {
   content: none;
 }
 @media (hover: hover) {
-  #seedBrushTray .seed-card-add-btn:hover {
+  :is(#seedBrushTray, #inspectorPanel) .seed-card-add-btn:hover {
     filter: none;
-    background: #eddcb9;
+    background: var(--hs-cream);
   }
-  :is(#seedBrushTray, #pastureBrushTray) .seed-card-slot:not(.locked):hover {
+  :is(#seedBrushTray, #pastureBrushTray, #inspectorPanel) .seed-card-slot:not(.locked):hover {
     border-color: var(--hs-gold-deep);
   }
 }
@@ -19344,7 +19348,7 @@ body:has(#tutorialCoachCard:not(.docked-top):popover-open) .owl-toast-stack[popo
   font-weight: var(--hs-weight-label);
   white-space: nowrap;
 }
-#seedQuizDialog :is(.sq-setup-row, .sq-tools-row) {
+#seedQuizDialog :is(.sq-setup-row, .sq-buy-row, .sq-tools-row) {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -19352,6 +19356,40 @@ body:has(#tutorialCoachCard:not(.docked-top):popover-open) .owl-toast-stack[popo
   padding: 0;
   border: 0;
   background: none;
+}
+#seedQuizDialog .sq-buy-row {
+  flex-wrap: wrap;
+}
+#seedQuizDialog .sq-buy-pill {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--hs-space-1);
+}
+#seedQuizDialog .sq-buy-pill[data-unaffordable='true'] {
+  opacity: 0.65;
+}
+#seedQuizDialog .sq-sickle-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hs-space-1);
+  min-block-size: 40px;
+  padding: 0 10px;
+  border: var(--hs-line) solid var(--hs-brass);
+  border-radius: var(--hs-radius-m);
+  background: var(--hs-paper-2);
+  color: var(--hs-ink);
+  font-size: var(--hs-text-12);
+  font-weight: var(--hs-weight-label);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+#seedQuizDialog .sq-sickle-chip .g-coin {
+  inline-size: 16px;
+  block-size: 16px;
+  filter: none;
 }
 #seedQuizDialog .sq-setup-row > .sq-crop-pill-img {
   flex: none;

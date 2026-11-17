@@ -225,21 +225,26 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                     const seedCount = hud.sim.getSeedCount(crop.id);
                     const growLabel = formatDurationCompactVi(crop.growSec);
                     return `
-                      <button
-                        type="button"
-                        class="seed-card ${lockedCrop ? 'locked' : ''} ${!lockedCrop && seedCount <= 0 ? 'out-of-seeds' : ''}"
-                        data-plant-crop="${crop.id}"
-                        ${lockedCrop ? 'disabled' : ''}
-                      >
-                        <span class="seed-card-seed-badge ${lockedCrop ? 'is-locked' : seedCount > 0 ? 'has-seed' : 'no-seed'}">
-                          ${lockedCrop ? `Cấp ${crop.unlockLevel}` : `×${seedCount}`}
-                        </span>
-                        <img src="${getFarmItemIconSrc(crop.id)}" alt="${escapeHtml(crop.name)}" class="seed-card-img" />
-                        <span class="seed-card-name">${escapeHtml(crop.name)}</span>
-                        <span class="seed-card-meta">
-                          ${lockedCrop ? growLabel : `${growLabel} · 🪙${crop.seedCost.toLocaleString('vi-VN')}`}
-                        </span>
-                      </button>
+                      <div class="seed-card-slot ${lockedCrop ? 'locked' : ''} ${!lockedCrop && seedCount <= 0 ? 'out-of-seeds' : ''}">
+                        <button
+                          type="button"
+                          class="seed-card seed-tray-card ${lockedCrop ? 'locked' : ''} ${!lockedCrop && seedCount <= 0 ? 'out-of-seeds' : ''}"
+                          data-plant-crop="${crop.id}"
+                          ${lockedCrop ? 'disabled' : ''}
+                        >
+                          <span class="seed-card-seed-badge ${lockedCrop ? 'is-locked' : seedCount > 0 ? 'has-seed' : 'no-seed'}">
+                            ${lockedCrop ? `Cấp ${crop.unlockLevel}` : `×${seedCount}`}
+                          </span>
+                          <img src="${getFarmItemIconSrc(crop.id)}" alt="${escapeHtml(crop.name)}" class="seed-card-img" />
+                          <span class="seed-card-name">${escapeHtml(crop.name)}</span>
+                          <span class="seed-card-meta">${growLabel}</span>
+                        </button>
+                        ${
+                          !lockedCrop
+                            ? `<button type="button" class="seed-card-add-btn" data-insp-buy-seed="${crop.id}" aria-label="Mua 1 hạt ${escapeHtml(crop.name)} (${crop.seedCost.toLocaleString('vi-VN')} Sickle)" title="Mua 1 hạt ${escapeHtml(crop.name)} (${crop.seedCost.toLocaleString('vi-VN')} Sickle)">+ 🪙${hud.sim.state.sandboxMode ? '0' : crop.seedCost.toLocaleString('vi-VN')}</button>`
+                            : ''
+                        }
+                      </div>
                     `;
                   })
                   .join('');
@@ -938,6 +943,19 @@ export function inspectorRenderInspector(hud: GameHUD): void {
           inspectorRenderInspector(hud);
           hud.renderSeedTray();
           hud.refreshFloatingBanner();
+        });
+      });
+      panel.querySelectorAll<HTMLButtonElement>('[data-insp-buy-seed]').forEach((btn) => {
+        btn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          const cid = btn.dataset.inspBuySeed as FarmCropId;
+          const res = hud.sim.buyCropSeedWithGold(cid, 1);
+          hud.showToast(res.msg, res.ok ? '🌱' : '🪙');
+          if (res.ok) {
+            inspectorRenderInspector(hud);
+            hud.renderSeedTray();
+            hud.refreshHeader();
+          }
         });
       });
       panel.querySelectorAll<HTMLButtonElement>('[data-insp-seed-filter]').forEach((btn) => {

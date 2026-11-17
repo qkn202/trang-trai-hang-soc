@@ -268,7 +268,7 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
             </button>
             ${
               !locked
-                ? `<button type="button" class="seed-card-add-btn" data-acquire-seed="${crop.id}" aria-label="Nạp hạt ${escapeHtml(crop.name)}" title="Mua hạt ${escapeHtml(crop.name)} (${crop.seedCost.toLocaleString('vi-VN')} Sickle) hoặc Đố 0 Sickle">+ 🪙${crop.seedCost.toLocaleString('vi-VN')}</button>`
+                ? `<button type="button" class="seed-card-add-btn" data-acquire-seed="${crop.id}" aria-label="Mua 1 hạt ${escapeHtml(crop.name)} (${crop.seedCost.toLocaleString('vi-VN')} Sickle)" title="Mua 1 hạt ${escapeHtml(crop.name)} (${crop.seedCost.toLocaleString('vi-VN')} Sickle)">+ 🪙${hud.sim.state.sandboxMode ? '0' : crop.seedCost.toLocaleString('vi-VN')}</button>`
                 : ''
             }
           </div>
@@ -383,14 +383,12 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
       btn.addEventListener('click', (ev) => {
         ev.stopPropagation();
         const cid = btn.dataset.acquireSeed as FarmCropId;
-        const targetPlotUid =
-          hud.pendingSowPlotUid ??
-          (hud.inspectSelection?.kind === 'building' ? hud.inspectSelection.uid : null);
-        hud.seedTrayOpen = false;
-        hud.pendingSowPlotUid = null;
-        hud.inspectSelection = null;
-        hud.refreshAll();
-        hud.openSeedQuizDialog(cid, targetPlotUid);
+        const res = hud.sim.buyCropSeedWithGold(cid, 1);
+        hud.showToast(res.msg, res.ok ? '🌱' : '🪙');
+        if (res.ok) {
+          hud.activeSeedCropId = cid;
+          hud.refreshAll();
+        }
       });
     });
 

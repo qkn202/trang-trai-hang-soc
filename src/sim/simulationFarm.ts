@@ -423,6 +423,13 @@ export function farmBuyCropSeedWithGold(sim: ParkSimulation,
     cropId: FarmCropId,
     qty = 1
   ): { ok: boolean; msg: string; newSeedCount: number } {
+    if (sim.isVisitingNeighbor) {
+      return {
+        ok: false,
+        msg: 'Chế độ Khách Tham Quan — không thể mua hạt giống khi đang thăm bạn bè!',
+        newSeedCount: sim.getSeedCount(cropId),
+      };
+    }
     const crop = FARM_CROPS[cropId];
     if (!sim.state.sandboxMode && sim.state.level < crop.unlockLevel) {
       return {
@@ -432,8 +439,8 @@ export function farmBuyCropSeedWithGold(sim: ParkSimulation,
       };
     }
     const count = Math.max(1, Math.min(20, Math.floor(qty)));
-    const totalCost = crop.seedCost * count;
-    if (sim.state.galleons < totalCost) {
+    const totalCost = sim.state.sandboxMode ? 0 : crop.seedCost * count;
+    if (!sim.state.sandboxMode && sim.state.galleons < totalCost) {
       return {
         ok: false,
         msg: `Cần ${totalCost.toLocaleString('vi-VN')} Sickle để mua ${count} hạt ${crop.name} — hãy niệm Thần Chú Đa Ngữ (0 Sickle) để nhận ngay 1–2 hạt miễn phí!`,
@@ -441,8 +448,10 @@ export function farmBuyCropSeedWithGold(sim: ParkSimulation,
       };
     }
 
-    sim.state.galleons -= totalCost;
-    sim.state.finance.constructionSpent += totalCost;
+    if (totalCost > 0) {
+      sim.state.galleons -= totalCost;
+      sim.state.finance.constructionSpent += totalCost;
+    }
     const newSeedCount = sim.addCropSeeds(cropId, count);
     sim.audio.playHarvestBubble();
     sim.advanceTutorialStep('seed_quiz_or_buy');
