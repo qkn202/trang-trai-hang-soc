@@ -5,6 +5,7 @@ import {
   CANDY_OBSTACLE_ICONS,
   CANDY_TILE_TYPES,
   CandyHogwartsLevel,
+  getCandyAscensionRank,
   getCandyChapterForLevel,
   getCandyLevelById,
   getCandySeasonByLevel,
@@ -16,7 +17,7 @@ import {
   getMilestoneBossMeta,
   MATCH3_BOOSTERS,
   MAX_MATCH3_HEARTS,
-  MAX_MINIGAME_STAGE,
+  MAX_MATCH3_STAGE,
   REFILL_HEARTS_GOLD_COST,
 } from '../data/match3Levels';
 import { SpriteRegistry } from '../engine/spriteLoader';
@@ -394,7 +395,7 @@ export class Match3ModalController {
         } else if (this.devJumpReturnLevel !== null) {
           this.cancelDeferredSave();
           const maxNormal = Math.min(
-            MAX_MINIGAME_STAGE,
+            MAX_MATCH3_STAGE,
             (this.sim.state.match3.maxClearedLevel ?? 0) + 1
           );
           if (this.sim.state.match3.currentLevel > maxNormal) {
@@ -695,12 +696,12 @@ export class Match3ModalController {
     );
     if (typeof overrideLevel === 'number' && Number.isFinite(overrideLevel) && overrideLevel >= 1) {
       const normalMaxAllowed = Math.min(
-        MAX_MINIGAME_STAGE,
+        MAX_MATCH3_STAGE,
         (this.sim.state.match3.maxClearedLevel ?? 0) + 1
       );
       const maxAllowed =
         this.sim.state.sandboxMode || this.sim.isHeadmasterPreview || safeDevJump
-          ? MAX_MINIGAME_STAGE
+          ? MAX_MATCH3_STAGE
           : normalMaxAllowed;
       const clampedLv = Math.min(maxAllowed, Math.floor(overrideLevel));
       if (
@@ -1323,22 +1324,22 @@ export class Match3ModalController {
             <div class="m3-victory-stars-row">${starIconsHtml}</div>
             <div class="pa-victory-title">${
               vs.isMasterReplay
-                ? `777/777 · ${escapeHtml(lv.title)}`
-                : lv.id >= MAX_MINIGAME_STAGE
-                  ? `777/777 · Xong`
+                ? `${MAX_MATCH3_STAGE}/${MAX_MATCH3_STAGE} · ${escapeHtml(lv.title)}`
+                : lv.id >= MAX_MATCH3_STAGE
+                  ? `${MAX_MATCH3_STAGE}/${MAX_MATCH3_STAGE} · Xong`
                   : `Màn ${lv.id} · Xong`
             }</div>
             <div class="m3-reward-badges">
               ${
                 vs.starsEarned > 0
                   ? `<span class="m3-reward-chip star">+${vs.starsEarned} ★</span>`
-                  : `<span class="m3-reward-chip star">777/777</span>`
+                  : `<span class="m3-reward-chip star">${MAX_MATCH3_STAGE}/${MAX_MATCH3_STAGE}</span>`
               }
               ${vs.goldEarned > 0 ? `<span class="m3-reward-chip">+${vs.goldEarned} Sickle</span>` : ''} <!-- HPVN: Sickle reward -->
             </div>
             <div class="pa-victory-actions">
               <button id="btnM3NextLevel" type="button" class="brass-btn gold-cta">
-                ${vs.isMasterReplay || lv.id >= MAX_MINIGAME_STAGE ? `Chơi lại` : `Màn ${vs.nextLevel}`}
+                ${vs.isMasterReplay || lv.id >= MAX_MATCH3_STAGE ? `Chơi lại` : `Màn ${vs.nextLevel}`}
               </button>
               <button id="btnM3VictoryLeaderboard" type="button" class="brass-btn">Hạng ${m3Rank}</button>
               <button id="btnM3UseStarsInPark" type="button" class="brass-btn">Về vườn · ${st.sandboxMode ? '∞' : m3.stars} ★</button>
@@ -1435,17 +1436,22 @@ export class Match3ModalController {
 
     const fmtTabLv = (kind: PuzzleArcadeMode | 'match3'): string => {
       const inf = this.sim.getDisciplineStageInfo(kind);
-      return inf.isMaxed ? `👑777` : `${inf.currentStage}/777`;
+      return inf.isMaxed ? `👑${inf.maxStage}` : `${inf.currentStage}/${inf.maxStage}`;
     };
 
     // the level bar (hpvn/levelBar.ts): the level's title with its difficulty when not plain (its icon was an emoji the filter
     // dropped), a milestone's guardian instead; school year and chapter as the figures
+    const ascRank = getCandyAscensionRank(lv.id);
+    const ascRomans = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
     const stageSub =
       milestoneMeta && !bossState
         ? `${escapeHtml(milestoneMeta.bossGuardianVi)} · ${escapeHtml(milestoneMeta.mechanicTagVi)}`
         : `${diffMeta.pillClass === 'normal' ? '' : `${escapeHtml(diffMeta.label)} · `}${escapeHtml(lv.title)}`;
     const stageStats =
-      lvStat('Năm học', `<span class="hs-lv-k">Năm</span><strong>${season.id}</strong>`) +
+      lvStat(
+        ascRank > 0 ? 'Bậc tinh thông' : 'Năm học',
+        `<span class="hs-lv-k">${ascRank > 0 ? 'Bậc' : 'Năm'}</span><strong>${ascRank > 0 ? `${season.id}·${ascRomans[ascRank] || ascRank}` : season.id}</strong>`
+      ) +
       lvStat('Chương', `<span class="hs-lv-k">Chương</span><strong>${chapter.globalChapterId}/${CANDY_HOGWARTS_TOTAL_CHAPTERS}</strong>`);
 
     const topStripHtml = `
@@ -1504,7 +1510,7 @@ export class Match3ModalController {
       </div>
 
       ${levelBarHtml({
-        stage: `Màn ${lv.id}/${MAX_MINIGAME_STAGE}`,
+        stage: `Màn ${lv.id}/${MAX_MATCH3_STAGE}`,
         sub: `${trialBadgeFor('match3') ? 'Đề cử · ' : ''}${stageSub}`,
         stats: stageStats,
       })}

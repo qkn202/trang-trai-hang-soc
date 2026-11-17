@@ -63,6 +63,7 @@ import {
   HEART_REGEN_MS,
   MATCH3_BOOSTERS,
   MAX_MATCH3_HEARTS,
+  MAX_MATCH3_STAGE,
   MAX_MINIGAME_STAGE,
   REFILL_HEARTS_GOLD_COST,
   TOTAL_MINIGAME_STAGES,
@@ -590,8 +591,8 @@ export function lifecycleToggleHeadmasterPreview(sim: ParkSimulation, targetLeve
       sim.state.match3 = {
         stars: 999,
         totalStarsEarned: 8154,
-        currentLevel: MAX_MINIGAME_STAGE,
-        maxClearedLevel: MAX_MINIGAME_STAGE,
+        currentLevel: MAX_MATCH3_STAGE,
+        maxClearedLevel: MAX_MATCH3_STAGE,
         winStreak: 5,
         hearts: MAX_MATCH3_HEARTS,
         nextHeartAt: 0,
@@ -600,7 +601,7 @@ export function lifecycleToggleHeadmasterPreview(sim: ParkSimulation, targetLeve
           row_col_cannon: 9,
           alohomora_shuffle: 9,
         },
-        levelsWon: MAX_MINIGAME_STAGE,
+        levelsWon: MAX_MATCH3_STAGE,
       };
 
       sim.rebuildGrid();

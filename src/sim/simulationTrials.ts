@@ -67,6 +67,7 @@ import {
   isCandyHogwartsBossStage,
   MATCH3_BOOSTERS,
   MAX_MATCH3_HEARTS,
+  MAX_MATCH3_STAGE,
   MAX_MINIGAME_STAGE,
   REFILL_HEARTS_GOLD_COST,
   TOTAL_MINIGAME_STAGES,
@@ -227,11 +228,12 @@ export function trialsGetDisciplineStageInfo(sim: ParkSimulation, kind: Minigame
     const m3 = sim.state.match3;
     let currentStage = 1;
     let clearedStages = 0;
+    const maxStage = kind === 'match3' ? MAX_MATCH3_STAGE : MAX_MINIGAME_STAGE;
     if (kind === 'match3') {
-      currentStage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, m3.currentLevel ?? 1));
+      currentStage = Math.max(1, Math.min(MAX_MATCH3_STAGE, m3.currentLevel ?? 1));
       clearedStages = Math.max(
         0,
-        Math.min(MAX_MINIGAME_STAGE, m3.maxClearedLevel ?? Math.max(0, currentStage - 1))
+        Math.min(MAX_MATCH3_STAGE, m3.maxClearedLevel ?? Math.max(0, currentStage - 1))
       );
     } else if (kind === 'sudoku') {
       currentStage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, pa.sudokuStage ?? 1));
@@ -267,8 +269,8 @@ export function trialsGetDisciplineStageInfo(sim: ParkSimulation, kind: Minigame
     return {
       currentStage,
       clearedStages,
-      maxStage: MAX_MINIGAME_STAGE,
-      isMaxed: clearedStages >= MAX_MINIGAME_STAGE,
+      maxStage,
+      isMaxed: clearedStages >= maxStage,
     };
 }
 
@@ -622,12 +624,12 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
     sim.state.lastPlayedMinigame = 'match3';
     const m3 = sim.state.match3;
     const pa = sim.state.puzzleArcade;
-    const playedStage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, m3.currentLevel ?? 1));
+    const playedStage = Math.max(1, Math.min(MAX_MATCH3_STAGE, m3.currentLevel ?? 1));
     const prevCleared = Math.max(
       0,
-      Math.min(MAX_MINIGAME_STAGE, m3.maxClearedLevel ?? Math.max(0, playedStage - 1))
+      Math.min(MAX_MATCH3_STAGE, m3.maxClearedLevel ?? Math.max(0, playedStage - 1))
     );
-    const isFirstClear = prevCleared < MAX_MINIGAME_STAGE && playedStage > prevCleared;
+    const isFirstClear = prevCleared < MAX_MATCH3_STAGE && playedStage > prevCleared;
 
     const def = getMatch3LevelDef(playedStage);
     const isBossStage = Boolean(isCandyHogwartsBossStage(playedStage) || def.difficulty === 'boss');
@@ -674,17 +676,17 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
       xpEarned = def.xpReward;
       boosterReward = def.bonusBoosterReward ?? (isBossStage ? 'reparo_hammer' : undefined);
 
-      m3.maxClearedLevel = Math.min(MAX_MINIGAME_STAGE, Math.max(prevCleared, playedStage));
-      m3.currentLevel = Math.min(MAX_MINIGAME_STAGE, m3.maxClearedLevel + 1);
+      m3.maxClearedLevel = Math.min(MAX_MATCH3_STAGE, Math.max(prevCleared, playedStage));
+      m3.currentLevel = Math.min(MAX_MATCH3_STAGE, m3.maxClearedLevel + 1);
       m3.stars += starsEarned;
       m3.totalStarsEarned += starsEarned;
       if (boosterReward) {
         m3.boosters[boosterReward] = (m3.boosters[boosterReward] ?? 0) + 1;
       }
     } else {
-      m3.maxClearedLevel = Math.min(MAX_MINIGAME_STAGE, Math.max(prevCleared, playedStage));
-      m3.currentLevel = Math.min(MAX_MINIGAME_STAGE, m3.maxClearedLevel + 1);
-      if (prevCleared >= MAX_MINIGAME_STAGE && playedStage === MAX_MINIGAME_STAGE) {
+      m3.maxClearedLevel = Math.min(MAX_MATCH3_STAGE, Math.max(prevCleared, playedStage));
+      m3.currentLevel = Math.min(MAX_MATCH3_STAGE, m3.maxClearedLevel + 1);
+      if (prevCleared >= MAX_MATCH3_STAGE && playedStage === MAX_MATCH3_STAGE) {
         starsEarned = 1;
         m3.stars += 1;
         m3.totalStarsEarned += 1;
@@ -719,8 +721,8 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
     sim.addHarvestFeastPoints(isFirstClear ? (isBossStage ? 40 : 28) : 14);
     sim.recordQuestProgress('cast_spells', undefined, 3);
     sim.checkAndToastAchievements?.();
-    if (isFirstClear && (isBossStage || playedStage === MAX_MINIGAME_STAGE)) {
-      sim.launchFireworksShow(playedStage === MAX_MINIGAME_STAGE ? 18 : 10);
+    if (isFirstClear && (isBossStage || playedStage === MAX_MATCH3_STAGE)) {
+      sim.launchFireworksShow(playedStage === MAX_MATCH3_STAGE ? 18 : 10);
     }
 
     const rawReduceSec = streakInfo.rawReduceSec;

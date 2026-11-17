@@ -1200,7 +1200,7 @@ export function headerRefreshHeader(hud: GameHUD): void {
     const lastGame = hud.sim.getLastPlayedMinigame();
     let playTag = '🍬 Bùa Gặt';
     let playIcon = '/game/trang-trai-hang-soc/sprites/m3_farm_pinwheel.webp';
-    let playStageText = m3Info.isMaxed ? `👑 ${MAX_MINIGAME_STAGE}` : `Màn ${m3Info.currentStage}`;
+    let playStageText = m3Info.isMaxed ? `👑 ${m3Info.maxStage}` : `Màn ${m3Info.currentStage}`;
     if (lastGame === 'caro') {
       const info = hud.sim.getDisciplineStageInfo('caro');
       playTag = '🗺️ Ngũ Ấn';
@@ -1291,8 +1291,8 @@ export function headerRefreshHeader(hud: GameHUD): void {
     const lblM3Lv = hud.root.querySelector('#lblMatch3Lv') as HTMLElement | null;
     if (lblM3Lv && st.match3) {
       lblM3Lv.textContent = m3Info.isMaxed
-        ? `👑${MAX_MINIGAME_STAGE}`
-        : `${m3Info.currentStage}/${MAX_MINIGAME_STAGE}`;
+        ? `👑${m3Info.maxStage}`
+        : `${m3Info.currentStage}/${m3Info.maxStage}`;
     }
     const lblArcadeTower = hud.root.querySelector('#lblArcadeTowerLv') as HTMLElement | null;
     if (lblArcadeTower) {
@@ -1433,7 +1433,7 @@ export function headerRefreshQuestTracker(hud: GameHUD): void {
       html += `
         <div class="quest-card-mini trial-quest-card">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;font-size:12px;font-weight:700;">
-            <span>🔥 ${reqTrial.icon} ${escapeHtml(reqTrial.shortVi)} (${dInfo.currentStage}/${MAX_MINIGAME_STAGE}) • ${wp.current}/${wp.required}</span>
+            <span>🔥 ${reqTrial.icon} ${escapeHtml(reqTrial.shortVi)} (${dInfo.currentStage}/${dInfo.maxStage}) • ${wp.current}/${wp.required}</span>
             <button type="button" data-open-trial="${reqTrial.kind}" class="brass-btn gold-cta" style="padding:3px 8px;font-size:12px;">
               ▶️ Chơi
             </button>

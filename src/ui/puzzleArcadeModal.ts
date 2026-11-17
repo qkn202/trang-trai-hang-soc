@@ -2717,7 +2717,7 @@ export class PuzzleArcadeModalController {
 
     const fmtTabLv = (kind: PuzzleArcadeMode | 'match3'): string => {
       const inf = this.sim.getDisciplineStageInfo(kind);
-      return inf.isMaxed ? `👑777` : `${inf.currentStage}/777`;
+      return inf.isMaxed ? `👑${inf.maxStage}` : `${inf.currentStage}/${inf.maxStage}`;
     };
 
     const isFailedNow =

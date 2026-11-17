@@ -20,21 +20,22 @@ import { PuzzleArcadeModalController } from '../../ui/puzzleArcadeModal';
 import { MILESTONE_BOSS_STAGES } from '../../data/match3Levels';
 import { MagicalAudio } from '../../engine/audio';
 import { CandyHogwartsEngine } from '../candyHogwartsEngine';
-import { ParkSimulation } from '../simulation';
+import { ProofOfPlayRecorder, verifyProofOfPlayEnvelope } from '../proofOfPlay';
+import { ParkSimulation, setFarmStore } from '../simulation';
 
 describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
-  it('generates all 777 stages cleanly across 7 Hogwarts Years, 77 Chapters, and 1,455 Magic Stars', () => {
-    expect(CANDY_HOGWARTS_TOTAL_LEVELS).toBe(777);
-    expect(CANDY_HOGWARTS_TOTAL_CHAPTERS).toBe(77);
+  it('generates all 7,777 stages cleanly across 10 Ascension Eras, 771 Chapters, progressive Gardenscapes+2 difficulty, and preserves 1,455 Magic Stars in stages 1..777', () => {
+    expect(CANDY_HOGWARTS_TOTAL_LEVELS).toBe(7777);
+    expect(CANDY_HOGWARTS_TOTAL_CHAPTERS).toBe(771);
     expect(HOGWARTS_SEASONS).toHaveLength(7);
 
-    let starSum = 0;
+    let starSum777 = 0;
     let hasTenByTen = false;
-    const seenChapters = new Set<number>();
+    const seenChapters777 = new Set<number>();
 
     for (let id = 1; id <= 777; id++) {
       const lv = generateCandyHogwartsLevel(id);
@@ -42,7 +43,7 @@ describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
       expect(lv.size).toBeGreaterThanOrEqual(7);
       expect(lv.size).toBeLessThanOrEqual(10);
       if (lv.size === 10) hasTenByTen = true;
-      expect(lv.moves).toBeGreaterThanOrEqual(12);
+      expect(lv.moves).toBeGreaterThanOrEqual(13);
       expect(lv.objectives.length).toBeGreaterThanOrEqual(1);
       expect(lv.stars[2]).toBeGreaterThan(lv.stars[0]);
 
@@ -50,25 +51,68 @@ describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
       const chapter = getCandyChapterForLevel(id);
       expect(lv.seasonId).toBe(season.id);
       expect(lv.globalChapterId).toBe(chapter.globalChapterId);
-      seenChapters.add(chapter.globalChapterId);
-      starSum += lv.starReward;
+      seenChapters777.add(chapter.globalChapterId);
+      starSum777 += lv.starReward;
     }
 
-    expect(seenChapters.size).toBe(77);
+    expect(seenChapters777.size).toBe(77);
     expect(hasTenByTen).toBe(true);
-    expect(starSum).toBe(1455);
+    expect(starSum777).toBe(1455);
 
-    // Verify all milestone boss stages and 7 Year Finales have 2-phase bossConfig
-    for (const bossStage of [...MILESTONE_BOSS_STAGES, 111, 222, 333, 444, 555, 666, 777]) {
+    // Verify all 771 chapters across 1..7777 & monotonic Ascension progression up to 7777
+    const allChapters = new Set<number>();
+    for (let id = 1; id <= 7777; id += 7) {
+      allChapters.add(getCandyChapterForLevel(id).globalChapterId);
+    }
+    for (let id = 7765; id <= 7777; id++) {
+      allChapters.add(getCandyChapterForLevel(id).globalChapterId);
+    }
+    expect(allChapters.size).toBe(771);
+
+    for (const ascSample of [778, 1111, 2000, 3333, 5000, 6666, 7770, 7777]) {
+      const lv = getCandyLevelById(ascSample);
+      expect(lv.id).toBe(ascSample);
+      expect(lv.numColors).toBe(6);
+      expect(lv.moves).toBeGreaterThanOrEqual(13);
+      expect(lv.objectives.length).toBeGreaterThanOrEqual(1);
+    }
+
+    // Progressive Boss HP & Star threshold climb from 777 -> 2000 -> 5000 -> 7777
+    const lv777 = getCandyLevelById(777);
+    const lv2000 = getCandyLevelById(2000);
+    const lv5000 = getCandyLevelById(5000);
+    const lv7777 = getCandyLevelById(7777);
+    expect(lv777.isSeasonFinale).toBe(true);
+    expect(lv777.bossConfig?.name).toContain('Voldemort');
+    expect(lv7777.isSeasonFinale).toBe(true);
+    expect(lv7777.size).toBe(10);
+    expect(lv7777.starReward).toBe(8);
+    expect(lv7777.bossConfig?.name).toContain('7777');
+    expect(lv2000.bossConfig!.maxHp).toBeGreaterThan(lv777.bossConfig!.maxHp);
+    expect(lv5000.bossConfig!.maxHp).toBeGreaterThan(lv2000.bossConfig!.maxHp);
+    expect(lv7777.bossConfig!.maxHp).toBeGreaterThan(lv5000.bossConfig!.maxHp);
+    expect(lv7777.stars[0]).toBeGreaterThan(lv5000.stars[0]);
+
+    // Verify all milestone boss stages, 7 Year Finales, and Ascension Finales have 2-phase bossConfig
+    for (const bossStage of [
+      ...MILESTONE_BOSS_STAGES,
+      111,
+      222,
+      333,
+      444,
+      555,
+      666,
+      777,
+      1111,
+      3333,
+      5555,
+      7777,
+    ]) {
       const lv = getCandyLevelById(bossStage);
       expect(lv.isBoss).toBe(true);
       expect(lv.bossConfig).not.toBeNull();
       expect(lv.bossConfig!.maxHp).toBeGreaterThan(0);
     }
-
-    const finale777 = getCandyLevelById(777);
-    expect(finale777.isSeasonFinale).toBe(true);
-    expect(finale777.bossConfig?.name).toContain('Voldemort');
   });
 
   it('spawns Year 2–7 signature mechanics in their respective Hogwarts Years', () => {
@@ -1413,5 +1457,70 @@ describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
 
     engine.destroy();
     restored.destroy();
+  });
+
+  it('supports progression beyond 777 all the way to 7777 (session save/load, Proof-of-Play, and Leaderboard)', () => {
+    let memSave: string | null = null;
+    setFarmStore({
+      read: () => memSave,
+      write: (json) => {
+        memSave = json;
+      },
+    });
+    const sim = new ParkSimulation(new MagicalAudio());
+    sim.state.match3.currentLevel = 777;
+    sim.state.match3.maxClearedLevel = 776;
+
+    const win777 = sim.completeMatch3LevelVictory(15, { sessionScore: 95000 });
+    expect(win777.nextLevel).toBe(778);
+    expect(sim.state.match3.maxClearedLevel).toBe(777);
+    expect(sim.state.match3.currentLevel).toBe(778);
+    expect(sim.getDisciplineStageInfo('match3')).toEqual({
+      currentStage: 778,
+      clearedStages: 777,
+      maxStage: 7777,
+      isMaxed: false,
+    });
+
+    // Save & reload an active session at Stage 2500
+    sim.state.match3.currentLevel = 2500;
+    sim.state.match3.maxClearedLevel = 2499;
+    const lv2500 = getCandyLevelById(2500);
+    const eng2500 = new CandyHogwartsEngine(null);
+    eng2500.loadLevel(lv2500, { house: 'ravenclaw', instantAnimations: true });
+    sim.state.match3.activeSession = eng2500.exportSession();
+    sim.saveToStorage();
+
+    const reloaded = new ParkSimulation(new MagicalAudio());
+    expect(reloaded.state.match3.currentLevel).toBe(2500);
+    expect(reloaded.state.match3.maxClearedLevel).toBe(2499);
+    expect(reloaded.state.match3.activeSession?.levelId).toBe(2500);
+
+    // Proof-of-Play & Leaderboard at Stage 7777
+    const pop = new ProofOfPlayRecorder('match3', 7777, 7777, 1000, 1000);
+    for (let i = 0; i < 16; i++) {
+      pop.recordMove(0x1213 + i, 1000 + (i + 1) * 850);
+    }
+    const env = pop.seal(380000, 1000 + 20000, 1000 + 20000);
+    const verified = verifyProofOfPlayEnvelope(env, {
+      expectedGameId: 'match3',
+      claimedPrimaryStage: 7777,
+    });
+    expect(verified.ok).toBe(true);
+
+    reloaded.state.match3.currentLevel = 7777;
+    reloaded.state.match3.maxClearedLevel = 7776;
+    const win7777 = reloaded.completeMatch3LevelVictory(20, {
+      sessionScore: 380000,
+      proofOfPlay: env,
+    });
+    expect(win7777.starsEarned).toBeGreaterThanOrEqual(8);
+    expect(reloaded.state.match3.maxClearedLevel).toBe(7777);
+    expect(reloaded.getDisciplineStageInfo('match3').isMaxed).toBe(true);
+    const lb = reloaded.getMinigameLeaderboard('match3', 'valley');
+    expect(lb.playerEntry.primaryDisplayVi).toBe('👑 7777/7777');
+    expect(lb.playerEntry.league.labelVi).toContain('7777');
+
+    eng2500.destroy();
   });
 });

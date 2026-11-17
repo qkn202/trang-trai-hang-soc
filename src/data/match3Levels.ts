@@ -3,8 +3,13 @@ import { ZONES } from './zones';
 
 export const MATCH3_BOARD_SIZE = 8;
 export const MAX_MINIGAME_STAGE = 777;
-export const TOTAL_MINIGAME_STAGES = MAX_MINIGAME_STAGE * 6; // 6 disciplines × 777 levels = 4,662 stages
+export const MAX_MATCH3_STAGE = 7777;
+export const TOTAL_MINIGAME_STAGES = MAX_MATCH3_STAGE + MAX_MINIGAME_STAGE * 5; // 7,777 + 5 × 777 = 11,662 stages
 export const MAX_MATCH3_HEARTS = 5;
+
+export function getMaxStageForDiscipline(kind: string): number {
+  return kind === 'match3' ? MAX_MATCH3_STAGE : MAX_MINIGAME_STAGE;
+}
 export const HEART_REGEN_MS = 5 * 60 * 1000; // 5 minutes per heart
 export const EXTRA_MOVES_COUNT = 5;
 export const EXTRA_MOVES_GOLD_COST = 120;
@@ -20,15 +25,21 @@ export const MILESTONE_BOSS_STAGES: ReadonlyArray<number> = [
   25, 50, 100, 150, 200, 300, 400, 500, 600, 700, 777,
 ];
 
+export const MATCH3_ASCENSION_MILESTONE_STAGES: ReadonlyArray<number> = [
+  1000, 1111, 1500, 2000, 2222, 2500, 3000, 3333, 4000, 4444, 5000, 5555, 6000, 6666, 7000, 7500, 7777,
+];
+
 const MILESTONE_BOSS_SET = new Set<number>(MILESTONE_BOSS_STAGES);
+const MATCH3_ASCENSION_MILESTONE_SET = new Set<number>(MATCH3_ASCENSION_MILESTONE_STAGES);
 
 export function isMilestoneBossStage(rawStage: number): boolean {
-  return MILESTONE_BOSS_SET.has(Math.floor(rawStage));
+  const s = Math.floor(rawStage);
+  return MILESTONE_BOSS_SET.has(s) || MATCH3_ASCENSION_MILESTONE_SET.has(s);
 }
 
 export function isCandyHogwartsBossStage(rawStage: number): boolean {
-  const s = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(Number(rawStage) || 1)));
-  return s % 111 === 0 || s % 10 === 0 || isMilestoneBossStage(s);
+  const s = Math.max(1, Math.min(MAX_MATCH3_STAGE, Math.floor(Number(rawStage) || 1)));
+  return s === MAX_MATCH3_STAGE || s % 111 === 0 || s % 10 === 0 || isMilestoneBossStage(s);
 }
 
 export interface MilestoneBossMeta {
@@ -92,7 +103,92 @@ const MILESTONE_BOSS_TITLES: Record<number, { guardian: string; title: string; t
   777: {
     guardian: 'Chúa Tể Hắc Ám — Đỉnh Priori Incantatem',
     title: 'Vương Miện Huyền Thoại Đỉnh Tháp 777',
-    tag: 'Đại Kết Giới Toàn Năng 777 — Trận Cuối Cùng',
+    tag: 'Đại Kết Giới Toàn Năng 777 — Tràn Đầy Linh Giá',
+  },
+  1000: {
+    guardian: 'Hội Đồng Thần Sáng Bộ Pháp Thuật',
+    title: 'Thiên Niên Kỷ Khảo Hạch Thần Sáng',
+    tag: 'Sắc Lệnh Kép & Linh Giá Bất Hoại',
+  },
+  1111: {
+    guardian: 'Tứ Đại Sáng Lập Hogwarts',
+    title: 'Tứ Trụ Cổ Đại Màn 1111',
+    tag: 'Bão Lửa Fiendfyre & Băng Ngục Đa Tầng',
+  },
+  1500: {
+    guardian: 'Đoàn Quân Phượng Hoàng Tối Cao',
+    title: 'Trận Tuyến Sở Bảo Mật Tầng Sâu',
+    tag: 'Gió Lốc Mê Cung & Phù Ấn Khoá Cảng',
+  },
+  2000: {
+    guardian: 'Rồng Bạch Tạng Gringotts Cổ Đại',
+    title: 'Hầm Ngục Nhị Thiên Niên',
+    tag: 'Khiên Linh Giá 5 Lớp & Bom Hắc Ám Dồn Dập',
+  },
+  2222: {
+    guardian: 'Tử Xà Ngàn Năm Tái Thức',
+    title: 'Mê Cung Hoá Đá Tầng 2222',
+    tag: 'Hoá Đá 3 Lớp & Sương Lạnh Giám Ngục',
+  },
+  2500: {
+    guardian: 'Đại Pháp Sư Nicolas Flamel',
+    title: 'Lò Luyện Hòn Đá Vĩnh Cửu',
+    tag: 'Thả Đá Triết Gia Giữa Biển Lửa Địa Ngục',
+  },
+  3000: {
+    guardian: 'Ba Anh Em Nhà Peverell',
+    title: 'Tam Bảo Bối Tử Thần Màn 3000',
+    tag: 'Áp Chế Phép Thuật 3×3 & Khiên Hồn Tối Đa',
+  },
+  3333: {
+    guardian: 'Chúa Giám Ngục Băng Hà Đen',
+    title: 'Vực Thẳm Azkaban 3333',
+    tag: 'Sáu Giám Ngục Cấp Cao & Khoá Băng 5 Lớp',
+  },
+  4000: {
+    guardian: 'Gellert Grindelwald — Lửa Xanh',
+    title: 'Vòng Tròn Lửa Xanh Nurmengard',
+    tag: 'Bão Lửa Huỷ Diệt & Gió Lốc Đảo Chiều',
+  },
+  4444: {
+    guardian: 'Chiếc Cốc Lửa Cổ Đại',
+    title: 'Đại Khảo Thí Tứ Phương 4444',
+    tag: 'Băng Chuyền Kép & Linh Giá Tứ Diện',
+  },
+  5000: {
+    guardian: 'Merlin Đệ Nhất Pháp Sư',
+    title: 'Thánh Điện Cổ Ngữ Ngũ Thiên',
+    tag: 'Đá Cổ Ngữ 5 Lớp & Trận Pháp 6 Sắc',
+  },
+  5555: {
+    guardian: 'Phượng Hoàng Lửa Vĩnh Hằng',
+    title: 'Đỉnh Niết Bàn Tháp Cao 5555',
+    tag: 'Linh Giá 5 Máu & Lửa Địa Ngục Kép',
+  },
+  6000: {
+    guardian: 'Hội Đồng Phù Thủy Quốc Tế',
+    title: 'Đại Phong Ấn Lục Thiên Niên',
+    tag: 'Sắc Lệnh Toàn Bàn & Mê Cung Xoáy Lốc',
+  },
+  6666: {
+    guardian: 'Bảy Trường Sinh Linh Giá Hợp Nhất',
+    title: 'Đêm Đen Tận Thế 6666',
+    tag: 'Tám Linh Giá Khiên Hồn & Bom Hắc Ám 6 Nhịp',
+  },
+  7000: {
+    guardian: 'Cụ Albus Dumbledore Đỉnh Phong',
+    title: 'Bình Minh Thất Thiên Niên',
+    tag: 'Tinh Hoa Bảy Năm Học Hợp Bích',
+  },
+  7500: {
+    guardian: 'Hộ Vệ Thánh Điện Vĩnh Hằng',
+    title: 'Cánh Cổng Cuối Trước Đỉnh 7777',
+    tag: 'Đại Trận Toàn Năng 10×10 Cực Hạn',
+  },
+  7777: {
+    guardian: 'Chúa Tể Hắc Ám Bất Diệt — Đỉnh Tháp Vĩnh Hằng',
+    title: 'ĐẠI KẾT CỤC VĨNH HẰNG ĐỈNH 7777',
+    tag: 'Đại Kết Giới Tối Thượng 7777 — Đỉnh Vinh Quang Bùa Gặt',
   },
 };
 
@@ -109,35 +205,43 @@ export function getMilestoneBossMeta(rawStage: number): MilestoneBossMeta | null
 }
 
 export function getMinigameDifficultyTier(rawStage: number): MinigameDifficultyTier {
-  const s = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(rawStage)));
+  const s = Math.max(1, Math.min(MAX_MATCH3_STAGE, Math.floor(rawStage)));
   if (s <= 25) return { tierIndex: 1, label: 'Tân Sinh Nhập Môn', badgeEmoji: '🌱' };
   if (s <= 100) return { tierIndex: 2, label: 'Học Trò Hang Sóc', badgeEmoji: '🌿' };
   if (s <= 220) return { tierIndex: 3, label: 'Phù Thủy Thực Chiến', badgeEmoji: '⚡' };
   if (s <= 380) return { tierIndex: 4, label: 'Cao Thủ Thần Sáng', badgeEmoji: '🔥' };
   if (s <= 560) return { tierIndex: 5, label: 'Bậc Thầy Hội Phượng Hoàng', badgeEmoji: '🦅' };
   if (s <= 700) return { tierIndex: 6, label: 'Đại Pháp Sư Cổ Ngữ', badgeEmoji: '🔮' };
-  return { tierIndex: 7, label: 'Huyền Thoại Đỉnh 777', badgeEmoji: '👑' };
+  if (s <= 777) return { tierIndex: 7, label: 'Huyền Thoại Đỉnh 777', badgeEmoji: '👑' };
+  return { tierIndex: 7, label: 'Thần Thoại Vĩnh Hằng 7777', badgeEmoji: '👑' };
 }
 
 /**
- * Unified base Star reward curve across Stages 1..777 for every mini-game.
- * Sums to exactly 1,455 🌟 per 777-level discipline (5 × 1,455 + 3 starter = 7,278 🌟 base,
- * vs 7,150 🌟 total estate Star cost -> guaranteed zero soft-lock, 200+ hours marathon).
+ * Unified base Star reward curve:
+ * - Stages 1..777 sum to exactly 1,455 🌟 per discipline (preserving the 7,150 🌟 estate economy).
+ * - Stages 778..7777 continue rewarding Ascension progress in Bùa Gặt up to Stage 7777.
  */
 export function getStageStarReward(rawStage: number): number {
-  const s = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(rawStage)));
-  if (s === MAX_MINIGAME_STAGE) return 6;
-  if (s % 10 === 0) return s >= 500 ? 5 : s >= 200 ? 4 : 3;
-  if (s % 10 === 5) return s >= 300 ? 3 : 2;
-  if (s >= 250 && s % 5 === 3) return 2;
-  if (s >= 320 && s % 2 === 0) return 2;
-  if (s >= 560) return 2;
-  return 1;
+  const s = Math.max(1, Math.min(MAX_MATCH3_STAGE, Math.floor(rawStage)));
+  if (s <= MAX_MINIGAME_STAGE) {
+    if (s === MAX_MINIGAME_STAGE) return 6;
+    if (s % 10 === 0) return s >= 500 ? 5 : s >= 200 ? 4 : 3;
+    if (s % 10 === 5) return s >= 300 ? 3 : 2;
+    if (s >= 250 && s % 5 === 3) return 2;
+    if (s >= 320 && s % 2 === 0) return 2;
+    if (s >= 560) return 2;
+    return 1;
+  }
+  if (s === MAX_MATCH3_STAGE) return 8;
+  if (s % 1111 === 0 || s % 1000 === 0 || s % 111 === 0) return 6;
+  if (s % 10 === 0) return 5;
+  if (s % 10 === 5) return 3;
+  return 2;
 }
 
 export function getExtraMovesGoldCost(rawLevel: number): number {
-  const lv = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(rawLevel)));
-  return Math.min(420, EXTRA_MOVES_GOLD_COST + Math.floor(lv / 20) * 12);
+  const lv = Math.max(1, Math.min(MAX_MATCH3_STAGE, Math.floor(rawLevel)));
+  return Math.min(680, EXTRA_MOVES_GOLD_COST + Math.floor(lv / 20) * 12);
 }
 
 export type GemColor = 'ruby' | 'sapphire' | 'emerald' | 'topaz' | 'amethyst' | 'candy_pink';
@@ -434,7 +538,7 @@ export function getWinStreakGifts(winStreak: number): SpecialKind[] {
 
 // ==================== DETERMINISTIC 777-LEVEL HARVEST ATTIC GENERATOR ====================
 
-const ROMAN_ACTS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
+const ROMAN_ACTS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
 
 function seededRand(seed: number): () => number {
   let s = (seed * 2654435761) >>> 0;
@@ -448,18 +552,20 @@ function seededRand(seed: number): () => number {
 }
 
 export function getMatch3LevelDef(rawLevel: number): Match3LevelDef {
-  const level = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(rawLevel)));
-  const totalChapter = Math.floor((level - 1) / 10); // 0..77 (78 chapters across 777 stages)
+  const level = Math.max(1, Math.min(MAX_MATCH3_STAGE, Math.floor(rawLevel)));
+  const totalChapter = Math.floor((level - 1) / 10); // 0..777 across 7,777 stages
   const chapterIndex = totalChapter % 10;
-  const actIndex = Math.min(ROMAN_ACTS.length - 1, Math.floor(totalChapter / 10));
+  const actIndex = Math.min(ROMAN_ACTS.length - 1, Math.floor(totalChapter / 65));
   const zone = ZONES[chapterIndex] ?? ZONES[0];
   const stageInChapter = ((level - 1) % 10) + 1;
 
-  const isGrandFinale = level === MAX_MINIGAME_STAGE;
+  const isGrandFinale = level === MAX_MATCH3_STAGE;
   const milestoneBoss = getMilestoneBossMeta(level);
-  const isExtraHard = level >= 250 && level % 5 === 3;
+  const isExtraHard =
+    (level >= 6 && (stageInChapter === 3 || stageInChapter === 7 || stageInChapter === 9)) ||
+    (level >= 250 && level % 3 === 1);
   const difficulty: Match3Difficulty =
-    isGrandFinale || Boolean(milestoneBoss) || stageInChapter === 10
+    isGrandFinale || Boolean(milestoneBoss) || stageInChapter === 10 || level % 111 === 0
       ? 'boss'
       : stageInChapter === 5 || isExtraHard
         ? 'hard'
@@ -467,17 +573,13 @@ export function getMatch3LevelDef(rawLevel: number): Match3LevelDef {
 
   const starReward = getStageStarReward(level);
   const numColors =
-    level <= 4
-      ? 4
-      : level <= 120
-        ? difficulty === 'boss' && level >= 40
+    level <= 2
+      ? 5
+      : level <= 25
+        ? difficulty !== 'normal' || level >= 6
           ? 6
           : 5
-        : level <= 240
-          ? difficulty !== 'normal' || level % 2 === 0
-            ? 6
-            : 5
-          : 6;
+        : 6;
   const activeColors = GEM_COLORS.slice(0, numColors);
 
   const rng = seededRand(level * 977 + 31);
@@ -816,12 +918,12 @@ export function getMatch3LevelDef(rawLevel: number): Match3LevelDef {
   }
 
   // Always include 1-2 gem goals when obstacle goals < 2 so every stage feels colorful!
-  const lateGemScale = Math.min(26, Math.floor(level * 0.045));
+  const lateGemScale = Math.min(44, Math.floor(Math.min(level, 777) * 0.05) + Math.floor(Math.max(0, level - 777) * 0.003));
   if (finalGoals.length === 0) {
     const c1 = activeColors[Math.floor(rng() * activeColors.length)];
     let c2 = activeColors[(activeColors.indexOf(c1) + 1) % activeColors.length];
     if (c2 === c1) c2 = 'sapphire';
-    const baseTarget = level <= 2 ? 15 : 22 + lateGemScale;
+    const baseTarget = level <= 2 ? 22 : 26 + lateGemScale;
     finalGoals.push({ kind: 'gem', color: c1, target: baseTarget });
     finalGoals.push({ kind: 'gem', color: c2, target: baseTarget - 3 });
   } else if (finalGoals.length === 1) {
@@ -829,29 +931,41 @@ export function getMatch3LevelDef(rawLevel: number): Match3LevelDef {
     finalGoals.push({
       kind: 'gem',
       color: c1,
-      target: 18 + lateGemScale,
+      target: 22 + lateGemScale,
     });
   }
 
-  // Move budget tightens across 1..777 so late tiers demand Rocket+Bomb / Chong Chóng combos
+  // Move budget tightens across 1..7777 (+2 tiers tighter than Gardenscapes)
   const workloadMoves =
-    14 +
-    Math.ceil(totalIceLayers * 0.31) +
-    Math.ceil(totalBoxLayers * 0.42) +
-    Math.ceil(totalWebs * 0.35) +
-    Math.ceil(totalHoney * 0.48) +
-    Math.ceil(scrollsTotal * (totalBoxLayers > 0 ? 2.35 : 1.95)) +
-    (numColors >= 6 ? 3 : 0);
+    13 +
+    Math.ceil(totalIceLayers * 0.3) +
+    Math.ceil(totalBoxLayers * 0.4) +
+    Math.ceil(totalWebs * 0.34) +
+    Math.ceil(totalHoney * 0.46) +
+    Math.ceil(scrollsTotal * (totalBoxLayers > 0 ? 2.25 : 1.85)) +
+    (numColors >= 6 ? 2 : 0);
   const lateTighten =
-    level >= 620 ? -6 : level >= 450 ? -5 : level >= 260 ? -4 : level >= 120 ? -2 : -1;
-  const earlyCushion = level <= 3 ? 2 : level <= 15 ? 1 : 0;
-  const maxMoves = difficulty === 'boss' ? 28 : difficulty === 'hard' ? 25 : 24;
-  const minMoves = 14;
+    level >= 4500
+      ? -9
+      : level >= 2000
+        ? -8
+        : level >= 778
+          ? -7
+          : level >= 450
+            ? -6
+            : level >= 200
+              ? -5
+              : level >= 60
+                ? -4
+                : -2;
+  const earlyCushion = level <= 2 ? 1 : 0;
+  const maxMoves = difficulty === 'boss' ? 26 : difficulty === 'hard' ? 23 : 21;
+  const minMoves = 13;
   const moves = Math.max(minMoves, Math.min(maxMoves, workloadMoves + earlyCushion + lateTighten));
 
   const actTag = actIndex > 0 ? ` • Hồi ${ROMAN_ACTS[actIndex]}` : '';
   const diffTitle = isGrandFinale
-    ? `👑 Đỉnh Tháp Mùa Gặt 777: ${milestoneBoss?.bossTitleVi ?? zone.name}`
+    ? `👑 Đỉnh Tháp Mùa Gặt 7777: ${milestoneBoss?.bossTitleVi ?? zone.name}`
     : milestoneBoss
       ? `👑 Đại Trùm Mốc ${level} — ${milestoneBoss.bossTitleVi}`
       : difficulty === 'boss'
@@ -866,7 +980,10 @@ export function getMatch3LevelDef(rawLevel: number): Match3LevelDef {
     'row_col_cannon',
   ];
 
-  const effectiveStageCap = Math.min(level, 260) + Math.floor(Math.max(0, level - 260) * 0.35);
+  const effectiveStageCap =
+    Math.min(level, 260) +
+    Math.floor(Math.max(0, Math.min(level, 777) - 260) * 0.35) +
+    Math.floor(Math.max(0, level - 777) * 0.12);
   return {
     level,
     chapterIndex,

@@ -60,6 +60,7 @@ import {
   HEART_REGEN_MS,
   MATCH3_BOOSTERS,
   MAX_MATCH3_HEARTS,
+  MAX_MATCH3_STAGE,
   MAX_MINIGAME_STAGE,
   REFILL_HEARTS_GOLD_COST,
   TOTAL_MINIGAME_STAGES,
@@ -1632,7 +1633,7 @@ export function sanitizeSavedMatch3Session(
 ): SavedMatch3Session | null {
   if (!raw || typeof raw !== 'object') return null;
   const rec = raw as Partial<SavedMatch3Session>;
-  if (Math.round(clampFinite(rec.levelId, -1, MAX_MINIGAME_STAGE, -1)) !== expectedLevelId) {
+  if (Math.round(clampFinite(rec.levelId, -1, MAX_MATCH3_STAGE, -1)) !== expectedLevelId) {
     return null;
   }
   if (rec.status !== 'playing' && rec.status !== 'out_of_moves') return null;
@@ -2329,8 +2330,8 @@ export function migrateLoadedState(parsed: GameState): GameState {
       totalMorphsHatched: Math.round(clampFinite(rawSuitcase.totalMorphsHatched, 0, 999999, 0)),
     },
     match3: (() => {
-      const safeM3Level = Math.round(clampFinite(parsed.match3?.currentLevel, 1, MAX_MINIGAME_STAGE, 1));
-      const defaultM3Cleared = Math.max(0, Math.min(MAX_MINIGAME_STAGE, safeM3Level - 1));
+      const safeM3Level = Math.round(clampFinite(parsed.match3?.currentLevel, 1, MAX_MATCH3_STAGE, 1));
+      const defaultM3Cleared = Math.max(0, Math.min(MAX_MATCH3_STAGE, safeM3Level - 1));
       return {
         stars: Math.round(clampFinite(parsed.match3?.stars, 0, 999999, def.match3.stars)),
         totalStarsEarned: Math.round(
@@ -2338,7 +2339,7 @@ export function migrateLoadedState(parsed: GameState): GameState {
         ),
         currentLevel: safeM3Level,
         maxClearedLevel: Math.round(
-          clampFinite(parsed.match3?.maxClearedLevel, 0, MAX_MINIGAME_STAGE, defaultM3Cleared)
+          clampFinite(parsed.match3?.maxClearedLevel, 0, MAX_MATCH3_STAGE, defaultM3Cleared)
         ),
         winStreak: Math.round(clampFinite(parsed.match3?.winStreak, 0, 9999, 0)),
         hearts: Math.round(clampFinite(parsed.match3?.hearts, 0, MAX_MATCH3_HEARTS, MAX_MATCH3_HEARTS)),

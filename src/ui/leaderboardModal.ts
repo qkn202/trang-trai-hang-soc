@@ -52,12 +52,12 @@ function podiumHtml(e: LeaderboardRowEntry, place: 1 | 2 | 3): string {
     <li class="hs-lb-pod place-${place}${e.isPlayer ? ' is-me' : ''}" data-house="${escapeHtml(e.house)}">
       <span class="hs-lb-pod-av">${avatarHtml(e)}${crest}</span>
       ${nameHtml(e)}
-      <span class="hs-lb-block"><span class="hs-lb-place" role="img" aria-label="Hạng ${place}">${place}</span><span class="hs-lb-pts">${escapeHtml(e.ratingDisplayVi)}</span><span class="hs-lb-pod-lv">${escapeHtml(e.primaryDisplayVi.replace(/\/777$/, ''))}</span></span>
+      <span class="hs-lb-block"><span class="hs-lb-place" role="img" aria-label="Hạng ${place}">${place}</span><span class="hs-lb-pts">${escapeHtml(e.ratingDisplayVi)}</span><span class="hs-lb-pod-lv">${escapeHtml(e.primaryDisplayVi.replace(/\/\d+$/, ''))}</span></span>
       ${visitHtml(e)}
     </li>`;
 }
 
-// the sub line: the house gives way, the stage («Màn 708», out of 777 everywhere) and your league stay whole; the points column
+// the sub line: the house gives way, the stage («Màn 708») and your league stay whole; the points column
 // holds the points only, so a long garden name keeps its room beside the «Bạn» tag
 function rowHtml(e: LeaderboardRowEntry): string {
   const league = e.isPlayer ? `<span class="hs-lb-lv">· ${escapeHtml(e.league.labelVi)}</span>` : '';
@@ -65,7 +65,7 @@ function rowHtml(e: LeaderboardRowEntry): string {
     <li class="hs-lb-row${e.isPlayer ? ' is-me' : ''}" data-house="${escapeHtml(e.house)}">
       <span class="hs-lb-rank">${e.rank.toLocaleString('vi-VN')}</span>
       ${avatarHtml(e)}
-      <span class="hs-lb-who">${nameHtml(e)}<span class="hs-lb-sub">${houseHtml(e)}<span class="hs-lb-lv">· ${escapeHtml(e.primaryDisplayVi.replace(/\/777$/, ''))}</span>${league}</span></span>
+      <span class="hs-lb-who">${nameHtml(e)}<span class="hs-lb-sub">${houseHtml(e)}<span class="hs-lb-lv">· ${escapeHtml(e.primaryDisplayVi.replace(/\/\d+$/, ''))}</span>${league}</span></span>
       <span class="hs-lb-pts">${escapeHtml(e.ratingDisplayVi)}</span>
       ${visitHtml(e)}
     </li>`;

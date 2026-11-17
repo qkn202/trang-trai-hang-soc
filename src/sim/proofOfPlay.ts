@@ -186,12 +186,17 @@ export function getMinHumanElapsedMs(gameId: ProofOfPlayGameId, moveCount: numbe
   }
 }
 
+export function getMaxStageForProofGame(gameId: string): number {
+  return gameId === 'match3' ? 7777 : 777;
+}
+
 export function getMaxPlausibleSessionScore(gameId: ProofOfPlayGameId, stage: number): number {
-  const clampedStage = Math.max(1, Math.min(777, Math.floor(stage || 1)));
+  const maxStage = getMaxStageForProofGame(gameId);
+  const clampedStage = Math.max(1, Math.min(maxStage, Math.floor(stage || 1)));
   switch (gameId) {
     case 'match3':
-      // Boss & cascade stages can spike high, but never into millions on a single stage
-      return 280_000 + clampedStage * 1_200;
+      // Boss & cascade stages can spike high across 1..7777, but never into tens of millions on a single stage
+      return 320_000 + clampedStage * 1_600;
     case 'sudoku':
       return 45_000 + clampedStage * 350;
     case 'blocks':
@@ -202,7 +207,7 @@ export function getMaxPlausibleSessionScore(gameId: ProofOfPlayGameId, stage: nu
 }
 
 /**
- * Trần điểm xếp hạng tổng hợp hợp lý cho một tầng tháp (`1..777`).
+ * Trần điểm xếp hạng tổng hợp hợp lý cho một tầng tháp (`1..7777` với Bùa Gặt, `1..777` với các môn khác).
  * Dùng cho cả luồng PoP trực tiếp lẫn luồng đồng bộ hồ sơ cũ (ngăn chặn bơm `ratingScore: 9999999` qua DevTools).
  */
 export function getMaxPlausibleLeaderboardRating(
@@ -211,7 +216,8 @@ export function getMaxPlausibleLeaderboardRating(
   totalWins: number,
   bestStreak: number
 ): number {
-  const st = Math.max(0, Math.min(777, Math.floor(primaryStage || 0)));
+  const maxStage = getMaxStageForProofGame(gameId);
+  const st = Math.max(0, Math.min(maxStage, Math.floor(primaryStage || 0)));
   if (st <= 0 && totalWins <= 0) return 0;
   const effectiveStage = Math.max(1, st);
   const cappedWins = Math.min(Math.max(effectiveStage, Math.floor(totalWins || 0)), effectiveStage * 25 + 120);
@@ -232,7 +238,8 @@ export function clampUnverifiedLeaderboardStats(params: {
   totalWins: number;
   bestStreak: number;
 } {
-  const primaryValue = Math.max(0, Math.min(777, Math.floor(Number(params.primaryValue) || 0)));
+  const maxStage = getMaxStageForProofGame(params.gameId);
+  const primaryValue = Math.max(0, Math.min(maxStage, Math.floor(Number(params.primaryValue) || 0)));
   const maxReasonableWins = primaryValue > 0 ? primaryValue * 25 + 120 : 120;
   const totalWins = Math.max(
     primaryValue,
@@ -285,7 +292,7 @@ export class ProofOfPlayRecorder {
     nowPerfMs = typeof performance !== 'undefined' ? performance.now() : nowEpochMs
   ) {
     this.gameId = gameId;
-    this.stage = Math.max(1, Math.min(777, Math.floor(stage || 1)));
+    this.stage = Math.max(1, Math.min(getMaxStageForProofGame(gameId), Math.floor(stage || 1)));
     this.seed =
       (seed !== undefined
         ? Math.floor(seed)
@@ -445,11 +452,12 @@ export function verifyProofOfPlayEnvelope(
     };
   }
 
-  if (env.stage < 1 || env.stage > 777) {
+  const maxAllowedStage = getMaxStageForProofGame(env.gameId);
+  if (env.stage < 1 || env.stage > maxAllowedStage) {
     return {
       ok: false,
       reason: 'stage-out-of-bounds',
-      messageVi: 'Tầng khảo thí vượt ngoài phạm vi hợp lệ (1–777).',
+      messageVi: `Tầng khảo thí vượt ngoài phạm vi hợp lệ (1–${maxAllowedStage}).`,
     };
   }
 

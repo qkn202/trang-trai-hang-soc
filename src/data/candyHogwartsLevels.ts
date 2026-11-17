@@ -1,15 +1,39 @@
-// 7 Năm Học Hogwarts × Candy Crush Saga — Nén Chuẩn 777 Màn (7 Năm × 111 Màn, 77 Chương)
-// Đồng bộ 100% với trần MAX_MINIGAME_STAGE = 777 & kinh tế Sao Phép Thuật của Thung Lũng Hang Sóc.
+// 7 Năm Học Hogwarts × 10 Bậc Tinh Thông Hậu Tốt Nghiệp — Đại Tháp 7.777 Màn (771 Chương)
+// Độ khó tăng dần xuyên suốt 1 → 7.777, cao hơn Gardenscapes tối thiểu +2 bậc ở cùng cấp màn.
 
 import { HouseName } from '../types/game';
-import { getStageStarReward, isMilestoneBossStage, MAX_MINIGAME_STAGE } from './match3Levels';
+import { getStageStarReward, isMilestoneBossStage, MAX_MATCH3_STAGE } from './match3Levels';
 
 export const CANDY_HOGWARTS_TOTAL_SEASONS = 7;
 export const CANDY_HOGWARTS_LEVELS_PER_SEASON = 111;
-export const CANDY_HOGWARTS_TOTAL_LEVELS = MAX_MINIGAME_STAGE; // 7 × 111 = 777 màn
+export const CANDY_HOGWARTS_BASE_CYCLE_LEVELS =
+  CANDY_HOGWARTS_TOTAL_SEASONS * CANDY_HOGWARTS_LEVELS_PER_SEASON; // 777 màn / kỷ nguyên 7 năm
+export const CANDY_HOGWARTS_TOTAL_LEVELS = MAX_MATCH3_STAGE; // 7.777 màn
 export const CANDY_HOGWARTS_CHAPTERS_PER_SEASON = 11;
 export const CANDY_HOGWARTS_TOTAL_CHAPTERS =
-  CANDY_HOGWARTS_TOTAL_SEASONS * CANDY_HOGWARTS_CHAPTERS_PER_SEASON; // 77 chương
+  10 * (CANDY_HOGWARTS_TOTAL_SEASONS * CANDY_HOGWARTS_CHAPTERS_PER_SEASON) + 1; // 771 chương (1..7770 + Đỉnh Vĩnh Hằng 7771..7777)
+
+export const ASCENSION_ERA_TITLES: ReadonlyArray<string> = [
+  '',
+  'Thần Sáng I',
+  'Thần Sáng II',
+  'Phượng Hoàng III',
+  'Phượng Hoàng IV',
+  'Cổ Ngữ V',
+  'Cổ Ngữ VI',
+  'Hộ Pháp VII',
+  'Hộ Pháp VIII',
+  'Huyền Thoại IX',
+  'Đỉnh Vĩnh Hằng X',
+];
+
+export function getCandyAscensionRank(levelId: number): number {
+  const safe = Math.max(
+    1,
+    Math.min(CANDY_HOGWARTS_TOTAL_LEVELS, Math.floor(Number(levelId) || 1))
+  );
+  return Math.floor((safe - 1) / CANDY_HOGWARTS_BASE_CYCLE_LEVELS); // 0..10
+}
 
 export type CandyHouseId = 'gryffindor' | 'slytherin' | 'ravenclaw' | 'hufflepuff';
 
@@ -331,9 +355,13 @@ export const HOGWARTS_SEASONS: ReadonlyArray<CandySeasonDef> = [
 
 export function getCandySeasonByLevel(levelId: number): CandySeasonDef {
   const safe = Math.max(1, Math.min(CANDY_HOGWARTS_TOTAL_LEVELS, Math.floor(Number(levelId) || 1)));
+  if (safe > 7770) {
+    return HOGWARTS_SEASONS[CANDY_HOGWARTS_TOTAL_SEASONS - 1];
+  }
+  const cycleOffset = (safe - 1) % CANDY_HOGWARTS_BASE_CYCLE_LEVELS;
   const idx = Math.min(
     CANDY_HOGWARTS_TOTAL_SEASONS - 1,
-    Math.floor((safe - 1) / CANDY_HOGWARTS_LEVELS_PER_SEASON)
+    Math.floor(cycleOffset / CANDY_HOGWARTS_LEVELS_PER_SEASON)
   );
   return HOGWARTS_SEASONS[idx];
 }
@@ -540,8 +568,18 @@ const WAND_MASTERY_BY_YEAR: ReadonlyArray<CandyWandMastery> = [
 ];
 
 export function getWandMasteryForLevel(levelId: number): CandyWandMastery {
-  const season = getCandySeasonByLevel(levelId);
-  return WAND_MASTERY_BY_YEAR[Math.min(WAND_MASTERY_BY_YEAR.length - 1, Math.max(0, season.id - 1))];
+  const asc = getCandyAscensionRank(levelId);
+  if (asc === 0) {
+    const season = getCandySeasonByLevel(levelId);
+    return WAND_MASTERY_BY_YEAR[Math.min(WAND_MASTERY_BY_YEAR.length - 1, Math.max(0, season.id - 1))];
+  }
+  return {
+    rank: 7 + asc,
+    title: `Đũa Tinh Thông ${ASCENSION_ERA_TITLES[asc] || `Bậc ${asc}`}`,
+    scoreBonusPct: 62 + asc * 14,
+    bossDmgPct: 85 + asc * 22,
+    patronusBonusPct: Math.min(35, Math.round(20 + asc * 1.5)),
+  };
 }
 
 // 77 Chương Cốt Truyện Chính Thức xuyên suốt 7 Năm Học (11 Chương / Năm: Ch.1–10 = 10 màn, Ch.11 = 11 màn = 111 màn/Năm)
@@ -788,10 +826,44 @@ export function getSeasonChapters(seasonId: number): CandyChapterDef[] {
 
 export function getCandyChapterForLevel(levelId: number): CandyChapterDef {
   const safe = Math.max(1, Math.min(CANDY_HOGWARTS_TOTAL_LEVELS, Math.floor(Number(levelId) || 1)));
-  const season = getCandySeasonByLevel(safe);
-  const offset = safe - season.range[0];
+  if (safe > 7770) {
+    return {
+      id: CANDY_HOGWARTS_TOTAL_CHAPTERS,
+      globalChapterId: CANDY_HOGWARTS_TOTAL_CHAPTERS,
+      seasonId: 7,
+      chapterIndexInSeason: 12,
+      roman: 'XII',
+      title: 'Chương Đỉnh 771: Thánh Điện Vĩnh Hằng 7777',
+      shortTitle: 'Thánh Điện Vĩnh Hằng 7777',
+      subtitle: 'Bảy tầng khảo thí tối thượng dẫn lên Vương Miện Bùa Gặt 7777',
+      range: [7771, 7777],
+      levelCount: 7,
+      accentColor: '#f59e0b',
+    };
+  }
+
+  const asc = Math.floor((safe - 1) / CANDY_HOGWARTS_BASE_CYCLE_LEVELS);
+  const cycleBase = asc * CANDY_HOGWARTS_BASE_CYCLE_LEVELS;
+  const localLv = safe - cycleBase; // 1..777
+  const season = getCandySeasonByLevel(localLv);
+  const offset = localLv - season.range[0];
   const chIdx = Math.min(CANDY_HOGWARTS_CHAPTERS_PER_SEASON - 1, Math.floor(offset / 10));
-  return getSeasonChapters(season.id)[chIdx];
+  const baseChapter = getSeasonChapters(season.id)[chIdx];
+  if (asc === 0) return baseChapter;
+
+  const globalId = asc * 77 + baseChapter.globalChapterId;
+  const start = cycleBase + baseChapter.range[0];
+  const end = cycleBase + baseChapter.range[1];
+  const eraTitle = ASCENSION_ERA_TITLES[asc] || `Bậc ${asc}`;
+  return {
+    ...baseChapter,
+    id: globalId,
+    globalChapterId: globalId,
+    title: `Chương ${globalId}: ${baseChapter.shortTitle} · ${eraTitle}`,
+    shortTitle: `${baseChapter.shortTitle} · ${eraTitle}`,
+    range: [start, end],
+    levelCount: end - start + 1,
+  };
 }
 
 const BOSS_ROSTER_EARLY: Record<number, Omit<CandyBossConfig, 'isFinaleBoss'>> = {
@@ -1067,65 +1139,129 @@ const SEASON_FINALE_BOSSES: Record<number, CandyBossConfig> = {
 };
 
 export function getCandyBossForLevel(levelId: number): CandyBossConfig | null {
+  if (levelId === CANDY_HOGWARTS_TOTAL_LEVELS) {
+    return {
+      levelId: CANDY_HOGWARTS_TOTAL_LEVELS,
+      name: 'ĐẠI KẾT CỤC VĨNH HẰNG 7777: Chúa Tể Hắc Ám Bất Diệt',
+      shortTitle: 'Chúa Tể Đỉnh 7777',
+      emoji: '👑',
+      maxHp: 78000,
+      castInterval: 2,
+      enrageBelowPct: 0.72,
+      hexType: 'fiendfyre',
+      hexName: 'Đại Diệt Thế Vĩnh Hằng',
+      isFinaleBoss: true,
+    };
+  }
   if (SEASON_FINALE_BOSSES[levelId]) {
     const finale = SEASON_FINALE_BOSSES[levelId];
     return {
       ...finale,
-      maxHp: Math.round((finale.maxHp * 1.25) / 50) * 50,
-      castInterval: Math.min(finale.castInterval, 2),
-      enrageBelowPct: Math.max(finale.enrageBelowPct, 0.55),
+      maxHp: Math.round((finale.maxHp * 1.38) / 50) * 50,
+      castInterval: 2,
+      enrageBelowPct: Math.max(finale.enrageBelowPct, 0.62),
     };
   }
   if (BOSS_ROSTER_EARLY[levelId]) {
     const early = BOSS_ROSTER_EARLY[levelId];
     return {
       ...early,
-      maxHp: Math.round((early.maxHp * 1.25) / 50) * 50,
-      castInterval: Math.min(early.castInterval, 3),
-      enrageBelowPct: Math.max(early.enrageBelowPct, 0.55),
+      maxHp: Math.round((early.maxHp * 1.38) / 50) * 50,
+      castInterval: levelId >= 50 ? 2 : Math.min(early.castInterval, 3),
+      enrageBelowPct: Math.max(early.enrageBelowPct, 0.58),
       isFinaleBoss: false,
     };
   }
-  const season = getCandySeasonByLevel(levelId);
-  const isChapterEnd = levelId % 10 === 0 || isMilestoneBossStage(levelId);
+  const isWingFinale = levelId % 111 === 0 || (levelId > 777 && levelId % 1111 === 0);
+  const isChapterEnd = isWingFinale || levelId % 10 === 0 || isMilestoneBossStage(levelId);
   if (!isChapterEnd) return null;
 
+  const season = getCandySeasonByLevel(levelId);
   const seasonIdx = season.id;
-  const offsetInSeason = levelId - season.range[0];
+  const asc = getCandyAscensionRank(levelId);
   const archetypes = YEAR_BOSS_ARCHETYPES[seasonIdx] || YEAR_BOSS_ARCHETYPES[1];
-  const pick = archetypes[Math.floor(levelId / 10) % archetypes.length];
-  const isHundredMilestone = levelId % 100 === 0 || isMilestoneBossStage(levelId);
+  const pick = archetypes[(Math.floor(levelId / 10) + asc * 2) % archetypes.length];
+  const isHundredMilestone =
+    isWingFinale || levelId % 100 === 0 || isMilestoneBossStage(levelId);
 
-  const baseHp =
-    (2600 +
-      (seasonIdx - 1) * 1450 +
-      Math.round((offsetInSeason / CANDY_HOGWARTS_LEVELS_PER_SEASON) * 1100) +
-      (isHundredMilestone ? 550 : 0)) *
-    1.25;
+  let maxHp = 0;
+  if (asc === 0) {
+    const offsetInSeason = levelId - season.range[0];
+    const baseHp =
+      (2800 +
+        (seasonIdx - 1) * 1550 +
+        Math.round((offsetInSeason / CANDY_HOGWARTS_LEVELS_PER_SEASON) * 1200) +
+        (isHundredMilestone ? 650 : 0)) *
+      1.38;
+    maxHp = Math.round(baseHp / 50) * 50;
+  } else {
+    const wandMult = 1 + getWandMasteryForLevel(levelId).bossDmgPct / 100;
+    const netHp =
+      7800 +
+      asc * 920 +
+      (seasonIdx - 1) * 185 +
+      Math.round((((levelId - 1) % 111) / 110) * 420) +
+      (isWingFinale ? 1800 : isHundredMilestone ? 950 : 0);
+    maxHp = Math.round((netHp * wandMult) / 50) * 50;
+  }
 
+  const eraLabel = asc > 0 ? ` · ${ASCENSION_ERA_TITLES[asc] || `Bậc ${asc}`}` : '';
   return {
     levelId,
-    name: isHundredMilestone ? `ĐẠI TRÙM MỐC: ${pick.name}` : pick.name,
+    name: isWingFinale
+      ? `ĐẠI KẾT CỤC${eraLabel.toUpperCase()}: ${pick.name}`
+      : isHundredMilestone
+        ? `ĐẠI TRÙM MỐC: ${pick.name}${eraLabel}`
+        : `${pick.name}${eraLabel}`,
     shortTitle: pick.shortTitle,
-    emoji: pick.emoji,
-    maxHp: Math.round(baseHp / 50) * 50,
-    castInterval: seasonIdx >= 5 || isHundredMilestone ? 2 : 3,
-    enrageBelowPct: 0.55,
-    hexType: pick.hexType,
+    emoji: isWingFinale ? '👑' : pick.emoji,
+    maxHp,
+    castInterval: levelId >= 60 || asc > 0 ? 2 : 3,
+    enrageBelowPct: Math.min(0.72, 0.58 + asc * 0.014),
+    hexType: asc >= 3 && levelId % 30 === 0 ? 'fiendfyre' : pick.hexType,
     hexName: pick.hexName,
-    isFinaleBoss: false,
+    isFinaleBoss: isWingFinale,
   };
 }
 
 export function getCandyDifficultyTier(levelNum: number): CandyDifficultyTier {
-  const season = getCandySeasonByLevel(levelNum);
-  if (levelNum === season.finaleLevelId) return 'finale';
+  if (
+    levelNum === CANDY_HOGWARTS_TOTAL_LEVELS ||
+    levelNum % 111 === 0 ||
+    (levelNum > 777 && levelNum % 1111 === 0)
+  ) {
+    return 'finale';
+  }
   if (levelNum % 10 === 0 || isMilestoneBossStage(levelNum)) return 'boss';
-  if (season.examLevelId && levelNum === season.examLevelId) return 'exam';
+  if ((levelNum > 1 && levelNum <= 7770 && (levelNum - 1) % 111 === 0) || levelNum === 7771) {
+    return 'exam';
+  }
+  if (levelNum === 1) return 'normal';
+
+  const asc = getCandyAscensionRank(levelNum);
   const pos = ((levelNum - 1) % 10) + 1;
-  if (levelNum >= 9 && (pos === 5 || pos === 9)) return 'nightmare';
-  if (levelNum >= 7 && (pos === 3 || pos === 7)) return 'hard';
-  return 'normal';
+
+  // Khó hơn Gardenscapes tối thiểu +2 bậc ngay ở cùng cấp màn, và tiếp tục leo thang tới 7777
+  if (levelNum <= 6) {
+    if (pos === 6) return 'nightmare';
+    if (pos === 3 || pos === 5) return 'hard';
+    return 'normal';
+  }
+  if (asc === 0) {
+    if (pos === 5 || pos === 9 || (levelNum >= 27 && pos === 7)) return 'nightmare';
+    if (pos === 2 || pos === 3 || pos === 6 || pos === 8) return 'hard';
+    return 'normal';
+  }
+  if (levelNum >= 7771) return 'nightmare';
+  if (asc <= 3) {
+    if (pos === 3 || pos === 5 || pos === 7 || pos === 9) return 'nightmare';
+    if (asc >= 2 || pos !== 1) return 'hard';
+    return 'normal';
+  }
+  if (pos === 2 || pos === 3 || pos === 5 || pos === 7 || pos === 8 || pos === 9) {
+    return 'nightmare';
+  }
+  return 'hard';
 }
 
 export function getCandyDifficultyBadgeMeta(tier: CandyDifficultyTier): {
@@ -1459,25 +1595,40 @@ const FIRST_100_SPECIAL_ORDERS: Record<
 function isIngredientDropLevel(
   levelNum: number,
   seasonId: number,
+  ascensionRank: number,
   isBoss: boolean,
   isSeasonFinale: boolean
 ): boolean {
   if (isSeasonFinale) return false;
-  if (levelNum <= 100) return FIRST_100_INGREDIENT.has(levelNum);
-  if (isBoss) return levelNum % 40 === 0;
-  return levelNum % 9 === 2 || (seasonId >= 3 && levelNum % 13 === 4);
+  if (levelNum <= 100) return FIRST_100_INGREDIENT.has(levelNum) || levelNum === 15 || levelNum === 29;
+  if (isBoss) return levelNum % 40 === 0 || (ascensionRank >= 2 && levelNum % 30 === 0);
+  return (
+    levelNum % 9 === 2 ||
+    ((seasonId >= 3 || ascensionRank >= 1) && levelNum % 13 === 4) ||
+    (ascensionRank >= 3 && levelNum % 11 === 6)
+  );
 }
 
 function getSpecialOrderSpec(
   levelNum: number,
   seasonId: number,
+  ascensionRank: number,
   isBoss: boolean,
   isSeasonFinale: boolean,
   hasDecree: boolean
 ): { specialKind: 'striped' | 'wrapped' | 'color_bomb' | 'seeker'; target: number } | null {
   if (isBoss || isSeasonFinale || hasDecree) return null;
-  if (levelNum <= 100) return FIRST_100_SPECIAL_ORDERS[levelNum] || null;
-  if (levelNum % 14 !== 5) return null;
+  if (levelNum <= 100) {
+    const preset = FIRST_100_SPECIAL_ORDERS[levelNum];
+    if (preset) {
+      return {
+        specialKind: preset.specialKind,
+        target: preset.target + (preset.specialKind === 'color_bomb' ? 1 : 2),
+      };
+    }
+    return null;
+  }
+  if (levelNum % 14 !== 5 && !(ascensionRank >= 2 && levelNum % 17 === 8)) return null;
 
   const kinds: Array<'striped' | 'seeker' | 'wrapped' | 'color_bomb'> = [
     'striped',
@@ -1485,14 +1636,17 @@ function getSpecialOrderSpec(
     'wrapped',
     'color_bomb',
   ];
-  const kind = kinds[(Math.floor(levelNum / 14) + seasonId) % kinds.length];
-  const bonus = Math.min(3, Math.floor(seasonId / 2));
+  const kind = kinds[(Math.floor(levelNum / 14) + seasonId + ascensionRank) % kinds.length];
+  const bonus = Math.min(8, 1 + Math.floor(seasonId / 2) + Math.ceil(ascensionRank * 0.6));
   if (kind === 'color_bomb') {
-    return { specialKind: 'color_bomb', target: 2 + Math.floor(seasonId / 3) };
+    return {
+      specialKind: 'color_bomb',
+      target: Math.min(6, 2 + Math.floor((seasonId + ascensionRank) / 3)),
+    };
   }
-  if (kind === 'wrapped') return { specialKind: 'wrapped', target: 4 + bonus };
-  if (kind === 'seeker') return { specialKind: 'seeker', target: 4 + bonus };
-  return { specialKind: 'striped', target: 5 + bonus };
+  if (kind === 'wrapped') return { specialKind: 'wrapped', target: 5 + bonus };
+  if (kind === 'seeker') return { specialKind: 'seeker', target: 5 + bonus };
+  return { specialKind: 'striped', target: 6 + bonus };
 }
 
 export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLevel {
@@ -1502,26 +1656,38 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
   );
   const season = getCandySeasonByLevel(levelNum);
   const seasonId = season.id;
+  const ascensionRank = getCandyAscensionRank(levelNum); // 0..10
   const chapter = getCandyChapterForLevel(levelNum);
   const difficultyTier = getCandyDifficultyTier(levelNum);
-  const isSeasonFinale = levelNum === season.finaleLevelId;
+  const isSeasonFinale =
+    levelNum === CANDY_HOGWARTS_TOTAL_LEVELS ||
+    levelNum % CANDY_HOGWARTS_LEVELS_PER_SEASON === 0 ||
+    (levelNum > 777 && levelNum % 1111 === 0);
   const isBoss = isSeasonFinale || levelNum % 10 === 0 || isMilestoneBossStage(levelNum);
   const isChapterBoss = isSeasonFinale || levelNum === chapter.range[1] || levelNum % 100 === 0;
-  const isExamTrial = season.examLevelId === levelNum;
+  const isExamTrial =
+    (levelNum > 1 && levelNum <= 7770 && (levelNum - 1) % CANDY_HOGWARTS_LEVELS_PER_SEASON === 0) ||
+    levelNum === 7771;
+  const localPosInSeason =
+    levelNum > 7770 ? 110 : ((levelNum - 1) % CANDY_HOGWARTS_BASE_CYCLE_LEVELS) % 111;
   const seasonProgress =
-    (levelNum - season.range[0]) / Math.max(1, CANDY_HOGWARTS_LEVELS_PER_SEASON - 1);
+    localPosInSeason / Math.max(1, CANDY_HOGWARTS_LEVELS_PER_SEASON - 1);
+  const progress7777 = (levelNum - 1) / Math.max(1, CANDY_HOGWARTS_TOTAL_LEVELS - 1);
 
   let title = '';
   if (levelNum <= 100 && FIRST_100_TITLES[levelNum - 1]) {
     title = FIRST_100_TITLES[levelNum - 1];
   } else if (isSeasonFinale) {
     const boss = getCandyBossForLevel(levelNum);
-    title = boss ? boss.name : `ĐẠI KẾT CỤC ${season.yearLabel.toUpperCase()}: ${season.title}`;
+    title = boss
+      ? boss.name
+      : `ĐẠI KẾT CỤC ${season.yearLabel.toUpperCase()}: ${chapter.shortTitle}`;
   } else if (isBoss) {
     const boss = getCandyBossForLevel(levelNum);
     title = boss ? `TRÙM: ${boss.name}` : `TRÙM: ${chapter.shortTitle}`;
   } else if (isExamTrial) {
-    title = `KHẢO HẠCH O.W.L. ${season.yearLabel.toUpperCase()}: ${season.title}`;
+    const examGrade = ascensionRank > 0 ? 'N.E.W.T.' : 'O.W.L.';
+    title = `KHẢO HẠCH ${examGrade} ${season.yearLabel.toUpperCase()}: ${chapter.shortTitle}`;
   } else {
     const stepInChapter = levelNum - chapter.range[0] + 1;
     const prefix =
@@ -1529,17 +1695,18 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
     title = `${prefix}: ${chapter.shortTitle} (${stepInChapter}/${chapter.levelCount})`;
   }
 
+  const ascBonus = ascensionRank * 22;
   const rewardSickle = isSeasonFinale
-    ? 320 + seasonId * 40
+    ? 320 + seasonId * 40 + ascBonus * 3
     : isChapterBoss
-      ? 140 + seasonId * 15
+      ? 140 + seasonId * 15 + ascBonus * 2
       : isBoss
-        ? 85 + seasonId * 8
+        ? 85 + seasonId * 8 + Math.round(ascBonus * 1.4)
         : difficultyTier === 'nightmare'
-          ? 45 + seasonId * 4
+          ? 45 + seasonId * 4 + ascBonus
           : difficultyTier === 'hard'
-            ? 36 + seasonId * 3
-            : 26 + seasonId * 2;
+            ? 36 + seasonId * 3 + Math.round(ascBonus * 0.8)
+            : 26 + seasonId * 2 + Math.round(ascBonus * 0.6);
 
   const isSpike =
     difficultyTier === 'hard' ||
@@ -1547,21 +1714,40 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
     difficultyTier === 'exam' ||
     isBoss ||
     isSeasonFinale;
-  const hardBias =
+
+  // Hệ số độ dày lớp vật cản (+2 bậc so với Gardenscapes ngay từ màn thấp, tăng liên tục tới 7777)
+  const baseHardBias =
     difficultyTier === 'finale'
-      ? 0.34
+      ? 0.46
       : difficultyTier === 'nightmare' || difficultyTier === 'boss' || difficultyTier === 'exam'
-        ? 0.24
+        ? 0.36
         : difficultyTier === 'hard'
-          ? 0.16
-          : 0.06;
+          ? 0.28
+          : 0.18;
+  const hardBias = Math.min(0.86, baseHardBias + progress7777 * 0.36);
+  const minBlockerLayer =
+    levelNum >= 5000 ? 3 : levelNum >= 1555 ? 2 : levelNum >= 180 && isSpike ? 2 : 1;
 
   const bossConfig = isBoss ? getCandyBossForLevel(levelNum) : null;
 
-  // 1. Kích thước bàn cờ: 7×7 → 8×8 → 9×9 → Đại Bàn Cờ 10×10 (mở từ Năm 4+)
+  // 1. Kích thước bàn cờ: mở 9×9 và 10×10 sớm hơn + phủ dày ở các bậc cao 778..7777
   let size = 8;
-  if (levelNum <= 3 || (seasonId === 1 && levelNum < 35 && levelNum % 8 === 3 && !isSpike)) {
+  if (levelNum <= 2) {
     size = 7;
+  } else if (
+    ascensionRank >= 4 &&
+    (isSpike || levelNum % 3 !== 0)
+  ) {
+    size = 10;
+  } else if (
+    ascensionRank >= 1 &&
+    (isSeasonFinale ||
+      isChapterBoss ||
+      isExamTrial ||
+      difficultyTier === 'nightmare' ||
+      levelNum % 2 === 0)
+  ) {
+    size = 10;
   } else if (
     seasonId >= 4 &&
     (isSeasonFinale ||
@@ -1573,21 +1759,27 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
   ) {
     size = 10;
   } else if (
+    ascensionRank >= 1 ||
     isBoss ||
     isExamTrial ||
     difficultyTier === 'nightmare' ||
-    (seasonId >= 2 && (difficultyTier === 'hard' || levelNum % 3 === 0)) ||
-    (seasonId === 1 && levelNum >= 20 && (difficultyTier === 'hard' || levelNum % 4 === 0))
+    (seasonId >= 2 && (difficultyTier === 'hard' || levelNum % 2 === 0)) ||
+    (seasonId === 1 && levelNum >= 8 && (difficultyTier === 'hard' || levelNum % 3 === 0))
   ) {
     size = 9;
   }
 
   let patternId = 0;
-  if (levelNum === 1 || levelNum === 3) patternId = 0;
+  if (levelNum === 1) patternId = 0;
   else if (levelNum === 2) patternId = 1;
   else if (isSeasonFinale) patternId = 17;
   else if (isBoss) patternId = [2, 6, 8, 12, 14, 16, 17][Math.floor(levelNum / 10) % 7];
-  else patternId = (levelNum * 7 + seasonId * 5) % 18;
+  else if (ascensionRank === 0) patternId = (levelNum * 7 + seasonId * 5) % 18;
+  else {
+    // Ở 778..7777 ưu tiên các mặt nạ khuyết chia cắt cột khó hơn Gardenscapes
+    const hardPatterns = [2, 3, 4, 6, 7, 8, 9, 10, 12, 14, 15, 16, 17];
+    patternId = hardPatterns[(levelNum * 11 + ascensionRank * 3) % hardPatterns.length];
+  }
 
   const mask = buildMask(size, patternId);
   let activeCells = 0;
@@ -1597,21 +1789,37 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
     }
   }
 
-  const maxTotalBlockers = Math.max(14, Math.floor(activeCells * 0.56));
+  // Mật độ vật cản cao hơn Gardenscapes +2 bậc (59% -> 68% số ô hợp lệ, luôn chừa >= 32% ô thở ở trên)
+  const maxTotalBlockers = Math.max(
+    16,
+    Math.floor(activeCells * (0.59 + progress7777 * 0.09))
+  );
   let usedBlockerCells = 0;
 
   // 2. Cột Thả Hòn Đá Phù Thủy (Drop Ingredients)
-  const hasIngredients = isIngredientDropLevel(levelNum, seasonId, isBoss, isSeasonFinale);
+  const hasIngredients = isIngredientDropLevel(
+    levelNum,
+    seasonId,
+    ascensionRank,
+    isBoss,
+    isSeasonFinale
+  );
   let ingredientTarget = 0;
   const ingredientSpawnCols: number[] = [];
   const ingredientExitCells: Array<{ r: number; c: number }> = [];
   if (hasIngredients) {
     ingredientTarget =
       levelNum <= 20
-        ? 2
-        : levelNum <= 60
-          ? 3
-          : Math.min(6, 3 + Math.floor(seasonId * 0.45) + (isSpike ? 1 : 0));
+        ? 3
+        : levelNum <= 80
+          ? 4
+          : Math.min(
+              8,
+              4 +
+                Math.floor(seasonId * 0.4) +
+                Math.floor(ascensionRank * 0.35) +
+                (isSpike ? 1 : 0)
+            );
 
     for (let c = 1; c < size - 1; c++) {
       let fullCol = true;
@@ -1652,8 +1860,10 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
   const portals: CandyPortalPair[] = [];
   const wantsPortals =
     levelNum <= 100
-      ? [36, 48, 54, 58, 66, 74, 84, 94, 100].includes(levelNum)
-      : (seasonId >= 2 && levelNum % 8 === 2) || (isSeasonFinale && seasonId >= 5);
+      ? [24, 36, 48, 54, 58, 66, 74, 84, 94, 100].includes(levelNum)
+      : ascensionRank === 0
+        ? (seasonId >= 2 && levelNum % 8 === 2) || (isSeasonFinale && seasonId >= 5)
+        : levelNum % 6 === 2 || isSeasonFinale;
   if (wantsPortals) {
     const leftC = 1;
     const rightC = size - 2;
@@ -1677,25 +1887,32 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
   const isPortalCell = (r: number, c: number) =>
     portals.some((p) => (p.from.r === r && p.from.c === c) || (p.to.r === r && p.to.c === c));
 
-  // 4. Băng Chuyền Cầu Thang Dịch Chuyển (Conveyor Belt)
+  // 4. Gió Lốc Mê Cung Tam Pháp Thuật & Băng Chuyền Cầu Thang Dịch Chuyển
+  const wantsMaze =
+    seasonId === 4 && ascensionRank === 0
+      ? isExamTrial || isSeasonFinale || isBoss || levelNum % 3 !== 1
+      : ascensionRank >= 1
+        ? seasonId === 4 ||
+          levelNum % 4 === 1 ||
+          (ascensionRank >= 4 && levelNum % 3 === 0) ||
+          levelNum === CANDY_HOGWARTS_TOTAL_LEVELS
+        : seasonId >= 5 &&
+          (levelNum % 4 === 1 || (isBoss && levelNum % 30 === 10));
+
   const wantsConveyor =
-    levelNum <= 100
-      ? [32, 46, 55, 68, 78, 88, 96, 99].includes(levelNum)
-      : levelNum % 7 === 4 ||
-        (isBoss && seasonId >= 3 && levelNum % 30 === 0) ||
-        levelNum === 777;
+    !wantsMaze &&
+    (levelNum <= 100
+      ? [19, 32, 46, 55, 68, 78, 88, 96, 99].includes(levelNum)
+      : levelNum % 6 === 4 ||
+        (ascensionRank >= 2 && levelNum % 5 === 3) ||
+        (isBoss && (seasonId >= 3 || ascensionRank >= 1) && levelNum % 30 === 0) ||
+        (isSeasonFinale && levelNum !== CANDY_HOGWARTS_TOTAL_LEVELS && seasonId !== 4));
   const conveyorLoops = wantsConveyor
     ? buildConveyorLoops(size, mask, levelNum, (r, c) => isExitCell(r, c) || isPortalCell(r, c))
     : [];
   const isConveyorCell = (r: number, c: number) =>
     conveyorLoops.some((loop) => loop.some((pt) => pt.r === r && pt.c === c));
 
-  // 5. Gió Lốc Mê Cung Tam Pháp Thuật (Năm 4+: tự dịch chuyển hàng kẹo mỗi 2–3 lượt!)
-  const wantsMaze =
-    seasonId === 4
-      ? isExamTrial || isSeasonFinale || isBoss || levelNum % 3 !== 1
-      : seasonId >= 5 &&
-        (levelNum % 5 === 1 || (isBoss && levelNum % 40 === 10) || isSeasonFinale);
   const mazeConfig = wantsMaze
     ? buildMazeConfig(size, mask, levelNum, isConveyorCell, difficultyTier)
     : null;
@@ -1720,13 +1937,35 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
     isConveyorCell(r, c) ||
     isProtectedSpawnCol(c);
 
-  // 6A. [NĂM 7] Trường Sinh Linh Giá (Horcrux 4–5 HP: Khiên Hồn miễn nhiễm ghép thường khi HP >= 4!)
+  // 6A. Trường Sinh Linh Giá (Horcrux 4–5 HP: Khiên Hồn miễn nhiễm ghép thường khi HP >= 4!)
   let horcruxTarget = 0;
   if (seasonId === 7 && (isExamTrial || isSeasonFinale || isBoss || levelNum % 3 !== 2)) {
-    horcruxTarget = isSeasonFinale ? 6 : isBoss || difficultyTier === 'nightmare' ? 4 : 2;
+    horcruxTarget =
+      levelNum === CANDY_HOGWARTS_TOTAL_LEVELS
+        ? 8
+        : isSeasonFinale
+          ? 6 + Math.min(2, Math.floor(ascensionRank / 3))
+          : isBoss || difficultyTier === 'nightmare'
+            ? 4 + (ascensionRank >= 5 ? 2 : 0)
+            : 2 + (ascensionRank >= 3 ? 2 : 0);
+  } else if (
+    ascensionRank >= 1 &&
+    (isSeasonFinale ||
+      (isBoss && levelNum % 20 === 0) ||
+      (ascensionRank >= 2 && levelNum % 5 === 4) ||
+      (ascensionRank >= 6 && levelNum % 3 === 1))
+  ) {
+    horcruxTarget =
+      isSeasonFinale || ascensionRank >= 7
+        ? 6
+        : difficultyTier === 'nightmare' || isBoss
+          ? 4
+          : 2;
   }
   const horcruxBudget = Math.min(horcruxTarget, Math.max(0, maxTotalBlockers - usedBlockerCells));
-  const horcruxMaxHp = isSeasonFinale || difficultyTier === 'nightmare' || isBoss ? 5 : 4;
+  const horcruxMaxHp =
+    ascensionRank >= 2 || isSeasonFinale || difficultyTier === 'nightmare' || isBoss ? 5 : 4;
+  const horcruxMinHp = ascensionRank >= 4 ? 5 : 4;
   const horcruxGrid = placeSymmetricalGrid(
     size,
     mask,
@@ -1736,23 +1975,31 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
     false,
     baseStaticForbidden,
     hardBias,
-    4
+    horcruxMinHp
   );
   markOccupied(horcruxGrid);
 
-  // 6B. [NĂM 3+] Giám Ngục Hút Nộ (Dementor 2–4 HP)
+  // 6B. Giám Ngục Hút Nộ (Dementor 2–4 HP)
   let dementorTarget = 0;
   if (seasonId === 3 && (isExamTrial || isSeasonFinale || isBoss || levelNum % 3 !== 1)) {
     dementorTarget = isSeasonFinale ? 6 : isBoss || difficultyTier === 'nightmare' ? 4 : 2;
   } else if (
-    seasonId >= 4 &&
-    (levelNum % 6 === 3 || (isBoss && levelNum % 30 === 20) || levelNum === 777)
+    (seasonId >= 4 || ascensionRank >= 1) &&
+    (levelNum % 5 === 3 || (isBoss && levelNum % 30 === 20) || isSeasonFinale)
   ) {
-    dementorTarget = isSeasonFinale ? 4 : difficultyTier === 'nightmare' || isBoss ? 4 : 2;
+    dementorTarget =
+      ascensionRank >= 5 && (isSeasonFinale || difficultyTier === 'nightmare')
+        ? 6
+        : isSeasonFinale || difficultyTier === 'nightmare' || isBoss
+          ? 4
+          : 2;
   }
   const dementorBudget = Math.min(dementorTarget, Math.max(0, maxTotalBlockers - usedBlockerCells));
   const dementorMaxHp =
-    seasonId >= 5 || isSeasonFinale || difficultyTier === 'nightmare' ? 4 : isSpike ? 3 : 2;
+    ascensionRank >= 1 || seasonId >= 4 || isSeasonFinale || difficultyTier === 'nightmare'
+      ? 4
+      : 3;
+  const dementorMinHp = ascensionRank >= 3 ? 4 : seasonId >= 4 || isSpike ? 3 : 2;
   const dementorGrid = placeSymmetricalGrid(
     size,
     mask,
@@ -1762,19 +2009,29 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
     false,
     baseStaticForbidden,
     hardBias,
-    2
+    dementorMinHp
   );
   markOccupied(dementorGrid);
 
-  // 6C. [NĂM 5+] Bia Sắc Lệnh Umbridge (Decree Plaque 2–4 HP: vùng 3×3 cấm kết tinh Kẹo Phép!)
+  // 6C. Bia Sắc Lệnh Umbridge (Decree Plaque 2–4 HP: vùng 3×3 cấm kết tinh Kẹo Phép!)
   let decreeTarget = 0;
   if (seasonId === 5 && (isExamTrial || isSeasonFinale || isBoss || levelNum % 3 !== 2)) {
-    decreeTarget = isSeasonFinale ? 4 : isBoss || difficultyTier === 'nightmare' ? 4 : 2;
-  } else if (seasonId >= 6 && (levelNum % 7 === 2 || (isBoss && levelNum % 40 === 20))) {
-    decreeTarget = 2;
+    decreeTarget =
+      ascensionRank >= 5 && isSpike
+        ? 6
+        : isSeasonFinale || isBoss || difficultyTier === 'nightmare'
+          ? 4
+          : 2;
+  } else if (
+    (seasonId >= 6 || ascensionRank >= 1) &&
+    (levelNum % 6 === 2 || (isBoss && levelNum % 40 === 20) || (ascensionRank >= 4 && levelNum % 5 === 0))
+  ) {
+    decreeTarget = ascensionRank >= 4 && isSpike ? 4 : 2;
   }
   const decreeBudget = Math.min(decreeTarget, Math.max(0, maxTotalBlockers - usedBlockerCells));
-  const decreeMaxHp = seasonId >= 6 || difficultyTier === 'nightmare' || isBoss ? 4 : 3;
+  const decreeMaxHp =
+    ascensionRank >= 1 || seasonId >= 6 || difficultyTier === 'nightmare' || isBoss ? 4 : 3;
+  const decreeMinHp = ascensionRank >= 3 ? 4 : 3;
   const decreeGrid = placeSymmetricalGrid(
     size,
     mask,
@@ -1784,19 +2041,24 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
     false,
     baseStaticForbidden,
     hardBias,
-    2
+    decreeMinHp
   );
   markOccupied(decreeGrid);
 
-  // 6D. [NĂM 6+] Lửa Địa Ngục Fiendfyre (2 HP)
+  // 6D. Lửa Địa Ngục Fiendfyre (2 HP — tự lan mỗi 2 lượt & đốt ngắn ngòi Bom!)
   let fiendfyreTarget = 0;
   if (seasonId === 6 && (isExamTrial || isSeasonFinale || isBoss || levelNum % 3 !== 1)) {
-    fiendfyreTarget = isSeasonFinale ? 4 : difficultyTier === 'nightmare' || isBoss ? 4 : 2;
+    fiendfyreTarget =
+      ascensionRank >= 6 && isSpike
+        ? 6
+        : isSeasonFinale || difficultyTier === 'nightmare' || isBoss
+          ? 4
+          : 2;
   } else if (
-    seasonId === 7 &&
+    (seasonId === 7 || ascensionRank >= 1) &&
     (levelNum % 4 === 1 || isSeasonFinale || (isBoss && levelNum % 20 === 0))
   ) {
-    fiendfyreTarget = isSeasonFinale ? 4 : 2;
+    fiendfyreTarget = isSeasonFinale || ascensionRank >= 5 ? 4 : 2;
   }
   const fiendfyreBudget = Math.min(
     fiendfyreTarget,
@@ -1819,9 +2081,11 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
   // 6E. Vạc Độc Dược (Magic Cauldron 3 HP)
   let cauldronTarget = 0;
   if (levelNum <= 100) {
-    if ([43, 57, 65, 75, 85, 94, 99].includes(levelNum)) cauldronTarget = levelNum >= 75 ? 4 : 2;
-  } else if (levelNum % 8 === 5 || (isBoss && levelNum % 50 === 0 && seasonId <= 5)) {
-    cauldronTarget = seasonId >= 3 ? 4 : 2;
+    if ([25, 35, 43, 57, 65, 75, 85, 94, 99].includes(levelNum)) {
+      cauldronTarget = levelNum >= 65 ? 4 : 2;
+    }
+  } else if (levelNum % 7 === 5 || (isBoss && levelNum % 50 === 0 && seasonId <= 5)) {
+    cauldronTarget = ascensionRank >= 4 ? 6 : seasonId >= 3 || ascensionRank >= 1 ? 4 : 2;
   }
   const cauldronBudget = Math.min(cauldronTarget, Math.max(0, maxTotalBlockers - usedBlockerCells));
   const rawCauldron = placeSymmetricalGrid(
@@ -1838,17 +2102,18 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
   const cauldronGrid = rawCauldron.map((row) => row.map((v) => (v > 0 ? 3 : 0)));
   markOccupied(cauldronGrid);
 
-  // 6F. Đá Cổ Ngữ (Frosting 1–5 lớp)
+  // 6F. Đá Cổ Ngữ (Frosting 1–5 lớp — đẩy sớm từ Màn 6, dày hơn Gardenscapes +2 bậc)
   let frostingTarget = 0;
   let maxFrostingLayer = 1;
-  if (levelNum >= 11 && (levelNum % 2 === 1 || isBoss || hasIngredients || isSpike)) {
+  if (levelNum >= 6 && (levelNum % 2 === 1 || isBoss || hasIngredients || isSpike)) {
     const baseFrost =
-      levelNum <= 100 ? 4 + Math.floor((levelNum - 10) * 0.09) : 6 + seasonId;
-    frostingTarget = Math.min(size >= 9 ? 14 : 10, baseFrost + (isSpike ? 2 : 0));
-    if (seasonId >= 5) maxFrostingLayer = isSpike ? 5 : 4;
-    else if (seasonId >= 3) maxFrostingLayer = isSpike ? 4 : 3;
-    else if (seasonId === 2) maxFrostingLayer = isSpike ? 4 : 3;
-    else maxFrostingLayer = levelNum >= 65 ? 3 : levelNum >= 28 ? 2 : 1;
+      levelNum <= 100
+        ? 6 + Math.floor((levelNum - 6) * 0.11)
+        : 8 + seasonId + Math.min(8, Math.ceil(ascensionRank * 0.8));
+    frostingTarget = Math.min(size >= 10 ? 20 : size >= 9 ? 16 : 12, baseFrost + (isSpike ? 3 : 0));
+    if (ascensionRank >= 1 || seasonId >= 4) maxFrostingLayer = 5;
+    else if (seasonId >= 2) maxFrostingLayer = isSpike ? 5 : 4;
+    else maxFrostingLayer = levelNum >= 45 ? 4 : levelNum >= 18 ? 3 : 2;
   }
   const frostingBudget = Math.min(frostingTarget, Math.max(0, maxTotalBlockers - usedBlockerCells));
   const frostingGrid = placeSymmetricalGrid(
@@ -1865,18 +2130,19 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
       isExitCell(r, c) ||
       isPortalCell(r, c) ||
       isConveyorCell(r, c),
-    hardBias
+    hardBias,
+    Math.min(maxFrostingLayer, minBlockerLayer)
   );
   markOccupied(frostingGrid);
 
-  // 6 Sickle. Sô-cô-la Hắc Ám Tự Lan
+  // Mục 6-7. Sô-cô-la Hắc Ám Tự Lan (đẩy sớm từ Màn 21)
   let chocolateTarget = 0;
   if (
     fiendfyreBudget === 0 &&
-    levelNum >= 31 &&
-    (levelNum % 5 === 0 || levelNum === 44 || levelNum === 75 || levelNum === 97)
+    levelNum >= 21 &&
+    (levelNum % 4 === 0 || levelNum === 21 || levelNum === 44 || levelNum === 75 || levelNum === 97)
   ) {
-    chocolateTarget = levelNum >= 70 || seasonId >= 2 ? 4 : 2;
+    chocolateTarget = ascensionRank >= 3 ? 6 : levelNum >= 50 || seasonId >= 2 ? 4 : 2;
   }
   const chocolateBudget = Math.min(
     chocolateTarget,
@@ -1893,10 +2159,13 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
   );
   markOccupied(chocolateGrid);
 
-  // 6H. Xoáy Cam Thảo (Licorice Swirl)
+  // 6H. Xoáy Cam Thảo (Licorice Swirl — đẩy sớm từ Màn 15)
   let swirlTarget = 0;
-  if (levelNum >= 24 && (levelNum % 4 === 3 || (isBoss && levelNum % 30 === 0))) {
-    swirlTarget = Math.min(8, 4 + Math.floor(seasonId * 0.7));
+  if (levelNum >= 15 && (levelNum % 4 === 3 || (isBoss && levelNum % 30 === 0))) {
+    swirlTarget = Math.min(
+      12,
+      5 + Math.floor(seasonId * 0.8) + Math.min(4, Math.floor(ascensionRank * 0.5))
+    );
   }
   const swirlBudget = Math.min(swirlTarget, Math.max(0, maxTotalBlockers - usedBlockerCells));
   const swirlGrid = placeSymmetricalGrid(
@@ -1915,12 +2184,14 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
   );
   markOccupied(swirlGrid);
 
-  // 6I. Chìa Khoá Đường Sickle & Ô Khoá Hầm Gringotts
+  // 6I. Chìa Khoá Đường Sickle & Ô Khoá Hầm Gringotts (đẩy sớm từ Màn 18)
   let lockTarget = 0;
   if (levelNum <= 100) {
-    if ([22, 28, 38, 48, 63, 73, 83, 88, 91].includes(levelNum)) lockTarget = levelNum >= 63 ? 6 : 4;
-  } else if (levelNum % 9 === 6) {
-    lockTarget = seasonId >= 4 ? 8 : 6;
+    if ([18, 22, 28, 38, 48, 63, 73, 83, 88, 91].includes(levelNum)) {
+      lockTarget = levelNum >= 55 ? 6 : 4;
+    }
+  } else if (levelNum % 8 === 6) {
+    lockTarget = ascensionRank >= 3 ? 10 : seasonId >= 4 || ascensionRank >= 1 ? 8 : 6;
   }
   const lockBudget = Math.min(lockTarget, Math.max(0, maxTotalBlockers - usedBlockerCells));
   const lockGrid = placeSymmetricalGrid(
@@ -1934,23 +2205,23 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
   );
   markOccupied(lockGrid);
 
-  // 6J. [NĂM 2+] Hoá Đá Tử Xà (Petrify 1–3 lớp)
+  // 6J. Hoá Đá Tử Xà (Petrify 1–3 lớp)
   let petrifyTarget = 0;
   let maxPetrifyLayer = 1;
   if (seasonId === 2 && (isExamTrial || isSeasonFinale || isBoss || levelNum % 3 !== 0)) {
-    petrifyTarget = isSeasonFinale ? 14 : isSpike ? 10 : 8;
+    petrifyTarget = isSeasonFinale ? 14 : isSpike ? 12 : 8;
     maxPetrifyLayer =
-      isSeasonFinale || difficultyTier === 'nightmare' || isBoss
+      ascensionRank >= 1 || isSeasonFinale || difficultyTier === 'nightmare' || isBoss
         ? 3
-        : isSpike || seasonProgress > 0.35
+        : isSpike || seasonProgress > 0.25
           ? 2
-          : 1;
+          : 2;
   } else if (
-    seasonId >= 3 &&
-    (levelNum % 5 === 2 || levelNum === 444 || levelNum === 777)
+    (seasonId >= 3 || ascensionRank >= 1) &&
+    (levelNum % 4 === 2 || levelNum === 444 || isSeasonFinale)
   ) {
-    petrifyTarget = isSpike ? 8 : 6;
-    maxPetrifyLayer = seasonId >= 5 ? 3 : 2;
+    petrifyTarget = ascensionRank >= 4 ? 12 : isSpike ? 10 : 6;
+    maxPetrifyLayer = ascensionRank >= 1 || seasonId >= 4 ? 3 : 2;
   }
   const petrifyBudget = Math.min(petrifyTarget, Math.max(0, maxTotalBlockers - usedBlockerCells));
   const petrifyGrid = placeSymmetricalGrid(
@@ -1966,19 +2237,23 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
       isExitCell(r, c) ||
       isPortalCell(r, c) ||
       isConveyorCell(r, c),
-    hardBias
+    hardBias,
+    ascensionRank >= 3 ? Math.min(maxPetrifyLayer, 2) : 1
   );
   markOccupied(petrifyGrid);
 
-  // 6K. Băng Ngục Azkaban (Ice Lock 1–5 lớp)
+  // 6K. Băng Ngục Azkaban (Ice Lock 1–5 lớp — đẩy sớm từ Màn 8)
   let iceTarget = 0;
   let maxIceLayer = 1;
-  if (levelNum >= 14 && (isSpike || levelNum % 3 === 1 || seasonId === 3)) {
-    iceTarget = Math.min(size >= 9 ? 16 : 12, 4 + Math.floor(seasonId * 1.4) + (isSpike ? 3 : 0));
-    if (seasonId >= 6) maxIceLayer = isSpike ? 5 : 4;
-    else if (seasonId >= 4) maxIceLayer = isSpike ? 4 : 3;
-    else if (seasonId >= 2) maxIceLayer = isSpike ? 3 : 2;
-    else maxIceLayer = levelNum >= 65 ? 3 : levelNum >= 35 ? 2 : 1;
+  if (levelNum >= 8 && (isSpike || levelNum % 3 === 1 || seasonId === 3 || ascensionRank >= 2)) {
+    iceTarget = Math.min(
+      size >= 10 ? 20 : size >= 9 ? 16 : 12,
+      6 + Math.floor(seasonId * 1.5) + Math.min(6, ascensionRank) + (isSpike ? 3 : 0)
+    );
+    if (ascensionRank >= 1 || seasonId >= 5) maxIceLayer = 5;
+    else if (seasonId >= 3) maxIceLayer = isSpike ? 5 : 4;
+    else if (seasonId === 2) maxIceLayer = isSpike ? 4 : 3;
+    else maxIceLayer = levelNum >= 50 ? 4 : levelNum >= 22 ? 3 : 2;
   }
   const iceBudget = Math.min(iceTarget, Math.max(0, maxTotalBlockers - usedBlockerCells));
   const iceGrid = placeSymmetricalGrid(
@@ -1994,30 +2269,36 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
       isExitCell(r, c) ||
       isPortalCell(r, c) ||
       isConveyorCell(r, c),
-    hardBias
+    hardBias,
+    Math.min(maxIceLayer, minBlockerLayer)
   );
   markOccupied(iceGrid);
 
-  // 6L. Thạch Hắc Ám (Jelly 1–5 lớp dưới kẹo)
+  // 6L. Thạch Hắc Ám (Jelly 1–5 lớp dưới kẹo — đẩy sớm từ Màn 2)
   const isScoreOnly = levelNum === 4 || levelNum === 9;
   let jellyCount = 0;
   let maxJellyLayer = 1;
-  if (levelNum >= 5 && !isScoreOnly) {
+  if (levelNum >= 2 && !isScoreOnly) {
     const wantsJelly =
       isBoss ||
       isSeasonFinale ||
       isExamTrial ||
       (!hasIngredients && levelNum % 3 !== 1) ||
-      seasonId >= 2;
+      seasonId >= 2 ||
+      ascensionRank >= 1;
     if (wantsJelly) {
       jellyCount = Math.min(
-        Math.floor(activeCells * 0.72),
-        10 + Math.floor(Math.min(100, levelNum) * 0.22) + (seasonId - 1) * 5 + (isSpike ? 6 : 0)
+        Math.floor(activeCells * (0.76 + Math.min(0.12, progress7777 * 0.12))),
+        14 +
+          Math.floor(Math.min(100, levelNum) * 0.26) +
+          (seasonId - 1) * 5 +
+          ascensionRank * 3 +
+          (isSpike ? 6 : 0)
       );
-      if (seasonId >= 6) maxJellyLayer = isSpike ? 5 : 4;
-      else if (seasonId >= 4) maxJellyLayer = isSpike ? 5 : 3;
-      else if (seasonId >= 2) maxJellyLayer = isSpike ? 4 : 3;
-      else maxJellyLayer = levelNum >= 70 ? 3 : levelNum >= 25 ? 2 : 1;
+      if (ascensionRank >= 1 || seasonId >= 5) maxJellyLayer = 5;
+      else if (seasonId >= 3) maxJellyLayer = isSpike ? 5 : 4;
+      else if (seasonId === 2) maxJellyLayer = isSpike ? 4 : 3;
+      else maxJellyLayer = levelNum >= 55 ? 4 : levelNum >= 18 ? 3 : 2;
     }
   }
   const jellyGrid = placeSymmetricalGrid(
@@ -2033,7 +2314,8 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
       decreeGrid[r][c] > 0 ||
       fiendfyreGrid[r][c] > 0 ||
       horcruxGrid[r][c] > 0,
-    hardBias
+    hardBias,
+    Math.min(maxJellyLayer, minBlockerLayer)
   );
 
   // 7. Thống kê số lượng thực tế đặt lên bàn
@@ -2049,42 +2331,52 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
   const { cells: actualFiendfyre } = countNonZeroCells(fiendfyreGrid);
   const { cells: actualHorcruxes } = countNonZeroCells(horcruxGrid);
 
-  // 8. Bom Kẹo Hắc Ám Đếm Ngược
+  // 8. Bom Kẹo Hắc Ám Đếm Ngược (ngòi ngắn & nhịp sinh dồn dập hơn Gardenscapes +2 bậc)
   let bombConfig: CandyBombConfig | null = null;
   const wantsBombs =
     levelNum <= 100
-      ? [20, 28, 34, 39, 44, 50, 56, 64, 70, 76, 80, 86, 90, 96, 100].includes(levelNum)
+      ? [16, 20, 26, 28, 34, 39, 44, 50, 56, 62, 64, 70, 76, 80, 86, 90, 96, 100].includes(
+          levelNum
+        )
       : difficultyTier === 'nightmare' ||
         difficultyTier === 'hard' ||
         isSeasonFinale ||
         (isBoss && levelNum % 10 === 0) ||
-        (seasonId >= 2 && levelNum % 5 === 0);
+        ((seasonId >= 2 || ascensionRank >= 1) && levelNum % 4 === 0);
   if (wantsBombs) {
-    const baseTimer =
+    const startTimer =
       actualFiendfyre > 0
-        ? 11
-        : seasonId >= 5
-          ? 9
-          : seasonId >= 3
-            ? 10
-            : levelNum >= 80
-              ? 10
-              : 12;
-    const startTimer = Math.max(7, baseTimer - 2);
+        ? ascensionRank >= 5
+          ? 8
+          : 9
+        : ascensionRank >= 6
+          ? 6
+          : ascensionRank >= 2
+            ? 7
+            : seasonId >= 4
+              ? 7
+              : levelNum >= 50
+                ? 8
+                : 9;
     bombConfig = {
       initialCount:
-        isSeasonFinale || (seasonId >= 3 && (difficultyTier === 'nightmare' || difficultyTier === 'boss'))
-          ? 2
-          : 1,
-      intervalMoves: seasonId >= 4 ? 4 : 5,
+        ascensionRank >= 5 && (isSeasonFinale || difficultyTier === 'nightmare')
+          ? 3
+          : isSeasonFinale ||
+              ascensionRank >= 1 ||
+              (seasonId >= 2 && (difficultyTier === 'nightmare' || difficultyTier === 'boss'))
+            ? 2
+            : 1,
+      intervalMoves: ascensionRank >= 3 ? 3 : seasonId >= 3 || ascensionRank >= 1 ? 4 : 5,
       startTimer,
     };
   }
 
-  // 9. Số màu kẹo trên bàn cờ
+  // 9. Số màu kẹo trên bàn cờ (phủ 6 màu ngay từ Màn 4+, 100% 6 màu từ Màn 300..7777)
   const specialOrder = getSpecialOrderSpec(
     levelNum,
     seasonId,
+    ascensionRank,
     isBoss,
     isSeasonFinale,
     actualDecrees > 0
@@ -2092,54 +2384,56 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
   let numColors = 6;
   if (levelNum <= 3) {
     numColors = 5;
-  } else if (specialOrder) {
-    numColors = seasonId >= 3 && specialOrder.specialKind !== 'color_bomb' ? 6 : 5;
-  } else if (seasonId === 1) {
-    numColors =
-      isSpike || levelNum >= 14
-        ? 6
-        : levelNum % 3 === 1 && !isSpike
-          ? 5
-          : 6;
-  } else {
-    numColors = !isSpike && levelNum % 17 === 4 ? 5 : 6;
+  } else if (levelNum < 300 && specialOrder?.specialKind === 'color_bomb') {
+    numColors = 5;
   }
 
-  // 10. Ngân sách Lượt đi chặt chẽ chuẩn Candy Crush Saga nâng cao
-  let moves = 15;
-  if (levelNum <= 3) {
-    moves = levelNum === 1 ? 16 : 15;
+  // 10. Ngân sách Lượt đi siết chặt chuẩn Gardenscapes +2 bậc (13–21 lượt, 100% khả giải khi ghép combo)
+  let moves = 14;
+  if (levelNum === 1) {
+    moves = 16;
   } else if (levelNum <= 100) {
-    if (isBoss) moves = levelNum === 100 ? 21 : 17 + Math.floor(levelNum / 50);
-    else if (difficultyTier === 'nightmare') moves = 13 + (levelNum >= 60 ? 1 : 0);
-    else if (difficultyTier === 'hard') moves = 14 + (levelNum % 2);
-    else moves = 15 + (levelNum % 2);
+    if (isBoss) moves = levelNum === 100 ? 19 : 16 + Math.floor(levelNum / 55);
+    else if (difficultyTier === 'nightmare') moves = 13;
+    else if (difficultyTier === 'hard') moves = 13 + (levelNum % 2);
+    else moves = 14 + (levelNum % 2);
+  } else if (ascensionRank === 0) {
+    const highYearPad = seasonId >= 6 ? 1 : 0;
+    if (isSeasonFinale) moves = 20 + highYearPad;
+    else if (isBoss) moves = 17 + highYearPad;
+    else if (difficultyTier === 'nightmare' || isExamTrial) moves = 13 + highYearPad;
+    else if (difficultyTier === 'hard') moves = 14 + highYearPad;
+    else moves = 14 + (levelNum % 2) + highYearPad;
   } else {
-    const highYearPad = seasonId >= 5 ? 1 : 0;
-    if (isSeasonFinale) moves = 22 + Math.floor(seasonId / 4);
-    else if (isBoss) moves = 18 + highYearPad;
-    else if (difficultyTier === 'nightmare' || isExamTrial) moves = 14 + highYearPad;
-    else if (difficultyTier === 'hard') moves = 15 + highYearPad;
-    else moves = 16 + (levelNum % 2) + highYearPad;
+    const lateTighten = ascensionRank >= 6 ? -1 : 0;
+    if (levelNum === CANDY_HOGWARTS_TOTAL_LEVELS) moves = 21;
+    else if (isSeasonFinale) moves = Math.max(18, 20 + lateTighten);
+    else if (isBoss) moves = Math.max(16, 18 + lateTighten);
+    else if (difficultyTier === 'nightmare' || isExamTrial) moves = 13;
+    else moves = 13 + (levelNum % 2);
   }
 
-  if (hasIngredients && !isBoss) moves += 1;
-  if (actualHorcruxes >= 4 && !isBoss) moves += 1;
+  if (hasIngredients && !isBoss) {
+    moves = Math.max(moves, 11 + Math.ceil(ingredientTarget * 1.15));
+  }
+  if (actualHorcruxes >= 6 && !isBoss) moves += 2;
+  else if (actualHorcruxes >= 4 && !isBoss) moves += 1;
   moves = Math.max(13, moves);
 
-  // 11. Ngưỡng 1–2–3 Sao (+22%)
+  // 11. Ngưỡng 1–2–3 Sao tăng dần xuyên suốt 1 -> 7777
   const baseStar1 = Math.round(
-    (2600 +
-      Math.min(100, levelNum) * 160 +
-      (seasonId - 1) * 5200 +
-      Math.round(seasonProgress * 3800) +
-      (isSeasonFinale ? 6500 : isBoss ? 2400 : isSpike ? 1100 : 0)) *
-      1.22,
+    (2800 +
+      Math.min(100, levelNum) * 175 +
+      (seasonId - 1) * 5600 +
+      ascensionRank * 14500 +
+      Math.round(seasonProgress * 4200) +
+      (isSeasonFinale ? 8000 : isBoss ? 3000 : isSpike ? 1400 : 0)) *
+      1.25
   );
   const stars: [number, number, number] = [
     Math.round(baseStar1 / 100) * 100,
-    Math.round((baseStar1 * 1.72) / 100) * 100,
-    Math.round((baseStar1 * 2.55) / 100) * 100,
+    Math.round((baseStar1 * 1.75) / 100) * 100,
+    Math.round((baseStar1 * 2.62) / 100) * 100,
   ];
 
   // 12. Tối đa 3 Mục Tiêu cho bảng Mục Tiêu dọc
@@ -2157,13 +2451,13 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
     if (actualHorcruxes > 0 && objectives.length < 3) {
       objectives.push({ type: 'horcrux', target: actualHorcruxes, label: 'Huỷ Linh Giá' });
     }
-    if (actualDementors > 0 && (seasonId === 3 || objectives.length < 2) && objectives.length < 3) {
+    if (actualDementors > 0 && (seasonId === 3 || ascensionRank >= 1 || objectives.length < 2) && objectives.length < 3) {
       objectives.push({ type: 'dementor', target: actualDementors, label: 'Đuổi Giám Ngục' });
     }
-    if (actualDecrees > 0 && (seasonId === 5 || objectives.length < 2) && objectives.length < 3) {
+    if (actualDecrees > 0 && (seasonId === 5 || ascensionRank >= 1 || objectives.length < 2) && objectives.length < 3) {
       objectives.push({ type: 'decree', target: actualDecrees, label: 'Đập Sắc Lệnh' });
     }
-    if (actualFiendfyre > 0 && (seasonId === 6 || objectives.length < 2) && objectives.length < 3) {
+    if (actualFiendfyre > 0 && (seasonId === 6 || ascensionRank >= 1 || objectives.length < 2) && objectives.length < 3) {
       objectives.push({ type: 'fiendfyre', label: 'Dập Lửa Địa Ngục' });
     }
     if (actualPetrify > 0 && (seasonId === 2 || objectives.length === 0) && objectives.length < 3) {
@@ -2206,8 +2500,12 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
     if (objectives.length < 2 && !bossConfig && ingredientTarget === 0) {
       let preferredTile = (levelNum + seasonId * 2) % numColors;
       if (levelNum <= 12) preferredTile = levelNum % 2 === 0 ? 4 : 2;
-      const multiplier = isSpike ? 2.25 : numColors === 6 ? 1.95 : 2.15;
-      const collectTarget = Math.max(26, Math.round(moves * multiplier + seasonId * 4));
+      const multiplier =
+        (isSpike ? 2.65 : numColors === 6 ? 2.35 : 2.45) + progress7777 * 0.75;
+      const collectTarget = Math.max(
+        34,
+        Math.round(moves * multiplier + seasonId * 5 + ascensionRank * 4)
+      );
       objectives.push({
         type: 'collect',
         tileId: preferredTile,
@@ -2219,7 +2517,7 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
         objectives.push({
           type: 'collect',
           tileId: secondTile,
-          target: Math.max(18, Math.round(collectTarget * 0.85)),
+          target: Math.max(24, Math.round(collectTarget * 0.88)),
         });
       }
     }

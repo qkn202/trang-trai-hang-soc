@@ -66,21 +66,32 @@ describe('Minigame Difficulty Upgrade (except Sudoku)', () => {
 
     const boss10 = getCandyBossForLevel(10);
     const boss777 = getCandyBossForLevel(777);
+    const boss7777 = getCandyBossForLevel(7777);
     expect(boss10).not.toBeNull();
-    expect(boss10!.maxHp).toBe(1950); // 1550 * 1.25 rounded to 50
+    expect(boss10!.maxHp).toBe(2150); // 1550 * 1.38 rounded to 50 (+2 tiers above Gardenscapes)
     expect(boss10!.castInterval).toBeLessThanOrEqual(3);
-    expect(boss10!.enrageBelowPct).toBeGreaterThanOrEqual(0.55);
+    expect(boss10!.enrageBelowPct).toBeGreaterThanOrEqual(0.58);
     expect(boss777).not.toBeNull();
     expect(boss777!.castInterval).toBe(2);
+    expect(boss7777).not.toBeNull();
+    expect(boss7777!.maxHp).toBe(78000);
+    expect(boss7777!.castInterval).toBe(2);
+    expect(boss7777!.enrageBelowPct).toBeGreaterThanOrEqual(0.72);
 
-    for (let id = 1; id <= 777; id++) {
+    for (const id of [1, 15, 60, 250, 777, 1500, 3500, 5500, 7777]) {
       const lv = generateCandyHogwartsLevel(id);
       expect(lv.moves).toBeGreaterThanOrEqual(13);
+      if (id >= 4 && id >= 300) {
+        expect(lv.numColors).toBe(6);
+      }
     }
 
     const legacy300 = getMatch3LevelDef(300);
+    const legacy7777 = getMatch3LevelDef(7777);
     expect(legacy300.moves).toBeGreaterThanOrEqual(13);
     expect(legacy300.moves).toBeLessThanOrEqual(28);
+    expect(legacy7777.level).toBe(7777);
+    expect(legacy7777.moves).toBeGreaterThanOrEqual(13);
   });
 
   it('upgrades Caro AI strength to >= 2, blocks open-four immediately, and seeds early runes safely', () => {

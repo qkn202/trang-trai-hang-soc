@@ -34,7 +34,7 @@ const FEATURED_DISCIPLINE_ROTATION: ReadonlyArray<{
     kind: 'match3',
     icon: '🍬',
     shortVi: 'Bùa Gặt Honeydukes',
-    descVi: 'Vượt màn mới Bùa Gặt Honeydukes (777 màn) để tích tiến độ lên cấp + nhận thưởng Sao Đề Cử, +1 ⏳ Cát & +35% Sickle!',
+    descVi: 'Vượt màn mới Bùa Gặt Honeydukes (7.777 màn) để tích tiến độ lên cấp + nhận thưởng Sao Đề Cử, +1 ⏳ Cát & +35% Sickle!',
   },
   {
     kind: 'caro',
@@ -123,7 +123,7 @@ const MILESTONE_NOTES: Record<number, string> = {
   8: 'Mở khóa Vùng Đất Đồng Cỏ Quái Lùng Nhùng + Guồng Nước Gỗ Đầm Sậy!',
   11: 'Mở khóa Khu Bảo Tồn Đào Mỏ (Niffler) tinh nghịch!',
   14: 'Mở khóa Vùng Đất Rạp Lều Lụa Trắng Hội Mùa Gặt!',
-  17: 'Mở khóa Tiệm Kẹo Công Tước Mật (Honeydukes) — cổng tắt vào Gác Xép Bùa Gặt Honeydukes 777 màn!',
+  17: 'Mở khóa Tiệm Kẹo Công Tước Mật (Honeydukes) — cổng tắt vào Gác Xép Bùa Gặt Honeydukes 7.777 màn!',
   21: 'Mở khóa Vùng Đất Cầu Đá Rêu & Ngõ Đá Cuội Hogsmeade + Cổng Bí Ngô Mùa Thu!',
   24: 'Mở khóa Cối Xay Gió Đồi Devon nghiền Bột Mì Mịn!',
   27: 'Mở khóa Quán Ba Cây Chổi Hogsmeade ủ Bia Bơ sủi bọt kem!',

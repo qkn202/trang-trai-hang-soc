@@ -336,8 +336,8 @@ export function shellMountDOM(hud: GameHUD): void {
           <!-- HPVN 15/11: each group has a small name; seven games by their short tab names plus BXH, on the same 3-column grid -->
           <p class="hg-menu-group" id="hgMenuGroupGames">Trò chơi</p>
           <div class="hg-menu-games-pills" role="group" aria-labelledby="hgMenuGroupGames">
-            <button id="btnOpenMatch3" type="button" data-switch-minigame="match3" class="hg-game-pill" title="Bùa Gặt Honeydukes — 777 Màn (Phím J)">
-              Bùa Gặt <small id="lblMatch3Lv" class="sr-only-hud">1/777</small>
+            <button id="btnOpenMatch3" type="button" data-switch-minigame="match3" class="hg-game-pill" title="Bùa Gặt Honeydukes — 7.777 Màn (Phím J)">
+              Bùa Gặt <small id="lblMatch3Lv" class="sr-only-hud">1/7777</small>
             </button>
             <button id="btnOpenPuzzleArcade" type="button" data-switch-minigame="caro" class="hg-game-pill" title="Ngũ Ấn Đạo Tặc (Phím K)">
               Ngũ Ấn <small id="lblArcadeTowerLv" class="sr-only-hud">0/3885</small>

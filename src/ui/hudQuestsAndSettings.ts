@@ -1061,7 +1061,7 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
     const wpModal = hud.sim.getWinsProgressForCurrentLevel();
     const fmtStagePill = (k: MinigameTrialKind) => {
       const inf = hud.sim.getDisciplineStageInfo(k);
-      return inf.isMaxed ? `👑777` : `${inf.currentStage}/777`;
+      return inf.isMaxed ? `👑${inf.maxStage}` : `${inf.currentStage}/${inf.maxStage}`;
     };
     const trialBannerHtml =
       reqTrial && !hud.sim.state.sandboxMode && !hud.sim.isHeadmasterPreview

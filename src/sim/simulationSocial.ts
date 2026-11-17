@@ -64,6 +64,7 @@ import {
   HEART_REGEN_MS,
   MATCH3_BOOSTERS,
   MAX_MATCH3_HEARTS,
+  MAX_MATCH3_STAGE,
   MAX_MINIGAME_STAGE,
   REFILL_HEARTS_GOLD_COST,
   TOTAL_MINIGAME_STAGES,
@@ -1126,7 +1127,8 @@ export function socialRequestPlayerMinigameSos(sim: ParkSimulation,
         msg: 'Chưa có thành viên cộng đồng nào trong danh bạ Cổng Floo! Hãy mở Cổng Floo & Hàng Xóm (Cấp 10+) để kết nối thành viên HPVN nhé.',
       };
     }
-    const cleanStage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.round(stage)));
+    const maxStageForKind = kind === 'match3' ? MAX_MATCH3_STAGE : MAX_MINIGAME_STAGE;
+    const cleanStage = Math.max(1, Math.min(maxStageForKind, Math.round(stage)));
 
     if (social.playerMinigameSos && !social.playerMinigameSos.claimed) {
       if (

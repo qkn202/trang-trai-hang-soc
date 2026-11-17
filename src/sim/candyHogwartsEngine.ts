@@ -1434,7 +1434,11 @@ export class CandyHogwartsEngine {
 
   public addRainbowCharge(rawAmount: number): void {
     if (rawAmount <= 0 || this.ended) return;
-    this.rainbowCharge = Math.max(0, this.rainbowCharge + rawAmount);
+    const lvId = this.level?.id ?? 1;
+    const highLevelResistance =
+      lvId <= 50 ? 1 : Math.max(0.72, 0.92 - ((lvId - 50) / 7727) * 0.2);
+    const effectiveAmount = rawAmount * highLevelResistance;
+    this.rainbowCharge = Math.max(0, this.rainbowCharge + effectiveAmount);
     while (this.rainbowCharge >= 100) {
       this.rainbowCharge -= 100;
       if (this.pendingRainbowSpawns < 4) {
@@ -5177,12 +5181,16 @@ export class CandyHogwartsEngine {
     if (candidates.length === 0) return false;
     candidates.sort(() => Math.random() - 0.5);
 
-    const baseCount = this.level.id >= 60 ? 2 : 1;
+    const baseCount = this.level.id >= 2332 ? 3 : this.level.id >= 30 ? 2 : 1;
     const count = forceEnrageBurst
-      ? Math.min(candidates.length, (this.level.seasonId || 1) >= 5 ? 3 : 2)
+      ? Math.min(
+          candidates.length,
+          this.level.id >= 778 ? 4 : (this.level.seasonId || 1) >= 5 ? 3 : 2
+        )
       : Math.min(candidates.length, this.bossEnraged ? baseCount + 1 : baseCount);
     const chosen = candidates.slice(0, count);
     const midC = Math.floor(this.size / 2);
+    const curseLayer = this.level.id >= 3109 && this.bossEnraged ? 3 : this.bossEnraged ? 2 : 1;
 
     for (let i = 0; i < chosen.length; i++) {
       const { r, c } = chosen[i];
@@ -5192,17 +5200,17 @@ export class CandyHogwartsEngine {
         this.grid[r][c] = null;
         this.chocolate[r][c] = 1;
       } else if (hex === 'petrify') {
-        this.petrify[r][c] = this.bossEnraged ? 2 : 1;
+        this.petrify[r][c] = curseLayer;
       } else if (hex === 'fiendfyre') {
         this.grid[r][c] = null;
         this.fiendfyre[r][c] = 2;
       } else if (hex === 'ice') {
-        this.ice[r][c] = this.bossEnraged ? 2 : 1;
+        this.ice[r][c] = curseLayer;
       } else if (hex === 'dark_curse') {
         if ((this.level.seasonId || 1) >= 2 && i % 3 === 1) {
-          this.petrify[r][c] = this.bossEnraged ? 2 : 1;
+          this.petrify[r][c] = curseLayer;
         } else if (i % 2 === 0) {
-          this.ice[r][c] = this.bossEnraged ? 2 : 1;
+          this.ice[r][c] = curseLayer;
         } else {
           this.grid[r][c] = this.createSwirlPiece(c, r);
         }
@@ -5238,11 +5246,12 @@ export class CandyHogwartsEngine {
       }
     }
 
+    const maxBombs = Math.max(2, this.bombConfig?.initialCount ?? 2);
     if (
       this.bombConfig &&
       this.movesUsed > 0 &&
       this.movesUsed % this.bombConfig.intervalMoves === 0 &&
-      this.countBombsOnBoard() < 2
+      this.countBombsOnBoard() < maxBombs
     ) {
       this.pendingBombSpawns = 1;
     }

@@ -9,6 +9,7 @@ import {
   NeighborProfileState,
 } from '../types/game';
 import { isNpcNeighborProfile } from './neighborSocial';
+import { MAX_MATCH3_STAGE } from '../data/match3Levels';
 import { flushFarmSave, identity, request } from '../hpvn/bridge';
 import { houseWeekPoints } from '../hpvn/houseCup';
 
@@ -61,7 +62,7 @@ export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMet
     shortVi: 'Bùa Gặt Honeydukes',
     tabVi: 'Bùa Gặt',
     titleVi: 'Bùa Gặt Honeydukes',
-    cupTitleVi: 'Cúp Đại Sư Bùa Gặt Honeydukes (777 Màn)',
+    cupTitleVi: 'Cúp Đại Sư Bùa Gặt Honeydukes (7.777 Màn)',
     subtitleVi: 'Xếp hạng theo Màn Đỉnh vượt qua, Điểm Bùa Gặt & Chuỗi Thắng Liên Tiếp',
     primaryColVi: 'Màn Đỉnh',
     secondaryColVi: 'Điểm Phép',
@@ -350,7 +351,14 @@ export function getLeaderboardLeagueBadge(
     return { tierId: 'bronze', icon: '🥉', labelVi: 'Tân Sinh Đồng' };
   }
 
-  if (primaryValue >= MAX_PUZZLE_TOWER_STAGE) {
+  if (gameId === 'match3') {
+    if (primaryValue >= MAX_MATCH3_STAGE) {
+      return { tierId: 'legend', icon: '👑', labelVi: 'Huyền Thoại 7777' };
+    }
+    if (primaryValue >= 777) {
+      return { tierId: 'legend', icon: '👑', labelVi: 'Huyền Thoại 777+' };
+    }
+  } else if (primaryValue >= MAX_PUZZLE_TOWER_STAGE) {
     return { tierId: 'legend', icon: '👑', labelVi: 'Huyền Thoại 777' };
   }
   if (primaryValue >= 300) {
@@ -389,7 +397,7 @@ function deriveBaseRecordFromState(
     const cleared = Math.max(
       0,
       Math.min(
-        MAX_PUZZLE_TOWER_STAGE,
+        MAX_MATCH3_STAGE,
         m3?.maxClearedLevel ?? Math.max(0, (m3?.currentLevel ?? 1) - 1)
       )
     );
@@ -507,10 +515,11 @@ function formatPrimaryDisplayVi(gameId: LeaderboardGameId, primaryVal: number): 
   if (gameId === 'seedquiz') {
     return `${primaryVal.toLocaleString('vi-VN')} câu đúng`;
   }
-  if (primaryVal >= MAX_PUZZLE_TOWER_STAGE) {
-    return `👑 777/777`;
+  const maxStage = gameId === 'match3' ? MAX_MATCH3_STAGE : MAX_PUZZLE_TOWER_STAGE;
+  if (primaryVal >= maxStage) {
+    return `👑 ${maxStage}/${maxStage}`;
   }
-  return `Màn ${primaryVal}/777`;
+  return `Màn ${primaryVal}/${maxStage}`;
 }
 
 function formatDetailDisplayVi(

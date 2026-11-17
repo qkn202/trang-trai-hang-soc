@@ -378,8 +378,8 @@ async function bootstrap(): Promise<void> {
   } else if (dlgParam === 'match3') {
     const m3LvParam = Number(params.get('m3level') || 0);
     const maxAllowedM3 = isDevHostAllowed
-      ? 777
-      : Math.min(777, (sim.state.match3.maxClearedLevel ?? 0) + 1);
+      ? 7777
+      : Math.min(7777, (sim.state.match3.maxClearedLevel ?? 0) + 1);
     const safeM3Lv =
       Number.isFinite(m3LvParam) && m3LvParam >= 1 ? Math.min(maxAllowedM3, Math.floor(m3LvParam)) : undefined;
     const allowDevJump = Boolean(
