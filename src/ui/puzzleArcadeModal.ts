@@ -208,6 +208,17 @@ const HP_CHESS_PIECE_META: Record<
 export type SudokuDisplayMode = 'relic_num' | 'relic_only' | 'num_only';
 type SudokuQuickActionKey = 'undo' | 'erase' | 'notes' | 'hint';
 
+export function getSudokuDigitFillColor(
+  isInitialClue: boolean,
+  isYule: boolean,
+  isSelected = false
+): string {
+  if (isInitialClue) {
+    return isYule ? '#0f172a' : '#2b1407';
+  }
+  return isYule && isSelected ? '#1e3a8a' : '#1d4ed8';
+}
+
 const HP_CARO_SEAL_KEYS = ['phoenix_seal', 'dark_mark_seal'] as const;
 
 const PORTRAIT_SPRITE_CROPS: Record<
@@ -2025,9 +2036,7 @@ export class PuzzleArcadeModalController {
       this.clearActiveModalResumeMarker();
       const sudokuScore = Math.max(
         1200,
-        2800 -
-          this.sudokuEngine.mistakesCount * 220 -
-          Math.min(600, Math.floor(this.sudokuEngine.elapsedSec * 1.2))
+        2800 - this.sudokuEngine.mistakesCount * 220
       );
       this.victorySummary = this.sim.completePuzzleArcadeVictory(
         'sudoku',
@@ -2362,8 +2371,7 @@ export class PuzzleArcadeModalController {
       stageSub = escapeHtml(se.classicDifficultyVi);
       stageStats =
         lvStat('Đã điền', `<strong id="paSudokuFilled">${se.filledCount}/81</strong>`) +
-        lvStat('Lỗi', `<strong id="paSudokuMistakes" class="${se.mistakesCount > 0 ? 'pa-err-inline' : ''}">${se.mistakesCount}/${se.maxMistakes}</strong>`, LV_MISTAKE) +
-        lvStat('Thời gian', `<strong id="paSudokuTimer">${se.formatElapsedTime()}</strong>`, timeIcon);
+        lvStat('Lỗi', `<strong id="paSudokuMistakes" class="${se.mistakesCount > 0 ? 'pa-err-inline' : ''}">${se.mistakesCount}/${se.maxMistakes}</strong>`, LV_MISTAKE);
       const canSudokuHint =
         se.status === 'playing' && (st.sandboxMode || se.freeHintsLeft + se.paidHintsLeft > 0);
       const talismanLocked = se.talismanUsed || usedTodayInMode;
@@ -2862,10 +2870,6 @@ export class PuzzleArcadeModalController {
       if (mistEl) {
         mistEl.textContent = `${se.mistakesCount}/${se.maxMistakes}`;
         mistEl.classList.toggle('pa-err-inline', se.mistakesCount > 0);
-      }
-      const timerEl = box.querySelector('#paSudokuTimer');
-      if (timerEl) {
-        timerEl.textContent = se.formatElapsedTime();
       }
       const undoBtn = box.querySelector('#btnPaSudokuUndo') as HTMLButtonElement | null;
       if (undoBtn) {
@@ -3992,7 +3996,7 @@ export class PuzzleArcadeModalController {
       if (sel) {
         const cx = sm.boardX + (sel.c + 0.5) * sm.cellPx;
         const cy = sm.boardY + (sel.r + 0.5) * sm.cellPx;
-        this.spawnBurst(cx, cy, this.sudokuEngine.pencilMode ? '#d97706' : '#fbbf24', 12);
+        this.spawnBurst(cx, cy, this.sudokuEngine.pencilMode ? '#d97706' : '#2563eb', 12);
         const nextRem = this.sudokuEngine.getRemainingDigitCounts()[digit] ?? 0;
         if (prevRem === 1 && nextRem === 0) {
           const padRect = this.sudokuPadRects.get(digit);
@@ -4760,12 +4764,6 @@ export class PuzzleArcadeModalController {
     if (!this.victoryClaimed) {
       if (this.mode === 'sudoku' && this.sudokuEngine) {
         const isPageHidden = typeof document !== 'undefined' && document.hidden;
-        if (!isPageHidden && this.sudokuEngine.tickTimer(dt)) {
-          const timerEl = this.root.querySelector('#paSudokuTimer');
-          if (timerEl) {
-            timerEl.textContent = this.sudokuEngine.formatElapsedTime();
-          }
-        }
         if (!isPageHidden && !this.rescueContext && this.sudokuEngine.status === 'playing') {
           this.sudokuAutoSaveAccumSec += dt;
           if (this.sudokuAutoSaveAccumSec >= 5) {
@@ -5952,7 +5950,7 @@ export class PuzzleArcadeModalController {
     // Inner specular highlight rim
     drawRoundedRect(ctx, fx + 1.8, fy + 1.8, fw - 3.6, fh - 3.6, 9.5);
     ctx.lineWidth = 0.9;
-    ctx.strokeStyle = isYuleSudoku ? 'rgba(220, 38, 38, 0.68)' : 'rgba(254, 243, 199, 0.35)';
+    ctx.strokeStyle = isYuleSudoku ? 'rgba(254, 243, 199, 0.42)' : 'rgba(254, 243, 199, 0.35)';
     ctx.stroke();
 
     // Parchment backing inside frame
@@ -6036,11 +6034,7 @@ export class PuzzleArcadeModalController {
           ctx.fillStyle = 'rgba(255, 253, 244, 0.72)';
           ctx.fillText(String(val), midCellX, midCellY + 1);
 
-          if (isInitialClue) {
-            ctx.fillStyle = isYuleSudoku ? '#06321d' : '#2b1407';
-          } else {
-            ctx.fillStyle = isYuleSudoku ? '#991b1b' : '#0f5257';
-          }
+          ctx.fillStyle = getSudokuDigitFillColor(isInitialClue, isYuleSudoku, isSel);
           ctx.fillText(String(val), midCellX, midCellY);
           const relicImg = this.getSudokuRelicImage(val);
           if (relicImg && cPx >= 36) {
@@ -6118,7 +6112,7 @@ export class PuzzleArcadeModalController {
       const sx = bX + sel.c * cPx;
       const sy = bY + sel.r * cPx;
       ctx.lineWidth = 2.5;
-      ctx.strokeStyle = '#9a3412';
+      ctx.strokeStyle = isYuleSudoku ? '#0284c7' : '#b45309';
       ctx.strokeRect(sx + 1.25, sy + 1.25, cPx - 2.5, cPx - 2.5);
       ctx.lineWidth = 1;
       ctx.strokeStyle = 'rgba(255, 251, 235, 0.85)';

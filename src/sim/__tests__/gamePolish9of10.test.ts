@@ -7,6 +7,7 @@ import {
 } from '../../ui/hudHeaderAndDock';
 import { SeedQuizModalController } from '../../ui/seedQuizModal';
 import { resolveMinigameOrientation } from '../../ui/minigameViewControls';
+import { getSudokuDigitFillColor } from '../../ui/puzzleArcadeModal';
 import type { GameHUD } from '../../ui/hud';
 
 async function loadNodeFsAndPath(): Promise<{
@@ -276,5 +277,20 @@ describe('Full-Game Loop 9/10 UX Polish & Hardening', () => {
     expect(mainTs).toContain('isEligiblePlot');
     expect(mainTs).toContain('isEligiblePasture');
     expect(shellTs).toContain('attachHorizontalWheel');
+  });
+
+  it('removes Sudoku timer from UI/score and renders player-entered Sudoku digits in blue instead of red', async () => {
+    expect(getSudokuDigitFillColor(false, true, false)).toBe('#1d4ed8');
+    expect(getSudokuDigitFillColor(false, false, false)).toBe('#1d4ed8');
+    expect(getSudokuDigitFillColor(false, true, true)).toBe('#1e3a8a');
+    expect(getSudokuDigitFillColor(false, true, false)).not.toBe('#991b1b');
+    expect(getSudokuDigitFillColor(true, true, false)).toBe('#0f172a');
+    expect(getSudokuDigitFillColor(true, false, false)).toBe('#2b1407');
+
+    const { fs, path } = await loadNodeFsAndPath();
+    const puzzleModal = fs.readFileSync(path.resolve('src/ui/puzzleArcadeModal.ts'), 'utf8');
+    expect(puzzleModal).not.toContain('paSudokuTimer');
+    expect(puzzleModal).not.toContain('this.sudokuEngine.tickTimer');
+    expect(puzzleModal).not.toContain('this.sudokuEngine.elapsedSec');
   });
 });
