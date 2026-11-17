@@ -386,12 +386,18 @@ export class GameHUD {
     this.refreshAll();
 
     // Update live 24h clock & active countdown timers cleanly without clobbering DOM or interrupting range sliders
+    const match3Dlg = this.root.querySelector('#match3Dialog') as HTMLDialogElement | null;
+    const arcadeDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
+    const seedQuizDlg = this.root.querySelector('#seedQuizDialog') as HTMLDialogElement | null;
     window.setInterval(() => {
+      this.match3Modal?.tickLiveHeaderTimer();
+      if (match3Dlg?.open || arcadeDlg?.open || seedQuizDlg?.open) {
+        return;
+      }
       this.refreshHeaderClock();
       this.refreshFloatingBanner();
       headerRefreshYuleBanner(this);
       headerYuleReadyToasts(this);
-      this.match3Modal?.tickLiveHeaderTimer();
       const wsDialog = this.root.querySelector('#workshopDialog') as HTMLDialogElement | null;
       if (wsDialog?.open) {
         this.updateWorkshopLiveTimers();

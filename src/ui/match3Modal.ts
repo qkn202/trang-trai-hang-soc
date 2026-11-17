@@ -98,19 +98,31 @@ function pictureSpriteHtml(webp: string, png: string, className: string): string
   return `<picture><source srcset="${webp}" type="image/webp" /><img src="${png}" alt="" class="${className}" /></picture>`;
 }
 
+function formatCandyObjectiveCountText(g: CandyObjectiveProgress): string {
+  if (g.completed) return '✓';
+  if (g.type === 'special_order') return `${g.current}/${g.target ?? 1}`;
+  if (g.type === 'boss') return `${g.remaining.toLocaleString('vi-VN')} HP`;
+  if (g.type === 'fiendfyre' || g.type === 'chocolate') return `Còn ${g.remaining}`;
+  if (g.type === 'score') {
+    return `${formatCompactScore(g.current)}/${formatCompactScore(g.target ?? 0)}`;
+  }
+  return `${g.current}/${g.target ?? 0}`;
+}
+
 function describeCandyObjective(g: CandyObjectiveProgress): {
   visualHtml: string;
   label: string;
   accent: string;
   countText: string;
 } {
+  const countText = formatCandyObjectiveCountText(g);
   if (g.type === 'collect') {
     const tile = CANDY_TILE_TYPES[g.tileId ?? 0] ?? CANDY_TILE_TYPES[0];
     return {
       visualHtml: pictureSpriteHtml(tile.webp, tile.png, 'm3-goal-sprite'),
       label: tile.shortName,
       accent: tile.color,
-      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+      countText,
     };
   }
   if (g.type === 'special_order') {
@@ -123,7 +135,7 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
         ),
         label: g.label || 'Quả Cầu Vồng',
         accent: '#b45309',
-        countText: g.completed ? '✓' : `${g.current}/${g.target ?? 1}`,
+        countText,
       };
     }
     if (g.specialKind === 'wrapped') {
@@ -135,7 +147,7 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
         ),
         label: g.label || 'Bom & Thuốc Nổ',
         accent: '#f97316',
-        countText: g.completed ? '✓' : `${g.current}/${g.target ?? 1}`,
+        countText,
       };
     }
     if (g.specialKind === 'striped') {
@@ -147,14 +159,14 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
         ),
         label: g.label || 'Pháo Hoa Nổ',
         accent: '#ef4444',
-        countText: g.completed ? '✓' : `${g.current}/${g.target ?? 1}`,
+        countText,
       };
     }
     return {
       visualHtml: CANDY_OBSTACLE_ICONS.special_seeker,
       label: g.label || 'Chong Chóng Snitch',
       accent: '#eab308',
-      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 1}`,
+      countText,
     };
   }
   if (g.type === 'boss') {
@@ -162,7 +174,7 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
       visualHtml: CANDY_OBSTACLE_ICONS.boss,
       label: 'Hạ Đại Trùm',
       accent: '#9333ea',
-      countText: g.completed ? '✓' : `${g.remaining.toLocaleString('vi-VN')} HP`,
+      countText,
     };
   }
   if (g.type === 'horcrux') {
@@ -170,7 +182,7 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
       visualHtml: CANDY_OBSTACLE_ICONS.horcrux,
       label: 'Linh Giá',
       accent: '#a855f7',
-      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+      countText,
     };
   }
   if (g.type === 'fiendfyre') {
@@ -178,7 +190,7 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
       visualHtml: CANDY_OBSTACLE_ICONS.fiendfyre,
       label: 'Lửa Địa Ngục',
       accent: '#ea580c',
-      countText: g.completed ? '✓' : `Còn ${g.remaining}`,
+      countText,
     };
   }
   if (g.type === 'decree') {
@@ -186,7 +198,7 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
       visualHtml: CANDY_OBSTACLE_ICONS.decree,
       label: 'Bia Sắc Lệnh',
       accent: '#ec4899',
-      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+      countText,
     };
   }
   if (g.type === 'dementor') {
@@ -194,7 +206,7 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
       visualHtml: CANDY_OBSTACLE_ICONS.dementor,
       label: 'Giám Ngục',
       accent: '#38bdf8',
-      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+      countText,
     };
   }
   if (g.type === 'petrify') {
@@ -202,7 +214,7 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
       visualHtml: CANDY_OBSTACLE_ICONS.petrify,
       label: 'Hoá Đá Tử Xà',
       accent: '#10b981',
-      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+      countText,
     };
   }
   if (g.type === 'cauldron') {
@@ -210,7 +222,7 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
       visualHtml: CANDY_OBSTACLE_ICONS.cauldron,
       label: 'Vạc Độc Dược',
       accent: '#10b981',
-      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+      countText,
     };
   }
   if (g.type === 'key_lock') {
@@ -218,7 +230,7 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
       visualHtml: CANDY_OBSTACLE_ICONS.key_lock,
       label: 'Khoá Gringotts',
       accent: '#d97706',
-      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+      countText,
     };
   }
   if (g.type === 'ingredient') {
@@ -226,7 +238,7 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
       visualHtml: CANDY_OBSTACLE_ICONS.ingredient,
       label: 'Đá Phù Thủy',
       accent: '#dc2626',
-      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+      countText,
     };
   }
   if (g.type === 'chocolate') {
@@ -234,7 +246,7 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
       visualHtml: CANDY_OBSTACLE_ICONS.chocolate,
       label: 'Sô-cô-la Lan',
       accent: '#92400e',
-      countText: g.completed ? '✓' : `Còn ${g.remaining}`,
+      countText,
     };
   }
   if (g.type === 'frosting') {
@@ -242,7 +254,7 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
       visualHtml: CANDY_OBSTACLE_ICONS.frosting,
       label: 'Bánh Quế Kem',
       accent: '#d97706',
-      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+      countText,
     };
   }
   if (g.type === 'ice') {
@@ -250,7 +262,7 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
       visualHtml: CANDY_OBSTACLE_ICONS.ice,
       label: 'Băng Đường',
       accent: '#0284c7',
-      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+      countText,
     };
   }
   if (g.type === 'jelly') {
@@ -258,16 +270,14 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
       visualHtml: CANDY_OBSTACLE_ICONS.jelly,
       label: 'Mứt Dâu Phép',
       accent: '#be185d',
-      countText: g.completed ? '✓' : `${g.current}/${g.target ?? 0}`,
+      countText,
     };
   }
   return {
     visualHtml: CANDY_OBSTACLE_ICONS.score,
     label: 'Điểm Phép',
     accent: '#f59e0b',
-    countText: g.completed
-      ? '✓'
-      : `${formatCompactScore(g.current)}/${formatCompactScore(g.target ?? 0)}`,
+    countText,
   };
 }
 
@@ -335,6 +345,19 @@ export class Match3ModalController {
   private devJumpReturnLevel: number | null = null;
   private popRecorder: ProofOfPlayRecorder | null = null;
   private gpuFx: MinigameGpuFxBatcher | null = null;
+  private deferredSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private pulseTimers: Record<number, ReturnType<typeof setTimeout>> = {};
+  private lastHudMovesSig = '';
+  private lastHudScore = -1;
+  private lastHudStarPct = -1;
+  private lastHudStarsEarned = -1;
+  private lastTalismanSig = '';
+  private lastBossSig = '';
+  private lastActionHintHtml = '';
+  private lastRainbowSig = '';
+  private lastGoalCounts: string[] = [];
+  private lastGoalDone: boolean[] = [];
+  private lastBoosterSig: Record<string, string> = {};
 
   constructor(
     root: HTMLElement,
@@ -357,15 +380,19 @@ export class Match3ModalController {
         void _returnAction;
         dlg.returnValue = '';
         this.clearLiveAnnouncement();
+        this.clearPulseTimers();
+        this.gpuFx?.clear();
         this.engine?.cancelBoosterMode();
         const wasBusyOnClose = Boolean(this.engine?.hasAnyAsyncActivity());
         this.engine?.stopLoop();
         if (this.rescueContext) {
+          this.cancelDeferredSave();
           this.rescueContext = null;
           this.rescueVictoryOutcome = null;
           this.engine?.destroy();
           this.engine = null;
         } else if (this.devJumpReturnLevel !== null) {
+          this.cancelDeferredSave();
           const maxNormal = Math.min(
             MAX_MINIGAME_STAGE,
             (this.sim.state.match3.maxClearedLevel ?? 0) + 1
@@ -379,12 +406,14 @@ export class Match3ModalController {
           this.devJumpReturnLevel = null;
           this.sim.saveToStorage();
         } else if (wasBusyOnClose) {
+          this.cancelDeferredSave();
           // Bàn chơi bị ngắt ngang giữa chuỗi rơi/nổ kẹo: huỷ engine dở dang và giữ nguyên activeSession sạch ở cuối nước đi trước.
           this.engine?.destroy();
           this.engine = null;
           this.sim.saveToStorage();
         } else {
           this.persistMatch3Session(true);
+          this.flushDeferredSave();
         }
         if (typeof document === 'undefined' || !document.hidden) {
           this.clearActiveModalResumeMarker();
@@ -496,6 +525,52 @@ export class Match3ModalController {
   }
 
 
+  private scheduleDeferredSave(delayMs = 1800): void {
+    this.cancelDeferredSave();
+    this.deferredSaveTimer = setTimeout(() => {
+      this.deferredSaveTimer = null;
+      this.sim.saveToStorage();
+    }, delayMs);
+  }
+
+  private cancelDeferredSave(): void {
+    if (this.deferredSaveTimer !== null) {
+      clearTimeout(this.deferredSaveTimer);
+      this.deferredSaveTimer = null;
+    }
+  }
+
+  private flushDeferredSave(): void {
+    if (this.deferredSaveTimer !== null) {
+      clearTimeout(this.deferredSaveTimer);
+      this.deferredSaveTimer = null;
+      this.sim.saveToStorage();
+    }
+  }
+
+  private clearPulseTimers(): void {
+    for (const k of Object.keys(this.pulseTimers)) {
+      const idx = Number(k);
+      clearTimeout(this.pulseTimers[idx]);
+      delete this.pulseTimers[idx];
+    }
+  }
+
+  private resetHudSyncCache(): void {
+    this.clearPulseTimers();
+    this.lastHudMovesSig = '';
+    this.lastHudScore = -1;
+    this.lastHudStarPct = -1;
+    this.lastHudStarsEarned = -1;
+    this.lastTalismanSig = '';
+    this.lastBossSig = '';
+    this.lastActionHintHtml = '';
+    this.lastRainbowSig = '';
+    this.lastGoalCounts = [];
+    this.lastGoalDone = [];
+    this.lastBoosterSig = {};
+  }
+
   private persistMatch3Session(saveToDisk = true): void {
     if (this.rescueContext) return;
     const m3 = this.sim.state.match3;
@@ -503,7 +578,10 @@ export class Match3ModalController {
     if (this.engine.status === 'won' || this.victoryClaimed) {
       if (m3.activeSession) {
         m3.activeSession = null;
-        if (saveToDisk) this.sim.saveToStorage();
+        if (saveToDisk) {
+          this.cancelDeferredSave();
+          this.sim.saveToStorage();
+        }
       }
       return;
     }
@@ -516,6 +594,7 @@ export class Match3ModalController {
     if (!snap) return;
     m3.activeSession = snap;
     if (saveToDisk) {
+      this.cancelDeferredSave();
       this.sim.saveToStorage();
     }
   }
@@ -523,6 +602,7 @@ export class Match3ModalController {
   private flushMatch3AndModalBeforeHide(): void {
     if (!this.rescueContext) {
       this.persistMatch3Session(true);
+      this.flushDeferredSave();
     }
     if (this.isOpen() && !this.rescueContext && !this.victoryClaimed) {
       this.persistActiveModalResumeMarker();
@@ -584,6 +664,9 @@ export class Match3ModalController {
 
   public resetSession(): void {
     this.clearLiveAnnouncement();
+    this.cancelDeferredSave();
+    this.clearPulseTimers();
+    this.gpuFx?.clear();
     this.engine?.destroy();
     this.engine = null;
     this.movesMadeThisAttempt = 0;
@@ -789,7 +872,8 @@ export class Match3ModalController {
         this.syncHudSnapshot(snapshot);
       },
       onSettled: () => {
-        this.persistMatch3Session(true);
+        this.persistMatch3Session(false);
+        this.scheduleDeferredSave(1800);
       },
       onGameEnd: (payload) => {
         this.handleEngineGameEnd(payload);
@@ -863,6 +947,7 @@ export class Match3ModalController {
   private handleEngineGameEnd(payload: CandyGameEndPayload): void {
     this.lastGameEndPayload = payload;
     if (payload.won) {
+      this.cancelDeferredSave();
       if (!this.victoryClaimed) {
         this.victoryClaimed = true;
         if (this.rescueContext) {
@@ -897,6 +982,7 @@ export class Match3ModalController {
       return;
     }
 
+    this.flushDeferredSave();
     this.announceInDialog(
       payload.failReason === 'bomb'
         ? 'Bom Hắc Ám đã phát nổ! Chọn Bùa Phượng Hoàng hoặc cộng thêm lượt để gỡ ngòi.'
@@ -909,9 +995,24 @@ export class Match3ModalController {
   private pulseGoalPill(goalIdx: number): void {
     const pill = this.root.querySelector(`[data-m3-goal-idx="${goalIdx}"]`) as HTMLElement | null;
     if (!pill) return;
-    pill.classList.remove('bump');
-    void pill.offsetWidth;
-    pill.classList.add('bump');
+    if (this.pulseTimers[goalIdx] !== undefined) {
+      clearTimeout(this.pulseTimers[goalIdx]);
+    }
+    if (!pill.classList.contains('bump')) {
+      pill.classList.add('bump');
+    }
+    this.pulseTimers[goalIdx] = setTimeout(() => {
+      delete this.pulseTimers[goalIdx];
+      if (pill.isConnected) {
+        pill.classList.remove('bump');
+      }
+    }, 350);
+  }
+
+  private setTextIfChanged(el: HTMLElement | null, text: string): void {
+    if (el && el.textContent !== text) {
+      el.textContent = text;
+    }
   }
 
   private refreshRestartButtonLabel(): void {
@@ -951,170 +1052,211 @@ export class Match3ModalController {
     if (!box || !snap) return;
 
     const st = this.sim.state;
-    const movesEl = box.querySelector('#m3MovesLeftVal') as HTMLElement | null;
-    if (movesEl) {
-      movesEl.textContent = String(snap.movesLeft);
-      movesEl.classList.toggle('low-moves', snap.movesLeft <= 5);
+    const isLowMoves = snap.movesLeft <= 5;
+    const movesSig = `${snap.movesLeft}|${isLowMoves ? 1 : 0}`;
+    if (movesSig !== this.lastHudMovesSig) {
+      this.lastHudMovesSig = movesSig;
+      const movesEl = box.querySelector('#m3MovesLeftVal') as HTMLElement | null;
+      if (movesEl) {
+        this.setTextIfChanged(movesEl, String(snap.movesLeft));
+        movesEl.classList.toggle('low-moves', isLowMoves);
+      }
     }
 
-    const scoreEl = box.querySelector('#m3ScoreVal') as HTMLElement | null;
-    if (scoreEl) {
-      scoreEl.textContent = snap.score.toLocaleString('vi-VN');
+    if (snap.score !== this.lastHudScore) {
+      this.lastHudScore = snap.score;
+      this.setTextIfChanged(
+        box.querySelector('#m3ScoreVal') as HTMLElement | null,
+        snap.score.toLocaleString('vi-VN')
+      );
     }
 
     const s3 = Math.max(1, snap.level.stars[2] || 1);
     const starPct = Math.min(100, Math.round((snap.score / s3) * 100));
-    const starFill = box.querySelector('#m3StarFillBar') as HTMLElement | null;
-    if (starFill) {
-      starFill.style.width = `${starPct}%`;
+    if (starPct !== this.lastHudStarPct) {
+      this.lastHudStarPct = starPct;
+      const starFill = box.querySelector('#m3StarFillBar') as HTMLElement | null;
+      if (starFill) {
+        starFill.style.width = `${starPct}%`;
+      }
     }
-    for (let idx = 1; idx <= 3; idx++) {
-      const starMark = box.querySelector(`#m3StarMark${idx}`) as HTMLElement | null;
-      if (starMark) {
-        starMark.classList.toggle('earned', snap.starsEarned >= idx);
+    if (snap.starsEarned !== this.lastHudStarsEarned) {
+      this.lastHudStarsEarned = snap.starsEarned;
+      for (let idx = 1; idx <= 3; idx++) {
+        const starMark = box.querySelector(`#m3StarMark${idx}`) as HTMLElement | null;
+        if (starMark) {
+          starMark.classList.toggle('earned', snap.starsEarned >= idx);
+        }
       }
     }
 
-    const goldEl = box.querySelector('#m3ModalGoldText') as HTMLElement | null;
-    if (goldEl) {
-      goldEl.textContent = st.sandboxMode ? '∞' : compactSickle(st.galleons);
-    }
-
-    const starsEl = box.querySelector('#m3ModalStarsText') as HTMLElement | null;
-    if (starsEl) {
-      starsEl.textContent = st.sandboxMode ? '∞' : compactSickle(st.match3.stars);
-    }
-
-    const heartsEl = box.querySelector('#m3ModalHeartsText') as HTMLElement | null;
-    if (heartsEl) {
-      heartsEl.textContent = this.formatHeartsLabel();
-    }
+    this.setTextIfChanged(
+      box.querySelector('#m3ModalGoldText') as HTMLElement | null,
+      st.sandboxMode ? '∞' : compactSickle(st.galleons)
+    );
+    this.setTextIfChanged(
+      box.querySelector('#m3ModalStarsText') as HTMLElement | null,
+      st.sandboxMode ? '∞' : compactSickle(st.match3.stars)
+    );
+    this.setTextIfChanged(
+      box.querySelector('#m3ModalHeartsText') as HTMLElement | null,
+      this.formatHeartsLabel()
+    );
 
     const talismanQty = this.sim.getPhoenixTalismanCount();
-    const talismanEl = box.querySelector('#m3ModalTalismanText') as HTMLElement | null;
-    if (talismanEl) {
-      talismanEl.textContent = st.sandboxMode ? '∞' : String(talismanQty);
-    }
+    this.setTextIfChanged(
+      box.querySelector('#m3ModalTalismanText') as HTMLElement | null,
+      st.sandboxMode ? '∞' : String(talismanQty)
+    );
 
     const talismanBtn = box.querySelector('#btnM3PhoenixTalisman') as HTMLButtonElement | null;
     if (talismanBtn) {
       const talismanDaily = this.sim.getPhoenixTalismanDailyStatus();
       const talismanLocked = snap.talismanUsed || talismanDaily.usedByGame.match3 === true;
-      talismanBtn.disabled =
+      const talismanDisabled =
         talismanLocked || snap.status === 'won' || (!st.sandboxMode && talismanQty <= 0);
-      talismanBtn.title = talismanLocked
-        ? `Bùa Phượng Hoàng — Đã dùng 1/1 lượt hôm nay ở môn này (${talismanDaily.usedCount}/${talismanDaily.maxDaily} môn hôm nay, mở lại sau 00:00)`
-        : `Bùa Phượng Hoàng — Tối đa 1 lần/môn/ngày (Đã dùng ${talismanDaily.usedCount}/${talismanDaily.maxDaily} môn hôm nay)`;
-      talismanBtn.innerHTML = talismanLocked
-        ? '<span>🔥 Bùa</span><span class="pa-cost-pill">✓ 1/1</span>'
-        : `<span>🔥 Bùa</span><span class="pa-cost-pill">${st.sandboxMode ? '∞' : `×${talismanQty}`}</span>`;
-      liftToolIcon(talismanBtn);
+      const talismanSig = `${talismanLocked ? 1 : 0}|${talismanDisabled ? 1 : 0}|${st.sandboxMode ? 1 : 0}|${talismanQty}|${talismanDaily.usedCount}|${talismanDaily.maxDaily}`;
+      if (talismanSig !== this.lastTalismanSig) {
+        this.lastTalismanSig = talismanSig;
+        talismanBtn.disabled = talismanDisabled;
+        talismanBtn.title = talismanLocked
+          ? `Bùa Phượng Hoàng — Đã dùng 1/1 lượt hôm nay ở môn này (${talismanDaily.usedCount}/${talismanDaily.maxDaily} môn hôm nay, mở lại sau 00:00)`
+          : `Bùa Phượng Hoàng — Tối đa 1 lần/môn/ngày (Đã dùng ${talismanDaily.usedCount}/${talismanDaily.maxDaily} môn hôm nay)`;
+        talismanBtn.innerHTML = talismanLocked
+          ? '<span>🔥 Bùa</span><span class="pa-cost-pill">✓ 1/1</span>'
+          : `<span>🔥 Bùa</span><span class="pa-cost-pill">${st.sandboxMode ? '∞' : `×${talismanQty}`}</span>`;
+        liftToolIcon(talismanBtn);
+      }
     }
 
     // Live 2-Phase Boss HP strip
     if (snap.bossState) {
       const bs = snap.bossState;
-      const bossHpPct = bs.maxHp > 0 ? Math.max(0, Math.min(100, Math.round((bs.hp / bs.maxHp) * 100))) : 0;
-      const bossStrip = box.querySelector('#m3BossLiveStrip') as HTMLElement | null;
-      if (bossStrip) {
-        bossStrip.dataset.enraged = String(bs.enraged && !bs.defeated);
-        bossStrip.dataset.defeated = String(bs.defeated);
-      }
-      const bossFill = box.querySelector('#m3BossHpFill') as HTMLElement | null;
-      if (bossFill) {
-        bossFill.style.width = `${bossHpPct}%`;
-      }
-      const bossHpText = box.querySelector('#m3BossHpText') as HTMLElement | null;
-      if (bossHpText) {
-        bossHpText.textContent = bs.defeated
-          ? '✓ ĐÃ HẠ GỤC'
-          : `${bs.hp.toLocaleString('vi-VN')} / ${bs.maxHp.toLocaleString('vi-VN')} HP`;
-      }
-      const bossPhaseBadge = box.querySelector('#m3BossPhaseBadge') as HTMLElement | null;
-      if (bossPhaseBadge) {
-        bossPhaseBadge.textContent = bs.defeated
-          ? '✓ Toàn Thắng'
-          : bs.enraged
-            ? '🔥 CUỒNG NỘ PHA 2'
-            : 'Pha 1';
-      }
-      const bossHexText = box.querySelector('#m3BossHexText') as HTMLElement | null;
-      if (bossHexText) {
-        bossHexText.textContent = bs.defeated
-          ? '✓ Bùa tan biến'
-          : `⚡ ${bs.hexName} (${bs.turnsUntilHex} lượt)`;
+      const bossHpPct =
+        bs.maxHp > 0 ? Math.max(0, Math.min(100, Math.round((bs.hp / bs.maxHp) * 100))) : 0;
+      const bossSig = `${bs.hp}|${bs.maxHp}|${bs.enraged ? 1 : 0}|${bs.defeated ? 1 : 0}|${bs.turnsUntilHex}`;
+      if (bossSig !== this.lastBossSig) {
+        this.lastBossSig = bossSig;
+        const bossStrip = box.querySelector('#m3BossLiveStrip') as HTMLElement | null;
+        if (bossStrip) {
+          bossStrip.dataset.enraged = String(bs.enraged && !bs.defeated);
+          bossStrip.dataset.defeated = String(bs.defeated);
+        }
+        const bossFill = box.querySelector('#m3BossHpFill') as HTMLElement | null;
+        if (bossFill) {
+          bossFill.style.width = `${bossHpPct}%`;
+        }
+        this.setTextIfChanged(
+          box.querySelector('#m3BossHpText') as HTMLElement | null,
+          bs.defeated
+            ? '✓ ĐÃ HẠ GỤC'
+            : `${bs.hp.toLocaleString('vi-VN')} / ${bs.maxHp.toLocaleString('vi-VN')} HP`
+        );
+        this.setTextIfChanged(
+          box.querySelector('#m3BossPhaseBadge') as HTMLElement | null,
+          bs.defeated ? '✓ Toàn Thắng' : bs.enraged ? '🔥 CUỒNG NỘ PHA 2' : 'Pha 1'
+        );
+        this.setTextIfChanged(
+          box.querySelector('#m3BossHexText') as HTMLElement | null,
+          bs.defeated ? '✓ Bùa tan biến' : `⚡ ${bs.hexName} (${bs.turnsUntilHex} lượt)`
+        );
       }
     }
 
-    // Action Hint Bar
+    // Action Hint Bar (when present)
     const hintBanner = box.querySelector('#m3ActionHintBar') as HTMLElement | null;
     if (hintBanner) {
-      hintBanner.innerHTML = this.buildActionHintHtml(snap);
+      const nextHintHtml = this.buildActionHintHtml(snap);
+      if (nextHintHtml !== this.lastActionHintHtml) {
+        this.lastActionHintHtml = nextHintHtml;
+        hintBanner.innerHTML = nextHintHtml;
+      }
     }
 
     // Gardenscapes Rainbow Blast Energy Meter
     const rainbowPct = Math.max(0, Math.min(100, Math.round(snap.rainbowCharge || 0)));
     const isSuperRainbow = Boolean(snap.superRainbow);
-    const rainbowBtn = box.querySelector('#btnM3RainbowMeter') as HTMLButtonElement | null;
-    if (rainbowBtn) {
-      rainbowBtn.dataset.super = String(isSuperRainbow);
-      rainbowBtn.dataset.hot = String(rainbowPct >= 75);
-      rainbowBtn.title = `${
-        isSuperRainbow
-          ? '⚡ Siêu Cầu Vồng đang bật (quét sạch 2 màu cùng lúc)!'
-          : 'Thanh năng lượng Bom Cầu Vồng'
-      } (${rainbowPct}/100%) — Nổ Chong Chóng (+22%), Pháo (+28%), Bom (+45%), Thuốc Nổ (+68%), TNT (+95%). Đủ 100% tự thả 1 Quả Cầu Vồng lên bàn!`;
-    }
-    const rainbowSuperBadge = box.querySelector('#m3RainbowSuperBadge') as HTMLElement | null;
-    if (rainbowSuperBadge) {
-      rainbowSuperBadge.hidden = !isSuperRainbow;
-    }
-    const rainbowLabel = box.querySelector('#m3RainbowLabelText') as HTMLElement | null;
-    if (rainbowLabel) {
-      rainbowLabel.textContent = isSuperRainbow ? 'Siêu Cầu Vồng' : 'Cầu Vồng';
-    }
-    const rainbowProgress = box.querySelector('#m3RainbowProgressBar') as HTMLElement | null;
-    if (rainbowProgress) {
-      rainbowProgress.setAttribute('aria-valuenow', String(rainbowPct));
-    }
-    const rainbowFill = box.querySelector('#m3RainbowFill') as HTMLElement | null;
-    if (rainbowFill) {
-      rainbowFill.style.width = `${rainbowPct}%`;
-    }
-    const rainbowPctEl = box.querySelector('#m3RainbowPctVal') as HTMLElement | null;
-    if (rainbowPctEl) {
-      rainbowPctEl.textContent = `${rainbowPct}%`;
+    const rainbowSig = `${isSuperRainbow ? 1 : 0}|${rainbowPct}`;
+    if (rainbowSig !== this.lastRainbowSig) {
+      this.lastRainbowSig = rainbowSig;
+      const rainbowBtn = box.querySelector('#btnM3RainbowMeter') as HTMLButtonElement | null;
+      if (rainbowBtn) {
+        rainbowBtn.dataset.super = String(isSuperRainbow);
+        rainbowBtn.dataset.hot = String(rainbowPct >= 75);
+        rainbowBtn.title = `${
+          isSuperRainbow
+            ? 'Siêu Cầu Vồng đang bật (quét sạch 2 màu cùng lúc)!'
+            : 'Thanh năng lượng Bom Cầu Vồng'
+        } (${rainbowPct}/100%) — Nổ Chong Chóng (+22%), Pháo (+28%), Bom (+45%), Thuốc Nổ (+68%), TNT (+95%). Đủ 100% tự thả 1 Quả Cầu Vồng lên bàn!`;
+      }
+      const rainbowSuperBadge = box.querySelector('#m3RainbowSuperBadge') as HTMLElement | null;
+      if (rainbowSuperBadge) {
+        rainbowSuperBadge.hidden = !isSuperRainbow;
+      }
+      this.setTextIfChanged(
+        box.querySelector('#m3RainbowLabelText') as HTMLElement | null,
+        isSuperRainbow ? 'Siêu Cầu Vồng' : 'Cầu Vồng'
+      );
+      const rainbowProgress = box.querySelector('#m3RainbowProgressBar') as HTMLElement | null;
+      if (rainbowProgress) {
+        rainbowProgress.setAttribute('aria-valuenow', String(rainbowPct));
+      }
+      const rainbowFill = box.querySelector('#m3RainbowFill') as HTMLElement | null;
+      if (rainbowFill) {
+        rainbowFill.style.width = `${rainbowPct}%`;
+      }
+      this.setTextIfChanged(
+        box.querySelector('#m3RainbowPctVal') as HTMLElement | null,
+        `${rainbowPct}%`
+      );
     }
 
     // Update goal cards & pulse when progress advances
     snap.objectives.forEach((g, idx) => {
-      const pill = box.querySelector(`[data-m3-goal-idx="${idx}"]`) as HTMLElement | null;
-      if (!pill) return;
-      const meta = describeCandyObjective(g);
-      pill.classList.toggle('done', g.completed);
-      const countSpan = pill.querySelector('.m3-goal-count') as HTMLElement | null;
-      if (countSpan) {
-        countSpan.textContent = meta.countText;
-      }
+      const countText = formatCandyObjectiveCountText(g);
+      const doneChanged = this.lastGoalDone[idx] !== g.completed;
+      const countChanged = this.lastGoalCounts[idx] !== countText;
       const prevRem = this.prevObjectiveRemaining[idx];
-      if (prevRem !== undefined && g.remaining < prevRem) {
-        this.pulseGoalPill(idx);
+      const advanced = prevRem !== undefined && g.remaining < prevRem;
+      if (doneChanged || countChanged || advanced) {
+        const pill = box.querySelector(`[data-m3-goal-idx="${idx}"]`) as HTMLElement | null;
+        if (pill) {
+          if (doneChanged) {
+            pill.classList.toggle('done', g.completed);
+            this.lastGoalDone[idx] = g.completed;
+          }
+          if (countChanged) {
+            const countSpan = pill.querySelector('.m3-goal-count') as HTMLElement | null;
+            this.setTextIfChanged(countSpan, countText);
+            this.lastGoalCounts[idx] = countText;
+          }
+          if (advanced) {
+            this.pulseGoalPill(idx);
+          }
+        }
       }
       this.prevObjectiveRemaining[idx] = g.remaining;
     });
 
-    // Update booster buttons
+    // Update booster buttons only when qty / sandbox / armed state actually changes
     MATCH3_BOOSTERS.forEach((bDef) => {
-      const btn = box.querySelector(`[data-m3-booster="${bDef.id}"]`) as HTMLButtonElement | null;
-      if (!btn) return;
       const qty = st.match3.boosters[bDef.id] ?? 0;
       const media = BOOSTER_MEDIA[bDef.id];
       const armed = snap.activeBooster === media.engineKind;
+      const sig = `${st.sandboxMode ? 1 : 0}|${qty}|${armed ? 1 : 0}`;
+      if (this.lastBoosterSig[bDef.id] === sig) return;
+      this.lastBoosterSig[bDef.id] = sig;
+
+      const btn = box.querySelector(`[data-m3-booster="${bDef.id}"]`) as HTMLButtonElement | null;
+      if (!btn) return;
       btn.setAttribute('data-active', String(armed));
       btn.setAttribute('aria-pressed', String(armed));
       const badge = btn.querySelector('.m3-booster-qty') as HTMLElement | null;
       if (badge) {
-        badge.textContent = st.sandboxMode ? '∞' : qty > 0 ? `×${qty}` : `🪙${bDef.goldCost}`;
+        const label = st.sandboxMode ? '∞' : qty > 0 ? `×${qty}` : `🪙${bDef.goldCost}`;
+        if (badge.textContent !== label) {
+          badge.textContent = label;
+        }
         badge.classList.toggle('buy', !st.sandboxMode && qty <= 0);
       }
     });
@@ -1264,6 +1406,7 @@ export class Match3ModalController {
   public renderDOM(): void {
     const box = this.root.querySelector('#match3DialogContent') as HTMLElement | null;
     if (!box) return;
+    this.resetHudSyncCache();
     const dlg = this.getDialog();
     const modalInner =
       typeof dlg?.querySelector === 'function'
@@ -1578,7 +1721,7 @@ export class Match3ModalController {
         data-hot="${rainbowPct >= 75}"
         title="${
           isSuperRainbow
-            ? '⚡ Siêu Cầu Vồng đang bật (quét sạch 2 màu cùng lúc)!'
+            ? 'Siêu Cầu Vồng đang bật (quét sạch 2 màu cùng lúc)!'
             : 'Thanh năng lượng Bom Cầu Vồng'
         } (${rainbowPct}/100%) — Nổ Chong Chóng (+22%), Pháo (+28%), Bom (+45%), Thuốc Nổ (+68%), TNT (+95%). Đủ 100% tự thả 1 Quả Cầu Vồng lên bàn!"
       >

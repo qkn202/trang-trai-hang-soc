@@ -512,6 +512,32 @@ export class CandyHogwartsEngine {
     }
   }
 
+  private expandScopeForDamagedColumns(colScope?: Set<number>): void {
+    if (!colScope) return;
+    const colsToExpand: number[] = [];
+    for (let c = 0; c < this.size; c++) {
+      if (colScope.has(c) || (this.colBusyCounts[c] ?? 0) > 0) continue;
+      for (let r = 0; r < this.size; r++) {
+        if (this.isOpenEmpty(r, c) || this.grid[r]?.[c]?.primedWrapped) {
+          colsToExpand.push(c);
+          break;
+        }
+      }
+    }
+    if (colsToExpand.length > 0) {
+      this.expandColumnSet(colScope, colsToExpand);
+    }
+  }
+
+  private hasAnyOpenEmptyCell(): boolean {
+    for (let r = 0; r < this.size; r++) {
+      for (let c = 0; c < this.size; c++) {
+        if (this.isOpenEmpty(r, c)) return true;
+      }
+    }
+    return false;
+  }
+
   private releaseColumnSet(owned: Set<number>): void {
     for (const c of owned) {
       if (c >= 0 && c < this.colBusyCounts.length && this.colBusyCounts[c]! > 0) {
@@ -840,11 +866,47 @@ export class CandyHogwartsEngine {
     }
   }
 
+  private hasActiveVisualMotion(): boolean {
+    if (
+      this.busy ||
+      this.activeAsyncSwaps > 0 ||
+      Boolean(this.pointerState) ||
+      Boolean(this.selected) ||
+      this.vfx.shake > 0.2 ||
+      this.vfx.particles.length > 0 ||
+      this.vfx.beams.length > 0 ||
+      this.vfx.seekers.length > 0 ||
+      this.vfx.arcs.length > 0 ||
+      this.vfx.rings.length > 0 ||
+      this.vfx.popups.length > 0
+    ) {
+      return true;
+    }
+    for (let r = 0; r < this.size; r++) {
+      const row = this.grid[r];
+      if (!row) continue;
+      for (let c = 0; c < this.size; c++) {
+        const piece = row[c];
+        if (!piece) continue;
+        if (
+          piece.primedWrapped ||
+          piece.scale > 1.005 ||
+          Math.abs(piece.x - c) > 0.01 ||
+          Math.abs(piece.y - r) > 0.01
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   public startLoop(): void {
     if (!this.renderer || typeof requestAnimationFrame === 'undefined') return;
     this.loopActive = true;
     if (this.rafId !== null) cancelAnimationFrame(this.rafId);
     this.lastFrameTime = nowMs();
+    let lastRenderAt = 0;
     const tick = (now: number) => {
       if (!this.loopActive) {
         this.rafId = null;
@@ -854,7 +916,10 @@ export class CandyHogwartsEngine {
       this.lastFrameTime = now;
       this.update(dt, now);
       if (this.level && this.renderer) {
-        this.renderer.render(this.getRenderState(), now);
+        if (lastRenderAt === 0 || this.hasActiveVisualMotion() || now - lastRenderAt >= 48) {
+          lastRenderAt = now;
+          this.renderer.render(this.getRenderState(), now);
+        }
       }
       this.rafId = requestAnimationFrame(tick);
     };
@@ -1123,46 +1188,7 @@ export class CandyHogwartsEngine {
           continue;
         }
 
-        const forbidden = new Set<number>();
-        const left1 = this.grid[r]?.[c - 1];
-        const left2 = this.grid[r]?.[c - 2];
-        if (
-          c >= 2 &&
-          this.isMatchablePiece(left1) &&
-          this.isMatchablePiece(left2) &&
-          left1.color === left2.color
-        ) {
-          forbidden.add(left1.color);
-        }
-        const up1 = this.grid[r - 1]?.[c];
-        const up2 = this.grid[r - 2]?.[c];
-        if (
-          r >= 2 &&
-          this.isMatchablePiece(up1) &&
-          this.isMatchablePiece(up2) &&
-          up1.color === up2.color
-        ) {
-          forbidden.add(up1.color);
-        }
-        const diag = this.grid[r - 1]?.[c - 1];
-        if (
-          r >= 1 &&
-          c >= 1 &&
-          this.isMatchablePiece(left1) &&
-          this.isMatchablePiece(up1) &&
-          this.isMatchablePiece(diag) &&
-          left1.color === up1.color &&
-          left1.color === diag.color
-        ) {
-          forbidden.add(left1.color);
-        }
-
-        const choices: number[] = [];
-        for (let col = 0; col < this.numColors; col++) {
-          if (!forbidden.has(col)) choices.push(col);
-        }
-        const color = choices[Math.floor(Math.random() * choices.length)] ?? 0;
-        this.grid[r][c] = this.createPiece(color, c, r);
+        this.grid[r][c] = this.createNonMatchingPiece(r, c);
       }
     }
 
@@ -1283,6 +1309,47 @@ export class CandyHogwartsEngine {
     } else if (winStreak > 0) {
       this.spawnCenterBanner(`CHUỖI CỐC LỬA ×${winStreak}!`);
     }
+  }
+
+  private createNonMatchingPiece(r: number, c: number): CandyInternalPiece {
+    const colorAt = (rr: number, cc: number): number | null => {
+      const p = this.grid[rr]?.[cc];
+      return this.isMatchablePiece(p) ? p.color : null;
+    };
+    const forbidden = new Set<number>();
+    const l1 = colorAt(r, c - 1);
+    const l2 = colorAt(r, c - 2);
+    const r1 = colorAt(r, c + 1);
+    const r2 = colorAt(r, c + 2);
+    if (l1 !== null && l1 === l2) forbidden.add(l1);
+    if (r1 !== null && r1 === r2) forbidden.add(r1);
+    if (l1 !== null && l1 === r1) forbidden.add(l1);
+
+    const u1 = colorAt(r - 1, c);
+    const u2 = colorAt(r - 2, c);
+    const d1 = colorAt(r + 1, c);
+    const d2 = colorAt(r + 2, c);
+    if (u1 !== null && u1 === u2) forbidden.add(u1);
+    if (d1 !== null && d1 === d2) forbidden.add(d1);
+    if (u1 !== null && u1 === d1) forbidden.add(u1);
+
+    const ul = colorAt(r - 1, c - 1);
+    const ur = colorAt(r - 1, c + 1);
+    const dl = colorAt(r + 1, c - 1);
+    const dr = colorAt(r + 1, c + 1);
+    if (l1 !== null && u1 !== null && ul !== null && l1 === u1 && l1 === ul) forbidden.add(l1);
+    if (r1 !== null && u1 !== null && ur !== null && r1 === u1 && r1 === ur) forbidden.add(r1);
+    if (l1 !== null && d1 !== null && dl !== null && l1 === d1 && l1 === dl) forbidden.add(l1);
+    if (r1 !== null && d1 !== null && dr !== null && r1 === d1 && r1 === dr) forbidden.add(r1);
+
+    const choices: number[] = [];
+    for (let col = 0; col < this.numColors; col++) {
+      if (!forbidden.has(col)) choices.push(col);
+    }
+    const color =
+      choices[Math.floor(Math.random() * choices.length)] ??
+      Math.floor(Math.random() * this.numColors);
+    return this.createPiece(color, c, r);
   }
 
   public createPiece(
@@ -2304,12 +2371,28 @@ export class CandyHogwartsEngine {
       }
 
       if (session === this.sessionId && !this.ended && this.activeAsyncSwaps === 0 && !this.busy) {
-        // Nếu 2 luồng cột độc lập khi hạ cánh tạo thêm cụm ngang nối liền giữa ranh giới cột, dọn dẹp mượt ngay lúc lắng bàn!
-        if (this.findMatchClusters().length > 0) {
+        if (this.hasAnyOpenEmptyCell()) {
           this.busy = true;
-          await this.resolveAllCascades(2, session);
-          this.busy = false;
+          try {
+            await this.applyGravityAndRefill(session);
+          } finally {
+            if (session === this.sessionId) this.busy = false;
+          }
         }
+        // Nếu 2 luồng cột độc lập khi hạ cánh tạo thêm cụm ngang nối liền giữa ranh giới cột (hoặc kẹo gói chờ nổ), dọn dẹp mượt ngay lúc lắng bàn!
+        if (
+          session === this.sessionId &&
+          !this.ended &&
+          (this.findMatchClusters().length > 0 || this.hasPrimedWrappedCandies())
+        ) {
+          this.busy = true;
+          try {
+            await this.resolveAllCascades(2, session);
+          } finally {
+            if (session === this.sessionId) this.busy = false;
+          }
+        }
+        if (session !== this.sessionId) return true;
         const consumedAny = this.pendingConsumedTurns > 0;
         this.pendingConsumedTurns = 0;
         if (consumedAny || isFreeSwapBooster) {
@@ -3079,6 +3162,7 @@ export class CandyHogwartsEngine {
     let safety = 0;
     while (session === this.sessionId && safety < 40) {
       safety++;
+      this.expandScopeForDamagedColumns(colScope);
       const clusters = this.findMatchClusters([], colScope);
       if (clusters.length > 0) {
         if (colScope) {
@@ -4049,9 +4133,11 @@ export class CandyHogwartsEngine {
 
   public async applyGravityAndRefill(
     session = this.sessionId,
-    colScope?: ReadonlySet<number>
+    colScope?: Set<number>
   ): Promise<void> {
     if (session !== this.sessionId) return;
+    this.expandScopeForDamagedColumns(colScope);
+    const fullScope = !colScope || colScope.size >= this.size;
     const inCol = (c: number): boolean => !colScope || colScope.has(c);
 
     for (let r = 0; r < this.size; r++) {
@@ -4079,7 +4165,7 @@ export class CandyHogwartsEngine {
     }
 
     const colSpawnCounts = new Array<number>(this.size).fill(0);
-    if (!colScope) {
+    if (fullScope) {
       this.extractIngredientsAtExits();
     }
 
@@ -4089,9 +4175,10 @@ export class CandyHogwartsEngine {
     for (let tick = 0; tick < maxTicks; tick++) {
       let moved = false;
 
-      if (!colScope) {
+      if (this.portals.length > 0) {
         for (const portal of this.portals) {
           const { from, to, color } = portal;
+          if (!fullScope && (!inCol(from.c) || !inCol(to.c))) continue;
           if (this.canPieceFall(from.r, from.c) && this.isOpenEmpty(to.r, to.c)) {
             const p = this.grid[from.r][from.c]!;
             this.grid[to.r][to.c] = p;
@@ -4167,7 +4254,7 @@ export class CandyHogwartsEngine {
         }
       }
 
-      if (!colScope && this.extractIngredientsAtExits()) {
+      if (fullScope && this.extractIngredientsAtExits()) {
         moved = true;
       }
 
@@ -4184,7 +4271,7 @@ export class CandyHogwartsEngine {
         }
       }
     }
-    if (!colScope) {
+    if (fullScope) {
       this.extractIngredientsAtExits();
     }
 
@@ -5142,17 +5229,17 @@ export class CandyHogwartsEngine {
 
   public getObjectivesProgress(): CandyObjectiveProgress[] {
     if (!this.level) return [];
-    const remJelly = this.countGridSum(this.jelly);
-    const remIce = this.countGridSum(this.ice);
-    const remFrosting = this.countGridSum(this.frosting);
-    const remChocolate = this.countGridSum(this.chocolate);
-    const remCauldrons = this.countPositiveCells(this.cauldron);
-    const remLocks = this.countGridSum(this.lockGrid);
-    const remPetrify = this.countGridSum(this.petrify);
-    const remDementors = this.countPositiveCells(this.dementor);
-    const remDecrees = this.countPositiveCells(this.decree);
-    const remFiendfyre = this.countPositiveCells(this.fiendfyre);
-    const remHorcruxes = this.countPositiveCells(this.horcrux);
+    let remJelly: number | null = null;
+    let remIce: number | null = null;
+    let remFrosting: number | null = null;
+    let remChocolate: number | null = null;
+    let remCauldrons: number | null = null;
+    let remLocks: number | null = null;
+    let remPetrify: number | null = null;
+    let remDementors: number | null = null;
+    let remDecrees: number | null = null;
+    let remFiendfyre: number | null = null;
+    let remHorcruxes: number | null = null;
 
     return this.level.objectives.map((obj) => {
       if (obj.type === 'boss') {
@@ -5166,6 +5253,7 @@ export class CandyHogwartsEngine {
         };
       }
       if (obj.type === 'horcrux') {
+        remHorcruxes ??= this.countPositiveCells(this.horcrux);
         const done = Math.max(0, this.initialHorcruxes - remHorcruxes);
         return {
           ...obj,
@@ -5176,6 +5264,7 @@ export class CandyHogwartsEngine {
         };
       }
       if (obj.type === 'dementor') {
+        remDementors ??= this.countPositiveCells(this.dementor);
         const done = Math.max(0, this.initialDementors - remDementors);
         return {
           ...obj,
@@ -5186,6 +5275,7 @@ export class CandyHogwartsEngine {
         };
       }
       if (obj.type === 'decree') {
+        remDecrees ??= this.countPositiveCells(this.decree);
         const done = Math.max(0, this.initialDecrees - remDecrees);
         return {
           ...obj,
@@ -5196,6 +5286,7 @@ export class CandyHogwartsEngine {
         };
       }
       if (obj.type === 'fiendfyre') {
+        remFiendfyre ??= this.countPositiveCells(this.fiendfyre);
         return {
           ...obj,
           target: remFiendfyre,
@@ -5205,6 +5296,7 @@ export class CandyHogwartsEngine {
         };
       }
       if (obj.type === 'petrify') {
+        remPetrify ??= this.countGridSum(this.petrify);
         const done = Math.max(0, this.initialPetrify - remPetrify);
         return {
           ...obj,
@@ -5215,6 +5307,7 @@ export class CandyHogwartsEngine {
         };
       }
       if (obj.type === 'cauldron') {
+        remCauldrons ??= this.countPositiveCells(this.cauldron);
         const done = Math.max(0, this.initialCauldronPots - remCauldrons);
         return {
           ...obj,
@@ -5225,6 +5318,7 @@ export class CandyHogwartsEngine {
         };
       }
       if (obj.type === 'key_lock') {
+        remLocks ??= this.countGridSum(this.lockGrid);
         const done = Math.max(0, this.initialLocks - remLocks);
         return {
           ...obj,
@@ -5235,6 +5329,7 @@ export class CandyHogwartsEngine {
         };
       }
       if (obj.type === 'jelly') {
+        remJelly ??= this.countGridSum(this.jelly);
         const done = Math.max(0, this.initialJelly - remJelly);
         return {
           ...obj,
@@ -5245,6 +5340,7 @@ export class CandyHogwartsEngine {
         };
       }
       if (obj.type === 'ice') {
+        remIce ??= this.countGridSum(this.ice);
         const done = Math.max(0, this.initialIce - remIce);
         return {
           ...obj,
@@ -5255,6 +5351,7 @@ export class CandyHogwartsEngine {
         };
       }
       if (obj.type === 'frosting') {
+        remFrosting ??= this.countGridSum(this.frosting);
         const done = Math.max(0, this.initialFrosting - remFrosting);
         return {
           ...obj,
@@ -5265,6 +5362,7 @@ export class CandyHogwartsEngine {
         };
       }
       if (obj.type === 'chocolate') {
+        remChocolate ??= this.countGridSum(this.chocolate);
         return {
           ...obj,
           target: remChocolate,
@@ -5621,14 +5719,25 @@ export class CandyHogwartsEngine {
   }
 
   private spawnRing(r: number, c: number, maxRadiusCells = 1.8, color = '#fde047'): void {
+    if (this.vfx.rings.length >= 12) {
+      this.vfx.rings.splice(0, this.vfx.rings.length - 11);
+    }
     this.vfx.rings.push({ r, c, maxRadiusCells, color, life: 0.34, maxLife: 0.34 });
   }
 
   private spawnArc(r1: number, c1: number, r2: number, c2: number, color = '#fde047'): void {
+    if (this.vfx.arcs.length >= 24) {
+      this.vfx.arcs.splice(0, this.vfx.arcs.length - 23);
+    }
     this.vfx.arcs.push({ r1, c1, r2, c2, color, life: 0.28, maxLife: 0.28 });
   }
 
   private spawnPopup(r: number, c: number, text: string, color = '#fde047', size = 15): void {
+    if (this.vfx.popups.length >= 10) {
+      if (size <= 15 && /^\+\d+$/.test(text)) return;
+      const dropIdx = this.vfx.popups.findIndex((p) => p.size < 18);
+      this.vfx.popups.splice(dropIdx >= 0 ? dropIdx : 0, 1);
+    }
     const center = this.cellCenterOrVirtual(r, c);
     this.vfx.popups.push({
       x: center.x,
@@ -5957,6 +6066,15 @@ export class CandyHogwartsEngine {
     this.horcrux = nextHorcrux;
     this.grid = nextGrid;
 
+    let healedEmpty = false;
+    for (let r = 0; r < sz; r++) {
+      for (let c = 0; c < sz; c++) {
+        if (!this.isOpenEmpty(r, c)) continue;
+        healedEmpty = true;
+        this.grid[r][c] = this.createNonMatchingPiece(r, c);
+      }
+    }
+
     this.ingredientsCollected = Math.max(0, Math.floor(snap.ingredientsCollected || 0));
     this.ingredientsSpawned = Math.max(
       this.ingredientsCollected,
@@ -6010,6 +6128,10 @@ export class CandyHogwartsEngine {
       seeker: Math.max(0, Math.floor(snap.specialStats?.seeker || 0)),
       color_bomb: Math.max(0, Math.floor(snap.specialStats?.color_bomb || 0)),
     };
+
+    if (healedEmpty && !this.ended && this.status === 'playing' && !this.findAnyValidMove(false)) {
+      this.grantEmergencyMovePiece();
+    }
 
     if (this.areAllObjectivesComplete()) {
       const reloadHouse = this.house;

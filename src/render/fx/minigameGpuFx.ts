@@ -204,9 +204,9 @@ export class MinigameGpuFxBatcher {
 
     const vw = Math.max(1, window.innerWidth || 1280);
     const vh = Math.max(1, window.innerHeight || 720);
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const pw = Math.round(vw * dpr);
-    const ph = Math.round(vh * dpr);
+    const dpr = 1;
+    const pw = vw;
+    const ph = vh;
     if (this.canvas.width !== pw || this.canvas.height !== ph) {
       this.canvas.width = pw;
       this.canvas.height = ph;
@@ -264,6 +264,23 @@ export class MinigameGpuFxBatcher {
       this.canvas.style.display = 'none';
     }
   };
+
+  public clear(): void {
+    if (this.rafId) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = 0;
+    }
+    this.sparkActive.fill(0);
+    this.activeCount = 0;
+    if (this.gl && this.canvas && this.canvas.width > 0 && this.canvas.height > 0) {
+      this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+      this.gl.clearColor(0, 0, 0, 0);
+      this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+    }
+    if (this.canvas) {
+      this.canvas.style.display = 'none';
+    }
+  }
 
   public destroy(): void {
     if (this.rafId) {

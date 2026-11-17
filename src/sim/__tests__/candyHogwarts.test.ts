@@ -982,4 +982,194 @@ describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
     expect(contentEl.innerHTML).toContain('id="btnM3RescuePhoenixTalisman"');
     expect(contentEl.innerHTML).not.toContain('flex:1.4;min-width:170px');
   });
+
+  it('expands colScope when localized swap in Stage 517 triggers cross-board beam, leaving zero empty open cells', async () => {
+    const lv517 = getCandyLevelById(517);
+    expect(lv517.size).toBe(10);
+    const engine = new CandyHogwartsEngine(null);
+    engine.loadLevel(lv517, { house: 'gryffindor', instantAnimations: true });
+
+    // Clear blockers/locks on col 8 and row 5 so vertical->horizontal chain beam sweeps cols 0..9 cleanly,
+    // and populate a deterministic non-matching pattern on every open cell.
+    for (let r = 0; r < engine.size; r++) {
+      for (let c = 0; c < engine.size; c++) {
+        if (engine.mask[r][c] === 0) continue;
+        if (r === 2 || r === 5 || c === 8) {
+          engine.frosting[r][c] = 0;
+          engine.chocolate[r][c] = 0;
+          engine.cauldron[r][c] = 0;
+          engine.dementor[r][c] = 0;
+          engine.decree[r][c] = 0;
+          engine.fiendfyre[r][c] = 0;
+          engine.horcrux[r][c] = 0;
+          engine.ice[r][c] = 0;
+          engine.lockGrid[r][c] = 0;
+          engine.petrify[r][c] = 0;
+        }
+        if (!engine.hasStaticBlocker(r, c) && !engine.isCellLocked(r, c)) {
+          engine.grid[r][c] = engine.createPiece((r * 2 + c) % 4, c, r);
+        }
+      }
+    }
+
+    // Swapping (2,7) <-> (2,8) with striped_v uses localized column lock (only cols 6..9),
+    // yet vertical beam hits striped_h at (5,8) and blasts horizontally across columns 0..5!
+    engine.grid[2][7] = engine.createPiece(1, 7, 2);
+    engine.grid[2][8] = engine.createPiece(5, 8, 2, 'striped_v');
+    engine.grid[5][8] = engine.createPiece(5, 8, 5, 'striped_h');
+
+    const swapped = await engine.trySwap({ r: 2, c: 7 }, { r: 2, c: 8 });
+    expect(swapped).toBe(true);
+
+    for (let r = 0; r < engine.size; r++) {
+      for (let c = 0; c < engine.size; c++) {
+        if (
+          engine.mask[r][c] === 1 &&
+          !engine.hasStaticBlocker(r, c) &&
+          !engine.isCellLocked(r, c)
+        ) {
+          expect(engine.grid[r][c], `cell (${r},${c}) must not stay empty`).not.toBeNull();
+        }
+      }
+    }
+    engine.destroy();
+  });
+
+  it('heals corrupted saved sessions containing empty half-board columns on restoreSession', () => {
+    const lv517 = getCandyLevelById(517);
+    const engine = new CandyHogwartsEngine(null);
+    engine.loadLevel(lv517, { house: 'gryffindor', instantAnimations: true });
+
+    const snap = engine.exportSession();
+    expect(snap).not.toBeNull();
+    // Reproduce the Stage 517 bug: wipe columns 0..5 to null in the saved snapshot
+    for (let r = 0; r < snap!.size; r++) {
+      for (let c = 0; c <= 5; c++) {
+        snap!.grid[r][c] = null;
+      }
+    }
+
+    const restored = new CandyHogwartsEngine(null);
+    restored.loadLevel(lv517, { house: 'gryffindor', instantAnimations: true });
+    expect(restored.restoreSession(snap)).toBe(true);
+
+    for (let r = 0; r < restored.size; r++) {
+      for (let c = 0; c < restored.size; c++) {
+        if (
+          restored.mask[r][c] === 1 &&
+          !restored.hasStaticBlocker(r, c) &&
+          !restored.isCellLocked(r, c)
+        ) {
+          expect(restored.grid[r][c], `restored cell (${r},${c}) must be filled`).not.toBeNull();
+        }
+      }
+    }
+    expect(restored.findMatchClusters()).toHaveLength(0);
+    expect(restored.findAnyValidMove(false)).not.toBeNull();
+
+    engine.destroy();
+    restored.destroy();
+  });
+
+  it('invalidates static obstacle underlay cache key whenever jelly, frosting, or decree changes', () => {
+    const noop = () => {};
+    const ctxStub = {
+      font: '',
+      textAlign: 'center',
+      textBaseline: 'middle',
+      fillStyle: '',
+      strokeStyle: '',
+      lineWidth: 1,
+      lineCap: 'round',
+      lineJoin: 'round',
+      globalAlpha: 1,
+      shadowColor: '',
+      shadowBlur: 0,
+      shadowOffsetY: 0,
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'medium',
+      save: noop,
+      restore: noop,
+      scale: noop,
+      clearRect: noop,
+      translate: noop,
+      rotate: noop,
+      beginPath: noop,
+      moveTo: noop,
+      lineTo: noop,
+      arc: noop,
+      arcTo: noop,
+      ellipse: noop,
+      quadraticCurveTo: noop,
+      closePath: noop,
+      fill: noop,
+      stroke: noop,
+      fillRect: noop,
+      setLineDash: noop,
+      drawImage: noop,
+      fillText: noop,
+      strokeText: noop,
+      measureText: () => ({ width: 10 }),
+      createLinearGradient: () => ({ addColorStop: noop }),
+      createRadialGradient: () => ({ addColorStop: noop }),
+    } as unknown as CanvasRenderingContext2D;
+
+    const renderer = new CandyHogwartsBoardRenderer({
+      width: 468,
+      height: 468,
+      clientWidth: 468,
+      clientHeight: 468,
+      getContext: () => ctxStub,
+    } as unknown as HTMLCanvasElement);
+
+    const zero4 = () => Array.from({ length: 4 }, () => [0, 0, 0, 0]);
+    const jelly = zero4();
+    jelly[0][0] = 3;
+    const renderState = {
+      size: 4,
+      mask: Array.from({ length: 4 }, () => [1, 1, 1, 1]),
+      jelly,
+      ice: zero4(),
+      frosting: zero4(),
+      chocolate: zero4(),
+      cauldron: zero4(),
+      lockGrid: zero4(),
+      petrify: zero4(),
+      dementor: zero4(),
+      decree: zero4(),
+      fiendfyre: zero4(),
+      horcrux: zero4(),
+      mazeConfig: null,
+      conveyorLoops: [],
+      portals: [],
+      ingredientExitCells: [],
+      grid: Array.from({ length: 4 }, () => [null, null, null, null]),
+      selected: null,
+      kbCursor: null,
+      hintPair: null,
+      activeBooster: null,
+      vfx: {
+        shake: 0,
+        particles: [],
+        beams: [],
+        seekers: [],
+        arcs: [],
+        rings: [],
+        popups: [],
+      },
+    };
+
+    renderer.render(renderState, 1000);
+    const key1 = renderer.getUnderlayCacheKey();
+    expect(key1.length).toBeGreaterThan(0);
+
+    renderer.render(renderState, 1016);
+    expect(renderer.getUnderlayCacheKey()).toBe(key1);
+
+    jelly[0][0] = 2;
+    renderer.render(renderState, 1032);
+    expect(renderer.getUnderlayCacheKey()).not.toBe(key1);
+
+    renderer.destroy();
+  });
 });

@@ -595,11 +595,19 @@ async function bootstrap(): Promise<void> {
     }
   });
 
+  let cachedFullscreenModalOpen = false;
+  let cachedAnyDialogOpen = false;
+  let pendingUiRefreshAfterFullscreen = false;
+
   sim.onTutorialStepChanged = () => {
     hud.tutorialMinimized = Boolean(sim.state.tutorial?.minimized);
     hud.panCameraToTutorialTarget();
   };
   sim.onUiChange = () => {
+    if (cachedFullscreenModalOpen) {
+      pendingUiRefreshAfterFullscreen = true;
+      return;
+    }
     hud.refreshAll();
     accessibility.refresh();
   };
@@ -2200,14 +2208,18 @@ async function bootstrap(): Promise<void> {
   const puzzleArcadeDlgEl = hud.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
   const seedQuizDlgEl = hud.root.querySelector('#seedQuizDialog') as HTMLDialogElement | null;
   const allModalDialogs = Array.from(hud.root.querySelectorAll<HTMLDialogElement>('dialog'));
-  let cachedFullscreenModalOpen = false;
-  let cachedAnyDialogOpen = false;
   const syncOpenDialogFlags = (): void => {
+    const prevFullscreen = cachedFullscreenModalOpen;
     cachedFullscreenModalOpen = Boolean(
       match3DlgEl?.open || puzzleArcadeDlgEl?.open || seedQuizDlgEl?.open
     );
     cachedAnyDialogOpen =
       cachedFullscreenModalOpen || allModalDialogs.some((d) => d.open);
+    if (prevFullscreen && !cachedFullscreenModalOpen && pendingUiRefreshAfterFullscreen) {
+      pendingUiRefreshAfterFullscreen = false;
+      hud.refreshAll();
+      accessibility.refresh();
+    }
   };
   syncOpenDialogFlags();
   if (typeof MutationObserver !== 'undefined') {
@@ -2222,6 +2234,7 @@ async function bootstrap(): Promise<void> {
 
   let mainRafId = 0;
   let lastWorldRenderMs = 0;
+  let fullscreenBgSimAccumSec = 0;
 
   function frame(now: number): void {
     mainRafId = 0;
@@ -2337,7 +2350,25 @@ async function bootstrap(): Promise<void> {
       cam.x += panSpeed;
     }
 
-    sim.update(dt);
+    let runSoundscapeNow = true;
+    let soundscapeDt = Math.min(0.1, dt);
+    if (cachedFullscreenModalOpen) {
+      fullscreenBgSimAccumSec += dt;
+      if (fullscreenBgSimAccumSec >= 1.0) {
+        const bgDt = Math.min(2.5, fullscreenBgSimAccumSec);
+        fullscreenBgSimAccumSec = 0;
+        sim.update(bgDt);
+        soundscapeDt = Math.min(0.1, bgDt);
+      } else {
+        runSoundscapeNow = false;
+      }
+    } else if (fullscreenBgSimAccumSec > 0) {
+      const catchupDt = Math.min(2.5, dt + fullscreenBgSimAccumSec);
+      fullscreenBgSimAccumSec = 0;
+      sim.update(catchupDt);
+    } else {
+      sim.update(dt);
+    }
 
     // V3 Ride Cam Lock-On (Smoothly tracks lead coaster car or Gringotts minecart!)
     if (hud.rideCamUid && !cachedFullscreenModalOpen) {
@@ -2378,18 +2409,20 @@ async function bootstrap(): Promise<void> {
     }
 
     // Symphonic Celesta BGM & Spatial Weather Soundscape
-    const period = sim.getRealTimePeriod();
-    const curWeather = sim.getCurrentWeather();
-    const stationWorld = worldIso(3, 17, cam.viewRot ?? 0);
-    const nearStation = Math.hypot(cam.x - stationWorld.wx, cam.y - stationWorld.wy) < 420;
-    audio.updateSoundscape(
-      Math.min(0.1, dt),
-      period === 'night' || period === 'dusk',
-      cam.zoom,
-      nearStation,
-      curWeather.kind,
-      sim.getActiveFestival() !== 'none'
-    );
+    if (runSoundscapeNow) {
+      const period = sim.getRealTimePeriod();
+      const curWeather = sim.getCurrentWeather();
+      const stationWorld = worldIso(3, 17, cam.viewRot ?? 0);
+      const nearStation = Math.hypot(cam.x - stationWorld.wx, cam.y - stationWorld.wy) < 420;
+      audio.updateSoundscape(
+        soundscapeDt,
+        period === 'night' || period === 'dusk',
+        cam.zoom,
+        nearStation,
+        curWeather.kind,
+        sim.getActiveFestival() !== 'none'
+      );
+    }
 
     // Pause background world canvas completely behind fullscreen minigame halls,
     // and throttle to ~12fps behind smaller modal dialogs so UI & minigames stay silky-smooth.

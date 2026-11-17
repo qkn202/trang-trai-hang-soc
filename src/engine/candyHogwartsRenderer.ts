@@ -8,6 +8,7 @@ import {
   CandyPortalPair,
   CandySpecialType,
 } from '../data/candyHogwartsLevels';
+import { fillTextRaw } from '../hpvn/emoji';
 
 export interface CandyBoardPiece {
   id: number;
@@ -162,6 +163,10 @@ export class CandyHogwartsBoardRenderer {
   private bgCtx: CanvasRenderingContext2D | null = null;
   private bgDirty = true;
   private lastBgKey = '';
+  private underlayCanvas: HTMLCanvasElement | null = null;
+  private underlayCtx: CanvasRenderingContext2D | null = null;
+  private underlayDirty = true;
+  private lastUnderlayKey = '';
   private sprites: Record<string, HTMLImageElement> = {};
   private yuleSprites: Record<string, HTMLImageElement> = {};
   private yuleSpritesLoaded = false;
@@ -196,6 +201,7 @@ export class CandyHogwartsBoardRenderer {
           if (sz > 0 && sz !== this.observedCssSize) {
             this.observedCssSize = sz;
             this.bgDirty = true;
+            this.underlayDirty = true;
           }
         }
         this.onSpriteReady?.();
@@ -217,6 +223,7 @@ export class CandyHogwartsBoardRenderer {
       img.decoding = 'async';
       img.onload = () => {
         this.bgDirty = true;
+        this.underlayDirty = true;
         this.onSpriteReady?.();
       };
       img.src = url;
@@ -254,6 +261,7 @@ export class CandyHogwartsBoardRenderer {
       img.decoding = 'async';
       img.onload = () => {
         this.bgDirty = true;
+        this.underlayDirty = true;
         this.onSpriteReady?.();
       };
       img.onerror = () => {
@@ -306,6 +314,11 @@ export class CandyHogwartsBoardRenderer {
 
   public invalidateBg(): void {
     this.bgDirty = true;
+    this.underlayDirty = true;
+  }
+
+  public getUnderlayCacheKey(): string {
+    return this.lastUnderlayKey;
   }
 
   public resize(gridSize: number): void {
@@ -458,6 +471,111 @@ export class CandyHogwartsBoardRenderer {
     this.lastBgKey = `${size}_${this.boardPx}_${this.dpr}_${isYule ? 1 : 0}`;
   }
 
+  private computeUnderlayKey(
+    size: number,
+    isYule: boolean,
+    mask: number[][],
+    jelly: number[][],
+    frosting: number[][],
+    decree: number[][]
+  ): string {
+    const frostSprite = this.pickActiveSprite('frosting_waffle');
+    const frostReady = frostSprite && frostSprite.complete && frostSprite.naturalWidth > 0 ? 1 : 0;
+    let h = 2166136261 >>> 0;
+    for (let r = 0; r < size; r++) {
+      const mRow = mask[r];
+      const jRow = jelly[r];
+      const fRow = frosting[r];
+      const dRow = decree[r];
+      for (let c = 0; c < size; c++) {
+        const v =
+          ((mRow?.[c] ? 1 : 0) |
+            (((jRow?.[c] || 0) & 0xf) << 1) |
+            (((fRow?.[c] || 0) & 0xf) << 5) |
+            (((dRow?.[c] || 0) & 0xf) << 9)) >>>
+          0;
+        h ^= v;
+        h = Math.imul(h, 16777619) >>> 0;
+      }
+    }
+    return `${size}_${this.boardPx}_${this.dpr}_${isYule ? 1 : 0}_${frostReady}_${h.toString(36)}`;
+  }
+
+  private drawStaticUnderlayCells(
+    uCtx: CanvasRenderingContext2D,
+    size: number,
+    mask: number[][],
+    cs: number,
+    jelly: number[][],
+    frosting: number[][],
+    decree: number[][],
+    decreeCenters: Array<{ r: number; c: number }> | null
+  ): void {
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        if (mask[r][c] === 0) continue;
+        const x = this.padding + c * cs;
+        const y = this.padding + r * cs;
+
+        if ((jelly[r]?.[c] || 0) > 0) {
+          this.drawCandyJelly(uCtx, x + 2, y + 2, cs - 4, cs - 4, cs * 0.16, jelly[r][c]);
+        }
+
+        if (decreeCenters && !(decree[r]?.[c] > 0)) {
+          const inAura = decreeCenters.some(
+            (dc) => Math.abs(dc.r - r) <= 1 && Math.abs(dc.c - c) <= 1
+          );
+          if (inAura) {
+            this.drawDecreeAuraCell(uCtx, x + 2, y + 2, cs - 4, cs - 4, cs * 0.14);
+          }
+        }
+
+        const frostLayer = frosting[r]?.[c] || 0;
+        if (frostLayer > 0) {
+          this.drawRuneFrosting(uCtx, x + 2.5, y + 2.5, cs - 5, cs - 5, cs * 0.16, frostLayer);
+        }
+      }
+    }
+  }
+
+  private renderStaticUnderlay(
+    size: number,
+    mask: number[][],
+    cs: number,
+    jelly: number[][],
+    frosting: number[][],
+    decree: number[][],
+    decreeCenters: Array<{ r: number; c: number }> | null,
+    underlayKey: string
+  ): boolean {
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') {
+      return false;
+    }
+    if (!this.underlayCanvas) {
+      this.underlayCanvas = document.createElement('canvas');
+      this.underlayCtx = this.underlayCanvas.getContext('2d');
+    }
+    if (!this.underlayCanvas || !this.underlayCtx) return false;
+
+    const targetW = this.canvas.width;
+    const targetH = this.canvas.height;
+    if (this.underlayCanvas.width !== targetW || this.underlayCanvas.height !== targetH) {
+      this.underlayCanvas.width = targetW;
+      this.underlayCanvas.height = targetH;
+    }
+
+    const uCtx = this.underlayCtx;
+    uCtx.clearRect(0, 0, targetW, targetH);
+    uCtx.save();
+    uCtx.scale(this.dpr, this.dpr);
+    this.drawStaticUnderlayCells(uCtx, size, mask, cs, jelly, frosting, decree, decreeCenters);
+    uCtx.restore();
+
+    this.underlayDirty = false;
+    this.lastUnderlayKey = underlayKey;
+    return true;
+  }
+
   public render(state: CandyRenderState, now: number): void {
     if (!this.ctx) return;
     const {
@@ -526,29 +644,37 @@ export class CandyHogwartsBoardRenderer {
       this.drawMazeWindPlates(ctx, mazeConfig, mask, size, cs, now);
     }
 
+    const underlayKey = this.computeUnderlayKey(size, isYule, mask, jelly, frosting, decree);
+    if (this.underlayDirty || this.lastUnderlayKey !== underlayKey) {
+      if (
+        !this.renderStaticUnderlay(
+          size,
+          mask,
+          cs,
+          jelly,
+          frosting,
+          decree,
+          decreeCenters,
+          underlayKey
+        )
+      ) {
+        this.underlayDirty = false;
+        this.lastUnderlayKey = underlayKey;
+        this.drawStaticUnderlayCells(ctx, size, mask, cs, jelly, frosting, decree, decreeCenters);
+      } else if (this.underlayCanvas) {
+        ctx.drawImage(this.underlayCanvas, 0, 0, this.boardPx, this.boardPx);
+      }
+    } else if (this.underlayCanvas) {
+      ctx.drawImage(this.underlayCanvas, 0, 0, this.boardPx, this.boardPx);
+    } else {
+      this.drawStaticUnderlayCells(ctx, size, mask, cs, jelly, frosting, decree, decreeCenters);
+    }
+
     for (let r = 0; r < size; r++) {
       for (let c = 0; c < size; c++) {
         if (mask[r][c] === 0) continue;
         const x = this.padding + c * cs;
         const y = this.padding + r * cs;
-
-        if ((jelly[r]?.[c] || 0) > 0) {
-          this.drawCandyJelly(ctx, x + 2, y + 2, cs - 4, cs - 4, cs * 0.16, jelly[r][c]);
-        }
-
-        if (decreeCenters && !(decree[r]?.[c] > 0)) {
-          const inAura = decreeCenters.some(
-            (dc) => Math.abs(dc.r - r) <= 1 && Math.abs(dc.c - c) <= 1
-          );
-          if (inAura) {
-            this.drawDecreeAuraCell(ctx, x + 2, y + 2, cs - 4, cs - 4, cs * 0.14);
-          }
-        }
-
-        const frostLayer = frosting[r]?.[c] || 0;
-        if (frostLayer > 0) {
-          this.drawRuneFrosting(ctx, x + 2.5, y + 2.5, cs - 5, cs - 5, cs * 0.16, frostLayer);
-        }
 
         const chocoLayer = chocolate[r]?.[c] || 0;
         if (chocoLayer > 0) {
@@ -767,7 +893,7 @@ export class CandyHogwartsBoardRenderer {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = textColor;
-    ctx.fillText(String(count), bx, by + 0.5);
+    fillTextRaw(ctx, String(count), bx, by + 0.5);
     ctx.restore();
   }
 
@@ -1542,13 +1668,13 @@ export class CandyHogwartsBoardRenderer {
     const flicker = 0.65 + 0.35 * Math.sin(t * 0.026);
     const r = baseR * flicker;
     ctx.save();
-    const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
-    g.addColorStop(0, 'rgba(255, 255, 224, 0.92)');
-    g.addColorStop(0.45, 'rgba(251, 191, 36, 0.55)');
-    g.addColorStop(1, 'rgba(249, 115, 22, 0)');
-    ctx.fillStyle = g;
+    ctx.fillStyle = 'rgba(251, 191, 36, 0.42)';
     ctx.beginPath();
     ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255, 255, 224, 0.92)';
+    ctx.beginPath();
+    ctx.arc(sx, sy, r * 0.48, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -1783,7 +1909,7 @@ export class CandyHogwartsBoardRenderer {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(String(timer), bx, by + 0.5);
+    fillTextRaw(ctx, String(timer), bx, by + 0.5);
     ctx.restore();
   }
 
