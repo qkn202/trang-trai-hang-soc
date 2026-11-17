@@ -426,7 +426,7 @@ export function cropsDrawHarvestBubble(self: IsometricRenderer, b: PlacedBuildin
 
     ctx.save();
     ctx.font = '800 12px "Be Vietnam Pro", sans-serif';
-    const labelText = `+${b.storedGalleons}`;
+    const labelText = `+${b.storedSickle}`;
     const textW = ctx.measureText(labelText).width;
     const pillW = Math.max(54, textW + 28);
     const pillH = 26;
@@ -497,7 +497,7 @@ export function cropsDrawInWorldWaitTimers(self: IsometricRenderer,
       const elev = sim.grid[b.gy]?.[b.gx]?.elevation ?? 0;
       const hasFloatingBubble =
         now >= b.constructEndsAt &&
-        (b.storedGalleons > 0 ||
+        (b.storedSickle > 0 ||
           Boolean(b.readyFarmGoods && b.readyFarmGoods.length > 0) ||
           Boolean(item.isFarmlandPlot && b.cropId && b.cropReadyAt && now >= b.cropReadyAt) ||
           Boolean(

@@ -220,7 +220,7 @@ export function creaturesFeedCreature(sim: ParkSimulation, uid: string): boolean
 
     const feedCost = Math.max(8, Math.round(item.cost * 0.04));
     if (!sim.state.sandboxMode && sim.state.galleons < feedCost) {
-      sim.onToast?.(`Cần ${feedCost} Galleon mua khẩu phần thức ăn phép thuật!`, '🥩');
+      sim.onToast?.(`Cần ${feedCost} Sickle mua khẩu phần thức ăn phép thuật!`, '🥩');
       return false;
     }
     if (!sim.state.sandboxMode) sim.state.galleons -= feedCost;
@@ -271,7 +271,7 @@ export function creaturesCatchEscapedCreature(sim: ParkSimulation, escId: string
     sim.spawnFloatingText(esc.gx, esc.gy, `Accio! Thu hồi +${reward} 🪙`, '#60a5fa');
     sim.onRewardFly?.('galleons', reward, esc.gx, esc.gy);
     sim.tryDropWizardCard(esc.gx, esc.gy, 0.25);
-    sim.onToast?.(`Đã đưa ${esc.name} về chuồng an toàn và thu hồi ${reward} Galleon!`, '🐾');
+    sim.onToast?.(`Đã đưa ${esc.name} về chuồng an toàn và thu hồi ${reward} Sickle!`, '🐾');
     sim.onUiChange?.();
     return true;
 }
@@ -362,14 +362,14 @@ export function creaturesCastAccioHarvestAll(sim: ParkSimulation): void {
           }
         }
         b.readyFarmGoods = remainingGoods;
-        if (collectedAnyGood && b.storedGalleons <= 0) {
+        if (collectedAnyGood && b.storedSickle <= 0) {
           count++;
         }
       }
-      if (b.storedGalleons > 0) {
-        sumG += b.storedGalleons;
+      if (b.storedSickle > 0) {
+        sumG += b.storedSickle;
         sumX += b.storedXp;
-        b.storedGalleons = 0;
+        b.storedSickle = 0;
         b.storedXp = 0;
         b.readyBubbles = remainingGoods.length > 0 ? Math.min(8, remainingGoods.length) : 0;
         if (it?.grantsButterbeer) {
@@ -401,14 +401,14 @@ export function creaturesCastAccioHarvestAll(sim: ParkSimulation): void {
     if (count > 0 || sumX > 0) {
       sim.state.galleons += sumG;
       sim.state.finance.harvestRevenue += sumG;
-      sim.state.stats.totalGalleonsHarvested += sumG;
+      sim.state.stats.totalSickleHarvested += sumG;
       sim.addXp(sumX);
       if (sumG > 0) {
         sim.recordQuestProgress('harvest_galleons', undefined, sumG);
         sim.onRewardFly?.('galleons', sumG);
       }
       sim.audio.playSpell();
-      sim.onToast?.(`⚡ Accio! Đã gom sạch ${sumG} Galleon & ${sumX} XP từ ${count} công trình!`, '🪄');
+      sim.onToast?.(`⚡ Accio! Đã gom sạch ${sumG} Sickle & ${sumX} XP từ ${count} công trình!`, '🪄');
       sim.onUiChange?.();
     } else {
       sim.onToast?.('Hiện các mái nhà đang tích lũy vàng, chờ thêm chút xíu nhé!', '✨');
@@ -581,7 +581,7 @@ export function creaturesTrainCreatureTrick(sim: ParkSimulation, uid: string): {
     }
     const trainCost = 20;
     if (!sim.state.sandboxMode && sim.state.galleons < trainCost) {
-      return { ok: false, msg: `Cần ${trainCost}G mua bánh thưởng huấn luyện tiết mục!` };
+      return { ok: false, msg: `Cần ${trainCost} Sickle mua bánh thưởng huấn luyện tiết mục!` };
     }
     if (!sim.state.sandboxMode) {
       sim.state.galleons -= trainCost;
@@ -628,7 +628,7 @@ export function creaturesStartMorphIncubation(sim: ParkSimulation, habitatUid: s
     const goldCost = creaturesGetMorphIncubationCost(sim, item);
     if (!sim.state.sandboxMode) {
       if (sim.state.galleons < goldCost) {
-        return { ok: false, msg: `Cần ${goldCost}G để thắp Lồng Ấp Cổ Ngữ cho loài này!` };
+        return { ok: false, msg: `Cần ${goldCost} Sickle để thắp Lồng Ấp Cổ Ngữ cho loài này!` };
       }
       if (useStarlight && (sim.state.supply.ingredients.starlight_dust ?? 0) < 1) {
         return { ok: false, msg: 'Chưa có ✨ Bụi Ánh Sao trong kho nguyên liệu!' };
@@ -841,7 +841,7 @@ export function creaturesClaimSuitcaseExpedition(sim: ParkSimulation): { ok: boo
       creaturesAddCreatureBondXp(sim, b, item, 35);
       if (!sim.isVisitingNeighbor) {
         sim.tryDropWizardCard(b.gx + 1, b.gy + 1, exp.cardDropChance);
-        sim.spawnFloatingText(b.gx + 1, b.gy + 1, `🧭 +${rewardGold}G ${herbParts.join(' ')}`, '#fde047');
+        sim.spawnFloatingText(b.gx + 1, b.gy + 1, `🧭 +${rewardGold} Sickle ${herbParts.join(' ')}`, '#fde047');
       }
     } else if (!sim.isVisitingNeighbor) {
       sim.tryDropWizardCard(24, 24, exp.cardDropChance);
@@ -852,7 +852,7 @@ export function creaturesClaimSuitcaseExpedition(sim: ParkSimulation): { ok: boo
     sim.onUiChange?.();
 
     const petLabel = b?.creatureNickname || item?.creatureName || 'Thú cưng';
-    const msg = `🎒 ${petLabel} trở về từ "${exp.name}": +${rewardGold}G, +${rewardXp} ⭐ & ${herbParts.join(', ')}!`;
+    const msg = `🎒 ${petLabel} trở về từ "${exp.name}": +${rewardGold} Sickle, +${rewardXp} ⭐ & ${herbParts.join(', ')}!`;
     sim.onToast?.(msg, '🧭');
     return { ok: true, msg };
 }

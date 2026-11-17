@@ -84,7 +84,7 @@ describe('Mobile Building UX & Safe Placement/Inspector Operations', () => {
     sim.state.galleons = 0;
     const noGold = sim.canPlaceItem(bench, spot.gx, spot.gy, 0);
     expect(noGold.ok).toBe(false);
-    expect(noGold.reason).toContain('Vàng');
+    expect(noGold.reason).toContain('Sickle'); // HPVN: the farm coin is Sickle
 
     // Khóa cấp độ
     sim.state.galleons = 50_000;
@@ -262,37 +262,29 @@ describe('Mobile Building UX & Safe Placement/Inspector Operations', () => {
     expect(sim.grid[anchor.gy][anchor.gx + 1].buildingUid).toBe(fort.uid);
   });
 
-  it('Xóa công trình indestructible bị chặn; xóa công trình có hazard vẫn mở confirm dialog', () => {
+  it('Xóa công trình indestructible bị chặn; xóa công trình có hazard báo trước (HPVN getRemovalLossText)', () => {
     const sim = new ParkSimulation(createMockAudio());
     sim.state.galleons = 5000;
 
     // 1. Chặn xóa công trình bất biến (isIndestructible = true)
     const burrow = sim.state.buildings[0]!;
     burrow.isIndestructible = true;
-    expect(sim.removeAtTile(burrow.gx, burrow.gy, true)).toBe(false);
+    expect(sim.removeAtTile(burrow.gx, burrow.gy)).toBe(false);
     expect(sim.state.buildings.some((b) => b.uid === burrow.uid)).toBe(true);
 
-    // 2. Xóa ruộng đang có cây trồng -> kích hoạt onRequestBulldozeConfirm và chưa xóa ngay
+    // 2. Ruộng đang có cây trồng -> HUD hỏi trước (getRemovalLossText khác null)
     const plotItem = getCatalogItem('farmland_plot')!;
     const spot = findFreeSpot(sim, 'farmland_plot');
     expect(sim.placeItem(plotItem, spot.gx, spot.gy, 0)).toBe(true);
     const plot = sim.state.buildings.at(-1)!;
     plot.cropId = 'ottery_wheat';
     plot.cropPlantedAt = Date.now() - 5000;
-    plot.cropReadyAt = Date.now() + 60_000;
+    plot.cropReadyAt = Date.now() - 1000;
+    expect(sim.getRemovalLossText(spot.gx, spot.gy)).toBeTruthy();
 
-    let capturedHazardUid: string | null = null;
-    sim.onRequestBulldozeConfirm = (warning) => {
-      capturedHazardUid = warning.uid;
-    };
-
-    expect(sim.removeAtTile(spot.gx, spot.gy, false)).toBe(false);
-    expect(capturedHazardUid).toBe(plot.uid);
-    expect(sim.state.buildings.some((b) => b.uid === plot.uid)).toBe(true);
-
-    // Sau khi người chơi xác nhận (force = true) -> xóa thành công và hoàn tác được
+    // Sau khi người chơi xác nhận -> xóa thành công và hoàn tác được
     sim.beginBuildStroke();
-    expect(sim.removeAtTile(spot.gx, spot.gy, true)).toBe(true);
+    expect(sim.removeAtTile(spot.gx, spot.gy)).toBe(true);
     sim.commitBuildStroke();
     expect(sim.state.buildings.some((b) => b.uid === plot.uid)).toBe(false);
     expect(sim.undoBuild()).toBe(true);
@@ -329,6 +321,7 @@ describe('Mobile Building UX & Safe Placement/Inspector Operations', () => {
       'snowy_pines'
     );
     expect(updated).toEqual(['snowy_pines', 'marble_bench']);
-    expect(loadRecentDecorIds()).toEqual(['snowy_pines', 'marble_bench']);
+    // HPVN: nothing on the device (owner 13/11): the recent list is not persisted across visits
+    expect(loadRecentDecorIds()).toEqual([]);
   });
 });

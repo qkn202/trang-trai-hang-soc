@@ -143,6 +143,7 @@ import {
   FRIENDSHIP_CHEST_TOKEN_COST,
   getGardenHelpMetaVi,
   getLocalCalendarResetKey,
+  getVietnamCalendarKey,
   getMinigameKindLabelVi,
   getPresetNoteMeta,
   isNpcNeighborProfile,
@@ -234,6 +235,9 @@ export {
 export { FARM_HARVEST_CHEST_XP } from './simulationData';
 export type { ValleyVillagerProfile } from './simulationData';
 import type { ParkSimulation } from './simulation';
+
+// HPVN: rewarded correct Học Viện Thần Chú answers per VN day
+export const QUIZ_DAILY_REWARD_CAP = 30;
 
 
 export function farmEnsureFarmBarn(sim: ParkSimulation): FarmBarnState {
@@ -341,21 +345,21 @@ export function farmUpgradeFarmBarn(sim: ParkSimulation): { ok: boolean; msg: st
         if (sim.state.galleons < baseGoldCost) {
           return {
             ok: false,
-            msg: `Cần ${plugCost} 🔌 Bộ Phích Cắm Muggle & ${baseGoldCost}G để nâng cấp Kho Nông Sản (+20 ô)!`,
+            msg: `Cần ${plugCost} 🔌 Bộ Phích Cắm Muggle & ${baseGoldCost} Sickle để nâng cấp Kho Nông Sản (+20 ô)!`,
           };
         }
         barn.goods.muggle_plug_kit = Math.max(0, plugsInBarn - plugCost);
         sim.state.galleons -= baseGoldCost;
-        spentDetail = ` (-${plugCost}🔌, -${baseGoldCost}G)`;
+        spentDetail = ` (-${plugCost}🔌, -${baseGoldCost} Sickle)`;
       } else {
         if (sim.state.galleons < effectiveGoldCost) {
           return {
             ok: false,
-            msg: `Chưa có 🔌 Bộ Phích Cắm Muggle: cần ${effectiveGoldCost}G (${baseGoldCost}G + ${plugShortageBuyout}G bù 1🔌) hoặc chế 1🔌 ở Kho Ông Arthur để nâng với ${baseGoldCost}G!`,
+            msg: `Chưa có 🔌 Bộ Phích Cắm Muggle: cần ${effectiveGoldCost} Sickle (${baseGoldCost} Sickle + ${plugShortageBuyout} Sickle bù 1🔌) hoặc chế 1🔌 ở Kho Ông Arthur để nâng với ${baseGoldCost} Sickle!`,
           };
         }
         sim.state.galleons -= effectiveGoldCost;
-        spentDetail = ` (-${effectiveGoldCost}G gồm ${baseGoldCost}G + ${plugShortageBuyout}G bù 1🔌)`;
+        spentDetail = ` (-${effectiveGoldCost} Sickle gồm ${baseGoldCost} Sickle + ${plugShortageBuyout} Sickle bù 1🔌)`;
       }
     }
 
@@ -385,7 +389,7 @@ export function farmSellFarmItemFromBarn(sim: ParkSimulation, itemId: FarmItemId
     sim.state.finance.shopRevenue += gold;
     sim.addXp(xp);
     sim.audio.playHarvestBubble();
-    const msg = `🪙 Đã bán ${take} ${meta.emoji} ${meta.name} thu về +${gold}G & +${xp} ⭐!`;
+    const msg = `🪙 Đã bán ${take} ${meta.emoji} ${meta.name} thu về +${gold} Sickle & +${xp} ⭐!`;
     sim.onToast?.(msg, meta.emoji);
     if (!sim.batchOperationActive) {
       sim.saveToStorage();
@@ -432,7 +436,7 @@ export function farmBuyCropSeedWithGold(sim: ParkSimulation,
     if (sim.state.galleons < totalCost) {
       return {
         ok: false,
-        msg: `Cần ${totalCost.toLocaleString('vi-VN')}G để mua ${count} hạt ${crop.name} — hãy niệm Thần Chú Đa Ngữ (0G) để nhận ngay 1–2 hạt miễn phí!`,
+        msg: `Cần ${totalCost.toLocaleString('vi-VN')} Sickle để mua ${count} hạt ${crop.name} — hãy niệm Thần Chú Đa Ngữ (0 Sickle) để nhận ngay 1–2 hạt miễn phí!`,
         newSeedCount: sim.getSeedCount(cropId),
       };
     }
@@ -442,7 +446,7 @@ export function farmBuyCropSeedWithGold(sim: ParkSimulation,
     const newSeedCount = sim.addCropSeeds(cropId, count);
     sim.audio.playHarvestBubble();
     sim.advanceTutorialStep('seed_quiz_or_buy');
-    const msg = `🪙 Đã mua ${count} hạt giống ${crop.emoji} ${crop.name} (-${totalCost.toLocaleString('vi-VN')}G • Túi có: ${newSeedCount} hạt)!`;
+    const msg = `🪙 Đã mua ${count} hạt giống ${crop.emoji} ${crop.name} (-${totalCost.toLocaleString('vi-VN')} Sickle • Túi có: ${newSeedCount} hạt)!`;
     if (!sim.batchOperationActive) {
       sim.saveToStorage();
       sim.onUiChange?.();
@@ -457,7 +461,13 @@ export function farmCompleteSeedLanguageQuizAttempt(sim: ParkSimulation,
   ): QuizAttemptOutcome & { newSeedCount: number; cropName: string } {
     const quiz = sim.ensureLanguageQuiz();
     const crop = FARM_CROPS[cropId];
-    const outcome = recordQuizAttempt(quiz, challenge, correct);
+    // HPVN: at most QUIZ_DAILY_REWARD_CAP rewarded correct answers per VN day, then practice only
+    const dayKey = getVietnamCalendarKey();
+    if (sim.state.quizRewardDaily?.dayKey !== dayKey) sim.state.quizRewardDaily = { dayKey, count: 0 };
+    const daily = sim.state.quizRewardDaily;
+    const rewarded = daily.count < QUIZ_DAILY_REWARD_CAP;
+    const outcome = recordQuizAttempt(quiz, challenge, correct, rewarded);
+    if (correct && rewarded) daily.count += 1;
     let newSeedCount = sim.getSeedCount(cropId);
     if (outcome.seedsAwarded > 0) {
       newSeedCount = sim.addCropSeeds(cropId, outcome.seedsAwarded);
@@ -470,7 +480,7 @@ export function farmCompleteSeedLanguageQuizAttempt(sim: ParkSimulation,
     let buildReduction: BuildReductionResult | undefined;
     const leaderboardRankUp: LeaderboardRankChange | undefined = undefined;
     let talismanProgress = Math.max(0, Math.min(7, Math.floor(sim.state.quizTalismanProgress ?? 0)));
-    if (correct) {
+    if (correct && rewarded) {
       const nextProg = talismanProgress + 1;
       if (nextProg >= 8) {
         talismanProgress = 0;
@@ -502,6 +512,7 @@ export function farmCompleteSeedLanguageQuizAttempt(sim: ParkSimulation,
     }
     return {
       ...outcome,
+      capReached: daily.count >= QUIZ_DAILY_REWARD_CAP,
       phoenixTalismanAwarded,
       talismanProgress,
       buildReduction,
@@ -536,7 +547,7 @@ export function farmPlantCropOnPlot(sim: ParkSimulation,
       return {
         ok: false,
         needSeedAcquire: true,
-        msg: `Túi chưa có hạt giống ${crop.emoji} ${crop.name} — hãy chọn Mua Vàng (${crop.seedCost.toLocaleString('vi-VN')}G/hạt) hoặc Niệm Thần Chú Đa Ngữ (0G)!`,
+        msg: `Túi chưa có hạt giống ${crop.emoji} ${crop.name} — hãy mua bằng Sickle (${crop.seedCost.toLocaleString('vi-VN')} Sickle/hạt) hoặc Niệm Thần Chú Đa Ngữ (0 Sickle)!`,
       };
     }
 
@@ -566,7 +577,7 @@ export function farmPlantCropOnPlot(sim: ParkSimulation,
     b.cropWateredBoost = false;
     b.cropRotatedBonus = strat.isRotatedBonus;
     b.readyBubbles = 0;
-    b.storedGalleons = 0;
+    b.storedSickle = 0;
     b.storedXp = 0;
 
     sim.audio.playPlace();
@@ -643,6 +654,8 @@ export function farmHarvestCropPlot(sim: ParkSimulation, uid: string): { ok: boo
     const baseYield = crop.yieldQty + (b.stars >= 3 ? 1 : 0);
     const yieldQty = isGoldenRotation ? baseYield * 2 : baseYield;
     const added = sim.addFarmItemToBarn(crop.id, yieldQty);
+    // HPVN: a full Kho sells the load at the normal sell value (same as selling it from the Kho), no flat bonus
+    const soldDirect = added === 0 ? getFarmItemMeta(crop.id).sellValue * yieldQty : 0;
 
     const prevMastery = sim.state.cropMastery?.[crop.id] ?? 0;
     const nextMastery = prevMastery + 1;
@@ -677,12 +690,12 @@ export function farmHarvestCropPlot(sim: ParkSimulation, uid: string): { ok: boo
     b.cropWateredBoost = false;
     b.cropRotatedBonus = false;
     b.readyBubbles = 0;
-    b.storedGalleons = 0;
+    b.storedSickle = 0;
     b.storedXp = 0;
 
     sim.state.galleons += gold;
     sim.state.finance.harvestRevenue += gold;
-    sim.state.stats.totalGalleonsHarvested += gold;
+    sim.state.stats.totalSickleHarvested += gold;
     sim.state.stats.farmHarvestsCount = (sim.state.stats.farmHarvestsCount ?? 0) + 1;
     sim.addXp(xp);
     sim.addHarvestFeastPoints(crop.isFlowerCrop ? 7 : 5);
@@ -704,11 +717,12 @@ export function farmHarvestCropPlot(sim: ParkSimulation, uid: string): { ok: boo
       cy,
       added > 0
         ? `🌾 +${added} ${crop.emoji}  +${gold} 🪙  +${xp} ⭐`
-        : `🏡 Kho đầy! Bán thẳng +${gold + 10} 🪙  +${xp} ⭐`,
+        : `🏡 Kho đầy! Bán thẳng +${gold + soldDirect} 🪙  +${xp} ⭐`,
       '#fde047'
     );
-    if (added === 0) {
-      sim.state.galleons += 10;
+    if (soldDirect > 0) {
+      sim.state.galleons += soldDirect;
+      sim.state.finance.shopRevenue += soldDirect;
     }
     sim.advanceTutorialStep('harvest_wheat');
     if (!sim.batchOperationActive) {
@@ -719,8 +733,8 @@ export function farmHarvestCropPlot(sim: ParkSimulation, uid: string): { ok: boo
       ok: true,
       msg:
         added > 0
-          ? `🌾 Đã gặt +${added} ${crop.emoji} ${crop.name} cất vào Kho Nông Sản (+${gold}G, +${xp} ⭐)!`
-          : `🏡 Kho Nông Sản đã đầy — bán trực tiếp thu +${gold + 10}G!`,
+          ? `🌾 Đã gặt +${added} ${crop.emoji} ${crop.name} cất vào Kho Nông Sản (+${gold} Sickle, +${xp} ⭐)!`
+          : `🏡 Kho Nông Sản đã đầy — bán trực tiếp thu +${gold + soldDirect} Sickle!`,
     };
 }
 
@@ -765,7 +779,7 @@ export function farmStockAnimalOnPasture(sim: ParkSimulation,
     if (!sim.state.sandboxMode && !isMollyTutorialHenSubsidy && sim.state.galleons < animal.cost) {
       return {
         ok: false,
-        msg: `Cần ${animal.cost.toLocaleString('vi-VN')} 🪙 Vàng để thả ${animal.emoji} ${animal.name} vào đồng cỏ!`,
+        msg: `Cần ${animal.cost.toLocaleString('vi-VN')} 🪙 Sickle để thả ${animal.emoji} ${animal.name} vào đồng cỏ!`,
       };
     }
 
@@ -781,7 +795,7 @@ export function farmStockAnimalOnPasture(sim: ParkSimulation,
     b.pastureReadyAt = now + cycleMs;
     b.pastureFedBoost = false;
     b.readyBubbles = 0;
-    b.storedGalleons = 0;
+    b.storedSickle = 0;
     b.storedXp = 0;
 
     sim.audio.playPlace();
@@ -856,6 +870,8 @@ export function farmHarvestAnimalPasture(sim: ParkSimulation, uid: string): { ok
     const goodMeta = FARM_GOODS[animal.goodId];
     const yieldQty = animal.yieldQty + (b.stars >= 3 ? 1 : 0);
     const added = sim.addFarmItemToBarn(animal.goodId, yieldQty);
+    // HPVN: a full Kho sells the load at the normal sell value (same as selling it from the Kho), no flat bonus
+    const soldDirect = added === 0 ? getFarmItemMeta(animal.goodId).sellValue * yieldQty : 0;
     const gold = animal.sellValue;
     const xp = animal.xp;
 
@@ -867,12 +883,12 @@ export function farmHarvestAnimalPasture(sim: ParkSimulation, uid: string): { ok
     b.pastureReadyAt = now + nextCycleMs;
     b.pastureFedBoost = false;
     b.readyBubbles = 0;
-    b.storedGalleons = 0;
+    b.storedSickle = 0;
     b.storedXp = 0;
 
     sim.state.galleons += gold;
     sim.state.finance.harvestRevenue += gold;
-    sim.state.stats.totalGalleonsHarvested += gold;
+    sim.state.stats.totalSickleHarvested += gold;
     sim.state.stats.farmHarvestsCount = (sim.state.stats.farmHarvestsCount ?? 0) + 1;
     sim.addXp(xp);
     sim.addHarvestFeastPoints(6);
@@ -888,14 +904,16 @@ export function farmHarvestAnimalPasture(sim: ParkSimulation, uid: string): { ok
       cy,
       added > 0
         ? `🐾 +${added} ${goodMeta.emoji}  +${gold} 🪙  +${xp} ⭐`
-        : `🏡 Kho đầy! Bán thẳng +${gold + 12} 🪙  +${xp} ⭐`,
+        : `🏡 Kho đầy! Bán thẳng +${gold + soldDirect} 🪙  +${xp} ⭐`,
       '#fde047'
     );
-    if (added === 0) {
-      sim.state.galleons += 12;
+    if (soldDirect > 0) {
+      sim.state.galleons += soldDirect;
+      sim.state.finance.shopRevenue += soldDirect;
     }
     if (sim.isTutorialActive() && sim.state.tutorial?.stepId === 'pasture_harvest_and_stock') {
       sim.state.tutorial.pastureHarvestedInStep3 = true;
+      sim.state.tutorial.minimized = false;
       const hasEmptyPasture = sim.state.buildings.some(
         (x) => getCatalogItem(x.itemId)?.isAnimalPasturePlot && !x.pastureAnimalId
       );
@@ -911,8 +929,8 @@ export function farmHarvestAnimalPasture(sim: ParkSimulation, uid: string): { ok
       ok: true,
       msg:
         added > 0
-          ? `🐾 Thu hoạch +${added} ${goodMeta.emoji} ${goodMeta.name} từ ${animal.name} (+${gold}G, +${xp} ⭐)!`
-          : `🏡 Kho Nông Sản đã đầy — bán trực tiếp sản vật thu +${gold + 12}G!`,
+          ? `🐾 Thu hoạch +${added} ${goodMeta.emoji} ${goodMeta.name} từ ${animal.name} (+${gold} Sickle, +${xp} ⭐)!`
+          : `🏡 Kho Nông Sản đã đầy — bán trực tiếp sản vật thu +${gold + soldDirect} Sickle!`,
     };
 }
 
@@ -947,7 +965,7 @@ function farmRunBatch(sim: ParkSimulation, uids: string[], options: FarmBatchOpt
   const beforeXp = sim.state.xp;
 
   // Gộp N lần saveToStorage + N lần onUiChange (mà từng API đơn lẻ gọi bên trong)
-  // xuống đúng 1 lần commit ở cuối batch — tránh serialize localStorage + refresh DOM
+  // xuống đúng 1 lần commit ở cuối batch — tránh serialize bản lưu + refresh DOM
   // từng ô gây GC stutter khi kéo brush / bấm "Tất cả".
   sim.batchOperationActive = true;
   const savedOnUiChange = sim.onUiChange;
@@ -1023,7 +1041,7 @@ export function farmClearAnimalFromPasture(sim: ParkSimulation, uid: string): { 
     b.pastureReadyAt = undefined;
     b.pastureFedBoost = false;
     b.readyBubbles = 0;
-    b.storedGalleons = 0;
+    b.storedSickle = 0;
     b.storedXp = 0;
     if (!sim.state.sandboxMode && refund > 0) {
       sim.state.galleons += refund;
@@ -1035,6 +1053,6 @@ export function farmClearAnimalFromPasture(sim: ParkSimulation, uid: string): { 
     }
     return {
       ok: true,
-      msg: `🐾 Đã đưa ${animal?.emoji ?? '🐾'} ${animal?.name ?? 'thú'} về chuồng nghỉ${refund > 0 ? ` (hoàn +${refund}G)` : ''} — có thể chọn thú mới!`,
+      msg: `🐾 Đã đưa ${animal?.emoji ?? '🐾'} ${animal?.name ?? 'thú'} về chuồng nghỉ${refund > 0 ? ` (hoàn +${refund} Sickle)` : ''} — có thể chọn thú mới!`,
     };
 }

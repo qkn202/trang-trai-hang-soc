@@ -219,29 +219,24 @@ export class CandyHogwartsBoardRenderer {
         this.bgDirty = true;
         this.onSpriteReady?.();
       };
-      img.onerror = () => {
-        if (/\.webp(\?.*)?$/.test(url)) {
-          img.src = url.replace(/\.webp(\?.*)?$/, '.png$1');
-        }
-      };
       img.src = url;
       this.sprites[key] = img;
     };
 
     const q = `?v=${CANDY_ASSET_REV}`;
     for (let i = 0; i < 6; i++) {
-      load(`c_${i}`, `/paintings/candy-hogwarts/candy-${i}.webp${q}`);
+      load(`c_${i}`, `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-${i}.webp${q}`);
     }
-    load('powerup_firecracker', `/paintings/candy-hogwarts/powerup-firecracker.webp${q}`);
-    load('powerup_bomb', `/paintings/candy-hogwarts/powerup-bomb.webp${q}`);
-    load('powerup_dynamite', `/paintings/candy-hogwarts/powerup-dynamite.webp${q}`);
-    load('powerup_tnt', `/paintings/candy-hogwarts/powerup-tnt.webp${q}`);
-    load('powerup_seeker', `/paintings/candy-hogwarts/powerup-seeker.webp${q}`);
-    load('color_bomb', `/paintings/candy-hogwarts/powerup-rainbow.webp${q}`);
-    load('chocolate_block', `/paintings/candy-hogwarts/candy-chocolate.webp${q}`);
-    load('chocolate_deluxe', `/paintings/candy-hogwarts/candy-chocolate-deluxe.webp${q}`);
-    load('frosting_waffle', `/paintings/candy-hogwarts/candy-frosting.webp${q}`);
-    load('swirl_piece', `/paintings/candy-hogwarts/candy-swirl.webp${q}`);
+    load('powerup_firecracker', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-firecracker.webp${q}`);
+    load('powerup_bomb', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-bomb.webp${q}`);
+    load('powerup_dynamite', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-dynamite.webp${q}`);
+    load('powerup_tnt', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-tnt.webp${q}`);
+    load('powerup_seeker', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-seeker.webp${q}`);
+    load('color_bomb', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-rainbow.webp${q}`);
+    load('chocolate_block', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-chocolate.webp${q}`);
+    load('chocolate_deluxe', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-chocolate-deluxe.webp${q}`);
+    load('frosting_waffle', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-frosting.webp${q}`);
+    load('swirl_piece', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-swirl.webp${q}`);
   }
 
   private isYuleSkinActive(): boolean {
@@ -272,11 +267,11 @@ export class CandyHogwartsBoardRenderer {
 
     const q = `?v=${CANDY_ASSET_REV}`;
     for (let i = 0; i < 6; i++) {
-      loadYule(`c_${i}`, `/paintings/candy-yule/candy-${i}.webp${q}`);
+      loadYule(`c_${i}`, `/game/trang-trai-hang-soc/paintings/candy-yule/candy-${i}.webp${q}`);
     }
-    loadYule('color_bomb', `/paintings/candy-yule/powerup-rainbow.webp${q}`);
-    loadYule('frosting_waffle', `/paintings/candy-yule/candy-frosting.webp${q}`);
-    loadYule('swirl_piece', `/paintings/candy-yule/candy-swirl.webp${q}`);
+    loadYule('color_bomb', `/game/trang-trai-hang-soc/paintings/candy-yule/powerup-rainbow.webp${q}`);
+    loadYule('frosting_waffle', `/game/trang-trai-hang-soc/paintings/candy-yule/candy-frosting.webp${q}`);
+    loadYule('swirl_piece', `/game/trang-trai-hang-soc/paintings/candy-yule/candy-swirl.webp${q}`);
   }
 
   private pickActiveSprite(key: string): HTMLImageElement | undefined {

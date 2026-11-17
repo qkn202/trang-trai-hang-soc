@@ -1,10 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  BurrowAuthoritativeBackend,
-  MAX_DAILY_HOUSE_CUP_MEMBER_POINTS,
-  MemoryBackendKVStore,
-} from '../../../server/burrowBackendCore';
-import {
   computeExamStreakReductionSec,
   computeStrategicPlotGrowSeconds,
   FIRST_ECONOMIC_CYCLE_SEC,
@@ -105,7 +100,7 @@ describe('AAA Transformation Suite (Tactical Economy 2.0, Minigame Synergy, Livi
         placedAt: Date.now() - 5000,
         constructEndsAt: 0,
         lastTickAt: Date.now(),
-        storedGalleons: 0,
+        storedSickle: 0,
         storedXp: 0,
         readyBubbles: 0,
         durability: 100,
@@ -207,7 +202,7 @@ describe('AAA Transformation Suite (Tactical Economy 2.0, Minigame Synergy, Livi
         placedAt: now - 5000,
         constructEndsAt: 0,
         lastTickAt: now,
-        storedGalleons: 0,
+        storedSickle: 0,
         storedXp: 0,
         readyBubbles: 0,
         durability: 100,
@@ -242,7 +237,7 @@ describe('AAA Transformation Suite (Tactical Economy 2.0, Minigame Synergy, Livi
         placedAt: Date.now() - 10_000,
         constructEndsAt: 0,
         lastTickAt: Date.now(),
-        storedGalleons: 0,
+        storedSickle: 0,
         storedXp: 0,
         readyBubbles: 0,
         durability: 100,
@@ -272,7 +267,7 @@ describe('AAA Transformation Suite (Tactical Economy 2.0, Minigame Synergy, Livi
     it('wires 7-Day Login, Achievements, Villager Dialogue, Layout Presets, Decor Stash & Named Save Slots', () => {
       const sim = new ParkSimulation(createMockAudio());
 
-      // 7-Day Login Day 1 credits Galleons & Magic Stars
+      // 7-Day Login Day 1 credits Sickle & Magic Stars
       const starsBefore = sim.state.match3.stars;
       const loginRes = sim.claimLoginDayReward(1);
       expect(loginRes.ok).toBe(true);
@@ -280,7 +275,7 @@ describe('AAA Transformation Suite (Tactical Economy 2.0, Minigame Synergy, Livi
       expect(sim.claimLoginDayReward(1).ok).toBe(false);
 
       // Unlock & claim achievement when unlocked
-      sim.state.stats.totalGalleonsHarvested = 10_000;
+      sim.state.stats.totalSickleHarvested = 10_000;
       sim.state.level = 10;
       sim.checkAndToastAchievements();
       const ret = ensureRetentionState(sim.state);
@@ -305,7 +300,7 @@ describe('AAA Transformation Suite (Tactical Economy 2.0, Minigame Synergy, Livi
         placedAt: Date.now(),
         constructEndsAt: 0,
         lastTickAt: Date.now(),
-        storedGalleons: 0,
+        storedSickle: 0,
         storedXp: 0,
         readyBubbles: 0,
         durability: 100,
@@ -328,8 +323,9 @@ describe('AAA Transformation Suite (Tactical Economy 2.0, Minigame Synergy, Livi
       expect(meta.parkName).toBe('Hang Sóc Huyền Thoại');
       sim.state.parkName = 'Tên Tạm';
       const loadRes = sim.loadNamedProfileSlot('slot_1');
-      expect(loadRes.ok).toBe(true);
-      expect(sim.state.parkName).toBe('Hang Sóc Huyền Thoại');
+      // HPVN: one farm on the server; a browser slot never replaces it
+      expect(loadRes.ok).toBe(false);
+      expect(sim.state.parkName).toBe('Tên Tạm');
 
       // Real MagicalAudio modal warm-muffle state toggle
       const realAudio = new MagicalAudio();
@@ -342,119 +338,5 @@ describe('AAA Transformation Suite (Tactical Economy 2.0, Minigame Synergy, Livi
     });
   });
 
-  describe('5. Authoritative HPVN Weekly 4-House Cup & Co-op SOS Ghost Replay', () => {
-    it('aggregates Weekly 4-House Cup points with daily member cap and fulfills Co-op SOS with Ghost Replay', async () => {
-      const nowMs = Date.parse('2026-11-11T10:00:00+07:00');
-      const backend = new BurrowAuthoritativeBackend({
-        store: new MemoryBackendKVStore(() => nowMs),
-        now: () => nowMs,
-        initialGalleons: 400,
-        initialBankGalleons: 200,
-      });
-
-      const ronAuth = {
-        uid: 'ron_weasley',
-        house: 'Gryffindor' as const,
-        role: 'member' as const,
-        authenticatedVia: 'hmac-jwt' as const,
-        username: 'Ron Weasley',
-      };
-      const hermioneAuth = {
-        uid: 'hermione_granger',
-        house: 'Gryffindor' as const,
-        role: 'member' as const,
-        authenticatedVia: 'hmac-jwt' as const,
-        username: 'Hermione Granger',
-      };
-
-      const initialCup = await backend.handleCallable('getWeeklyHouseCupStandings', {}, ronAuth);
-      const baseGryffindor = (initialCup.totals as Record<string, number>).Gryffindor;
-
-      // Contribute points up to daily member cap (150)
-      const c1 = await backend.handleCallable(
-        'contributeWeeklyHouseCup',
-        { points: 25 },
-        ronAuth
-      );
-      expect(c1.added).toBe(25);
-      expect((c1.totals as Record<string, number>).Gryffindor).toBe(baseGryffindor + 25);
-
-      for (let i = 0; i < 6; i++) {
-        await backend.handleCallable('contributeWeeklyHouseCup', { points: 30 }, ronAuth);
-      }
-      const standings = await backend.handleCallable('getWeeklyHouseCupStandings', {}, ronAuth);
-      expect(standings.playerContribution).toBe(MAX_DAILY_HOUSE_CUP_MEMBER_POINTS);
-      expect((standings.totals as Record<string, number>).Gryffindor).toBe(
-        baseGryffindor + MAX_DAILY_HOUSE_CUP_MEMBER_POINTS
-      );
-
-      // Ron posts a Minigame SOS on Stage 42
-      const postRes = await backend.handleCallable(
-        'postCoopAssistanceRequest',
-        {
-          requestId: 'sos_ron_chess_42',
-          kind: 'minigame_sos',
-          minigameKind: 'chess',
-          stage: 42,
-        },
-        ronAuth
-      );
-      expect(postRes.ok).toBe(true);
-
-      // Self-fulfill is strictly forbidden
-      await expect(
-        backend.handleCallable(
-          'fulfillCoopAssistanceRequest',
-          { hostUid: 'ron_weasley', targetRequestId: 'sos_ron_chess_42' },
-          ronAuth
-        )
-      ).rejects.toMatchObject({ reason: 'invalid-action-input' });
-
-      // Hermione fulfills Ron's SOS with a tactical Ghost Replay -> earns +95G, +3 Friendship Tokens, +6 House Cup pts
-      const fulfillRes = await backend.handleCallable(
-        'fulfillCoopAssistanceRequest',
-        {
-          hostUid: 'ron_weasley',
-          targetRequestId: 'sos_ron_chess_42',
-          movesUsed: 11,
-          ghostReplayMoves: ['Nước #2: Thí Mã mở cột E', 'Nước #11: Chiếu hết Hậu D8!'],
-        },
-        hermioneAuth
-      );
-      expect(fulfillRes.ok).toBe(true);
-      expect(fulfillRes.goldEarned).toBe(95);
-      expect(fulfillRes.tokensEarned).toBe(3);
-      const fulfilledReq = fulfillRes.request as {
-        ghostReplaySummaryVi?: string;
-        ghostReplayMoves?: string[];
-      };
-      expect(fulfilledReq.ghostReplaySummaryVi).toContain('Màn 42');
-      expect(fulfilledReq.ghostReplayMoves).toHaveLength(2);
-
-      // Hermione's Gringotts wallet increased by +95G
-      const hermioneSnap = (await backend.handleCallable('getBurrowGarden', {}, hermioneAuth)) as {
-        wallet: { spendable: number };
-      };
-      expect(hermioneSnap.wallet.spendable).toBe(600 + 95);
-
-      // Ron posts a second SOS today, but Hermione already rescued Ron once today -> 1/friend/day cap!
-      await backend.handleCallable(
-        'postCoopAssistanceRequest',
-        {
-          requestId: 'sos_ron_blocks_43',
-          kind: 'minigame_sos',
-          minigameKind: 'blocks',
-          stage: 43,
-        },
-        ronAuth
-      );
-      await expect(
-        backend.handleCallable(
-          'fulfillCoopAssistanceRequest',
-          { hostUid: 'ron_weasley', targetRequestId: 'sos_ron_blocks_43' },
-          hermioneAuth
-        )
-      ).rejects.toMatchObject({ reason: 'already-helped' });
-    });
-  });
+  // HPVN: '5. Authoritative HPVN Weekly 4-House Cup' tested upstream's own farm server, not shipped
 });

@@ -34,7 +34,7 @@ export interface AchievementDef {
   descVi: string;
   icon: string;
   target: number;
-  rewardGalleons: number;
+  rewardSickle: number;
   rewardStars: number;
 }
 
@@ -129,7 +129,7 @@ function buildAchievementRegistry(): AchievementDef[] {
         descVi: `${spec.descTemplateVi} ${target}.`,
         icon: spec.icon,
         target,
-        rewardGalleons: (tIdx + 1) * 45,
+        rewardSickle: (tIdx + 1) * 45,
         rewardStars: tIdx >= 6 ? 2 : 1,
       });
       idx++;
@@ -274,7 +274,7 @@ export function getCategoryMetricValue(
       const harvestProgress =
         realHarvests > 0
           ? realHarvests
-          : Math.floor(Math.max(0, state.stats?.totalGalleonsHarvested ?? 0) / 40);
+          : Math.floor(Math.max(0, state.stats?.totalSickleHarvested ?? 0) / 40);
       return harvestProgress + Math.max(0, Math.floor(state.stats?.creaturesFed ?? 0));
     }
     case 'building': {
@@ -379,7 +379,7 @@ export function evaluateAchievements(
 }
 
 /**
- * Chuẩn hoá `retention` khi tải save từ localStorage / CloudSave:
+ * Chuẩn hoá `retention` khi tải save:
  * - Gỡ các thành tựu chưa nhận thưởng bị mở khoá nhầm do công thức cũ (`schemaVersion < 13`).
  * - Đánh dấu `notifiedAt` cho toàn bộ thành tựu đã mở khoá từ phiên trước để không bao giờ hiện lại toast khi reload.
  * - Với save cũ từng bị thiếu trường `retention`, đồng bộ im lặng (`silent: true`) các mốc đã thực sự đạt được.
@@ -428,18 +428,18 @@ export function claimAchievementReward(
   state: GameState,
   achId: string,
   now = Date.now()
-): { ok: boolean; rewardGalleons: number; rewardStars: number } {
+): { ok: boolean; rewardSickle: number; rewardStars: number } {
   const ret = ensureRetentionState(state);
   const def = ACHIEVEMENT_REGISTRY.find((a) => a.id === achId);
   const entry = ret.achievements[achId];
   if (!def || !entry?.unlockedAt || entry.claimedAt) {
-    return { ok: false, rewardGalleons: 0, rewardStars: 0 };
+    return { ok: false, rewardSickle: 0, rewardStars: 0 };
   }
   entry.claimedAt = now;
-  state.galleons += def.rewardGalleons;
+  state.galleons += def.rewardSickle;
   return {
     ok: true,
-    rewardGalleons: def.rewardGalleons,
+    rewardSickle: def.rewardSickle,
     rewardStars: def.rewardStars,
   };
 }
@@ -447,21 +447,21 @@ export function claimAchievementReward(
 export function claimAllUnlockedAchievements(
   state: GameState,
   now = Date.now()
-): { claimedIds: string[]; totalGalleons: number; totalStars: number } {
+): { claimedIds: string[]; totalSickle: number; totalStars: number } {
   const ret = ensureRetentionState(state);
   const claimedIds: string[] = [];
-  let totalGalleons = 0;
+  let totalSickle = 0;
   let totalStars = 0;
   for (const def of ACHIEVEMENT_REGISTRY) {
     const entry = ret.achievements[def.id];
     if (!entry?.unlockedAt || entry.claimedAt) continue;
     entry.claimedAt = now;
-    state.galleons += def.rewardGalleons;
-    totalGalleons += def.rewardGalleons;
+    state.galleons += def.rewardSickle;
+    totalSickle += def.rewardSickle;
     totalStars += def.rewardStars;
     claimedIds.push(def.id);
   }
-  return { claimedIds, totalGalleons, totalStars };
+  return { claimedIds, totalSickle, totalStars };
 }
 
 export function getClaimableRetentionCount(
@@ -596,7 +596,7 @@ export function saveToNamedSlot(
 ): SaveSlotMetadata {
   const payload = exportSavePayload(state, slotId);
   const meta = buildSaveSlotMeta(state, slotId);
-  const targetStorage = storage ?? (typeof localStorage !== 'undefined' ? localStorage : undefined);
+  const targetStorage = storage; // HPVN: one farm, saved on the server; no browser save slots
   try {
     targetStorage?.setItem(`${SLOT_STORAGE_PREFIX}${slotId}`, payload);
   } catch {
@@ -609,7 +609,7 @@ export function loadFromNamedSlot(
   slotId: SaveSlotId,
   storage?: Pick<Storage, 'getItem'>
 ): { ok: boolean; meta?: SaveSlotMetadata; state?: GameState } {
-  const targetStorage = storage ?? (typeof localStorage !== 'undefined' ? localStorage : undefined);
+  const targetStorage = storage; // HPVN: one farm, saved on the server; no browser save slots
   const raw = targetStorage?.getItem(`${SLOT_STORAGE_PREFIX}${slotId}`);
   if (!raw) return { ok: false };
   return importSavePayload(raw);

@@ -197,7 +197,7 @@ export interface CandyHogwartsLevel {
   numColors: number;
   moves: number;
   stars: [number, number, number];
-  rewardGalleons: number;
+  rewardSickle: number;
   mask: number[][];
   jellyGrid: number[][];
   iceGrid: number[][];
@@ -432,8 +432,8 @@ export const CANDY_TILE_TYPES: ReadonlyArray<CandyTileTypeDef> = [
     color: '#e62e3d',
     light: '#ff7585',
     dark: '#9e1322',
-    webp: `/paintings/candy-hogwarts/candy-0.webp?v=${CANDY_ASSET_REV}`,
-    png: `/paintings/candy-hogwarts/candy-0.png?v=${CANDY_ASSET_REV}`,
+    webp: `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-0.webp?v=${CANDY_ASSET_REV}`,
+    png: `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-0.webp?v=${CANDY_ASSET_REV}`,
   },
   {
     id: 1,
@@ -443,8 +443,8 @@ export const CANDY_TILE_TYPES: ReadonlyArray<CandyTileTypeDef> = [
     color: '#f97316',
     light: '#ffb84d',
     dark: '#b45309',
-    webp: `/paintings/candy-hogwarts/candy-1.webp?v=${CANDY_ASSET_REV}`,
-    png: `/paintings/candy-hogwarts/candy-1.png?v=${CANDY_ASSET_REV}`,
+    webp: `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-1.webp?v=${CANDY_ASSET_REV}`,
+    png: `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-1.webp?v=${CANDY_ASSET_REV}`,
   },
   {
     id: 2,
@@ -454,8 +454,8 @@ export const CANDY_TILE_TYPES: ReadonlyArray<CandyTileTypeDef> = [
     color: '#2fb638',
     light: '#86efac',
     dark: '#166534',
-    webp: `/paintings/candy-hogwarts/candy-2.webp?v=${CANDY_ASSET_REV}`,
-    png: `/paintings/candy-hogwarts/candy-2.png?v=${CANDY_ASSET_REV}`,
+    webp: `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-2.webp?v=${CANDY_ASSET_REV}`,
+    png: `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-2.webp?v=${CANDY_ASSET_REV}`,
   },
   {
     id: 3,
@@ -465,8 +465,8 @@ export const CANDY_TILE_TYPES: ReadonlyArray<CandyTileTypeDef> = [
     color: '#1d9bf0',
     light: '#7dd3fc',
     dark: '#0369a1',
-    webp: `/paintings/candy-hogwarts/candy-3.webp?v=${CANDY_ASSET_REV}`,
-    png: `/paintings/candy-hogwarts/candy-3.png?v=${CANDY_ASSET_REV}`,
+    webp: `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-3.webp?v=${CANDY_ASSET_REV}`,
+    png: `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-3.webp?v=${CANDY_ASSET_REV}`,
   },
   {
     id: 4,
@@ -476,8 +476,8 @@ export const CANDY_TILE_TYPES: ReadonlyArray<CandyTileTypeDef> = [
     color: '#8b4513',
     light: '#f5b041',
     dark: '#4a2511',
-    webp: `/paintings/candy-hogwarts/candy-4.webp?v=${CANDY_ASSET_REV}`,
-    png: `/paintings/candy-hogwarts/candy-4.png?v=${CANDY_ASSET_REV}`,
+    webp: `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-4.webp?v=${CANDY_ASSET_REV}`,
+    png: `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-4.webp?v=${CANDY_ASSET_REV}`,
   },
   {
     id: 5,
@@ -487,17 +487,17 @@ export const CANDY_TILE_TYPES: ReadonlyArray<CandyTileTypeDef> = [
     color: '#eab308',
     light: '#fef08a',
     dark: '#a16207',
-    webp: `/paintings/candy-hogwarts/candy-5.webp?v=${CANDY_ASSET_REV}`,
-    png: `/paintings/candy-hogwarts/candy-5.png?v=${CANDY_ASSET_REV}`,
+    webp: `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-5.webp?v=${CANDY_ASSET_REV}`,
+    png: `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-5.webp?v=${CANDY_ASSET_REV}`,
   },
 ];
 
 export const CANDY_OBSTACLE_ICONS: Record<string, string> = {
   jelly: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><rect x="4" y="4" width="36" height="36" rx="10" fill="rgba(190, 24, 93, 0.82)" stroke="#3b1e0e" stroke-width="3"/><rect x="6.5" y="6.5" width="31" height="31" rx="7.5" fill="none" stroke="#fbcfe8" stroke-width="1.6"/><path d="M11 13C15 9 25 9 31 13" stroke="#fff1f2" stroke-width="3" stroke-linecap="round"/></svg>`,
   ice: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><rect x="4" y="4" width="36" height="36" rx="9" fill="rgba(14, 116, 144, 0.72)" stroke="#3b1e0e" stroke-width="2.8"/><path d="M9 9L35 35M35 9L9 35" stroke="#e0f2fe" stroke-width="3.2" stroke-linecap="round"/></svg>`,
-  frosting: `<picture><source srcset="/paintings/candy-hogwarts/candy-frosting.webp?v=${CANDY_ASSET_REV}" type="image/webp" /><img src="/paintings/candy-hogwarts/candy-frosting.png?v=${CANDY_ASSET_REV}" alt="" class="m3-goal-sprite" /></picture>`,
-  chocolate: `<picture><source srcset="/paintings/candy-hogwarts/candy-chocolate.webp?v=${CANDY_ASSET_REV}" type="image/webp" /><img src="/paintings/candy-hogwarts/candy-chocolate.png?v=${CANDY_ASSET_REV}" alt="" class="m3-goal-sprite" /></picture>`,
-  swirl: `<picture><source srcset="/paintings/candy-hogwarts/candy-swirl.webp?v=${CANDY_ASSET_REV}" type="image/webp" /><img src="/paintings/candy-hogwarts/candy-swirl.png?v=${CANDY_ASSET_REV}" alt="" class="m3-goal-sprite" /></picture>`,
+  frosting: `<picture><source srcset="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-frosting.webp?v=${CANDY_ASSET_REV}" type="image/webp" /><img src="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-frosting.webp?v=${CANDY_ASSET_REV}" alt="" class="m3-goal-sprite" /></picture>`,
+  chocolate: `<picture><source srcset="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-chocolate.webp?v=${CANDY_ASSET_REV}" type="image/webp" /><img src="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-chocolate.webp?v=${CANDY_ASSET_REV}" alt="" class="m3-goal-sprite" /></picture>`,
+  swirl: `<picture><source srcset="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-swirl.webp?v=${CANDY_ASSET_REV}" type="image/webp" /><img src="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-swirl.webp?v=${CANDY_ASSET_REV}" alt="" class="m3-goal-sprite" /></picture>`,
   ingredient: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><polygon points="22,3 38,16 32,39 12,39 6,16" fill="#dc2626" stroke="#fde047" stroke-width="3"/><polygon points="22,8 31,18 22,33 13,18" fill="#fca5a5" opacity="0.65"/></svg>`,
   cauldron: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><ellipse cx="22" cy="13" rx="13" ry="5" fill="#10b981" stroke="#fde047" stroke-width="2.4"/><path d="M8 15H36L33 34C32 38 28 40 22 40C16 40 12 38 11 34L8 15Z" fill="#1e1b4b" stroke="#c084fc" stroke-width="2.6"/><circle cx="18" cy="11" r="2.5" fill="#bef264"/><circle cx="26" cy="9" r="2" fill="#bef264"/></svg>`,
   key_lock: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><path d="M14 19V13C14 8.5 17.5 5 22 5C26.5 5 30 8.5 30 13V19" fill="none" stroke="#fde047" stroke-width="3.6" stroke-linecap="round"/><rect x="9" y="18" width="26" height="21" rx="6" fill="#92400e" stroke="#fde047" stroke-width="2.8"/><circle cx="22" cy="27" r="3" fill="#fef08a"/><path d="M22 30V34" stroke="#fef08a" stroke-width="2.8" stroke-linecap="round"/></svg>`,
@@ -509,7 +509,7 @@ export const CANDY_OBSTACLE_ICONS: Record<string, string> = {
   horcrux: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><polygon points="22,3 38,14 34,36 22,41 10,36 6,14" fill="#1e1b4b" stroke="#fde047" stroke-width="2.8"/><polygon points="22,10 31,18 28,32 22,35 16,32 13,18" fill="#064e3b" stroke="#34d399" stroke-width="2"/><circle cx="22" cy="22" r="4.5" fill="#a855f7" stroke="#fef08a" stroke-width="1.8"/></svg>`,
   boss: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><polygon points="22,3 39,13 35,35 22,41 9,35 5,13" fill="#581c87" stroke="#fde047" stroke-width="2.8"/><path d="M15 19L20 23M29 19L24 23" stroke="#f87171" stroke-width="3" stroke-linecap="round"/><path d="M16 31C19 28 25 28 28 31" stroke="#fde047" stroke-width="2.6" stroke-linecap="round"/></svg>`,
   score: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><path d="M22 4L27.5 15.5L40 17.3L31 26.1L33.1 38.5L22 32.6L10.9 38.5L13 26.1L4 17.3L16.5 15.5L22 4Z" fill="#f59e0b" stroke="#fef9c3" stroke-width="2.6"/></svg>`,
-  special_seeker: `<picture><source srcset="/paintings/candy-hogwarts/powerup-seeker.webp?v=${CANDY_ASSET_REV}" type="image/webp" /><img src="/paintings/candy-hogwarts/powerup-seeker.png?v=${CANDY_ASSET_REV}" alt="" class="m3-goal-sprite" /></picture>`,
+  special_seeker: `<img src="/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-seeker.webp?v=${CANDY_ASSET_REV}" alt="" class="m3-goal-sprite" loading="lazy" decoding="async" />`,
 };
 
 export const CANDY_COMBO_PRAISES = [
@@ -1529,7 +1529,7 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
     title = `${prefix}: ${chapter.shortTitle} (${stepInChapter}/${chapter.levelCount})`;
   }
 
-  const rewardGalleons = isSeasonFinale
+  const rewardSickle = isSeasonFinale
     ? 320 + seasonId * 40
     : isChapterBoss
       ? 140 + seasonId * 15
@@ -1864,7 +1864,7 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
   );
   markOccupied(frostingGrid);
 
-  // 6G. Sô-cô-la Hắc Ám Tự Lan
+  // 6 Sickle. Sô-cô-la Hắc Ám Tự Lan
   let chocolateTarget = 0;
   if (
     fiendfyreBudget === 0 &&
@@ -1910,7 +1910,7 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
   );
   markOccupied(swirlGrid);
 
-  // 6I. Chìa Khoá Đường Vàng & Ô Khoá Hầm Gringotts
+  // 6I. Chìa Khoá Đường Sickle & Ô Khoá Hầm Gringotts
   let lockTarget = 0;
   if (levelNum <= 100) {
     if ([22, 28, 38, 48, 63, 73, 83, 88, 91].includes(levelNum)) lockTarget = levelNum >= 63 ? 6 : 4;
@@ -2251,7 +2251,7 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
     numColors,
     moves,
     stars,
-    rewardGalleons,
+    rewardSickle,
     mask,
     jellyGrid,
     iceGrid,

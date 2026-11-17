@@ -87,57 +87,13 @@ describe('Audit Fixes — Hosting CSP, SW Dev Port, 2.5D Props, Stashed Decor 0G
     storageMap.clear();
   });
 
-  it('đồng bộ CSP YouTube BGM trên cả index.html, firebase.json, netlify.toml và vercel.json', async () => {
-    const { fs, path, rootDir } = await loadNodeFsAndPath();
-    const requiredTokens = [
-      'https://www.youtube.com',
-      'https://www.youtube-nocookie.com',
-      'https://s.ytimg.com',
-      'https://i.ytimg.com',
-      'frame-src https://www.youtube.com https://www.youtube-nocookie.com',
-    ];
-
-    const indexHtml = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
-    const netlifyToml = fs.readFileSync(path.join(rootDir, 'netlify.toml'), 'utf8');
-    const firebaseJsonRaw = fs.readFileSync(path.join(rootDir, 'firebase.json'), 'utf8');
-    const vercelJsonRaw = fs.readFileSync(path.join(rootDir, 'vercel.json'), 'utf8');
-
-    const firebaseParsed = JSON.parse(firebaseJsonRaw) as {
-      hosting: { headers: Array<{ source: string; headers: Array<{ key: string; value: string }> }> };
-    };
-    const vercelParsed = JSON.parse(vercelJsonRaw) as {
-      headers: Array<{ source: string; headers: Array<{ key: string; value: string }> }>;
-    };
-
-    const firebaseCsp =
-      firebaseParsed.hosting.headers
-        .flatMap((h) => h.headers)
-        .find((h) => h.key === 'Content-Security-Policy')?.value ?? '';
-    const vercelCsp =
-      vercelParsed.headers
-        .flatMap((h) => h.headers)
-        .find((h) => h.key === 'Content-Security-Policy')?.value ?? '';
-
-    for (const token of requiredTokens) {
-      expect(indexHtml).toContain(token);
-      expect(netlifyToml).toContain(token);
-      expect(firebaseCsp).toContain(token);
-      expect(vercelCsp).toContain(token);
-    }
-  });
-
-  it('Service Worker và bootstrap dev bypass được các cổng Vite 517x (5173..5179) và giữ nguyên 288 SPRITE_KEYS', async () => {
-    const { fs, path, rootDir } = await loadNodeFsAndPath();
+  // HPVN: no hosting CSP files, service worker or dev cache-bypass script ship here (the HPVN server sets the CSP
+  // and serves /game/trang-trai-hang-soc/), so upstream's two hosting checks are left out; the sprite count stays.
+  it('giữ nguyên 288 SPRITE_KEYS', () => {
     expect(SPRITE_KEYS.length).toBe(288);
-    const swSrc = fs.readFileSync(path.join(rootDir, 'public/sw.js'), 'utf8');
-    const indexHtml = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
-
-    expect(swSrc).toContain('/^517\\d$/');
-    expect(indexHtml).toContain('/^517\\d$/');
-    expect(swSrc).toMatch(/const CACHE_VERSION = 'v([6-9]\d|\d{3,})'/);
   });
 
-  it('resolveCatalogPropSpriteKey ánh xạ đủ 3 prop không có spriteKey tới PNG tồn tại trên đĩa và bật groundBlend', async () => {
+  it('resolveCatalogPropSpriteKey ánh xạ đủ 3 prop không có spriteKey tới ảnh tồn tại trên đĩa và bật groundBlend', async () => {
     const { fs, path, rootDir } = await loadNodeFsAndPath();
     expect(resolveCatalogPropSpriteKey('marble_bench', undefined)).toBe('catalog_marble_bench');
     expect(resolveCatalogPropSpriteKey('floating_candles_post', undefined)).toBe(
@@ -152,7 +108,7 @@ describe('Audit Fixes — Hosting CSP, SW Dev Port, 2.5D Props, Stashed Decor 0G
 
     for (const [key, relPath] of Object.entries(CATALOG_PROP_SPRITE_PATHS)) {
       expect(shouldGroundBlend(key)).toBe(true);
-      const absAsset = path.join(rootDir, 'public', relPath.replace(/^\/+/, ''));
+      const absAsset = path.join(rootDir, 'public', relPath.replace(/^\/game\/trang-trai-hang-soc\//, '')); // HPVN base path, .webp
       expect(fs.existsSync(absAsset)).toBe(true);
     }
   });
@@ -255,7 +211,7 @@ describe('Audit Fixes — Hosting CSP, SW Dev Port, 2.5D Props, Stashed Decor 0G
       placedAt: Date.now(),
       constructEndsAt: Date.now(),
       lastTickAt: Date.now(),
-      storedGalleons: 0,
+      storedSickle: 0,
       storedXp: 0,
       readyBubbles: 0,
       durability: 100,
@@ -286,28 +242,21 @@ describe('Audit Fixes — Hosting CSP, SW Dev Port, 2.5D Props, Stashed Decor 0G
     expect(css).toContain("body[data-photo-mode='true'] .yt-bgm-mini-dock");
   });
 
-  it('nén ảnh WebApp giữ PNG-8 chuẩn cho catalog props, ngân sách icons/* và bảo vệ public/sprites theo AGENTS.md', async () => {
+  it('nén ảnh WebApp: catalog props WebP (HPVN) và bảo vệ public/sprites theo AGENTS.md', async () => {
     const { fs, path, rootDir } = await loadNodeFsAndPath();
     const catalogDir = path.join(rootDir, 'public/paintings/catalog');
-    const catalogPngs = fs
+    // HPVN: the lock's removePaths drops upstream PNG/JPG (and public/icons); catalog props ship as WebP ≤ 150 KB.
+    const catalogWebps = fs
       .readdirSync(catalogDir)
-      .filter((name: string) => name.endsWith('.png'))
+      .filter((name: string) => name.endsWith('.webp'))
       .sort();
-    expect(catalogPngs.length).toBe(6);
+    expect(catalogWebps.length).toBe(6);
 
-    for (const name of catalogPngs) {
+    for (const name of catalogWebps) {
       const buf = fs.readFileSync(path.join(catalogDir, name));
-      const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-      expect(view.getUint32(0, false)).toBe(0x89504e47);
-      expect(buf[25]).toBe(3); // 8-bit indexed palette PNG (mode P)
-      expect(buf.byteLength).toBeLessThan(35 * 1024);
-    }
-
-    for (const iconJpg of ['og-banner.jpg', 'screenshot-wide.jpg', 'screenshot-narrow.jpg']) {
-      const fullPath = path.join(rootDir, 'public/icons', iconJpg);
-      expect(fs.existsSync(fullPath)).toBe(true);
-      const st = fs.statSync(fullPath);
-      expect(st.size).toBeLessThan(230 * 1024);
+      expect(String.fromCharCode(...buf.subarray(0, 4))).toBe('RIFF');
+      expect(String.fromCharCode(...buf.subarray(8, 12))).toBe('WEBP');
+      expect(buf.byteLength).toBeLessThan(150 * 1024);
     }
 
     const compressPy = fs.readFileSync(path.join(rootDir, 'tools/compress-images.py'), 'utf8');

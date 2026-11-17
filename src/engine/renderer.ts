@@ -1034,7 +1034,7 @@ export class IsometricRenderer {
       }
     }
 
-    // 6. Collectible Galleon / XP Rooftop Bubbles (Home) OR Neighbor Co-op Help Bubbles & Mystery Gift (Visiting)!
+    // 6. Collectible Sickle / XP Rooftop Bubbles (Home) OR Neighbor Co-op Help Bubbles & Mystery Gift (Visiting)!
     if (sim.isVisitingNeighbor) {
       this.drawNeighborVisitOverlays(sim, cam, viewW, viewH, now);
     } else {
@@ -1058,7 +1058,7 @@ export class IsometricRenderer {
             now >= b.pastureReadyAt
         );
         const hasReadyGoods = Boolean(b.readyFarmGoods && b.readyFarmGoods.length > 0);
-        if (b.storedGalleons > 0 || hasReadyGoods || isRipePlot || isRipePasture) {
+        if (b.storedSickle > 0 || hasReadyGoods || isRipePlot || isRipePasture) {
           const { bw, bh } = sim.getBuildingFootprint(item, b.rotation);
           const elev = sim.grid[b.gy]?.[b.gx]?.elevation ?? 0;
           const zLift = item.isAnimalPasturePlot
@@ -1079,7 +1079,7 @@ export class IsometricRenderer {
             (hasReadyGoods ? 500 : 0) +
             (isRipePasture ? 360 : 0) +
             (isRipePlot ? 350 : 0) +
-            b.storedGalleons;
+            b.storedSickle;
           bubbleCandidates.push({ b, sx: topPt.sx, sy: topPt.sy, value: prioVal });
         }
       }
@@ -1464,7 +1464,7 @@ export class IsometricRenderer {
             now >= b.pastureReadyAt
         );
         const hasReadyGoods = Boolean(b.readyFarmGoods && b.readyFarmGoods.length > 0);
-        if (b.storedGalleons > 0 || hasReadyGoods || isRipePlot || isRipePasture) {
+        if (b.storedSickle > 0 || hasReadyGoods || isRipePlot || isRipePasture) {
           const { bw, bh } = sim.getBuildingFootprint(item, b.rotation);
           const elev = sim.grid[b.gy]?.[b.gx]?.elevation ?? 0;
           const zLift = item.isAnimalPasturePlot
@@ -1487,7 +1487,7 @@ export class IsometricRenderer {
             (hasReadyGoods ? 500 : 0) +
             (isRipePasture ? 360 : 0) +
             (isRipePlot ? 350 : 0) +
-            b.storedGalleons;
+            b.storedSickle;
           bubbleCandidates.push({ b, sx: topPt.sx, sy: topPt.sy, value: prioVal });
         }
       }

@@ -36,8 +36,6 @@ import {
   syncNeighborSocialDailyReset,
 } from '../neighborSocial';
 import {
-  IS_SANDBOX_BUILD_ENABLED,
-  isSandboxRuntimeAllowed,
   ParkSimulation,
 } from '../simulation';
 import { YULE_EVENT_DAYS, YULE_SCHEDULE, yuleAssetPrice, yuleDayIndex } from '../yuleEvent';
@@ -195,7 +193,7 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(sim.state.xp).toBe(199);
       expect(sim.state.galleons).toBe(initialGold);
 
-      // Cộng thêm 2 XP -> 201 XP: chạm mốc 200, thưởng 1 rương (+13G + 1 Cát)
+      // Cộng thêm 2 XP -> 201 XP: chạm mốc 200, thưởng 1 rương (+13 Sickle + 1 Cát)
       sim.addXp(2);
       expect(sim.state.xp).toBe(201);
       expect(sim.state.galleons).toBe(initialGold + 13);
@@ -220,7 +218,7 @@ describe('ParkSimulation & Progression Tests', () => {
         constructEndsAt: 0, // Đã xây xong
         stars: 1,
         lastTickAt: Date.now(),
-        storedGalleons: 0,
+        storedSickle: 0,
         storedXp: 0,
         readyBubbles: 0,
         durability: 100,
@@ -282,7 +280,7 @@ describe('ParkSimulation & Progression Tests', () => {
         constructEndsAt: 0,
         stars: 1,
         lastTickAt: Date.now(),
-        storedGalleons: 0,
+        storedSickle: 0,
         storedXp: 0,
         readyBubbles: 0,
         durability: 100,
@@ -301,7 +299,7 @@ describe('ParkSimulation & Progression Tests', () => {
   });
 
   describe('(c) Đơn hàng Cú & nâng cấp Kho Nông Sản', () => {
-    it('Đơn hàng Cú kiểm tra điều kiện giao hàng, thưởng Galleon/XP và sinh đơn mới', () => {
+    it('Đơn hàng Cú kiểm tra điều kiện giao hàng, thưởng Sickle/XP và sinh đơn mới', () => {
       const audio = createMockAudio();
       const sim = new ParkSimulation(audio);
       const barn = sim.ensureFarmBarn();
@@ -321,7 +319,7 @@ describe('ParkSimulation & Progression Tests', () => {
 
       const fulfillRes = sim.fulfillFarmOwlOrder(targetOrder.id);
       expect(fulfillRes.ok).toBe(true);
-      expect(sim.state.galleons).toBe(goldBefore + targetOrder.rewardGalleons);
+      expect(sim.state.galleons).toBe(goldBefore + targetOrder.rewardSickle);
       expect(barn.ordersDelivered).toBe(ordersBefore + 1);
 
       // Kiểm tra vị trí đó đã được thay bằng đơn hàng mới
@@ -439,7 +437,7 @@ describe('ParkSimulation & Progression Tests', () => {
   });
 
   describe('(f) Vườn Bí Ngô & Sân Đàn Gà Mái tách riêng và ghép liền mạch (connectableGroup)', () => {
-    it('Tách thành 2 công trình 2×2 riêng biệt và hỗ trợ đặt nhiều ô bằng Galleon sau ô đầu tiên', () => {
+    it('Tách thành 2 công trình 2×2 riêng biệt và hỗ trợ đặt nhiều ô bằng Sickle sau ô đầu tiên', () => {
       const audio = createMockAudio();
       const sim = new ParkSimulation(audio);
 
@@ -456,7 +454,7 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(pumpkinItem.connectableGroup).toBe('pumpkin_patch');
       expect(chickenItem.connectableGroup).toBe('chicken_yard');
 
-      // Mở cấp độ và cấp đủ Sao + Galleon để kiểm tra đặt nhiều ô liền kề trên vùng 0 (x: 0..10, y: 12..23)
+      // Mở cấp độ và cấp đủ Sao + Sickle để kiểm tra đặt nhiều ô liền kề trên vùng 0 (x: 0..10, y: 12..23)
       sim.state.level = 10;
       sim.state.galleons = 2000;
       const m3 = sim.state.match3!;
@@ -466,18 +464,18 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(sim.getEffectiveItemStarCost(chickenItem)).toBe(3);
       expect(sim.getEffectiveItemStarCost(pumpkinItem)).toBe(5);
 
-      // Đặt Sân Đàn Gà Mái đầu tiên: trừ 3 Sao, 0 Galleon
+      // Đặt Sân Đàn Gà Mái đầu tiên: trừ 3 Sao, 0 Sickle
       expect(sim.placeItem(chickenItem, 0, 12, 0)).toBe(true);
       expect(m3.stars).toBe(97);
       expect(sim.state.galleons).toBe(2000);
       expect(sim.getEffectiveItemStarCost(chickenItem)).toBe(0);
 
-      // Đặt Sân Đàn Gà Mái thứ hai sát cạnh để ghép rào: trừ 0 Sao, 130 Galleon
+      // Đặt Sân Đàn Gà Mái thứ hai sát cạnh để ghép rào: trừ 0 Sao, 130 Sickle
       expect(sim.placeItem(chickenItem, 0, 14, 0)).toBe(true);
       expect(m3.stars).toBe(97);
       expect(sim.state.galleons).toBe(2000 - chickenItem.cost);
 
-      // Xoá bớt ô thứ hai: hoàn Galleon (65%), không nhân bản Sao Phép Thuật
+      // Xoá bớt ô thứ hai: hoàn Sickle (65%), không nhân bản Sao Phép Thuật
       expect(sim.removeAtTile(0, 14)).toBe(true);
       expect(m3.stars).toBe(97);
 
@@ -777,7 +775,7 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(sim.state.match3.currentLevel).toBe(8);
       expect(social.dailyRescuesReceivedCount).toBe(1);
 
-      // Kiểm tra Rương Quà Tình Bạn (10 🍀 -> +2 🌟 Sao + 1 🔥 Bùa + 2 🌱 Hạt + 150G)
+      // Kiểm tra Rương Quà Tình Bạn (10 🍀 -> +2 🌟 Sao + 1 🔥 Bùa + 2 🌱 Hạt + 150 Sickle)
       social.friendshipTokens = FRIENDSHIP_CHEST_TOKEN_COST;
       const starsBefore = sim.state.match3.stars;
       const talismansBefore = sim.getPhoenixTalismanCount();
@@ -919,7 +917,7 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(sim.stockAnimalOnPasture(emptyPasture.uid, 'ottery_sheep').ok).toBe(true);
       expect(sim.getCurrentTutorialStep()?.id).toBe('seed_quiz_or_buy');
 
-      // Bước 4: Nhận thêm hạt giống (mua bằng Vàng hoặc thắng Học Viện Ngôn Ngữ 0G)
+      // Bước 4: Nhận thêm hạt giống (mua bằng Sickle hoặc thắng Học Viện Ngôn Ngữ 0 Sickle)
       const sandBefore = sim.state.timeSand;
       expect(sim.buyCropSeedWithGold('meadow_daisy', 1).ok).toBe(true);
       expect(sim.state.timeSand).toBe(sandBefore + 1);
@@ -1259,14 +1257,14 @@ describe('ParkSimulation & Progression Tests', () => {
       const feastBefore1 = sim.ensureHarvestFeast().points;
       const unveil1 = sim.unveilBuilding(b1.uid);
       expect(unveil1).not.toBeNull();
-      expect(sim.state.galleons).toBe(goldBeforeUnveil1 + unveil1!.bonusGalleons);
+      expect(sim.state.galleons).toBe(goldBeforeUnveil1 + unveil1!.bonusSickle);
       expect(sim.ensureHarvestFeast().points).toBe(feastBefore1 + 25);
 
       // Xóa Lò Nướng: hoàn đủ 2 🌟 Sao để không bao giờ khóa tiến độ 100%
-      expect(sim.removeAtTile(22, 24, true)).toBe(true);
+      expect(sim.removeAtTile(22, 24)).toBe(true);
       expect(sim.state.match3.stars).toBe(10);
 
-      // Vòng 2: Xây lại Lò Nướng cùng loại -> KHÔNG cộng lại finishXp, KHÔNG bật awaitingUnveil, KHÔNG nhận thêm Vàng/XP/Điểm Tiệc Mùa Gặt!
+      // Vòng 2 (HPVN): xây lại cùng loại -> KHÔNG cộng lại finishXp; vẫn cắt băng được nhưng KHÔNG nhận thêm Sickle/XP/Điểm Tiệc Mùa Gặt!
       expect(sim.placeItem(bakeryItem, 22, 24, 0)).toBe(true);
       const b2 = sim.state.buildings.find((b) => b.itemId === 'molly_apple_bakery')!;
       const xpBeforeFinish2 = sim.state.xp;
@@ -1275,16 +1273,17 @@ describe('ParkSimulation & Progression Tests', () => {
       b2.constructEndsAt = Date.now() - 1000;
       sim.tickProductionToTimestamp(Date.now());
 
-      expect(b2.awaitingUnveil).toBeUndefined();
+      expect(b2.awaitingUnveil).toBe(true);
       expect(sim.state.xp).toBe(xpBeforeFinish2);
-      expect(sim.unveilBuilding(b2.uid)).toBeNull();
+      expect(sim.unveilBuilding(b2.uid)!.bonusSickle).toBe(0);
+      expect(sim.state.xp).toBe(xpBeforeFinish2);
       expect(sim.state.galleons).toBe(goldBeforeFinish2);
       expect(sim.ensureHarvestFeast().points).toBe(feastBefore2);
 
-      // Kể cả khi lưu & F5 (loadFromStorage), cờ unveiledItemIds vẫn được bảo toàn
+      // Kể cả khi lưu & F5 (loadFromStorage), cờ ribbonPaidItems vẫn được bảo toàn
       sim.saveToStorage();
       const reloaded = new ParkSimulation(createMockAudio());
-      expect(reloaded.state.unveiledItemIds).toContain('molly_apple_bakery');
+      expect(reloaded.state.ribbonPaidItems).toContain('molly_apple_bakery');
 
       // Cổng Floo thứ 2 (mua bằng Vàng, không tốn Sao) khi xóa chỉ hoàn 65% Vàng, 0 Sao
       const flooItem = getCatalogItem('floo_fireplace_gate')!;
@@ -1308,41 +1307,20 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(sim.placeItem(flooItem, spot2.gx, spot2.gy, 0)).toBe(true);
       expect(sim.state.match3.stars).toBe(starsAfterFirstFloo);
       const goldBeforeRemove2 = sim.state.galleons;
-      expect(sim.removeAtTile(spot2.gx, spot2.gy, true)).toBe(true);
+      expect(sim.removeAtTile(spot2.gx, spot2.gy)).toBe(true);
       expect(sim.state.match3.stars).toBe(starsAfterFirstFloo);
       expect(sim.state.galleons).toBe(goldBeforeRemove2 + Math.round(flooItem.cost * 0.65));
     });
 
-    it('2. Xóa ô đất đang có cây chín/đang lớn, đồng cỏ có thú hoặc xưởng đang chạy bắt buộc qua xác nhận trước khi xóa', () => {
+    it('2. HPVN: xóa ô đất có cây chín thì có lời cảnh báo (main.ts hỏi xác nhận), ô trống thì không', () => {
       const sim = new ParkSimulation(createMockAudio());
-      const warnings: string[] = [];
-      sim.onRequestBulldozeConfirm = (w) => {
-        warnings.push(w.hazardSummaryVi);
-      };
-
-      // Ô đất khởi đầu đang có Lúa Mì chín (burrow_plot_wheat tại 17,25)
       const ripePlot = sim.state.buildings.find((b) => b.uid === 'burrow_plot_wheat')!;
       expect(ripePlot.cropId).toBe('ottery_wheat');
-      expect(sim.removeAtTile(ripePlot.gx, ripePlot.gy)).toBe(false);
-      expect(warnings.length).toBe(1);
-      expect(warnings[0]).toContain('Lúa Mì');
-      expect(sim.state.buildings.some((b) => b.uid === 'burrow_plot_wheat')).toBe(true);
-
-      // Ô đồng cỏ đang có Gà Mái Đỏ (burrow_pasture_hen tại 12,25)
-      const stockedPasture = sim.state.buildings.find((b) => b.uid === 'burrow_pasture_hen')!;
-      expect(sim.removeAtTile(stockedPasture.gx, stockedPasture.gy)).toBe(false);
-      expect(warnings.length).toBe(2);
-      expect(sim.state.buildings.some((b) => b.uid === 'burrow_pasture_hen')).toBe(true);
-
-      // Chỉ khi người chơi bấm xác nhận (force = true) thì mới thực sự xóa
-      expect(sim.removeAtTile(ripePlot.gx, ripePlot.gy, true)).toBe(true);
-      expect(sim.state.buildings.some((b) => b.uid === 'burrow_plot_wheat')).toBe(false);
-
-      // Ngược lại, ô đất trống (burrow_plot_empty tại 19,25) xóa ngay không làm phiền hỏi xác nhận
+      ripePlot.cropReadyAt = Date.now() - 1000;
+      expect(sim.getRemovalLossText(ripePlot.gx, ripePlot.gy)).toContain('Lúa Mì');
       const emptyPlot = sim.state.buildings.find((b) => b.uid === 'burrow_plot_empty')!;
-      expect(sim.getBulldozeHazardWarning(emptyPlot.gx, emptyPlot.gy)).toBeNull();
+      expect(sim.getRemovalLossText(emptyPlot.gx, emptyPlot.gy)).toBeNull();
       expect(sim.removeAtTile(emptyPlot.gx, emptyPlot.gy)).toBe(true);
-      expect(warnings.length).toBe(2);
     });
 
     it('3. Thông tin chi phí nâng cấp Kho Đỏ đồng bộ 100% giữa khi có Phích Cắm (1🔌 + 250G) và khi thiếu Phích Cắm (370G bù 1🔌)', () => {
@@ -1395,11 +1373,13 @@ describe('ParkSimulation & Progression Tests', () => {
       }
 
       // 4b. formatToastMessage khử sạch lặp đôi emoji ở đầu thông báo
-      expect(formatToastMessage('🎀 Đã cắt băng khánh thành!', '🎀')).toBe('🎀 Đã cắt băng khánh thành!');
-      expect(formatToastMessage('🎀 🎀 Đã cắt băng khánh thành!', '🎀')).toBe('🎀 Đã cắt băng khánh thành!');
-      expect(formatToastMessage('🏡 Đã nâng cấp Kho Đỏ!', '🏡')).toBe('🏡 Đã nâng cấp Kho Đỏ!');
-      expect(formatToastMessage('🌸 Đã bày lại trang trí!')).toBe('🌸 Đã bày lại trang trí!');
-      expect(formatToastMessage('Đã lưu ảnh công viên!', '📸')).toBe('📸 Đã lưu ảnh công viên!');
+      // HPVN: toasts carry no leading emoji at all
+      expect(formatToastMessage('🎀 Đã cắt băng khánh thành!', '🎀')).toBe('Đã cắt băng khánh thành!');
+      expect(formatToastMessage('🎀 🎀 Đã cắt băng khánh thành!', '🎀')).toBe('Đã cắt băng khánh thành!');
+      expect(formatToastMessage('❤️ Đổi Bàn · +1')).toBe('Đổi Bàn · +1');
+      expect(formatToastMessage('Đã lưu ảnh công viên!', '📸')).toBe('Đã lưu ảnh công viên!');
+      expect(formatToastMessage('+5 🌟 Sao')).toBe('+5 🌟 Sao');
+      expect(formatToastMessage('🎉')).toBe('🎉');
 
       // 4c. Vạc Phép thông báo bằng đơn vị giờ/phút dễ hiểu thay vì "3600s" thô
       const sim = new ParkSimulation(createMockAudio());
@@ -1413,50 +1393,7 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(brewRes.msg).toContain('1 giờ');
     });
 
-    it('5. Khóa cứng toàn bộ chế độ Sandbox / Xem Thử Lv.100 / Lễ Hội ép tay / Ô lưu bẩn trong bản game sạch', () => {
-      expect(IS_SANDBOX_BUILD_ENABLED).toBe(false);
-      expect(isSandboxRuntimeAllowed()).toBe(false);
-
-      const sim = new ParkSimulation(createMockAudio());
-      expect(sim.state.sandboxMode).toBe(false);
-
-      // 5a. toggleHeadmasterPreview(100) bị chặn hoàn toàn ở bản sạch
-      sim.toggleHeadmasterPreview(100);
-      expect(sim.isHeadmasterPreview).toBe(false);
-      expect(sim.state.sandboxMode).toBe(false);
-      expect(sim.state.level).toBe(1);
-
-      // 5b. Chỉnh sửa localStorage / importSaveJson ép sandboxMode=true, activeFestival='quidditch_cup' & công trình builtInSandbox bị khử ngay khi nạp
-      const rawTampered = JSON.parse(sim.exportSaveJson());
-      rawTampered.sandboxMode = true;
-      rawTampered.settings.activeFestival = 'quidditch_cup';
-      rawTampered.buildings.push({
-        uid: 'sandbox_cheat_dragon_99',
-        itemId: 'dragon_lair',
-        gx: 40,
-        gy: 40,
-        rotation: 0,
-        stars: 5,
-        builtAt: Date.now(),
-        constructEndsAt: Date.now(),
-        builtInSandbox: true,
-      });
-      expect(sim.importSaveJson(JSON.stringify(rawTampered))).toBe(true);
-      expect(sim.state.sandboxMode).toBe(false);
-      expect(sim.state.sandboxTainted).toBe(true);
-      expect(sim.state.settings.activeFestival).toBe('auto');
-      expect(sim.state.buildings.some((b) => b.uid === 'sandbox_cheat_dragon_99')).toBe(false);
-
-      // 5c. Hồ sơ lưu (slot_1..3) dính dấu vết Sandbox bị từ chối khôi phục trong bản game sạch
-      sim.saveNamedProfileSlot('slot_1');
-      mockLocalStorage.removeItem(SAVE_KEY);
-      const cleanSim = new ParkSimulation(createMockAudio());
-      expect(cleanSim.state.sandboxTainted).toBeFalsy();
-      const slotRes = cleanSim.loadNamedProfileSlot('slot_1');
-      expect(slotRes.ok).toBe(false);
-      expect(cleanSim.state.sandboxMode).toBe(false);
-      expect(cleanSim.state.sandboxTainted).toBeFalsy();
-    });
+    // HPVN: upstream's «5. Khóa cứng Sandbox» case is dropped: HPVN keeps its own dev-only gating and has no local save slots.
   });
 
   describe('(m) Christmas × Harry Potter Mega-Update (104 Yule Decor, 12 Winter Crops, Yule Theme)', () => {
@@ -1612,6 +1549,7 @@ describe('ParkSimulation & Progression Tests', () => {
         textContent: '',
         title: '',
         parentElement: null,
+        closest: () => null,
         classList: {
           add: () => {},
           remove: () => {},
@@ -1670,10 +1608,11 @@ describe('ParkSimulation & Progression Tests', () => {
         },
       };
 
+      // HPVN: toasts go through the one-at-a-time queue (stack.replaceChildren, text kept in dataset.msg)
       const fakeStack = {
         parentElement: null as unknown,
-        appendChild: (node: { textContent?: string }) => {
-          if (node.textContent) toasts.push(node.textContent);
+        replaceChildren: (node: { dataset: { msg?: string } }) => {
+          if (node.dataset.msg) toasts.push(node.dataset.msg);
         },
       };
 
@@ -1692,6 +1631,7 @@ describe('ParkSimulation & Progression Tests', () => {
 
       vi.stubGlobal('window', {
         setTimeout: () => 0,
+        clearTimeout: () => {},
         requestAnimationFrame: () => 0,
         cancelAnimationFrame: () => {},
         matchMedia: () => ({ matches: true }),
@@ -1699,7 +1639,7 @@ describe('ParkSimulation & Progression Tests', () => {
       vi.stubGlobal('document', {
         activeElement: null,
         documentElement: { dataset: {} as Record<string, string> },
-        createElement: () => ({ className: '', textContent: '', remove: () => {} }),
+        createElement: () => ({ className: '', textContent: '', dataset: {}, remove: () => {}, appendChild: (c: unknown) => c }),
         getElementById: () => fakeStack,
       });
 
@@ -1964,7 +1904,7 @@ describe('ParkSimulation & Progression Tests', () => {
         lastTickAt: 2000,
         durability: 100,
         readyBubbles: 0,
-        storedGalleons: 0,
+        storedSickle: 0,
         storedXp: 0,
         visitorsServed: 0,
       });
@@ -2033,6 +1973,76 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(stockRes.ok).toBe(true);
       expect(emptyPasture.pastureAnimalId).toBe('burrow_hen');
       expect(tutSim.state.galleons).toBeGreaterThanOrEqual(0);
+    });
+
+    it('nút «Đưa tới ruộng Lúa» (Bước 1) thu gọn bảng hướng dẫn, căn camera vào ô lúa chín và tự mở lại khi sang Bước 2', async () => {
+      const { socialUiHandleTutorialPrimaryAction } = await import('../../ui/hudSocialAndTutorial');
+      const sim = new ParkSimulation(createMockAudio());
+      sim.restartTutorial();
+      expect(sim.getCurrentTutorialStep()?.id).toBe('harvest_wheat');
+      expect(sim.state.tutorial?.minimized).toBe(false);
+
+      const target = sim.getTutorialWorldTarget()!;
+      expect(target).toBeTruthy();
+
+      const tactileUids: string[] = [];
+      sim.onBuildingTactile = (uid) => tactileUids.push(uid);
+      const toasts: string[] = [];
+      let jumped = 0;
+
+      const fakeCard = {
+        innerHTML: '',
+        classList: { toggle: () => {}, remove: () => {}, add: () => {} },
+        querySelector: () => null,
+        querySelectorAll: () => [],
+      };
+      const fakeHud = {
+        sim,
+        cam: { x: 0, y: 0, zoom: 0.9, viewRot: 0 },
+        root: {
+          querySelector: (sel: string) => (sel === '#tutorialCoachCard' ? fakeCard : null),
+          querySelectorAll: () => [],
+        },
+        tutorialMinimized: false,
+        photoModeActive: false,
+        manageMenuOpen: false,
+        weatherPopoverOpen: false,
+        seedTrayOpen: false,
+        pastureTrayOpen: false,
+        buildSheetOpen: false,
+        activeCategory: null,
+        selectedCatalogItem: null,
+        lastRenderedTutorialSig: '',
+        lastFocusedTutorialStepKey: '',
+        onCameraJump: () => {
+          jumped += 1;
+        },
+        showToast: (msg: string) => {
+          toasts.push(msg);
+        },
+      };
+
+      vi.stubGlobal('document', { querySelector: () => null });
+      vi.stubGlobal('requestAnimationFrame', () => 0);
+
+      try {
+        socialUiHandleTutorialPrimaryAction(fakeHud as never, 'harvest_wheat');
+        expect(fakeHud.tutorialMinimized).toBe(true);
+        expect(sim.state.tutorial?.minimized).toBe(true);
+        expect(fakeHud.cam.zoom).toBeGreaterThanOrEqual(1.1);
+        expect(jumped).toBe(1);
+        expect(tactileUids).toContain(target.uid);
+        expect(toasts.some((t) => t.includes('Lúa Mì'))).toBe(true);
+
+        // Khi thu hoạch xong ô lúa, hướng dẫn chuyển sang Bước 2 và tự mở rộng lại
+        const harvestRes = sim.harvestCropPlot(target.uid);
+        expect(harvestRes.ok).toBe(true);
+        expect(sim.getCurrentTutorialStep()?.id).toBe('sow_and_merge_plot');
+        expect(sim.state.tutorial?.minimized).toBe(false);
+      } finally {
+        vi.unstubAllGlobals();
+        vi.stubGlobal('localStorage', mockLocalStorage);
+      }
     });
   });
 });

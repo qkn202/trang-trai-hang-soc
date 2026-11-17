@@ -109,12 +109,12 @@ describe('Master Upgrade 10/10 Suite (Đợt 1, Đợt 2 & Đợt 3)', () => {
       const gBefore = sim.state.galleons;
       const firstGreet = sim.greetVillager('molly');
       expect(firstGreet.ok).toBe(true);
-      expect(firstGreet.bonusGalleons).toBeGreaterThan(0);
-      expect(sim.state.galleons).toBe(gBefore + firstGreet.bonusGalleons);
+      expect(firstGreet.bonusSickle).toBeGreaterThan(0);
+      expect(sim.state.galleons).toBe(gBefore + firstGreet.bonusSickle);
 
       const secondGreet = sim.greetVillager('molly');
       expect(secondGreet.ok).toBe(true);
-      expect(secondGreet.bonusGalleons).toBe(0);
+      expect(secondGreet.bonusSickle).toBe(0);
     });
   });
 

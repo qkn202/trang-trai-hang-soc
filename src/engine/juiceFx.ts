@@ -126,7 +126,7 @@ export interface ConfettiParticle {
 }
 
 export const CONFETTI_COLORS = [
-  '#f59e0b', // Golden Galleon
+  '#f59e0b', // Golden Sickle
   '#ef4444', // Gryffindor Scarlet
   '#10b981', // Meadow Emerald
   '#8b5cf6', // Magic Purple
@@ -371,7 +371,8 @@ export class JuiceFX {
   }
 
   public emitConfetti(x: number, y: number, count = 25, emojis?: string[]): void {
-    this.confetti.emit(x, y, count, emojis);
+    void emojis; // HPVN: no emoji (owner 14/11) — confetti is the coloured paper only
+    this.confetti.emit(x, y, count);
   }
 
   public tick(dt = 1 / 60): void {

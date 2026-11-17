@@ -9,10 +9,7 @@ import {
 import { getMatch3LevelDef, MATCH3_BOARD_SIZE } from '../../data/match3Levels';
 import { MagicalAudio } from '../../engine/audio';
 import { FarmCropId, QuizLanguageId } from '../../types/game';
-import { CloudSave } from '../../ui/cloudSave';
 import { haptic } from '../../ui/haptics';
-import { MemoryBackendKVStore } from '../../../server/burrowBackendCore';
-import { handleAuthoritativeHttpRequest } from '../../../server/index';
 import { CandyHogwartsEngine } from '../candyHogwartsEngine';
 import {
   createInitialLanguageQuizState,
@@ -106,7 +103,7 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
       expect(eighth.talismanProgress).toBe(0);
       expect(sim.getPhoenixTalismanCount()).toBe(startTalismans + 1);
 
-      // Rèn Bùa tại Kho Đỏ từ 1 thành phẩm xưởng + 180G
+      // Rèn Bùa tại Kho Đỏ từ 1 thành phẩm xưởng + 180 Sickle
       const barn = sim.ensureFarmBarn();
       barn.goods.cinnamon_apple_pie = 2;
       sim.state.galleons = 500;
@@ -272,7 +269,7 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
           expect(ch.lang).toBe(lang);
           expect(ch.format).toBe(fmt);
           expect(ch.promptVi.length).toBeGreaterThan(3);
-          expect(ch.heroSpriteSrc).toMatch(/^\/sprites\/.+\.png$/);
+          expect(ch.heroSpriteSrc).toMatch(/^\/game\/trang-trai-hang-soc\/sprites\/.+\.webp$/);
           expect(ch.visualGameKind).toBeDefined();
           if (fmt === 'sentence_builder') {
             expect(ch.visualGameKind).toBe('word_tiles');
@@ -282,8 +279,8 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
             expect(ch.visualGameKind).toBe('pic_pairs');
             expect(ch.leftCards?.length).toBeGreaterThanOrEqual(3);
             expect(ch.rightCards?.length).toBeGreaterThanOrEqual(3);
-            expect(ch.leftCards?.[0]?.spriteSrc).toMatch(/^\/sprites\/.+\.png$/);
-            expect(ch.rightCards?.[0]?.spriteSrc).toMatch(/^\/sprites\/.+\.png$/);
+            expect(ch.leftCards?.[0]?.spriteSrc).toMatch(/^\/game\/trang-trai-hang-soc\/sprites\/.+\.webp$/);
+            expect(ch.rightCards?.[0]?.spriteSrc).toMatch(/^\/game\/trang-trai-hang-soc\/sprites\/.+\.webp$/);
           } else {
             expect(['pic_flashcard', 'word_flashcard', 'bubble_pop']).toContain(ch.visualGameKind);
             expect(ch.choices?.length).toBe(4);
@@ -1085,44 +1082,7 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
       });
       sim1.saveToStorage();
 
-      // Kiểm chứng CloudSave đẩy ngay POST /api/save với keepalive=true trước khi trình duyệt đóng băng JS
-      const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
-      vi.stubGlobal('window', {
-        dispatchEvent: vi.fn(),
-        addEventListener: vi.fn(),
-        setInterval: setInterval,
-      });
-      vi.stubGlobal('navigator', { onLine: true });
-      vi.stubGlobal(
-        'fetch',
-        vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-          fetchCalls.push({ url: String(input), init });
-          return {
-            ok: true,
-            status: 200,
-            json: async () => ({ ok: true }),
-          } as Response;
-        })
-      );
-
-      try {
-        const cloud = new CloudSave({ endpoint: 'https://hpvn.example/api/save' });
-        const uploaded = await cloud.uploadNow({ keepalive: true });
-        expect(uploaded).toBe(true);
-        expect(fetchCalls.length).toBe(1);
-        expect(fetchCalls[0].url).toContain('https://hpvn.example/api/save?userId=');
-        expect(fetchCalls[0].init?.method).toBe('POST');
-        expect(fetchCalls[0].init?.keepalive).toBe(true);
-
-        const uploadedBody = JSON.parse(String(fetchCalls[0].init?.body ?? '{}'));
-        expect(uploadedBody.match3?.activeSession?.levelId).toBe(20);
-        expect(uploadedBody.match3?.activeSession?.talismanUsed).toBe(true);
-        expect(uploadedBody.match3?.activeSession?.movesMadeThisAttempt).toBe(4);
-      } finally {
-        vi.unstubAllGlobals();
-        vi.stubGlobal('localStorage', mockLocalStorage);
-      }
-
+      // HPVN: no CloudSave; the bridge saves the farm (src/hpvn/bridge.ts)
       // Khôi phục lại từ localStorage / CloudSave trên phiên mới
       const sim2 = new ParkSimulation(createMockAudio());
       const loadedM3 = sim2.state.match3.activeSession;
@@ -1150,6 +1110,25 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
       m3Eng1.destroy();
       m3Eng2.destroy();
     });
+  });
+
+  it('HPVN: xáo bàn với dưới 3 viên ngọc tự do vẫn chừa một nước đi (không kẹt bàn)', () => {
+    const eng = new Match3BoardEngine(getMatch3LevelDef(25));
+    let free = 0;
+    for (const row of eng.grid) {
+      for (const cell of row) {
+        if (cell.piece?.kind === 'gem' && !cell.hole && cell.box === 0 && !cell.web && free < 2) {
+          cell.piece.special = 'none';
+          free++;
+        } else if (!cell.hole) {
+          cell.box = 1;
+        }
+      }
+    }
+    expect(free).toBe(2);
+    expect(eng.findBestHintMove()).toBeNull();
+    eng.shuffleMovableGems(false);
+    expect(eng.findBestHintMove()).not.toBeNull();
   });
 
   describe('QA Bugfix Regressions (Haptics Activation Guard, Tutorial Minimize Persistence & 204 Empty CloudSave)', () => {
@@ -1185,18 +1164,6 @@ describe('Commercial Upgrades Suite (Items 1, 2 & 3)', () => {
 
       sim2.restartTutorial();
       expect(sim2.state.tutorial?.minimized).toBe(false);
-    });
-
-    it('returns 204 No Content instead of 404 on GET /api/save for brand-new users without cloud save', async () => {
-      const kv = new MemoryBackendKVStore();
-      const res = await handleAuthoritativeHttpRequest(
-        new Request('http://127.0.0.1:5173/api/save?userId=brand_new_qa_user', {
-          method: 'GET',
-          headers: { 'X-User-Id': 'brand_new_qa_user' },
-        }),
-        { SAVE_KV: kv, ENVIRONMENT: 'development' }
-      );
-      expect(res.status).toBe(204);
     });
   });
 });

@@ -440,23 +440,20 @@ describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
     // 6 normal candies + 6 Gardenscapes colorless power-ups (firecracker, bomb, dynamite, tnt, seeker, rainbow) + 4 obstacles = 16
     expect(instances).toHaveLength(16);
     const srcs = instances.map((im) => im.src);
-    expect(srcs).toContain(`/paintings/candy-hogwarts/powerup-firecracker.webp?v=${CANDY_ASSET_REV}`);
-    expect(srcs).toContain(`/paintings/candy-hogwarts/powerup-bomb.webp?v=${CANDY_ASSET_REV}`);
-    expect(srcs).toContain(`/paintings/candy-hogwarts/powerup-dynamite.webp?v=${CANDY_ASSET_REV}`);
-    expect(srcs).toContain(`/paintings/candy-hogwarts/powerup-tnt.webp?v=${CANDY_ASSET_REV}`);
-    expect(srcs).toContain(`/paintings/candy-hogwarts/powerup-seeker.webp?v=${CANDY_ASSET_REV}`);
-    expect(srcs).toContain(`/paintings/candy-hogwarts/powerup-rainbow.webp?v=${CANDY_ASSET_REV}`);
-    expect(srcs).toContain(`/paintings/candy-hogwarts/candy-chocolate.webp?v=${CANDY_ASSET_REV}`);
-    expect(srcs).toContain(`/paintings/candy-hogwarts/candy-chocolate-deluxe.webp?v=${CANDY_ASSET_REV}`);
-    expect(srcs).toContain(`/paintings/candy-hogwarts/candy-frosting.webp?v=${CANDY_ASSET_REV}`);
-    expect(srcs).toContain(`/paintings/candy-hogwarts/candy-swirl.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-firecracker.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-bomb.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-dynamite.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-tnt.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-seeker.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-rainbow.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-chocolate.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-chocolate-deluxe.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-frosting.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-swirl.webp?v=${CANDY_ASSET_REV}`);
     // Ensure old Candy Crush striped/wrapped sprites are NOT loaded on the board
     expect(srcs.some((s) => /-sh\.webp|-sv\.webp|-wrapped\.webp|candy-colorbomb\.webp/.test(s))).toBe(false);
 
-    // Verify query-preserving .png fallback on .webp error
-    const firstImg = instances[0];
-    firstImg.onerror?.();
-    expect(firstImg.src).toBe(`/paintings/candy-hogwarts/candy-0.png?v=${CANDY_ASSET_REV}`);
+    // HPVN: WebP only, no PNG fallback
     renderer.destroy();
   });
 
@@ -608,7 +605,7 @@ describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
     });
 
     expect(overlayMountEl.innerHTML).toContain('m3-reward-chip star');
-    expect(overlayMountEl.innerHTML).toContain('🌟');
+    expect(overlayMountEl.innerHTML).toContain('★');
     expect(overlayMountEl.innerHTML).not.toContain('Điểm phép:');
     expect(overlayMountEl.innerHTML).not.toContain('XP');
     expect(overlayMountEl.innerHTML).not.toContain('Gryffindor');
@@ -980,11 +977,9 @@ describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
     eng!.status = 'out_of_moves';
     ctrl.renderDOM();
 
-    expect(contentEl.innerHTML).toContain('m3-overlay-actions');
+    // HPVN: the rescue overlay uses its own wrapping action row (.pa-victory-actions), not upstream's m3-overlay-btn-* classes
+    expect(contentEl.innerHTML).toContain('pa-victory-actions');
     expect(contentEl.innerHTML).toContain('id="btnM3RescuePhoenixTalisman"');
-    expect(contentEl.innerHTML).toContain('m3-overlay-btn-full');
-    expect(contentEl.innerHTML).toContain('m3-overlay-btn-primary');
-    expect(contentEl.innerHTML).toContain('m3-overlay-btn-half');
     expect(contentEl.innerHTML).not.toContain('flex:1.4;min-width:170px');
   });
 });

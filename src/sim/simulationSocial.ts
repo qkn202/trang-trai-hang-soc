@@ -139,7 +139,6 @@ import {
   classifyBuildingGardenHelpKind,
   createFriendNeighborFromCode,
   createInitialNeighborSocialState,
-  deduplicateNeighborProfiles,
   FRIENDSHIP_CHEST_TOKEN_COST,
   getGardenHelpMetaVi,
   getHonorGardenById,
@@ -147,17 +146,17 @@ import {
   getMinigameKindLabelVi,
   getPresetNoteMeta,
   HONOR_GARDENS,
-  isPlaceholderOrSyntheticFriendCode,
+  isNpcNeighborProfile,
   MAX_DAILY_FRIEND_HELPS,
   MAX_DAILY_MINIGAME_RESCUES,
   MAX_DAILY_OWL_HELP_REQUESTS,
   MAX_HOME_LANTERN_MARKS,
-  normalizeDistinctPlayerNickname,
   normalizeSceneTimeOverride,
   normalizeSceneWeatherOverride,
   pickSimulatedHomeLanternMark,
   syncNeighborSocialDailyReset,
   upsertFlooMemberToNeighborProfile,
+  getVietnamCalendarKey,
 } from './neighborSocial';
 import {
   buildAllPersonalRecordsSummary,
@@ -165,7 +164,6 @@ import {
   ensureMinigameLeaderboardState,
   getAllCachedCloudLeaderboards,
   getCachedCloudLeaderboardEntries,
-  getClientLeaderboardUserId,
   getPlayerHogwartsHouse,
   HOGWARTS_HOUSE_META,
   isScoredLeaderboardGame,
@@ -230,21 +228,9 @@ export function socialEnsureNeighborSocial(sim: ParkSimulation): NeighborSocialS
       sim.state.neighborSocial = createInitialNeighborSocialState();
     }
     if (Array.isArray(sim.state.neighborSocial.neighbors)) {
-      const ownUid = getClientLeaderboardUserId();
-      const deduped = deduplicateNeighborProfiles(sim.state.neighborSocial.neighbors, {
-        ownUid: ownUid !== 'local_player' ? ownUid : undefined,
-        ownFriendCode: sim.state.neighborSocial.playerFriendCode,
-        ownDisplayName: sim.state.neighborSocial.playerDisplayName,
-      });
-      if (deduped.length !== sim.state.neighborSocial.neighbors.length) {
-        sim.state.neighborSocial.neighbors = deduped;
-      } else {
-        for (let i = 0; i < deduped.length; i++) {
-          if (deduped[i] !== sim.state.neighborSocial.neighbors[i]) {
-            sim.state.neighborSocial.neighbors = deduped;
-            break;
-          }
-        }
+      const filtered = sim.state.neighborSocial.neighbors.filter((n) => !isNpcNeighborProfile(n));
+      if (filtered.length !== sim.state.neighborSocial.neighbors.length) {
+        sim.state.neighborSocial.neighbors = filtered;
       }
     } else {
       sim.state.neighborSocial.neighbors = [];
@@ -425,13 +411,11 @@ export function socialAddFriendByCode(sim: ParkSimulation,
         msg: 'Sổ Hàng Xóm chỉ kết nối với người chơi thật — không hỗ trợ thêm mã NPC!',
       };
     }
-    const candidateNick = normalizeDistinctPlayerNickname(customName || verifiedProfile?.name);
-    const existing = social.neighbors.find((n) => {
-      if (n.friendCode.toUpperCase() === cleaned) return true;
-      if (Boolean(verifiedProfile?.userId) && n.remoteUserId === verifiedProfile?.userId) return true;
-      const exNick = normalizeDistinctPlayerNickname(n.name);
-      return candidateNick !== null && exNick !== null && candidateNick === exNick;
-    });
+    const existing = social.neighbors.find(
+      (n) =>
+        n.friendCode.toUpperCase() === cleaned ||
+        (Boolean(verifiedProfile?.userId) && n.remoteUserId === verifiedProfile?.userId)
+    );
     if (existing) {
       if (verifiedProfile) {
         socialSyncVerifiedFriendSnapshot(sim, verifiedProfile);
@@ -619,16 +603,16 @@ export function socialHelpVisitedNeighborBuilding(sim: ParkSimulation, buildingU
     sim.spawnFloatingText(
       cx,
       cy,
-      `${meta.icon} +${meta.goldReward}G  +${meta.xpReward} ⭐  +1 🍀`,
+      `${meta.icon} +${meta.goldReward} Sickle  +${meta.xpReward} ⭐  +1 🍀`,
       '#fde047'
     );
 
     socialPushSocialActivity(sim, 
       meta.icon,
-      `${meta.actionVi} "${item.name}" tại vườn ${nb.name} (+1 🍀, +${meta.goldReward}G)`,
+      `${meta.actionVi} "${item.name}" tại vườn ${nb.name} (+1 🍀, +${meta.goldReward} Sickle)`,
       now
     );
-    const msg = `🏮 Đã ${meta.actionVi.toLowerCase()} cho ${nb.name} kèm lời chúc "${note.shortVi}"! Nhận +1 🍀, +${meta.goldReward}G, +${meta.xpReward} XP!`;
+    const msg = `🏮 Đã ${meta.actionVi.toLowerCase()} cho ${nb.name} kèm lời chúc "${note.shortVi}"! Nhận +1 🍀, +${meta.goldReward} Sickle, +${meta.xpReward} XP!`;
     sim.onToast?.(msg, meta.icon);
     recordNeighborHelpStat(sim);
     sim.saveToStorage();
@@ -667,10 +651,10 @@ export function socialLikeVisitedNeighborFarm(sim: ParkSimulation, targetNeighbo
 
     sim.audio.playMatchPop(1);
     if (sim.isVisitingNeighbor && sim.activeVisitNeighborId === nb.id) {
-      sim.spawnFloatingText(15, 19, '❤️ Tuyệt đẹp! +4G +1 🍀', '#fb7185');
+      sim.spawnFloatingText(15, 19, '❤️ Tuyệt đẹp! +4 Sickle +1 🍀', '#fb7185');
     }
-    socialPushSocialActivity(sim, '❤️', `Thả tim khen "${nb.parkName}" của ${nb.name} (+1 🍀, +4G)`, now);
-    const msg = `❤️ Đã gửi tim khen ngợi "${nb.parkName}"! Nhận +1 🍀 Huy Hiệu Tình Bạn, +4G & +10 XP!`;
+    socialPushSocialActivity(sim, '❤️', `Thả tim khen "${nb.parkName}" của ${nb.name} (+1 🍀, +4 Sickle)`, now);
+    const msg = `❤️ Đã gửi tim khen ngợi "${nb.parkName}"! Nhận +1 🍀 Huy Hiệu Tình Bạn, +4 Sickle & +10 XP!`;
     sim.onToast?.(msg, '❤️');
     recordNeighborHelpStat(sim);
     sim.saveToStorage();
@@ -734,15 +718,15 @@ export function socialClaimVisitedNeighborMysteryGift(sim: ParkSimulation): { ok
     sim.spawnFloatingText(
       nb.mysteryGiftGx + 0.5,
       nb.mysteryGiftGy + 0.5,
-      `🎁 +${gold}G +1 🍀${bonusLabel}`,
+      `🎁 +${gold} Sickle +1 🍀${bonusLabel}`,
       '#fde047'
     );
     socialPushSocialActivity(sim, 
       '🎁',
-      `Tìm thấy Giỏ Quà Bí Ẩn tại vườn ${nb.name} (+1 🍀, +${gold}G${bonusLabel})`,
+      `Tìm thấy Giỏ Quà Bí Ẩn tại vườn ${nb.name} (+1 🍀, +${gold} Sickle${bonusLabel})`,
       now
     );
-    const msg = `🎁 Mở Giỏ Quà Bí Ẩn tại vườn ${nb.name}: Nhận +1 🍀, +${gold}G, +${xp} XP &${bonusLabel}!`;
+    const msg = `🎁 Mở Giỏ Quà Bí Ẩn tại vườn ${nb.name}: Nhận +1 🍀, +${gold} Sickle, +${xp} XP &${bonusLabel}!`;
     sim.onToast?.(msg, '🎁');
     recordNeighborHelpStat(sim);
     sim.saveToStorage();
@@ -777,20 +761,20 @@ export function socialFulfillNeighborOwlCrate(sim: ParkSimulation,
 
     const now = Date.now();
     crate.fulfilledByPlayerToday = true;
-    sim.state.galleons += crate.rewardGalleons;
-    sim.state.finance.shopRevenue += crate.rewardGalleons;
+    sim.state.galleons += crate.rewardSickle;
+    sim.state.finance.shopRevenue += crate.rewardSickle;
     social.friendshipTokens += crate.rewardTokens;
     sim.addXp(crate.rewardXp);
 
     sim.audio.playOwlHoot(0.04);
     sim.audio.playHarvestBubble();
-    sim.onRewardFly?.('galleons', crate.rewardGalleons);
+    sim.onRewardFly?.('galleons', crate.rewardSickle);
     socialPushSocialActivity(sim, 
       '📦',
-      `Đóng hộ ${crate.qty} ${meta.emoji} ${meta.name} trên Đơn Cú của ${nb.name} (+${crate.rewardTokens} 🍀, +${crate.rewardGalleons}G)`,
+      `Đóng hộ ${crate.qty} ${meta.emoji} ${meta.name} trên Đơn Cú của ${nb.name} (+${crate.rewardTokens} 🍀, +${crate.rewardSickle} Sickle)`,
       now
     );
-    const msg = `📦 Đã đóng hộ ${crate.qty} ${meta.emoji} ${meta.name} giúp ${nb.name}! Nhận +${crate.rewardTokens} 🍀, +${crate.rewardGalleons}G & +${crate.rewardXp} XP!`;
+    const msg = `📦 Đã đóng hộ ${crate.qty} ${meta.emoji} ${meta.name} giúp ${nb.name}! Nhận +${crate.rewardTokens} 🍀, +${crate.rewardSickle} Sickle & +${crate.rewardXp} XP!`;
     sim.onToast?.(msg, '🦉');
     recordNeighborHelpStat(sim);
     sim.saveToStorage();
@@ -872,10 +856,10 @@ export function socialCompleteNeighborMinigameRescue(sim: ParkSimulation, ctx: M
     sim.onRewardFly?.('galleons', goldEarned);
     socialPushSocialActivity(sim, 
       '⚔️',
-      `Giải cứu thành công ${kindMeta.icon} ${kindMeta.nameVi} (Màn ${ctx.stage}) cho ${nb.name} (+${tokensEarned} 🍀, +${goldEarned}G)`,
+      `Giải cứu thành công ${kindMeta.icon} ${kindMeta.nameVi} (Màn ${ctx.stage}) cho ${nb.name} (+${tokensEarned} 🍀, +${goldEarned} Sickle)`,
       now
     );
-    const msg = `🏆 Tuyệt đỉnh! Bạn đã vượt hộ ${kindMeta.nameVi} Màn ${ctx.stage} giúp ${nb.avatarEmoji} ${nb.name}! Nhận +${tokensEarned} 🍀, +${goldEarned}G & +${xpEarned} XP${buildMsg}!`;
+    const msg = `🏆 Tuyệt đỉnh! Bạn đã vượt hộ ${kindMeta.nameVi} Màn ${ctx.stage} giúp ${nb.avatarEmoji} ${nb.name}! Nhận +${tokensEarned} 🍀, +${goldEarned} Sickle & +${xpEarned} XP${buildMsg}!`;
     sim.onToast?.(msg, '🏆');
     recordNeighborHelpStat(sim);
     sim.saveToStorage();
@@ -952,7 +936,7 @@ export function socialOpenFriendshipChest(sim: ParkSimulation): {
 
     const relicPart =
       talismanEarned > 0 ? `+${talismanEarned} 🔥 Bùa Phượng Hoàng` : `+${sandEarned} ⏳ Cát Xoay`;
-    const msg = `🎁 Mở Rương Quà Tình Bạn #${social.chestsOpened}: Nhận +${starsEarned} 🌟 Sao Phép Thuật, ${relicPart}, +${seedQty} hạt ${cropMeta.emoji} ${cropMeta.name} & +${goldEarned}G!`;
+    const msg = `🎁 Mở Rương Quà Tình Bạn #${social.chestsOpened}: Nhận +${starsEarned} 🌟 Sao Phép Thuật, ${relicPart}, +${seedQty} hạt ${cropMeta.emoji} ${cropMeta.name} & +${goldEarned} Sickle!`;
     socialPushSocialActivity(sim, '🎁', msg, now);
     sim.onToast?.(msg, '🎁');
     sim.saveToStorage();
@@ -1010,7 +994,7 @@ export function socialClaimHomeLanternMark(sim: ParkSimulation, markIdOrBuilding
       } else if (item.cycleSec > 0 && item.baseIncome > 0) {
         const prod = sim.getBuildingProductionPerCycle(b, item);
         b.readyBubbles = Math.min(8, b.readyBubbles + 1);
-        b.storedGalleons += prod.galleons;
+        b.storedSickle += prod.galleons;
         b.storedXp += prod.xp;
         effectTag = ' • Tặng +1 mẻ thu hoạch sẵn!';
       }
@@ -1018,7 +1002,7 @@ export function socialClaimHomeLanternMark(sim: ParkSimulation, markIdOrBuilding
       sim.spawnFloatingText(
         b.gx + item.width * 0.5,
         b.gy + item.height * 0.5,
-        `🏮 ${mark.helperEmoji} +4G +1 🍀`,
+        `🏮 ${mark.helperEmoji} +4 Sickle +1 🍀`,
         '#fde047'
       );
     }
@@ -1030,10 +1014,10 @@ export function socialClaimHomeLanternMark(sim: ParkSimulation, markIdOrBuilding
     sim.tickProductionToTimestamp(now, true);
 
     sim.audio.playHarvestBubble();
-    const msg = `🏮 ${mark.helperEmoji} ${mark.helperName} nhắn: "${mark.noteVi}"${effectTag} (+1 🍀, +4G, +12 XP)`;
+    const msg = `🏮 ${mark.helperEmoji} ${mark.helperName} nhắn: "${mark.noteVi}"${effectTag} (+1 🍀, +4 Sickle, +12 XP)`;
     socialPushSocialActivity(sim, 
       '🏮',
-      `Nhận Dấu Ấn Cú Đưa Thư từ ${mark.helperName}${effectTag} (+1 🍀, +4G)`,
+      `Nhận Dấu Ấn Cú Đưa Thư từ ${mark.helperName}${effectTag} (+1 🍀, +4 Sickle)`,
       now
     );
     sim.onToast?.(msg, '🏮');
@@ -1398,11 +1382,11 @@ export function socialEnterHonorGardenTour(
     sim.state.finance.harvestRevenue += 8;
     sim.addXp(15);
     sim.addHarvestFeastPoints(8);
-    bonusSuffix = ' · Quà tham quan đầu ngày: +8G +15 XP!';
+    bonusSuffix = ' · Quà tham quan đầu ngày: +8 Sickle +15 XP!';
     socialPushSocialActivity(
       sim,
       snap.tour.avatarEmoji,
-      `Tham quan Vườn Mẫu "${snap.tour.titleVi}" (+8G, +15 XP)`,
+      `Tham quan Vườn Mẫu "${snap.tour.titleVi}" (+8 Sickle, +15 XP)`,
       now
     );
   }
@@ -1442,28 +1426,16 @@ export function socialSyncFlooDirectoryMembers(
 ): NeighborProfileState[] {
   const social = socialEnsureNeighborSocial(sim);
   const synced: NeighborProfileState[] = [];
-  const ownNick = normalizeDistinctPlayerNickname(social.playerDisplayName);
-  const ownCode = (social.playerFriendCode || '').trim().toUpperCase();
-  const hasOwnCode = !isPlaceholderOrSyntheticFriendCode(ownCode);
 
   for (const row of rows) {
     if (!row || !row.uid) continue;
     if (ownUid && row.uid === ownUid) continue;
-    const rowCode = String(row.friendCode || '').trim().toUpperCase();
-    const hasRowCode = !isPlaceholderOrSyntheticFriendCode(rowCode);
-    const rowNick = normalizeDistinctPlayerNickname(row.username);
-    if (hasOwnCode && hasRowCode && rowCode === ownCode) continue;
-    if (ownNick !== null && rowNick !== null && rowNick === ownNick) continue;
-
-    const existingIdx = social.neighbors.findIndex((n) => {
-      if (n.remoteUserId === row.uid) return true;
-      const nCode = (n.friendCode || '').trim().toUpperCase();
-      if (hasRowCode && !isPlaceholderOrSyntheticFriendCode(nCode) && nCode === rowCode) {
-        return true;
-      }
-      const nNick = normalizeDistinctPlayerNickname(n.name);
-      return rowNick !== null && nNick !== null && nNick === rowNick;
-    });
+    const existingIdx = social.neighbors.findIndex(
+      (n) =>
+        n.remoteUserId === row.uid ||
+        (Boolean(row.friendCode) &&
+          n.friendCode.toUpperCase() === String(row.friendCode).toUpperCase())
+    );
     const existing = existingIdx >= 0 ? social.neighbors[existingIdx] : undefined;
     const updated = upsertFlooMemberToNeighborProfile(existing, row, nowMs);
     if (social.dailyRescuesGivenIds.includes(updated.id) && updated.minigameSos) {
@@ -1476,12 +1448,6 @@ export function socialSyncFlooDirectoryMembers(
     }
     synced.push(updated);
   }
-
-  social.neighbors = deduplicateNeighborProfiles(social.neighbors, {
-    ownUid,
-    ownFriendCode: social.playerFriendCode,
-    ownDisplayName: social.playerDisplayName,
-  });
 
   if (synced.length > 0) {
     sim.saveToStorage();
@@ -1591,7 +1557,7 @@ export function socialHelpVisitedFlooMemberWholeGarden(
   sim.spawnFloatingText(
     19.5,
     24.5,
-    `🔥 Chăm giúp -15p! +${goldReward}G +1 🍀 +${xpReward} XP`,
+    `🔥 Chăm giúp -15p! +${goldReward} Sickle +1 🍀 +${xpReward} XP`,
     '#fde047'
   );
 
@@ -1599,10 +1565,10 @@ export function socialHelpVisitedFlooMemberWholeGarden(
   socialPushSocialActivity(
     sim,
     '🔥',
-    `Bay Floo chăm giúp toàn thung lũng ${nb.name} (-15 phút${helpedPlots > 0 ? ` cho ${helpedPlots} mẻ` : ''}, +${goldReward}G, +1 🍀)`,
+    `Bay Floo chăm giúp toàn thung lũng ${nb.name} (-15 phút${helpedPlots > 0 ? ` cho ${helpedPlots} mẻ` : ''}, +${goldReward} Sickle, +1 🍀)`,
     now
   );
-    const msg = `🔥 Đã chăm giúp thung lũng ${nb.name} (cây chín sớm 15 phút)! Nhận +${goldReward}G · +1 🍀 · +${xpReward} XP (Còn ${helpsLeft}/${MAX_DAILY_FRIEND_HELPS} lượt hôm nay)`;
+    const msg = `🔥 Đã chăm giúp thung lũng ${nb.name} (cây chín sớm 15 phút)! Nhận +${goldReward} Sickle · +1 🍀 · +${xpReward} XP (Còn ${helpsLeft}/${MAX_DAILY_FRIEND_HELPS} lượt hôm nay)`;
     sim.onToast?.(msg, '🔥');
     recordNeighborHelpStat(sim);
     sim.saveToStorage();
@@ -1619,6 +1585,9 @@ export function socialRecordFlooShareOrPostcard(
 ): { rewarded: boolean; msg: string } {
   const social = socialEnsureNeighborSocial(sim);
   const now = Date.now();
+  // HPVN: the gift is paid at most once per VN day, whatever the neighbour-reset key says
+  const vnDay = getVietnamCalendarKey(now);
+  if (social.flooShareRewardDay === vnDay) social.dailyFlooShareClaimed = true;
   if (social.dailyFlooShareClaimed) {
     return {
       rewarded: false,
@@ -1630,6 +1599,7 @@ export function socialRecordFlooShareOrPostcard(
   }
 
   social.dailyFlooShareClaimed = true;
+  social.flooShareRewardDay = vnDay;
   sim.state.galleons += 10;
   sim.state.finance.harvestRevenue += 10;
   social.friendshipTokens += 1;
@@ -1639,8 +1609,8 @@ export function socialRecordFlooShareOrPostcard(
     sim,
     kind === 'shareFloo' ? '🔥' : '🖼️',
     kind === 'shareFloo'
-      ? 'Khoe Bưu Thiếp & rủ bạn sang thăm trên Mạng Floo (+10G, +1 🍀, +15 điểm Lễ Hội)'
-      : 'Lưu Bưu Thiếp Thung Lũng đầu ngày (+10G, +1 🍀, +15 điểm Lễ Hội)',
+      ? 'Khoe Bưu Thiếp & rủ bạn sang thăm trên Mạng Floo (+10 Sickle, +1 🍀, +15 điểm Lễ Hội)'
+      : 'Lưu Bưu Thiếp Thung Lũng đầu ngày (+10 Sickle, +1 🍀, +15 điểm Lễ Hội)',
     now
   );
   recordNeighborHelpStat(sim);
@@ -1648,6 +1618,6 @@ export function socialRecordFlooShareOrPostcard(
   sim.onUiChange?.();
   return {
     rewarded: true,
-    msg: '✨ Gửi Bưu Thiếp Mạng Floo đầu ngày: Nhận +10G · +1 🍀 · +15 điểm Đại Tiệc!',
+    msg: '✨ Gửi Bưu Thiếp Mạng Floo đầu ngày: Nhận +10 Sickle · +1 🍀 · +15 điểm Đại Tiệc!',
   };
 }

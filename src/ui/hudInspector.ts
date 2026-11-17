@@ -149,9 +149,9 @@ export function inspectorRenderInspector(hud: GameHUD): void {
           : `z:${hud.inspectSelection.zoneId}`;
     if (selKey !== hud.lastInspectedKey) {
       hud.lastInspectedKey = selKey;
-      hud.inspectorCollapsed = false;
     }
-    panel.classList.toggle('inspector-collapsed', hud.inspectorCollapsed);
+    hud.inspectorCollapsed = false;
+    panel.classList.remove('inspector-collapsed');
 
     if (hud.inspectSelection.kind === 'building') {
       const targetUid = hud.inspectSelection.uid;
@@ -171,7 +171,6 @@ export function inspectorRenderInspector(hud: GameHUD): void {
       const queueCount = (hud.sim.rideQueues.get(b.uid) ?? []).length;
       const isConnected = hud.sim.isBuildingConnected(b.uid);
       const synGold = hud.sim.activeSynergies.buildingGoldMult.get(b.uid) ?? 1;
-      const synXp = hud.sim.activeSynergies.buildingXpMult.get(b.uid) ?? 1;
       const isRide = item.category === 'ride' && !item.isCoasterTrackPiece;
       const canRideCam = Boolean(item.isCustomCoasterStation) && !isBuilding;
 
@@ -196,8 +195,6 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                 const allCropList = Object.values(FARM_CROPS).sort(
                   (a, c) => a.unlockLevel - c.unlockLevel || a.growSec - c.growSec
                 );
-                const flowerTotal = allCropList.filter((c) => c.isFlowerCrop).length;
-                const cropTotal = allCropList.length - flowerTotal;
                 const filteredList = allCropList.filter((c) => {
                   if (hud.seedFilterMode === 'flowers') return Boolean(c.isFlowerCrop);
                   if (hud.seedFilterMode === 'crops') return !c.isFlowerCrop;
@@ -205,9 +202,9 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                 });
                 const filterPills = (
                   [
-                    { id: 'all', label: `🌱 (${allCropList.length})` },
-                    { id: 'flowers', label: `🌸 (${flowerTotal})` },
-                    { id: 'crops', label: `🌾 (${cropTotal})` },
+                    { id: 'all', label: 'Tất cả' },
+                    { id: 'flowers', label: 'Hoa' },
+                    { id: 'crops', label: 'Cây' },
                   ] as const
                 )
                   .map(
@@ -226,7 +223,6 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                     const lockedCrop =
                       !hud.sim.state.sandboxMode && hud.sim.state.level < crop.unlockLevel;
                     const seedCount = hud.sim.getSeedCount(crop.id);
-                    const stock = hud.sim.getFarmItemCount(crop.id);
                     const growLabel = formatDurationCompactVi(crop.growSec);
                     return `
                       <button
@@ -235,21 +231,14 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                         data-plant-crop="${crop.id}"
                         ${lockedCrop ? 'disabled' : ''}
                       >
+                        <span class="seed-card-seed-badge ${lockedCrop ? 'is-locked' : seedCount > 0 ? 'has-seed' : 'no-seed'}">
+                          ${lockedCrop ? `Cấp ${crop.unlockLevel}` : `×${seedCount}`}
+                        </span>
                         <img src="${getFarmItemIconSrc(crop.id)}" alt="${escapeHtml(crop.name)}" class="seed-card-img" />
                         <span class="seed-card-name">${escapeHtml(crop.name)}</span>
-                        <span class="seed-card-seed-badge ${seedCount > 0 ? 'has-seed' : 'no-seed'}">
-                          ${
-                            lockedCrop
-                              ? `🔒 Lv.${crop.unlockLevel}`
-                              : seedCount > 0
-                                ? `🌱 ×${seedCount}`
-                                : `🎓 +Hạt`
-                          }
-                        </span>
                         <span class="seed-card-meta">
-                          ${lockedCrop ? `⏱️ ${growLabel}` : `⏱️ ${growLabel} • 🪙${crop.seedCost}G`}
+                          ${lockedCrop ? growLabel : `${growLabel} · 🪙${crop.seedCost.toLocaleString('vi-VN')}`}
                         </span>
-                        <span class="seed-card-stock">🧺 ${stock}</span>
                       </button>
                     `;
                   })
@@ -262,14 +251,14 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                   magical: 'Thảo dược phép',
                 };
                 const soilHintHtml = soilEntry?.lastFamily
-                  ? `<div style="font-size:11px;font-weight:800;color:var(--teal-deep);margin-bottom:6px;">♻️ Luân canh: vừa gặt họ <strong>${familyLabelMap[soilEntry.lastFamily] ?? soilEntry.lastFamily}</strong> — gieo họ khác nhận <strong>×2 sản lượng</strong> & giảm mỏi đất!</div>`
+                  ? `<div class="hs-insp-note">Luân canh ×2 · Khác họ <strong>${familyLabelMap[soilEntry.lastFamily] ?? soilEntry.lastFamily}</strong></div>`
                   : '';
                 return `
                   <div class="ws-inspector-board">
                     <div class="ws-board-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-                      <span>🌱 Chọn Hạt</span>
-                      <button id="btnInspOpenSeedQuiz" type="button" class="brass-btn sq-tray-quiz-cta" style="padding:4px 9px;font-size:11.5px;">
-                        🪄 +Hạt
+                      <span>Chọn hạt</span>
+                      <button id="btnInspOpenSeedQuiz" type="button" class="brass-btn sq-tray-quiz-cta">
+                        Đố nhận hạt
                       </button>
                     </div>
                     ${soilHintHtml}
@@ -296,41 +285,41 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                   );
               return `
                 <div class="ws-inspector-board">
-                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-                    <img src="${getFarmItemIconSrc(cropDef.id)}" alt="${escapeHtml(cropDef.name)}" style="width:44px;height:44px;object-fit:contain;" />
-                    <div style="flex:1;">
-                      <div style="font-size:13.5px;font-weight:900;">${escapeHtml(cropDef.name)} <span style="font-size:11px;color:var(--amber-deep);">• Bậc ${masteryInfo.labelRom}</span></div>
-                      <div style="font-size:12px;font-weight:700;opacity:0.86;">
-                        ${isRipe ? '🌾 Chín!' : `⏱️ ${formatDurationCountdownVi(cropLeftSec)}`}${b.cropRotatedBonus ? ' • 🌟 Luân canh ×2' : ''}
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                    <img src="${getFarmItemIconSrc(cropDef.id)}" alt="${escapeHtml(cropDef.name)}" style="width:40px;height:40px;object-fit:contain;" />
+                    <div style="flex:1;min-width:0;">
+                      <div class="hs-insp-name">${escapeHtml(cropDef.name)} <span class="hs-insp-meta">· Bậc ${masteryInfo.labelRom}</span></div>
+                      <div class="hs-insp-stat">
+                        ${isRipe ? 'Chín' : formatDurationCountdownVi(cropLeftSec)}${b.cropRotatedBonus ? ' · ×2' : ''}
                       </div>
-                      <div style="font-size:10.5px;opacity:0.76;">Thông thạo: ${masteryCount} vụ • Họ ${getCropFamily(cropDef.id)}</div>
+                      <div class="hs-insp-meta">${masteryCount} vụ</div>
                     </div>
                   </div>
-                  <div class="quest-bar" style="height:9px;margin-bottom:8px;">
+                  <div class="quest-bar" style="height:8px;margin-bottom:8px;">
                     <div class="quest-bar-fill" style="width:${growPct}%"></div>
                   </div>
-                  <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;">
                     ${
                       isRipe
                         ? `
-                          <button id="btnInspHarvestCrop" type="button" class="owl-green-send-btn" style="width:100%;padding:8px 12px;font-size:13px;">
-                            <img src="/sprites/ui_icon_golden_sickle.png" alt="" style="width:20px;height:20px;object-fit:contain;vertical-align:-4px;margin-right:4px;" />
-                            Gặt (+${effectiveYield})
+                          <button id="btnInspHarvestCrop" type="button" class="owl-green-send-btn" style="width:100%;">
+                            <img src="/game/trang-trai-hang-soc/sprites/ui_icon_golden_sickle.webp" alt="" style="width:18px;height:18px;object-fit:contain;vertical-align:-3px;margin-right:4px;" />
+                            Gặt +${effectiveYield}
                           </button>
                         `
                         : !b.cropWateredBoost
                           ? `
                             <button id="btnInspWaterCrop" type="button" class="brass-btn gold-cta" style="flex:1;">
-                              <img src="/sprites/ui_icon_watering_can.png" alt="" style="width:18px;height:18px;object-fit:contain;vertical-align:-3px;margin-right:4px;" />
-                              💧 Tưới (-30%)
+                              <img src="/game/trang-trai-hang-soc/sprites/ui_icon_watering_can.webp" alt="" style="width:18px;height:18px;object-fit:contain;vertical-align:-3px;margin-right:4px;" />
+                              Tưới −30%
                             </button>
                           `
-                          : `<div style="flex:1;font-size:11.5px;font-weight:800;text-align:center;opacity:0.88;padding:6px 4px;">💧 Đã tưới</div>`
+                          : `<div class="hs-insp-meta" style="flex:1;text-align:center;padding:8px 4px;">Đã tưới</div>`
                     }
                     ${
                       !isRipe && (dewPhials > 0 || hud.sim.state.sandboxMode)
                         ? `<button type="button" class="brass-btn" data-use-morning-dew="1" style="flex:1;" title="Dùng 1 Bình Sương Mai rút ngắn 15 phút">
-                            🧪 Sương Mai (-15p • ×${dewPhials})
+                            Sương Mai ×${dewPhials}
                           </button>`
                         : ''
                     }
@@ -357,7 +346,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                           .slice(0, 5)
                           .map((gid) => {
                             const gMeta = FARM_GOODS[gid];
-                            return `<img src="/sprites/${gMeta.iconKey}.png" alt="${escapeHtml(gMeta.name)}" title="${escapeHtml(gMeta.name)}" class="ws-ready-good-img" />`;
+                            return `<img src="/game/trang-trai-hang-soc/sprites/${gMeta.iconKey}.webp" alt="${escapeHtml(gMeta.name)}" title="${escapeHtml(gMeta.name)}" class="ws-ready-good-img" />`;
                           })
                           .join('')}
                       </div>
@@ -400,7 +389,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                     >
                       <div class="ws-recipe-name">${escapeHtml(recipeTitle)}</div>
                       <div class="ws-recipe-art-wrap">
-                        <img src="/sprites/${outMeta.iconKey}.png" alt="${escapeHtml(recipeTitle)}" class="ws-recipe-img" />
+                        <img src="/game/trang-trai-hang-soc/sprites/${outMeta.iconKey}.webp" alt="${escapeHtml(recipeTitle)}" class="ws-recipe-img" />
                         ${canCraft ? '<span class="ws-check-dot">✓</span>' : ''}
                       </div>
                       <div class="ws-recipe-ings">
@@ -424,7 +413,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                   const sMeta = FARM_GOODS[slot.goodId];
                   return `
                     <div class="ws-slot-card filled" title="Đang chờ: ${escapeHtml(sMeta.name)}">
-                      <img src="/sprites/${sMeta.iconKey}.png" alt="${escapeHtml(sMeta.name)}" class="ws-slot-img" />
+                      <img src="/game/trang-trai-hang-soc/sprites/${sMeta.iconKey}.webp" alt="${escapeHtml(sMeta.name)}" class="ws-slot-img" />
                       <span class="ws-check-dot">✓</span>
                       <div class="ws-slot-bar"></div>
                     </div>
@@ -439,17 +428,13 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                 }
                 return `
                   <div class="ws-slot-card empty" title="Trống">
-                    <span style="font-size:11px;font-weight:800;opacity:0.65;">Trống</span>
+                    <span style="font-size:11px;font-weight:700;opacity:0.65;">Trống</span>
                   </div>
                 `;
               }).join('');
 
               return `
                 <div class="ws-inspector-board">
-                  <div class="ws-board-header">
-                    <span>🔥 ${escapeHtml(item.name)}</span>
-                    <button id="btnInspOpenBarn" type="button" class="brass-btn" style="padding:2px 8px;font-size:11px;">🏡 Kho</button>
-                  </div>
                   ${readyShelfHtml}
                   <div class="ws-recipe-grid">${recipeCardsHtml}</div>
                   <div class="ws-oven-strip">
@@ -457,8 +442,8 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                       <div class="ws-oven-arch">
                         ${
                           activeMeta
-                            ? `<img src="/sprites/${activeMeta.iconKey}.png" alt="${escapeHtml(activeMeta.name)}" class="ws-oven-good-img" />`
-                            : `<span style="font-size:20px;">🪵</span>`
+                            ? `<img src="/game/trang-trai-hang-soc/sprites/${activeMeta.iconKey}.webp" alt="${escapeHtml(activeMeta.name)}" class="ws-oven-good-img" />`
+                            : `<span style="font-size:18px;">🪵</span>`
                         }
                       </div>
                       <div class="ws-oven-caption">
@@ -489,7 +474,6 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                   .map((animal) => {
                     const lockedAnimal =
                       !hud.sim.state.sandboxMode && hud.sim.state.level < animal.unlockLevel;
-                    const prodMeta = animal.goodId ? getFarmItemMeta(animal.goodId) : null;
                     return `
                       <button
                         type="button"
@@ -497,13 +481,12 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                         data-stock-animal="${animal.id}"
                         ${lockedAnimal ? 'disabled' : ''}
                       >
-                        <img src="/sprites/${animal.spritePair[0]}.png" alt="${escapeHtml(animal.name)}" class="seed-card-img pasture-card-img" />
-                        <span class="seed-card-name">${escapeHtml(animal.name)}</span>
-                        <span class="seed-card-seed-badge ${lockedAnimal ? 'no-seed' : 'has-seed'}">
-                          ${lockedAnimal ? `🔒 Lv.${animal.unlockLevel}` : `🪙 ${animal.cost}G`}
+                        <span class="seed-card-seed-badge ${lockedAnimal ? 'is-locked' : 'has-seed'}">
+                          ${lockedAnimal ? `Cấp ${animal.unlockLevel}` : `🪙${animal.cost.toLocaleString('vi-VN')}`}
                         </span>
-                        <span class="seed-card-meta">⏱️${formatDurationCompactVi(animal.cycleSec)} • +${animal.sellValue}G</span>
-                        <span class="seed-card-stock">${prodMeta ? `+${animal.yieldQty} ${escapeHtml(prodMeta.name)}` : 'Sản vật'}</span>
+                        <img src="/game/trang-trai-hang-soc/sprites/${animal.spritePair[0]}.webp" alt="${escapeHtml(animal.name)}" class="seed-card-img pasture-card-img" />
+                        <span class="seed-card-name">${escapeHtml(animal.name)}</span>
+                        <span class="seed-card-meta">${formatDurationCompactVi(animal.cycleSec)} · +🪙${animal.sellValue}</span>
                       </button>
                     `;
                   })
@@ -511,7 +494,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                 return `
                   <div class="ws-inspector-board">
                     <div class="ws-board-title">
-                      <span>🐾 Chọn Thú</span>
+                      <span>Chọn thú</span>
                     </div>
                     <div class="seed-picker-grid">${animalCards}</div>
                   </div>
@@ -536,19 +519,19 @@ export function inspectorRenderInspector(hud: GameHUD): void {
               return `
                 <div class="ws-inspector-board">
                   <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-                    <img src="/sprites/${animalDef.spritePair[0]}.png" alt="${escapeHtml(animalDef.name)}" style="width:46px;height:46px;object-fit:contain;" />
+                    <img src="/game/trang-trai-hang-soc/sprites/${animalDef.spritePair[0]}.webp" alt="${escapeHtml(animalDef.name)}" style="width:46px;height:46px;object-fit:contain;" />
                     <div style="flex:1;">
-                      <div style="font-size:13.5px;font-weight:900;">${escapeHtml(animalDef.name)}</div>
+                      <div class="hs-insp-title">${escapeHtml(animalDef.name)}</div>
                       <div style="font-size:12px;font-weight:700;opacity:0.86;">
                         ${
                           isReady
-                            ? `🧺 +${animalDef.sellValue}G${prodMeta ? ` +${animalDef.yieldQty} ${escapeHtml(prodMeta.name)}` : ''}`
+                            ? `🧺 +${animalDef.sellValue} Sickle${prodMeta ? ` +${animalDef.yieldQty} ${escapeHtml(prodMeta.name)}` : ''}`
                             : `⏱️ ${formatDurationCountdownVi(leftSec)}`
                         }
                       </div>
                     </div>
                   </div>
-                  <div class="quest-bar" style="height:9px;margin-bottom:8px;">
+                  <div class="quest-bar" style="height:8px;margin-bottom:8px;">
                     <div class="quest-bar-fill" style="width:${grazePct}%"></div>
                   </div>
                   <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -556,7 +539,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                       isReady
                         ? `
                           <button id="btnInspHarvestPasture" type="button" class="owl-green-send-btn" style="flex:1;padding:8px 12px;font-size:13px;">
-                            🧺 Thu (+${animalDef.sellValue}G)
+                            🧺 Thu (+${animalDef.sellValue} Sickle)
                           </button>
                         `
                         : !b.pastureFedBoost
@@ -565,7 +548,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                               🌾 Cho ăn (-35%)
                             </button>
                           `
-                          : `<div style="flex:1;font-size:11.5px;font-weight:800;text-align:center;opacity:0.88;padding:6px 4px;">🌾 Đã cho ăn</div>`
+                          : `<div style="flex:1;font-size:12px;font-weight:700;text-align:center;opacity:0.88;padding:6px 4px;">🌾 Đã cho ăn</div>`
                     }
                     <button id="btnInspClearPasture" type="button" class="brass-btn" title="Đổi thú">
                       🔄 Đổi
@@ -573,7 +556,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                     ${
                       !isReady && ((hud.sim.state.morningDewPhials ?? 0) > 0 || hud.sim.state.sandboxMode)
                         ? `<button type="button" class="brass-btn" data-use-morning-dew="1" style="flex:1;" title="Dùng 1 Bình Sương Mai rút ngắn 15 phút">
-                            🧪 Sương Mai (-15p • ×${hud.sim.state.morningDewPhials ?? 0})
+                            🧪 -15p (×${hud.sim.state.morningDewPhials ?? 0})
                           </button>`
                         : ''
                     }
@@ -582,6 +565,18 @@ export function inspectorRenderInspector(hud: GameHUD): void {
               `;
             })()
           : '';
+
+      const typeOrVisits = `${
+        item.isFarmlandPlot
+          ? 'Ruộng'
+          : item.isAnimalPasturePlot
+            ? 'Đồng cỏ'
+            : item.connectableGroup === 'flower_garden'
+              ? 'Vườn hoa'
+              : item.workshopGroupId
+                ? 'Xưởng'
+                : `${b.visitorsServed} lượt`
+      }${isRide ? ` · ${queueCount}/${MAX_RIDE_QUEUE}` : ''}`;
 
       panel.classList.remove('hidden');
       panel.classList.toggle(
@@ -593,50 +588,26 @@ export function inspectorRenderInspector(hud: GameHUD): void {
       hud.syncHudFocusVisibility();
       const inspThumbSrc = getCatalogCardImageSrc(item);
       panel.innerHTML = `
-        <div class="inspector-header-bar" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:${hud.inspectorCollapsed ? '0' : '8px'};">
-          <div style="display:flex;gap:10px;align-items:center;min-width:0;">
+        <div class="inspector-header-bar">
+          <div class="hs-insp-head-main">
             ${inspThumbSrc ? `<img src="${inspThumbSrc}" alt="${escapeHtml(item.name)}" class="inspector-thumb" />` : ''}
-            <div style="min-width:0;">
-              <div style="font-size:14px;font-weight:800;color:#45230c;">${escapeHtml(item.name)}</div>
-              <div style="font-size:12.5px;color:#b45309;font-weight:800;">${'★'.repeat(b.stars)}${'☆'.repeat(5 - b.stars)}</div>
-              <div style="font-size:11.5px;opacity:0.82;">${
-                item.isFarmlandPlot
-                  ? '🌱 Ruộng'
-                  : item.isAnimalPasturePlot
-                    ? '🐾 Đồng cỏ'
-                    : item.connectableGroup === 'flower_garden'
-                      ? '🌸 Vườn hoa'
-                      : item.workshopGroupId
-                        ? '🔥 Xưởng'
-                        : `👥 ${b.visitorsServed}`
-              }${isRide ? ` • 🎟️ ${queueCount}/${MAX_RIDE_QUEUE}` : ''}</div>
+            <div class="hs-insp-head-copy">
+              <div class="hs-insp-title">${escapeHtml(item.name)}</div>
+              <div class="hs-insp-meta"><span class="hs-insp-stars-inline">${'★'.repeat(b.stars)}${'☆'.repeat(5 - b.stars)}</span> · ${typeOrVisits}${!isConnected ? ' · <span class="hs-insp-warn">Chưa nối đường</span>' : ''}${synGold > 1 ? ` · +${Math.round((synGold - 1) * 100)}%` : ''}</div>
             </div>
           </div>
-          <div style="display:flex;gap:4px;flex-shrink:0;">
-            <button id="btnToggleInspRollup" type="button" class="brass-btn" aria-expanded="${!hud.inspectorCollapsed}" title="Thu gọn / Mở rộng" style="padding:3px 7px;font-size:11.5px;">${hud.inspectorCollapsed ? '▴' : '▾'}</button>
-            <button id="btnCloseInsp" type="button" class="brass-btn" aria-label="Đóng bảng chi tiết" style="padding:3px 8px;">✕</button>
-          </div>
+          <button id="btnCloseInsp" type="button" class="brass-btn hs-insp-icon-btn" aria-label="Đóng bảng chi tiết">✕</button>
         </div>
 
         ${farmlandHtml}
         ${pastureHtml}
         ${workshopBoardHtml}
 
-        <div class="quest-card-mini" style="margin-bottom:8px;font-size:12px;display:flex;flex-direction:column;gap:4px;">
-          <div style="font-weight:800;color:${isConnected ? '#15803d' : '#dc2626'};">
-            ${isConnected ? '🟢 Đã nối đường' : '🚧 Chưa nối đường (25%)'}
-          </div>
-          ${
-            synGold > 1
-              ? `<div style="font-weight:800;color:#b45309;">🌟 Combo: +${Math.round((synGold - 1) * 100)}%G • +${Math.round((synXp - 1) * 100)}%XP</div>`
-              : ''
-          }
-          ${
-            item.producesIngredient
-              ? `<div style="color:#5c2d0c;">🌿 Rơi: <strong>${RAW_INGREDIENTS_INFO[item.producesIngredient].emoji} ${RAW_INGREDIENTS_INFO[item.producesIngredient].name}</strong></div>`
-              : ''
-          }
-        </div>
+        ${
+          item.producesIngredient && !isBuilding
+            ? `<div class="hs-insp-drop-meta">Rơi: <strong>${RAW_INGREDIENTS_INFO[item.producesIngredient].name}</strong></div>`
+            : ''
+        }
 
         ${
           isBuilding
@@ -667,38 +638,30 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                   ? 'Tiến độ ấp trứng'
                   : 'Tiến độ xây dựng';
                 return `
-                  <div class="quest-card-mini" style="margin-bottom:8px;background:var(--surface-panel);border-color:var(--sky-deep);">
-                    <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;font-weight:800;color:var(--sky-deep);">
-                      <span>${item.isCreatureHabitat ? '🥚 Đang ấp' : '🔨 Đang xây'}</span>
+                  <div class="hs-insp-build-wrap">
+                    <div class="hs-insp-build-head">
+                      <span>${item.isCreatureHabitat ? 'Đang ấp' : 'Đang xây'} · <strong>${formatDurationCountdownVi(remainSec)}</strong>${
+                        reducedSec > 0 ? ` (−${formatDurationCompactVi(reducedSec)})` : ''
+                      }</span>
                       <span>${buildPct}%</span>
                     </div>
                     <progress class="ts-build-progress" max="100" value="${buildPct}" aria-label="${progLabel}"></progress>
-                    <div style="font-size:12px;font-weight:700;color:var(--ink);">
-                      ⏳ <strong>${formatDurationCountdownVi(remainSec)}</strong>${
-                        reducedSec > 0
-                          ? ` • <span style="color:var(--teal-deep);">-${formatDurationCompactVi(reducedSec)}</span>`
-                          : ''
-                      }
-                    </div>
-                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px;">
-                      <button id="btnInspPlayMinigameSpeed" type="button" class="brass-btn gold-cta" style="flex:1 1 132px;" ${canTriggerSpeedup ? '' : 'disabled'} title="Thắng 1 màn trừ 30–75p giờ xây">
-                        ⚡ Khảo Thí (-30~75p)
-                      </button>
-                      <button id="btnInspQuizSpeed" type="button" class="brass-btn" style="flex:1 1 132px;" ${canTriggerSpeedup ? '' : 'disabled'} title="Đố ngoại ngữ trừ 10–25p giờ xây">
-                        🪄 Thần Chú (-10~25p)
-                      </button>
+                    <div class="hs-insp-actions-row">
+                      <button id="btnInspPlayMinigameSpeed" type="button" class="brass-btn gold-cta hs-insp-speed-btn" ${canTriggerSpeedup ? '' : 'disabled'} title="Thắng 1 màn trừ 30–75p giờ xây">Khảo thí −30p</button>
+                      <button id="btnInspQuizSpeed" type="button" class="brass-btn hs-insp-speed-btn" ${canTriggerSpeedup ? '' : 'disabled'} title="Đố ngoại ngữ trừ 10–25p giờ xây">Thần chú −10p</button>
                       ${
                         reducibleSec > 0 && ((hud.sim.state.morningDewPhials ?? 0) > 0 || hud.sim.state.sandboxMode)
-                          ? `<button type="button" class="brass-btn" data-use-morning-dew="1" style="flex:1 1 160px;" title="Dùng 1 Bình Sương Mai rút ngắn 15 phút thi công">
-                              🧪 Sương Mai (-15p • ×${hud.sim.state.morningDewPhials ?? 0})
-                            </button>`
+                          ? `<button type="button" class="brass-btn" data-use-morning-dew="1" title="Dùng 1 Bình Sương Mai rút ngắn 15 phút">−15p ×${hud.sim.state.morningDewPhials ?? 0}</button>`
                           : ''
                       }
                       ${
                         hud.sim.state.sandboxMode
-                          ? `<button id="btnFinishNowSand" type="button" class="brass-btn" style="flex:1 1 120px;" title="Hoàn tất ngay">
-                              ⚡ Xong ngay
-                            </button>`
+                          ? `<button id="btnFinishNowSand" type="button" class="brass-btn" title="Hoàn tất ngay">Xong</button>`
+                          : ''
+                      }
+                      ${
+                        !b.isIndestructible
+                          ? `<button id="btnMoveThis" type="button" class="brass-btn hs-insp-move-btn" title="Dời công trình">Dời</button>`
                           : ''
                       }
                     </div>
@@ -707,11 +670,8 @@ export function inspectorRenderInspector(hud: GameHUD): void {
               })()
             : b.awaitingUnveil
               ? `
-                <div class="quest-card-mini feast-unveil-insp-card">
-                  <div class="feast-unveil-insp-title">🎀 Hoàn thiện!</div>
-                  <button id="btnInspUnveilBuilding" type="button" class="brass-btn gold-cta" style="width:100%;margin-top:7px;">
-                    🎀 Cắt Băng
-                  </button>
+                <div class="hs-insp-actions-row">
+                  <button id="btnInspUnveilBuilding" type="button" class="brass-btn gold-cta" style="flex:1;">Cắt băng khánh thành</button>
                 </div>
               `
               : item.baseIncome > 0
@@ -719,20 +679,23 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                   const festSpeed =
                     hud.sim.getActiveFestival() === 'quidditch_cup' ? 0.85 : 1.0;
                   const baseCycle = getBuildingEffectiveCycleSec(b, item);
+                  // HPVN: a stocked pasture pays the animal's own values (same numbers as the tray and the harvest)
+                  const pastureAnimal = item.isAnimalPasturePlot && b.pastureAnimalId ? PASTURE_ANIMALS[b.pastureAnimalId] : null;
                   const effCycle = Math.max(1, baseCycle * festSpeed);
                   const rawEl = Math.max(0, (now - (b.lastTickAt || now)) / 1000);
                   const cycLeft = Math.max(1, Math.ceil(effCycle - (rawEl % effCycle)));
                   return `
-                    <div class="quest-card-mini" style="margin-bottom:8px;font-size:12px;">
-                      <div><strong id="lblBuildingProdVal">+${prod.galleons}🪙 +${prod.xp}⭐</strong> / ${formatDurationCompactVi(baseCycle)}</div>
+                    <div class="hs-insp-prod-row">
+                      <div class="hs-insp-prod-copy">
+                        <strong id="lblBuildingProdVal">+${pastureAnimal?.sellValue ?? prod.galleons}🪙 +${pastureAnimal?.xp ?? prod.xp}⭐</strong> / ${formatDurationCompactVi(pastureAnimal?.cycleSec ?? baseCycle)}${
+                          item.cycleSec > 0 && !item.isFarmlandPlot && !item.isAnimalPasturePlot
+                            ? ` · ${formatDurationCountdownVi(cycLeft)}`
+                            : ''
+                        } · Kho: <strong>${b.storedSickle}🪙</strong>
+                      </div>
                       ${
-                        item.cycleSec > 0 && !item.isFarmlandPlot && !item.isAnimalPasturePlot
-                          ? `<div style="margin-top:3px;">⏱️ <strong>${formatDurationCountdownVi(cycLeft)}</strong> • Kho: <strong>${b.storedGalleons}🪙</strong></div>`
-                          : `<div style="margin-top:3px;">Kho: <strong>${b.storedGalleons}🪙</strong></div>`
-                      }
-                      ${
-                        b.storedGalleons > 0
-                          ? `<button id="btnCollectSingle" type="button" class="brass-btn gold-cta" style="width:100%;margin-top:6px;">🪙 Thu (+${b.storedGalleons}G)</button>`
+                        b.storedSickle > 0
+                          ? `<button id="btnCollectSingle" type="button" class="brass-btn gold-cta">Thu +${b.storedSickle} Sickle</button>`
                           : ''
                       }
                     </div>
@@ -744,17 +707,15 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         ${
           isRide && !isBuilding && !item.isFlooPortal
             ? `
-              <div class="quest-card-mini" style="margin-bottom:8px;font-size:12px;">
-                <div style="display:flex;justify-content:space-between;font-weight:800;margin-bottom:4px;">
-                  <span>⚙️ Độ bền:</span>
+              <div class="quest-card-mini" style="margin-bottom:6px;font-size:12px;">
+                <div style="display:flex;justify-content:space-between;font-weight:700;margin-bottom:4px;">
+                  <span>Độ bền</span>
                   <span style="color:${b.isBrokenDown ? '#dc2626' : b.durability < 50 ? '#b45309' : '#15803d'};">${Math.round(b.durability)}%</span>
                 </div>
                 <progress max="100" value="${Math.round(b.durability)}" aria-label="Độ bền"></progress>
                 ${
                   b.isBrokenDown || b.durability < 98
-                    ? `<button id="btnRepairRide" type="button" class="brass-btn ${b.isBrokenDown ? 'gold-cta' : ''}" style="width:100%;margin-top:6px;">
-                        🪄 Sửa (0G)
-                      </button>`
+                    ? `<button id="btnRepairRide" type="button" class="brass-btn ${b.isBrokenDown ? 'gold-cta' : ''}" style="width:100%;margin-top:6px;">Sửa (0 Sickle)</button>`
                     : ''
                 }
               </div>
@@ -765,10 +726,10 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         ${
           hasPriceSlider
             ? `
-              <div class="quest-card-mini" style="margin-bottom:8px;font-size:12px;">
-                <label for="inpBuildingPrice" style="display:flex;justify-content:space-between;font-weight:800;margin-bottom:4px;">
-                  <span>🎟️ Giá (${priceBounds.min}–${priceBounds.max}G):</span>
-                  <span id="lblBuildingPriceVal">${curPrice}G</span>
+              <div class="quest-card-mini" style="margin-bottom:6px;font-size:12px;">
+                <label for="inpBuildingPrice" style="display:flex;justify-content:space-between;font-weight:700;margin-bottom:4px;">
+                  <span>Giá (${priceBounds.min}–${priceBounds.max})</span>
+                  <span id="lblBuildingPriceVal">${curPrice} Sickle</span>
                 </label>
                 <input id="inpBuildingPrice" type="range" min="${priceBounds.min}" max="${priceBounds.max}" value="${curPrice}" />
                 <div id="lblPriceVerdict" style="margin-top:4px;font-weight:700;color:${priceVerdict.color};">
@@ -782,11 +743,9 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         ${
           item.isCustomCoasterStation && b.coasterStats && !isBuilding
             ? `
-              <div class="quest-card-mini" style="margin-bottom:8px;font-size:12px;">
-                <div style="font-weight:800;color:#7c2d12;margin-bottom:4px;">🎢 Ray: ${b.coasterStats.lengthMeters}m • 🔥 ${b.coasterStats.excitement}/10</div>
-                <button id="btnAutoLoopCoaster" type="button" class="brass-btn gold-cta" style="width:100%;margin-top:4px;">
-                  ✨ Tự Lắp Ray
-                </button>
+              <div class="hs-insp-prod-row">
+                <span class="hs-insp-prod-copy">Ray ${b.coasterStats.lengthMeters}m · Hứng khởi ${b.coasterStats.excitement}/10</span>
+                <button id="btnAutoLoopCoaster" type="button" class="brass-btn gold-cta">Tự lắp ray</button>
               </div>
             `
             : ''
@@ -795,9 +754,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         ${
           canRideCam
             ? `
-              <button id="btnEnterRideCam" type="button" class="brass-btn gold-cta" style="width:100%;margin-bottom:8px;">
-                🎥 Ride Cam
-              </button>
+              <button id="btnEnterRideCam" type="button" class="brass-btn gold-cta" style="width:100%;margin-bottom:6px;">Ride Cam</button>
             `
             : ''
         }
@@ -805,13 +762,11 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         ${
           (item.isWorkshopBrewery || item.producesIngredient || item.isFireworksLauncher) && !isBuilding
             ? `
-              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-                <button id="btnInspOpenWorkshop" type="button" class="brass-btn gold-cta" style="flex:1;">
-                  🧪 Xưởng
-                </button>
+              <div class="hs-insp-actions-row" style="margin-bottom:6px;">
+                <button id="btnInspOpenWorkshop" type="button" class="brass-btn gold-cta" style="flex:1;">Xưởng</button>
                 ${
                   item.isFireworksLauncher
-                    ? `<button id="btnInspFireworks" type="button" class="brass-btn" style="flex:1;">🎆 Pháo Hoa</button>`
+                    ? `<button id="btnInspFireworks" type="button" class="brass-btn" style="flex:1;">Pháo hoa</button>`
                     : ''
                 }
               </div>
@@ -822,21 +777,17 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         ${
           item.isCreatureHabitat && !isBuilding
             ? `
-              <div class="quest-card-mini" style="margin-bottom:8px;font-size:12px;">
+              <div class="quest-card-mini" style="margin-bottom:6px;font-size:12px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;">
-                  <strong>🐾 ${escapeHtml(b.creatureNickname || item.creatureName || item.name)}</strong>
+                  <strong>${escapeHtml(b.creatureNickname || item.creatureName || item.name)}</strong>
                   <span class="morph-pill ${b.creatureMorph === 'radiant' ? 'radiant' : b.creatureMorph === 'mystic' ? 'mystic' : ''}">
                     ${MORPH_INFO[b.creatureMorph ?? 'normal'].badge}
                   </span>
                 </div>
-                <div>💝 Lv.${b.creatureBondLevel ?? 1}/${MAX_BOND_LEVEL} • ${stageNames[b.creatureStage ?? 'baby']} • 🌿 ${bio?.score ?? 50}% • 🥩 ${Math.round(b.creatureHunger ?? 90)}%</div>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
-                  <button id="btnFeedBeast" type="button" class="brass-btn" style="flex:1;">
-                    🥩 Cho ăn
-                  </button>
-                  <button id="btnInspOpenSuitcase" type="button" class="brass-btn gold-cta" style="flex:1.3;">
-                    🧳 Vali
-                  </button>
+                <div>Lv.${b.creatureBondLevel ?? 1}/${MAX_BOND_LEVEL} · ${stageNames[b.creatureStage ?? 'baby']} · Môi trường ${bio?.score ?? 50}% · No ${Math.round(b.creatureHunger ?? 90)}%</div>
+                <div class="hs-insp-actions-row" style="margin-top:6px;">
+                  <button id="btnFeedBeast" type="button" class="brass-btn" style="flex:1;">Cho ăn</button>
+                  <button id="btnInspOpenSuitcase" type="button" class="brass-btn gold-cta" style="flex:1;">Vali</button>
                 </div>
               </div>
             `
@@ -846,10 +797,8 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         ${
           item.isBackstage && backstage && !isBuilding
             ? `
-              <div class="quest-card-mini" style="margin-bottom:8px;font-size:12px;">
-                <div style="font-weight:700;color:${backstage.isShielded ? '#15803d' : '#dc2626'};">
-                  📦 Che chắn: ${backstage.shieldCount}/${backstage.needed} ${backstage.isShielded ? '✅ (+25%G)' : '⚠️'}
-                </div>
+              <div class="hs-insp-drop-meta" style="color:${backstage.isShielded ? '#15803d' : '#dc2626'};">
+                Che chắn: ${backstage.shieldCount}/${backstage.needed} ${backstage.isShielded ? '✓ (+25% Sickle)' : ''}
               </div>
             `
             : ''
@@ -858,63 +807,44 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         ${
           item.id === 'burrow_honeydukes_canon' && !isBuilding
             ? `
-              <button id="btnInspOpenHoneydukesMatch3" type="button" class="brass-btn gold-cta" style="width:100%;margin-bottom:8px;">
-                🍬 Vào Gác Xép Bùa Gặt Honeydukes
-              </button>
+              <button id="btnInspOpenHoneydukesMatch3" type="button" class="brass-btn gold-cta" style="width:100%;margin-bottom:6px;">Vào Bùa Gặt Honeydukes</button>
             `
             : ''
         }
 
         ${
           (item.id === 'burrow_owl_post' || item.id === 'eeylops_owl_emporium') && !isBuilding
-            ? `
-              <button id="btnInspOpenOwlOrders" type="button" class="brass-btn gold-cta" style="width:100%;margin-bottom:8px;">
-                🦉 Mở Bảng Đơn Hàng Cú
-              </button>
-            `
+            ? `<button id="btnInspOpenOwlOrders" type="button" class="brass-btn gold-cta" style="width:100%;margin-bottom:8px;">Mở Bảng Đơn Hàng Cú</button>`
             : ''
         }
-
         ${
           item.id === 'burrow_feast_marquee' && !isBuilding
-            ? `
-              <button id="btnInspOpenFeastMarquee" type="button" class="brass-btn gold-cta" style="width:100%;margin-bottom:8px;">
-                🎪 Mở Đại Tiệc Mùa Gặt
-              </button>
-            `
+            ? `<button id="btnInspOpenFeastMarquee" type="button" class="brass-btn gold-cta" style="width:100%;margin-bottom:8px;">Mở Đại Tiệc Mùa Gặt</button>`
             : ''
         }
-
         ${
           item.id === 'floo_fireplace_gate' && !isBuilding
-            ? `
-              <button id="btnInspOpenNeighbors" type="button" class="brass-btn gold-cta" style="width:100%;margin-bottom:8px;">
-                🔥 Mở Sổ Hàng Xóm &amp; Cổng Floo
-              </button>
-            `
+            ? `<button id="btnInspOpenNeighbors" type="button" class="brass-btn gold-cta" style="width:100%;margin-bottom:8px;">Mở Sổ Hàng Xóm &amp; Cổng Floo</button>`
             : ''
         }
-
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          ${
-            !isBuilding && b.stars < 5
-              ? `<button id="btnUpgStar" type="button" class="brass-btn" style="flex:1 1 100%;">
-                  ⬆️ ${b.stars + 1}★ (🌟${getUpgradePuzzleStarCost(b.stars, item)} + 🪙${upgCost.toLocaleString('vi-VN')})
-                </button>`
-              : !isBuilding
-                ? `<div style="width:100%;text-align:center;font-size:12px;font-weight:800;color:var(--green-deep);">🌟 5★ Tối Đa</div>`
-                : ''
-          }
-        </div>
+        ${
+          !isBuilding
+            ? `<div class="hs-insp-actions-row">
+                ${
+                  b.stars < 5
+                    ? `<button id="btnUpgStar" type="button" class="brass-btn hs-insp-upg-btn">Nâng ${b.stars + 1}★ · 🌟${getUpgradePuzzleStarCost(b.stars, item)} + 🪙${upgCost.toLocaleString('vi-VN')}</button>`
+                    : `<span class="hs-insp-max-stars">5★ Tối đa</span>`
+                }
+              </div>`
+            : ''
+        }
         ${
           !b.isIndestructible && !hud.sim.isVisitingNeighbor
-            ? `
-              <div class="inspector-build-actions" role="group" aria-label="Thao tác công trình">
-                <button id="btnMoveThis" type="button" class="brass-btn" title="Dời công trình miễn phí (0G)">✋ Dời</button>
-                <button id="btnRotateThis" type="button" class="brass-btn" title="Xoay hướng công trình 90°">🔄 Xoay</button>
-                <button id="btnDeleteThis" type="button" class="brass-btn inspector-delete-btn" title="Xóa công trình">🧹 Xóa</button>
-              </div>
-            `
+            ? `<div class="inspector-build-actions" role="group" aria-label="Thao tác công trình">
+                <button id="btnMoveThis" type="button" class="brass-btn hs-insp-move-btn" title="Dời công trình miễn phí (0 Sickle)">Dời</button>
+                <button id="btnRotateThis" type="button" class="brass-btn" title="Xoay hướng công trình 90°">Xoay</button>
+                <button id="btnDeleteThis" type="button" class="brass-btn inspector-delete-btn" title="Xóa công trình">Xóa</button>
+              </div>`
             : ''
         }
       `;
@@ -927,7 +857,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
           hud.sim.setBuildingCustomPrice(b.uid, v);
           const curEff = hud.sim.getEffectivePrice(b, item);
           const lblVal = panel.querySelector('#lblBuildingPriceVal');
-          if (lblVal) lblVal.textContent = `${curEff} Galleon`;
+          if (lblVal) lblVal.textContent = `${curEff} Sickle`;
           const verd = hud.sim.getPriceValueVerdict(b, item);
           const lblVerd = panel.querySelector('#lblPriceVerdict') as HTMLElement | null;
           if (lblVerd) {
@@ -942,10 +872,6 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         });
       }
 
-      panel.querySelector('#btnToggleInspRollup')?.addEventListener('click', () => {
-        hud.inspectorCollapsed = !hud.inspectorCollapsed;
-        inspectorRenderInspector(hud);
-      });
       panel.querySelector('#btnCloseInsp')?.addEventListener('click', () => {
         hud.inspectSelection = null;
         inspectorRenderInspector(hud);
@@ -1067,9 +993,6 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         hud.sim.harvestBuildingBubble(b.uid);
         inspectorRenderInspector(hud);
       });
-      panel.querySelector('#btnInspOpenBarn')?.addEventListener('click', () => {
-        hud.openWorkshopDialog('barn');
-      });
       panel.querySelectorAll<HTMLButtonElement>('[data-ws-enqueue]').forEach((btn) => {
         btn.addEventListener('click', () => {
           const rid = btn.dataset.wsEnqueue!;
@@ -1165,10 +1088,21 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         );
       });
       panel.querySelector('#btnDeleteThis')?.addEventListener('click', () => {
+        // HPVN: ask first when the demolition would destroy a ready crop / ready animals / a workshop job
+        const loss = hud.sim.getRemovalLossText(b.gx, b.gy);
+        if (loss) {
+          void hud.askConfirm(loss).then((ok) => {
+            if (ok) removeThis();
+          });
+        } else {
+          removeThis();
+        }
+      });
+      const removeThis = () => {
         hud.sim.beginBuildStroke();
         let removed = false;
         try {
-          removed = hud.sim.removeAtTile(b.gx, b.gy, false);
+          removed = hud.sim.removeAtTile(b.gx, b.gy);
         } finally {
           hud.sim.commitBuildStroke();
         }
@@ -1180,7 +1114,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
             '🧹'
           );
         }
-      });
+      };
       return;
     }
 
@@ -1199,39 +1133,24 @@ export function inspectorRenderInspector(hud: GameHUD): void {
       panel.classList.remove('inspector-wide-ws');
       hud.syncHudFocusVisibility();
       panel.innerHTML = `
-        <div class="inspector-header-bar" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:${hud.inspectorCollapsed ? '0' : '8px'};">
-          <div>
-            <div style="font-size:14.5px;font-weight:800;">🧙 ${escapeHtml(st.name)}</div>
-          </div>
-          <div style="display:flex;gap:4px;flex-shrink:0;">
-            <button id="btnToggleInspRollup" type="button" class="brass-btn" aria-expanded="${!hud.inspectorCollapsed}" title="Thu gọn / Mở rộng" style="padding:3px 7px;font-size:11.5px;">${hud.inspectorCollapsed ? '▴' : '▾'}</button>
-            <button id="btnCloseInsp" type="button" class="brass-btn" aria-label="Đóng bảng chi tiết" style="padding:3px 8px;">✕</button>
-          </div>
+        <div class="inspector-header-bar">
+          <div class="hs-insp-title">${escapeHtml(st.name)}</div>
+          <button id="btnCloseInsp" type="button" class="brass-btn hs-insp-icon-btn" aria-label="Đóng bảng chi tiết">✕</button>
         </div>
 
-        <div class="quest-card-mini" style="font-size:12.5px;margin-bottom:8px;">
-          <strong>"${escapeHtml(st.actionText)}"</strong>
-        </div>
+        <div class="hs-insp-drop-meta">"${escapeHtml(st.actionText)}"</div>
 
-        <div class="quest-card-mini" style="font-size:12px;margin-bottom:10px;">
-          <label for="selInspPatrolZone" style="display:block;font-weight:800;margin-bottom:5px;">📍 Khu vực:</label>
-          <select id="selInspPatrolZone" style="width:100%;padding:6px 8px;border-radius:8px;border:1.5px solid #9a5b1e;background:#fffdf7;color:#3a2615;font-weight:700;">
-            <option value="all" ${pZone === 'all' ? 'selected' : ''}>🗺️ Toàn bộ</option>
+        <div class="hs-insp-actions-row">
+          <select id="selInspPatrolZone" aria-label="Khu vực tuần tra" style="flex:1;min-height:40px;padding:6px 8px;border-radius:8px;border:1px solid var(--hs-brass);background:#fffdf7;color:#3a2615;font-weight:700;">
+            <option value="all" ${pZone === 'all' ? 'selected' : ''}>Toàn bộ</option>
             ${ZONES.filter((z) => hud.sim.state.sandboxMode || unlockedSet.has(z.id))
-              .map((z) => `<option value="${z.id}" ${pZone === z.id ? 'selected' : ''}>📍 ${z.name}</option>`)
+              .map((z) => `<option value="${z.id}" ${pZone === z.id ? 'selected' : ''}>${z.name}</option>`)
               .join('')}
           </select>
+          <button id="btnPickInspStaff" type="button" class="brass-btn gold-cta">Gắp</button>
         </div>
-
-        <button id="btnPickInspStaff" type="button" class="brass-btn gold-cta" style="width:100%;">
-          🤏 Gắp
-        </button>
       `;
 
-      panel.querySelector('#btnToggleInspRollup')?.addEventListener('click', () => {
-        hud.inspectorCollapsed = !hud.inspectorCollapsed;
-        inspectorRenderInspector(hud);
-      });
       panel.querySelector('#btnCloseInsp')?.addEventListener('click', () => {
         hud.inspectSelection = null;
         inspectorRenderInspector(hud);
@@ -1239,7 +1158,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
       panel.querySelector('#selInspPatrolZone')?.addEventListener('change', (e) => {
         const val = (e.currentTarget as HTMLSelectElement).value as ZoneId | 'all';
         hud.sim.setStaffPatrolZone(st.id, val);
-        hud.showToast(`Đã phân công khu tuần tra cho ${st.name}!`, '📍');
+        hud.showToast(`Đã phân công ${st.name}.`, '📍');
       });
       panel.querySelector('#btnPickInspStaff')?.addEventListener('click', () => {
         clearBuildToolModes(hud);
@@ -1259,24 +1178,15 @@ export function inspectorRenderInspector(hud: GameHUD): void {
       panel.classList.remove('inspector-wide-ws');
       hud.syncHudFocusVisibility();
       panel.innerHTML = `
-        <div class="inspector-header-bar" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:${hud.inspectorCollapsed ? '0' : '8px'};">
-          <div style="font-size:15px;font-weight:800;">🌫️ ${escapeHtml(z.name)}</div>
-          <div style="display:flex;gap:4px;flex-shrink:0;">
-            <button id="btnToggleInspRollup" type="button" class="brass-btn" aria-expanded="${!hud.inspectorCollapsed}" title="Thu gọn / Mở rộng" style="padding:3px 7px;font-size:11.5px;">${hud.inspectorCollapsed ? '▴' : '▾'}</button>
-            <button id="btnCloseInsp" type="button" class="brass-btn" aria-label="Đóng bảng chi tiết" style="padding:3px 8px;">✕</button>
+        <div class="inspector-header-bar">
+          <div>
+            <div class="hs-insp-title">${escapeHtml(z.name)}</div>
+            <div class="hs-insp-meta">Cấp ${z.unlockLevel} · 🌟 ${zStars}</div>
           </div>
+          <button id="btnCloseInsp" type="button" class="brass-btn hs-insp-icon-btn" aria-label="Đóng bảng chi tiết">✕</button>
         </div>
-        <div style="font-size:12.5px;margin-bottom:10px;font-weight:700;">
-          🔒 Lv.${z.unlockLevel} • <strong>🌟 ${zStars}</strong>
-        </div>
-        <button id="btnConfirmUnlockZone" type="button" class="brass-btn ${canLv ? 'gold-cta' : ''}" style="width:100%;">
-          🔓 Mở (🌟 ${zStars})
-        </button>
+        <button id="btnConfirmUnlockZone" type="button" class="brass-btn ${canLv ? 'gold-cta' : ''}" style="width:100%;">Mở khu vực · 🌟 ${zStars}</button>
       `;
-      panel.querySelector('#btnToggleInspRollup')?.addEventListener('click', () => {
-        hud.inspectorCollapsed = !hud.inspectorCollapsed;
-        inspectorRenderInspector(hud);
-      });
       panel.querySelector('#btnCloseInsp')?.addEventListener('click', () => {
         hud.inspectSelection = null;
         inspectorRenderInspector(hud);

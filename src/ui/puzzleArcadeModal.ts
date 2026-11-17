@@ -45,7 +45,6 @@ import {
 import { MinigameGpuFxBatcher } from '../render/fx/minigameGpuFx';
 import { ParkSimulation } from '../sim/simulation';
 import {
-  ACTIVE_MINIGAME_RESUME_KEY,
   ActiveMinigameResumeRecord,
   BuildReductionResult,
   JigsawTrayFilter,
@@ -58,6 +57,9 @@ import {
   MINIGAME_ZOOM_STEP,
   sharedMinigameViewport,
 } from './minigameViewControls';
+import { compactSickle, liftToolIcons } from '../hpvn/toolIcons';
+import { fillCheck } from '../hpvn/emoji';
+import { levelBarHtml, lvIcon, lvStat, LV_MISTAKE } from '../hpvn/levelBar';
 
 const PA_VIRTUAL_W = JIGSAW_VIRTUAL_W; // 692
 const PA_VIRTUAL_H = JIGSAW_VIRTUAL_H; // 504
@@ -378,6 +380,10 @@ function escapeHtml(val: unknown): string {
     .replace(/'/g, '&#39;');
 }
 
+// the chess turn cell of the level bar: short words, the opponent is named on the sub line
+const chessTurnVi = (we: WizardChessEngine): string =>
+  we.status === 'ai_thinking' ? 'Lượt đối thủ' : we.isInCheck('w') ? 'Chiếu tướng' : 'Lượt bạn';
+
 function drawRoundedRect(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -601,6 +607,7 @@ export class PuzzleArcadeModalController {
       });
     }
     dlg?.addEventListener('close', () => {
+      if (dlg.open) return;
       dlg.returnValue = '';
       this.terminateChessWorker();
       this.hitStopTimer = 0;
@@ -1046,32 +1053,7 @@ export class PuzzleArcadeModalController {
     const boardX = 5;
     const boardY = 5;
     const virtW = boardPx + boardX * 2; // 496
-
-    if (tallRatio >= 1.25) {
-      const maxNoShrinkVirtH = Math.floor(virtW * Math.max(1.23, tallRatio - 0.015));
-      const virtH = Math.max(608, Math.min(656, maxNoShrinkVirtH));
-      const trayY = boardY + boardPx + 6; // 497
-      const trayH = virtH - trayY - 2;
-      return {
-        variant: 'portrait-tall',
-        virtW,
-        virtH,
-        boardX,
-        boardY,
-        cellPx,
-        boardPx,
-        framePad: 4,
-        padX: 0,
-        padY: 0,
-        padW: 0,
-        padH: 0,
-        trayY,
-        trayH,
-      };
-    }
-
-    const maxNoShrinkVirtH = Math.floor(virtW * Math.max(1.09, tallRatio - 0.01));
-    const virtH = Math.max(540, Math.min(564, maxNoShrinkVirtH));
+    const virtH = 561;
     const trayY = boardY + boardPx + 6; // 497
     const trayH = virtH - trayY - 2;
     return {
@@ -1132,35 +1114,35 @@ export class PuzzleArcadeModalController {
   private preloadAssets(): void {
     const parlorImg = new Image();
     parlorImg.decoding = 'async';
-    parlorImg.src = '/paintings/burrow_parlor_bg.jpg';
+    parlorImg.src = '/game/trang-trai-hang-soc/paintings/burrow_parlor_bg.webp';
     this.parlorBgImage = parlorImg;
 
     const hallImg = new Image();
     hallImg.decoding = 'async';
-    hallImg.src = '/paintings/great_hall_chess_bg.jpg';
+    hallImg.src = '/game/trang-trai-hang-soc/paintings/great_hall_chess_bg.webp';
     this.greatHallBgImage = hallImg;
 
     const marauderImg = new Image();
     marauderImg.decoding = 'async';
-    marauderImg.src = '/paintings/marauder_caro_bg.jpg';
+    marauderImg.src = '/game/trang-trai-hang-soc/paintings/marauder_caro_bg.webp';
     this.marauderCaroBgImage = marauderImg;
 
     const unicornLakeImg = new Image();
     unicornLakeImg.decoding = 'async';
-    unicornLakeImg.src = '/paintings/p5_unicorn_lake.jpg';
+    unicornLakeImg.src = '/game/trang-trai-hang-soc/paintings/p5_unicorn_lake.webp';
     this.unicornLakeBgImage = unicornLakeImg;
 
     for (const key of HP_CHESS_PIECE_KEYS) {
       const pImg = new Image();
       pImg.decoding = 'async';
-      pImg.src = `/paintings/chess/${key}.png`;
+      pImg.src = `/game/trang-trai-hang-soc/paintings/chess/${key}.webp?v=stone`;
       this.chessPieceImages.set(key, pImg);
     }
 
     for (const sealKey of HP_CARO_SEAL_KEYS) {
       const sImg = new Image();
       sImg.decoding = 'async';
-      sImg.src = `/paintings/caro/${sealKey}.png`;
+      sImg.src = `/game/trang-trai-hang-soc/paintings/caro/${sealKey}.webp`;
       this.caroSealImages.set(sealKey, sImg);
     }
 
@@ -1177,7 +1159,7 @@ export class PuzzleArcadeModalController {
     for (const key of spriteKeys) {
       const img = new Image();
       img.decoding = 'async';
-      img.src = `/sprites/${key}.png`;
+      img.src = `/game/trang-trai-hang-soc/sprites/${key}.webp`;
       this.iconImages.set(key, img);
     }
   }
@@ -1197,20 +1179,20 @@ export class PuzzleArcadeModalController {
     const yHall = new Image();
     yHall.decoding = 'async';
     yHall.onload = markReady;
-    yHall.src = '/paintings/yule_great_hall_chess_bg.jpg';
+    yHall.src = '/game/trang-trai-hang-soc/paintings/yule_great_hall_chess_bg.webp';
     this.yuleGreatHallBgImage = yHall;
 
     const yCaroBg = new Image();
     yCaroBg.decoding = 'async';
     yCaroBg.onload = markReady;
-    yCaroBg.src = '/paintings/yule_caro_bg.jpg';
+    yCaroBg.src = '/game/trang-trai-hang-soc/paintings/yule_caro_bg.webp';
     this.yuleCaroBgImage = yCaroBg;
 
     for (const key of HP_CHESS_PIECE_KEYS) {
       const pImg = new Image();
       pImg.decoding = 'async';
       pImg.onload = markReady;
-      pImg.src = `/paintings/chess-yule/${key}.png`;
+      pImg.src = `/game/trang-trai-hang-soc/paintings/chess-yule/${key}.webp`;
       this.yuleChessPieceImages.set(key, pImg);
     }
 
@@ -1218,7 +1200,7 @@ export class PuzzleArcadeModalController {
       const sImg = new Image();
       sImg.decoding = 'async';
       sImg.onload = markReady;
-      sImg.src = `/paintings/caro-yule/${sealKey}.png`;
+      sImg.src = `/game/trang-trai-hang-soc/paintings/caro-yule/${sealKey}.webp`;
       this.yuleCaroSealImages.set(sealKey, sImg);
     }
 
@@ -1226,7 +1208,7 @@ export class PuzzleArcadeModalController {
       const rImg = new Image();
       rImg.decoding = 'async';
       rImg.onload = markReady;
-      rImg.src = `/paintings/sudoku-yule/relic_${d}.png`;
+      rImg.src = `/game/trang-trai-hang-soc/paintings/sudoku-yule/relic_${d}.webp`;
       this.yuleSudokuRelicImages.set(d, rImg);
     }
   }
@@ -1289,7 +1271,7 @@ export class PuzzleArcadeModalController {
           this.forceImmediateRedraw = true;
         }
       };
-      img.src = `/sprites/${key}.png`;
+      img.src = `/game/trang-trai-hang-soc/sprites/${key}.webp`;
       this.iconImages.set(key, img);
     }
     return null;
@@ -1555,25 +1537,29 @@ export class PuzzleArcadeModalController {
     return null;
   }
 
-  private renderTurningPointCardHtml(rev: TurningPointReview): string {
+  // HPVN: a won jigsaw shows only its data line «9/9 mảnh · viền 1:43»; the loss strip keeps move + advice
+  private renderTurningPointCardHtml(rev: TurningPointReview, won = false): string {
+    const dataOnly = won && rev.mode === 'jigsaw';
     const isOptimalMove = rev.playedCoordVi.trim() === rev.recommendedCoordVi.trim();
-    const pillsHtml = isOptimalMove
-      ? `<span class="pa-review-pill best">✨ Nước chuẩn tối ưu: <strong>${escapeHtml(rev.recommendedCoordVi)}</strong></span>`
-      : `<span class="pa-review-pill">⚡ <strong>${escapeHtml(rev.playedCoordVi)}</strong></span>
-          <span class="pa-review-pill best">✨ <strong>${escapeHtml(rev.recommendedCoordVi)}</strong></span>`;
     return `
       <div class="pa-review-card">
         <div class="pa-review-head">
-          <span class="pa-review-title">🪞 #${rev.plyNumber}</span>
           ${
-            rev.highlightCells.length > 0
+            rev.highlightCells.length > 0 && !won // HPVN: on the win card «Soi bàn» sits in the button row
               ? `<button id="btnPaToggleReviewInspect" type="button" class="pa-mini-pill ${this.inspectingTurningPoint ? 'active' : ''}">${
-                  this.inspectingTurningPoint ? '🙈 Ẩn' : '🔍 Soi Bàn'
+                  this.inspectingTurningPoint ? 'Ẩn' : 'Soi bàn'
                 }</button>`
               : ''
           }
         </div>
-        <div class="pa-review-pills">${pillsHtml}</div>
+        <div class="pa-review-pills">
+          ${
+            !dataOnly && isOptimalMove
+              ? `<span class="pa-review-pill best">Nước ${rev.plyNumber} · chuẩn: ${escapeHtml(rev.recommendedCoordVi)}</span>`
+              : `<span class="pa-review-pill">${dataOnly ? '' : `Nước ${rev.plyNumber} · `}${escapeHtml(rev.playedCoordVi)}</span>
+          ${dataOnly ? '' : `<span class="pa-review-pill best">Nên: ${escapeHtml(rev.recommendedCoordVi)}</span>`}`
+          }
+        </div>
       </div>
     `;
   }
@@ -1591,28 +1577,21 @@ export class PuzzleArcadeModalController {
   }
 
   private persistActiveModalResumeMarker(): void {
-    if (typeof localStorage === 'undefined' || this.rescueContext || this.victoryClaimed) return;
-    try {
-      const rec: ActiveMinigameResumeRecord = {
+    if (this.rescueContext || this.victoryClaimed) return;
+    // HPVN: the marker rides in the farm save (no browser storage in the frame), so F5 reopens this run
+    this.sim.state.activeMinigameResume = {
         dialog: 'puzzleArcade',
         mode: this.mode,
         stage: this.getActiveEngineStage(),
-        savedAt: Date.now(),
-      };
-      localStorage.setItem(ACTIVE_MINIGAME_RESUME_KEY, JSON.stringify(rec));
-    } catch {
-      // Ignore storage quota errors
-    }
+      savedAt: Date.now(),
+    };
   }
 
+
   private clearActiveModalResumeMarker(): void {
-    if (typeof localStorage === 'undefined') return;
-    try {
-      localStorage.removeItem(ACTIVE_MINIGAME_RESUME_KEY);
-    } catch {
-      // Ignore storage errors
-    }
+    delete this.sim.state.activeMinigameResume;
   }
+
 
   private persistSudokuSession(saveToDisk = true): void {
     this.persistModeSession('sudoku', saveToDisk);
@@ -2290,19 +2269,19 @@ export class PuzzleArcadeModalController {
 
     if (this.mode === 'chess') {
         modalTitle.innerHTML =
-          '<img src="/paintings/chess/wk.png" alt="" style="width:28px;height:32px;object-fit:contain;vertical-align:-8px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Cờ Phù Thủy';
+          '<img src="/game/trang-trai-hang-soc/paintings/chess/wk.webp?v=stone" alt="" style="width:28px;height:32px;object-fit:contain;vertical-align:-8px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Cờ Phù Thủy';
       } else if (this.mode === 'sudoku') {
         modalTitle.innerHTML =
-          '<img src="/sprites/m3_piece_scroll.png" alt="" style="width:26px;height:26px;object-fit:contain;vertical-align:-6px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Số Học Huyền Bí';
+          '<img src="/game/trang-trai-hang-soc/sprites/m3_piece_scroll.webp" alt="" style="width:26px;height:26px;object-fit:contain;vertical-align:-6px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Số Học Huyền Bí';
       } else if (this.mode === 'caro') {
         modalTitle.innerHTML =
-          '<img src="/paintings/caro/phoenix_seal.png" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Ngũ Ấn Đạo Tặc';
+          '<img src="/game/trang-trai-hang-soc/paintings/caro/phoenix_seal.webp" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Ngũ Ấn Đạo Tặc';
       } else if (this.mode === 'jigsaw') {
         modalTitle.innerHTML =
-          '<img src="/sprites/ui_icon_jigsaw.png" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Tranh Ghép Phép Thuật';
+          '<img src="/game/trang-trai-hang-soc/sprites/ui_icon_jigsaw.webp" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Tranh Ghép Phép Thuật';
       } else {
         modalTitle.innerHTML =
-          '<img src="/sprites/beast_niffler.png" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Sinh Vật Huyền Bí';
+          '<img src="/game/trang-trai-hang-soc/sprites/beast_niffler.webp" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Sinh Vật Huyền Bí';
       }
     }
 
@@ -2320,8 +2299,14 @@ export class PuzzleArcadeModalController {
       this.mode === 'sudoku' || this.mode === 'blocks' || this.mode === 'jigsaw';
     const activeModeRank = isScoredMode ? this.sim.getPlayerMinigameRank(this.mode, 'valley') : 0;
 
-    let stageHeadline = '';
-    let stageSubtitle = '';
+    // the level bar (hpvn/levelBar.ts): stage number, one sub line, the figures; a loss sets `stageAlert` (+ the rescue action)
+    let stageSub = '';
+    let stageStats = '';
+    let stageAlert: string | undefined;
+    let stageAction = '';
+    const rescueBtn = (can: boolean): string =>
+      can ? `<button id="btnPaRescuePhoenixTalisman" type="button" class="pa-tool-btn talisman hs-lv-act">Bùa ×${talismanDisp}</button>` : '';
+    const timeIcon = lvIcon('res_time_sand');
     let controlsHtml = '';
     let statusBannerHtml = '';
 
@@ -2352,7 +2337,7 @@ export class PuzzleArcadeModalController {
     if (this.rescueContext) {
       statusBannerHtml += `
         <div class="pa-trial-strip urgent">
-          <span>⚔️ <strong>CỨU MÀN ${this.rescueContext.stage}</strong> (${escapeHtml(this.rescueContext.neighborEmoji)} <strong>${escapeHtml(this.rescueContext.neighborName)}</strong>) • <strong>+3 🍀 + 95G</strong></span>
+          <span>⚔️ <strong>CỨU MÀN ${this.rescueContext.stage}</strong> (${escapeHtml(this.rescueContext.neighborEmoji)} <strong class="hs-raw">${escapeHtml(this.rescueContext.neighborName)}</strong>) • <strong>+3 🍀 + 95 Sickle</strong></span>
         </div>
       `;
     } else if (mySosArcade) {
@@ -2374,8 +2359,11 @@ export class PuzzleArcadeModalController {
 
     if (this.mode === 'sudoku' && this.sudokuEngine) {
       const se = this.sudokuEngine;
-      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${se.stage}/${MAX_MINIGAME_STAGE} • ${se.classicDifficultyVi}`;
-      stageSubtitle = `📝 <strong id="paSudokuFilled">${se.filledCount}/81</strong> • ❌ Lỗi nộp: <strong id="paSudokuMistakes" class="${se.mistakesCount > 0 ? 'pa-err-inline' : ''}">${se.mistakesCount}/${se.maxMistakes}</strong> • ⏱ <strong id="paSudokuTimer">${se.formatElapsedTime()}</strong>`;
+      stageSub = escapeHtml(se.classicDifficultyVi);
+      stageStats =
+        lvStat('Đã điền', `<strong id="paSudokuFilled">${se.filledCount}/81</strong>`) +
+        lvStat('Lỗi', `<strong id="paSudokuMistakes" class="${se.mistakesCount > 0 ? 'pa-err-inline' : ''}">${se.mistakesCount}/${se.maxMistakes}</strong>`, LV_MISTAKE) +
+        lvStat('Thời gian', `<strong id="paSudokuTimer">${se.formatElapsedTime()}</strong>`, timeIcon);
       const canSudokuHint =
         se.status === 'playing' && (st.sandboxMode || se.freeHintsLeft + se.paidHintsLeft > 0);
       const talismanLocked = se.talismanUsed || usedTodayInMode;
@@ -2388,7 +2376,7 @@ export class PuzzleArcadeModalController {
         : se.freeHintsLeft > 0
           ? `${se.freeHintsLeft}`
           : se.paidHintsLeft > 0
-            ? `${se.hintGoldCost}G`
+            ? `${se.hintGoldCost} Sickle`
             : '0';
       controlsHtml = `
         <button id="btnPaSudokuUndo" type="button" class="pa-tool-btn" ${!se.canUndo ? 'disabled' : ''} title="Hoàn tác bước vừa điền (Z)">
@@ -2411,27 +2399,17 @@ export class PuzzleArcadeModalController {
         </button>
       `;
       if (se.status === 'lost') {
-        statusBannerHtml += `
-          <div class="pa-alert-strip" role="status" aria-live="polite">
-            <span>❌ Quá giới hạn kiểm tra sai (<strong>${se.mistakesCount}/${se.maxMistakes}</strong>)! Bấm ↩️ Hoàn Tác hoặc 🧹 Xoá để tự dò lại (không hiện ô sai).</span>
-            ${canTalisman ? `<button id="btnPaRescuePhoenixTalisman" type="button" class="pa-tool-btn talisman">🔥 Bùa (×${talismanDisp})</button>` : ''}
-          </div>
-        `;
+        stageAlert = `Sai ${se.mistakesCount}/${se.maxMistakes} · Hoàn Tác hoặc Xoá`;
+        stageAction = rescueBtn(canTalisman);
       } else if (se.fullBoardMismatch) {
-        statusBannerHtml += `
-          <div class="pa-alert-strip" role="status" aria-live="polite">
-            <span>⚠️ Đã điền kín <strong>81/81</strong> ô nhưng lời giải chưa đúng (<strong>${se.mistakesCount}/${se.maxMistakes}</strong>) — hãy tự rà lại hàng, cột &amp; khối 3×3!</span>
-          </div>
-        `;
+        stageAlert = `Kín 81/81 nhưng chưa đúng · ${se.mistakesCount}/${se.maxMistakes}`;
       }
     } else if (this.mode === 'caro' && this.caroEngine) {
       const ce = this.caroEngine;
-      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${ce.stage}/${MAX_MINIGAME_STAGE} • ${escapeHtml(ce.opponent.emoji)} ${escapeHtml(ce.opponent.name)}`;
-      const sealNote =
-        ce.runeSealCount > 0
-          ? ` • 🔒 ${ce.runeSealCount}`
-          : '';
-      stageSubtitle = `⚔️ ${escapeHtml(ce.opponent.name)}${sealNote} • <strong id="paCaroMoves">${ce.moveHistory.length} nước</strong>`;
+      stageSub = escapeHtml(ce.opponent.name);
+      stageStats =
+        (ce.runeSealCount > 0 ? lvStat('Ấn khoá', `<strong>${ce.runeSealCount}</strong>`, lvIcon('ui_lock')) : '') +
+        lvStat('Số nước', `<strong id="paCaroMoves">${ce.moveHistory.length} nước</strong>`);
       const canCaroUndo =
         ce.moveHistory.length > ce.initialHistoryLen &&
         ce.status !== 'ai_thinking' &&
@@ -2449,14 +2427,14 @@ export class PuzzleArcadeModalController {
         : ce.freeUndosLeft > 0
           ? `${ce.freeUndosLeft}`
           : ce.paidUndosLeft > 0
-            ? `${ce.undoGoldCost}G`
+            ? `${ce.undoGoldCost} Sickle`
             : '0';
       const hintLbl = st.sandboxMode
         ? '∞'
         : ce.freeHintsLeft > 0
           ? `${ce.freeHintsLeft}`
           : ce.paidHintsLeft > 0
-            ? `${ce.hintGoldCost}G`
+            ? `${ce.hintGoldCost} Sickle`
             : '0';
       controlsHtml = `
         <button id="btnPaCaroUndo" type="button" class="pa-tool-btn" ${!canCaroUndo ? 'disabled' : ''}>
@@ -2474,29 +2452,15 @@ export class PuzzleArcadeModalController {
       `;
       if (ce.status === 'lost' || ce.status === 'draw') {
         const caroRev = ce.getTurningPointReview();
-        statusBannerHtml += `
-          <div class="pa-alert-strip">
-            <span>${
-              ce.status === 'lost'
-                ? `${escapeHtml(ce.opponent.emoji)} <strong>${escapeHtml(ce.opponent.name)}</strong> thắng!`
-                : `🤝 Hòa cờ!`
-            }</span>
-            ${canTalisman ? `<button id="btnPaRescuePhoenixTalisman" type="button" class="pa-tool-btn talisman">🔥 Bùa (×${talismanDisp})</button>` : ''}
-          </div>
-          ${caroRev ? this.renderTurningPointCardHtml(caroRev) : ''}
-        `;
+        stageAlert = ce.status === 'lost' ? 'Thua' : 'Hòa cờ';
+        stageAction = rescueBtn(canTalisman);
+        if (caroRev) statusBannerHtml += `<div class="pa-alert-strip">${this.renderTurningPointCardHtml(caroRev)}</div>`;
       }
     } else if (this.mode === 'chess' && this.chessEngine) {
       const we = this.chessEngine;
       const isTactics = we.subMode === 'tactics';
-      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${we.stage}/${MAX_MINIGAME_STAGE}`;
-      stageSubtitle = `🦁 <strong id="paChessTurn">${
-        we.status === 'ai_thinking'
-          ? `${escapeHtml(we.opponentName)} đang đi...`
-          : we.isInCheck('w')
-            ? '⚠️ Chiếu tướng!'
-            : 'Lượt bạn'
-      }</strong> • ⚔️ ${escapeHtml(we.opponentName)}`;
+      stageSub = escapeHtml(we.opponentName);
+      stageStats = lvStat('Lượt', `<strong id="paChessTurn" class="${we.status !== 'ai_thinking' && we.isInCheck('w') ? 'pa-err-inline' : ''}">${chessTurnVi(we)}</strong>`);
       const canChessUndo =
         we.moveCount > 0 &&
         we.status !== 'ai_thinking' &&
@@ -2513,14 +2477,14 @@ export class PuzzleArcadeModalController {
         : we.freeUndosLeft > 0
           ? `${we.freeUndosLeft}`
           : we.paidUndosLeft > 0
-            ? `${we.undoGoldCost}G`
+            ? `${we.undoGoldCost} Sickle`
             : '0';
       const hintLbl = st.sandboxMode
         ? '∞'
         : we.freeHintsLeft > 0
           ? `${we.freeHintsLeft}`
           : we.paidAssistsLeft > 0
-            ? `${we.assistGoldCost}G`
+            ? `${we.assistGoldCost} Sickle`
             : '0';
       controlsHtml = `
         <div class="pa-submode-switch" role="group" aria-label="Kiểu chơi Cờ Phù Thủy">
@@ -2542,22 +2506,18 @@ export class PuzzleArcadeModalController {
       `;
       if (we.status === 'lost' || we.status === 'draw') {
         const chessRev = we.getTurningPointReview();
-        statusBannerHtml += `
-          <div class="pa-alert-strip">
-            <span>${
-              we.status === 'lost'
-                ? `🏰 Bị chiếu bí!`
-                : `🤝 Hòa cờ!`
-            }</span>
-            ${canTalisman ? `<button id="btnPaRescuePhoenixTalisman" type="button" class="pa-tool-btn talisman">🔥 Bùa (×${talismanDisp})</button>` : ''}
-          </div>
-          ${chessRev ? this.renderTurningPointCardHtml(chessRev) : ''}
-        `;
+        stageAlert = we.status === 'lost' ? 'Bị chiếu bí' : 'Hòa cờ';
+        stageAction = rescueBtn(canTalisman);
+        if (chessRev) statusBannerHtml += `<div class="pa-alert-strip">${this.renderTurningPointCardHtml(chessRev)}</div>`;
       }
     } else if (this.mode === 'blocks' && this.onetEngine) {
       const oe = this.onetEngine;
-      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${oe.stage}/${MAX_MINIGAME_STAGE} • ${oe.rows}×${oe.cols} (${oe.rows * oe.cols} ô)`;
-      stageSubtitle = `⏱ <strong id="paOnetTimer" class="${!st.sandboxMode && oe.isTimeCritical ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : oe.formatRemainingTime()}</strong> • ❤️ <strong id="paOnetLives" class="${!st.sandboxMode && oe.lives <= 2 ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : oe.lives}</strong> • 🧩 <strong id="paOnetProgress">${oe.matchedPairs}/${oe.totalPairs}</strong> • <strong>${escapeHtml(oe.shiftBadgeVi)}</strong>`;
+      // the shift direction is the board's rule: it tags the sub line (a fourth cell does not fit 360px beside «Màn 150/777»)
+      stageSub = `${oe.rows}×${oe.cols} · <span class="hs-lv-tag">${escapeHtml(oe.shiftBadgeVi)}</span>`;
+      stageStats =
+        lvStat('Thời gian', `<strong id="paOnetTimer" class="${!st.sandboxMode && oe.isTimeCritical ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : oe.formatRemainingTime()}</strong>`, timeIcon) +
+        lvStat('Lượt đổi', `<strong id="paOnetLives" class="${!st.sandboxMode && oe.lives <= 2 ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : oe.lives}</strong>`, lvIcon('m3_icon_heart')) +
+        lvStat('Cặp đã nối', `<strong id="paOnetProgress">${oe.matchedPairs}/${oe.totalPairs}</strong>`, lvIcon('ui_icon_jigsaw'));
       const canHint =
         oe.status === 'playing' && (st.sandboxMode || oe.freeHintsLeft + oe.paidHintsLeft > 0);
       const canShuffle =
@@ -2573,14 +2533,14 @@ export class PuzzleArcadeModalController {
         : oe.freeHintsLeft > 0
           ? `${oe.freeHintsLeft}`
           : oe.paidHintsLeft > 0
-            ? `${oe.hintGoldCost}G`
+            ? `${oe.hintGoldCost} Sickle`
             : '0';
       const shuffleCostLbl = st.sandboxMode
         ? '❤️∞'
         : oe.lives > 0
           ? `❤️${oe.lives}`
           : oe.paidShufflesLeft > 0
-            ? `${oe.shuffleGoldCost}G`
+            ? `${oe.shuffleGoldCost} Sickle`
             : '0';
       controlsHtml = `
         <button id="btnPaOnetHint" type="button" class="pa-tool-btn gold" ${!canHint ? 'disabled' : ''} title="Dò Cặp (H)">
@@ -2597,21 +2557,15 @@ export class PuzzleArcadeModalController {
         </button>
       `;
       if (oe.status === 'lost') {
-        const lostMsgHtml =
-          oe.lossReason === 'timeout'
-            ? `<span>⏰ Hết thời gian (<strong>00:00</strong>) — còn <strong>${oe.remainingPairs}</strong> cặp chưa nối!</span>`
-            : `<span>💔 Hết đường nối &amp; hết lượt đổi vị trí (<strong>0 ❤️</strong>)!</span>`;
-        statusBannerHtml += `
-          <div class="pa-alert-strip">
-            ${lostMsgHtml}
-            ${canTalisman ? `<button id="btnPaRescuePhoenixTalisman" type="button" class="pa-tool-btn talisman">🔥 Bùa (×${talismanDisp})</button>` : ''}
-          </div>
-        `;
+        stageAlert = oe.lossReason === 'timeout' ? `Hết giờ · còn ${oe.remainingPairs} cặp` : 'Hết đường nối';
+        stageAction = rescueBtn(canTalisman);
       }
     } else if (this.mode === 'jigsaw' && this.jigsawEngine) {
       const je = this.jigsawEngine;
-      stageHeadline = `${curInfo.isMaxed ? '👑 ' : ''}Màn ${je.stage}/${MAX_MINIGAME_STAGE} • ${je.rows}×${je.cols} (${je.totalPieces.toLocaleString('vi-VN')} mảnh)`;
-      stageSubtitle = `⏱ <strong id="paJigsawTimer" class="${!st.sandboxMode && je.isTimeCritical ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : je.formatRemainingTime()}</strong> • 🧩 <strong id="paJigsawProgress">${je.lockedCount.toLocaleString('vi-VN')}/${je.totalPieces.toLocaleString('vi-VN')}</strong> • 🎨 <strong>${escapeHtml(je.artwork.titleVi)}</strong>`;
+      stageSub = `${je.rows}×${je.cols} · ${escapeHtml(je.artwork.titleVi)}`;
+      stageStats =
+        lvStat('Thời gian', `<strong id="paJigsawTimer" class="${!st.sandboxMode && je.isTimeCritical ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : je.formatRemainingTime()}</strong>`, timeIcon) +
+        lvStat('Mảnh đã ghép', `<strong id="paJigsawProgress">${je.lockedCount.toLocaleString('vi-VN')}/${je.totalPieces.toLocaleString('vi-VN')}</strong>`, lvIcon('ui_icon_jigsaw'));
       const canHint =
         je.status === 'playing' && (st.sandboxMode || je.freeHintsLeft + je.paidHintsLeft > 0);
       const talismanLocked = je.talismanUsed || usedTodayInMode;
@@ -2624,7 +2578,7 @@ export class PuzzleArcadeModalController {
         : je.freeHintsLeft > 0
           ? `${je.freeHintsLeft}`
           : je.paidHintsLeft > 0
-            ? `${je.hintGoldCost}G`
+            ? `${je.hintGoldCost} Sickle`
             : '0';
       controlsHtml = `
         <button id="btnPaJigsawPreview" type="button" class="pa-tool-btn ${je.showGhostPreview ? 'active' : ''}" aria-pressed="${je.showGhostPreview}" ${je.status !== 'playing' ? 'disabled' : ''} title="Bật/tắt ảnh mẫu mờ trên khung tranh (P)">
@@ -2645,13 +2599,9 @@ export class PuzzleArcadeModalController {
       `;
       if (je.status === 'lost') {
         const jigRev = je.getTurningPointReview();
-        statusBannerHtml += `
-          <div class="pa-alert-strip">
-            <span>⏰ Hết thời gian (<strong>00:00</strong>) — còn <strong>${je.remainingPieces.toLocaleString('vi-VN')}</strong> mảnh chưa ghép!</span>
-            ${canTalisman ? `<button id="btnPaRescuePhoenixTalisman" type="button" class="pa-tool-btn talisman">🔥 Bùa (×${talismanDisp})</button>` : ''}
-          </div>
-          ${jigRev ? this.renderTurningPointCardHtml(jigRev) : ''}
-        `;
+        stageAlert = `Hết giờ · còn ${je.remainingPieces.toLocaleString('vi-VN')} mảnh`;
+        stageAction = rescueBtn(canTalisman);
+        if (jigRev) statusBannerHtml += `<div class="pa-alert-strip">${this.renderTurningPointCardHtml(jigRev)}</div>`;
       }
     }
 
@@ -2677,22 +2627,20 @@ export class PuzzleArcadeModalController {
         <div class="pa-victory-overlay" role="region" aria-label="Giải cứu thành công">
           <div class="pa-victory-card">
             <div class="pa-victory-title">
-              🏆 Cứu Thành Công (${escapeHtml(this.rescueContext.neighborName)})!
+              Cứu <span class="hs-raw">${escapeHtml(this.rescueContext.neighborName)}</span> · Xong
             </div>
             <div class="m3-reward-badges">
-              <span class="m3-reward-chip star">+${rv.tokensEarned} 🍀</span>
-              <span class="m3-reward-chip">🪙 +${rv.goldEarned}G</span>
-              <span class="m3-reward-chip">⭐ +${rv.xpEarned} XP</span>
+              <span class="m3-reward-chip star">+${rv.tokensEarned} Huy hiệu</span>
+              <span class="m3-reward-chip">+${rv.goldEarned} Sickle</span>
+              <span class="m3-reward-chip">+${rv.xpEarned} XP</span>
               ${
                 rv.buildReduction && rv.buildReduction.reducedSec > 0
-                  ? `<span class="m3-reward-chip">🔨 -${formatDurationCompactVi(rv.buildReduction.reducedSec)}</span>`
+                  ? `<span class="m3-reward-chip">Xây −${formatDurationCompactVi(rv.buildReduction.reducedSec)}</span>`
                   : ''
               }
             </div>
-            <div class="m3-overlay-actions">
-              <button id="btnPaBackToPark" type="button" class="brass-btn gold-cta m3-overlay-btn-full">
-                🏡 Về Vườn
-              </button>
+            <div class="pa-victory-actions">
+              <button id="btnPaBackToPark" type="button" class="brass-btn gold-cta">Về vườn</button>
             </div>
           </div>
         </div>
@@ -2704,10 +2652,10 @@ export class PuzzleArcadeModalController {
       if (this.inspectingTurningPoint && winReview) {
         inspectReturnBarHtml = `
           <div class="pa-inspect-return-bar" role="region" aria-label="Đang soi Gương Chiếu Hậu Pháp Thuật">
-            <span>🪞 ${escapeHtml(winReview.playedCoordVi)} → <strong>${escapeHtml(winReview.recommendedCoordVi)}</strong></span>
+            <span>${escapeHtml(winReview.playedCoordVi)} → <strong>${escapeHtml(winReview.recommendedCoordVi)}</strong></span>
             <div class="pa-inspect-return-actions">
-              <button id="btnPaReturnVictoryCard" type="button" class="brass-btn gold-cta">🏆 Bảng Thưởng</button>
-              <button id="btnPaNextStage" type="button" class="brass-btn">▶️ Màn ${vs.nextStage}</button>
+              <button id="btnPaReturnVictoryCard" type="button" class="brass-btn gold-cta">Bảng thưởng</button>
+              <button id="btnPaNextStage" type="button" class="brass-btn">Màn ${vs.nextStage}</button>
             </div>
           </div>
         `;
@@ -2717,39 +2665,34 @@ export class PuzzleArcadeModalController {
             <div class="pa-victory-card">
               <div class="pa-victory-title">${
                 vs.isMasterReplay || curInfo.isMaxed
-                  ? `👑 777/777!`
-                  : `🎉 Thắng Màn ${activeStageNum}/${MAX_MINIGAME_STAGE}!`
+                  ? `777/777 · Xong`
+                  : `Màn ${activeStageNum} · Xong`
               }</div>
               <div class="m3-reward-badges">
                 ${
                   vs.starsEarned > 0
-                    ? `<span class="m3-reward-chip star">
-                        <img src="/sprites/m3_icon_star.png" alt="" style="width:16px;height:16px;" />
-                        +${vs.starsEarned} 🌟
-                      </span>`
-                    : `<span class="m3-reward-chip star">👑 777/777</span>`
+                    ? `<span class="m3-reward-chip star">+${vs.starsEarned} ★</span>`
+                    : `<span class="m3-reward-chip star">777/777</span>`
                 }
+                ${vs.goldEarned > 0 ? `<span class="m3-reward-chip">+${vs.goldEarned} Sickle</span>` : ''} <!-- HPVN: Sickle reward -->
                 ${
                   this.mode === 'jigsaw' && this.jigsawEngine
-                    ? `<span class="m3-reward-chip">🖼️ ${escapeHtml(this.jigsawEngine.artwork.titleVi)}</span>`
+                    ? `<span class="m3-reward-chip pa-victory-art">${escapeHtml(this.jigsawEngine.artwork.titleVi)}</span>`
                     : ''
                 }
               </div>
-              ${winReview ? this.renderTurningPointCardHtml(winReview) : ''}
-              <div class="m3-overlay-actions">
-                <button id="btnPaNextStage" type="button" class="brass-btn gold-cta m3-overlay-btn-primary">
-                  ${vs.isMasterReplay || curInfo.isMaxed ? `👑 Chơi Lại` : `▶️ Màn ${vs.nextStage}`}
+              ${winReview ? this.renderTurningPointCardHtml(winReview, true) : ''}
+              <div class="pa-victory-actions">
+                <button id="btnPaNextStage" type="button" class="brass-btn gold-cta">
+                  ${vs.isMasterReplay || curInfo.isMaxed ? `Chơi lại` : `Màn ${vs.nextStage}`}
                 </button>
                 ${
                   isScoredMode
-                    ? `<button id="btnPaVictoryLeaderboard" type="button" class="brass-btn m3-overlay-btn-half">
-                        🏆 #${activeModeRank}
-                      </button>`
+                    ? `<button id="btnPaVictoryLeaderboard" type="button" class="brass-btn">Hạng ${activeModeRank}</button>`
                     : ''
                 }
-                <button id="btnPaBackToPark" type="button" class="brass-btn m3-overlay-btn-half">
-                  🏡 Về Vườn (${st.sandboxMode ? '∞' : st.match3.stars} 🌟)
-                </button>
+                <button id="btnPaBackToPark" type="button" class="brass-btn">Về vườn · ${st.sandboxMode ? '∞' : st.match3.stars} ★</button>
+                ${winReview?.highlightCells.length ? '<button id="btnPaVictoryReviewInspect" type="button" class="brass-btn">Soi bàn</button>' : ''}
               </div>
             </div>
           </div>
@@ -2760,7 +2703,7 @@ export class PuzzleArcadeModalController {
     const trialBadgeFor = (kind: PuzzleArcadeMode | 'match3'): string => {
       if (!reqTrial || st.sandboxMode || this.sim.isHeadmasterPreview) return '';
       if (reqTrial.kind !== kind) return '';
-      return `<span class="pa-tab-trial" title="Môn Đề Cử">🔥</span>`;
+      return `<span class="pa-tab-trial" role="img" aria-label="Môn Đề Cử"></span>`; // HPVN: a red dot; the stage line names it
     };
 
     const fmtTabLv = (kind: PuzzleArcadeMode | 'match3'): string => {
@@ -2791,11 +2734,18 @@ export class PuzzleArcadeModalController {
           ${this.snackPieUsedThisAttempt || this.victoryClaimed || (!st.sandboxMode && pieQty <= 0) ? 'disabled' : ''}
           title="Dùng 1 Bánh Táo Quế từ Kho Đỏ (Xoá 1 lỗi / +1 Lùi hoặc Đảo + 1 Gợi Ý)"
         >
-          <img src="/sprites/ui_icon_pie_ready.png" alt="" width="20" height="20" class="aaa-synergy-sprite" />
+          <img src="/game/trang-trai-hang-soc/sprites/ui_icon_pie_ready.webp" alt="" width="20" height="20" class="aaa-synergy-sprite" />
           <span><span class="aaa-lbl-full">Bánh Táo </span><strong>${this.snackPieUsedThisAttempt ? '✓' : st.sandboxMode ? '∞' : `×${pieQty}`}</strong></span>
         </button>
       </div>
     `;
+
+    // HPVN: portrait = pie and companion join the tool row under the board, so the board gets their row; desktop (≥980px)
+    // too, so the dock keeps room for the game list (main.css «desktop minigame frame»)
+    const synergyInControls =
+      (this.root.querySelector('#puzzleArcadeDialog') as HTMLElement | null)?.dataset?.mgLayout === 'portrait' ||
+      globalThis.matchMedia?.('(min-width: 980px)').matches ||
+      globalThis.matchMedia?.('(max-height: 450px) and (orientation: landscape)').matches;
 
     box.innerHTML = `
       <div class="pa-layout-shell" data-pa-active-mode="${this.mode}">
@@ -2804,65 +2754,66 @@ export class PuzzleArcadeModalController {
             <div class="pa-dock-head-row">
               <div class="pa-currencies">
                 <span class="m3-res-chip" title="Sao Phép Thuật">
-                  <img src="/sprites/m3_icon_star.png" alt="Sao" class="m3-res-icon" />
-                  <strong id="paStarsText">${st.sandboxMode ? '∞' : st.match3.stars}</strong>
+                  <img src="/game/trang-trai-hang-soc/sprites/m3_icon_star.webp" alt="Sao" class="m3-res-icon" />
+                  <strong id="paStarsText">${st.sandboxMode ? '∞' : compactSickle(st.match3.stars)}</strong>
                 </span>
                 <span class="m3-res-chip" title="Cát Xoay Thời Gian">
-                  <span>⏳</span>
+                  <img src="/game/trang-trai-hang-soc/sprites/res_time_sand.webp" alt="" class="m3-res-icon" />
                   <strong id="paSandText">${st.sandboxMode ? '∞' : st.timeSand}</strong>
                 </span>
-                <span class="m3-res-chip" title="Vàng Galleon">
-                  <span class="g-coin" style="width:17px;height:17px;font-size:10.5px;">G</span>
-                  <strong id="paGoldText">${st.sandboxMode ? '∞' : st.galleons.toLocaleString('vi-VN')}</strong>
+                <span class="m3-res-chip" title="Sickle">
+                  <span class="g-coin" style="font-size:11px;">S</span>
+                  <strong id="paGoldText">${st.sandboxMode ? '∞' : compactSickle(st.galleons)}</strong>
                 </span>
                 <span class="m3-res-chip" title="Bùa Phượng Hoàng">
-                  <span>🔥</span>
+                  <img src="/game/trang-trai-hang-soc/sprites/beast_phoenix.webp" alt="" class="m3-res-icon" /><!-- HPVN: no emoji -->
                   <strong id="paTalismanText">${talismanDisp}</strong>
                 </span>
-                <button id="btnPaOpenLeaderboard" type="button" class="m3-res-chip minigame-lb-chip" title="${isScoredMode ? 'Bảng Xếp Hạng môn này' : 'Bảng Xếp Hạng 4 Môn Tính Điểm (Bùa Gặt • Số Học • Sinh Vật • Tranh Ghép)'}">
-                  <span>🏆</span>
-                  <strong id="paRankText">${isScoredMode ? `#${activeModeRank}` : '4 Môn'}</strong>
-                </button>
                 <button id="btnPaToggleYuleSkin" type="button" class="m3-res-chip yule-skin-toggle-pill ${this.isYuleSkinActive() ? 'is-yule-active' : ''}" aria-pressed="${this.isYuleSkinActive()}" title="Bật/Tắt giao diện Giáng Sinh">
-                  <span>🎄</span>
+                  <span>Noel</span>
                 </button>
               </div>
+              <button id="btnPaOpenLeaderboard" type="button" class="minigame-lb-chip" title="${isScoredMode ? 'Bảng Xếp Hạng môn này' : 'Bảng Xếp Hạng 4 Môn Tính Điểm (Bùa Gặt • Số Học • Sinh Vật • Tranh Ghép)'}">
+                <img src="/game/trang-trai-hang-soc/sprites/ui_trophy_cup.webp" alt="" class="m3-res-icon" />
+                <strong id="paRankText">${isScoredMode ? `#${compactSickle(activeModeRank)}` : '4 Môn'}</strong>
+              </button>
               <form method="dialog" class="pa-inline-close-form">
                 <button type="submit" class="brass-btn pa-inline-close-btn" title="Đóng (Esc)" aria-label="Đóng">✕</button>
               </form>
             </div>
 
-            <div class="pa-mode-tabs" role="tablist" aria-label="Chọn môn khảo thí phép thuật Hogwarts" ${this.rescueContext ? 'style="opacity:0.65;pointer-events:none;"' : ''}>
+            <div class="pa-mode-tabs" role="tablist"${globalThis.matchMedia?.('(min-width: 980px)').matches ? ' aria-orientation="vertical"' : ''} aria-label="Chọn môn khảo thí phép thuật Hogwarts" ${this.rescueContext ? 'style="opacity:0.65;pointer-events:none;"' : ''}>
               <button type="button" role="tab" aria-selected="${this.mode === 'caro'}" data-pa-mode="caro" class="pa-mode-tab ${this.mode === 'caro' ? 'active' : ''}" title="Ngũ Ấn Đạo Tặc">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🗺️ Ngũ Ấn Đạo Tặc</span><span class="pa-tab-name-short">🗺️ Ngũ Ấn</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('caro')}</span>${trialBadgeFor('caro')}</span>
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🗺️ Ngũ Ấn Đạo Tặc</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🗺️</span> Ngũ Ấn</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('caro')}</span>${trialBadgeFor('caro')}</span>
               </button>
               <button type="button" role="tab" aria-selected="${this.mode === 'sudoku'}" data-pa-mode="sudoku" class="pa-mode-tab ${this.mode === 'sudoku' ? 'active' : ''}" title="Số Học Huyền Bí">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🔢 Số Học Huyền Bí</span><span class="pa-tab-name-short">🔢 Số Học</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('sudoku')}</span>${trialBadgeFor('sudoku')}</span>
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🔢 Số Học Huyền Bí</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🔢</span> Số Học</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('sudoku')}</span>${trialBadgeFor('sudoku')}</span>
               </button>
               <button type="button" role="tab" aria-selected="${this.mode === 'chess'}" data-pa-mode="chess" class="pa-mode-tab ${this.mode === 'chess' ? 'active' : ''}" title="Cờ Phù Thủy">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🏰 Cờ Phù Thủy</span><span class="pa-tab-name-short">🏰 Cờ Phù Thủy</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('chess')}</span>${trialBadgeFor('chess')}</span>
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🏰 Cờ Phù Thủy</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🏰</span> Cờ</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('chess')}</span>${trialBadgeFor('chess')}</span>
               </button>
               <button type="button" role="tab" aria-selected="${this.mode === 'blocks'}" data-pa-mode="blocks" class="pa-mode-tab ${this.mode === 'blocks' ? 'active' : ''}" title="Sinh Vật Huyền Bí">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🦄 Sinh Vật Huyền Bí</span><span class="pa-tab-name-short">🦄 Sinh Vật</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('blocks')}</span>${trialBadgeFor('blocks')}</span>
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🦄 Sinh Vật Huyền Bí</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🦄</span> Sinh Vật</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('blocks')}</span>${trialBadgeFor('blocks')}</span>
               </button>
               <button type="button" role="tab" aria-selected="${this.mode === 'jigsaw'}" data-pa-mode="jigsaw" class="pa-mode-tab ${this.mode === 'jigsaw' ? 'active' : ''}" title="Tranh Ghép Phép Thuật">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🧩 Tranh Ghép Phép Thuật</span><span class="pa-tab-name-short">🧩 Tranh Ghép</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('jigsaw')}</span>${trialBadgeFor('jigsaw')}</span>
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🧩 Tranh Ghép Phép Thuật</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🧩</span> Tranh Ghép</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('jigsaw')}</span>${trialBadgeFor('jigsaw')}</span>
               </button>
               <button id="btnPaGoMatch3" type="button" role="tab" aria-selected="false" class="pa-mode-tab" title="Bùa Gặt Honeydukes">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🍬 Bùa Gặt Honeydukes</span><span class="pa-tab-name-short">🍬 Bùa Gặt</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('match3')}</span>${trialBadgeFor('match3')}</span>
+                <span class="pa-tab-name"><span class="pa-tab-name-full">🍬 Bùa Gặt Honeydukes</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🍬</span> Bùa Gặt</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('match3')}</span>${trialBadgeFor('match3')}</span>
               </button>
             </div>
           </div>
 
-          <div class="pa-stage-banner">
-            <div class="pa-stage-meta">
-              <div class="pa-stage-title">${stageHeadline}</div>
-              <div class="pa-stage-sub">${stageSubtitle}</div>
-            </div>
-          </div>
+          ${levelBarHtml({
+            stage: `Màn ${activeStageNum}/${MAX_MINIGAME_STAGE}`,
+            sub: `${trialBadgeFor(this.mode) ? 'Đề cử · ' : ''}${stageSub}`,
+            stats: stageStats,
+            alert: stageAlert,
+            action: stageAction,
+          })}
 
           ${statusBannerHtml}
-          ${paSynergyDockHtml}
+          ${synergyInControls ? '' : paSynergyDockHtml}
         </aside>
 
         <div class="pa-stage-viewport ${this.mode === 'jigsaw' ? 'pa-jigsaw-stage-viewport' : ''}">
@@ -2877,11 +2828,13 @@ export class PuzzleArcadeModalController {
 
         <div class="pa-controls-bar">
           ${controlsHtml}
+          ${synergyInControls ? paSynergyDockHtml : ''}
         </div>
         ${victoryOverlayHtml}
       </div>
     `;
 
+    liftToolIcons(box);
     this.bindDOMControls(box);
     this.mountCanvas(box);
   }
@@ -2891,11 +2844,11 @@ export class PuzzleArcadeModalController {
     if (!box) return;
     const st = this.sim.state;
     const starsEl = box.querySelector('#paStarsText');
-    if (starsEl) starsEl.textContent = st.sandboxMode ? '∞' : String(st.match3.stars);
+    if (starsEl) starsEl.textContent = st.sandboxMode ? '∞' : compactSickle(st.match3.stars);
     const sandEl = box.querySelector('#paSandText');
     if (sandEl) sandEl.textContent = st.sandboxMode ? '∞' : String(st.timeSand);
     const goldEl = box.querySelector('#paGoldText');
-    if (goldEl) goldEl.textContent = st.sandboxMode ? '∞' : st.galleons.toLocaleString('vi-VN');
+    if (goldEl) goldEl.textContent = st.sandboxMode ? '∞' : compactSickle(st.galleons);
     const talEl = box.querySelector('#paTalismanText');
     if (talEl) talEl.textContent = st.sandboxMode ? '∞' : String(this.sim.getPhoenixTalismanCount());
 
@@ -2930,7 +2883,7 @@ export class PuzzleArcadeModalController {
             : se.freeHintsLeft > 0
               ? `${se.freeHintsLeft}`
               : se.paidHintsLeft > 0
-                ? `${se.hintGoldCost}G`
+                ? `${se.hintGoldCost} Sickle`
                 : '0';
         }
       }
@@ -2955,12 +2908,8 @@ export class PuzzleArcadeModalController {
     } else if (this.mode === 'chess' && this.chessEngine) {
       const turnEl = box.querySelector('#paChessTurn');
       if (turnEl) {
-        turnEl.textContent =
-          this.chessEngine.status === 'ai_thinking'
-            ? `${this.chessEngine.opponentName} đang đi...`
-            : this.chessEngine.isInCheck('w')
-              ? '⚠️ Chiếu tướng!'
-              : 'Lượt bạn';
+        turnEl.textContent = chessTurnVi(this.chessEngine);
+        turnEl.classList.toggle('pa-err-inline', this.chessEngine.status !== 'ai_thinking' && this.chessEngine.isInCheck('w'));
       }
       const undoBtn = box.querySelector('#btnPaChessUndo') as HTMLButtonElement | null;
       if (undoBtn) {
@@ -3005,7 +2954,7 @@ export class PuzzleArcadeModalController {
             : oe.freeHintsLeft > 0
               ? String(oe.freeHintsLeft)
               : oe.paidHintsLeft > 0
-                ? `${oe.hintGoldCost}G`
+                ? `${oe.hintGoldCost} Sickle`
                 : '0';
         }
       }
@@ -3022,7 +2971,7 @@ export class PuzzleArcadeModalController {
             : oe.lives > 0
               ? `❤️${oe.lives}`
               : oe.paidShufflesLeft > 0
-                ? `${oe.shuffleGoldCost}G`
+                ? `${oe.shuffleGoldCost} Sickle`
                 : '0';
         }
       }
@@ -3049,7 +2998,7 @@ export class PuzzleArcadeModalController {
             : je.freeHintsLeft > 0
               ? String(je.freeHintsLeft)
               : je.paidHintsLeft > 0
-                ? `${je.hintGoldCost}G`
+                ? `${je.hintGoldCost} Sickle`
                 : '0';
         }
       }
@@ -3196,7 +3145,7 @@ export class PuzzleArcadeModalController {
     box.querySelector('#btnPaChessTactics')?.addEventListener('click', () => {
       if (this.chessEngine?.subMode === 'tactics') return;
       if (this.chessEngine?.subModeLocked) {
-        this.showToast('🔒 Từ Màn 11/777 trở đi, thể thức mỗi màn được ấn định cố định!', '🏰');
+        this.showToast('Từ Màn 11, thể thức mỗi màn là cố định', '🏰');
         return;
       }
       this.chessForceSubMode = 'tactics';
@@ -3208,7 +3157,7 @@ export class PuzzleArcadeModalController {
     box.querySelector('#btnPaChessMatch')?.addEventListener('click', () => {
       if (this.chessEngine?.subMode === 'match') return;
       if (this.chessEngine?.subModeLocked) {
-        this.showToast('🔒 Từ Màn 11/777 trở đi, thể thức mỗi màn được ấn định cố định!', '🏰');
+        this.showToast('Từ Màn 11, thể thức mỗi màn là cố định', '🏰');
         return;
       }
       this.chessForceSubMode = 'match';
@@ -3498,7 +3447,7 @@ export class PuzzleArcadeModalController {
                 : this.onetEngine?.talismanUsed;
       if (activeUsed) {
         this.showToast(
-          'Hôm nay bạn đã dùng 🔥 Bùa Phượng Hoàng ở môn này rồi (giới hạn 1 lần/môn/ngày)!',
+          'Bùa Phượng Hoàng: mỗi môn 1 lần/ngày, hôm nay đã dùng',
           '🔥'
         );
         return;
@@ -3707,11 +3656,11 @@ export class PuzzleArcadeModalController {
     box.querySelector('#btnPaClaimSosRescue')?.addEventListener('click', handleClaimSosRescue);
     box.querySelector('#btnPaSideClaimSos')?.addEventListener('click', handleClaimSosRescue);
 
-    box.querySelector('#btnPaToggleReviewInspect')?.addEventListener('click', () => {
+    box.querySelectorAll('#btnPaToggleReviewInspect, #btnPaVictoryReviewInspect').forEach((btn) => btn.addEventListener('click', () => {
       this.inspectingTurningPoint = !this.inspectingTurningPoint;
       this.sim.audio.playClick();
       this.renderDOM();
-    });
+    }));
     box.querySelector('#btnPaReturnVictoryCard')?.addEventListener('click', () => {
       this.inspectingTurningPoint = false;
       this.sim.audio.playClick();
@@ -4060,18 +4009,10 @@ export class PuzzleArcadeModalController {
       this.checkAndClaimVictory();
     } else if (res.lost) {
       this.persistSudokuSession(true);
-      this.showToast(
-        `❌ Đã điền kín 81/81 ô nhưng chưa đúng (${this.sudokuEngine.mistakesCount}/${this.sudokuEngine.maxMistakes} lần) — bấm ↩️ Hoàn Tác hoặc 🧹 Xoá để tự dò lại!`,
-        '❌'
-      );
-      this.renderDOM();
+      this.renderDOM(); // the level bar states the loss (role=status) — no toast over the HUD
     } else if (res.fullBoardError) {
       this.persistSudokuSession(true);
-      this.showToast(
-        `⚠️ Đã điền đủ 81/81 ô nhưng bảng còn sai sót (${this.sudokuEngine.mistakesCount}/${this.sudokuEngine.maxMistakes}) — hãy tự kiểm tra lại!`,
-        '⚠️'
-      );
-      this.renderDOM();
+      this.renderDOM(); // the level bar states the full-board mismatch
     } else {
       this.persistSudokuSession(true);
       if (wasFullMismatch !== this.sudokuEngine.fullBoardMismatch) {
@@ -4885,7 +4826,7 @@ export class PuzzleArcadeModalController {
               this.cleanupJigsawTrayDrag();
               this.persistModeSession('jigsaw', true);
               this.sim.audio.playCheekyAlert();
-              this.showToast('⏰ Đã hết thời gian phục dựng bức tranh! Dùng 🔥 Bùa Phượng Hoàng để tiếp sức!', '⏰');
+              this.showToast('Hết giờ ghép tranh · dùng Bùa Phượng Hoàng để tiếp sức', '⏰');
               this.renderDOM();
             } else {
               if (tick.wholeSecondChanged) {
@@ -6220,140 +6161,6 @@ export class PuzzleArcadeModalController {
       ctx.strokeStyle = '#e5a93c';
       ctx.stroke();
 
-      if (sm.variant === 'portrait-tall') {
-        const barX = bX;
-        const barW = bPx;
-        const colGap = 5;
-        const rowGap = 5;
-        const padV = 5;
-        const btnW = (barW - colGap * 4) / 5;
-        const btnH = Math.max(46, (trayH - padV * 2 - rowGap) * 0.5);
-
-        for (let d = 1; d <= 9; d++) {
-          const rowIdx = d <= 5 ? 0 : 1;
-          const colIdx = d <= 5 ? d - 1 : d - 6;
-          const bx = barX + colIdx * (btnW + colGap);
-          const by = trayY + padV + rowIdx * (btnH + rowGap);
-          this.sudokuPadRects.set(d, { x: bx, y: by, w: btnW, h: btnH });
-
-          const done = rem[d] === 0;
-          const isKeyActive = activeDigit === d && !done;
-          const isKeyHover = this.sudokuHoverPadDigit === d && !done;
-
-          if (!done) {
-            drawRoundedRect(ctx, bx, by + 2.5, btnW, btnH, 9);
-            ctx.fillStyle = '#1e0d04';
-            ctx.fill();
-          }
-
-          drawRoundedRect(ctx, bx, by, btnW, btnH, 9);
-          if (done) {
-            ctx.fillStyle = 'rgba(28, 13, 5, 0.55)';
-          } else if (isKeyActive) {
-            const actGrad = ctx.createLinearGradient(0, by, 0, by + btnH);
-            actGrad.addColorStop(0, '#fff3b0');
-            actGrad.addColorStop(0.55, '#fbbf24');
-            actGrad.addColorStop(1, '#d97706');
-            ctx.fillStyle = actGrad;
-          } else if (isKeyHover) {
-            const hovGrad = ctx.createLinearGradient(0, by, 0, by + btnH);
-            hovGrad.addColorStop(0, '#fffef7');
-            hovGrad.addColorStop(1, '#fde68a');
-            ctx.fillStyle = hovGrad;
-          } else {
-            const keyGrad = ctx.createLinearGradient(0, by, 0, by + btnH);
-            keyGrad.addColorStop(0, '#fffef8');
-            keyGrad.addColorStop(0.58, '#f8e9ca');
-            keyGrad.addColorStop(1, '#ebd3a4');
-            ctx.fillStyle = keyGrad;
-          }
-          ctx.fill();
-
-          ctx.lineWidth = isKeyActive ? 2 : 1.35;
-          ctx.strokeStyle = done
-            ? 'rgba(229, 169, 60, 0.25)'
-            : isKeyActive
-              ? '#fffbeb'
-              : engine.pencilMode
-                ? '#d97706'
-                : '#b87d32';
-          ctx.stroke();
-
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          const fontPx = Math.min(28, Math.max(22, Math.round(btnH * 0.48)));
-          ctx.font = `800 ${fontPx}px "Be Vietnam Pro", system-ui, -apple-system, sans-serif`;
-          ctx.fillStyle = done
-            ? 'rgba(253, 230, 138, 0.35)'
-            : isKeyActive
-              ? '#3b1806'
-              : engine.pencilMode
-                ? '#6b4423'
-                : '#2b1407';
-          ctx.fillText(String(d), bx + btnW * 0.36, by + btnH * 0.52);
-
-          // Side count badge inside wide thumb key
-          const pillW = 24;
-          const pillH = 18;
-          const pillX = bx + btnW - pillW - 8;
-          const pillY = by + (btnH - pillH) * 0.5;
-          drawRoundedRect(ctx, pillX, pillY, pillW, pillH, 6);
-          ctx.fillStyle = done
-            ? 'transparent'
-            : isKeyActive
-              ? 'rgba(59, 24, 6, 0.85)'
-              : 'rgba(67, 32, 13, 0.84)';
-          ctx.fill();
-          ctx.font = '800 11px "Be Vietnam Pro", system-ui, sans-serif';
-          ctx.fillStyle = done ? '#eab308' : '#fde68a';
-          ctx.fillText(done ? '✓' : String(rem[d]), pillX + pillW * 0.5, pillY + pillH * 0.53);
-        }
-
-        // Slot 10 (Row 2, Col 5): Quick Erase Thumb Key ("🧹 Xoá")
-        const ex = barX + 4 * (btnW + colGap);
-        const ey = trayY + padV + (btnH + rowGap);
-        const eraseDisabled = engine.status !== 'playing' && engine.status !== 'lost';
-        const eraseActive = engine.eraseMode;
-        const eraseHover = this.sudokuHoverAction === 'erase' && !eraseDisabled;
-        this.sudokuActionRects.set('erase', { x: ex, y: ey, w: btnW, h: btnH });
-
-        if (!eraseDisabled) {
-          drawRoundedRect(ctx, ex, ey + 2.5, btnW, btnH, 9);
-          ctx.fillStyle = '#1e0d04';
-          ctx.fill();
-        }
-        drawRoundedRect(ctx, ex, ey, btnW, btnH, 9);
-        if (eraseDisabled) {
-          ctx.fillStyle = 'rgba(28, 13, 5, 0.55)';
-        } else if (eraseActive) {
-          const erGrad = ctx.createLinearGradient(0, ey, 0, ey + btnH);
-          erGrad.addColorStop(0, '#e04f3e');
-          erGrad.addColorStop(0.55, '#b91c1c');
-          erGrad.addColorStop(1, '#7f1d1d');
-          ctx.fillStyle = erGrad;
-        } else if (eraseHover) {
-          ctx.fillStyle = '#fde68a';
-        } else {
-          const defGrad = ctx.createLinearGradient(0, ey, 0, ey + btnH);
-          defGrad.addColorStop(0, '#fffdf5');
-          defGrad.addColorStop(1, '#e8cb94');
-          ctx.fillStyle = defGrad;
-        }
-        ctx.fill();
-        ctx.lineWidth = eraseActive ? 2 : 1.35;
-        ctx.strokeStyle = eraseActive ? '#fde047' : '#b87d32';
-        ctx.stroke();
-
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.font = '800 13.5px "Be Vietnam Pro", system-ui, sans-serif';
-        ctx.fillStyle = eraseDisabled ? '#a89070' : eraseActive ? '#fffbeb' : '#3b1806';
-        ctx.fillText('🧹 Xoá', ex + btnW * 0.5, ey + btnH * 0.52);
-
-        ctx.restore();
-        return;
-      }
-
       const barX = bX;
       const barY = trayY + 3.5;
       const barW = bPx;
@@ -6427,7 +6234,7 @@ export class PuzzleArcadeModalController {
           isUltraCompact ? by + btnH * 0.39 : by + btnH * 0.4
         );
 
-        const pillH = isUltraCompact ? 11.5 : 14;
+        const pillH = isUltraCompact ? 13 : 15;
         const pillY = by + btnH - pillH - 2.5;
         drawRoundedRect(ctx, bx + 4.5, pillY, btnW - 9, pillH, 4.5);
         ctx.fillStyle = done
@@ -6437,17 +6244,15 @@ export class PuzzleArcadeModalController {
             : 'rgba(67, 32, 13, 0.82)';
         ctx.fill();
 
-        ctx.font = isUltraCompact
-          ? '800 8.8px "Be Vietnam Pro", system-ui, sans-serif'
-          : '800 10px "Be Vietnam Pro", system-ui, sans-serif';
+        ctx.font = '700 11px "Be Vietnam Pro", system-ui, sans-serif';
         ctx.fillStyle = done ? '#eab308' : '#fde68a';
-        ctx.fillText(done ? '✓' : String(rem[d]), bx + btnW * 0.5, pillY + pillH * 0.53);
+        if (done) fillCheck(ctx, bx + btnW * 0.5, pillY + pillH * 0.5, isUltraCompact ? 7 : 8); else ctx.fillText(String(rem[d]), bx + btnW * 0.5, pillY + pillH * 0.53);
       }
       ctx.restore();
       return;
     }
 
-    // 4b. Desktop / Landscape: Hang Sóc Carved Wood & Brass Control + 3×3 Numpad Dock on Right
+    // 4b. Desktop / Landscape: Hang Sóc Carved Wood 3×3 Numpad Dock on Right (actions stay solely in DOM .pa-controls-bar)
     this.sudokuPadRects.clear();
     this.sudokuActionRects.clear();
 
@@ -6486,181 +6291,11 @@ export class PuzzleArcadeModalController {
 
     const innerX = padX + 7;
     const innerW = padW - 14;
-    const actGap = 6;
-    const actW = (innerW - actGap) / 2;
-    const actH = 47;
-    const actStartY = padY + 8;
-
-    const sandbox = this.sim.state.sandboxMode;
-    const canHint =
-      engine.status === 'playing' && (sandbox || engine.freeHintsLeft + engine.paidHintsLeft > 0);
-    const hintBadge = sandbox
-      ? '∞'
-      : engine.freeHintsLeft > 0
-        ? String(engine.freeHintsLeft)
-        : engine.paidHintsLeft > 0
-          ? `${engine.hintGoldCost}G`
-          : '0';
-
-    const quickActions: ReadonlyArray<{
-      key: SudokuQuickActionKey;
-      icon: string;
-      label: string;
-      active: boolean;
-      disabled: boolean;
-      isGoldCta?: boolean;
-      badge?: string;
-      badgeActive?: boolean;
-    }> = [
-      {
-        key: 'undo',
-        icon: '↩️',
-        label: 'Hoàn tác',
-        active: false,
-        disabled: !engine.canUndo,
-      },
-      {
-        key: 'erase',
-        icon: '🧹',
-        label: 'Xoá',
-        active: engine.eraseMode,
-        disabled: engine.status !== 'playing' && engine.status !== 'lost',
-      },
-      {
-        key: 'notes',
-        icon: '✏️',
-        label: 'Ghi chú',
-        active: engine.pencilMode,
-        disabled: engine.status !== 'playing',
-        badge: engine.pencilMode ? 'ON' : 'OFF',
-        badgeActive: engine.pencilMode,
-      },
-      {
-        key: 'hint',
-        icon: '💡',
-        label: 'Gợi ý',
-        active: false,
-        disabled: !canHint,
-        isGoldCta: true,
-        badge: hintBadge,
-        badgeActive: canHint && (sandbox || engine.freeHintsLeft > 0),
-      },
-    ];
-
-    quickActions.forEach((act, idx) => {
-      const ar = Math.floor(idx / 2);
-      const ac = idx % 2;
-      const ax = innerX + ac * (actW + actGap);
-      const ay = actStartY + ar * (actH + actGap);
-      this.sudokuActionRects.set(act.key, { x: ax, y: ay, w: actW, h: actH });
-
-      const isHov = this.sudokuHoverAction === act.key && !act.disabled;
-
-      if (!act.disabled) {
-        drawRoundedRect(ctx, ax, ay + 2, actW, actH, 9);
-        ctx.fillStyle = '#1a0b04';
-        ctx.fill();
-      }
-
-      drawRoundedRect(ctx, ax, ay, actW, actH, 9);
-      if (act.disabled) {
-        ctx.fillStyle = 'rgba(32, 15, 6, 0.55)';
-      } else if (act.active) {
-        const actGrad = ctx.createLinearGradient(0, ay, 0, ay + actH);
-        actGrad.addColorStop(0, '#e04f3e');
-        actGrad.addColorStop(0.55, '#b91c1c');
-        actGrad.addColorStop(1, '#7f1d1d');
-        ctx.fillStyle = actGrad;
-      } else if (act.isGoldCta) {
-        const goldGrad = ctx.createLinearGradient(0, ay, 0, ay + actH);
-        goldGrad.addColorStop(0, isHov ? '#fff3b0' : '#ffe484');
-        goldGrad.addColorStop(0.55, '#f5b301');
-        goldGrad.addColorStop(1, '#c27c08');
-        ctx.fillStyle = goldGrad;
-      } else if (isHov) {
-        const hovGrad = ctx.createLinearGradient(0, ay, 0, ay + actH);
-        hovGrad.addColorStop(0, '#fffef7');
-        hovGrad.addColorStop(1, '#fde68a');
-        ctx.fillStyle = hovGrad;
-      } else {
-        const btnGrad = ctx.createLinearGradient(0, ay, 0, ay + actH);
-        btnGrad.addColorStop(0, '#fffdf5');
-        btnGrad.addColorStop(0.58, '#f7e5be');
-        btnGrad.addColorStop(1, '#e8cb94');
-        ctx.fillStyle = btnGrad;
-      }
-      ctx.fill();
-
-      ctx.lineWidth = act.active || isHov ? 1.8 : 1.3;
-      ctx.strokeStyle = act.disabled
-        ? 'rgba(229, 169, 60, 0.22)'
-        : act.active
-          ? '#fde047'
-          : act.isGoldCta
-            ? '#fffbeb'
-            : '#b87d32';
-      ctx.stroke();
-
-      ctx.save();
-      ctx.globalAlpha = act.disabled ? 0.42 : 1;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = '15px system-ui, sans-serif';
-      ctx.fillText(act.icon, ax + actW * 0.5, ay + 15.5);
-
-      ctx.font = '800 9.8px "Be Vietnam Pro", system-ui, sans-serif';
-      ctx.fillStyle = act.disabled
-        ? '#d6be96'
-        : act.active
-          ? '#fffbeb'
-          : '#3b1806';
-      ctx.fillText(act.label, ax + actW * 0.5, ay + 35, actW - 6);
-      ctx.restore();
-
-      if (act.badge) {
-        const bw = Math.max(20, act.badge.length * 5.8 + 7);
-        const bh = 13.5;
-        const bx = ax + actW - bw - 2.5;
-        const by = ay + 2.5;
-        drawRoundedRect(ctx, bx, by, bw, bh, 6.5);
-        ctx.fillStyle = act.disabled
-          ? 'rgba(59, 31, 13, 0.6)'
-          : act.badgeActive
-            ? '#15803d'
-            : '#3b1f0d';
-        ctx.fill();
-        ctx.lineWidth = 0.8;
-        ctx.strokeStyle = 'rgba(253, 230, 138, 0.6)';
-        ctx.stroke();
-        ctx.font = '800 8px "Be Vietnam Pro", system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = act.disabled ? '#a89070' : '#fef3c7';
-        ctx.fillText(act.badge, bx + bw * 0.5, by + bh * 0.54);
-      }
-    });
-
-    // Ornamental brass divider with 4-point Hogwarts star between Quick Actions and 3×3 Numpad
-    const divY = actStartY + actH * 2 + actGap + 8.5;
-    const midDockX = innerX + innerW * 0.5;
-    ctx.beginPath();
-    ctx.moveTo(innerX + 2, divY);
-    ctx.lineTo(midDockX - 10, divY);
-    ctx.moveTo(midDockX + 10, divY);
-    ctx.lineTo(innerX + innerW - 2, divY);
-    ctx.lineWidth = 1.2;
-    ctx.strokeStyle = 'rgba(244, 198, 104, 0.55)';
-    ctx.stroke();
-    this.drawFourPointStar(ctx, midDockX, divY, 5, 1.8);
-    ctx.fillStyle = '#f4c668';
-    ctx.fill();
-
-    // 3×3 Tactile Hang Sóc Ivory-Wood Number Pad (1..9)
     const numGapX = 5;
-    const numGapY = 6;
-    const btnW = (innerW - numGapX * 2) / 3; // ~41.6px
-    const btnH = 112;
-    const startY = divY + 8.5;
+    const numGapY = 8;
+    const btnW = (innerW - numGapX * 2) / 3;
+    const startY = padY + 10;
+    const btnH = Math.floor((padH - 20 - numGapY * 2) / 3);
 
     for (let d = 1; d <= 9; d++) {
       const pr = Math.floor((d - 1) / 3);
@@ -6735,7 +6370,7 @@ export class PuzzleArcadeModalController {
       }
       ctx.font = padRelic && !done
         ? '800 28px "Be Vietnam Pro", system-ui, -apple-system, sans-serif'
-        : '800 33px "Be Vietnam Pro", system-ui, -apple-system, sans-serif';
+        : '800 34px "Be Vietnam Pro", system-ui, -apple-system, sans-serif';
       ctx.fillStyle = done
         ? 'rgba(253, 230, 138, 0.3)'
         : isKeyActive
@@ -6743,10 +6378,12 @@ export class PuzzleArcadeModalController {
           : engine.pencilMode
             ? '#6b4423'
             : '#2b1407';
-      ctx.fillText(String(d), bx + btnW * 0.5, padRelic && !done ? by + 51 : by + 43);
+      ctx.fillText(String(d), bx + btnW * 0.5, padRelic && !done ? by + btnH * 0.42 + 8 : by + btnH * 0.42);
 
-      // Recessed dark-wood count pill at bottom of key (matches 1/777 Hang Sóc pills)
-      drawRoundedRect(ctx, bx + 5, by + 76, btnW - 10, 22, 7);
+      // Recessed dark-wood count pill at bottom of key
+      const pillH = 24;
+      const pillY = by + btnH - pillH - 10;
+      drawRoundedRect(ctx, bx + 5, pillY, btnW - 10, pillH, 7);
       ctx.fillStyle = done
         ? 'transparent'
         : isKeyActive
@@ -6759,9 +6396,9 @@ export class PuzzleArcadeModalController {
         ctx.stroke();
       }
 
-      ctx.font = '800 11.5px "Be Vietnam Pro", system-ui, sans-serif';
+      ctx.font = '700 12px "Be Vietnam Pro", system-ui, sans-serif';
       ctx.fillStyle = done ? '#eab308' : '#fde68a';
-      ctx.fillText(done ? '✓' : String(rem[d]), bx + btnW * 0.5, by + 87.5);
+      if (done) fillCheck(ctx, bx + btnW * 0.5, pillY + pillH * 0.5, 9.5); else ctx.fillText(String(rem[d]), bx + btnW * 0.5, pillY + pillH * 0.53);
     }
 
     ctx.restore();
@@ -7029,7 +6666,7 @@ export class PuzzleArcadeModalController {
     }
     const label1X = oX + 28 + Math.floor(p1) * 36;
     ctx.fillStyle = 'rgba(110, 32, 18, 0.65)';
-    ctx.font = 'italic 700 8.5px Georgia, serif';
+    ctx.font = '700 8.5px "Be Vietnam Pro", sans-serif';
     ctx.fillText(
       'Harry Potter',
       Math.min(oX + 398, Math.max(oX + 36, label1X)),
@@ -7324,7 +6961,7 @@ export class PuzzleArcadeModalController {
       ctx.stroke();
 
       ctx.fillStyle = '#fde68a';
-      ctx.font = `900 ${Math.round(14.5 * scale)}px Georgia, serif`;
+      ctx.font = `900 ${Math.round(14.5 * scale)}px "Be Vietnam Pro", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('ᛉ', cx, cy + 0.6);
@@ -8024,7 +7661,7 @@ export class PuzzleArcadeModalController {
   }
 
   /**
-   * Renders a unified 2.5D Hogwarts Wizard's Chess Armored Stone Figurine from `/paintings/chess/{wk..bp}.png`
+   * Renders a unified 2.5D Hogwarts Wizard's Chess Armored Stone Figurine from `/game/trang-trai-hang-soc/paintings/chess/{wk..bp}.webp`
    * (Identical sculpt across both sides: Ivory-Gold vs Obsidian-Silver/Emerald) with animated levitation aura
    * and an instant matching-silhouette pedestal+glyph fallback while sprites decode.
    */
@@ -8110,7 +7747,7 @@ export class PuzzleArcadeModalController {
     ctx.stroke();
 
     ctx.fillStyle = isWhite ? '#92400e' : '#ecfdf5';
-    ctx.font = '900 15px "Apple Symbols", Georgia, serif';
+    ctx.font = '900 15px "Apple Symbols", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(meta?.glyph ?? '♚', 0, -0.5);
@@ -8526,10 +8163,10 @@ export class PuzzleArcadeModalController {
     const filters: Array<{ id: JigsawTrayFilter; label: string }> = [
       { id: 'all', label: '🧩 Tất Cả' },
       { id: 'edges', label: '🔲 Viền' },
-      { id: 'q0', label: '↖ Góc I' },
-      { id: 'q1', label: '↗ Góc II' },
-      { id: 'q2', label: '↙ Góc III' },
-      { id: 'q3', label: '↘ Góc IV' },
+      { id: 'q0', label: '↖ <span class="pa-jig-word">Góc </span>I' },
+      { id: 'q1', label: '↗ <span class="pa-jig-word">Góc </span>II' },
+      { id: 'q2', label: '↙ <span class="pa-jig-word">Góc </span>III' },
+      { id: 'q3', label: '↘ <span class="pa-jig-word">Góc </span>IV' },
     ];
 
     const filtered = je.getFilteredTrayPieces();
@@ -8548,7 +8185,7 @@ export class PuzzleArcadeModalController {
       .map((f) => {
         const cnt = je.getTrayCountForFilter(f.id);
         const active = je.trayFilter === f.id;
-        return `<button type="button" class="pa-jigsaw-filter-chip ${active ? 'active' : ''}" data-jigsaw-filter="${f.id}" aria-pressed="${active}">${f.label} <span>(${cnt})</span></button>`;
+        return `<button type="button" class="pa-jigsaw-filter-chip ${active ? 'active' : ''}" data-jigsaw-filter="${f.id}" aria-pressed="${active}">${f.label} <span>· ${cnt}</span></button>`; // HPVN: «Góc I · 4»
       })
       .join('');
 

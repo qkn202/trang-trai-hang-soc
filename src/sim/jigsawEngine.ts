@@ -1172,14 +1172,14 @@ export class MasterJigsawEngine {
 
   public getTurningPointReview(): TurningPointReview | null {
     const edgeLabel = this.firstEdgeCompletedSec !== null
-      ? `Khung viền xong ở ${Math.floor(this.firstEdgeCompletedSec / 60)}p${String(this.firstEdgeCompletedSec % 60).padStart(2, '0')}s`
-      : 'Chưa khép kín khung viền ngoài';
+      ? `viền ${Math.floor(this.firstEdgeCompletedSec / 60)}:${String(this.firstEdgeCompletedSec % 60).padStart(2, '0')}`
+      : 'viền chưa kín';
     return {
       mode: 'jigsaw',
       plyNumber: Math.max(1, this.movesCount),
       outcomeTagVi: this.status === 'won' ? 'Phục Chế Tuyệt Tác' : 'Mẹo Ghép Màn Lớn',
-      playedCoordVi: `${this.lockedCount}/${this.totalPieces} mảnh (${edgeLabel})`,
-      recommendedCoordVi: 'Lọc 🔲 Mảnh Viền & tách 2 ngón phóng to 300–600%',
+      playedCoordVi: `${this.lockedCount}/${this.totalPieces} mảnh · ${edgeLabel}`,
+      recommendedCoordVi: 'lọc Viền, phóng to 2 ngón',
       summaryVi:
         'Ghép kín khung viền 4 cạnh trước, sau đó chuyển bộ lọc 🧭 4 Góc Phần Tư và chụm/tách 2 ngón phóng to để khớp cụm nhanh gấp đôi.',
       highlightCells: [],

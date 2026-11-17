@@ -213,9 +213,18 @@ import {
 } from './simulationData';
 import type { ParkSimulation } from './simulation';
 
+/** Where the farm is kept. HPVN (main.ts) swaps in the server save before the simulation starts;
+ *  the default (unit tests) is the browser's storage. */
+export interface FarmStore { read(): string | null; write(json: string): void }
+let farmStore: FarmStore = {
+  read: () => globalThis.localStorage?.getItem(SAVE_KEY) ?? null,
+  write: (json) => globalThis.localStorage?.setItem(SAVE_KEY, json),
+};
+export const setFarmStore = (store: FarmStore) => { farmStore = store; };
+
 export function lifecycleLoadFromStorage(sim: ParkSimulation): GameState | null {
     try {
-      const raw = localStorage.getItem(SAVE_KEY);
+      const raw = farmStore.read();
       if (!raw) return null;
       const parsed = JSON.parse(raw) as GameState;
       if (!parsed || typeof parsed.level !== 'number' || !Array.isArray(parsed.buildings)) {
@@ -240,7 +249,6 @@ export function lifecycleSyncPlayerPrimitivesToHomeState(sim: ParkSimulation): v
     h.levelUpTrialCompletedLevel = sim.state.levelUpTrialCompletedLevel;
     h.puzzleLevelWinsProgress = sim.state.puzzleLevelWinsProgress;
     h.featuredStarClaimedLevel = sim.state.featuredStarClaimedLevel;
-    h.houseCupMilestoneTier = sim.state.houseCupMilestoneTier;
     h.lastDailyResetKey = sim.state.lastDailyResetKey;
     h.storyQuestIndex = sim.state.storyQuestIndex;
     h.storyClaimedIds = sim.state.storyClaimedIds;
@@ -255,7 +263,6 @@ export function lifecycleSyncPlayerPrimitivesToHomeState(sim: ParkSimulation): v
     h.morningDewPhials = sim.state.morningDewPhials;
     h.examWinStreak = sim.state.examWinStreak;
     h.a11ySettings = sim.state.a11ySettings;
-    h.weeklyHouseCupServerStandings = sim.state.weeklyHouseCupServerStandings;
     h.retention = sim.state.retention;
     h.neighborSocial = sim.state.neighborSocial;
     h.match3 = sim.state.match3;
@@ -298,12 +305,11 @@ export function lifecycleSaveToStorage(sim: ParkSimulation, touchTimestamp = tru
         ...preparedState,
         lastSavedAt: baseState.lastSavedAt || now,
         settings: {
-          ...preparedState.settings,
-          showGrid: false,
+          ...preparedState.settings, // HPVN: showGrid and toonEnabled are kept
           cutawayMode: false,
         },
       };
-      localStorage.setItem(SAVE_KEY, JSON.stringify(persistedState));
+      farmStore.write(JSON.stringify(persistedState));
     } catch {
       // Ignore quota errors
     }
@@ -377,12 +383,6 @@ export function lifecycleToggleHeadmasterPreview(sim: ParkSimulation, targetLeve
       sim.state.sandboxTainted = true;
       sim.state.unlockedZones = ZONES.filter((z) => z.unlockLevel <= targetLevel).map((z) => z.id);
       sim.state.collectedCards = {};
-      sim.state.housePoints = {
-        Gryffindor: 840,
-        Ravenclaw: 815,
-        Hufflepuff: 790,
-        Slytherin: 805,
-      };
       sim.state.finance = {
         harvestRevenue: 48200,
         ticketRevenue: 19450,
@@ -440,7 +440,7 @@ export function lifecycleToggleHeadmasterPreview(sim: ParkSimulation, targetLeve
         { id: 'burrow_cider_apiary', gx: 10, gy: 15, stars: 5, gold: 260 },
         { id: 'burrow_apple_orchard', gx: 14, gy: 15, stars: 5, gold: 150 },
         { id: 'molly_apple_bakery', gx: 15, gy: 20, stars: 5, gold: 220 },
-        // Đồng Cỏ Chăn Thả 4×4 ghép liền rào (Bò Sữa, Cừu Lông Xù, Đàn Gà, Puffskein)
+        // Đồng Cỏ Chăn Thả 4×4 ghép liền rào (Bò Sữa, Cừu Lông Xù, Đàn Gà, Quái Lùng Nhùng)
         { id: 'burrow_animal_pasture', gx: 19, gy: 20, stars: 5, gold: 46, animal: 'daisy_cow' },
         { id: 'burrow_animal_pasture', gx: 21, gy: 20, stars: 5, gold: 34, animal: 'ottery_sheep' },
         { id: 'burrow_animal_pasture', gx: 19, gy: 22, stars: 5, gold: 26, animal: 'burrow_hen' },
@@ -530,7 +530,7 @@ export function lifecycleToggleHeadmasterPreview(sim: ParkSimulation, targetLeve
             placedAt: now,
             constructEndsAt: now,
             lastTickAt: now,
-            storedGalleons: s.gold,
+            storedSickle: s.gold,
             storedXp: Math.round(s.gold * 0.35),
             readyBubbles: s.gold > 0 ? 1 : 0,
             durability: 100,
@@ -713,7 +713,7 @@ export function lifecycleDescribeWeatherSlot(sim: ParkSimulation,
         kind,
         icon: '🌈',
         labelVi: 'Cầu Vồng Sau Mưa',
-        buffVi: 'Kỳ Diệu +20% • Toàn công viên +15% Vàng thu hoạch!',
+        buffVi: 'Kỳ Diệu +20% • Toàn công viên +15% Sickle thu hoạch!',
         startsInSec,
         isRainbow: true,
       };
@@ -860,42 +860,42 @@ export function lifecycleProcessOfflineProgress(sim: ParkSimulation): OfflineRep
       sim.state.staffHired.house_elf +
       sim.state.buildings.filter((b) => b.itemId === 'owlery_elf_hut' && b.constructEndsAt <= now).length;
 
-    let autoGalleons = 0;
+    let autoSickle = 0;
     let autoXp = 0;
     let collectedCount = 0;
 
     if (elfCount > 0 || awaySec >= 180) {
       const ratio = elfCount > 0 ? Math.min(1, 0.55 + elfCount * 0.2) : 0.35;
       for (const b of sim.state.buildings) {
-        if (b.storedGalleons > 0) {
-          const takeG = Math.floor(b.storedGalleons * ratio);
+        if (b.storedSickle > 0) {
+          const takeG = Math.floor(b.storedSickle * ratio);
           const takeX = Math.floor(b.storedXp * ratio);
           if (takeG > 0) {
-            b.storedGalleons -= takeG;
+            b.storedSickle -= takeG;
             b.storedXp -= takeX;
-            b.readyBubbles = Math.max(b.storedGalleons > 0 ? 1 : 0, Math.floor(b.readyBubbles * (1 - ratio)));
-            autoGalleons += takeG;
+            b.readyBubbles = Math.max(b.storedSickle > 0 ? 1 : 0, Math.floor(b.readyBubbles * (1 - ratio)));
+            autoSickle += takeG;
             autoXp += takeX;
             collectedCount++;
           }
         }
       }
-      if (autoGalleons > 0 || autoXp > 0) {
-        sim.state.galleons += autoGalleons;
-        sim.state.finance.harvestRevenue += autoGalleons;
+      if (autoSickle > 0 || autoXp > 0) {
+        sim.state.galleons += autoSickle;
+        sim.state.finance.harvestRevenue += autoSickle;
         sim.addXp(autoXp);
-        sim.recordQuestProgress('harvest_galleons', undefined, autoGalleons);
+        sim.recordQuestProgress('harvest_galleons', undefined, autoSickle);
       }
     }
 
     lifecycleSaveToStorage(sim);
-    if (autoGalleons === 0 && buildingsFinished === 0 && awaySec < 120) {
+    if (autoSickle === 0 && buildingsFinished === 0 && awaySec < 120) {
       return null;
     }
 
     return {
       awaySeconds: awaySec,
-      galleonsEarned: autoGalleons,
+      galleonsEarned: autoSickle,
       xpEarned: autoXp,
       buildingsFinished,
       houseElfAutoCollected: collectedCount,

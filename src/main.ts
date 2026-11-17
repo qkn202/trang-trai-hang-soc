@@ -1,3 +1,4 @@
+import './styles/fonts.css';
 import './styles/main.css';
 import { getCatalogItem } from './data/catalog';
 import { getLevelInfo } from './data/levels';
@@ -16,16 +17,8 @@ import {
 import { IsometricRenderer, isTouchOrIOSDevice } from './engine/renderer';
 import { SpriteRegistry } from './engine/spriteLoader';
 import { sampleCoasterTrainPositions } from './sim/coaster';
+import { isDragPaintableCatalogItem, isRepeatableCatalogItem, setFarmStore, ParkSimulation } from './sim/simulation';
 import {
-  IS_SANDBOX_BUILD_ENABLED,
-  isDragPaintableCatalogItem,
-  isRepeatableCatalogItem,
-  isSandboxRuntimeAllowed,
-  ParkSimulation,
-} from './sim/simulation';
-import {
-  ACTIVE_MINIGAME_RESUME_KEY,
-  ActiveMinigameResumeRecord,
   CatalogItem,
   FarmCropId,
   HeatmapMode,
@@ -41,26 +34,38 @@ import {
   ZoneId,
 } from './types/game';
 import { accessibility, announce } from './ui/accessibility';
-import { SAVE_KEY } from './ui/cloudSave';
 import { haptic } from './ui/haptics';
 import { GameHUD } from './ui/hud';
-import { installPrompt } from './ui/installPrompt';
-import onlineServices from './ui/onlineBootstrap';
 import {
   GamepadController,
   RADIAL_QUICK_SLICES,
   RadialQuickActionId,
 } from './ui/platformAndA11y';
-import {
-  createRollbackSaveBackup,
-  ProductionTelemetryCollector,
-} from './ui/productionShip';
+import { ProductionTelemetryCollector } from './ui/productionShip';
+import { flushFarmSave, identity, loadFarm, placeShellNav, queueFarmSave, setInboxListener, setSaveStatusListener } from './hpvn/bridge';
+import { applyFarmInbox } from './hpvn/inbox';
+import { installCanvasEmojiFilter, installEmojiFilter } from './hpvn/emoji';
+import { installTabCentering } from './hpvn/toolIcons';
 import { CrossLayerFlyingCollectibles } from './render/fx/flyingCollectibles';
 
 const isDragPaintableItem = isDragPaintableCatalogItem;
 
+// HPVN: cheap brush items stay armed between strokes; paid buildings (plots, pastures, coops, gardens) disarm after one stroke
+const isBrushItem = (item: CatalogItem): boolean =>
+  item.category === 'path' || item.category === 'terrain' || Boolean(item.isCoasterTrackPiece) || Boolean(item.isZooFence);
+
 async function bootstrap(): Promise<void> {
   const app = document.getElementById('app')!;
+  installEmojiFilter(); // HPVN: no emoji on screen (owner 14/11)
+  installTabCentering(); // HPVN: a re-rendered tab row keeps its current tab in view
+  // HPVN: on a touch screen a field focused in a dialog moves to the top of the dialog's scroller, above the keyboard
+  // (phone landscape: the dialog fills the height and iOS does not shrink dvh for the keyboard)
+  document.addEventListener('focusin', (e) => {
+    const field = e.target as HTMLElement;
+    const box = field.closest?.('input:not([type=checkbox], [type=radio], [type=range]), textarea') ? field.closest<HTMLElement>("dialog [id$='DialogContent']") : null;
+    if (box && matchMedia('(pointer: coarse)').matches) box.scrollTop += field.getBoundingClientRect().top - box.getBoundingClientRect().top - 8;
+  });
+  installCanvasEmojiFilter();
   // Thu dọn hộp hướng dẫn "mở file sai cách" (index.html) nếu game kịp mount sau khi nó hiện ra
   const fileOpenHelp = document.getElementById('hangsoc-file-open-help');
   if (fileOpenHelp) fileOpenHelp.remove();
@@ -69,32 +74,71 @@ async function bootstrap(): Promise<void> {
   canvas.setAttribute('aria-label', 'Bản đồ 2.5D Trang Trại Hang Sóc & Thung Lũng Hogsmeade');
   app.appendChild(canvas);
 
+  // HPVN: the farm lives on the HPVN server; without it nothing starts (a fresh farm must never overwrite a saved one).
+  if (!identity) throw Object.assign(new Error('Hãy mở Trang Trại Hang Sóc từ Phòng Sinh Hoạt Chung trên HPVN.'), { hpvn: true });
+  const farmJson = await loadFarm();
+  setFarmStore({ read: () => farmJson, write: queueFarmSave });
+
   const audio = new MagicalAudio();
   const sprites = new SpriteRegistry();
   await sprites.loadAll();
 
   const sim = new ParkSimulation(audio);
+  if (typeof sim.state.settings.toonEnabled === 'boolean') sprites.setToonEnabled(sim.state.settings.toonEnabled); // HPVN: «Viền nâu» survives a reload
+  // HPVN: the in-game house is the member's HPVN house (hidden Sorting Hat, no changes); 'none' keeps upstream behaviour
+  const hpvnHouse = ({ gryffindor: 'Gryffindor', slytherin: 'Slytherin', ravenclaw: 'Ravenclaw', hufflepuff: 'Hufflepuff' } as const)[
+    String(identity.house).toLowerCase() as 'gryffindor'
+  ];
+  if (hpvnHouse) sim.lockPlayerHouse(hpvnHouse);
   const cam: Camera = { x: 0, y: 0, zoom: 0.82, viewRot: 0 };
   centerCameraOnGrid(cam, 18.0, 24.5);
 
   const renderer = new IsometricRenderer(canvas, sprites);
   const hud = new GameHUD(app, sim, cam, canvas, sprites);
+  const hudTopLeft = app.querySelector('.ts-hud-topleft');
+  if (hudTopLeft) placeShellNav(hudTopLeft);
 
-  // Initialize PWA install prompt & accessibility system
-  installPrompt.init();
   accessibility.init(sim);
+  setSaveStatusListener((status) => {
+    if (status === 'replaced') showStop('Bạn đang chơi Trang Trại Hang Sóc ở nơi khác', 'Trang trại này không lưu nữa. Tải lại để chơi tiếp ở đây.');
+    else if (status === 'too-big') hud.showToast('Trang trại quá lớn để lưu lên HPVN, hãy dọn bớt đồ trang trí.', '⚠️');
+    else if (status === 'error') hud.showToast('Chưa lưu được lên HPVN, sẽ thử lại.', '⚠️');
+  });
+  // HPVN: helps other members gave this farm (server inbox), applied once to the home farm and saved
+  setInboxListener((entries) => {
+    const applied = applyFarmInbox(sim.homeStateWhileVisiting ?? sim.state, entries, Date.now(), sim.state);
+    if (!applied.length) return;
+    const bought = applied.reduce((sum, entry) => sum + (entry.kind === 'sickles' ? entry.sickle ?? 0 : 0), 0);
+    if (bought) hud.showToast(`Gringotts đã chuyển ${bought.toLocaleString('vi-VN')} Sickle vào trang trại!`, '🏦');
+    const helps = applied.filter((entry) => entry.kind === 'help');
+    for (const entry of helps) hud.flooHelpersToday.push({ uid: entry.uid ?? '', name: entry.name ?? '', avatarUrl: entry.avatarUrl, at: entry.at });
+    if (helps.length) hud.showToast(`${helps[0].name}${helps.length > 1 ? ` +${helps.length - 1} bạn` : ''} chăm giúp · cây chín sớm 15 phút`, '🤝');
+    for (const entry of applied) if (entry.kind === 'fire-out') hud.showToast(`${entry.name} đã dập lửa giúp trang trại!`, '🧯');
+    // several Cúp Đợt rewards at once read as one toast: «Cúp Đợt 3, 4, 5 · +900 Sickle · +60 XP · +3 Cát»
+    const cups = applied.filter((entry) => entry.kind === 'cup');
+    for (const entry of cups) if (Number.isSafeInteger(entry.xp) && entry.xp! > 0) sim.addXp(entry.xp!);
+    if (cups.length) {
+      // the same checks as the wallet (applyFarmInbox) and sim.addXp above: only what was credited is counted
+      const ok = (v: number | undefined) => Number.isSafeInteger(v) && v! > 0;
+      const sum = (key: 'sickle' | 'xp' | 'sand') => cups
+        .reduce((total, entry) => total + (ok(entry[key]) && (key !== 'sand' || ok(entry.sickle)) ? entry[key]! : 0), 0);
+      // only real tier numbers, and no «+0 …» part
+      const tiers = [...new Set(cups.map((entry) => entry.tier).filter((t): t is number => ok(t)))].sort((a, b) => a - b).join(', ');
+      const parts = [['sickle', 'Sickle'], ['xp', 'XP'], ['sand', 'Cát']] as const;
+      const gains = parts.map(([key, unit]) => [sum(key), unit] as const).filter(([n]) => n > 0).map(([n, unit]) => `+${n.toLocaleString('vi-VN')} ${unit}`);
+      hud.showToast([tiers ? `Cúp Đợt ${tiers}` : 'Cúp Đợt', ...gains].join(' · '), '🏆');
+    }
+    sim.saveToStorage();
+    if (bought || applied.some((entry) => entry.kind === 'cup')) void flushFarmSave(); // a bought pack or cup reward reaches the server at once
+    hud.refreshAll();
+  });
 
-  // URL preview parameters & default WebGL2 2.5D HDR Graphics Engine on main game ("bản gốc")
-  const params = new URLSearchParams(window.location.search);
-  const rawRendererParam = params.get('renderer');
-  const wantsGpuEngineMock =
-    params.get('mock') === 'gpu' || rawRendererParam === 'compare';
-  if (rawRendererParam === 'canvas' || rawRendererParam === 'webgl2') {
-    sim.state.settings.rendererMode = rawRendererParam;
-  }
+  // URL preview parameters for instant visual verification or sharing
+  // HPVN: preview/debug switches (?preview=100, ?time=, …) only in the Vite dev server;
+  // the renderer comes only from the saved setting (rendererMode, default webgl2, Canvas2D fallback)
+  const params = new URLSearchParams(import.meta.env.DEV ? window.location.search : '');
 
   let gpuWorldRenderer: import('./render/webgl2/webgl2WorldRenderer').WebGL2WorldRenderer | null = null;
-  let gpuOverlay: import('./render/gpuMockOverlay').GpuMockOverlayController | null = null;
   let directGpuCanvas: HTMLCanvasElement | null = null;
   let directGpuSettings: import('./render/core/renderDevice').GpuMockSettings | null = null;
   let gpuInitFailed = false;
@@ -111,75 +155,52 @@ async function bootstrap(): Promise<void> {
     );
   };
 
-  if (wantsGpuEngineMock) {
-    try {
-      const initialMode =
-        rawRendererParam === 'webgl2' || rawRendererParam === 'canvas' || rawRendererParam === 'compare'
-          ? rawRendererParam
-          : 'compare';
-      const [{ GpuMockOverlayController }, { WebGL2WorldRenderer }] = await Promise.all([
-        import('./render/gpuMockOverlay'),
-        import('./render/webgl2/webgl2WorldRenderer'),
-      ]);
-      gpuOverlay = new GpuMockOverlayController(app, canvas, sim, initialMode, 'high');
-      gpuWorldRenderer = new WebGL2WorldRenderer(gpuOverlay.gpuCanvas, sprites);
-      if (!params.get('tutorial')) {
-        hud.tutorialMinimized = true;
-      }
-      bindGpuPointerTracking();
-    } catch (err) {
-      console.warn('[WebGL2 Mock] Fallback về Canvas2D:', err);
-      gpuWorldRenderer = null;
-      gpuOverlay = null;
-      gpuInitFailed = true;
+  try {
+    const { WebGL2WorldRenderer } = await import('./render/webgl2/webgl2WorldRenderer');
+    const gpuCanvas = document.createElement('canvas');
+    gpuCanvas.id = 'gpuWorldCanvas';
+    gpuCanvas.setAttribute('aria-hidden', 'true');
+    gpuCanvas.style.cssText =
+      'position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:0;display:block;';
+    canvas.insertAdjacentElement('beforebegin', gpuCanvas);
+    gpuWorldRenderer = new WebGL2WorldRenderer(gpuCanvas, sprites);
+    directGpuCanvas = gpuCanvas;
+    directGpuSettings = {
+      mode: (sim.state.settings.rendererMode ?? 'webgl2') === 'canvas' ? 'canvas' : 'webgl2',
+      splitRatio: 0.5,
+      qualityTier: isTouchOrIOSDevice() ? 'medium' : 'high',
+      lumosWandEnabled: false,
+      windStrength: 1.15,
+      bloomIntensity: 0.72,
+      normalStrength: 1.12,
+    };
+    if (directGpuSettings.mode === 'webgl2') {
+      canvas.style.position = 'relative';
+      canvas.style.zIndex = '1';
+      canvas.style.background = 'transparent';
+    } else {
+      gpuCanvas.style.display = 'none';
     }
-  } else {
-    try {
-      const { WebGL2WorldRenderer } = await import('./render/webgl2/webgl2WorldRenderer');
-      const gpuCanvas = document.createElement('canvas');
-      gpuCanvas.id = 'gpuWorldCanvas';
-      gpuCanvas.setAttribute('aria-hidden', 'true');
-      gpuCanvas.style.cssText =
-        'position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:0;display:block;';
-      canvas.insertAdjacentElement('beforebegin', gpuCanvas);
-      gpuWorldRenderer = new WebGL2WorldRenderer(gpuCanvas, sprites);
-      directGpuCanvas = gpuCanvas;
-      directGpuSettings = {
-        mode: (sim.state.settings.rendererMode ?? 'webgl2') === 'canvas' ? 'canvas' : 'webgl2',
-        splitRatio: 0.5,
-        qualityTier: isTouchOrIOSDevice() ? 'medium' : 'high',
-        lumosWandEnabled: false,
-        windStrength: 1.15,
-        bloomIntensity: 0.72,
-        normalStrength: 1.12,
-      };
-      if (directGpuSettings.mode === 'webgl2') {
-        canvas.style.position = 'relative';
-        canvas.style.zIndex = '1';
-        canvas.style.background = 'transparent';
-      } else {
-        gpuCanvas.style.display = 'none';
-      }
-      bindGpuPointerTracking();
-      window.addEventListener('hangsoc:toon-changed', () => {
-        gpuWorldRenderer?.invalidateSpriteAtlas();
-      });
-    } catch (err) {
-      console.warn('[WebGL2 Engine] Thiết bị không hỗ trợ WebGL2, tự động fallback về Canvas2D:', err);
-      directGpuCanvas?.remove();
-      directGpuCanvas = null;
-      gpuWorldRenderer = null;
-      directGpuSettings = null;
-      gpuInitFailed = true;
-      sim.state.settings.rendererMode = 'canvas';
-    }
+    bindGpuPointerTracking();
+    window.addEventListener('hangsoc:toon-changed', () => {
+      gpuWorldRenderer?.invalidateSpriteAtlas();
+    });
+  } catch (err) {
+    console.warn('[WebGL2 Engine] Thiết bị không hỗ trợ WebGL2, tự động fallback về Canvas2D:', err);
+    directGpuCanvas?.remove();
+    directGpuCanvas = null;
+    gpuWorldRenderer = null;
+    directGpuSettings = null;
+    gpuInitFailed = true;
+    sim.state.settings.rendererMode = 'canvas';
   }
-  const isSandboxAllowed = IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed();
   const hasExplicitCamParam = Boolean(
-    (isSandboxAllowed && params.get('preview') === '100') ||
+    params.get('preview') === '100' ||
       params.get('visit') ||
       params.get('tour') ||
-      (isSandboxAllowed && (params.get('zoom') || params.get('cx') || params.get('cy'))) ||
+      params.get('zoom') ||
+      params.get('cx') ||
+      params.get('cy') ||
       params.get('ridecam') === '1'
   );
   let introGlide: {
@@ -212,8 +233,11 @@ async function bootstrap(): Promise<void> {
       toZoom: targetZoom,
     };
   }
+  const isDevHostAllowed =
+    Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV) ||
+    import.meta.env.DEV;
 
-  if (IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed() && params.get('preview') === '100') {
+  if (params.get('preview') === '100' && isDevHostAllowed) {
     sim.toggleHeadmasterPreview(100);
     if (!params.get('tutorial') && sim.isTutorialActive()) {
       sim.skipTutorial();
@@ -226,94 +250,71 @@ async function bootstrap(): Promise<void> {
     const cy = Number.isFinite(rawCy) && params.get('cy') ? rawCy : 23.0;
     centerCameraOnGrid(cam, cx, cy);
   }
-  if (IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed()) {
-    const sandboxParam = params.get('sandbox');
-    if (
-      sandboxParam === '1' ||
-      (sandboxParam !== '0' && params.get('preview') !== '100' && !params.get('tutorial'))
-    ) {
-      sim.enableInfiniteSandbox();
-      hud.refreshAll();
-    }
-    const tutorialParam = params.get('tutorial');
-    if (tutorialParam === '1' || tutorialParam === 'reset') {
-      sim.restartTutorial();
-      hud.tutorialMinimized = false;
-    } else if (tutorialParam === '0' || tutorialParam === 'off') {
-      if (sim.isTutorialActive()) {
-        sim.skipTutorial();
-      }
-    }
-    const tstepParam = params.get('tstep');
-    if (tstepParam !== null) {
-      const idx = Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, Number(tstepParam) || 0));
-      const tut = sim.ensureTutorialState();
-      tut.active = true;
-      delete tut.completedAt;
-      tut.skipped = false;
-      tut.stepIndex = idx;
-      tut.stepId = TUTORIAL_STEPS[idx].id;
-      tut.pastureHarvestedInStep3 = false;
-    }
-    const rotParam = Number(params.get('rot') || 0);
-    if (rotParam >= 1 && rotParam <= 3) {
-      for (let i = 0; i < rotParam; i++) {
-        rotateCamera90(cam, 1);
-      }
-    }
-    if (params.get('cutaway') === '1') {
-      sim.state.settings.cutawayMode = true;
-    }
-    const timeParam = params.get('time');
-    if (timeParam === 'night' || timeParam === 'day' || timeParam === 'dusk' || timeParam === 'dawn') {
-      sim.state.settings.timeOverride = timeParam;
-    }
-    const weatherParam = params.get('weather');
-    if (
-      weatherParam === 'auto' ||
-      weatherParam === 'clear' ||
-      weatherParam === 'cloudy' ||
-      weatherParam === 'rain' ||
-      weatherParam === 'storm' ||
-      weatherParam === 'snow' ||
-      weatherParam === 'fog' ||
-      weatherParam === 'fireflies'
-    ) {
-      sim.state.settings.weatherOverride = weatherParam as WeatherOverride;
-    }
-    if (params.get('zoom') && params.get('preview') !== '100') {
-      const z = Number(params.get('zoom'));
-      if (Number.isFinite(z) && z >= 0.32 && z <= 2.15) cam.zoom = z;
-    }
-    if ((params.get('cx') || params.get('cy')) && params.get('preview') !== '100') {
-      const rawCx = Number(params.get('cx'));
-      const rawCy = Number(params.get('cy'));
-      const cx = Number.isFinite(rawCx) && params.get('cx') ? rawCx : 18.0;
-      const cy = Number.isFinite(rawCy) && params.get('cy') ? rawCy : 24.5;
-      centerCameraOnGrid(cam, cx, cy);
-    }
-    const hm = params.get('heatmap') as HeatmapMode | null;
-    if (hm) {
-      sim.heatmapMode = hm;
-    }
-    if (params.get('fireworks') === '1') {
-      sim.launchFireworksShow(12);
+  const tutorialParam = params.get('tutorial');
+  if (tutorialParam === '1' || tutorialParam === 'reset') {
+    sim.restartTutorial();
+    hud.tutorialMinimized = false;
+  } else if (tutorialParam === '0' || tutorialParam === 'off') {
+    if (sim.isTutorialActive()) {
+      sim.skipTutorial();
     }
   }
-  const yuleParam = params.get('yule');
-  if (yuleParam === 'on' || yuleParam === 'off' || yuleParam === 'auto') {
-    sim.state.settings.yuleThemeMode = yuleParam;
-    hud.refreshAll();
+  const tstepParam = params.get('tstep');
+  if (tstepParam !== null && isDevHostAllowed) {
+    const idx = Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, Number(tstepParam) || 0));
+    const tut = sim.ensureTutorialState();
+    tut.active = true;
+    delete tut.completedAt;
+    tut.skipped = false;
+    tut.stepIndex = idx;
+    tut.stepId = TUTORIAL_STEPS[idx].id;
+    tut.pastureHarvestedInStep3 = false;
+    tut.minimized = false;
+    hud.tutorialMinimized = false;
   }
-  const isLocalDevLoopback =
-    Boolean(import.meta.env.DEV) &&
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-  if (isLocalDevLoopback) {
-    const yuleDayParam = Number(params.get('yuleDay') || 0);
-    if (Number.isFinite(yuleDayParam) && yuleDayParam >= 1 && yuleDayParam <= 36) {
-      sim.debugYuleDayOverride = Math.floor(yuleDayParam);
-      hud.refreshAll();
+  const rotParam = Number(params.get('rot') || 0);
+  if (rotParam >= 1 && rotParam <= 3) {
+    for (let i = 0; i < rotParam; i++) {
+      rotateCamera90(cam, 1);
     }
+  }
+  if (params.get('cutaway') === '1') {
+    sim.state.settings.cutawayMode = true;
+  }
+  const timeParam = params.get('time');
+  if (timeParam === 'night' || timeParam === 'day' || timeParam === 'dusk' || timeParam === 'dawn') {
+    sim.state.settings.timeOverride = timeParam;
+  }
+  const weatherParam = params.get('weather');
+  if (
+    weatherParam === 'auto' ||
+    weatherParam === 'clear' ||
+    weatherParam === 'cloudy' ||
+    weatherParam === 'rain' ||
+    weatherParam === 'storm' ||
+    weatherParam === 'snow' ||
+    weatherParam === 'fog' ||
+    weatherParam === 'fireflies'
+  ) {
+    sim.state.settings.weatherOverride = weatherParam as WeatherOverride;
+  }
+  if (params.get('zoom') && params.get('preview') !== '100') {
+    const z = Number(params.get('zoom'));
+    if (Number.isFinite(z) && z >= 0.32 && z <= 2.15) cam.zoom = z;
+  }
+  if ((params.get('cx') || params.get('cy')) && params.get('preview') !== '100') {
+    const rawCx = Number(params.get('cx'));
+    const rawCy = Number(params.get('cy'));
+    const cx = Number.isFinite(rawCx) && params.get('cx') ? rawCx : 18.0;
+    const cy = Number.isFinite(rawCy) && params.get('cy') ? rawCy : 24.5;
+    centerCameraOnGrid(cam, cx, cy);
+  }
+  const hm = params.get('heatmap') as HeatmapMode | null;
+  if (hm) {
+    sim.heatmapMode = hm;
+  }
+  if (params.get('fireworks') === '1') {
+    sim.launchFireworksShow(12);
   }
   if (params.get('ridecam') === '1') {
     const coasterB = sim.state.buildings.find((b) => getCatalogItem(b.itemId)?.isCustomCoasterStation);
@@ -323,6 +324,14 @@ async function bootstrap(): Promise<void> {
   }
   const dlgParam = params.get('dialog');
   if (dlgParam === 'album') {
+    const aTab = params.get('tab');
+    if (aTab === 'profile' || aTab === 'cup' || aTab === 'leaderboard') {
+      hud.activeAlbumTab = aTab;
+    }
+    const pSub = params.get('psub');
+    if (pSub === 'login7' || pSub === 'achievements' || pSub === 'friendship') {
+      hud.activeProfileSubTab = pSub;
+    }
     (document.getElementById('btnOpenAlbum') as HTMLButtonElement | null)?.click();
   } else if (dlgParam === 'finance') {
     (document.getElementById('btnOpenFinance') as HTMLButtonElement | null)?.click();
@@ -368,15 +377,13 @@ async function bootstrap(): Promise<void> {
     hud.openSuitcaseDialog(tabParam);
   } else if (dlgParam === 'match3') {
     const m3LvParam = Number(params.get('m3level') || 0);
-    const maxAllowedM3 = isSandboxAllowed
+    const maxAllowedM3 = isDevHostAllowed
       ? 777
       : Math.min(777, (sim.state.match3.maxClearedLevel ?? 0) + 1);
     const safeM3Lv =
-      isSandboxAllowed && Number.isFinite(m3LvParam) && m3LvParam >= 1
-        ? Math.min(maxAllowedM3, Math.floor(m3LvParam))
-        : undefined;
+      Number.isFinite(m3LvParam) && m3LvParam >= 1 ? Math.min(maxAllowedM3, Math.floor(m3LvParam)) : undefined;
     const allowDevJump = Boolean(
-      isSandboxAllowed && safeM3Lv && safeM3Lv > (sim.state.match3.maxClearedLevel ?? 0) + 1
+      isDevHostAllowed && safeM3Lv && safeM3Lv > (sim.state.match3.maxClearedLevel ?? 0) + 1
     );
     hud.openMatch3Dialog(safeM3Lv, allowDevJump);
   } else if (
@@ -422,11 +429,11 @@ async function bootstrap(): Promise<void> {
         ? rawScope
         : undefined;
     hud.openLeaderboardDialog(validGame, validScope);
-  } else if (!params.get('tour') && !params.get('visit') && !sim.isHeadmasterPreview && !wantsGpuEngineMock) {
+  } else if (!params.get('tour') && !params.get('visit') && !sim.isHeadmasterPreview) {
     try {
-      const rawResume = localStorage.getItem(ACTIVE_MINIGAME_RESUME_KEY);
-      if (rawResume) {
-        const parsedResume = JSON.parse(rawResume) as Partial<ActiveMinigameResumeRecord>;
+      // HPVN: the marker rides in the farm save
+      const parsedResume = sim.state.activeMinigameResume;
+      if (parsedResume) {
         const ageMs = Date.now() - Number(parsedResume.savedAt || 0);
         const pa = sim.state.puzzleArcade;
         if (ageMs >= 0 && ageMs <= 12 * 3600 * 1000) {
@@ -466,14 +473,14 @@ async function bootstrap(): Promise<void> {
           ) {
             hud.openMatch3Dialog();
           } else {
-            localStorage.removeItem(ACTIVE_MINIGAME_RESUME_KEY);
+            delete sim.state.activeMinigameResume;
           }
         } else {
-          localStorage.removeItem(ACTIVE_MINIGAME_RESUME_KEY);
+          delete sim.state.activeMinigameResume;
         }
       }
     } catch {
-      // Ignore malformed storage entries
+      // Ignore a malformed marker
     }
   }
   const LEGACY_SHOWCASE_TOUR_MAP: Record<string, string> = {
@@ -539,18 +546,8 @@ async function bootstrap(): Promise<void> {
   if (sim.isTutorialActive() && !hasExplicitCamParam) {
     hud.panCameraToTutorialTarget();
   }
-  onlineServices.bindSimulationGringottsWallet(sim, {
-    onSnapshot: (snap) => hud.applyAuthoritativeSnapshot(snap),
-    onToast: (msg, icon) => hud.showToast(msg, icon ?? '🏦'),
-  });
-  if (onlineServices.authoritativeClient.snapshot) {
-    hud.applyAuthoritativeSnapshot(onlineServices.authoritativeClient.snapshot);
-  }
   hud.refreshAll();
 
-  window.addEventListener('hpvn:authoritative-snapshot', (ev) => {
-    hud.applyAuthoritativeSnapshot((ev as CustomEvent).detail);
-  });
   window.addEventListener('hpvn:toast', (ev) => {
     const detail = (ev as CustomEvent<{ text?: string }>).detail;
     if (detail?.text) {
@@ -560,44 +557,6 @@ async function bootstrap(): Promise<void> {
   window.addEventListener('hpvn:tour-garden', (ev) => {
     const detail = (ev as CustomEvent<{ tourId?: string | null }>).detail;
     routeGardenTourOrVisit(String(detail?.tourId ?? ''));
-  });
-  window.addEventListener('gamesave:updated', (ev) => {
-    if (sim.isHeadmasterPreview || sim.isVisitingNeighbor) return;
-    const detail = (ev as CustomEvent<{ saveJson?: string }>).detail;
-    const rawSave =
-      (typeof detail?.saveJson === 'string' && detail.saveJson) ||
-      (typeof localStorage !== 'undefined' ? localStorage.getItem(SAVE_KEY) : null);
-    if (!rawSave) return;
-    if (!isSandboxRuntimeAllowed()) {
-      try {
-        const probe = JSON.parse(rawSave) as {
-          sandboxMode?: boolean;
-          sandboxTainted?: boolean;
-          isHeadmasterPreview?: boolean;
-        };
-        if (
-          probe &&
-          (probe.sandboxMode === true ||
-            probe.sandboxTainted === true ||
-            probe.isHeadmasterPreview === true)
-        ) {
-          return;
-        }
-      } catch {
-        return;
-      }
-    }
-    createRollbackSaveBackup(sim.state);
-    if (sim.importSaveJson(rawSave)) {
-      if (onlineServices.authoritativeClient.snapshot) {
-        hud.applyAuthoritativeSnapshot(onlineServices.authoritativeClient.snapshot);
-      }
-      hud.match3Modal?.resetSession();
-      hud.puzzleArcadeModal?.resetSession();
-      hud.refreshAll();
-      accessibility.refresh();
-      hud.showToast('☁️ Đã đồng bộ thung lũng từ máy chủ HPVN!', '☁️');
-    }
   });
   window.addEventListener('hpvn:atmosphere', (ev) => {
     if (sim.isVisitingNeighbor) return;
@@ -635,6 +594,7 @@ async function bootstrap(): Promise<void> {
   });
 
   sim.onTutorialStepChanged = () => {
+    hud.tutorialMinimized = Boolean(sim.state.tutorial?.minimized);
     hud.panCameraToTutorialTarget();
   };
   sim.onUiChange = () => {
@@ -696,11 +656,11 @@ async function bootstrap(): Promise<void> {
       .slice(0, 2)
       .join(', ');
     const unlockTag = unlockedNames
-      ? ` — Mở bản vẽ mới: ${unlockedNames}!`
+      ? ` · Mở: ${unlockedNames}`
       : info.milestoneNote
-        ? ` — ${info.milestoneNote}`
+        ? ` · ${info.milestoneNote}`
         : '';
-    hud.showToast(`🎉 Đạt Cấp Giải Đố ${lv}! (+${info.rewardGalleons}🪙)${unlockTag}`, '🌟');
+    hud.showToast(`Cấp Giải Đố ${lv} · +${info.rewardSickle} Sickle${unlockTag}`, '🌟');
     hud.refreshAll();
   };
 
@@ -1598,11 +1558,17 @@ async function bootstrap(): Promise<void> {
     const wasDragging = isDraggingCam;
     const wasPainting =
       isPaintingTiles || flushedTouchPaint || isSowingSeeds || isStockingPastures || wasCareSweeping;
+    const paintedBuild = isPaintingTiles || flushedTouchPaint;
     isPointerDown = false;
     isDraggingCam = false;
     isPaintingTiles = false;
     isSowingSeeds = false;
     isStockingPastures = false;
+
+    if (paintedBuild && hud.selectedCatalogItem && !isBrushItem(hud.selectedCatalogItem)) {
+      hud.selectedCatalogItem = null; // HPVN: a stray tap must not buy another one
+      hud.refreshAll();
+    }
 
     if (wasDragging || wasPainting) return;
 
@@ -1672,12 +1638,22 @@ async function bootstrap(): Promise<void> {
           }
         }
       }
+      // HPVN: ask first when the demolition would destroy a ready crop / ready animals / a workshop job
+      const loss = sim.getRemovalLossText(bGx, bGy);
+      if (loss) {
+        void hud.askConfirm(loss).then((ok) => {
+          if (!ok) return;
+          runSingleBuildStroke(() => sim.removeAtTile(bGx, bGy));
+          hud.refreshDock();
+        });
+        return;
+      }
       runSingleBuildStroke(() => sim.removeAtTile(bGx, bGy));
       hud.refreshDock();
       return;
     }
 
-    // 2. Move Building Mode (Pick up -> Relocate for 0G!)
+    // 2. Move Building Mode (Pick up -> Relocate for 0 Sickle!)
     if (hud.moveModeActive) {
       if (hud.movingBuildingUid) {
         const movingUid = hud.movingBuildingUid;
@@ -2090,7 +2066,7 @@ async function bootstrap(): Promise<void> {
                 hud.openPastureTray(undefined, b.uid);
               }
               return;
-            } else if (b.storedGalleons > 0 || (b.readyFarmGoods && b.readyFarmGoods.length > 0)) {
+            } else if (b.storedSickle > 0 || (b.readyFarmGoods && b.readyFarmGoods.length > 0)) {
               sim.harvestBuildingBubble(b.uid);
             }
           }
@@ -2098,6 +2074,10 @@ async function bootstrap(): Promise<void> {
           hud.closeSeedTray();
           hud.closePastureTray();
           hud.inspectSelection = { kind: 'building', uid: best.id };
+          const cRect = canvas.getBoundingClientRect();
+          if (best.sy > cRect.height - 190) {
+            cam.y += (best.sy - (cRect.height - 210)) / cam.zoom;
+          }
           hud.refreshAll();
           return;
         }
@@ -2133,9 +2113,10 @@ async function bootstrap(): Promise<void> {
 
   let lastTime = performance.now();
   let minimapFrame = 0;
+  // HPVN: phones draw at most 30 frames a second (battery and heat); a 2 ms slack keeps a 60 Hz screen on every other frame
+  const minFrameMs = window.matchMedia?.('(pointer: coarse)').matches ? 1000 / 30 - 2 : 0;
   const gamepad = new GamepadController();
   const telemetry = new ProductionTelemetryCollector();
-  createRollbackSaveBackup(sim.state);
 
   // Mount lightweight 8-slice Gamepad Radial Quick Menu overlay (hidden until LB held)
   const radialEl = document.createElement('div');
@@ -2220,6 +2201,10 @@ async function bootstrap(): Promise<void> {
     mainRafId = 0;
     if (document.hidden) {
       lastTime = now;
+      return;
+    }
+    if (now - lastTime < minFrameMs) {
+      requestAnimationFrame(frame);
       return;
     }
     const dt = (now - lastTime) / 1000;
@@ -2394,7 +2379,7 @@ async function bootstrap(): Promise<void> {
       renderer.activeSeedBrushCropId = hud.activeSeedCropId;
       renderer.activePastureBrushAnimalId = hud.activePastureAnimalId;
 
-      if (directGpuSettings && !gpuOverlay) {
+      if (directGpuSettings) {
         const wantWebgl2 =
           !gpuInitFailed &&
           Boolean(gpuWorldRenderer && !gpuWorldRenderer.gpuDevice.contextLost) &&
@@ -2417,7 +2402,7 @@ async function bootstrap(): Promise<void> {
         }
       }
 
-      const activeGpuSettings = gpuOverlay?.settings ?? directGpuSettings;
+      const activeGpuSettings = directGpuSettings;
       const gpuMode =
         gpuWorldRenderer && !gpuWorldRenderer.gpuDevice.contextLost
           ? (activeGpuSettings?.mode ?? 'canvas')
@@ -2474,7 +2459,6 @@ async function bootstrap(): Promise<void> {
             );
           }
         }
-        gpuOverlay?.updateTelemetry(gpuWorldRenderer.stats, now);
       }
 
       minimapFrame++;
@@ -2494,7 +2478,9 @@ async function bootstrap(): Promise<void> {
         cancelAnimationFrame(mainRafId);
         mainRafId = 0;
       }
+      // phones rarely fire beforeunload: save as the page hides
       sim.saveToStorage();
+      void flushFarmSave();
       audio.pause();
     } else {
       lastTime = performance.now();
@@ -2505,230 +2491,24 @@ async function bootstrap(): Promise<void> {
     }
   });
 
-  window.addEventListener('pagehide', () => {
-    sim.saveToStorage();
-  });
+  const saveNow = () => { sim.saveToStorage(); void flushFarmSave(); };
+  window.addEventListener('pagehide', saveNow);
+  window.addEventListener('beforeunload', saveNow);
 
-  window.addEventListener('beforeunload', () => {
-    sim.saveToStorage();
-  });
+}
 
-  window.addEventListener('hangsoc:before-sw-reload', () => {
-    sim.saveToStorage();
-  });
-
-  // --- External Online-Prod & HPVN Host Shell Event Bus Bridge ---
-  let lastHpvnStateSyncAt = 0;
-  let lastHpvnSig = '';
-  const previousUiChange = sim.onUiChange;
-  sim.onUiChange = () => {
-    previousUiChange?.();
-    window.dispatchEvent(
-      new CustomEvent('game:tick', {
-        detail: {
-          level: sim.state.level,
-          galleons: sim.state.galleons,
-        },
-      })
-    );
-    const nowMs = Date.now();
-    const sig = `${sim.state.level}|${sim.state.match3.stars}|${sim.state.unlockedZones.length}|${sim.state.buildings.length}|${sim.state.settings.weatherOverride}|${sim.state.settings.timeOverride}`;
-    if (sig !== lastHpvnSig && nowMs - lastHpvnStateSyncAt >= 1200) {
-      lastHpvnSig = sig;
-      lastHpvnStateSyncAt = nowMs;
-      window.dispatchEvent(
-        new CustomEvent('hpvn:sync-state', {
-          detail: {
-            parkName: sim.state.parkName,
-            level: sim.state.level,
-            magicStars: sim.state.match3.stars,
-            galleons: sim.state.galleons,
-            unlockedZonesCount: sim.state.unlockedZones.length,
-            buildingsCount: sim.state.buildings.length,
-            weatherMode: sim.state.settings.weatherOverride,
-            atmosphereMode:
-              sim.state.settings.timeOverride === 'realtime'
-                ? 'auto'
-                : sim.state.settings.timeOverride,
-          },
-        })
-      );
-    }
-  };
-
-  window.addEventListener('hpvn:event', (ev: Event) => {
-    if (sim.isVisitingNeighbor) return;
-    const mode = String((ev as CustomEvent<{ mode?: string }>).detail?.mode || 'auto');
-    if (
-      mode === 'auto' ||
-      mode === 'none' ||
-      mode === 'halloween' ||
-      mode === 'christmas' ||
-      mode === 'quidditch_cup'
-    ) {
-      sim.state.settings.activeFestival = mode;
-      sim.saveToStorage();
-      hud.refreshAll();
-    }
-  });
-
-  window.addEventListener('hpvn:mute', (ev: Event) => {
-    const muted = Boolean((ev as CustomEvent<{ muted?: boolean }>).detail?.muted);
-    sim.state.settings.soundEnabled = !muted;
-    sim.state.settings.bgmEnabled = !muted;
-    audio.enabled = !muted;
-    audio.bgmEnabled = !muted;
-    if (muted) {
-      audio.pause();
-    } else {
-      audio.resume();
-    }
-    sim.saveToStorage();
-    hud.refreshAll();
-  });
-
-  window.addEventListener('gamesave:helpers', (ev: Event) => {
-    const detail = (
-      ev as CustomEvent<{
-        helpers?: Array<{
-          id: string;
-          uid: string;
-          name: string;
-          avatarEmoji?: string;
-          kind?: 'water_crop' | 'tend_yard' | 'stoke_workshop';
-          buildingUid?: string;
-          noteText?: string;
-          at: number;
-        }>;
-        summaryVi?: string;
-      }>
-    ).detail;
-    if (!detail) return;
-    const targetState = sim.homeStateWhileVisiting ?? sim.state;
-    const social =
-      targetState === sim.state
-        ? sim.ensureNeighborSocial()
-        : (targetState.neighborSocial ??= sim.ensureNeighborSocial());
-    const seen = new Set(social.homeLanternMarks.map((m) => m.id));
-    const fallbackUid = targetState.buildings[0]?.uid || 'burrow_main_gate';
-    const nowMs = Date.now();
-    const speedupMs = 15 * 60 * 1000;
-    const minConstructFloorMs = 60 * 60 * 1000;
-    let added = 0;
-    for (const h of detail.helpers ?? []) {
-      if (!h?.id || seen.has(h.id) || social.homeLanternMarks.length >= 5) continue;
-      seen.add(h.id);
-      const preferredTarget = h.buildingUid
-        ? targetState.buildings.find((b) => b.uid === h.buildingUid)
-        : undefined;
-      const activeTimerBuilding =
-        (preferredTarget &&
-        ((preferredTarget.cropReadyAt ?? 0) > nowMs ||
-          (preferredTarget.pastureReadyAt ?? 0) > nowMs ||
-          (preferredTarget.workshopQueue?.[0]?.endsAt ?? 0) > nowMs ||
-          (preferredTarget.constructEndsAt ?? 0) > nowMs)
-          ? preferredTarget
-          : undefined) ??
-        targetState.buildings.find(
-          (b) =>
-            (b.cropReadyAt ?? 0) > nowMs ||
-            (b.pastureReadyAt ?? 0) > nowMs ||
-            (b.workshopQueue?.[0]?.endsAt ?? 0) > nowMs ||
-            (b.constructEndsAt ?? 0) > nowMs
-        );
-
-      if (activeTimerBuilding) {
-        if ((activeTimerBuilding.cropReadyAt ?? 0) > nowMs) {
-          activeTimerBuilding.cropReadyAt = Math.max(
-            nowMs,
-            (activeTimerBuilding.cropReadyAt ?? nowMs) - speedupMs
-          );
-          activeTimerBuilding.cropWateredBoost = true;
-        } else if ((activeTimerBuilding.pastureReadyAt ?? 0) > nowMs) {
-          activeTimerBuilding.pastureReadyAt = Math.max(
-            nowMs,
-            (activeTimerBuilding.pastureReadyAt ?? nowMs) - speedupMs
-          );
-        } else if ((activeTimerBuilding.workshopQueue?.[0]?.endsAt ?? 0) > nowMs) {
-          for (const slot of activeTimerBuilding.workshopQueue ?? []) {
-            slot.startedAt -= speedupMs;
-            slot.endsAt = Math.max(nowMs, slot.endsAt - speedupMs);
-          }
-        } else if ((activeTimerBuilding.constructEndsAt ?? 0) > nowMs + minConstructFloorMs) {
-          activeTimerBuilding.constructEndsAt = Math.max(
-            nowMs + minConstructFloorMs,
-            (activeTimerBuilding.constructEndsAt ?? nowMs) - speedupMs
-          );
-        }
-      }
-
-      social.homeLanternMarks.push({
-        id: h.id,
-        buildingUid: activeTimerBuilding?.uid || h.buildingUid || fallbackUid,
-        helperId: h.uid,
-        helperName: h.name || 'Hàng Xóm Hang Sóc',
-        helperEmoji: h.avatarEmoji || '🧙‍♂️',
-        kind: h.kind || 'water_crop',
-        noteVi: h.noteText || 'Đã sang chăm giúp thung lũng của bạn!',
-        createdAt: h.at || nowMs,
-      });
-      added++;
-    }
-    if (added > 0) {
-      sim.saveToStorage();
-      hud.refreshAll();
-      if (detail.summaryVi) {
-        hud.showToast(detail.summaryVi, '🏮');
-      }
-    }
-  });
-
-  window.addEventListener('gamesave:server-meta', (ev) => {
-    const detail = (
-      ev as CustomEvent<{
-        dayKey?: string;
-        dailyGardenHelpsCount?: number;
-      }>
-    ).detail;
-    if (!detail) return;
-    const targetState = sim.homeStateWhileVisiting ?? sim.state;
-    const social =
-      targetState === sim.state
-        ? sim.ensureNeighborSocial()
-        : (targetState.neighborSocial ??= sim.ensureNeighborSocial());
-    if (typeof detail.dayKey === 'string' && detail.dayKey) {
-      social.lastSocialResetKey = detail.dayKey;
-    }
-    if (
-      typeof detail.dailyGardenHelpsCount === 'number' &&
-      detail.dailyGardenHelpsCount > (social.dailyGardenHelpsCount ?? 0)
-    ) {
-      social.dailyGardenHelpsCount = detail.dailyGardenHelpsCount;
-    }
-  });
+function showStop(title: string, text: string): void {
+  const box = document.createElement('div');
+  box.className = 'hpvn-stop';
+  box.innerHTML = '<div><h2></h2><p></p><button type="button">Tải lại</button></div>';
+  box.querySelector('h2')!.textContent = title;
+  box.querySelector('p')!.textContent = text;
+  box.querySelector('button')!.addEventListener('click', () => window.location.reload());
+  document.body.appendChild(box);
 }
 
 bootstrap().catch((err) => {
   console.error('Lỗi khởi động Trang Trại Hang Sóc:', err);
-  const app = document.getElementById('app');
-  if (app) {
-    app.innerHTML = `
-      <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:#241912;color:#fff6dc;font-family:'Be Vietnam Pro',sans-serif;text-align:center;gap:12px;">
-        <h2 style="margin:0;font-family:'Playfair Display',serif;color:#fde047;">Đang làm mới dữ liệu Thung Lũng Hang Sóc…</h2>
-        <p style="margin:0;max-width:460px;line-height:1.5;opacity:0.9;">Bộ nhớ đệm trình duyệt vừa được cập nhật phiên bản mới. Hãy nhấn nút bên dưới để tải lại trang.</p>
-        <button id="btnRecoverReload" style="padding:10px 20px;border-radius:999px;border:2px solid #f5b301;background:#b45309;color:#fff6dc;font-weight:700;cursor:pointer;">Tải lại ngay</button>
-      </div>
-    `;
-    document.getElementById('btnRecoverReload')?.addEventListener('click', async () => {
-      if ('serviceWorker' in navigator) {
-        const regs = await navigator.serviceWorker.getRegistrations().catch(() => []);
-        await Promise.all(regs.map((r) => r.unregister()));
-      }
-      if ('caches' in window) {
-        const keys = await caches.keys().catch(() => []);
-        await Promise.all(keys.map((k) => caches.delete(k)));
-      }
-      window.location.reload();
-    });
-  }
+  if ((err as { hpvn?: boolean })?.hpvn) showStop('Cần mở game từ HPVN', (err as Error).message);
+  else showStop('Chưa tải được trang trại', 'Máy chủ HPVN chưa trả lời. Kiểm tra mạng rồi tải lại.');
 });

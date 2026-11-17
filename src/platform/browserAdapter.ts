@@ -29,26 +29,12 @@ export class BrowserPlatformAdapter implements PlatformAdapter {
     }
   }
 
-  public async saveLocalBackup(slotKey: string, jsonPayload: string): Promise<boolean> {
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(`hangsoc_native_bak_${slotKey}`, jsonPayload);
-        return true;
-      }
-    } catch {
-      // Quota or private-browsing guard
-    }
+  // HPVN: nothing on the device (owner 13/11); the farm is saved on the HPVN server only
+  public async saveLocalBackup(_slotKey: string, _jsonPayload: string): Promise<boolean> {
     return false;
   }
 
-  public async loadLocalBackup(slotKey: string): Promise<string | null> {
-    try {
-      if (typeof localStorage !== 'undefined') {
-        return localStorage.getItem(`hangsoc_native_bak_${slotKey}`);
-      }
-    } catch {
-      // Ignored
-    }
+  public async loadLocalBackup(_slotKey: string): Promise<string | null> {
     return null;
   }
 

@@ -56,6 +56,7 @@ export interface FarmWorkshopRecipe {
   id: string;
   name?: string;
   goodId: FarmGoodId;
+  /** HPVN: own recipe name when two recipes make the same good (otherwise the good's name is shown) */
   workshopGroupId: string;
   craftSec: number;
   unlockLevel: number;
@@ -87,7 +88,7 @@ export const FARM_CROPS: Record<FarmCropId, FarmCropMeta> = {
     xp: 9,
     yieldQty: 2,
     iconKey: 'ui_icon_crop_honey_carrot',
-    loreVi: 'Củ cà rốt cam giòn ngọt lịm mọc từ đất phù sa sông Ottery, món khoái khẩu của đàn thỏ và Puffskein.',
+    loreVi: 'Củ cà rốt cam giòn ngọt lịm mọc từ đất phù sa sông Ottery, món khoái khẩu của đàn thỏ và quái lùng nhùng.',
   },
   garden_pumpkin: {
     id: 'garden_pumpkin',
@@ -583,7 +584,7 @@ export const FARM_GOODS: Record<FarmGoodId, FarmGoodMeta> = {
     xp: 20,
     iconKey: 'ui_icon_egg_basket',
     workshopGroupId: 'pasture',
-    loreVi: 'Trứng gà mái nâu tươi mới và cuộn lông mềm từ đàn Puffskein tròn ủng.',
+    loreVi: 'Trứng gà mái nâu tươi mới và cuộn lông mềm từ đàn quái lùng nhùng tròn ủng.',
   },
   fine_wheat_flour: {
     id: 'fine_wheat_flour',
@@ -725,7 +726,7 @@ export const PASTURE_ANIMALS: Record<PastureAnimalId, PastureAnimalMeta> = {
   },
   golden_puffskein: {
     id: 'golden_puffskein',
-    name: 'Bông Thoa Puffskein Mật',
+    name: 'Quái Lùng Nhùng Mật',
     emoji: '🟡',
     unlockLevel: 4,
     cost: 110,
@@ -837,7 +838,7 @@ export const FARM_WORKSHOP_RECIPES: FarmWorkshopRecipe[] = [
   },
   {
     id: 'rcp_glow_mushroom_pot',
-    name: 'Súp Nấm Phát Sáng',
+    name: 'Súp Nấm Phát Sáng Nóng Hổi', // HPVN: no longer the same name as another recipe
     goodId: 'cream_mushroom_soup',
     workshopGroupId: 'molly_kitchen',
     craftSec: 259200,
@@ -1026,7 +1027,7 @@ export const FARM_WORKSHOP_RECIPES: FarmWorkshopRecipe[] = [
   },
   {
     id: 'rcp_dairy_custard_pie',
-    name: 'Bánh Kem Sữa Bò Ấm',
+    name: 'Bánh Táo Quế Sữa Kem Bà Molly', // HPVN: no longer the same name as another recipe
     goodId: 'cinnamon_apple_pie',
     workshopGroupId: 'molly_kitchen',
     craftSec: 57600,
@@ -1062,7 +1063,7 @@ export function getFarmItemIconSrc(itemId: FarmItemId): string {
     ? FARM_GOODS[itemId as FarmGoodId]
     : undefined;
   const iconKey = cropMeta?.iconKey ?? goodMeta?.iconKey ?? 'ui_icon_crop_ottery_wheat';
-  const src = `/sprites/${iconKey}.png`;
+  const src = `/game/trang-trai-hang-soc/sprites/${iconKey}.webp`;
   if (cropMeta || goodMeta) {
     FARM_ICON_SRC_CACHE.set(itemId, src);
   }
@@ -1107,7 +1108,7 @@ export function getFarmItemMeta(itemId: FarmItemId): {
     name: String(itemId),
     emoji: '📦',
     iconKey: 'ui_icon_crop_ottery_wheat',
-    iconSrc: '/sprites/ui_icon_crop_ottery_wheat.png',
+    iconSrc: '/game/trang-trai-hang-soc/sprites/ui_icon_crop_ottery_wheat.webp',
     sellValue: 1,
     isCrop: false,
   };
@@ -1409,7 +1410,7 @@ export const CATALOG: CatalogItem[] = [
     id: 'burrow_animal_pasture',
     name: 'Đồng Cỏ Chăn Thả',
     category: 'creature',
-    description: 'Đồng cỏ ba lá xanh mướt rào gỗ sồi hai thanh thoáng đãng — đặt sát nhau để tự động nối liền rào gỗ thành đồng cỏ lớn, rồi thả Gà, Cừu, Bò Sữa, Puffskein hay Kỳ Lân dạo chơi!',
+    description: 'Đồng cỏ ba lá xanh mướt rào gỗ sồi hai thanh thoáng đãng — đặt sát nhau để tự động nối liền rào gỗ thành đồng cỏ lớn, rồi thả Gà, Cừu, Bò Sữa, quái lùng nhùng hay Kỳ Lân dạo chơi!',
     loreTip: 'Tương tự Thửa Đất Canh Tác: ghép nhiều Đồng Cỏ cạnh nhau để mở rộng bãi cỏ liền mạch và bấm vào ô cỏ để chọn thú chăn thả!',
     width: 2,
     height: 2,
@@ -1663,9 +1664,9 @@ export const CATALOG: CatalogItem[] = [
   },
   {
     id: 'burrow_puffskein_pasture',
-    name: 'Đồng Cỏ Puffskein & Đào Mỏ Niffler',
+    name: 'Đồng Cỏ Quái Lùng Nhùng & Đào Mỏ Niffler',
     category: 'creature',
-    description: 'Bãi cỏ hoa cúc quây rào gỗ thấp cho những bé Bông Thoa Puffskein tròn xoe lăn tròn ấm áp dưới nắng.',
+    description: 'Bãi cỏ hoa cúc quây rào gỗ thấp cho những bé Quái Lùng Nhùng tròn xoe lăn tròn ấm áp dưới nắng.',
     loreTip: 'Thu hoạch Cuộn Lông Xù mềm mại để đan Áo Len Phép Chữ W!',
     width: 3,
     height: 3,
@@ -1676,7 +1677,7 @@ export const CATALOG: CatalogItem[] = [
     spriteScale: 1.1,
     isRuralFarmstead: true,
     isCreatureHabitat: true,
-    creatureName: 'Bông Thoa Puffskein Lông Vàng',
+    creatureName: 'Quái Lùng Nhùng Lông Vàng',
     preferredTerrains: ['grass', 'forest'],
     canEscape: false,
     buildDurationSec: 259200,
@@ -1741,7 +1742,7 @@ export const CATALOG: CatalogItem[] = [
     name: 'Trạm Thư Cú Hang Sóc (Hedwig & Errol)',
     category: 'shop',
     description: 'Trạm gỗ gửi thư cú mộc mạc có cú tuyết Hedwig, lão cú xám Errol hậu đậu và bé cú Pigwidgeon lanh chanh.',
-    loreTip: 'Nơi tiếp nhận Đơn Hàng Cú mang nguồn thu Galleon và XP dồi dào nhất trang trại!',
+    loreTip: 'Nơi tiếp nhận Đơn Hàng Cú mang nguồn thu Sickle và XP dồi dào nhất trang trại!',
     width: 3,
     height: 3,
     cost: 210,
@@ -2375,8 +2376,8 @@ export const CATALOG: CatalogItem[] = [
   yuleDecor('yule_burrow_knitting_basket', 'Giỏ Len Tuyết Tự Đan Bà Molly', 'burrow', 1, 1, 1, 75,
     'Giỏ mây đọng tuyết quấn vòng thông nơ đỏ, đôi kim phép vẫn tự đan chiếc khăn len bông tuyết.',
     'Phép đan len ấm áp của bà Molly suốt kỳ nghỉ đông.', { isInteractiveSpellSpot: true }),
-  yuleDecor('yule_hearth_stockings', 'Lò Sưởi Tuyết & Tất Len Chữ W', 'burrow', 1, 1, 2, 120,
-    'Lò sưởi đá phủ tuyết nhũ băng treo vòng thông chuông vàng, tất len chữ W và ly Bia Bơ nóng.',
+  yuleDecor('yule_hearth_stockings', 'Lò Sưởi Tuyết & Vớ Len Chữ W', 'burrow', 1, 1, 2, 120,
+    'Lò sưởi đá phủ tuyết nhũ băng treo vòng thông chuông vàng, vớ len chữ W và ly Bia Bơ nóng.',
     'Ghế sưởi ấm chân giúp dân làng nghỉ ngơi giữa ngày đông.', { isBench: true }),
   yuleDecor('yule_gnome_angel_topper', 'Thiên Thần Yêu Tinh Vòng Thông', 'burrow', 1, 1, 2, 95,
     'Chú Yêu Tinh vườn sơn nhũ vàng đeo cánh bìa cầm đũa sao đứng giữa vòng thông tuyết Fred & George bày trò.',
@@ -2482,8 +2483,8 @@ export const CATALOG: CatalogItem[] = [
     'Chuyến tàu tốc hành đưa học sinh về nghỉ lễ Giáng Sinh!', { isInteractiveSpellSpot: true }),
 
   // Bộ 5 — Sinh Vật Huyền Bí Trú Đông Của Bác Hagrid (creatures • #36–#43)
-  yuleDecor('yule_puffskein_snowballs', 'Tháp Cầu Tuyết Đèn Ấm Puffskein', 'creatures', 1, 1, 1, 90,
-    'Ba quả cầu tuyết quấn dây đèn, kẹo gậy và nhựa ruồi với đôi Puffskein bông xù đội mũ Noel.',
+  yuleDecor('yule_puffskein_snowballs', 'Tháp Cầu Tuyết Đèn Ấm Quái Lùng Nhùng', 'creatures', 1, 1, 1, 90,
+    'Ba quả cầu tuyết quấn dây đèn, kẹo gậy và nhựa ruồi với đôi quái lùng nhùng bông xù đội mũ Noel.',
     'Đáng yêu hết nấc bên hàng rào sân vườn!'),
   yuleDecor('yule_bowtruckle_mistletoe', 'Gốc Tuyết Nhũ Băng & Bowtruckle', 'creatures', 1, 1, 2, 110,
     'Gốc cây cổ thụ phủ tuyết dày thắt nơ nhung lớn nơi chú Bowtruckle quàng khăn đỏ tinh nghịch trú ngụ.',
@@ -2578,8 +2579,8 @@ export const CATALOG: CatalogItem[] = [
   yuleDecor('yule_firebolt_display', 'Chổi Tia Chớp Quà Của Sirius', 'book_lore', 2, 1, 6, 430,
     'Cây chổi đua Tia Chớp cán gỗ mun bóng loáng đặt trên giá đồng phủ tuyết kèm 3 chiếc lông Bằng Mã trắng.',
     'Tập 3: Món quà Giáng Sinh bí ẩn từ người cha đỡ đầu Sirius Black!', { isInteractiveSpellSpot: true }),
-  yuleDecor('yule_dobby_sock_tree', 'Cây Tất Len Lệch Đôi Của Dobby', 'book_lore', 1, 1, 2, 125,
-    'Cây thông nhỏ treo đầy tất len lệch đôi sặc sỡ — chiếc đỏ dệt chổi bay, chiếc vàng dệt Trái Snitch.',
+  yuleDecor('yule_dobby_sock_tree', 'Cây Vớ Len Lệch Đôi Của Dobby', 'book_lore', 1, 1, 2, 125,
+    'Cây thông nhỏ treo đầy vớ len lệch đôi sặc sỡ — chiếc đỏ dệt chổi bay, chiếc vàng dệt Trái Snitch.',
     'Tập 4: Món quà Giáng Sinh chân thành Dobby tự tay đan tặng Harry!', { isInteractiveSpellSpot: true }),
   yuleDecor('yule_triwizard_golden_egg', 'Quả Trứng Vàng & Vòi Bọt Tiên Cá', 'book_lore', 1, 1, 6, 360,
     'Quả Trứng Vàng Tam Pháp Thuật chạm nổi đặt cạnh vòi đồng khảm ngọc bọt hương thơm Phòng Tắm Huynh Trưởng.',
@@ -2792,13 +2793,13 @@ export function getStageSawtoothTag(stage: number): {
 } {
   const s = Math.max(1, Math.floor(stage));
   if (s % 10 === 0) {
-    return { kind: 'boss', badgeVi: '👑 Đại Trùm Mốc (+50% Vàng)', bonusGoldMult: 1.5 };
+    return { kind: 'boss', badgeVi: '👑 Đại Trùm Mốc (+50% Sickle)', bonusGoldMult: 1.5 };
   }
   if (s % 10 === 5) {
-    return { kind: 'treasure', badgeVi: '🪙 Kho Báu Snitch (+60% Vàng)', bonusGoldMult: 1.6 };
+    return { kind: 'treasure', badgeVi: '🪙 Kho Báu Snitch (+60% Sickle)', bonusGoldMult: 1.6 };
   }
   if (s % 10 === 4 || s % 10 === 9) {
-    return { kind: 'hard', badgeVi: '🔥 Màn Khó Tinh Anh (+25% Vàng)', bonusGoldMult: 1.25 };
+    return { kind: 'hard', badgeVi: '🔥 Màn Khó Tinh Anh (+25% Sickle)', bonusGoldMult: 1.25 };
   }
   return { kind: 'normal', badgeVi: '', bonusGoldMult: 1.0 };
 }
@@ -2941,8 +2942,12 @@ for (const item of CATALOG) {
   }
 }
 
-const CATALOG_BY_ID = new Map<string, CatalogItem>(CATALOG.map((item) => [item.id, item]));
-
+// HPVN: looked up per building per frame; a Map instead of scanning the catalog each time (first entry wins, as find did).
+let catalogById: Map<string, CatalogItem> | null = null;
 export function getCatalogItem(id: string): CatalogItem | undefined {
-  return CATALOG_BY_ID.get(id);
+  if (!catalogById) {
+    catalogById = new Map();
+    for (const item of CATALOG) if (!catalogById.has(item.id)) catalogById.set(item.id, item);
+  }
+  return catalogById.get(id);
 }

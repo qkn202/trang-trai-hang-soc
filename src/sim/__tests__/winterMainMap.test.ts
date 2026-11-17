@@ -12,7 +12,6 @@ import { drawWinterAssetLiveEffects } from '../../engine/renderBuildings';
 import { SPRITE_KEYS, SpriteRegistry } from '../../engine/spriteLoader';
 import { canSpriteReceiveWinterSnowCap } from '../../render/webgl2/webgl2WorldRenderer';
 import { WorldRenderSnapshotCollector } from '../../render/worldSnapshot';
-import { parseYouTubeBgmSource, YouTubeBgmController } from '../../ui/youtubeBgmPlayer';
 import { ParkSimulation } from '../simulation';
 import { evaluateHabitatBiome } from '../zooAndBackstage';
 
@@ -191,7 +190,7 @@ describe('Winter Christmas Main Map (Mùa Đông Chào Mừng Giáng Sinh)', () 
     expect(collector.seasonId).not.toBe('winter');
   });
 
-  it('hiệu ứng động cho các asset tab Giáng Sinh và trình phát nhạc nền YouTube 0 băng thông hoạt động chuẩn xác', () => {
+  it('hiệu ứng động cho các asset tab Giáng Sinh hoạt động chuẩn xác', () => {
     const fakeCanvas = {
       width: 1280,
       height: 800,
@@ -232,46 +231,7 @@ describe('Winter Christmas Main Map (Mùa Đông Chào Mừng Giáng Sinh)', () 
       ).not.toThrow();
     }
 
-    // Kiểm tra tách link YouTube đủ mọi định dạng phổ biến
-    expect(parseYouTubeBgmSource('https://www.youtube.com/watch?v=jfKfPfyJRdk')).toEqual({
-      kind: 'video',
-      videoId: 'jfKfPfyJRdk',
-    });
-    expect(parseYouTubeBgmSource('https://youtu.be/4xDzrJKXOOY?si=abc')).toEqual({
-      kind: 'video',
-      videoId: '4xDzrJKXOOY',
-    });
-    expect(parseYouTubeBgmSource('https://www.youtube.com/live/DWcJFNfaw9c')).toEqual({
-      kind: 'video',
-      videoId: 'DWcJFNfaw9c',
-    });
-    expect(
-      parseYouTubeBgmSource('https://www.youtube.com/playlist?list=PL1234567890ABCDEF')
-    ).toEqual({
-      kind: 'playlist',
-      playlistId: 'PL1234567890ABCDEF',
-    });
-    expect(parseYouTubeBgmSource('https://evil.example.com/watch?v=jfKfPfyJRdk')).toBeNull();
-
-    // Khi bật YouTube BGM, MagicalAudio tự ngắt nhạc nền nội bộ để không chồng 2 bài nhạc
-    const mockAudio = createMockAudio();
-    mockAudio.externalBgmActive = false;
-    const ytCtrl = new YouTubeBgmController(mockAudio);
-    ytCtrl.sync({
-      youtubeEnabled: true,
-      bgmEnabled: true,
-      rawUrl: 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
-      volume0to1: 0.7,
-    });
-    expect(mockAudio.externalBgmActive).toBe(true);
-
-    ytCtrl.sync({
-      youtubeEnabled: false,
-      bgmEnabled: true,
-      rawUrl: 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
-      volume0to1: 0.7,
-    });
-    expect(mockAudio.externalBgmActive).toBe(false);
+    // HPVN: no YouTube BGM player (no outside host; scripts/test-hpvn-core.mjs «no outside URL»)
   });
 
   it('mặc định bật Engine Đồ Hoạ Mới (WebGL2 2.5D HDR), ghép liền mạch rào mask12 trên GPU và vẽ chuẩn khung xoay khi đặt công trình', () => {

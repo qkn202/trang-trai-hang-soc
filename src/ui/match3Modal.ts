@@ -40,7 +40,6 @@ import {
 } from '../sim/proofOfPlay';
 import { MinigameGpuFxBatcher } from '../render/fx/minigameGpuFx';
 import {
-  ACTIVE_MINIGAME_RESUME_KEY,
   ActiveMinigameResumeRecord,
   BuildReductionResult,
   LeaderboardRankChange,
@@ -49,6 +48,8 @@ import {
   PuzzleArcadeMode,
 } from '../types/game';
 import { MINIGAME_ZOOM_STEP, sharedMinigameViewport } from './minigameViewControls';
+import { compactSickle, liftToolIcon, liftToolIcons } from '../hpvn/toolIcons';
+import { levelBarHtml, lvStat } from '../hpvn/levelBar';
 
 const VIRTUAL_W = 468;
 
@@ -62,18 +63,18 @@ const BOOSTER_MEDIA: Record<
 > = {
   reparo_hammer: {
     engineKind: 'hammer',
-    webp: `/paintings/candy-hogwarts/booster-lollipop.webp?v=${CANDY_ASSET_REV}`,
-    png: `/paintings/candy-hogwarts/booster-lollipop.png?v=${CANDY_ASSET_REV}`,
+    webp: `/game/trang-trai-hang-soc/paintings/candy-hogwarts/booster-lollipop.webp?v=${CANDY_ASSET_REV}`,
+    png: `/game/trang-trai-hang-soc/paintings/candy-hogwarts/booster-lollipop.webp?v=${CANDY_ASSET_REV}`,
   },
   row_col_cannon: {
     engineKind: 'swap',
-    webp: `/paintings/candy-hogwarts/booster-swap.webp?v=${CANDY_ASSET_REV}`,
-    png: `/paintings/candy-hogwarts/booster-swap.png?v=${CANDY_ASSET_REV}`,
+    webp: `/game/trang-trai-hang-soc/paintings/candy-hogwarts/booster-swap.webp?v=${CANDY_ASSET_REV}`,
+    png: `/game/trang-trai-hang-soc/paintings/candy-hogwarts/booster-swap.webp?v=${CANDY_ASSET_REV}`,
   },
   alohomora_shuffle: {
     engineKind: 'shuffle',
-    webp: `/paintings/candy-hogwarts/booster-shuffle.webp?v=${CANDY_ASSET_REV}`,
-    png: `/paintings/candy-hogwarts/booster-shuffle.png?v=${CANDY_ASSET_REV}`,
+    webp: `/game/trang-trai-hang-soc/paintings/candy-hogwarts/booster-shuffle.webp?v=${CANDY_ASSET_REV}`,
+    png: `/game/trang-trai-hang-soc/paintings/candy-hogwarts/booster-shuffle.webp?v=${CANDY_ASSET_REV}`,
   },
 };
 
@@ -116,8 +117,8 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
     if (g.specialKind === 'color_bomb') {
       return {
         visualHtml: pictureSpriteHtml(
-          `/paintings/candy-hogwarts/powerup-rainbow.webp?v=${CANDY_ASSET_REV}`,
-          `/paintings/candy-hogwarts/powerup-rainbow.png?v=${CANDY_ASSET_REV}`,
+          `/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-rainbow.webp?v=${CANDY_ASSET_REV}`,
+          `/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-rainbow.webp?v=${CANDY_ASSET_REV}`,
           'm3-goal-sprite'
         ),
         label: g.label || 'Quả Cầu Vồng',
@@ -128,8 +129,8 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
     if (g.specialKind === 'wrapped') {
       return {
         visualHtml: pictureSpriteHtml(
-          `/paintings/candy-hogwarts/powerup-bomb.webp?v=${CANDY_ASSET_REV}`,
-          `/paintings/candy-hogwarts/powerup-bomb.png?v=${CANDY_ASSET_REV}`,
+          `/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-bomb.webp?v=${CANDY_ASSET_REV}`,
+          `/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-bomb.webp?v=${CANDY_ASSET_REV}`,
           'm3-goal-sprite'
         ),
         label: g.label || 'Bom & Thuốc Nổ',
@@ -140,8 +141,8 @@ function describeCandyObjective(g: CandyObjectiveProgress): {
     if (g.specialKind === 'striped') {
       return {
         visualHtml: pictureSpriteHtml(
-          `/paintings/candy-hogwarts/powerup-firecracker.webp?v=${CANDY_ASSET_REV}`,
-          `/paintings/candy-hogwarts/powerup-firecracker.png?v=${CANDY_ASSET_REV}`,
+          `/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-firecracker.webp?v=${CANDY_ASSET_REV}`,
+          `/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-firecracker.webp?v=${CANDY_ASSET_REV}`,
           'm3-goal-sprite'
         ),
         label: g.label || 'Pháo Hoa Nổ',
@@ -351,6 +352,7 @@ export class Match3ModalController {
     const dlg = this.getDialog();
     if (dlg) {
       dlg.addEventListener('close', () => {
+        if (dlg.open) return;
         const _returnAction = dlg.returnValue;
         void _returnAction;
         dlg.returnValue = '';
@@ -478,28 +480,21 @@ export class Match3ModalController {
   }
 
   private persistActiveModalResumeMarker(): void {
-    if (typeof localStorage === 'undefined' || this.rescueContext || this.victoryClaimed) return;
-    try {
-      const rec: ActiveMinigameResumeRecord = {
+    if (this.rescueContext || this.victoryClaimed) return;
+    // HPVN: the marker rides in the farm save (no browser storage in the frame), so F5 reopens this run
+    this.sim.state.activeMinigameResume = {
         dialog: 'match3',
         mode: 'match3',
         stage: this.engine?.level?.id ?? this.sim.state.match3.currentLevel,
-        savedAt: Date.now(),
-      };
-      localStorage.setItem(ACTIVE_MINIGAME_RESUME_KEY, JSON.stringify(rec));
-    } catch {
-      // Ignore storage quota errors
-    }
+      savedAt: Date.now(),
+    };
   }
 
+
   private clearActiveModalResumeMarker(): void {
-    if (typeof localStorage === 'undefined') return;
-    try {
-      localStorage.removeItem(ACTIVE_MINIGAME_RESUME_KEY);
-    } catch {
-      // Ignore storage errors
-    }
+    delete this.sim.state.activeMinigameResume;
   }
+
 
   private persistMatch3Session(saveToDisk = true): void {
     if (this.rescueContext) return;
@@ -927,6 +922,7 @@ export class Match3ModalController {
         : this.movesMadeThisAttempt === 0
           ? '🔄 Ván Mới'
           : '🔄 Lại (-1❤️)';
+      liftToolIcon(btn);
     }
   }
 
@@ -981,12 +977,12 @@ export class Match3ModalController {
 
     const goldEl = box.querySelector('#m3ModalGoldText') as HTMLElement | null;
     if (goldEl) {
-      goldEl.textContent = st.sandboxMode ? '∞' : st.galleons.toLocaleString('vi-VN');
+      goldEl.textContent = st.sandboxMode ? '∞' : compactSickle(st.galleons);
     }
 
     const starsEl = box.querySelector('#m3ModalStarsText') as HTMLElement | null;
     if (starsEl) {
-      starsEl.textContent = st.sandboxMode ? '∞' : String(st.match3.stars);
+      starsEl.textContent = st.sandboxMode ? '∞' : compactSickle(st.match3.stars);
     }
 
     const heartsEl = box.querySelector('#m3ModalHeartsText') as HTMLElement | null;
@@ -1012,6 +1008,7 @@ export class Match3ModalController {
       talismanBtn.innerHTML = talismanLocked
         ? '<span>🔥 Bùa</span><span class="pa-cost-pill">✓ 1/1</span>'
         : `<span>🔥 Bùa</span><span class="pa-cost-pill">${st.sandboxMode ? '∞' : `×${talismanQty}`}</span>`;
+      liftToolIcon(talismanBtn);
     }
 
     // Live 2-Phase Boss HP strip
@@ -1151,24 +1148,19 @@ export class Match3ModalController {
       return `
         <div class="m3-board-overlay" role="region" aria-label="Giải cứu thành công">
           <div class="m3-overlay-card victory">
-            <div style="font-size:38px;line-height:1;">🏆🍀</div>
-            <h3 style="font-size:20px;font-weight:900;color:#451a03;">
-              Cứu Thành Công (${escapeHtml(this.rescueContext.neighborName)})!
-            </h3>
+            <div class="pa-victory-title">Cứu <span class="hs-raw">${escapeHtml(this.rescueContext.neighborName)}</span> · Xong</div>
             <div class="m3-reward-badges">
-              <span class="m3-reward-chip star">+${rv.tokensEarned} 🍀</span>
-              <span class="m3-reward-chip">+${rv.goldEarned} 🪙</span>
-              <span class="m3-reward-chip">+${rv.xpEarned} ⭐ XP</span>
+              <span class="m3-reward-chip star">+${rv.tokensEarned} Huy hiệu</span>
+              <span class="m3-reward-chip">+${rv.goldEarned} Sickle</span>
+              <span class="m3-reward-chip">+${rv.xpEarned} XP</span>
               ${
                 rv.buildReduction && rv.buildReduction.reducedSec > 0
-                  ? `<span class="m3-reward-chip">🔨 -${formatDurationCompactVi(rv.buildReduction.reducedSec)}</span>`
+                  ? `<span class="m3-reward-chip">Xây −${formatDurationCompactVi(rv.buildReduction.reducedSec)}</span>`
                   : ''
               }
             </div>
-            <div class="m3-overlay-actions">
-              <button id="btnM3UseStarsInPark" type="button" class="brass-btn gold-cta m3-overlay-btn-full">
-                🏡 Về Vườn
-              </button>
+            <div class="pa-victory-actions">
+              <button id="btnM3UseStarsInPark" type="button" class="brass-btn gold-cta">Về vườn</button>
             </div>
           </div>
         </div>
@@ -1180,40 +1172,34 @@ export class Match3ModalController {
       const boardStars = Math.max(1, Math.min(3, this.lastGameEndPayload?.stars ?? 3));
       const starIconsHtml = Array.from({ length: boardStars }, (_, idx) => {
         const isCenter = boardStars === 3 && idx === 1;
-        return `<img src="/sprites/m3_icon_star.png" alt="" class="m3-victory-star-img ${isCenter ? 'center' : ''}" />`;
+        return `<img src="/game/trang-trai-hang-soc/sprites/m3_icon_star.webp" alt="" class="m3-victory-star-img ${isCenter ? 'center' : ''}" />`;
       }).join('');
 
       return `
         <div class="m3-board-overlay" role="region" aria-label="Chiến thắng màn giải đố">
           <div class="m3-overlay-card victory">
             <div class="m3-victory-stars-row">${starIconsHtml}</div>
-            <h3 style="font-size:20px;font-weight:900;color:#451a03;">${
+            <div class="pa-victory-title">${
               vs.isMasterReplay
-                ? `👑 777/777 — ${escapeHtml(lv.title)}!`
+                ? `777/777 · ${escapeHtml(lv.title)}`
                 : lv.id >= MAX_MINIGAME_STAGE
-                  ? `👑 ĐẠI THẮNG VOLDEMORT 777/777!`
-                  : `🎉 Thắng Màn ${lv.id}/${MAX_MINIGAME_STAGE}!`
-            }</h3>
+                  ? `777/777 · Xong`
+                  : `Màn ${lv.id} · Xong`
+            }</div>
             <div class="m3-reward-badges">
               ${
                 vs.starsEarned > 0
-                  ? `<span class="m3-reward-chip star">
-                      <img src="/sprites/m3_icon_star.png" alt="" class="m3-inline-icon" />
-                      +${vs.starsEarned} 🌟
-                    </span>`
-                  : `<span class="m3-reward-chip star">👑 777/777</span>`
+                  ? `<span class="m3-reward-chip star">+${vs.starsEarned} ★</span>`
+                  : `<span class="m3-reward-chip star">777/777</span>`
               }
+              ${vs.goldEarned > 0 ? `<span class="m3-reward-chip">+${vs.goldEarned} Sickle</span>` : ''} <!-- HPVN: Sickle reward -->
             </div>
-            <div class="m3-overlay-actions">
-              <button id="btnM3NextLevel" type="button" class="brass-btn gold-cta m3-overlay-btn-primary">
-                ${vs.isMasterReplay || lv.id >= MAX_MINIGAME_STAGE ? `👑 Chơi Lại` : `▶️ Màn ${vs.nextLevel}`}
+            <div class="pa-victory-actions">
+              <button id="btnM3NextLevel" type="button" class="brass-btn gold-cta">
+                ${vs.isMasterReplay || lv.id >= MAX_MINIGAME_STAGE ? `Chơi lại` : `Màn ${vs.nextLevel}`}
               </button>
-              <button id="btnM3VictoryLeaderboard" type="button" class="brass-btn m3-overlay-btn-half">
-                🏆 #${m3Rank}
-              </button>
-              <button id="btnM3UseStarsInPark" type="button" class="brass-btn m3-overlay-btn-half">
-                🏡 Về Vườn (${st.sandboxMode ? '∞' : m3.stars} 🌟)
-              </button>
+              <button id="btnM3VictoryLeaderboard" type="button" class="brass-btn">Hạng ${m3Rank}</button>
+              <button id="btnM3UseStarsInPark" type="button" class="brass-btn">Về vườn · ${st.sandboxMode ? '∞' : m3.stars} ★</button>
             </div>
           </div>
         </div>
@@ -1227,40 +1213,30 @@ export class Match3ModalController {
         <div class="m3-board-overlay" role="region" aria-label="${isBombFail ? 'Bom Hắc Ám phát nổ' : 'Hết lượt đi'}">
           <div class="m3-overlay-card rescue">
             <div class="m3-rescue-hero-icon">
-              ${pictureSpriteHtml(`/paintings/candy-hogwarts/booster-extramoves.webp?v=${CANDY_ASSET_REV}`, `/paintings/candy-hogwarts/booster-extramoves.png?v=${CANDY_ASSET_REV}`, 'm3-rescue-booster-img')}
+              ${pictureSpriteHtml(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/booster-extramoves.webp?v=${CANDY_ASSET_REV}`, `/game/trang-trai-hang-soc/paintings/candy-hogwarts/booster-extramoves.webp?v=${CANDY_ASSET_REV}`, 'm3-rescue-booster-img')}
             </div>
-            <h3 style="font-size:19px;font-weight:900;color:#451a03;">
-              ${isBombFail ? '💣 Bom Hắc Ám Phát Nổ!' : 'Hết Lượt Phép Thuật!'}
-            </h3>
-            <p style="font-size:12.4px;color:#78350f;max-width:360px;line-height:1.42;margin:0;">
-              ${
-                isBombFail
-                  ? 'Ngòi nổ chạm 0! Tiếp sức ngay sẽ tự động lùi thêm nhịp đếm Bom trên bàn cờ.'
-                  : 'Chỉ còn vài bước nữa là phá giải màn kẹo phép — tiếp sức ngay để giữ chuỗi thắng!'
-              }
-            </p>
-            <div class="m3-overlay-actions">
+            <div class="pa-victory-title">${isBombFail ? 'Bom Hắc Ám nổ' : 'Hết lượt'}</div>
+            ${isBombFail ? '<p>Tiếp sức sẽ lùi nhịp đếm Bom</p>' : ''}
+            <div class="pa-victory-actions">
+              <button id="btnM3BuyExtraMoves" type="button" class="brass-btn${!this.rescueContext && mySosMatch3?.rescuedAt ? '' : ' gold-cta'}">
+                +${EXTRA_MOVES_COUNT} lượt · ${st.sandboxMode ? '0' : extraMovesCost} Sickle
+              </button>
               ${
                 canRescueTalisman
-                  ? `<button id="btnM3RescuePhoenixTalisman" type="button" class="brass-btn pa-tool-btn talisman m3-overlay-btn-full">
-                      🔥 Bùa (+5 Lượt &amp; Gỡ Bom • ${st.sandboxMode ? '∞' : `×${talismanQty}`})
+                  ? `<button id="btnM3RescuePhoenixTalisman" type="button" class="brass-btn pa-tool-btn talisman">
+                      ${isBombFail ? 'Bùa · gỡ Bom' : 'Bùa +5 lượt'} · ${st.sandboxMode ? '∞' : `×${talismanQty}`}
                     </button>`
                   : ''
               }
-              <button id="btnM3BuyExtraMoves" type="button" class="brass-btn gold-cta m3-overlay-btn-primary">
-                🪄 +${EXTRA_MOVES_COUNT} Lượt (${st.sandboxMode ? '0G' : `🪙 ${extraMovesCost}G`})
-              </button>
-              <button id="btnM3GiveUpRetry" type="button" class="brass-btn m3-overlay-btn-half">
-                ${this.rescueContext ? '🔄 Thử Lại' : '💔 Thử Lại (-1 ❤️)'}
+              <button id="btnM3GiveUpRetry" type="button" class="brass-btn">
+                ${this.rescueContext ? 'Thử lại' : 'Thử lại · −1 ♥\uFE0E'}
               </button>
               ${
                 !this.rescueContext
                   ? mySosMatch3?.rescuedAt
-                    ? `<button id="btnM3OverlayClaimSos" type="button" class="brass-btn gold-cta m3-overlay-btn-full">
-                        🎉 Qua Màn Ngay!
-                      </button>`
-                    : `<button id="btnM3OverlayAskFriend" type="button" class="brass-btn m3-overlay-btn-half" ${rescuesReceivedLeft <= 0 && !mySosMatch3 ? 'disabled' : ''}>
-                        ${mySosMatch3 ? '🦉 Đang chờ...' : `🆘 Cứu (${rescuesReceivedLeft}/${MAX_DAILY_MINIGAME_RESCUES})`}
+                    ? `<button id="btnM3OverlayClaimSos" type="button" class="brass-btn gold-cta">Qua màn</button>`
+                    : `<button id="btnM3OverlayAskFriend" type="button" class="brass-btn" ${rescuesReceivedLeft <= 0 && !mySosMatch3 ? 'disabled' : ''}>
+                        ${mySosMatch3 ? 'Đang chờ cứu' : `Nhờ cứu · ${rescuesReceivedLeft}/${MAX_DAILY_MINIGAME_RESCUES}`}
                       </button>`
                   : ''
               }
@@ -1311,7 +1287,7 @@ export class Match3ModalController {
     const trialBadgeFor = (kind: PuzzleArcadeMode | 'match3'): string => {
       if (!reqTrial || st.sandboxMode || this.sim.isHeadmasterPreview) return '';
       if (reqTrial.kind !== kind) return '';
-      return `<span class="pa-tab-trial" title="Môn Đề Cử">🔥</span>`;
+      return `<span class="pa-tab-trial" role="img" aria-label="Môn Đề Cử"></span>`; // HPVN: a red dot; the stage line names it
     };
 
     const fmtTabLv = (kind: PuzzleArcadeMode | 'match3'): string => {
@@ -1319,73 +1295,76 @@ export class Match3ModalController {
       return inf.isMaxed ? `👑777` : `${inf.currentStage}/777`;
     };
 
-    const stageHeadline = `${m3Info.isMaxed ? '👑 ' : ''}Màn ${lv.id}/${MAX_MINIGAME_STAGE} • ${diffMeta.icon} ${escapeHtml(lv.title)}`;
-    const stageSubtitle =
+    // the level bar (hpvn/levelBar.ts): the level's title with its difficulty when not plain (its icon was an emoji the filter
+    // dropped), a milestone's guardian instead; school year and chapter as the figures
+    const stageSub =
       milestoneMeta && !bossState
-        ? `👑 ${escapeHtml(milestoneMeta.bossGuardianVi)} • ${escapeHtml(milestoneMeta.mechanicTagVi)}`
-        : `${escapeHtml(season.signatureIcon)} ${escapeHtml(season.yearLabel)} • Chương ${chapter.globalChapterId}/${CANDY_HOGWARTS_TOTAL_CHAPTERS}`;
+        ? `${escapeHtml(milestoneMeta.bossGuardianVi)} · ${escapeHtml(milestoneMeta.mechanicTagVi)}`
+        : `${diffMeta.pillClass === 'normal' ? '' : `${escapeHtml(diffMeta.label)} · `}${escapeHtml(lv.title)}`;
+    const stageStats =
+      lvStat('Năm học', `<span class="hs-lv-k">Năm</span><strong>${season.id}</strong>`) +
+      lvStat('Chương', `<span class="hs-lv-k">Chương</span><strong>${chapter.globalChapterId}/${CANDY_HOGWARTS_TOTAL_CHAPTERS}</strong>`);
 
     const topStripHtml = `
       <div class="pa-top-bar">
         <div class="pa-dock-head-row">
           <div class="pa-currencies">
             <span class="m3-res-chip" title="Sao Phép Thuật">
-              <img src="/sprites/m3_icon_star.png" alt="Sao" class="m3-res-icon" />
-              <strong id="m3ModalStarsText">${st.sandboxMode ? '∞' : m3.stars}</strong>
+              <img src="/game/trang-trai-hang-soc/sprites/m3_icon_star.webp" alt="Sao" class="m3-res-icon" />
+              <strong id="m3ModalStarsText">${st.sandboxMode ? '∞' : compactSickle(m3.stars)}</strong>
             </span>
             <span class="m3-res-chip" title="Tim giải đố">
-              <img src="/sprites/m3_icon_heart.png" alt="Tim" class="m3-res-icon" />
+              <img src="/game/trang-trai-hang-soc/sprites/m3_icon_heart.webp" alt="Tim" class="m3-res-icon" />
               <strong id="m3ModalHeartsText">${this.formatHeartsLabel()}</strong>
             </span>
-            <span class="m3-res-chip" title="Vàng Galleon">
-              <span class="g-coin" style="width:17px;height:17px;font-size:10.5px;">G</span>
-              <strong id="m3ModalGoldText">${st.sandboxMode ? '∞' : st.galleons.toLocaleString('vi-VN')}</strong>
+            <span class="m3-res-chip" title="Sickle">
+              <span class="g-coin" style="font-size:11px;">S</span>
+              <strong id="m3ModalGoldText">${st.sandboxMode ? '∞' : compactSickle(st.galleons)}</strong>
             </span>
             <span class="m3-res-chip" title="Bùa Phượng Hoàng">
-              <span>🔥</span>
+              <img src="/game/trang-trai-hang-soc/sprites/beast_phoenix.webp" alt="" class="m3-res-icon" /><!-- HPVN: no emoji -->
               <strong id="m3ModalTalismanText">${st.sandboxMode ? '∞' : this.sim.getPhoenixTalismanCount()}</strong>
             </span>
-            <button id="btnM3OpenLeaderboard" type="button" class="m3-res-chip minigame-lb-chip" title="Bảng Xếp Hạng (#${m3Rank})">
-              <span>🏆</span>
-              <strong id="m3ModalRankText">#${m3Rank}</strong>
-            </button>
             <button id="btnM3ToggleYuleSkin" type="button" class="m3-res-chip yule-skin-toggle-pill ${this.sim.isYuleVisualThemeActive() ? 'is-yule-active' : ''}" aria-pressed="${this.sim.isYuleVisualThemeActive()}" title="Bật/Tắt giao diện Giáng Sinh">
-              <span>🎄</span>
+              <span>Noel</span>
             </button>
           </div>
+          <button id="btnM3OpenLeaderboard" type="button" class="minigame-lb-chip" title="Bảng Xếp Hạng (#${m3Rank})">
+            <img src="/game/trang-trai-hang-soc/sprites/ui_trophy_cup.webp" alt="" class="m3-res-icon" />
+            <strong id="m3ModalRankText">#${compactSickle(m3Rank)}</strong>
+          </button>
           <form method="dialog" class="pa-inline-close-form">
             <button type="submit" value="close" class="brass-btn pa-inline-close-btn" title="Đóng (Esc)" aria-label="Đóng">✕</button>
           </form>
         </div>
 
-        <div class="pa-mode-tabs" role="tablist" aria-label="Chọn môn khảo thí phép thuật Hogwarts" ${this.rescueContext ? 'style="opacity:0.65;pointer-events:none;"' : ''}>
+        <div class="pa-mode-tabs" role="tablist"${globalThis.matchMedia?.('(min-width: 980px)').matches ? ' aria-orientation="vertical"' : ''} aria-label="Chọn môn khảo thí phép thuật Hogwarts" ${this.rescueContext ? 'style="opacity:0.65;pointer-events:none;"' : ''}>
           <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="caro" class="pa-mode-tab" title="Ngũ Ấn Đạo Tặc">
-            <span class="pa-tab-name"><span class="pa-tab-name-full">🗺️ Ngũ Ấn Đạo Tặc</span><span class="pa-tab-name-short">🗺️ Ngũ Ấn</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('caro')}</span>${trialBadgeFor('caro')}</span>
+            <span class="pa-tab-name"><span class="pa-tab-name-full">🗺️ Ngũ Ấn Đạo Tặc</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🗺️</span> Ngũ Ấn</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('caro')}</span>${trialBadgeFor('caro')}</span>
           </button>
           <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="sudoku" class="pa-mode-tab" title="Số Học Huyền Bí">
-            <span class="pa-tab-name"><span class="pa-tab-name-full">🔢 Số Học Huyền Bí</span><span class="pa-tab-name-short">🔢 Số Học</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('sudoku')}</span>${trialBadgeFor('sudoku')}</span>
+            <span class="pa-tab-name"><span class="pa-tab-name-full">🔢 Số Học Huyền Bí</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🔢</span> Số Học</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('sudoku')}</span>${trialBadgeFor('sudoku')}</span>
           </button>
           <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="chess" class="pa-mode-tab" title="Cờ Phù Thủy">
-            <span class="pa-tab-name"><span class="pa-tab-name-full">🏰 Cờ Phù Thủy</span><span class="pa-tab-name-short">🏰 Cờ Phù Thủy</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('chess')}</span>${trialBadgeFor('chess')}</span>
+            <span class="pa-tab-name"><span class="pa-tab-name-full">🏰 Cờ Phù Thủy</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🏰</span> Cờ</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('chess')}</span>${trialBadgeFor('chess')}</span>
           </button>
           <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="blocks" class="pa-mode-tab" title="Sinh Vật Huyền Bí">
-            <span class="pa-tab-name"><span class="pa-tab-name-full">🦄 Sinh Vật Huyền Bí</span><span class="pa-tab-name-short">🦄 Sinh Vật</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('blocks')}</span>${trialBadgeFor('blocks')}</span>
+            <span class="pa-tab-name"><span class="pa-tab-name-full">🦄 Sinh Vật Huyền Bí</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🦄</span> Sinh Vật</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('blocks')}</span>${trialBadgeFor('blocks')}</span>
           </button>
           <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="jigsaw" class="pa-mode-tab" title="Tranh Ghép Phép Thuật">
-            <span class="pa-tab-name"><span class="pa-tab-name-full">🧩 Tranh Ghép Phép Thuật</span><span class="pa-tab-name-short">🧩 Tranh Ghép</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('jigsaw')}</span>${trialBadgeFor('jigsaw')}</span>
+            <span class="pa-tab-name"><span class="pa-tab-name-full">🧩 Tranh Ghép Phép Thuật</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🧩</span> Tranh Ghép</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('jigsaw')}</span>${trialBadgeFor('jigsaw')}</span>
           </button>
           <button type="button" role="tab" aria-selected="true" class="pa-mode-tab active" title="Bùa Gặt Honeydukes">
-            <span class="pa-tab-name"><span class="pa-tab-name-full">🍬 Bùa Gặt Honeydukes</span><span class="pa-tab-name-short">🍬 Bùa Gặt</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('match3')}</span>${trialBadgeFor('match3')}</span>
+            <span class="pa-tab-name"><span class="pa-tab-name-full">🍬 Bùa Gặt Honeydukes</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🍬</span> Bùa Gặt</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('match3')}</span>${trialBadgeFor('match3')}</span>
           </button>
         </div>
       </div>
 
-      <div class="pa-stage-banner">
-        <div class="pa-stage-meta">
-          <div class="pa-stage-title">${stageHeadline}</div>
-          <div class="pa-stage-sub">${stageSubtitle}</div>
-        </div>
-      </div>
+      ${levelBarHtml({
+        stage: `Màn ${lv.id}/${MAX_MINIGAME_STAGE}`,
+        sub: `${trialBadgeFor('match3') ? 'Đề cử · ' : ''}${stageSub}`,
+        stats: stageStats,
+      })}
       ${(() => {
         if (bossState) {
           const hpPct =
@@ -1422,7 +1401,7 @@ export class Match3ModalController {
       ${(() => {
         if (this.rescueContext) {
           return `<div class="pa-trial-strip urgent">
-            <span>⚔️ <strong>CỨU MÀN ${this.rescueContext.stage}</strong> (${escapeHtml(this.rescueContext.neighborEmoji)} <strong>${escapeHtml(this.rescueContext.neighborName)}</strong>) • <strong>+3 🍀 + 95G</strong></span>
+            <span>⚔️ <strong>CỨU MÀN ${this.rescueContext.stage}</strong> (${escapeHtml(this.rescueContext.neighborEmoji)} <strong class="hs-raw">${escapeHtml(this.rescueContext.neighborName)}</strong>) • <strong>+3 🍀 + 95 Sickle</strong></span>
           </div>`;
         }
         const social = this.sim.ensureNeighborSocial();
@@ -1459,26 +1438,16 @@ export class Match3ModalController {
           </aside>
           <div class="pa-stage-viewport">
             <div class="mg-stage-pan-area">
-              <div class="m3-empty-hearts-card">
-                <img src="/sprites/m3_icon_heart.png" alt="Tim" style="width:52px;height:52px;object-fit:contain;filter:grayscale(0.25) drop-shadow(0 6px 10px rgba(0,0,0,0.3));" />
-                <h3 style="font-size:18px;font-weight:900;color:#451a03;">Hết Tim Giải Đố!</h3>
-                <p style="font-size:12.5px;max-width:440px;line-height:1.45;color:#78350f;margin:0;">
-                  <strong>+1 ❤️</strong> sau <strong id="m3NoHeartsCountdown" style="color:#b45309;">${mm}:${ss}</strong>
-                </p>
-                <div class="m3-overlay-actions">
-                  <button id="btnM3RefillHeartsNow" type="button" class="brass-btn gold-cta m3-overlay-btn-primary">
-                    ${
-                      butterbeerQty > 0
-                        ? `🍻 Hồi 5 ❤️ (×${butterbeerQty})`
-                        : `❤️ Hồi 5/5 (🪙 ${REFILL_HEARTS_GOLD_COST}G)`
-                    }
+              <div class="m3-empty-hearts-card m3-overlay-card rescue">
+                <img src="/game/trang-trai-hang-soc/sprites/m3_icon_heart.webp" alt="" class="m3-empty-hearts-img" />
+                <div class="pa-victory-title">Hết tim</div>
+                <p>+1 ♥\uFE0E sau <strong id="m3NoHeartsCountdown">${mm}:${ss}</strong></p>
+                <div class="pa-victory-actions">
+                  <button id="btnM3RefillHeartsNow" type="button" class="brass-btn gold-cta">
+                    ${butterbeerQty > 0 ? `Bia Bơ · 5 ♥\uFE0E · ×${butterbeerQty}` : `5 ♥\uFE0E · ${REFILL_HEARTS_GOLD_COST} Sickle`}
                   </button>
-                  <button id="btnM3EmptyGoArcade" type="button" class="brass-btn pa-hud-cta m3-overlay-btn-half">
-                    ♟️ 4 Môn Khảo Thí
-                  </button>
-                  <button id="btnM3BackToPark" type="button" class="brass-btn m3-overlay-btn-half">
-                    🏡 Về Vườn
-                  </button>
+                  <button id="btnM3EmptyGoArcade" type="button" class="brass-btn">4 Môn Khảo Thí</button>
+                  <button id="btnM3BackToPark" type="button" class="brass-btn">Về vườn</button>
                 </div>
               </div>
             </div>
@@ -1616,11 +1585,11 @@ export class Match3ModalController {
         <span class="m3-rainbow-orb-wrap">
           ${pictureSpriteHtml(
             this.sim.isYuleVisualThemeActive()
-              ? `/paintings/candy-yule/powerup-rainbow.webp?v=${CANDY_ASSET_REV}`
-              : `/paintings/candy-hogwarts/powerup-rainbow.webp?v=${CANDY_ASSET_REV}`,
+              ? `/game/trang-trai-hang-soc/paintings/candy-yule/powerup-rainbow.webp?v=${CANDY_ASSET_REV}`
+              : `/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-rainbow.webp?v=${CANDY_ASSET_REV}`,
             this.sim.isYuleVisualThemeActive()
-              ? `/paintings/candy-yule/powerup-rainbow.png?v=${CANDY_ASSET_REV}`
-              : `/paintings/candy-hogwarts/powerup-rainbow.png?v=${CANDY_ASSET_REV}`,
+              ? `/game/trang-trai-hang-soc/paintings/candy-yule/powerup-rainbow.webp?v=${CANDY_ASSET_REV}`
+              : `/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-rainbow.webp?v=${CANDY_ASSET_REV}`,
             'm3-rainbow-orb-icon'
           )}
           <span id="m3RainbowSuperBadge" class="m3-rainbow-super-badge" ${isSuperRainbow ? '' : 'hidden'}>⚡</span>
@@ -1650,11 +1619,18 @@ export class Match3ModalController {
           ${this.snackPieUsedThisAttempt || snap.status === 'won' || (!st.sandboxMode && pieQty <= 0) ? 'disabled' : ''}
           title="Dùng 1 Bánh Táo Quế từ Kho Đỏ (+3 Lượt đi & lùi +3 nhịp Bom)"
         >
-          <img src="/sprites/ui_icon_pie_ready.png" alt="" width="20" height="20" class="aaa-synergy-sprite" />
+          <img src="/game/trang-trai-hang-soc/sprites/ui_icon_pie_ready.webp" alt="" width="20" height="20" class="aaa-synergy-sprite" />
           <span><span class="aaa-lbl-full">Bánh Táo </span><strong data-m3-pie-qty="1">${this.snackPieUsedThisAttempt ? '✓' : st.sandboxMode ? '∞' : `×${pieQty}`}</strong></span>
         </button>
       </div>
     `;
+
+    // HPVN: portrait = pie and companion join the tool row under the board, so the board gets their row
+    // HPVN: portrait and desktop (≥980px, the dock needs the row for the game list) = pie and companion join the tool row
+    const synergyInControls =
+      this.getDialog()?.dataset?.mgLayout === 'portrait' ||
+      globalThis.matchMedia?.('(min-width: 980px)').matches ||
+      globalThis.matchMedia?.('(max-height: 450px) and (orientation: landscape)').matches;
 
     box.innerHTML = `
       <div id="m3LiveAnnouncer" class="m3-sr-only" aria-live="polite" aria-atomic="true"></div>
@@ -1674,7 +1650,7 @@ export class Match3ModalController {
             ${rainbowMeterHtml}
           </div>
 
-          ${synergyDockHtml}
+          ${synergyInControls ? '' : synergyDockHtml}
         </aside>
 
         <div class="pa-stage-viewport">
@@ -1719,11 +1695,13 @@ export class Match3ModalController {
                   </button>`
               : ''
           }
+          ${synergyInControls ? synergyDockHtml : ''}
         </div>
       </div>
       <div id="m3OverlayMount">${this.renderOverlayHtml(lv)}</div>
     `;
 
+    liftToolIcons(box);
     this.bindStageDOMEvents(box);
   }
 
@@ -1806,7 +1784,7 @@ export class Match3ModalController {
     }
     if (this.engine.talismanUsed) {
       this.showToast(
-        'Hôm nay bạn đã dùng 🔥 Bùa Phượng Hoàng ở môn này rồi (giới hạn 1 lần/môn/ngày)!',
+        'Bùa Phượng Hoàng: mỗi môn 1 lần/ngày, hôm nay đã dùng',
         '🔥'
       );
       return;
@@ -1874,7 +1852,7 @@ export class Match3ModalController {
         const alreadyArmed = this.engine.activeBooster === media.engineKind;
         if (!alreadyArmed && !st.sandboxMode && qty <= 0 && st.galleons < bDef.goldCost) {
           this.sim.audio.playCheekyAlert();
-          this.showToast(`Cần ${bDef.goldCost}G để mua ${bDef.name}!`, '🪙');
+          this.showToast(`Cần ${bDef.goldCost} Sickle để mua ${bDef.name}!`, '🪙');
           return;
         }
 

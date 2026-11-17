@@ -3,7 +3,7 @@ import type { FlyRewardKind } from '../../types/game';
 /**
  * Cross-Layer Flying Collectibles Batcher (Track A2 + B6a)
  * --------------------------------------------------------
- * Vẽ các vật phẩm thu hoạch (Galleons, Sao Phép Thuật, Cát Thời Gian, XP) bay xuyên lớp
+ * Vẽ các vật phẩm thu hoạch (Sickle, Sao Phép Thuật, Cát Thời Gian, XP) bay xuyên lớp
  * từ toạ độ thế giới 2.5D vút theo đường cong Bezier bậc 3 thẳng vào đúng ô HUD mục tiêu
  * (`[data-fly-target="galleons|stars|sand|xp"]`), kèm đuôi bụi sao lấp lánh và vòng xung kích khi chạm đích.
  *

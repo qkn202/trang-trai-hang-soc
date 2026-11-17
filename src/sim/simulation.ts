@@ -314,7 +314,6 @@ import {
 } from './simulationEconomy';
 
 import {
-  BulldozeHazardWarning,
   worldRebuildGrid,
   worldIsBuildingConnected,
   worldRecomputeAllCoastersAndBiomes,
@@ -330,12 +329,11 @@ import {
   worldUnlockZone,
   worldBridgeZoneWithCobblePath,
   worldFindSmartSpotForStoryBuilding,
-  worldGetBulldozeHazardWarning,
   worldRemoveAtTile,
+  worldGetRemovalLossText,
 } from './simulationWorld';
 export { isDragPaintableCatalogItem, isRepeatableCatalogItem } from './simulationWorld';
 export type { BarnUpgradeCostInfo, FarmBatchResult } from './simulationFarm';
-export type { BulldozeHazardWarning } from './simulationWorld';
 
 import {
   creaturesFeedCreature,
@@ -379,6 +377,7 @@ import {
   trialsEnsureMinigameLeaderboard,
   trialsGetPlayerHouse,
   trialsSetPlayerHouse,
+  trialsLockPlayerHouse,
   trialsRollPlayerSortingHat,
   trialsGetMinigameLeaderboard,
   trialsGetPlayerMinigameRank,
@@ -399,8 +398,6 @@ import {
 
 import {
   questsTryDropWizardCard,
-  questsAwardHousePoints,
-  questsClaimHouseCupReward,
   questsGrantBuildingIngredientDrop,
   questsHarvestBuildingBubble,
   questsAddXp,
@@ -419,6 +416,7 @@ import {
   questsGetReadyOwlOrdersCount,
   questsFulfillFarmOwlOrder,
   questsRefreshFarmOwlOrder,
+  questsGetOwlRerollsLeft,
   questsGetBrewDurationSec,
   questsQuickHarvestHerbs,
   questsStartBrewing,
@@ -511,6 +509,8 @@ import {
   lifecycleProcessOfflineProgress,
 } from './simulationLifecycle';
 
+export { setFarmStore } from './simulationLifecycle';
+
 export class ParkSimulation {
   public state: GameState;
   public grid: TileCell[][] = [];
@@ -573,14 +573,13 @@ export class ParkSimulation {
   public onBuildingCompleted: ((uid: string) => void) | null = null;
   public onRibbonUnveiled: ((info: RibbonUnveilCelebration) => void) | null = null;
   public onTutorialStepChanged: ((stepId: TutorialStepId) => void) | null = null;
-  public onRequestBulldozeConfirm: ((warning: BulldozeHazardWarning) => void) | null = null;
   public villagerGreetCooldown = new Map<ValleyVillagerId, number>();
   /** Công trình đang xây được người chơi bấm rút ngắn trực tiếp trong #inspectorPanel. */
   public preferredSpeedupBuildingUid: string | null = null;
   /**
    * Guard cho thao tác batch (Feed All / Collect All / brush). Khi active,
    * saveToStorage() và onUiChange() bị gộp lại ở cuối batch (1 lần commit)
-   * để tránh 40 lần serialize localStorage + 40 lần refresh DOM gây GC stutter.
+   * để tránh 40 lần serialize bản lưu + 40 lần refresh DOM gây GC stutter.
    */
   public batchOperationActive = false;
   /**
@@ -839,19 +838,13 @@ export class ParkSimulation {
 
   public placeItem(item: CatalogItem, gx: number, gy: number, rotation: 0 | 1 | 2 | 3): boolean { return worldPlaceItem(this, item, gx, gy, rotation); }
 
-  public getBulldozeHazardWarning(gx: number, gy: number): BulldozeHazardWarning | null {
-    return worldGetBulldozeHazardWarning(this, gx, gy);
-  }
+  public removeAtTile(gx: number, gy: number): boolean { return worldRemoveAtTile(this, gx, gy); }
 
-  public removeAtTile(gx: number, gy: number, force = false): boolean {
-    return worldRemoveAtTile(this, gx, gy, force);
-  }
+  public getRemovalLossText(gx: number, gy: number): string | null { return worldGetRemovalLossText(this, gx, gy); }
 
   public tryDropWizardCard(_gx: number, _gy: number, _baseChance = 0.08): void { return questsTryDropWizardCard(this, _gx, _gy, _baseChance); }
 
-  public awardHousePoints(house: HouseName, pts: number): void { return questsAwardHousePoints(this, house, pts); }
 
-  public claimHouseCupReward(): boolean { return questsClaimHouseCupReward(this); }
 
   public grantBuildingIngredientDrop(
     b: PlacedBuilding,
@@ -931,7 +924,7 @@ export class ParkSimulation {
 
   /**
    * XP Điền Trang (từ thu hoạch nông sản, làm bánh, Đơn Hàng Cú, Quiz ngôn ngữ) tích lũy vào
-   * Rương Mùa Gặt Điền Trang (mỗi 200 XP tặng ngay +65 🪙 Galleon + 1 ⏳ Cát Thời Gian + định kỳ Bùa Trợ Lực),
+   * Rương Mùa Gặt Điền Trang (mỗi 200 XP tặng ngay +65 🪙 Sickle + 1 ⏳ Cát Thời Gian + định kỳ Bùa Trợ Lực),
    * hoàn toàn không thay thế Cấp Giải Đố Tổng để giữ đúng vòng lặp cày Mini-game mở khóa Nhà!
    */
   public addXp(amount: number): void { return questsAddXp(this, amount); }
@@ -1096,6 +1089,11 @@ export class ParkSimulation {
         const wage = this.getHourlyStaffWage();
         if (!this.state.sandboxMode && this.state.galleons > wage * 3) {
           this.state.galleons -= wage;
+          // HPVN: say once why Sickle drops while idle (there is no dismiss option, so no way to stop it)
+          if (wage > 0 && !this.state.wageToastShown) {
+            this.state.wageToastShown = true;
+            this.onToast?.(`Lương phụ tá: các phụ tá của bạn (Lao Công Phép Thuật, Phù Thủy Bảo Trì, Nhà Sinh Vật Học…) nhận ${wage} Sickle mỗi 45 giây. Trong game chưa có cách cho nghỉ việc.`, '🪙');
+          }
         }
         this.state.finance.staffWagesPaid += wage;
       }
@@ -1299,6 +1297,11 @@ export class ParkSimulation {
 
   public getPlayerHouse(): HouseName { return trialsGetPlayerHouse(this); }
 
+  /** HPVN: set when the member's HPVN house is a real house; setPlayerHouse / rollPlayerSortingHat then change nothing */
+  public lockedHouse: HouseName | null = null;
+
+  public lockPlayerHouse(house: HouseName): HouseName { return trialsLockPlayerHouse(this, house); }
+
   public setPlayerHouse(house: HouseName, activeGameId?: LeaderboardGameId): HouseName { return trialsSetPlayerHouse(this, house, activeGameId); }
 
   public rollPlayerSortingHat(activeGameId?: LeaderboardGameId): HouseName { return trialsRollPlayerSortingHat(this, activeGameId); }
@@ -1481,6 +1484,8 @@ export class ParkSimulation {
   public fulfillFarmOwlOrder(orderId: string): { ok: boolean; msg: string } { return questsFulfillFarmOwlOrder(this, orderId); }
 
   public refreshFarmOwlOrder(orderId: string): boolean { return questsRefreshFarmOwlOrder(this, orderId); }
+
+  public getOwlRerollsLeft(): number { return questsGetOwlRerollsLeft(this); }
 
   // =========================================================================
   // HỆ THỐNG THAM QUAN, TƯƠNG TRỢ VƯỜN & GIẢI CỨU MÀN KHÓ (1 NGÀY 1 LẦN / BẠN)
@@ -1678,7 +1683,7 @@ export class ParkSimulation {
 
   private updateValleyVillagers(dt: number, unlockedSet: Set<string>): void { return villagersUpdateValleyVillagers(this, dt, unlockedSet); }
 
-  public greetVillager(id: ValleyVillagerId): { ok: boolean; msg: string; bonusGalleons: number } { return villagersGreetVillager(this, id); }
+  public greetVillager(id: ValleyVillagerId): { ok: boolean; msg: string; bonusSickle: number } { return villagersGreetVillager(this, id); }
 
   public unveilBuilding(uid: string): RibbonUnveilCelebration | null { return questsUnveilBuilding(this, uid); }
 
@@ -1742,15 +1747,15 @@ export class ParkSimulation {
       if (toDisplay.length === 1) {
         const def = toDisplay[0];
         this.onToast(
-          `🏅 Đạt Thành Tựu: ${def.titleVi} (+${def.rewardGalleons}G, +${def.rewardStars} 🌟 — nhận tại Sổ Vàng!)`,
+          `🏅 Đạt Thành Tựu: ${def.titleVi} (+${def.rewardSickle} Sickle, +${def.rewardStars} 🌟 — nhận tại Sổ Vàng!)`,
           def.icon
         );
       } else if (toDisplay.length > 1) {
         const top = toDisplay[toDisplay.length - 1];
-        const sumGold = toDisplay.reduce((acc, d) => acc + d.rewardGalleons, 0);
+        const sumGold = toDisplay.reduce((acc, d) => acc + d.rewardSickle, 0);
         const sumStars = toDisplay.reduce((acc, d) => acc + d.rewardStars, 0);
         this.onToast(
-          `🏅 Mở khoá ${toDisplay.length} Thành Tựu mới (${top.titleVi}...) • +${sumGold}G, +${sumStars} 🌟 — nhận tại Sổ Vàng!`,
+          `🏅 Mở khoá ${toDisplay.length} Thành Tựu mới (${top.titleVi}...) • +${sumGold} Sickle, +${sumStars} 🌟 — nhận tại Sổ Vàng!`,
           top.icon
         );
       }
@@ -1765,29 +1770,29 @@ export class ParkSimulation {
   public claimAchievement(achId: string): {
     ok: boolean;
     msg: string;
-    rewardGalleons: number;
+    rewardSickle: number;
     rewardStars: number;
   } {
     const def = ACHIEVEMENT_REGISTRY.find((a) => a.id === achId);
     const res = claimAchievementReward(this.state, achId);
     if (!res.ok || !def) {
-      return { ok: false, msg: 'Thành tựu chưa mở khoá hoặc đã nhận thưởng!', rewardGalleons: 0, rewardStars: 0 };
+      return { ok: false, msg: 'Thành tựu chưa mở khoá hoặc đã nhận thưởng!', rewardSickle: 0, rewardStars: 0 };
     }
     if (res.rewardStars > 0) {
       this.state.match3.stars += res.rewardStars;
       this.state.match3.totalStarsEarned += res.rewardStars;
       this.onRewardFly?.('stars', res.rewardStars);
     }
-    if (res.rewardGalleons > 0) {
-      this.onRewardFly?.('galleons', res.rewardGalleons);
+    if (res.rewardSickle > 0) {
+      this.onRewardFly?.('galleons', res.rewardSickle);
     }
     this.audio.playLevelUp();
     this.saveToStorage();
     this.onUiChange?.();
     return {
       ok: true,
-      msg: `🎖️ Đã nhận thưởng "${def.titleVi}": +${res.rewardGalleons}G & +${res.rewardStars} 🌟!`,
-      rewardGalleons: res.rewardGalleons,
+      msg: `🎖️ Đã nhận thưởng "${def.titleVi}": +${res.rewardSickle} Sickle & +${res.rewardStars} 🌟!`,
+      rewardSickle: res.rewardSickle,
       rewardStars: res.rewardStars,
     };
   }
@@ -1796,7 +1801,7 @@ export class ParkSimulation {
     ok: boolean;
     msg: string;
     claimedCount: number;
-    rewardGalleons: number;
+    rewardSickle: number;
     rewardStars: number;
   } {
     const res = claimAllUnlockedAchievements(this.state);
@@ -1805,7 +1810,7 @@ export class ParkSimulation {
         ok: false,
         msg: 'Hiện chưa có thành tựu mới chờ nhận thưởng!',
         claimedCount: 0,
-        rewardGalleons: 0,
+        rewardSickle: 0,
         rewardStars: 0,
       };
     }
@@ -1814,17 +1819,17 @@ export class ParkSimulation {
       this.state.match3.totalStarsEarned += res.totalStars;
       this.onRewardFly?.('stars', res.totalStars);
     }
-    if (res.totalGalleons > 0) {
-      this.onRewardFly?.('galleons', res.totalGalleons);
+    if (res.totalSickle > 0) {
+      this.onRewardFly?.('galleons', res.totalSickle);
     }
     this.audio.playLevelUp();
     this.saveToStorage();
     this.onUiChange?.();
     return {
       ok: true,
-      msg: `🎖️ Đã nhận gộp ${res.claimedIds.length} Thành Tựu: +${res.totalGalleons.toLocaleString('vi-VN')}G & +${res.totalStars} 🌟!`,
+      msg: `🎖️ Đã nhận gộp ${res.claimedIds.length} Thành Tựu: +${res.totalSickle.toLocaleString('vi-VN')} Sickle & +${res.totalStars} 🌟!`,
       claimedCount: res.claimedIds.length,
-      rewardGalleons: res.totalGalleons,
+      rewardSickle: res.totalSickle,
       rewardStars: res.totalStars,
     };
   }
@@ -1878,8 +1883,8 @@ export class ParkSimulation {
     this.onUiChange?.();
     return {
       ok: true,
-      msg: `📅 Nhận ${res.reward.titleVi}: +${res.reward.galleons}G, +${res.reward.magicStars} 🌟${
-        res.reward.phoenixTalismans > 0 ? `, +${res.reward.phoenixTalismans} 🔥` : ''
+      msg: `📅 Nhận ${res.reward.titleVi}: +${res.reward.galleons} Sickle, +${res.reward.magicStars} 🌟${
+        res.reward.phoenixTalismans > 0 ? `, +${res.reward.phoenixTalismans} Bùa` : ''
       }!`,
     };
   }
@@ -1915,7 +1920,7 @@ export class ParkSimulation {
     this.onUiChange?.();
     return {
       ok: true,
-      msg: `💝 "${res.replyVi}" (+${bonusGold}G${res.leveledUp ? `, Lên Cấp Thân Thiết ${res.level} +1 🌟!` : ''})`,
+      msg: `💝 "${res.replyVi}" (+${bonusGold} Sickle${res.leveledUp ? `, Lên Cấp Thân Thiết ${res.level} +1 🌟!` : ''})`,
       level: res.level,
       leveledUp: res.leveledUp,
     };
@@ -1929,28 +1934,9 @@ export class ParkSimulation {
     return meta;
   }
 
-  public loadNamedProfileSlot(slotId: SaveSlotId): { ok: boolean; msg: string } {
-    const loaded = loadFromNamedSlot(slotId);
-    if (!loaded.ok || !loaded.state) {
-      return { ok: false, msg: 'Ô hồ sơ này hiện đang trống!' };
-    }
-    if (
-      !isSandboxRuntimeAllowed() &&
-      (loaded.state.sandboxMode === true || loaded.state.sandboxTainted === true)
-    ) {
-      return {
-        ok: false,
-        msg: 'Hồ sơ thử nghiệm Sandbox đã bị khóa trong bản game chính thức!',
-      };
-    }
-    const ok = this.importSaveJson(JSON.stringify(loaded.state));
-    if (!ok) {
-      return { ok: false, msg: 'Không thể khôi phục hồ sơ này!' };
-    }
-    return {
-      ok: true,
-      msg: `💾 Đã tải ${loaded.meta?.label ?? slotId} (${loaded.meta?.parkName ?? 'Hang Sóc'} • Cấp ${loaded.state.level})!`,
-    };
+  public loadNamedProfileSlot(_slotId: SaveSlotId): { ok: boolean; msg: string } {
+    // HPVN: the server keeps one farm; there are no browser save slots to load
+    return { ok: false, msg: 'Trang trại lưu trên máy chủ HPVN, không có hồ sơ khác.' };
   }
 
   public saveLayoutPreset(presetId: LayoutPresetId, customLabel?: string): LayoutPresetEntry {
@@ -2142,7 +2128,7 @@ export class ParkSimulation {
     this.onUiChange?.();
     return {
       ok: true,
-      msg: `📦 Đã cất gọn ${count} vật phẩm Trang Trí vào Kho Kiến Trúc (đặt lại miễn phí 0G)!`,
+      msg: `📦 Đã cất gọn ${count} vật phẩm Trang Trí vào Kho Kiến Trúc (đặt lại miễn phí 0 Sickle)!`,
       count,
     };
   }
@@ -2186,7 +2172,7 @@ export class ParkSimulation {
           placedAt: now,
           constructEndsAt: now,
           lastTickAt: now,
-          storedGalleons: 0,
+          storedSickle: 0,
           storedXp: 0,
           readyBubbles: 0,
           durability: 100,
@@ -2213,7 +2199,7 @@ export class ParkSimulation {
     this.onUiChange?.();
     return {
       ok: true,
-      msg: `🌸 Đã bày lại ${placed} vật phẩm Trang Trí từ Kho Kiến Trúc ra sân (0G)!`,
+      msg: `🌸 Đã bày lại ${placed} vật phẩm Trang Trí từ Kho Kiến Trúc ra sân (0 Sickle)!`,
       placed,
     };
   }

@@ -8,7 +8,7 @@
 // Các mutation (worldPlaceItem / worldMoveBuilding / worldRemoveAtTile / farm brush)
 // được gọi trong khi sim.suppressPerActionSave = true để gộp N lần saveToStorage +
 // onUiChange (mà từng action đơn lẻ gọi bên trong) xuống đúng 1 lần commit ở cuối
-// stroke — tránh serialize localStorage + refresh DOM gây GC stutter khi kéo brush.
+// stroke — tránh serialize bản lưu + refresh DOM gây GC stutter khi kéo brush.
 
 import type { PlacedBuilding, TileOverrideData } from '../types/game';
 import type { ParkSimulation } from './simulation';

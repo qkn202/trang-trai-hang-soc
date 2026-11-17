@@ -5,6 +5,7 @@ import {
   CATALOG,
   FARM_CROPS,
   FARM_GOODS,
+  computeStrategicPlotGrowSeconds,
   formatDurationCompactVi,
   formatDurationCountdownVi,
   getCatalogItem,
@@ -217,8 +218,6 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
     const allCrops = Object.values(FARM_CROPS).sort(
       (a, b) => a.unlockLevel - b.unlockLevel || a.growSec - b.growSec
     );
-    const flowerCount = allCrops.filter((c) => c.isFlowerCrop).length;
-    const harvestCropCount = allCrops.length - flowerCount;
     const filteredCrops = allCrops.filter((c) => {
       if (hud.seedFilterMode === 'flowers') return Boolean(c.isFlowerCrop);
       if (hud.seedFilterMode === 'crops') return !c.isFlowerCrop;
@@ -226,9 +225,9 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
     });
     const filterPillsHtml = (
       [
-        { id: 'all', label: `🌱 (${allCrops.length})` },
-        { id: 'flowers', label: `🌸 (${flowerCount})` },
-        { id: 'crops', label: `🌾 (${harvestCropCount})` },
+        { id: 'all', label: 'Tất cả' },
+        { id: 'flowers', label: 'Hoa' },
+        { id: 'crops', label: 'Cây' },
       ] as const
     )
       .map(
@@ -248,10 +247,11 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
         const locked = !hud.sim.state.sandboxMode && hud.sim.state.level < crop.unlockLevel;
         const selected = hud.activeSeedCropId === crop.id;
         const seedCount = hud.sim.getSeedCount(crop.id);
-        const stock = hud.sim.getFarmItemCount(crop.id);
-        const growLabel = formatDurationCompactVi(crop.growSec);
+        const mastery = hud.sim.state.cropMastery?.[crop.id] ?? 0;
+        const firstSec = computeStrategicPlotGrowSeconds(0, false, mastery, crop.growSec).growSec;
+        const growLabel = formatDurationCompactVi(firstSec);
         return `
-          <div class="seed-card-slot">
+          <div class="seed-card-slot ${locked ? 'locked' : ''} ${selected ? 'selected' : ''} ${!locked && seedCount <= 0 ? 'out-of-seeds' : ''}">
             <button
               type="button"
               class="seed-card seed-tray-card ${locked ? 'locked' : ''} ${selected ? 'selected' : ''} ${!locked && seedCount <= 0 ? 'out-of-seeds' : ''}"
@@ -259,25 +259,16 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
               aria-pressed="${selected}"
               ${locked ? 'disabled' : ''}
             >
+              <span class="seed-card-seed-badge ${locked ? 'is-locked' : seedCount > 0 ? 'has-seed' : 'no-seed'}">
+                ${locked ? `Cấp ${crop.unlockLevel}` : `×${seedCount}`}
+              </span>
               <img src="${getFarmItemIconSrc(crop.id)}" alt="${escapeHtml(crop.name)}" class="seed-card-img" />
               <span class="seed-card-name">${escapeHtml(crop.name)}</span>
-              <span class="seed-card-seed-badge ${seedCount > 0 ? 'has-seed' : 'no-seed'}">
-                ${
-                  locked
-                    ? `🔒 Cấp ${crop.unlockLevel}`
-                    : seedCount > 0
-                      ? `🌱 ${seedCount}`
-                      : `🪄 0G`
-                }
-              </span>
-              <span class="seed-card-meta">
-                ${locked ? `⏱️ ${growLabel}` : `⏱️ ${growLabel} • 🪙${crop.seedCost.toLocaleString('vi-VN')}G`}
-              </span>
-              <span class="seed-card-stock">📦 ${stock}</span>
+              <span class="seed-card-meta">${growLabel}</span>
             </button>
             ${
               !locked
-                ? `<button type="button" class="seed-card-add-btn" data-acquire-seed="${crop.id}" aria-label="Nạp hạt ${escapeHtml(crop.name)}" title="Mua hạt ${escapeHtml(crop.name)} (${crop.seedCost.toLocaleString('vi-VN')}G) hoặc Đố 0G">+</button>`
+                ? `<button type="button" class="seed-card-add-btn" data-acquire-seed="${crop.id}" aria-label="Nạp hạt ${escapeHtml(crop.name)}" title="Mua hạt ${escapeHtml(crop.name)} (${crop.seedCost.toLocaleString('vi-VN')} Sickle) hoặc Đố 0 Sickle">+ 🪙${crop.seedCost.toLocaleString('vi-VN')}</button>`
                 : ''
             }
           </div>
@@ -287,50 +278,39 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
 
     tray.innerHTML = `
       <div class="seed-tray-header">
-        <div class="seed-tray-title-row">
-          <div class="seed-tray-title-wrap">
-            <div class="seed-tray-title">
-              ${
-                activeCrop
-                  ? `🌱 <strong>${escapeHtml(activeCrop.name)}</strong> (${hud.sim.getSeedCount(activeCrop.id)})`
-                  : '🌱 Hạt Giống & Hoa'
-              }
-            </div>
-            <div class="seed-tray-sub" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:3px;">
-              <span>Ô trống: <strong>${emptyPlotCount}/${totalPlotCount}</strong></span>
-              <div class="seed-filter-bar" role="group" aria-label="Bộ lọc nhóm hạt giống">${filterPillsHtml}</div>
-            </div>
+        <div class="hs-tray-head">
+          <div class="hs-tray-heading">
+            <span class="seed-tray-title">${
+              activeCrop
+                ? `${escapeHtml(activeCrop.name)} · ×${hud.sim.getSeedCount(activeCrop.id)}`
+                : 'Hạt Giống & Hoa'
+            }</span>
+            <span class="seed-tray-sub">Trống ${emptyPlotCount}/${totalPlotCount}</span>
           </div>
-          <button id="btnCloseSeedTray" type="button" class="brass-btn seed-tray-close" aria-label="Đóng túi hạt giống">✕</button>
+          <button id="btnSeedTrayOpenQuiz" type="button" class="brass-btn sq-tray-quiz-cta" title="Đố nhận hạt 0 Sickle">
+            Đố nhận hạt
+          </button>
+          <button id="btnCloseSeedTray" type="button" class="brass-btn hs-tray-close" aria-label="Đóng túi hạt giống">✕</button>
         </div>
-        <div class="seed-tray-actions">
-          ${
-            hud.pendingSowPlotUid &&
-            hud.sim.state.buildings.some((x) => x.uid === hud.pendingSowPlotUid && !x.isIndestructible)
-              ? `<button id="btnSeedTrayMovePlot" type="button" class="brass-btn" title="Nhấc dời thửa đất này">✋ Dời ô</button>`
-              : ''
-          }
-          <button id="btnSeedTrayPlantAll" type="button" class="brass-btn" title="Gieo hạt giống đã chọn vào tất cả ô đất trống">
-            🌱 Gieo tất cả
-          </button>
-          <button id="btnSeedTrayWaterAll" type="button" class="brass-btn" title="Tưới tất cả luống đang lớn chưa được tưới">
-            💧 Tưới tất cả
-          </button>
-          <button id="btnSeedTrayHarvestAll" type="button" class="brass-btn gold-cta" title="Gặt tất cả luống đã chín vàng">
-            🌾 Gặt tất cả
-          </button>
-          <button id="btnSeedTrayOpenQuiz" type="button" class="brass-btn sq-tray-quiz-cta" title="Mua Hạt hoặc Đố Ngoại Ngữ 0G">
-            🪄 Hạt 0G
-          </button>
-          <button id="btnSeedTrayBuyPlot" type="button" class="brass-btn gold-cta" title="Đặt thêm Thửa Đất (30G)">
-            + Đất 30G
-          </button>
-          <button id="btnSeedTrayBuyFlowerGarden" type="button" class="brass-btn" title="Đặt Ô Vườn Hoa (55G)">
-            🌸 + Vườn 55G
-          </button>
-          <button id="btnSeedTrayOpenBarn" type="button" class="brass-btn" title="Mở Kho">
-            📦 Kho
-          </button>
+        <div class="hs-tray-toolbar">
+          <div class="seed-filter-bar" role="group" aria-label="Bộ lọc nhóm hạt giống">${filterPillsHtml}</div>
+          <div class="seed-tray-actions">
+            ${
+              hud.pendingSowPlotUid &&
+              hud.sim.state.buildings.some((x) => x.uid === hud.pendingSowPlotUid && !x.isIndestructible)
+                ? `<button id="btnSeedTrayMovePlot" type="button" class="brass-btn" title="Nhấc dời thửa đất này">Dời ô</button>`
+                : ''
+            }
+            <button id="btnSeedTrayPlantAll" type="button" class="brass-btn" title="Gieo hạt giống đã chọn vào tất cả ô đất trống">Gieo tất cả</button>
+            <button id="btnSeedTrayWaterAll" type="button" class="brass-btn" title="Tưới tất cả luống đang lớn chưa được tưới">Tưới tất cả</button>
+            <button id="btnSeedTrayHarvestAll" type="button" class="brass-btn gold-cta" title="Gặt tất cả luống đã chín vàng">Gặt tất cả</button>
+            <button id="btnSeedTrayBuyPlot" type="button" class="brass-btn" title="Đặt Thửa Đất (30 Sickle)">
+              + Đất 🪙30
+            </button>
+            <button id="btnSeedTrayBuyFlowerGarden" type="button" class="brass-btn" title="Đặt Vườn Hoa (55 Sickle)">
+              + Vườn 🪙55
+            </button>
+          </div>
         </div>
       </div>
       <div class="seed-tray-scroll">${cardsHtml}</div>
@@ -352,7 +332,7 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
     if (plantAllBtn) {
       const count = plantableCrops.length;
       plantAllBtn.disabled = count === 0;
-      plantAllBtn.textContent = `🌱 Gieo tất cả${count ? ` (${count})` : ''}`;
+      plantAllBtn.textContent = `Gieo tất cả${count ? ` (${count})` : ''}`;
       plantAllBtn.addEventListener('click', () => {
         const cropId = hud.activeSeedCropId;
         if (!cropId) {
@@ -369,7 +349,7 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
     if (waterAllBtn) {
       const count = waterableCrops.length;
       waterAllBtn.disabled = count === 0;
-      waterAllBtn.textContent = `💧 Tưới tất cả${count ? ` (${count})` : ''}`;
+      waterAllBtn.textContent = `Tưới tất cả${count ? ` (${count})` : ''}`;
       waterAllBtn.addEventListener('click', () => {
         const result = hud.sim.batchWaterCropPlots(cropUids);
         hud.showToast(result.msg, result.ok ? '💧' : '🌱');
@@ -380,7 +360,7 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
     if (harvestAllBtn) {
       const count = readyCrops.length;
       harvestAllBtn.disabled = count === 0;
-      harvestAllBtn.textContent = `🌾 Gặt tất cả${count ? ` (${count})` : ''}`;
+      harvestAllBtn.textContent = `Gặt tất cả${count ? ` (${count})` : ''}`;
       harvestAllBtn.addEventListener('click', () => {
         const result = hud.sim.batchHarvestCropPlots(cropUids);
         hud.showToast(result.msg, result.ok ? '🌾' : '🌱');
@@ -468,7 +448,7 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
         hud.activeSeedCropId = cid;
         hud.refreshAll();
         hud.showToast(
-          `🌱 Đã chọn ${c.emoji} ${c.name} (Túi có ${hud.sim.getSeedCount(cid)} hạt) — Nhấp hoặc kéo lướt qua các Thửa Đất trống để gieo!`,
+          `${c.name} · ${hud.sim.getSeedCount(cid)} hạt`,
           c.emoji
         );
       });
@@ -498,7 +478,7 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
       hud.inspectSelection = null;
       hud.selectedCatalogItem = plotItem;
       hud.refreshAll();
-      hud.showToast('🌾 Nhấp hoặc kéo trên bãi cỏ để đặt thêm Thửa Đất Canh Tác (30G)!', '🌱');
+      hud.showToast('Thửa đất · 30 Sickle/ô', '🌱');
     });
 
     tray.querySelector('#btnSeedTrayBuyFlowerGarden')?.addEventListener('click', () => {
@@ -509,7 +489,7 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
       hud.inspectSelection = null;
       hud.selectedCatalogItem = gardenItem;
       hud.refreshAll();
-      hud.showToast('🌸 Nhấp hoặc kéo cạnh nhau để ghép liền Ô Vườn Hoa Cảnh Hang Sóc (55G)!', '🌸');
+      hud.showToast('Vườn hoa · 55 Sickle/ô', '🌸');
     });
 
     tray.querySelector('#btnSeedTrayOpenBarn')?.addEventListener('click', () => {
@@ -560,9 +540,8 @@ export function farmUiRenderPastureTray(hud: GameHUD): void {
       .map((animal) => {
         const locked = !hud.sim.state.sandboxMode && hud.sim.state.level < animal.unlockLevel;
         const selected = hud.activePastureAnimalId === animal.id;
-        const prodMeta = animal.goodId ? getFarmItemMeta(animal.goodId) : null;
         return `
-          <div class="seed-card-slot">
+          <div class="seed-card-slot pasture-card-slot ${locked ? 'locked' : ''} ${selected ? 'selected' : ''}">
             <button
               type="button"
               class="seed-card seed-tray-card ${locked ? 'locked' : ''} ${selected ? 'selected' : ''}"
@@ -570,21 +549,12 @@ export function farmUiRenderPastureTray(hud: GameHUD): void {
               aria-pressed="${selected}"
               ${locked ? 'disabled' : ''}
             >
-              <img src="/sprites/${animal.spritePair[0]}.png" alt="${escapeHtml(animal.name)}" class="seed-card-img pasture-card-img" />
+              <span class="seed-card-seed-badge ${locked ? 'is-locked' : 'has-seed'}">
+                ${locked ? `Cấp ${animal.unlockLevel}` : `🪙${animal.cost.toLocaleString('vi-VN')}`}
+              </span>
+              <img src="/game/trang-trai-hang-soc/sprites/${animal.spritePair[0]}.webp" alt="${escapeHtml(animal.name)}" class="seed-card-img pasture-card-img" />
               <span class="seed-card-name">${escapeHtml(animal.name)}</span>
-              <span class="seed-card-seed-badge ${locked ? 'no-seed' : 'has-seed'}">
-                ${
-                  locked
-                    ? `🔒 Cấp ${animal.unlockLevel}`
-                    : `🪙 ${animal.cost.toLocaleString('vi-VN')}G`
-                }
-              </span>
-              <span class="seed-card-meta">
-                ⏱️${formatDurationCompactVi(animal.cycleSec)} • +${animal.sellValue}G
-              </span>
-              <span class="seed-card-stock">
-                ${prodMeta ? `+${animal.yieldQty} ${escapeHtml(prodMeta.name)}` : ''}
-              </span>
+              <span class="seed-card-meta">${formatDurationCompactVi(animal.cycleSec)} · +🪙${animal.sellValue}</span>
             </button>
           </div>
         `;
@@ -593,40 +563,29 @@ export function farmUiRenderPastureTray(hud: GameHUD): void {
 
     tray.innerHTML = `
       <div class="seed-tray-header">
-        <div class="seed-tray-title-row">
-          <div class="seed-tray-title-wrap">
-            <div class="seed-tray-title">
-              ${
-                activeAnimal
-                  ? `🐾 <strong>${escapeHtml(activeAnimal.name)}</strong> (${activeAnimal.cost.toLocaleString('vi-VN')}G)`
-                  : '🐾 Chăn Thả'
-              }
-            </div>
-            <div class="seed-tray-sub">
-              Ô trống: <strong>${emptyPastureCount}/${totalPastureCount}</strong>
-            </div>
+        <div class="hs-tray-head">
+          <div class="hs-tray-heading">
+            <span class="seed-tray-title">${
+              activeAnimal ? escapeHtml(activeAnimal.name) : 'Chăn Thả'
+            }</span>
+            <span class="seed-tray-sub">Trống ${emptyPastureCount}/${totalPastureCount}</span>
           </div>
-          <button id="btnClosePastureTray" type="button" class="brass-btn seed-tray-close" aria-label="Đóng khay chọn thú chăn thả">✕</button>
+          <button id="btnPastureTrayBuyPlot" type="button" class="brass-btn" title="Đặt Đồng Cỏ (45 Sickle)">
+            + Đồng cỏ 🪙45
+          </button>
+          <button id="btnClosePastureTray" type="button" class="brass-btn hs-tray-close" aria-label="Đóng khay chọn thú chăn thả">✕</button>
         </div>
-        <div class="seed-tray-actions">
-          ${
-            hud.pendingStockPastureUid &&
-            hud.sim.state.buildings.some((x) => x.uid === hud.pendingStockPastureUid && !x.isIndestructible)
-              ? `<button id="btnPastureTrayMovePlot" type="button" class="brass-btn" title="Nhấc dời ô đồng cỏ này">✋ Dời ô</button>`
-              : ''
-          }
-          <button id="btnPastureTrayBuyPlot" type="button" class="brass-btn gold-cta" title="Đặt thêm Đồng Cỏ (45G)">
-            🐾 + Đồng Cỏ 45G
-          </button>
-          <button id="btnPastureFeedAll" type="button" class="brass-btn" title="Cho tất cả đàn thú đang lớn ăn">
-            🌾 Cho ăn tất cả
-          </button>
-          <button id="btnPastureCollectAll" type="button" class="brass-btn gold-cta" title="Thu hoạch tất cả sản vật đã sẵn sàng">
-            🧺 Thu hoạch tất cả
-          </button>
-          <button id="btnPastureTrayOpenBarn" type="button" class="brass-btn" title="Mở Kho">
-            📦 Kho
-          </button>
+        <div class="hs-tray-toolbar">
+          <div class="seed-tray-actions">
+            ${
+              hud.pendingStockPastureUid &&
+              hud.sim.state.buildings.some((x) => x.uid === hud.pendingStockPastureUid && !x.isIndestructible)
+                ? `<button id="btnPastureTrayMovePlot" type="button" class="brass-btn" title="Nhấc dời ô đồng cỏ này">Dời ô</button>`
+                : ''
+            }
+            <button id="btnPastureFeedAll" type="button" class="brass-btn" title="Cho tất cả đàn thú đang lớn ăn">Cho ăn tất cả</button>
+            <button id="btnPastureCollectAll" type="button" class="brass-btn gold-cta" title="Thu hoạch tất cả sản vật đã sẵn sàng">Thu hoạch tất cả</button>
+          </div>
         </div>
       </div>
       <div class="seed-tray-scroll pasture-tray-scroll">${cardsHtml}</div>
@@ -646,7 +605,7 @@ export function farmUiRenderPastureTray(hud: GameHUD): void {
     ).length;
     if (feedAll) {
       feedAll.disabled = feedableCount === 0;
-      feedAll.textContent = `🌾 Cho ăn tất cả${feedableCount ? ` (${feedableCount})` : ''}`;
+      feedAll.textContent = `Cho ăn tất cả${feedableCount ? ` (${feedableCount})` : ''}`;
       feedAll.addEventListener('click', () => {
         const result = hud.sim.batchFeedAnimalPastures(pastureUids);
         hud.showToast(result.msg, result.ok ? '🌾' : '✨');
@@ -655,7 +614,7 @@ export function farmUiRenderPastureTray(hud: GameHUD): void {
     }
     if (collectAll) {
       collectAll.disabled = readyCount === 0;
-      collectAll.textContent = `🧺 Thu hoạch tất cả${readyCount ? ` (${readyCount})` : ''}`;
+      collectAll.textContent = `Thu hoạch tất cả${readyCount ? ` (${readyCount})` : ''}`;
       collectAll.addEventListener('click', () => {
         const result = hud.sim.batchHarvestAnimalPastures(pastureUids);
         hud.showToast(result.msg, result.ok ? '🐾' : '✨');
@@ -691,7 +650,7 @@ export function farmUiRenderPastureTray(hud: GameHUD): void {
         hud.activePastureAnimalId = aid;
         hud.refreshAll();
         hud.showToast(
-          `🐾 Đang dẫn ${a.emoji} ${a.name} (${a.cost.toLocaleString('vi-VN')}G/ô) — Nhấp hoặc kéo lướt qua Đồng Cỏ Chăn Thả trống để thả!`,
+          `${a.name} · ${a.cost.toLocaleString('vi-VN')} Sickle/ô`,
           a.emoji
         );
       });
@@ -721,7 +680,7 @@ export function farmUiRenderPastureTray(hud: GameHUD): void {
       hud.inspectSelection = null;
       hud.selectedCatalogItem = pastureItem;
       hud.refreshAll();
-      hud.showToast('🐾 Nhấp hoặc kéo cạnh nhau trên bãi cỏ để ghép liền Đồng Cỏ Chăn Thả (45G)!', '🐾');
+      hud.showToast('Đồng cỏ · 45 Sickle/ô', '🐾');
     });
 
     tray.querySelector('#btnPastureTrayOpenBarn')?.addEventListener('click', () => {
@@ -781,7 +740,7 @@ export function farmUiUpdateWorkshopLiveTimers(hud: GameHUD): void {
         } else {
           buffBox.classList.remove('hidden');
           const parts: string[] = [];
-          if (bbLeft > 0) parts.push(`🍻 +85%G (${formatDurationCountdownVi(bbLeft)})`);
+          if (bbLeft > 0) parts.push(`🍻 +85% Sickle (${formatDurationCountdownVi(bbLeft)})`);
           if (fxLeft > 0) parts.push(`🧪 +35%XP (${formatDurationCountdownVi(fxLeft)})`);
           buffBox.textContent = `✨ ${parts.join(' • ')}`;
         }
@@ -804,16 +763,16 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
     const tabsHtml = `
       <div class="workshop-tabs" role="group" aria-label="Kho & Xưởng">
         <button type="button" data-ws-tab="barn" data-active="${hud.activeWorkshopTab === 'barn'}" aria-pressed="${hud.activeWorkshopTab === 'barn'}" class="brass-btn">
-          🏡 Kho (${barnUsed}/${barn.capacity})
+          <span class="nb-tab-ico">🏡</span> Kho <span class="nb-tab-badge">${barnUsed}/${barn.capacity}</span>
         </button>
         <button type="button" data-ws-tab="brew" data-active="${hud.activeWorkshopTab === 'brew'}" aria-pressed="${hud.activeWorkshopTab === 'brew'}" class="brass-btn">
-          🧪 Vạc Phép
+          <span class="nb-tab-ico">🧪</span> <span class="hs-long">Vạc Phép</span><span class="hs-short">Vạc</span>
         </button>
         <button type="button" data-ws-tab="cargo" data-active="${hud.activeWorkshopTab === 'cargo'}" aria-pressed="${hud.activeWorkshopTab === 'cargo'}" class="brass-btn">
-          🚂 Tàu (${cratesDone}/3)
+          <span class="nb-tab-ico">🚂</span> Tàu <span class="nb-tab-badge">${cratesDone}/3</span>
         </button>
         <button type="button" data-ws-tab="synergy" data-active="${hud.activeWorkshopTab === 'synergy'}" aria-pressed="${hud.activeWorkshopTab === 'synergy'}" class="brass-btn">
-          🌟 Combo (${activeSynCount}/12)
+          <span class="nb-tab-ico">🌟</span> Combo <span class="nb-tab-badge">${activeSynCount}/12</span>
         </button>
       </div>
     `;
@@ -824,13 +783,13 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
       const capPct = Math.min(100, Math.round((barnUsed / Math.max(1, barn.capacity)) * 100));
       const upgInfo = hud.sim.getBarnUpgradeCostInfo();
       const upgBtnLabel = st.sandboxMode
-        ? '🏡 +20 Ô (Miễn phí Sandbox)'
+        ? '+20 Ô (Miễn phí)'
         : upgInfo.hasPlug
-          ? `🔌 +20 Ô (1🔌 + 🪙${upgInfo.baseGoldCost})`
-          : `🏡 +20 Ô (🪙${upgInfo.effectiveGoldCost} • bù 1🔌)`;
+          ? `+20 Ô (1 🔌 + ${upgInfo.baseGoldCost} Sickle)`
+          : `+20 Ô (${upgInfo.effectiveGoldCost} Sickle)`;
       const plugStatusLabel = upgInfo.hasPlug
         ? `🔌 ×${upgInfo.plugsInBarn}`
-        : `🔌 ×0 (thiếu 1🔌 → bù +${upgInfo.plugShortageBuyout}G)`;
+        : `🔌 ×0 (bù +${upgInfo.plugShortageBuyout} Sickle)`;
 
       const renderStockCards = (ids: FarmItemId[]) =>
         ids
@@ -847,9 +806,9 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
                   class="brass-btn ${qty > 0 || st.sandboxMode ? 'gold-cta' : ''}"
                   data-sell-farm-item="${id}"
                   ${qty <= 0 && !st.sandboxMode ? 'disabled' : ''}
-                  style="width:100%;padding:4px 8px;font-size:11.5px;"
+                  style="width:100%;padding:4px 8px;font-size:12px;"
                 >
-                  🪙 +${meta.sellValue}G
+                  🪙 +${meta.sellValue} Sickle
                 </button>
               </div>
             `;
@@ -868,11 +827,11 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
 
       bodyHtml = `
         <div class="barn-header-card">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-            <div>
-              <div style="font-size:15px;font-weight:900;">🏡 Kho Đỏ (${barnUsed}/${barn.capacity})</div>
+          <div class="barn-head-row" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div class="barn-head-text">
+              <div class="hs-card-title">🏡 Kho Đỏ (${barnUsed}/${barn.capacity})</div>
               <div style="font-size:12px;font-weight:700;opacity:0.86;">
-                🦉 ${barn.ordersDelivered} • ${plugStatusLabel}
+                🦉 ${barn.ordersDelivered} · ${plugStatusLabel}
               </div>
             </div>
             <button
@@ -880,23 +839,23 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
               type="button"
               class="owl-green-send-btn"
               ${!upgInfo.canAfford ? 'disabled' : ''}
-              style="padding:7px 14px;font-size:12.5px;${!upgInfo.canAfford ? 'opacity:0.55;cursor:not-allowed;' : ''}"
+              style="padding:7px 14px;font-size:13px;${!upgInfo.canAfford ? 'opacity:0.55;cursor:not-allowed;' : ''}"
             >
               ${upgBtnLabel}
             </button>
           </div>
-          <div class="quest-bar" style="height:10px;margin-top:8px;">
+          <div class="quest-bar" style="height:8px;margin-top:8px;">
             <div class="quest-bar-fill" style="width:${capPct}%"></div>
           </div>
         </div>
 
         <div class="barn-talisman-forge">
           <div class="barn-talisman-forge-meta">
-            <div class="barn-talisman-forge-title">
+            <h3 class="barn-talisman-forge-title">
               🔥 Bùa Phượng Hoàng (${st.sandboxMode ? '∞' : `${talCount}/${MAX_PHOENIX_TALISMANS}`})
-            </div>
-            <div style="font-size:11.5px;font-weight:700;opacity:0.84;margin-top:2px;">
-              Dùng tối đa 1 lần/môn/ngày • Hôm nay: ${talDaily.usedCount}/${talDaily.maxDaily} môn
+            </h3>
+            <div class="barn-talisman-forge-sub" style="margin-top:2px;">
+              Hôm nay: ${talDaily.usedCount}/${talDaily.maxDaily} môn
             </div>
           </div>
           <button
@@ -904,18 +863,18 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
             type="button"
             class="brass-btn pa-tool-btn talisman"
             ${!canForgeTalisman ? 'disabled' : ''}
-            style="padding:8px 13px;font-size:12.5px;"
+            style="padding:8px 12px;font-size:12px;"
           >
-            🔥 Rèn +1 (${craftMeta ? `1 ${escapeHtml(craftMeta.name)}` : '1 Đặc sản'} + ${PHOENIX_FORGE_GOLD_COST}G)
+            🔥 Rèn +1 (${craftMeta ? `1 ${escapeHtml(craftMeta.name)}` : '1 Đặc sản'} + ${PHOENIX_FORGE_GOLD_COST} Sickle)
           </button>
         </div>
 
-        <h3 style="font-size:14.5px;font-weight:900;margin:12px 0 6px;">🌾 Nông Sản (${Object.keys(FARM_CROPS).length})</h3>
+        <h3 class="hs-section-title" style="margin:12px 0 6px;">Nông sản (${Object.keys(FARM_CROPS).length})</h3>
         <div class="barn-stock-grid">
           ${renderStockCards(Object.keys(FARM_CROPS) as FarmItemId[])}
         </div>
 
-        <h3 style="font-size:14.5px;font-weight:900;margin:14px 0 6px;">🥧 Đặc Sản (${Object.keys(FARM_GOODS).length})</h3>
+        <h3 class="hs-section-title" style="margin:14px 0 6px;">Đặc sản (${Object.keys(FARM_GOODS).length})</h3>
         <div class="barn-stock-grid">
           ${renderStockCards(Object.keys(FARM_GOODS) as FarmItemId[])}
         </div>
@@ -938,12 +897,12 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
       const hasHerbSynergy = hud.sim.activeSynergies.activeIds.has('combo_herb_brewery');
       const cycleStageLabel =
         completedBrews === 0
-          ? 'Mẻ #1 (khởi động: 1 giờ)'
+          ? 'Mẻ #1 (1h)'
           : completedBrews === 1
-            ? 'Mẻ #2 (tăng nhiệt ×2: 2 giờ)'
+            ? 'Mẻ #2 (2h)'
             : completedBrews === 2
-              ? 'Mẻ #3 (tăng nhiệt ×4: 4 giờ)'
-              : `Mẻ #${nextBatchIdx} (đạt trần tối đa: 6 giờ)`;
+              ? 'Mẻ #3 (4h)'
+              : `Mẻ #${nextBatchIdx} (6h)`;
 
       const ingKeys: RawIngredientId[] = [
         'mandrake_leaf',
@@ -953,21 +912,19 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
       ];
 
       bodyHtml = `
-        <div class="quest-card-mini" style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-          <div style="font-size:13.5px;font-weight:800;color:#7c2d12;">🌿 Luống Thảo Dược</div>
+        <div class="quest-card-mini" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <div class="hs-card-title">🌿 Luống Thảo Dược</div>
           <button id="btnWsQuickHerb" type="button" class="brass-btn ${herbWait === 0 || st.sandboxMode ? 'gold-cta' : ''}">
             ${herbWait > 0 && !st.sandboxMode ? `🌱 (${formatDurationCompactVi(herbWait)})` : '🌿 Hái Thảo Dược'}
           </button>
         </div>
 
-        <div class="quest-card-mini" style="margin-bottom:12px;padding:9px 11px;font-size:12px;line-height:1.45;">
-          <div style="font-weight:900;color:var(--brand-strong);">
-            🔥 Nhiệt Vạc Phép — ${cycleStageLabel}
+        <div class="quest-card-mini" style="font-size:12px;line-height:1.45;">
+          <div style="font-size:13px;font-weight:700;color:var(--brand-strong);">
+            🔥 Nhiệt Vạc · ${cycleStageLabel}
           </div>
           <div style="font-weight:700;color:var(--ink-soft);margin-top:2px;">
-            Mỗi mẻ ủ hoàn tất làm vạc tăng nhiệt: <strong>1 giờ → 2 giờ → 4 giờ → tối đa 6 giờ</strong>.
-            ${hasWorkshopBrewery ? '✅ Đang giảm 45% nhờ Xưởng Chế Biến.' : '💡 Dựng Xưởng Chế Biến để giảm 45% giờ ủ.'}
-            ${hasHerbSynergy ? ' ✅ Combo Thảo Dược giảm thêm 22%.' : ''}
+            Chu kỳ 1h → 2h → 4h → 6h.${hasWorkshopBrewery ? ' ✓ −45% Xưởng.' : ' Dựng Xưởng −45%.'}${hasHerbSynergy ? ' ✓ −22% Combo.' : ''}
           </div>
         </div>
 
@@ -978,7 +935,7 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
               const qty = st.supply.ingredients[k] ?? 0;
               return `
                 <div class="ingredient-pill">
-                  <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:800;">
+                  <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;">
                     <span>${info.emoji} ${info.name}</span>
                     <span style="color:#b45309;">×${st.sandboxMode ? '∞' : qty}</span>
                   </div>
@@ -991,8 +948,8 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
         ${
           bbLeft > 0 || fxLeft > 0
             ? `
-              <div data-ws-buff-banner="1" class="quest-card-mini" style="margin-bottom:12px;background:rgba(220,252,231,0.75);border-color:#16a34a;font-size:12.5px;font-weight:800;color:#15803d;">
-                ✨ ${bbLeft > 0 ? `🍻 +85%G (${formatDurationCountdownVi(bbLeft)}) ` : ''}${fxLeft > 0 ? `• 🧪 +35%XP (${formatDurationCountdownVi(fxLeft)})` : ''}
+              <div data-ws-buff-banner="1" class="quest-card-mini" style="font-size:12px;font-weight:700;color:#15803d;">
+                ✨ ${bbLeft > 0 ? `🍻 +85% Sickle (${formatDurationCountdownVi(bbLeft)}) ` : ''}${fxLeft > 0 ? `• 🧪 +35% XP (${formatDurationCountdownVi(fxLeft)})` : ''}
               </div>
             `
             : ''
@@ -1001,10 +958,10 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
         ${
           activeBrew && brewRec
             ? `
-              <div class="quest-card-mini" style="margin-bottom:12px;border-color:#9333ea;background:rgba(243,232,255,0.82);">
+              <div class="quest-card-mini">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-                  <div data-ws-brew-left="1" style="font-size:13.5px;font-weight:800;color:#6b21a8;">
-                    🔥 ${brewRec.emoji} ${escapeHtml(brewRec.name)} (còn ${formatDurationCountdownVi(brewLeftSec)})
+                  <div data-ws-brew-left="1" style="font-size:13px;font-weight:700;color:#6b21a8;">
+                    🔥 ${brewRec.emoji} ${escapeHtml(brewRec.name)} (${formatDurationCountdownVi(brewLeftSec)})
                   </div>
                   <button id="btnWsSpeedBrew" type="button" class="brass-btn gold-cta" style="padding:4px 10px;">
                     ⏳ 1 Cát
@@ -1025,16 +982,16 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
                 const inf = RAW_INGREDIENTS_INFO[k as RawIngredientId];
                 const have = st.supply.ingredients[k as RawIngredientId] ?? 0;
                 const ok = st.sandboxMode || have >= (q ?? 0);
-                return `<span style="color:${ok ? '#15803d' : '#dc2626'};font-weight:800;">${inf.emoji} ${have}/${q}</span>`;
+                return `<span style="color:${ok ? '#15803d' : '#dc2626'};font-weight:700;">${inf.emoji} ${have}/${q}</span>`;
               })
               .join(' • ');
 
             return `
-              <div class="quest-card-mini" style="padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:7px;">
+              <div class="quest-card-mini" style="display:flex;flex-direction:column;justify-content:space-between;gap:7px;">
                 <div>
                   <div style="display:flex;justify-content:space-between;align-items:center;">
-                    <span style="font-size:14px;font-weight:800;">${rec.emoji} ${rec.name}</span>
-                    <span style="font-size:12px;font-weight:800;color:#7c2d12;">×${st.sandboxMode ? '∞' : stock}</span>
+                    <span class="hs-card-title">${rec.emoji} ${rec.name}</span>
+                    <span style="font-size:12px;font-weight:700;color:#7c2d12;">×${st.sandboxMode ? '∞' : stock}</span>
                   </div>
                   <div style="font-size:12px;margin:4px 0;">${reqText}</div>
                 </div>
@@ -1055,12 +1012,12 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
       const bonusG = Math.round(240 + st.level * 40);
       const bonusXp = Math.round(160 + st.level * 25);
       bodyHtml = `
-        <div class="quest-card-mini" style="padding:13px;margin-bottom:14px;background:rgba(254,243,199,0.85);border-color:#b45309;">
+        <div class="quest-card-mini">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-            <div style="font-size:15px;font-weight:800;color:#7c2d12;">
+            <div class="hs-card-title">
               🚂 Tàu #${st.supply.cargoTrainIndex}
             </div>
-            <span style="font-size:12px;font-weight:800;">🎁 +${bonusG.toLocaleString('vi-VN')}🪙 +${bonusXp}⭐ +2⏳</span>
+            <span style="font-size:12px;font-weight:700;">+${bonusG.toLocaleString('vi-VN')} Sickle · +${bonusXp} ⭐ · +2 ⏳</span>
           </div>
         </div>
 
@@ -1073,20 +1030,20 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
               return `
                 <div class="crate-card ${crate.fulfilled ? 'done' : ''}">
                   <div>
-                    <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:800;color:#92400e;">
+                    <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:#92400e;">
                       <span>#${idx + 1}</span>
-                      <span>${crate.fulfilled ? '✅' : `${st.sandboxMode ? '∞' : have}/${crate.qtyRequired}`}</span>
+                      <span>${crate.fulfilled ? '✓' : `${st.sandboxMode ? '∞' : have}/${crate.qtyRequired}`}</span>
                     </div>
-                    <div style="font-size:15px;font-weight:800;margin:6px 0;">${rec.emoji} ${rec.name} ×${crate.qtyRequired}</div>
+                    <div class="hs-card-title" style="margin:6px 0;">${rec.emoji} ${rec.name} ×${crate.qtyRequired}</div>
                     <div style="font-size:12px;font-weight:700;color:#15803d;">
-                      +${crate.rewardGalleons}🪙 • +${crate.rewardXp}⭐ • +${crate.rewardTimeSand}⏳
+                      +${crate.rewardSickle} Sickle · +${crate.rewardXp} ⭐ · +${crate.rewardTimeSand} ⏳
                     </div>
                   </div>
                   ${
                     crate.fulfilled
-                      ? `<div style="font-size:12.5px;font-weight:800;color:#15803d;text-align:center;padding:6px 0;">✓ Đã chất</div>`
+                      ? `<div style="font-size:12px;font-weight:700;color:#15803d;text-align:center;padding:6px 0;">✓ Đã chất</div>`
                       : canLoad
-                        ? `<button type="button" data-fulfill-crate="${crate.id}" class="brass-btn gold-cta" style="width:100%;">📦 Chất Hàng</button>`
+                        ? `<button type="button" data-fulfill-crate="${crate.id}" class="brass-btn gold-cta" style="width:100%;">📦 Chất hàng</button>`
                         : `<button type="button" data-goto-brew="1" class="brass-btn" style="width:100%;">🧪 Nấu</button>`
                   }
                 </div>
@@ -1104,16 +1061,16 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
               .map((id) => getCatalogItem(id)?.name ?? id)
               .join(' + ');
             return `
-              <div class="quest-card-mini" style="padding:11px;border-color:${active ? '#d97706' : 'rgba(138,90,43,0.3)'};background:${active ? 'rgba(254,243,199,0.9)' : 'rgba(255,251,240,0.68)'};">
+              <div class="quest-card-mini" style="border-color:${active ? '#d97706' : 'rgba(176, 125, 67, 0.45)'};">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
-                  <span style="font-size:13.5px;font-weight:800;">${syn.emoji} ${escapeHtml(syn.name)}</span>
-                  <span style="font-size:12px;font-weight:800;color:${active ? '#15803d' : '#78350f'};">
-                    ${active ? '✅' : `≤${syn.maxRadius} ô`}
+                  <span class="hs-card-title">${syn.emoji} ${escapeHtml(syn.name)}</span>
+                  <span style="font-size:12px;font-weight:700;white-space:nowrap;color:${active ? '#15803d' : '#78350f'};">
+                    ${active ? '✓' : `≤${syn.maxRadius} ô`}
                   </span>
                 </div>
-                <div style="font-size:12px;font-weight:700;color:#92400e;margin:4px 0;">🔗 ${names}</div>
-                <div style="font-size:12px;font-weight:800;color:#15803d;">
-                  +${syn.goldBonusPct}%G • +${syn.xpBonusPct}%XP
+                <div style="font-size:12px;font-weight:700;color:#92400e;margin:4px 0;">${names}</div>
+                <div style="font-size:12px;font-weight:700;color:#15803d;">
+                  +${syn.goldBonusPct}% Sickle · +${syn.xpBonusPct}% XP
                 </div>
               </div>
             `;

@@ -226,7 +226,7 @@ export function villagersHireStaff(sim: ParkSimulation, role: keyof GameState['s
     };
     const cost = costs[role] * (1 + sim.state.staffHired[role]);
     if (!sim.state.sandboxMode && sim.state.galleons < cost) {
-      sim.onToast?.(`Cần ${cost} Galleon để tuyển thêm nhân sự này!`, '🧙');
+      sim.onToast?.(`Cần ${cost} Sickle để tuyển thêm nhân sự này!`, '🧙');
       return false;
     }
     if (!sim.state.sandboxMode) {
@@ -736,10 +736,10 @@ export function villagersAdvanceTutorialStep(sim: ParkSimulation, expectedStepId
     const alreadyClaimed = tut.claimedSteps.includes(curStep.index);
     if (!alreadyClaimed) {
       tut.claimedSteps.push(curStep.index);
-      if (curStep.rewardGalleons > 0) {
-        sim.state.galleons += curStep.rewardGalleons;
-        sim.state.finance.harvestRevenue += curStep.rewardGalleons;
-        sim.onRewardFly?.('galleons', curStep.rewardGalleons);
+      if (curStep.rewardSickle > 0) {
+        sim.state.galleons += curStep.rewardSickle;
+        sim.state.finance.harvestRevenue += curStep.rewardSickle;
+        sim.onRewardFly?.('galleons', curStep.rewardSickle);
       }
       if (curStep.rewardXp > 0) {
         sim.addXp(curStep.rewardXp);
@@ -776,7 +776,7 @@ export function villagersAdvanceTutorialStep(sim: ParkSimulation, expectedStepId
       sim.onToast?.(
         alreadyClaimed
           ? '🎉 Bạn đã hoàn thành ôn tập Cẩm Nang Trang Trại Hang Sóc cùng Bà Molly!'
-          : '🎉 Chúc mừng Tốt Nghiệp Tân Thủ Hang Sóc! Bà Molly tặng +150G, +2 🌟 Sao & +1 🔥 Bùa Phượng Hoàng!',
+          : '🎉 Chúc mừng Tốt Nghiệp Tân Thủ Hang Sóc! Bà Molly tặng +150 Sickle, +2 🌟 Sao & +1 🔥 Bùa Phượng Hoàng!',
         '🥧'
       );
       sim.onTutorialStepChanged?.('completed');
@@ -784,6 +784,7 @@ export function villagersAdvanceTutorialStep(sim: ParkSimulation, expectedStepId
       const nextStep = TUTORIAL_STEPS[nextIdx];
       tut.stepIndex = nextIdx;
       tut.stepId = nextStep.id;
+      tut.minimized = false;
       const now = Date.now();
       if (nextStep.id === 'sow_and_merge_plot') {
         const hasEmptyPlot = sim.state.buildings.some(
@@ -845,7 +846,7 @@ export function villagersSkipTutorial(sim: ParkSimulation): void {
     tut.skipped = true;
     sim.audio.playClick();
     sim.onToast?.(
-      '📖 Đã tạm ẩn hướng dẫn — bạn có thể mở lại bất cứ lúc nào trong ⚙️ Cài Đặt!',
+      'Đã ẩn hướng dẫn',
       '📖'
     );
     sim.onTutorialStepChanged?.(tut.stepId);
@@ -1175,11 +1176,11 @@ export function villagersUpdateValleyVillagers(sim: ParkSimulation, dt: number, 
     }
 }
 
-export function villagersGreetVillager(sim: ParkSimulation, id: ValleyVillagerId): { ok: boolean; msg: string; bonusGalleons: number } {
+export function villagersGreetVillager(sim: ParkSimulation, id: ValleyVillagerId): { ok: boolean; msg: string; bonusSickle: number } {
     const v = sim.villagers.find((x) => x.id === id);
     const prof = VALLEY_VILLAGER_PROFILES.find((p) => p.id === id);
     if (!v || !prof) {
-      return { ok: false, msg: 'Không tìm thấy cư dân thung lũng!', bonusGalleons: 0 };
+      return { ok: false, msg: 'Không tìm thấy cư dân thung lũng!', bonusSickle: 0 };
     }
 
     const now = Date.now();
@@ -1192,14 +1193,14 @@ export function villagersGreetVillager(sim: ParkSimulation, id: ValleyVillagerId
     v.moodBubble = prof.moodBubble;
     v.bubbleTimer = 4.8;
 
-    let bonusGalleons = 0;
+    let bonusSickle = 0;
     let friendLevelUpNote = '';
     if (canReward) {
       sim.villagerGreetCooldown.set(id, now + 45_000);
       v.greetCooldownSec = 45;
-      bonusGalleons = 2;
-      sim.state.galleons += bonusGalleons;
-      sim.state.finance.harvestRevenue += bonusGalleons;
+      bonusSickle = 2;
+      sim.state.galleons += bonusSickle;
+      sim.state.finance.harvestRevenue += bonusSickle;
       sim.addXp(4);
       sim.addHarvestFeastPoints(3);
       sim.recordQuestProgress('cast_spells', undefined, 1);
@@ -1218,20 +1219,20 @@ export function villagersGreetVillager(sim: ParkSimulation, id: ValleyVillagerId
       }
       sim.checkAndToastAchievements?.();
       sim.audio.playHarvestBubble();
-      sim.onRewardFly?.('galleons', bonusGalleons, v.gx, v.gy);
-      sim.spawnFloatingText(v.gx, v.gy, `${prof.moodBubble} +${bonusGalleons}G +4⭐`, '#fde047');
+      sim.onRewardFly?.('galleons', bonusSickle, v.gx, v.gy);
+      sim.spawnFloatingText(v.gx, v.gy, `${prof.moodBubble} +${bonusSickle} Sickle +4⭐`, '#fde047');
     } else {
       sim.audio.playClick();
       sim.spawnFloatingText(v.gx, v.gy, `${prof.moodBubble} ${prof.nameVi}`, '#fef08a');
     }
 
     const msg = canReward
-      ? `${prof.moodBubble} ${prof.nameVi}: "${quote}" (+${bonusGalleons}G, +4 ⭐, +3 🍁${friendLevelUpNote})`
+      ? `${prof.moodBubble} ${prof.nameVi}: "${quote}" (+${bonusSickle} Sickle, +4 ⭐, +3 🍁${friendLevelUpNote})`
       : `${prof.moodBubble} ${prof.nameVi}: "${quote}"`;
     sim.onToast?.(msg, prof.moodBubble);
     if (canReward) {
       sim.saveToStorage();
       sim.onUiChange?.();
     }
-    return { ok: true, msg, bonusGalleons };
+    return { ok: true, msg, bonusSickle };
 }

@@ -4,6 +4,8 @@ export interface QuizLanguageMeta {
   id: QuizLanguageId;
   flag: string;
   nameVi: string;
+  /** HPVN: the language tab's label («Anh», «Tây Ban Nha») */
+  tabVi: string;
   academyVi: string;
   nativeName: string;
   ttsLang: string;
@@ -72,6 +74,7 @@ export const QUIZ_LANGUAGES: Record<QuizLanguageId, QuizLanguageMeta> = {
     id: 'en',
     flag: '🇬🇧',
     nameVi: 'Chú Ngữ Anh',
+    tabVi: 'Anh',
     academyVi: 'Chú Ngữ Hogwarts (Tiếng Anh)',
     nativeName: 'English',
     ttsLang: 'en-US',
@@ -86,6 +89,7 @@ export const QUIZ_LANGUAGES: Record<QuizLanguageId, QuizLanguageMeta> = {
     id: 'ko',
     flag: '🇰🇷',
     nameVi: 'Cổ Ngữ Hàn',
+    tabVi: 'Hàn',
     academyVi: 'Cổ Ngữ Bạch Sơn (Tiếng Hàn)',
     nativeName: '한국어',
     ttsLang: 'ko-KR',
@@ -100,6 +104,7 @@ export const QUIZ_LANGUAGES: Record<QuizLanguageId, QuizLanguageMeta> = {
     id: 'zh',
     flag: '🇨🇳',
     nameVi: 'Phù Chú Hoa',
+    tabVi: 'Trung',
     academyVi: 'Phù Chú Phương Đông (Tiếng Trung)',
     nativeName: '中文',
     ttsLang: 'zh-CN',
@@ -114,6 +119,7 @@ export const QUIZ_LANGUAGES: Record<QuizLanguageId, QuizLanguageMeta> = {
     id: 'es',
     flag: '🇪🇸',
     nameVi: 'Mật Ngữ TBN',
+    tabVi: 'Tây Ban Nha',
     academyVi: 'Mật Ngữ Hỏa Long (Tây Ban Nha)',
     nativeName: 'Español',
     ttsLang: 'es-ES',
@@ -128,6 +134,7 @@ export const QUIZ_LANGUAGES: Record<QuizLanguageId, QuizLanguageMeta> = {
     id: 'ja',
     flag: '🇯🇵',
     nameVi: 'Bí Thuật Nhật',
+    tabVi: 'Nhật',
     academyVi: 'Bí Thuật Mahoutokoro (Tiếng Nhật)',
     nativeName: '日本語',
     ttsLang: 'ja-JP',

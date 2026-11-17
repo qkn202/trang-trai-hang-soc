@@ -322,9 +322,9 @@ export const SPRITE_KEYS = [
 ] as const;
 
 export const CATALOG_PROP_SPRITE_PATHS: Readonly<Record<string, string>> = {
-  catalog_marble_bench: '/paintings/catalog/marble_bench.png',
-  catalog_floating_candles_post: '/paintings/catalog/floating_candles_post.png',
-  catalog_patronus_ward_lantern: '/paintings/catalog/patronus_ward_lantern.png',
+  catalog_marble_bench: '/game/trang-trai-hang-soc/paintings/catalog/marble_bench.webp',
+  catalog_floating_candles_post: '/game/trang-trai-hang-soc/paintings/catalog/floating_candles_post.webp',
+  catalog_patronus_ward_lantern: '/game/trang-trai-hang-soc/paintings/catalog/patronus_ward_lantern.webp',
 };
 
 export function resolveCatalogPropSpriteKey(
@@ -515,7 +515,7 @@ export class SpriteRegistry {
       });
 
     const loadJobs: Array<Promise<void>> = [
-      ...SPRITE_KEYS.map((key) => loadSingleWithRetry(key, `/sprites/${key}.png`)),
+      ...SPRITE_KEYS.map((key) => loadSingleWithRetry(key, `/game/trang-trai-hang-soc/sprites/${key}.webp`)),
       ...Object.entries(CATALOG_PROP_SPRITE_PATHS).map(([key, url]) =>
         loadSingleWithRetry(key, url)
       ),
