@@ -356,7 +356,117 @@ function refreshHouseCup(hud: GameHUD) {
   return fetchHouseCup().then((cup) => {
     const dlg = hud.root.querySelector('#albumDialog') as HTMLDialogElement | null;
     if (cup !== before && dlg?.open && hud.activeAlbumTab === 'cup') questsUiRenderAlbumDialog(hud);
+    const introDlg = hud.root.querySelector('#houseCupIntroDialog') as HTMLDialogElement | null;
+    if (cup !== before && introDlg?.open) questsUiRenderHouseCupIntroDialog(hud);
     return cup;
+  });
+}
+
+function buildHouseCupStandingsHtml(playerHouse: HouseName, cup: ReturnType<typeof houseCup>): {
+  listHtml: string;
+  noHouse: boolean;
+  perTier: number;
+  bank: number;
+} {
+  const houses = (['Gryffindor', 'Slytherin', 'Ravenclaw', 'Hufflepuff'] as HouseName[])
+    .map((house) => ({ house, pts: houseWeekPoints(house) }))
+    .sort((x, y) => y.pts - x.pts);
+  const top = Math.max(1, houses[0].pts);
+  const noHouse = cup?.house === null;
+  const pts = (v: number) => `${v.toLocaleString('vi-VN')} đ`;
+  const listHtml = houses
+    .map((h) => {
+      const mine = !noHouse && h.house === playerHouse;
+      const name = `${h.house}${mine ? '<span class="hs-cup-you">Nhà bạn</span>' : ''}`;
+      const crest = `<img class="hs-cup-crest" src="/game/trang-trai-hang-soc/sprites/crest-${h.house.toLowerCase()}.webp" alt="" width="32" height="32">`;
+      const pct = Math.round((h.pts / top) * 100);
+      return `
+        <li class="hs-cup-row" data-house="${h.house}" data-mine="${mine}">
+          ${crest}
+          <span class="hs-cup-name">${name}</span>
+          <span class="hs-cup-pts">${cup ? pts(h.pts) : '…'}</span>
+          <span class="hs-cup-bar"><i style="width:${pct}%"></i></span>
+        </li>`;
+    })
+    .join('');
+  const perTier = cup?.perTier ?? 300;
+  const bank = Math.min(perTier, cup?.memberBank ?? 0);
+  return { listHtml, noHouse, perTier, bank };
+}
+
+/** Mở pop-up thông tin Cúp 4 Nhà Hogwarts (khi mới vào game hoặc xem thể lệ). */
+export function questsUiOpenHouseCupIntroDialog(hud: GameHUD): void {
+  hud.hasShownHouseCupIntro = true;
+  hud.closeHudPopovers();
+  questsUiRenderHouseCupIntroDialog(hud);
+  const dlg = hud.root.querySelector('#houseCupIntroDialog') as HTMLDialogElement | null;
+  if (dlg && !dlg.open) {
+    dlg.showModal();
+  }
+}
+
+/** Dựng nội dung pop-up thông tin Cúp 4 Nhà Hogwarts từ dữ liệu máy chủ HPVN. */
+export function questsUiRenderHouseCupIntroDialog(hud: GameHUD): void {
+  const box = hud.root.querySelector('#houseCupIntroDialogContent') as HTMLElement | null;
+  if (!box) return;
+  const playerHouse = hud.sim.getPlayerHouse();
+  const cup = houseCup();
+  refreshHouseCup(hud).catch(() => {});
+
+  const { listHtml, noHouse, perTier, bank } = buildHouseCupStandingsHtml(playerHouse, cup);
+  const tierNum = cup?.memberTier ?? 1;
+  const dailyCap = cup?.memberDailyCap ?? 0;
+  const todayPts = cup?.memberTodayPoints ?? 0;
+  const crestSrc = noHouse
+    ? '/game/trang-trai-hang-soc/sprites/ui_trophy_cup.webp'
+    : `/game/trang-trai-hang-soc/sprites/crest-${playerHouse.toLowerCase()}.webp`;
+  const subText = noHouse
+    ? 'Đội Nón Phân Loại trên HPVN để bắt đầu góp điểm và nhận quà Cúp Đợt.'
+    : cup
+      ? `Hôm nay: ${todayPts.toLocaleString('vi-VN')}${dailyCap > 0 ? `/${dailyCap.toLocaleString('vi-VN')}` : ''} đ · Cúp Đợt ${tierNum}: ${bank.toLocaleString('vi-VN')}/${perTier.toLocaleString('vi-VN')} đ`
+      : 'Đang tải bảng điểm tuần từ máy chủ HPVN…';
+
+  box.innerHTML = `
+    <div class="hs-cup hs-cup-intro">
+      <div class="hs-cup-intro-hero" data-house="${noHouse ? '' : escapeHtml(playerHouse)}">
+        <img class="hs-cup-intro-crest" src="${crestSrc}" alt="" width="40" height="40" />
+        <div class="hs-cup-intro-copy">
+          <span class="hs-cup-kicker">${cup?.weekKey ? `Mùa giải Tuần ${escapeHtml(cup.weekKey)}` : 'Giải đấu 4 Nhà hàng tuần'}</span>
+          <strong class="hs-cup-intro-title">${noHouse ? 'Chưa phân Nhà trên HPVN' : `Nhà ${escapeHtml(playerHouse)}`}</strong>
+          <span class="hs-cup-intro-sub">${subText}</span>
+        </div>
+      </div>
+
+      <ol class="hs-cup-list hs-cup-intro-standings">${listHtml}</ol>
+
+      <div class="quest-card-mini hs-cup-intro-rules">
+        <h3 class="hs-section-title">Thể lệ &amp; Phần thưởng Cúp Nhà</h3>
+        <ul class="hs-cup-intro-points">
+          <li><strong>Ghi điểm cho Nhà:</strong> Thắng màn mới ở 4 môn tính điểm (<strong>Bùa Gặt</strong>, <strong>Số Học</strong>, <strong>Sinh Vật</strong>, <strong>Tranh Ghép</strong>) góp từ <strong>20 đ/màn</strong> vào quỹ điểm tuần của Nhà${dailyCap > 0 ? ` (tối đa ${dailyCap.toLocaleString('vi-VN')} đ/ngày)` : ''}.</li>
+          <li><strong>Thưởng Cúp Đợt tự động:</strong> Mỗi khi tích đủ <strong>${perTier.toLocaleString('vi-VN')} đ</strong>, máy chủ HPVN trao ngay quà <strong>Sickle</strong>, <strong>XP</strong> và <strong>Cát Thời Gian</strong> thẳng vào trang trại.</li>
+          <li><strong>Đua Cúp hàng tuần:</strong> Điểm của toàn bộ học sinh cùng Nhà trên HPVN được cộng dồn suốt tuần lễ. Xem lại bất cứ lúc nào tại <strong>Hồ Sơ &amp; BXH → Cúp Nhà</strong>.</li>
+        </ul>
+      </div>
+
+      <div class="hs-dlg-actions">
+        <button id="btnCupIntroPlay" type="button" class="brass-btn">Thi đấu ngay</button>
+        <button id="btnCupIntroClose" type="button" class="brass-btn gold-cta">Vào trang trại</button>
+      </div>
+    </div>
+  `;
+
+  box.querySelector('#btnCupIntroClose')?.addEventListener('click', () => {
+    (hud.root.querySelector('#houseCupIntroDialog') as HTMLDialogElement | null)?.close();
+  });
+
+  box.querySelector('#btnCupIntroPlay')?.addEventListener('click', () => {
+    (hud.root.querySelector('#houseCupIntroDialog') as HTMLDialogElement | null)?.close();
+    const last = hud.sim.getLastPlayedMinigame();
+    if (last === 'sudoku' || last === 'blocks' || last === 'jigsaw') {
+      hud.openPuzzleArcadeDialog(last);
+    } else {
+      hud.openMatch3Dialog();
+    }
   });
 }
 
@@ -393,11 +503,7 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
       // HPVN: server numbers only (week totals per HPVN house, the member's day and milestone bank); nothing local.
       const cup = houseCup();
       refreshHouseCup(hud).catch(() => {});
-      const houses = (['Gryffindor', 'Slytherin', 'Ravenclaw', 'Hufflepuff'] as HouseName[])
-        .map((house) => ({ house, pts: houseWeekPoints(house) }))
-        .sort((x, y) => y.pts - x.pts);
-      const top = Math.max(1, houses[0].pts);
-      const noHouse = cup?.house === null;
+      const { listHtml, noHouse, perTier, bank } = buildHouseCupStandingsHtml(playerHouse, cup);
       const pts = (v: number) => `${v.toLocaleString('vi-VN')} đ`;
       const row = (lead: string, name: string, value: string, pct: number | null, house = '', mine = false) => `
         <li class="hs-cup-row"${house ? ` data-house="${house}" data-mine="${mine}"` : ''}>
@@ -406,16 +512,6 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
           <span class="hs-cup-pts">${value}</span>
           ${pct === null ? '' : `<span class="hs-cup-bar"><i style="width:${pct}%"></i></span>`}
         </li>`;
-      const listHtml = houses
-        .map((h) => {
-          const mine = !noHouse && h.house === playerHouse;
-          const name = `${h.house}${mine ? '<span class="hs-cup-you">Nhà bạn</span>' : ''}`;
-          const crest = `<img class="hs-cup-crest" src="/game/trang-trai-hang-soc/sprites/crest-${h.house.toLowerCase()}.webp" alt="" width="32" height="32">`;
-          return row(crest, name, cup ? pts(h.pts) : '…', Math.round((h.pts / top) * 100), h.house, mine);
-        })
-        .join('');
-      const perTier = cup?.perTier ?? 300;
-      const bank = Math.min(perTier, cup?.memberBank ?? 0);
       const meHtml = cup
         ? noHouse
           ? row('', 'Chưa phân Nhà trên HPVN', '0 đ', null)
@@ -425,7 +521,10 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
 
       bodyHtml = `
         <div class="hs-cup">
-          <div class="hs-cup-kicker"><span>${cup?.weekKey ? `Tuần ${cup.weekKey}` : 'Đang tải…'}</span></div>
+          <div class="hs-cup-kicker hs-cup-kicker-row">
+            <span>${cup?.weekKey ? `Tuần ${cup.weekKey}` : 'Đang tải…'}</span>
+            <button id="btnOpenCupIntroFromTab" type="button" class="brass-btn hs-cup-info-btn">Thể lệ</button>
+          </div>
           <ol class="hs-cup-list">${listHtml}</ol>
           ${meHtml ? `<ul class="hs-cup-me">${meHtml}</ul>` : ''}
           <p class="hs-cup-note">Thắng màn mới Bùa Gặt, Số Học, Sinh Vật, Tranh Ghép: từ 20 đ/màn.</p>
@@ -646,6 +745,11 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
         }, () => {});
       }
     }
+
+    box.querySelector('#btnOpenCupIntroFromTab')?.addEventListener('click', () => {
+      (hud.root.querySelector('#albumDialog') as HTMLDialogElement | null)?.close();
+      questsUiOpenHouseCupIntroDialog(hud);
+    });
 
     box.querySelectorAll<HTMLButtonElement>('[data-atab]').forEach((btn) => {
       btn.addEventListener('click', () => {

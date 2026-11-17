@@ -201,9 +201,11 @@ import {
 
 import {
   questsUiOpenHarvestFeastDialog,
+  questsUiOpenHouseCupIntroDialog,
   questsUiRefreshHarvestFeastBadges,
   questsUiShowRibbonUnveilBanner,
   questsUiRenderHarvestFeastDialog,
+  questsUiRenderHouseCupIntroDialog,
   questsUiRenderFinanceDialog,
   questsUiRenderAlbumDialog,
   questsUiRenderQuestDialog,
@@ -292,6 +294,7 @@ export class GameHUD {
   public activeWorkshopTab: 'barn' | 'brew' | 'cargo' | 'synergy' = 'barn';
   public activeQuestTab: 'orders' | 'quests' = 'orders';
   public activeAlbumTab: 'profile' | 'cup' | 'leaderboard' = 'cup';
+  public hasShownHouseCupIntro = false;
   public activeProfileSubTab: 'login7' | 'achievements' | 'friendship' = 'login7';
   public activeAchievementFilterCat: AchievementCategory | 'all' = 'all';
   public selectedOwlOrderId: string | null = null;
@@ -970,6 +973,10 @@ export class GameHUD {
   public renderInspector(): void { return inspectorRenderInspector(this); }
 
   public renderFinanceDialog(): void { return questsUiRenderFinanceDialog(this); }
+
+  public openHouseCupIntroDialog(): void { return questsUiOpenHouseCupIntroDialog(this); }
+
+  public renderHouseCupIntroDialog(): void { return questsUiRenderHouseCupIntroDialog(this); }
 
   public renderAlbumDialog(): void { return questsUiRenderAlbumDialog(this); }
 

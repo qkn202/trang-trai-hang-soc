@@ -411,6 +411,8 @@ async function bootstrap(): Promise<void> {
     hud.openNeighborDialog();
   } else if (dlgParam === 'feast') {
     hud.openHarvestFeastDialog();
+  } else if (dlgParam === 'cupinfo') {
+    hud.openHouseCupIntroDialog();
   } else if (dlgParam === 'leaderboard') {
     const rawGame = params.get('lbgame');
     const validGame: LeaderboardGameId | undefined =
@@ -667,6 +669,30 @@ async function bootstrap(): Promise<void> {
   const offlineReport = sim.processOfflineProgress();
   if (offlineReport) {
     hud.showOfflineModal(offlineReport);
+  }
+
+  if (
+    !dlgParam &&
+    !tourOrVisitParam &&
+    !sim.isVisitingNeighbor &&
+    !sim.isHeadmasterPreview &&
+    !sim.state.activeMinigameResume &&
+    !hud.hasShownHouseCupIntro
+  ) {
+    const openStartupDlg = app.querySelector('dialog[open]') as HTMLDialogElement | null;
+    if (!openStartupDlg) {
+      hud.openHouseCupIntroDialog();
+    } else {
+      openStartupDlg.addEventListener(
+        'close',
+        () => {
+          if (!hud.hasShownHouseCupIntro && !sim.isVisitingNeighbor && !app.querySelector('dialog[open]')) {
+            hud.openHouseCupIntroDialog();
+          }
+        },
+        { once: true }
+      );
+    }
   }
 
   const notifyHpvnVisitHelpIfRealPlayer = (buildingUid: string): void => {

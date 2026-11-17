@@ -716,6 +716,17 @@ export function shellMountDOM(hud: GameHUD): void {
         </div>
       </dialog>
 
+      <!-- DIALOG 14: HOUSE CUP STARTUP INFO POPUP -->
+      <dialog id="houseCupIntroDialog" closedby="any" aria-labelledby="houseCupIntroDialogTitle">
+        <div class="parchment-panel modal-inner">
+          <div class="modal-header">
+            <h2 id="houseCupIntroDialogTitle" class="modal-title">Cúp 4 Nhà Hogwarts</h2>
+            <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng">✕</button></form>
+          </div>
+          <div id="houseCupIntroDialogContent"></div>
+        </div>
+      </dialog>
+
     `;
     hud.root.appendChild(hudWrap);
     hud.minimapCanvas = hud.root.querySelector('#minimapCanvas') as HTMLCanvasElement;

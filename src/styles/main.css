@@ -17359,33 +17359,33 @@ body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(96px + ma
    bottom inset (safe area: env() reads 0 inside the site's frame, so the shell sends it as --hpvn-safe-bottom; or the site
    dock, gone on phones). All at ID weight:
    upstream sizes several dialogs from their ID. */
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) {
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) {
   --hs-dlg-bottom: max(8px, env(safe-area-inset-bottom, 0px), var(--hpvn-safe-bottom, 0px), var(--hpvn-dock, 0px));
   --hs-dlg-h: min(86dvh, calc(100dvh - var(--hs-dlg-bottom) - 8px));
   box-sizing: border-box; inline-size: min(880px, calc(100vw - 32px)); max-inline-size: none; max-block-size: var(--hs-dlg-h);
   inset: 0 0 var(--hpvn-dock, 0px); margin: auto; padding: 0; border: 0; background: transparent; overflow: visible;
 }
-:is(#questDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog) { inline-size: min(560px, calc(100vw - 32px)); }
+:is(#questDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #houseCupIntroDialog) { inline-size: min(560px, calc(100vw - 32px)); }
 #confirmDialog { inline-size: min(360px, calc(100vw - 32px)); }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog)::backdrop { background: rgba(58, 36, 23, 0.6); -webkit-backdrop-filter: none; backdrop-filter: none; }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) > .modal-inner {
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog)::backdrop { background: rgba(58, 36, 23, 0.6); -webkit-backdrop-filter: none; backdrop-filter: none; }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) > .modal-inner {
   box-sizing: border-box; display: flex; flex-direction: column; inline-size: 100%; max-inline-size: none; max-block-size: var(--hs-dlg-h);
   margin: 0; padding: var(--hs-space-4); overflow: hidden; border: var(--hs-line-shell) solid var(--hs-brass); border-radius: var(--hs-radius-l);
   background: var(--hs-paper); color: var(--hs-ink); box-shadow: var(--hs-shadow-float);
 }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) > .modal-inner > :not(.modal-header) { flex: 0 1 auto; min-block-size: 0; }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) > .modal-inner > [id$='DialogContent'] { overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) > .modal-inner > :not(.modal-header) { flex: 0 1 auto; min-block-size: 0; }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) > .modal-inner > [id$='DialogContent'] { overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
 /* header: one line — the title (18px/800, ellipsis, text only), an extra (Floo's BXH), the 44px ✕ on the right */
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) .modal-header { flex: none; display: flex; align-items: center; gap: var(--hs-space-2); min-block-size: 44px; margin: 0 0 var(--hs-space-3); padding: 0 0 var(--hs-space-3); border-bottom: var(--hs-line) solid rgba(122, 86, 56, 0.24); }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) .modal-title { flex: 1 1 auto; min-inline-size: 0; margin: 0; overflow: hidden; color: var(--hs-ink); font-size: var(--hs-text-18); font-weight: var(--hs-weight-title); line-height: var(--hs-leading-label); white-space: nowrap; text-overflow: ellipsis; text-shadow: none; }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) .modal-title :is(img, .hs-ico) { display: none; }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) .modal-header > :not(.modal-title) { flex: none; margin: 0; }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) .modal-header form .brass-btn { position: relative; inline-size: 44px; min-inline-size: 44px; block-size: 44px; min-block-size: 44px; padding: 0; border: var(--hs-line) solid var(--hs-brass); border-radius: var(--hs-radius-m); background: transparent; color: var(--hs-ink); font-size: 0; box-shadow: none; transform: none; }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) .modal-header form .brass-btn.gold-cta { border-color: var(--hs-gold-deep); background: var(--hs-gold); }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) .modal-header form .brass-btn:focus:not(:focus-visible) { outline: none; }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) .modal-header form .brass-btn[aria-label='Đóng']::before, :is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) .modal-header form .brass-btn[aria-label='Đóng']::after { content: ''; position: absolute; inset: 50% auto auto 50%; inline-size: 18px; block-size: 2px; border-radius: 1px; background: currentColor; transform: translate(-50%, -50%) rotate(45deg); }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) .modal-header form .brass-btn[aria-label='Đóng']::after { transform: translate(-50%, -50%) rotate(-45deg); }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) .modal-header form .brass-btn:not([aria-label='Đóng']) { font-size: var(--hs-text-16); }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) .modal-header { flex: none; display: flex; align-items: center; gap: var(--hs-space-2); min-block-size: 44px; margin: 0 0 var(--hs-space-3); padding: 0 0 var(--hs-space-3); border-bottom: var(--hs-line) solid rgba(122, 86, 56, 0.24); }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) .modal-title { flex: 1 1 auto; min-inline-size: 0; margin: 0; overflow: hidden; color: var(--hs-ink); font-size: var(--hs-text-18); font-weight: var(--hs-weight-title); line-height: var(--hs-leading-label); white-space: nowrap; text-overflow: ellipsis; text-shadow: none; }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) .modal-title :is(img, .hs-ico) { display: none; }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) .modal-header > :not(.modal-title) { flex: none; margin: 0; }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) .modal-header form .brass-btn { position: relative; inline-size: 44px; min-inline-size: 44px; block-size: 44px; min-block-size: 44px; padding: 0; border: var(--hs-line) solid var(--hs-brass); border-radius: var(--hs-radius-m); background: transparent; color: var(--hs-ink); font-size: 0; box-shadow: none; transform: none; }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) .modal-header form .brass-btn.gold-cta { border-color: var(--hs-gold-deep); background: var(--hs-gold); }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) .modal-header form .brass-btn:focus:not(:focus-visible) { outline: none; }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) .modal-header form .brass-btn[aria-label='Đóng']::before, :is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) .modal-header form .brass-btn[aria-label='Đóng']::after { content: ''; position: absolute; inset: 50% auto auto 50%; inline-size: 18px; block-size: 2px; border-radius: 1px; background: currentColor; transform: translate(-50%, -50%) rotate(45deg); }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) .modal-header form .brass-btn[aria-label='Đóng']::after { transform: translate(-50%, -50%) rotate(-45deg); }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) .modal-header form .brass-btn:not([aria-label='Đóng']) { font-size: var(--hs-text-16); }
 /* confirm: text, then the two buttons on one 44px row */
 #confirmDialog #confirmDialogText { overflow-y: auto; overscroll-behavior: contain; padding: 0 0 var(--hs-space-4); font-size: var(--hs-text-14); font-weight: var(--hs-weight-body); line-height: var(--hs-leading-body); }
 #confirmDialog .modal-inner > div:last-child { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--hs-space-2); }
@@ -17393,12 +17393,12 @@ body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(96px + ma
 #confirmDialog > .modal-inner > div:last-child:not(.modal-header) { flex: none; }
 /* no frame inside the frame: sections and the boxes round them are bare (spacing sets them apart); chips, buttons, the
    postcard, the podium and the house bars keep theirs. List items: «list items» block at the end */
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) :is(.nb-panel-card, .suitcase-summary-bar, .nb-summary-ribbon, .barn-header-card, .barn-talisman-forge, .feast-hero-banner, .lb-cup-banner, .house-cup-section, .lb-table-wrapper, .floo-identity-card, .floo-hearth-hero, .owl-detail-sheet, .owl-reward-box, .owl-pin-notes-col) { padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) :is(.nb-log-row, .owl-req-row, .switch-row) { padding-inline: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) .suitcase-summary-bar { justify-content: space-between; color: var(--hs-ink); font-size: var(--hs-text-14); font-weight: var(--hs-weight-label); }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) :is(.lb-cell-contender, .lb-cell-league, .lb-cell-primary, .lb-cell-rating, .lb-cell-detail) { border: 0; background: none; box-shadow: none; }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) > .modal-inner > [id$='DialogContent'] { font-variant-numeric: tabular-nums; }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) > .modal-inner > [id$='DialogContent'] :is(.workshop-tabs, .hs-tabs, .lb-game-tabs) { position: sticky; top: 0; z-index: 2; }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) :is(.nb-panel-card, .suitcase-summary-bar, .nb-summary-ribbon, .barn-header-card, .barn-talisman-forge, .feast-hero-banner, .lb-cup-banner, .house-cup-section, .lb-table-wrapper, .floo-identity-card, .floo-hearth-hero, .owl-detail-sheet, .owl-reward-box, .owl-pin-notes-col) { padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) :is(.nb-log-row, .owl-req-row, .switch-row) { padding-inline: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) .suitcase-summary-bar { justify-content: space-between; color: var(--hs-ink); font-size: var(--hs-text-14); font-weight: var(--hs-weight-label); }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) :is(.lb-cell-contender, .lb-cell-league, .lb-cell-primary, .lb-cell-rating, .lb-cell-detail) { border: 0; background: none; box-shadow: none; }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) > .modal-inner > [id$='DialogContent'] { font-variant-numeric: tabular-nums; }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) > .modal-inner > [id$='DialogContent'] :is(.workshop-tabs, .hs-tabs, .lb-game-tabs) { position: sticky; top: 0; z-index: 2; }
 /* one scroller per dialog: lists that scrolled inside their own box (Lễ Hội tiers, BXH table) now run in the content */
 #harvestFeastDialog .feast-tier-list { max-block-size: none; overflow: visible; padding-inline-end: 0; }
 #leaderboardDialog .lb-table-wrapper { max-block-size: none; overflow: visible; }
@@ -17419,14 +17419,14 @@ body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(96px + ma
 
 /* phones: on the bottom edge, 8px from the sides */
 @media (max-width: 599px) {
-  :is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) { --hs-dlg-h: calc(100dvh - var(--hs-dlg-bottom) - 16px); inline-size: calc(100vw - 16px); inset: 0 0 var(--hs-dlg-bottom); margin: auto auto 0; }
-  :is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) > .modal-inner { padding: var(--hs-space-3); }
+  :is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) { --hs-dlg-h: calc(100dvh - var(--hs-dlg-bottom) - 16px); inline-size: calc(100vw - 16px); inset: 0 0 var(--hs-dlg-bottom); margin: auto auto 0; }
+  :is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) > .modal-inner { padding: var(--hs-space-3); }
   #confirmDialog { inline-size: min(320px, calc(100vw - 16px)); margin: auto; }
 }
 /* phone landscape: one width, the whole height */
 @media (max-height: 450px) and (orientation: landscape) {
-  :is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) { --hs-dlg-h: calc(100dvh - var(--hs-dlg-bottom) - 8px); inline-size: min(720px, calc(100vw - 32px)); }
-  :is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) > .modal-inner { padding: var(--hs-space-3); }
+  :is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) { --hs-dlg-h: calc(100dvh - var(--hs-dlg-bottom) - 8px); inline-size: min(720px, calc(100vw - 32px)); }
+  :is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) > .modal-inner { padding: var(--hs-space-3); }
   #confirmDialog { inline-size: 320px; }
 }
 /* seed / pasture tray: its buttons share one 44px row (the gold one was 45, the others 40) */
@@ -17618,17 +17618,17 @@ body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(96px + ma
    a zone, a milestone, a model garden, a feast tier, a barn or crate card, an album slot) is one light card: cream fill, a
    1px soft brass rim, 12px corners, 12px inside, 8px between; nothing inside it is boxed again (its chips stay chips).
    One-line rows (log, owl request, settings switch) stay bare with a hairline between them; BXH keeps its zebra. */
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) :is(.quest-card-mini, .barn-stock-card, .feast-tier-card, .aaa-slot-card, .aaa-ach-card, .crate-card, .honor-garden-card) { box-sizing: border-box; margin: 0 0 var(--hs-space-2); padding: var(--hs-space-3); border: var(--hs-line) solid rgba(176, 125, 67, 0.45); border-radius: var(--hs-radius-m); background: var(--hs-cream); box-shadow: none; }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) :is(.honor-gardens-grid, .feast-tier-list, .grid-2col, .crate-grid, .barn-stock-grid, .hs-card-list) { gap: var(--hs-space-2); }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) :is(.honor-gardens-grid, .feast-tier-list, .grid-2col, .crate-grid, .barn-stock-grid, .hs-card-list) > :is(.quest-card-mini, .barn-stock-card, .feast-tier-card, .aaa-slot-card, .aaa-ach-card, .crate-card, .honor-garden-card) { margin: 0; }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) :is(.quest-card-mini, .barn-stock-card, .feast-tier-card, .aaa-slot-card, .aaa-ach-card, .crate-card, .honor-garden-card) { box-sizing: border-box; margin: 0 0 var(--hs-space-2); padding: var(--hs-space-3); border: var(--hs-line) solid rgba(176, 125, 67, 0.45); border-radius: var(--hs-radius-m); background: var(--hs-cream); box-shadow: none; }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) :is(.honor-gardens-grid, .feast-tier-list, .grid-2col, .crate-grid, .barn-stock-grid, .hs-card-list) { gap: var(--hs-space-2); }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) :is(.honor-gardens-grid, .feast-tier-list, .grid-2col, .crate-grid, .barn-stock-grid, .hs-card-list) > :is(.quest-card-mini, .barn-stock-card, .feast-tier-card, .aaa-slot-card, .aaa-ach-card, .crate-card, .honor-garden-card) { margin: 0; }
 .hs-card-list { display: flex; flex-direction: column; }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) :is(.aaa-slot-card, .aaa-ach-card) { margin: 0; } /* their grids (.aaa-codex-scroll, .aaa-slot-grid) space them */
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) :is(.aaa-slot-card, .aaa-ach-card) { margin: 0; } /* their grids (.aaa-codex-scroll, .aaa-slot-grid) space them */
 /* a section box that holds cards (Album «Bạn bè» / «Điểm danh», Cài Đặt saves) stays bare: one level of card */
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) :is(.quest-card-mini, .barn-stock-card, .feast-tier-card, .aaa-slot-card, .aaa-ach-card, .crate-card, .honor-garden-card):has(:is(.quest-card-mini, .barn-stock-card, .feast-tier-card, .aaa-slot-card, .aaa-ach-card, .crate-card, .honor-garden-card)) { padding: 0; border: 0; border-radius: 0; background: none; }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) :is(.nb-log-row, .owl-req-row, .switch-row) + :is(.nb-log-row, .owl-req-row, .switch-row) { border-block-start: var(--hs-line) solid rgba(122, 86, 56, 0.16); }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) .honor-garden-card.visiting { border-color: var(--hs-ok); }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) :is(.quest-card-mini, .barn-stock-card, .feast-tier-card, .aaa-slot-card, .aaa-ach-card, .crate-card, .honor-garden-card):has(:is(.quest-card-mini, .barn-stock-card, .feast-tier-card, .aaa-slot-card, .aaa-ach-card, .crate-card, .honor-garden-card)) { padding: 0; border: 0; border-radius: 0; background: none; }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) :is(.nb-log-row, .owl-req-row, .switch-row) + :is(.nb-log-row, .owl-req-row, .switch-row) { border-block-start: var(--hs-line) solid rgba(122, 86, 56, 0.16); }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) .honor-garden-card.visiting { border-color: var(--hs-ok); }
 /* a model garden whose emoji has no sprite shows its owner's initial (hudSocialAndTutorial.ts avatarGlyph) */
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) .honor-garden-emoji { color: var(--hs-ink); font-weight: var(--hs-weight-label); }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) .honor-garden-emoji { color: var(--hs-ink); font-weight: var(--hs-weight-label); }
 /* ===== /HPVN UI refresh — list items ===== */
 
 /* ===== HPVN UI refresh — tabs never move (owner 15/11 «đổi tab thì nó bị thụt menu… cảm giác giật») =====
@@ -17638,10 +17638,10 @@ body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(96px + ma
    classic bar coming and going would move the row by its width). The sticky row's paper reaches 12px round it (its rounded
    corners: 16px above, 8px at its sides, 4px under, less than the 8px from the row to the first item's own marks, e.g. the red
    pin of Đơn Cú's first card), so nothing scrolled shows round it; the content starts 12px below it. */
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog):has(> .modal-inner > [id$='DialogContent'] :is(.workshop-tabs, .hs-tabs, .lb-game-tabs)) { block-size: var(--hs-dlg-h); }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) > .modal-inner:has(> [id$='DialogContent'] :is(.workshop-tabs, .hs-tabs, .lb-game-tabs)) { block-size: 100%; }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) > .modal-inner > [id$='DialogContent']:has(:is(.workshop-tabs, .hs-tabs, .lb-game-tabs)) { flex: 1 1 auto; scrollbar-gutter: stable; }
-:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog) > .modal-inner > [id$='DialogContent'] :is(.workshop-tabs, .hs-tabs, .lb-game-tabs) { margin-block-end: var(--hs-space-3); box-shadow: 0 calc(-1 * var(--hs-space-2)) 0 var(--hs-space-2) var(--hs-paper), 0 0 0 var(--hs-space-1) var(--hs-paper); }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog):has(> .modal-inner > [id$='DialogContent'] :is(.workshop-tabs, .hs-tabs, .lb-game-tabs)) { block-size: var(--hs-dlg-h); }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) > .modal-inner:has(> [id$='DialogContent'] :is(.workshop-tabs, .hs-tabs, .lb-game-tabs)) { block-size: 100%; }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) > .modal-inner > [id$='DialogContent']:has(:is(.workshop-tabs, .hs-tabs, .lb-game-tabs)) { flex: 1 1 auto; scrollbar-gutter: stable; }
+:is(#questDialog, #roadmapDialog, #financeDialog, #albumDialog, #settingsDialog, #offlineDialog, #confirmDialog, #workshopDialog, #suitcaseDialog, #neighborDialog, #harvestFeastDialog, #houseCupIntroDialog) > .modal-inner > [id$='DialogContent'] :is(.workshop-tabs, .hs-tabs, .lb-game-tabs) { margin-block-end: var(--hs-space-3); box-shadow: 0 calc(-1 * var(--hs-space-2)) 0 var(--hs-space-2) var(--hs-paper), 0 0 0 var(--hs-space-1) var(--hs-paper); }
 /* ===== /HPVN UI refresh — tabs never move ===== */
 
 /* ===== HPVN UI refresh — BXH (owner 15/11 «làm lại UI full trang này») =====
@@ -19921,3 +19921,74 @@ body:has(#tutorialCoachCard:not(.docked-top):popover-open) .owl-toast-stack[popo
   margin-block-end: 10px;
 }
 /* ===== /HPVN UI refresh — đợt 8 ===== */
+
+/* 4. Pop-up thông tin Cúp 4 Nhà Hogwarts (#houseCupIntroDialog) */
+.hs-cup-kicker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--hs-space-2);
+}
+.hs-cup-info-btn {
+  min-block-size: 36px;
+  padding: 0 var(--hs-space-3);
+  font-size: var(--hs-text-12);
+  text-transform: none;
+  letter-spacing: 0;
+}
+#houseCupIntroDialogContent .hs-cup-intro {
+  gap: var(--hs-space-3);
+}
+.hs-cup-intro-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--hs-space-3);
+  padding: var(--hs-space-3);
+  border: var(--hs-line) solid rgba(176, 125, 67, 0.45);
+  border-radius: var(--hs-radius-m);
+  background: var(--hs-cream);
+}
+.hs-cup-intro-crest {
+  flex: none;
+  inline-size: 40px;
+  block-size: 40px;
+  object-fit: contain;
+}
+.hs-cup-intro-copy {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hs-cup-intro-title {
+  color: var(--hs-ink);
+  font-size: var(--hs-text-16);
+  font-weight: var(--hs-weight-title);
+  line-height: var(--hs-leading-label);
+}
+.hs-cup-intro-sub {
+  color: var(--hs-ink-soft);
+  font-size: var(--hs-text-12);
+  line-height: var(--hs-leading-body);
+}
+.hs-cup-intro-rules {
+  margin: 0;
+}
+.hs-cup-intro-rules .hs-section-title {
+  margin: 0 0 var(--hs-space-2);
+  font-size: var(--hs-text-14);
+}
+.hs-cup-intro-points {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hs-space-2);
+  margin: 0;
+  padding-inline-start: var(--hs-space-4);
+  color: var(--hs-ink);
+  font-size: var(--hs-text-13);
+  line-height: var(--hs-leading-body);
+}
+#houseCupIntroDialogContent .hs-dlg-actions > .brass-btn {
+  font-size: var(--hs-text-14);
+}
