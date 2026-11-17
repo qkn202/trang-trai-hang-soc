@@ -248,13 +248,24 @@ export class GameHUD {
   public gameCanvas: HTMLCanvasElement;
   public activeCategory: BuildingCategory | null = null;
   public christmasTabActive = false;
-  public activeChristmasFilter: 'all' | 'recent' | YuleCollectionId = 'all';
+  public activeChristmasFilter: 'all' | 'recent' | 'stashed' | YuleCollectionId = 'all';
   public selectedCatalogItem: CatalogItem | null = null;
   public rotation: 0 | 1 | 2 | 3 = 0;
-  public activeDecorFilter: 'all' | 'recent' | 'yule_all' | 'classic' | YuleCollectionId = 'all';
+  public activeDecorFilter:
+    | 'all'
+    | 'recent'
+    | 'stashed'
+    | 'nature'
+    | 'fences'
+    | 'lights'
+    | 'landmarks'
+    | 'yule_all'
+    | 'classic'
+    | YuleCollectionId = 'all';
   public recentDecorIds: string[] = [];
   public bulldozerActive = false;
   public moveModeActive = false;
+  public moveKeepActiveAfterDrop = false;
   public movingBuildingUid: string | null = null;
   public pincerActive = false;
   public pincerPicked: { kind: 'staff'; id: string; label: string } | null = null;
@@ -270,6 +281,7 @@ export class GameHUD {
   public pendingTouchTile: { gx: number; gy: number; label: string } | null = null;
   public onTouchConfirmPlace: (() => void) | null = null;
   public onTouchCancelPlace: (() => void) | null = null;
+  public onTouchStashActiveBuilding: (() => void) | null = null;
   public onSelectCatalogItem: ((item: CatalogItem) => void) | null = null;
   public onAutoPlaceSelected: (() => void) | null = null;
   public onBuildStateReset: (() => void) | null = null;

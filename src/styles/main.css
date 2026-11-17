@@ -1097,6 +1097,7 @@ progress {
 }
 
 .catalog-card {
+  position: relative;
   flex: 0 0 158px;
   font: inherit;
   color: inherit;
@@ -16431,6 +16432,31 @@ html[data-yule-theme='true'] #seedQuizDialog .sq-option-card {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
   margin-top: 8px;
+}
+
+.inspector-build-actions.has-stash {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.inspector-build-actions .hs-insp-stash-btn {
+  border-color: var(--teal-deep);
+  color: var(--teal-deep);
+}
+
+.catalog-card-placed-badge {
+  position: absolute;
+  top: 5px;
+  left: 6px;
+  z-index: 2;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-chip-top);
+  border: 1px solid var(--border-brass-soft);
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.3;
+  pointer-events: none;
 }
 
 .inspector-build-actions .brass-btn {

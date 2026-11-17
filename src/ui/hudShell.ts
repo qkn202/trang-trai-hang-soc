@@ -413,6 +413,7 @@ export function shellMountDOM(hud: GameHUD): void {
         <span id="lblTouchConfirm" style="font-size:13px;font-weight:700;color:#fde68a;"></span>
         <button id="btnTouchConfirmOk" type="button" class="brass-btn gold-cta" aria-label="Đặt">✓</button>
         <button id="btnTouchRotate" type="button" class="brass-btn" aria-label="Xoay">↻</button>
+        <button id="btnTouchStash" type="button" class="brass-btn hidden" aria-label="Cất vào kho" title="Cất vào Kho Trang Trí (0 Sickle)">Cất</button>
         <button id="btnTouchCancel" type="button" class="brass-btn" aria-label="Hủy">✕</button>
       </div>
 
@@ -1268,14 +1269,24 @@ export function shellBindEvents(hud: GameHUD): void {
       }
     });
 
-    // Touch Confirm Bar buttons (Move confirmation only)
+    // Touch Confirm Bar buttons (Build & Move confirmation)
     hud.root.querySelector('#btnTouchConfirmOk')?.addEventListener('click', () => {
       hud.onTouchConfirmPlace?.();
     });
     hud.root.querySelector('#btnTouchRotate')?.addEventListener('click', () => {
       hud.triggerRotateAction();
     });
+    hud.root.querySelector('#btnTouchStash')?.addEventListener('click', () => {
+      hud.onTouchStashActiveBuilding?.();
+    });
     hud.root.querySelector('#btnTouchCancel')?.addEventListener('click', () => {
+      if (hud.moveModeActive && hud.moveKeepActiveAfterDrop && hud.movingBuildingUid) {
+        hud.movingBuildingUid = null;
+        hud.pendingTouchTile = null;
+        hud.onTouchCancelPlace?.();
+        hud.refreshAll();
+        return;
+      }
       clearBuildToolModes(hud);
       hud.onTouchCancelPlace?.();
       hud.refreshAll();
@@ -1326,7 +1337,18 @@ export function shellBindEvents(hud: GameHUD): void {
           hud.activeCategory = cat;
           hud.buildSheetOpen = true;
           hud.mapToolsExpanded = true;
-          if (cat === 'decor' && hud.activeDecorFilter !== 'recent') {
+          if (
+            cat === 'decor' &&
+            ![
+              'all',
+              'recent',
+              'stashed',
+              'nature',
+              'fences',
+              'lights',
+              'landmarks',
+            ].includes(hud.activeDecorFilter)
+          ) {
             hud.activeDecorFilter = 'all';
           }
         }
@@ -1362,9 +1384,10 @@ export function shellBindEvents(hud: GameHUD): void {
       clearBuildToolModes(hud);
       if (nextMove) {
         hud.moveModeActive = true;
+        hud.moveKeepActiveAfterDrop = true;
         hud.inspectSelection = null;
         hud.collapseBuildDock();
-        hud.showToast('Chế độ Di Dời: Chạm công trình cần dời chỗ (Miễn phí 0 Sickle)!', '✋');
+        hud.showToast('Chế độ Di Dời liên hoàn: Chạm từng công trình để dời chỗ (0 Sickle)!', '✋');
       }
       hud.refreshAll();
     });
@@ -1380,7 +1403,7 @@ export function shellBindEvents(hud: GameHUD): void {
         hud.bulldozerActive = true;
         hud.inspectSelection = null;
         hud.collapseBuildDock();
-        hud.showToast('🧹 Chế độ Xóa: Chạm công trình hoặc đường cần dọn dẹp!', '🧹');
+        hud.showToast('🧹 Chế độ Xóa: Kéo lướt để xóa đường/rào hoặc chạm công trình cần dọn!', '🧹');
       }
       hud.refreshAll();
     });
@@ -1504,10 +1527,11 @@ export function shellBindEvents(hud: GameHUD): void {
         clearBuildToolModes(hud);
         if (nextMove) {
           hud.moveModeActive = true;
+          hud.moveKeepActiveAfterDrop = true;
           hud.inspectSelection = null;
           hud.closeSeedTray();
           hud.collapseBuildDock();
-          hud.showToast('✋ Chạm chọn công trình để di dời miễn phí!', '✋');
+          hud.showToast('✋ Chạm chọn từng công trình để di dời liên hoàn (0 Sickle)!', '✋');
         }
         hud.refreshAll();
       } else if (e.key === 'b' || e.key === 'B') {

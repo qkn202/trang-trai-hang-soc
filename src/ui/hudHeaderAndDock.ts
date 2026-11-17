@@ -125,6 +125,8 @@ import type { PuzzleArcadeModalController } from './puzzleArcadeModal';
 import { SeedQuizModalController } from './seedQuizModal';
 import {
   BUILD_HUD_CATEGORIES,
+  ClassicDecorSubFilter,
+  classifyClassicDecorSubFilter,
   HEATMAP_CYCLE,
   InspectSelection,
   clearBuildToolModes,
@@ -893,11 +895,35 @@ export function headerRefreshFloatingBanner(hud: GameHUD): void {
 export function headerRefreshTouchConfirmBar(hud: GameHUD): void {
     const bar = hud.root.querySelector('#touchConfirmBar') as HTMLElement | null;
     const lbl = hud.root.querySelector('#lblTouchConfirm') as HTMLElement | null;
+    const btnRot = hud.root.querySelector('#btnTouchRotate') as HTMLButtonElement | null;
+    const btnStash = hud.root.querySelector('#btnTouchStash') as HTMLButtonElement | null;
     if (!bar || !lbl) return;
     if (hud.photoModeActive || !hud.pendingTouchTile) {
       bar.classList.add('hidden');
       return;
     }
+    const activeItem =
+      hud.selectedCatalogItem ??
+      (hud.moveModeActive && hud.movingBuildingUid
+        ? getCatalogItem(
+            hud.sim.state.buildings.find((x) => x.uid === hud.movingBuildingUid)?.itemId ?? ''
+          ) ?? null
+        : null);
+    const canRotate = Boolean(
+      activeItem &&
+        activeItem.category !== 'path' &&
+        activeItem.category !== 'terrain' &&
+        !activeItem.isFarmlandPlot &&
+        !activeItem.connectableGroup &&
+        !activeItem.isZooFence
+    );
+    const canStashMove = Boolean(
+      hud.moveModeActive &&
+        hud.movingBuildingUid &&
+        hud.sim.canStashBuilding(hud.movingBuildingUid)
+    );
+    btnRot?.classList.toggle('hidden', !canRotate);
+    btnStash?.classList.toggle('hidden', !canStashMove);
     bar.classList.remove('hidden');
     lbl.textContent = `📍 ${hud.pendingTouchTile.label}`;
 }
@@ -1582,6 +1608,31 @@ export function headerRefreshDock(hud: GameHUD): void {
     const recentIds = hud.recentDecorIds ?? [];
     const recentOrder = new Map(recentIds.map((id, idx) => [id, idx]));
 
+    const placedCountByItemId = new Map<string, number>();
+    for (const b of hud.sim.state.buildings) {
+      placedCountByItemId.set(b.itemId, (placedCountByItemId.get(b.itemId) ?? 0) + 1);
+    }
+    let zooFenceCount = 0;
+    for (const ov of Object.values(hud.sim.state.tileOverrides)) {
+      if (ov?.zooFence) zooFenceCount++;
+    }
+    if (zooFenceCount > 0) {
+      placedCountByItemId.set('burrow_stone_rune_fence', zooFenceCount);
+    }
+
+    const stashedWinterCount = CATALOG.reduce((acc, it) => {
+      if (it.category === 'decor' && !it.isThemeParkLegacy && isWinterChristmasBuildItem(it)) {
+        return acc + worldGetStashedDecorCount(hud.sim, it);
+      }
+      return acc;
+    }, 0);
+    const stashedClassicCount = CATALOG.reduce((acc, it) => {
+      if (it.category === 'decor' && !it.isThemeParkLegacy && !isWinterChristmasBuildItem(it)) {
+        return acc + worldGetStashedDecorCount(hud.sim, it);
+      }
+      return acc;
+    }, 0);
+
     if (decorFilterBar) {
       if (hud.activeCategory === 'decor' && isChristmasActive) {
         decorFilterBar.classList.remove('hidden');
@@ -1591,13 +1642,17 @@ export function headerRefreshDock(hud: GameHUD): void {
         }).length;
         const activeCf = hud.activeChristmasFilter ?? 'all';
         const christmasChips: Array<{
-          id: 'all' | 'recent' | YuleCollectionId;
+          id: 'all' | 'recent' | 'stashed' | YuleCollectionId;
           label: string;
         }> = [
           { id: 'all', label: '✨ Tất cả (105)' },
           {
             id: 'recent',
             label: recentWinterCount > 0 ? `Gần đây (${recentWinterCount})` : 'Gần đây',
+          },
+          {
+            id: 'stashed',
+            label: stashedWinterCount > 0 ? `📦 Trong kho (${stashedWinterCount})` : '📦 Trong kho',
           },
           { id: 'yule_trees', label: '🌲 Cây tuyết' },
           { id: 'yule_flowers', label: '🌺 Hoa đông' },
@@ -1628,15 +1683,38 @@ export function headerRefreshDock(hud: GameHUD): void {
         decorFilterBar.classList.remove('hidden');
         const recentClassicCount = recentIds.filter((id) => {
           const it = getCatalogItem(id);
-          return Boolean(it && it.category === 'decor' && !isWinterChristmasBuildItem(it));
+          return Boolean(
+            it && it.category === 'decor' && it.id !== 'farmland_plot' && !isWinterChristmasBuildItem(it)
+          );
         }).length;
-        const activeDf = hud.activeDecorFilter === 'recent' ? 'recent' : 'all';
-        const classicChips: Array<{ id: 'all' | 'recent'; label: string }> = [
+        const validClassicFilters: ReadonlyArray<ClassicDecorSubFilter> = [
+          'all',
+          'recent',
+          'stashed',
+          'nature',
+          'fences',
+          'lights',
+          'landmarks',
+        ];
+        const activeDf: ClassicDecorSubFilter = validClassicFilters.includes(
+          hud.activeDecorFilter as ClassicDecorSubFilter
+        )
+          ? (hud.activeDecorFilter as ClassicDecorSubFilter)
+          : 'all';
+        const classicChips: Array<{ id: ClassicDecorSubFilter; label: string }> = [
           { id: 'all', label: '✨ Tất cả' },
           {
             id: 'recent',
             label: recentClassicCount > 0 ? `Gần đây (${recentClassicCount})` : 'Gần đây',
           },
+          {
+            id: 'stashed',
+            label: stashedClassicCount > 0 ? `📦 Trong kho (${stashedClassicCount})` : '📦 Trong kho',
+          },
+          { id: 'nature', label: '🌿 Cây & Hoa' },
+          { id: 'fences', label: '🚧 Rào & Cổng' },
+          { id: 'lights', label: '🕯️ Đèn & Ghế' },
+          { id: 'landmarks', label: '⛲ Tiểu cảnh' },
         ];
         decorFilterBar.innerHTML = classicChips
           .map((ch) => {
@@ -1661,13 +1739,27 @@ export function headerRefreshDock(hud: GameHUD): void {
       (isChristmasActive
         ? (hud.activeChristmasFilter ?? 'all') === 'recent'
         : hud.activeDecorFilter === 'recent');
+    const isStashedSubFilter =
+      hud.activeCategory === 'decor' &&
+      (isChristmasActive
+        ? (hud.activeChristmasFilter ?? 'all') === 'stashed'
+        : hud.activeDecorFilter === 'stashed');
+
+    const PROD_PLOT_PRIORITY: ReadonlyArray<string> = [
+      'farmland_plot',
+      'burrow_animal_pasture',
+      'burrow_flower_garden',
+      'burrow_chicken_coop',
+      'burrow_pumpkin_gnomes',
+      'burrow_apple_orchard',
+    ];
 
     const items = CATALOG.filter((c) => {
       if (c.category === 'terrain' || c.isThemeParkLegacy) {
         return false;
       }
       if (hud.activeCategory === 'creature') {
-        return c.category === 'creature' || c.id === 'farmland_plot';
+        return c.category === 'creature' || PROD_PLOT_PRIORITY.includes(c.id);
       }
       if (c.category !== hud.activeCategory) {
         return false;
@@ -1678,14 +1770,25 @@ export function headerRefreshDock(hud: GameHUD): void {
           if (!isWinter) return false;
           const cf = hud.activeChristmasFilter ?? 'all';
           if (cf === 'recent') return recentOrder.has(c.id);
+          if (cf === 'stashed') return worldGetStashedDecorCount(hud.sim, c) > 0;
           if (cf === 'all') return true;
           if (c.id === 'snowy_pines') {
             return cf === 'yule_trees' || cf === 'hogsmeade';
           }
           return c.yuleCollection === cf;
         }
-        if (isWinter) return false;
-        if (hud.activeDecorFilter === 'recent') return recentOrder.has(c.id);
+        if (isWinter || c.id === 'farmland_plot') return false;
+        const df = hud.activeDecorFilter;
+        if (df === 'recent') return recentOrder.has(c.id);
+        if (df === 'stashed') return worldGetStashedDecorCount(hud.sim, c) > 0;
+        if (
+          df === 'nature' ||
+          df === 'fences' ||
+          df === 'lights' ||
+          df === 'landmarks'
+        ) {
+          return classifyClassicDecorSubFilter(c) === df;
+        }
         return true;
       }
       return true;
@@ -1693,16 +1796,27 @@ export function headerRefreshDock(hud: GameHUD): void {
     if (isRecentSubFilter) {
       items.sort((a, b) => (recentOrder.get(a.id) ?? 999) - (recentOrder.get(b.id) ?? 999));
     } else if (hud.activeCategory === 'creature') {
-      items.sort((a, b) => (a.id === 'farmland_plot' ? -1 : b.id === 'farmland_plot' ? 1 : 0));
+      items.sort((a, b) => {
+        const pa = PROD_PLOT_PRIORITY.indexOf(a.id);
+        const pb = PROD_PLOT_PRIORITY.indexOf(b.id);
+        if (pa !== -1 || pb !== -1) {
+          return (pa === -1 ? 999 : pa) - (pb === -1 ? 999 : pb);
+        }
+        return a.unlockLevel - b.unlockLevel;
+      });
     }
     const sandbox = hud.sim.state.sandboxMode;
     const curStars = hud.sim.state.match3?.stars ?? 0;
     const curGold = hud.sim.state.galleons;
 
-    if (items.length === 0 && isRecentSubFilter) {
+    if (items.length === 0 && (isRecentSubFilter || isStashedSubFilter)) {
       drawer.innerHTML = `
         <div class="catalog-empty-hint">
-          Chưa có vật phẩm vừa đặt gần đây — hãy chọn một món trong <strong>✨ Tất cả</strong> nhé!
+          ${
+            isStashedSubFilter
+              ? 'Kho Trang Trí hiện đang trống — bấm vào món trang trí ngoài sân rồi chọn <strong>Cất</strong> để lưu giữ nhé!'
+              : 'Chưa có vật phẩm vừa đặt gần đây — hãy chọn một món trong <strong>✨ Tất cả</strong> nhé!'
+          }
         </div>
       `;
       headerSyncBuildDrawerScrollAffordance(hud, drawer);
@@ -1767,6 +1881,11 @@ export function headerRefreshDock(hud: GameHUD): void {
                       : `🪙 ${item.cost.toLocaleString('vi-VN')} Sickle${buildSuffix}`;
 
         const isWinterCard = isChristmasActive && isWinterChristmasBuildItem(item);
+        const placedCount = placedCountByItemId.get(item.id) ?? 0;
+        const placedBadgeHtml =
+          placedCount > 0 && (!alreadyBuilt || placedCount > 1)
+            ? `<span class="catalog-card-placed-badge">Đã đặt ${placedCount}</span>`
+            : '';
 
         return `
           <button
@@ -1777,6 +1896,7 @@ export function headerRefreshDock(hud: GameHUD): void {
             aria-pressed="${selected}"
             ${locked || isShortResource ? 'aria-disabled="true"' : ''}
           >
+            ${placedBadgeHtml}
             ${isWinterCard ? '<span class="yule-card-twinkle" aria-hidden="true">❄</span>' : ''}
             ${imgTag}
             <div class="catalog-card-title">${escapeHtml(item.name)}</div>
@@ -1865,11 +1985,16 @@ export function headerRefreshDock(hud: GameHUD): void {
         headerRefreshAll(hud);
         hud.onSelectCatalogItem?.(item);
         const isBrushItem = isDragPaintableCatalogItem(item);
+        const isCoarseTouch =
+          typeof window !== 'undefined' &&
+          Boolean(window.matchMedia?.('(pointer: coarse)')?.matches);
         headerShowToast(
           hud,
           isBrushItem
             ? `🏗️ Đã chọn "${item.name}" — Chạm hoặc kéo liên tục trên bản đồ để đặt!`
-            : `🏗️ Đã chọn "${item.name}" — Chạm một lần vào ô xanh để đặt ngay (hoặc bấm ⚡ Đặt Ngay)!`,
+            : isCoarseTouch
+              ? `🏗️ Đã chọn "${item.name}" — Kéo/chạm ô chỉnh vị trí rồi bấm ✓ Đặt (hoặc bấm ⚡ Đặt Ngay)!`
+              : `🏗️ Đã chọn "${item.name}" — Chạm một lần vào ô xanh để đặt ngay (hoặc bấm ⚡ Đặt Ngay)!`,
           '🔨'
         );
       });

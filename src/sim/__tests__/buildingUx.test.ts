@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCatalogItem } from '../../data/catalog';
 import { GRID_SIZE } from '../../data/zones';
 import { MagicalAudio } from '../../engine/audio';
-import { clearBuildToolModes, pushRecentDecorId, loadRecentDecorIds } from '../../ui/hudShared';
+import {
+  classifyClassicDecorSubFilter,
+  clearBuildToolModes,
+  pushRecentDecorId,
+  loadRecentDecorIds,
+} from '../../ui/hudShared';
 import {
   isDragPaintableCatalogItem,
   isRepeatableCatalogItem,
@@ -323,5 +328,109 @@ describe('Mobile Building UX & Safe Placement/Inspector Operations', () => {
     expect(updated).toEqual(['snowy_pines', 'marble_bench']);
     // HPVN: nothing on the device (owner 13/11): the recent list is not persisted across visits
     expect(loadRecentDecorIds()).toEqual([]);
+  });
+
+  it('stashBuilding cất lẻ từng món Trang Trí vào Kho (giữ sao, hỗ trợ Undo/Redo, chặn xưởng & ruộng)', () => {
+    const sim = new ParkSimulation(createMockAudio());
+    sim.state.galleons = 5000;
+
+    // 1. Cất lẻ ghế đá trang trí đã nâng 3 sao
+    const bench = getCatalogItem('marble_bench')!;
+    const spot = findFreeSpot(sim, 'marble_bench');
+    expect(sim.placeItem(bench, spot.gx, spot.gy, 0)).toBe(true);
+    const placedBench = sim.state.buildings.at(-1)!;
+    placedBench.stars = 3;
+
+    expect(sim.canStashBuilding(placedBench.uid)).toBe(true);
+    const stashRes = sim.stashBuilding(placedBench.uid);
+    expect(stashRes.ok).toBe(true);
+    expect(sim.grid[spot.gy][spot.gx].buildingUid).toBeNull();
+    expect(sim.state.stashedDecorInventory?.marble_bench).toBe(1);
+    expect(sim.state.stashedDecorStars?.marble_bench).toEqual([3]);
+
+    // 2. Undo khôi phục món trang trí ra đúng ô cũ và trừ lại khỏi Kho
+    expect(sim.undoBuild()).toBe(true);
+    expect(sim.grid[spot.gy][spot.gx].buildingUid).toBe(placedBench.uid);
+    expect(sim.state.stashedDecorInventory?.marble_bench ?? 0).toBe(0);
+
+    // 3. Redo cất lại vào Kho, đặt lại từ Kho tốn 0 Sickle và giữ nguyên 3 sao
+    expect(sim.redoBuild()).toBe(true);
+    expect(sim.state.stashedDecorInventory?.marble_bench).toBe(1);
+    const goldBeforePlaceFromStash = sim.state.galleons;
+    expect(sim.placeItem(bench, spot.gx, spot.gy, 0)).toBe(true);
+    expect(sim.state.galleons).toBe(goldBeforePlaceFromStash);
+    expect(sim.state.buildings.at(-1)?.stars).toBe(3);
+
+    // 4. Chặn cất lẻ ô ruộng sản xuất hoặc công trình chính
+    const plotItem = getCatalogItem('farmland_plot')!;
+    const plotSpot = findFreeSpot(sim, 'farmland_plot');
+    expect(sim.placeItem(plotItem, plotSpot.gx, plotSpot.gy, 0)).toBe(true);
+    const placedPlot = sim.state.buildings.at(-1)!;
+    expect(sim.canStashBuilding(placedPlot.uid)).toBe(false);
+    expect(sim.stashBuilding(placedPlot.uid).ok).toBe(false);
+  });
+
+  it('eraseBrushAtTile xóa mượt đường đi & hàng rào 1x1 theo nét kéo mà không xóa nhầm ruộng/xưởng', () => {
+    const sim = new ParkSimulation(createMockAudio());
+    sim.state.galleons = 10_000;
+    sim.state.yuleEvent = {
+      schemaVersion: 1,
+      claimedMainDays: [],
+      claimedSideTaskIds: [],
+      unlockedAssetIds: ['yule_holly_hedgerow'],
+      purchasedAssetIds: ['yule_holly_hedgerow'],
+    };
+
+    const cobble = getCatalogItem('path_cobble')!;
+    const stoneFence = getCatalogItem('burrow_stone_rune_fence')!;
+    const hollyFence = getCatalogItem('yule_holly_hedgerow')!;
+    const plotItem = getCatalogItem('farmland_plot')!;
+    expect(isDragPaintableCatalogItem(stoneFence)).toBe(true);
+
+    const anchor = findFreeSpot(sim, 'farmland_plot');
+    expect(sim.placeItem(plotItem, anchor.gx, anchor.gy, 0)).toBe(true);
+    const plotUid = sim.state.buildings.at(-1)!.uid;
+
+    const pathSpot = findFreeSpot(sim, 'marble_bench');
+    sim.grid[pathSpot.gy][pathSpot.gx].path = 'none';
+    expect(sim.placeItem(cobble, pathSpot.gx, pathSpot.gy, 0)).toBe(true);
+
+    const fenceSpot1 = findFreeSpot(sim, 'marble_bench');
+    expect(sim.placeItem(stoneFence, fenceSpot1.gx, fenceSpot1.gy, 0)).toBe(true);
+    expect(sim.grid[fenceSpot1.gy][fenceSpot1.gx].zooFence).toBe(true);
+
+    const fenceSpot2 = findFreeSpot(sim, 'yule_holly_hedgerow');
+    expect(sim.placeItem(hollyFence, fenceSpot2.gx, fenceSpot2.gy, 0)).toBe(true);
+
+    // Kéo xóa qua đường, rào đá, rào nhựa ruồi và trượt ngang qua ruộng trong 1 stroke duy nhất
+    sim.beginBuildStroke();
+    expect(sim.eraseBrushAtTile(pathSpot.gx, pathSpot.gy)).toBe(true);
+    expect(sim.eraseBrushAtTile(fenceSpot1.gx, fenceSpot1.gy)).toBe(true);
+    expect(sim.eraseBrushAtTile(fenceSpot2.gx, fenceSpot2.gy)).toBe(true);
+    expect(sim.eraseBrushAtTile(anchor.gx, anchor.gy)).toBe(false); // Ruộng 2x2 được bảo vệ an toàn!
+    sim.commitBuildStroke();
+
+    expect(sim.grid[pathSpot.gy][pathSpot.gx].path).toBe('none');
+    expect(sim.grid[fenceSpot1.gy][fenceSpot1.gx].zooFence).toBe(false);
+    expect(sim.grid[fenceSpot2.gy][fenceSpot2.gx].buildingUid).toBeNull();
+    expect(sim.state.buildings.some((b) => b.uid === plotUid)).toBe(true);
+
+    // 1 lần Undo khôi phục toàn bộ đường và hàng rào vừa kéo xóa
+    expect(sim.undoBuild()).toBe(true);
+    expect(sim.grid[pathSpot.gy][pathSpot.gx].path).toBe('cobble');
+    expect(sim.grid[fenceSpot1.gy][fenceSpot1.gx].zooFence).toBe(true);
+    expect(sim.grid[fenceSpot2.gy][fenceSpot2.gx].buildingUid).toBeTruthy();
+  });
+
+  it('classifyClassicDecorSubFilter phân nhóm đúng Cây & Hoa, Rào & Cổng, Đèn & Ghế, Tiểu cảnh', () => {
+    expect(classifyClassicDecorSubFilter(getCatalogItem('burrow_oak_tree')!)).toBe('nature');
+    expect(classifyClassicDecorSubFilter(getCatalogItem('burrow_flower_garden')!)).toBe('nature');
+    expect(classifyClassicDecorSubFilter(getCatalogItem('burrow_stone_rune_fence')!)).toBe('fences');
+    expect(classifyClassicDecorSubFilter(getCatalogItem('hogsmeade_stone_bridge')!)).toBe('fences');
+    expect(classifyClassicDecorSubFilter(getCatalogItem('marble_bench')!)).toBe('lights');
+    expect(classifyClassicDecorSubFilter(getCatalogItem('floating_candles_post')!)).toBe('lights');
+    expect(classifyClassicDecorSubFilter(getCatalogItem('hogsmeade_harvest_fountain')!)).toBe(
+      'landmarks'
+    );
   });
 });

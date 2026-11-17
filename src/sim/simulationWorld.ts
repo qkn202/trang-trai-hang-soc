@@ -625,6 +625,75 @@ export function worldGetStashedDecorCount(sim: ParkSimulation, item: CatalogItem
   return Math.max(0, Math.floor(sim.state.stashedDecorInventory?.[item.id] ?? 0));
 }
 
+export function worldCanStashBuilding(sim: ParkSimulation, uid: string, now = Date.now()): boolean {
+  if (sim.isVisitingNeighbor || sim.isHeadmasterPreview) return false;
+  const b = sim.state.buildings.find((x) => x.uid === uid);
+  if (!b || b.isIndestructible || b.builtInSandbox || now < b.constructEndsAt) return false;
+  const it = getCatalogItem(b.itemId);
+  if (!it) return false;
+  return (
+    it.category === 'decor' &&
+    !it.isFlooPortal &&
+    !it.isFarmlandPlot &&
+    !it.isAnimalPasturePlot &&
+    !it.isRuralFarmstead &&
+    !it.isZooFence &&
+    !it.isCoasterTrackPiece &&
+    !it.elevationDelta
+  );
+}
+
+export function worldStashBuilding(
+  sim: ParkSimulation,
+  uid: string
+): { ok: boolean; msg: string } {
+  if (sim.isVisitingNeighbor || sim.isHeadmasterPreview) {
+    return { ok: false, msg: 'Không thể cất trang trí khi đang thăm vườn!' };
+  }
+  const idx = sim.state.buildings.findIndex((x) => x.uid === uid);
+  if (idx === -1) return { ok: false, msg: 'Không tìm thấy vật phẩm để cất!' };
+  const b = sim.state.buildings[idx]!;
+  const it = getCatalogItem(b.itemId);
+  if (!it || !worldCanStashBuilding(sim, uid)) {
+    return {
+      ok: false,
+      msg: 'Chỉ vật phẩm Trang Trí đã hoàn thiện mới có thể cất vào Kho Kiến Trúc!',
+    };
+  }
+
+  const ownStroke = !sim.pendingBuildStroke;
+  if (ownStroke) sim.beginBuildStroke();
+  try {
+    const stash = { ...(sim.state.stashedDecorInventory ?? {}) };
+    stash[b.itemId] = (stash[b.itemId] ?? 0) + 1;
+    const stashStars: Record<string, number[]> = {};
+    for (const [k, arr] of Object.entries(sim.state.stashedDecorStars ?? {})) {
+      if (Array.isArray(arr)) stashStars[k] = [...arr];
+    }
+    if (!stashStars[b.itemId]) stashStars[b.itemId] = [];
+    stashStars[b.itemId].push(Math.max(1, Math.min(5, Math.floor(b.stars || 1))));
+
+    sim.state.buildings.splice(idx, 1);
+    sim.rideQueues.delete(b.uid);
+    sim.state.stashedDecorInventory = stash;
+    sim.state.stashedDecorStars = stashStars;
+    worldRebuildGrid(sim);
+    sim.audio.playClick();
+    sim.spawnFloatingText(b.gx + 0.5, b.gy + 0.5, '📦 Đã cất vào Kho!', '#a7f3d0');
+    sim.noteBuildMutation();
+    if (!sim.suppressPerActionSave) {
+      sim.saveToStorage();
+      sim.onUiChange?.();
+    }
+  } finally {
+    if (ownStroke) sim.commitBuildStroke();
+  }
+  return {
+    ok: true,
+    msg: `📦 Đã cất "${it.name}" vào Kho Trang Trí (đặt lại miễn phí 0 Sickle)!`,
+  };
+}
+
 export function worldIsCatalogItemUnlocked(sim: ParkSimulation, item: CatalogItem): boolean {
   if (worldGetStashedDecorCount(sim, item) > 0) return true;
   if (item.id.startsWith('yule_') && sim.state.yuleEvent?.unlockedAssetIds.includes(item.id)) return true;
@@ -1377,4 +1446,30 @@ export function worldRemoveAtTile(sim: ParkSimulation, gx: number, gy: number): 
     }
 
     return false;
+}
+
+/**
+ * Xóa theo nét kéo (Drag-Erase): chỉ dọn các ô vẽ dạng cọ (đường đi, hàng rào 1x1,
+ * rào đá sắt rèn, rác, đường ray) mà KHÔNG xóa nhầm nhà xưởng, ruộng hay chuồng thú.
+ */
+export function worldEraseBrushAtTile(sim: ParkSimulation, gx: number, gy: number): boolean {
+  if (sim.isVisitingNeighbor) return false;
+  if (gx < 0 || gy < 0 || gx >= GRID_SIZE || gy >= GRID_SIZE) return false;
+  const cell = sim.grid[gy][gx];
+
+  if (cell.hasLitter || cell.coasterTrack || cell.zooFence) {
+    return worldRemoveAtTile(sim, gx, gy);
+  }
+  if (cell.buildingUid) {
+    const b = sim.state.buildings.find((x) => x.uid === cell.buildingUid);
+    if (!b || b.isIndestructible) return false;
+    if (DRAG_PAINTABLE_FENCE_IDS.has(b.itemId)) {
+      return worldRemoveAtTile(sim, gx, gy);
+    }
+    return false;
+  }
+  if (cell.path !== 'none') {
+    return worldRemoveAtTile(sim, gx, gy);
+  }
+  return false;
 }

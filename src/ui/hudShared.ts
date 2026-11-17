@@ -137,6 +137,48 @@ export const BUILD_HUD_CATEGORIES: ReadonlyArray<BuildingCategory> = [
   'decor',
 ];
 
+export type ClassicDecorSubFilter =
+  | 'all'
+  | 'recent'
+  | 'stashed'
+  | 'nature'
+  | 'fences'
+  | 'lights'
+  | 'landmarks';
+
+export function classifyClassicDecorSubFilter(
+  item: CatalogItem
+): 'nature' | 'fences' | 'lights' | 'landmarks' {
+  if (
+    item.isZooFence ||
+    item.id === 'burrow_stone_rune_fence' ||
+    item.id === 'halloween_arch' ||
+    item.id === 'hogsmeade_stone_bridge' ||
+    item.id === 'floo_fireplace_gate'
+  ) {
+    return 'fences';
+  }
+  if (
+    item.isBench ||
+    item.id === 'floating_candles_post' ||
+    item.id === 'patronus_ward_lantern'
+  ) {
+    return 'lights';
+  }
+  if (
+    item.isFarmlandPlot ||
+    Boolean(item.connectableGroup) ||
+    item.id === 'burrow_apple_orchard' ||
+    item.id === 'whomping_willow' ||
+    item.id === 'burrow_oak_tree' ||
+    item.id === 'burrow_pine_tree' ||
+    item.id === 'burrow_magic_tree'
+  ) {
+    return 'nature';
+  }
+  return 'landmarks';
+}
+
 const CUSTOM_CATALOG_PREVIEW_IDS = new Set([
   'path_cobble',
   'path_snow_brick',
@@ -144,6 +186,7 @@ const CUSTOM_CATALOG_PREVIEW_IDS = new Set([
   'marble_bench',
   'floating_candles_post',
   'patronus_ward_lantern',
+  'burrow_stone_rune_fence',
 ]);
 
 export function isWinterChristmasBuildItem(
@@ -167,6 +210,7 @@ export function getCatalogCardImageSrc(
 export interface BuildToolModeHost {
   selectedCatalogItem: CatalogItem | null;
   moveModeActive: boolean;
+  moveKeepActiveAfterDrop?: boolean;
   movingBuildingUid: string | null;
   bulldozerActive: boolean;
   pincerActive: boolean;
@@ -178,6 +222,7 @@ export interface BuildToolModeHost {
 export function clearBuildToolModes(hud: BuildToolModeHost): void {
   hud.selectedCatalogItem = null;
   hud.moveModeActive = false;
+  hud.moveKeepActiveAfterDrop = false;
   hud.movingBuildingUid = null;
   hud.bulldozerActive = false;
   hud.pincerActive = false;

@@ -3,6 +3,7 @@
 
 import {
   CATALOG,
+  computeStrategicPlotGrowSeconds,
   FARM_CROPS,
   FARM_GOODS,
   formatDurationCompactVi,
@@ -183,7 +184,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
 
       const bio = item.isCreatureHabitat ? hud.sim.biomeCache.get(b.uid) : undefined;
       const backstage = item.isBackstage ? hud.sim.backstageCache.get(b.uid) : undefined;
-      const hasPriceSlider = Boolean(item.ticketPrice) && !isBuilding && !item.workshopGroupId;
+      const hasPriceSlider = false;
       const priceBounds = getItemPriceBounds(item);
       const curPrice = hud.sim.getEffectivePrice(b, item);
       const priceVerdict = hud.sim.getPriceValueVerdict(b, item);
@@ -192,6 +193,8 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         item.isFarmlandPlot && !isBuilding
           ? (() => {
               if (!b.cropId) {
+                const soilEntry = hud.sim.state.plotSoilState?.[`${b.gx},${b.gy}`];
+                const fatigueStep = Math.max(b.harvestCycleCount ?? 0, soilEntry?.fatigueStep ?? 0);
                 const allCropList = Object.values(FARM_CROPS).sort(
                   (a, c) => a.unlockLevel - c.unlockLevel || a.growSec - c.growSec
                 );
@@ -223,7 +226,20 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                     const lockedCrop =
                       !hud.sim.state.sandboxMode && hud.sim.state.level < crop.unlockLevel;
                     const seedCount = hud.sim.getSeedCount(crop.id);
-                    const growLabel = formatDurationCompactVi(crop.growSec);
+                    const curFamily = getCropFamily(crop.id);
+                    const rotatedFamily = Boolean(
+                      soilEntry && soilEntry.lastFamily !== curFamily
+                    );
+                    const mastery = hud.sim.state.cropMastery?.[crop.id] ?? 0;
+                    const strat = computeStrategicPlotGrowSeconds(
+                      fatigueStep,
+                      rotatedFamily,
+                      mastery,
+                      crop.growSec
+                    );
+                    const growLabel = `${formatDurationCompactVi(strat.growSec)}${
+                      strat.isRotatedBonus ? ' · ×2' : ''
+                    }`;
                     return `
                       <div class="seed-card-slot ${lockedCrop ? 'locked' : ''} ${!lockedCrop && seedCount <= 0 ? 'out-of-seeds' : ''}">
                         <button
@@ -248,7 +264,6 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                     `;
                   })
                   .join('');
-                const soilEntry = hud.sim.state.plotSoilState?.[`${b.gx},${b.gy}`];
                 const familyLabelMap: Record<string, string> = {
                   grain: 'Lúa mạch/Ngũ cốc',
                   produce: 'Rau củ quả',
@@ -275,10 +290,16 @@ export function inspectorRenderInspector(hud: GameHUD): void {
 
               const cropDef = FARM_CROPS[b.cropId];
               const readyAt = b.cropReadyAt ?? now;
-              const plantedAt = b.cropPlantedAt ?? readyAt - cropDef.growSec * 1000;
+              const masteryCount = hud.sim.state.cropMastery?.[cropDef.id] ?? 0;
+              const fallbackDurSec = computeStrategicPlotGrowSeconds(
+                0,
+                false,
+                masteryCount,
+                cropDef.growSec
+              ).growSec;
+              const plantedAt = b.cropPlantedAt ?? readyAt - fallbackDurSec * 1000;
               const cropLeftSec = Math.max(0, Math.ceil((readyAt - now) / 1000));
               const isRipe = cropLeftSec <= 0;
-              const masteryCount = hud.sim.state.cropMastery?.[cropDef.id] ?? 0;
               const masteryInfo = getCropMasteryTierInfo(masteryCount);
               const dewPhials = Math.max(0, hud.sim.state.morningDewPhials ?? 0);
               const effectiveYield = cropDef.yieldQty * (b.cropRotatedBonus ? 2 : 1);
@@ -845,9 +866,14 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         }
         ${
           !b.isIndestructible && !hud.sim.isVisitingNeighbor
-            ? `<div class="inspector-build-actions" role="group" aria-label="Thao tác công trình">
+            ? `<div class="inspector-build-actions ${!isBuilding && hud.sim.canStashBuilding(b.uid) ? 'has-stash' : ''}" role="group" aria-label="Thao tác công trình">
                 <button id="btnMoveThis" type="button" class="brass-btn hs-insp-move-btn" title="Dời công trình miễn phí (0 Sickle)">Dời</button>
                 <button id="btnRotateThis" type="button" class="brass-btn" title="Xoay hướng công trình 90°">Xoay</button>
+                ${
+                  !isBuilding && hud.sim.canStashBuilding(b.uid)
+                    ? `<button id="btnStashThis" type="button" class="brass-btn hs-insp-stash-btn" title="Cất vào Kho Trang Trí (đặt lại miễn phí 0 Sickle)">Cất</button>`
+                    : ''
+                }
                 <button id="btnDeleteThis" type="button" class="brass-btn inspector-delete-btn" title="Xóa công trình">Xóa</button>
               </div>`
             : ''
@@ -1082,6 +1108,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
       panel.querySelector('#btnMoveThis')?.addEventListener('click', () => {
         clearBuildToolModes(hud);
         hud.moveModeActive = true;
+        hud.moveKeepActiveAfterDrop = false;
         hud.movingBuildingUid = b.uid;
         hud.rotation = b.rotation;
         hud.inspectSelection = null;
@@ -1089,6 +1116,14 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         hud.onStartMoveBuilding?.(b.uid);
         hud.refreshAll();
         hud.showToast(`✋ Đang nhấc "${item.name}" — chạm ô đất mới trên bản đồ để đặt xuống!`, '✋');
+      });
+      panel.querySelector('#btnStashThis')?.addEventListener('click', () => {
+        const res = hud.sim.stashBuilding(b.uid);
+        if (res.ok) {
+          hud.inspectSelection = null;
+          hud.refreshAll();
+        }
+        hud.showToast(res.msg, res.ok ? '📦' : '⚠️');
       });
       panel.querySelector('#btnRotateThis')?.addEventListener('click', () => {
         const res = hud.sim.rotatePlacedBuilding(b.uid);

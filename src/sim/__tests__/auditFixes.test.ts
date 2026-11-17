@@ -250,7 +250,7 @@ describe('Audit Fixes — Hosting CSP, SW Dev Port, 2.5D Props, Stashed Decor 0G
       .readdirSync(catalogDir)
       .filter((name: string) => name.endsWith('.webp'))
       .sort();
-    expect(catalogWebps.length).toBe(6);
+    expect(catalogWebps.length).toBe(7);
 
     for (const name of catalogWebps) {
       const buf = fs.readFileSync(path.join(catalogDir, name));

@@ -330,7 +330,10 @@ import {
   worldBridgeZoneWithCobblePath,
   worldFindSmartSpotForStoryBuilding,
   worldRemoveAtTile,
+  worldEraseBrushAtTile,
   worldGetRemovalLossText,
+  worldCanStashBuilding,
+  worldStashBuilding,
 } from './simulationWorld';
 export { isDragPaintableCatalogItem, isRepeatableCatalogItem } from './simulationWorld';
 export type { BarnUpgradeCostInfo, FarmBatchResult } from './simulationFarm';
@@ -2079,6 +2082,18 @@ export class ParkSimulation {
       msg: `📐 Đã áp dụng "${entry.label}" (sắp xếp lại ${movedCount} công trình)!`,
       movedCount,
     };
+  }
+
+  public canStashBuilding(uid: string): boolean {
+    return worldCanStashBuilding(this, uid);
+  }
+
+  public stashBuilding(uid: string): { ok: boolean; msg: string } {
+    return worldStashBuilding(this, uid);
+  }
+
+  public eraseBrushAtTile(gx: number, gy: number): boolean {
+    return worldEraseBrushAtTile(this, gx, gy);
   }
 
   public stashAllDecorItems(): { ok: boolean; msg: string; count: number } {

@@ -18,6 +18,7 @@ import { IsometricRenderer, isTouchOrIOSDevice } from './engine/renderer';
 import { SpriteRegistry } from './engine/spriteLoader';
 import { sampleCoasterTrainPositions } from './sim/coaster';
 import { isDragPaintableCatalogItem, isRepeatableCatalogItem, setFarmStore, ParkSimulation } from './sim/simulation';
+import { worldGetStashedDecorCount } from './sim/simulationWorld';
 import {
   CatalogItem,
   FarmCropId,
@@ -50,9 +51,8 @@ import { CrossLayerFlyingCollectibles } from './render/fx/flyingCollectibles';
 
 const isDragPaintableItem = isDragPaintableCatalogItem;
 
-// HPVN: cheap brush items stay armed between strokes; paid buildings (plots, pastures, coops, gardens) disarm after one stroke
-const isBrushItem = (item: CatalogItem): boolean =>
-  item.category === 'path' || item.category === 'terrain' || Boolean(item.isCoasterTrackPiece) || Boolean(item.isZooFence);
+// HPVN: brush items (paths & 1x1 fences) stay armed between strokes; non-brush buildings confirm/disarm cleanly
+const isBrushItem = (item: CatalogItem): boolean => isDragPaintableItem(item);
 
 async function bootstrap(): Promise<void> {
   const app = document.getElementById('app')!;
@@ -725,6 +725,13 @@ async function bootstrap(): Promise<void> {
   let isPointerDown = false;
   let isDraggingCam = false;
   let isPaintingTiles = false;
+  let isErasingBrush = false;
+  let canStartEraseBrush = false;
+  let eraseStartGx = 0;
+  let eraseStartGy = 0;
+  let pressedOnPendingGhost = false;
+  let isDraggingTouchGhost = false;
+  let longPressJustActivated = false;
   let isSowingSeeds = false;
   let isStockingPastures = false;
   let lastSeedWarnAt = 0;
@@ -733,6 +740,40 @@ async function bootstrap(): Promise<void> {
   let pointerStartY = 0;
   let camStartX = 0;
   let camStartY = 0;
+
+  const LONG_PRESS_MOVE_MS = 430;
+  let longPressMove: {
+    uid: string;
+    startMs: number;
+    sx: number;
+    sy: number;
+    pointerType: string;
+    timer: number;
+  } | null = null;
+
+  const cancelLongPressMove = () => {
+    if (longPressMove) {
+      window.clearTimeout(longPressMove.timer);
+      longPressMove = null;
+    }
+  };
+
+  const formatTouchConfirmLabelForItem = (item: CatalogItem): string => {
+    const stashed = worldGetStashedDecorCount(sim, item);
+    if (stashed > 0) return `${item.name} • Kho (0 Sickle)`;
+    if (sim.state.sandboxMode) return `${item.name} • 0 Sickle`;
+    const stars = sim.getEffectiveItemStarCost(item);
+    if (stars > 0) return `${item.name} • ${stars} Sao`;
+    return `${item.name} • ${item.cost.toLocaleString('vi-VN')} Sickle`;
+  };
+
+  const canStillAffordAnotherPlacement = (item: CatalogItem): boolean => {
+    if (sim.state.sandboxMode) return true;
+    if (worldGetStashedDecorCount(sim, item) > 0) return true;
+    const stars = sim.getEffectiveItemStarCost(item);
+    if (stars > 0) return (sim.state.match3?.stars ?? 0) >= stars;
+    return sim.state.galleons >= item.cost;
+  };
 
   const trySowPlotAt = (gx: number, gy: number, sx: number, sy: number): boolean => {
     const seedCropId = hud.activeSeedCropId;
@@ -1102,15 +1143,24 @@ async function bootstrap(): Promise<void> {
       return;
     }
     if (hud.selectedCatalogItem && !isDragPaintableItem(hud.selectedCatalogItem)) {
-      if (hoverTile) {
+      const anchor = hud.pendingTouchTile ?? hoverTile;
+      if (anchor) {
         hoverTile = resolveBuildingPlacementTile(
           hud.selectedCatalogItem,
-          hoverTile.gx,
-          hoverTile.gy,
+          anchor.gx,
+          anchor.gy,
           hud.rotation
         );
       } else {
         hoverTile = findBestPreviewSpotNearCamera(hud.selectedCatalogItem, hud.rotation);
+      }
+      if (hud.pendingTouchTile && hoverTile) {
+        hud.pendingTouchTile = {
+          gx: hoverTile.gx,
+          gy: hoverTile.gy,
+          label: hud.pendingTouchTile.label,
+        };
+        hud.refreshTouchConfirmBar();
       }
     }
   };
@@ -1130,27 +1180,35 @@ async function bootstrap(): Promise<void> {
     if (!spot) {
       const focus = screenToGrid(viewW * 0.5, viewH * 0.5, cam, viewW, viewH, sim.grid);
       hoverTile = resolveBuildingPlacementTile(item, focus.gx, focus.gy, hud.rotation);
-      return;
+    } else {
+      hoverTile = { gx: spot.gx, gy: spot.gy };
+      const { bw, bh } = sim.getBuildingFootprint(item, hud.rotation);
+      const elev = sim.grid[spot.gy]?.[spot.gx]?.elevation ?? 0;
+      const scr = gridToScreen(
+        spot.gx + bw * 0.5,
+        spot.gy + bh * 0.5,
+        cam,
+        viewW,
+        viewH,
+        elev * ELEV_PX
+      );
+      if (
+        scr.sx < viewW * 0.18 ||
+        scr.sx > viewW * 0.82 ||
+        scr.sy < viewH * 0.2 ||
+        scr.sy > viewH * 0.76
+      ) {
+        introGlide = null;
+        centerCameraOnGrid(cam, spot.gx + bw * 0.5, spot.gy + bh * 0.5);
+      }
     }
-    hoverTile = { gx: spot.gx, gy: spot.gy };
-    const { bw, bh } = sim.getBuildingFootprint(item, hud.rotation);
-    const elev = sim.grid[spot.gy]?.[spot.gx]?.elevation ?? 0;
-    const scr = gridToScreen(
-      spot.gx + bw * 0.5,
-      spot.gy + bh * 0.5,
-      cam,
-      viewW,
-      viewH,
-      elev * ELEV_PX
-    );
-    if (
-      scr.sx < viewW * 0.18 ||
-      scr.sx > viewW * 0.82 ||
-      scr.sy < viewH * 0.2 ||
-      scr.sy > viewH * 0.76
-    ) {
-      introGlide = null;
-      centerCameraOnGrid(cam, spot.gx + bw * 0.5, spot.gy + bh * 0.5);
+    if (hoverTile && window.matchMedia?.('(pointer: coarse)')?.matches) {
+      hud.pendingTouchTile = {
+        gx: hoverTile.gx,
+        gy: hoverTile.gy,
+        label: formatTouchConfirmLabelForItem(item),
+      };
+      hud.refreshTouchConfirmBar();
     }
   };
 
@@ -1201,28 +1259,90 @@ async function bootstrap(): Promise<void> {
     hud.showToast(`🔨 Đã khởi công "${placedItem.name}" thành công!`, '✨');
   };
 
-  // Touch Confirm Bar is strictly reserved for Move (relocating existing buildings)
+  // Touch Confirm Bar handles both Move relocation and Touch Ghost Placement
   hud.onTouchConfirmPlace = () => {
     if (!hud.pendingTouchTile) return;
-    if (!(hud.moveModeActive && hud.movingBuildingUid)) {
-      hud.pendingTouchTile = null;
-      hud.refreshTouchConfirmBar();
-      return;
-    }
-    const movingUid = hud.movingBuildingUid;
-    const mb = sim.state.buildings.find((x) => x.uid === movingUid);
-    const mIt = mb ? getCatalogItem(mb.itemId) : undefined;
     const { gx, gy } = hud.pendingTouchTile;
-    const res = runSingleBuildStroke(() =>
-      sim.moveBuilding(movingUid, gx, gy, hud.rotation)
-    );
-    if (!res.ok) {
-      hud.showToast(res.reason ?? 'Không thể đặt tại ô này!', '⚠️');
+
+    if (hud.moveModeActive && hud.movingBuildingUid) {
+      const movingUid = hud.movingBuildingUid;
+      const mb = sim.state.buildings.find((x) => x.uid === movingUid);
+      const mIt = mb ? getCatalogItem(mb.itemId) : undefined;
+      const res = runSingleBuildStroke(() =>
+        sim.moveBuilding(movingUid, gx, gy, hud.rotation)
+      );
+      if (!res.ok) {
+        hud.showToast(res.reason ?? 'Không thể đặt tại ô này!', '⚠️');
+        return;
+      }
+      if (hud.moveKeepActiveAfterDrop) {
+        hud.movingBuildingUid = null;
+        hud.pendingTouchTile = null;
+        hoverTile = null;
+      } else {
+        hud.clearBuildToolModes();
+        hoverTile = null;
+      }
+      hud.refreshAll();
+      hud.showToast(`✋ Đã dời "${mIt?.name ?? 'công trình'}" sang vị trí mới!`, '✨');
       return;
     }
-    hud.clearBuildToolModes();
-    hud.refreshAll();
-    hud.showToast(`✋ Đã dời "${mIt?.name ?? 'công trình'}" sang vị trí mới!`, '✨');
+
+    if (hud.selectedCatalogItem && !isDragPaintableItem(hud.selectedCatalogItem)) {
+      const placedItem = hud.selectedCatalogItem;
+      const check = sim.canPlaceItem(placedItem, gx, gy, hud.rotation);
+      if (!check.ok) {
+        hud.showToast(check.reason ?? 'Không thể đặt tại ô này!', '⚠️');
+        return;
+      }
+      const placedOk = runSingleBuildStroke(() =>
+        sim.placeItem(placedItem, gx, gy, hud.rotation)
+      );
+      if (!placedOk) return;
+      hud.recordRecentDecorItem(placedItem.id);
+      if (isRepeatableCatalogItem(placedItem) && canStillAffordAnotherPlacement(placedItem)) {
+        const nextSpot = findBestPreviewSpotNearCamera(placedItem, hud.rotation);
+        if (nextSpot) {
+          hoverTile = nextSpot;
+          hud.pendingTouchTile = {
+            gx: nextSpot.gx,
+            gy: nextSpot.gy,
+            label: formatTouchConfirmLabelForItem(placedItem),
+          };
+        } else {
+          hud.selectedCatalogItem = null;
+          hud.pendingTouchTile = null;
+          hoverTile = null;
+        }
+      } else {
+        hud.selectedCatalogItem = null;
+        hud.pendingTouchTile = null;
+        hoverTile = null;
+        hud.showToast(`🔨 Đã khởi công "${placedItem.name}" thành công!`, '✨');
+      }
+      hud.refreshAll();
+      return;
+    }
+
+    hud.pendingTouchTile = null;
+    hud.refreshTouchConfirmBar();
+  };
+
+  hud.onTouchStashActiveBuilding = () => {
+    if (!(hud.moveModeActive && hud.movingBuildingUid)) return;
+    const res = sim.stashBuilding(hud.movingBuildingUid);
+    if (res.ok) {
+      if (hud.moveKeepActiveAfterDrop) {
+        hud.movingBuildingUid = null;
+        hud.pendingTouchTile = null;
+        hoverTile = null;
+      } else {
+        hud.clearBuildToolModes();
+        hoverTile = null;
+      }
+      hud.refreshAll();
+    }
+    hud.showToast(res.msg, res.ok ? '📦' : '⚠️');
   };
 
   hud.onTouchCancelPlace = () => {
@@ -1267,7 +1387,12 @@ async function bootstrap(): Promise<void> {
     // Handle 2-finger Pinch-to-Zoom!
     if (activePointers.size >= 2) {
       cancelPendingTouchPaint();
+      cancelLongPressMove();
       isPaintingTiles = false;
+      isErasingBrush = false;
+      canStartEraseBrush = false;
+      pressedOnPendingGhost = false;
+      isDraggingTouchGhost = false;
       wasPinching = true;
       const pts = Array.from(activePointers.values());
       const curDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
@@ -1319,10 +1444,68 @@ async function bootstrap(): Promise<void> {
 
     if (!isPointerDown) return;
 
+    const moveDistFromStart = Math.hypot(e.clientX - pointerStartX, e.clientY - pointerStartY);
+    if (longPressMove && moveDistFromStart > 8) {
+      cancelLongPressMove();
+    }
+
+    if (pressedOnPendingGhost && !isDraggingTouchGhost && moveDistFromStart > 6) {
+      isDraggingTouchGhost = true;
+    }
+
+    if (isDraggingTouchGhost && activePointers.size === 1) {
+      if (hud.moveModeActive && hud.movingBuildingUid) {
+        const mb = sim.state.buildings.find((x) => x.uid === hud.movingBuildingUid);
+        const mIt = mb ? getCatalogItem(mb.itemId) : undefined;
+        const nextTile = mIt
+          ? resolveBuildingPlacementTile(mIt, gPos.gx, gPos.gy, hud.rotation, hud.movingBuildingUid)
+          : { gx: gPos.gx, gy: gPos.gy };
+        hoverTile = nextTile;
+        if (hud.pendingTouchTile) {
+          hud.pendingTouchTile = {
+            gx: nextTile.gx,
+            gy: nextTile.gy,
+            label: hud.pendingTouchTile.label,
+          };
+          hud.refreshTouchConfirmBar();
+        }
+        return;
+      }
+      if (hud.selectedCatalogItem && !isDragPaintableItem(hud.selectedCatalogItem)) {
+        const nextTile = resolveBuildingPlacementTile(
+          hud.selectedCatalogItem,
+          gPos.gx,
+          gPos.gy,
+          hud.rotation
+        );
+        hoverTile = nextTile;
+        if (hud.pendingTouchTile) {
+          hud.pendingTouchTile = {
+            gx: nextTile.gx,
+            gy: nextTile.gy,
+            label: hud.pendingTouchTile.label,
+          };
+          hud.refreshTouchConfirmBar();
+        }
+        return;
+      }
+    }
+
+    if (canStartEraseBrush && hud.bulldozerActive && activePointers.size === 1 && !wasPinching) {
+      if (!isErasingBrush && moveDistFromStart > 7) {
+        isErasingBrush = true;
+        sim.eraseBrushAtTile(eraseStartGx, eraseStartGy);
+      }
+      if (isErasingBrush) {
+        sim.eraseBrushAtTile(gPos.gx, gPos.gy);
+        return;
+      }
+    }
+
     if (
       pendingTouchPaint &&
       activePointers.size === 1 &&
-      Math.hypot(e.clientX - pointerStartX, e.clientY - pointerStartY) > 8
+      moveDistFromStart > 8
     ) {
       const first = pendingTouchPaint;
       cancelPendingTouchPaint();
@@ -1398,11 +1581,16 @@ async function bootstrap(): Promise<void> {
     activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (activePointers.size >= 2) {
       cancelPendingTouchPaint();
+      cancelLongPressMove();
       finishCareSweep();
       const pts = Array.from(activePointers.values());
       prevPinchDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
       wasPinching = true;
       isPaintingTiles = false;
+      isErasingBrush = false;
+      canStartEraseBrush = false;
+      pressedOnPendingGhost = false;
+      isDraggingTouchGhost = false;
       return;
     }
 
@@ -1436,13 +1624,49 @@ async function bootstrap(): Promise<void> {
 
     isPointerDown = true;
     isDraggingCam = false;
+    isErasingBrush = false;
+    canStartEraseBrush = false;
+    pressedOnPendingGhost = false;
+    isDraggingTouchGhost = false;
+    longPressJustActivated = false;
+    cancelLongPressMove();
     pointerStartX = e.clientX;
     pointerStartY = e.clientY;
     camStartX = cam.x;
     camStartY = cam.y;
 
+    // Allow grabbing and sliding an active pending ghost footprint directly on touch!
+    if (e.button === 0 && hud.pendingTouchTile && !hud.hasOpenFloatingTray()) {
+      const ghostItem =
+        hud.selectedCatalogItem ??
+        (hud.moveModeActive && hud.movingBuildingUid
+          ? getCatalogItem(
+              sim.state.buildings.find((x) => x.uid === hud.movingBuildingUid)?.itemId ?? ''
+            ) ?? null
+          : null);
+      if (ghostItem && !isDragPaintableItem(ghostItem)) {
+        const { bw, bh } = sim.getBuildingFootprint(ghostItem, hud.rotation);
+        const pt = hud.pendingTouchTile;
+        if (
+          gPos.gx >= pt.gx - 1 &&
+          gPos.gx <= pt.gx + bw &&
+          gPos.gy >= pt.gy - 1 &&
+          gPos.gy <= pt.gy + bh
+        ) {
+          pressedOnPendingGhost = true;
+        }
+      }
+    }
+
     const item = hud.selectedCatalogItem;
-    if (e.button === 0 && item && isDragPaintableItem(item) && !hud.hasOpenFloatingTray()) {
+    if (e.button === 0 && hud.bulldozerActive && !hud.hasOpenFloatingTray()) {
+      isPaintingTiles = false;
+      isSowingSeeds = false;
+      isStockingPastures = false;
+      canStartEraseBrush = true;
+      eraseStartGx = gPos.gx;
+      eraseStartGy = gPos.gy;
+    } else if (e.button === 0 && item && isDragPaintableItem(item) && !hud.hasOpenFloatingTray()) {
       if (e.pointerType === 'touch') {
         cancelPendingTouchPaint();
         isPaintingTiles = false;
@@ -1520,6 +1744,83 @@ async function bootstrap(): Promise<void> {
               sweptUids: new Set<string>(),
             }
           : null;
+
+        // Long-Press (~430ms) on any movable placed building lifts it into Move Mode directly!
+        if (!hud.photoModeActive) {
+          const hitPriorityBubble = renderer.hotspots.some(
+            (hs) =>
+              (hs.kind === 'owl_post' ||
+                hs.kind === 'visitor_gift' ||
+                hs.kind === 'neighbor_help' ||
+                hs.kind === 'home_lantern' ||
+                hs.kind === 'unveil_building' ||
+                hs.kind === 'bubble') &&
+              Math.hypot(sx - hs.sx, sy - hs.sy) <= hs.radius
+          );
+          if (!hitPriorityBubble) {
+            let holdUid = sim.grid[gPos.gy]?.[gPos.gx]?.buildingUid ?? null;
+            if (!holdUid) {
+              let bestDist = Infinity;
+              for (let i = renderer.hotspots.length - 1; i >= 0; i--) {
+                const hs = renderer.hotspots[i];
+                if (hs.kind !== 'building') continue;
+                const d = Math.hypot(sx - hs.sx, sy - hs.sy);
+                if (d <= hs.radius && d < bestDist) {
+                  bestDist = d;
+                  holdUid = hs.id;
+                }
+              }
+            }
+            const holdB = holdUid ? sim.state.buildings.find((x) => x.uid === holdUid) : null;
+            if (holdB && !holdB.isIndestructible) {
+              const pType = e.pointerType;
+              longPressMove = {
+                uid: holdB.uid,
+                startMs: performance.now(),
+                sx,
+                sy,
+                pointerType: pType,
+                timer: window.setTimeout(() => {
+                  const activeHold = longPressMove;
+                  longPressMove = null;
+                  if (!activeHold || !isPointerDown || wasPinching || activePointers.size > 1) {
+                    return;
+                  }
+                  const curB = sim.state.buildings.find((x) => x.uid === activeHold.uid);
+                  if (!curB || curB.isIndestructible || sim.isVisitingNeighbor) return;
+                  pendingCareSweep = null;
+                  sim.batchOperationActive = false;
+                  const curIt = getCatalogItem(curB.itemId);
+                  hud.clearBuildToolModes();
+                  hud.inspectSelection = null;
+                  hud.moveModeActive = true;
+                  hud.moveKeepActiveAfterDrop = false;
+                  hud.movingBuildingUid = curB.uid;
+                  hud.rotation = curB.rotation;
+                  hoverTile = { gx: curB.gx, gy: curB.gy };
+                  if (activeHold.pointerType === 'touch') {
+                    hud.pendingTouchTile = {
+                      gx: curB.gx,
+                      gy: curB.gy,
+                      label: curIt?.name ?? 'Dời công trình',
+                    };
+                    pressedOnPendingGhost = true;
+                    isDraggingTouchGhost = true;
+                  }
+                  longPressJustActivated = true;
+                  renderer.triggerSquash(curB.uid);
+                  sim.audio.playClick();
+                  haptic('light');
+                  hud.refreshAll();
+                  hud.showToast(
+                    `✋ Đã nhấc "${curIt?.name ?? 'công trình'}" — kéo tới ô mới để đặt!`,
+                    '✋'
+                  );
+                }, LONG_PRESS_MOVE_MS),
+              };
+            }
+          }
+        }
       } else {
         pendingCareSweep = null;
       }
@@ -1535,12 +1836,18 @@ async function bootstrap(): Promise<void> {
 
   window.addEventListener('pointercancel', (e) => {
     cancelPendingTouchPaint();
+    cancelLongPressMove();
     finishCareSweep();
     sim.cancelBuildStroke();
     clearPointer(e.pointerId);
     isPointerDown = false;
     isDraggingCam = false;
     isPaintingTiles = false;
+    isErasingBrush = false;
+    canStartEraseBrush = false;
+    pressedOnPendingGhost = false;
+    isDraggingTouchGhost = false;
+    longPressJustActivated = false;
     isSowingSeeds = false;
     isStockingPastures = false;
     wasPinching = false;
@@ -1548,6 +1855,7 @@ async function bootstrap(): Promise<void> {
 
   window.addEventListener('pointerup', (e) => {
     clearPointer(e.pointerId);
+    cancelLongPressMove();
     if (wasPinching) {
       cancelPendingTouchPaint();
       finishCareSweep();
@@ -1556,6 +1864,11 @@ async function bootstrap(): Promise<void> {
         wasPinching = false;
         isPointerDown = false;
         isDraggingCam = false;
+        isErasingBrush = false;
+        canStartEraseBrush = false;
+        pressedOnPendingGhost = false;
+        isDraggingTouchGhost = false;
+        longPressJustActivated = false;
         isSowingSeeds = false;
         isStockingPastures = false;
       }
@@ -1564,6 +1877,9 @@ async function bootstrap(): Promise<void> {
 
     if (!isPointerDown) return;
     const wasCareSweeping = finishCareSweep();
+    const wasErasingBrush = isErasingBrush;
+    const wasDraggingGhost = isDraggingTouchGhost;
+    const wasLongPressLift = longPressJustActivated;
     let flushedTouchPaint = false;
     if (pendingTouchPaint && !isDraggingCam && e.target === canvas) {
       const first = pendingTouchPaint;
@@ -1574,6 +1890,11 @@ async function bootstrap(): Promise<void> {
         isPointerDown = false;
         isDraggingCam = false;
         isPaintingTiles = false;
+        isErasingBrush = false;
+        canStartEraseBrush = false;
+        pressedOnPendingGhost = false;
+        isDraggingTouchGhost = false;
+        longPressJustActivated = false;
         isSowingSeeds = false;
         isStockingPastures = false;
         hud.showToast(check.reason ?? 'Không thể đặt tại ô này!', '⚠️');
@@ -1591,13 +1912,33 @@ async function bootstrap(): Promise<void> {
 
     const wasDragging = isDraggingCam;
     const wasPainting =
-      isPaintingTiles || flushedTouchPaint || isSowingSeeds || isStockingPastures || wasCareSweeping;
+      isPaintingTiles ||
+      flushedTouchPaint ||
+      wasErasingBrush ||
+      isSowingSeeds ||
+      isStockingPastures ||
+      wasCareSweeping;
     const paintedBuild = isPaintingTiles || flushedTouchPaint;
     isPointerDown = false;
     isDraggingCam = false;
     isPaintingTiles = false;
+    isErasingBrush = false;
+    canStartEraseBrush = false;
+    pressedOnPendingGhost = false;
+    isDraggingTouchGhost = false;
+    longPressJustActivated = false;
     isSowingSeeds = false;
     isStockingPastures = false;
+
+    if (wasErasingBrush) {
+      hud.refreshDock();
+      return;
+    }
+    if (wasLongPressLift || wasDraggingGhost) {
+      hud.refreshTouchConfirmBar();
+      hud.refreshFloatingBanner();
+      return;
+    }
 
     if (paintedBuild && hud.selectedCatalogItem && !isBrushItem(hud.selectedCatalogItem)) {
       hud.selectedCatalogItem = null; // HPVN: a stray tap must not buy another one
@@ -1730,7 +2071,14 @@ async function bootstrap(): Promise<void> {
           hud.showToast(res.reason ?? 'Không thể đặt tại ô này!', '⚠️');
           return;
         }
-        hud.clearBuildToolModes();
+        if (hud.moveKeepActiveAfterDrop) {
+          hud.movingBuildingUid = null;
+          hud.pendingTouchTile = null;
+          hoverTile = null;
+        } else {
+          hud.clearBuildToolModes();
+          hoverTile = null;
+        }
         hud.refreshAll();
         hud.showToast(`✋ Đã dời "${mIt?.name ?? 'công trình'}" sang vị trí mới!`, '✨');
         return;
@@ -1757,8 +2105,16 @@ async function bootstrap(): Promise<void> {
           hud.movingBuildingUid = b.uid;
           hud.rotation = b.rotation;
           hoverTile = { gx: b.gx, gy: b.gy };
-          hud.refreshFloatingBanner();
           const it = getCatalogItem(b.itemId);
+          if (isTouch) {
+            hud.pendingTouchTile = {
+              gx: b.gx,
+              gy: b.gy,
+              label: it?.name ?? 'Dời công trình',
+            };
+          }
+          hud.refreshTouchConfirmBar();
+          hud.refreshFloatingBanner();
           hud.showToast(
             `✋ Đang nhấc "${it?.name ?? 'công trình'}" — chạm ô mới để đặt xuống!`,
             '✋'
@@ -1768,10 +2124,36 @@ async function bootstrap(): Promise<void> {
       }
     }
 
-    // 3. Active One-Tap Building Placement Mode
+    // 3. Building Placement Mode (Touch Ghost Confirm on touch; One-Tap on desktop)
     if (hud.selectedCatalogItem) {
       const placedItem = hud.selectedCatalogItem;
       const targetTile = resolveBuildingPlacementTile(placedItem, gPos.gx, gPos.gy, hud.rotation);
+      if (isTouch && !isDragPaintableItem(placedItem)) {
+        const { bw: pBw, bh: pBh } = sim.getBuildingFootprint(placedItem, hud.rotation);
+        const tappedInsidePendingPlace =
+          Boolean(hud.pendingTouchTile) &&
+          gPos.gx >= hud.pendingTouchTile!.gx &&
+          gPos.gx < hud.pendingTouchTile!.gx + pBw &&
+          gPos.gy >= hud.pendingTouchTile!.gy &&
+          gPos.gy < hud.pendingTouchTile!.gy + pBh;
+        if (
+          !tappedInsidePendingPlace &&
+          (!hud.pendingTouchTile ||
+            hud.pendingTouchTile.gx !== targetTile.gx ||
+            hud.pendingTouchTile.gy !== targetTile.gy)
+        ) {
+          hoverTile = targetTile;
+          hud.pendingTouchTile = {
+            gx: targetTile.gx,
+            gy: targetTile.gy,
+            label: formatTouchConfirmLabelForItem(placedItem),
+          };
+          hud.refreshTouchConfirmBar();
+          return;
+        }
+        hud.onTouchConfirmPlace?.();
+        return;
+      }
       hoverTile = targetTile;
       const check = sim.canPlaceItem(placedItem, targetTile.gx, targetTile.gy, hud.rotation);
       if (!check.ok) {
@@ -1788,8 +2170,6 @@ async function bootstrap(): Promise<void> {
         hud.selectedCatalogItem = null;
         hoverTile = null;
         hud.showToast(`🔨 Đã khởi công "${placedItem.name}" thành công!`, '✨');
-      } else if (isTouch) {
-        hoverTile = findBestPreviewSpotNearCamera(placedItem, hud.rotation);
       }
       hud.refreshAll();
       return;
@@ -2517,6 +2897,35 @@ async function bootstrap(): Promise<void> {
               hud.pincerPicked?.label ?? null
             );
           }
+        }
+      }
+
+      if (longPressMove) {
+        const heldMs = now - longPressMove.startMs;
+        if (heldMs >= 95) {
+          const prog = Math.max(0, Math.min(1, (heldMs - 95) / (LONG_PRESS_MOVE_MS - 95)));
+          const overlayCtx = renderer.ctx;
+          const dpr = window.devicePixelRatio || 1;
+          overlayCtx.save();
+          overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          overlayCtx.beginPath();
+          overlayCtx.arc(longPressMove.sx, longPressMove.sy - 18, 17, 0, Math.PI * 2);
+          overlayCtx.strokeStyle = 'rgba(36, 23, 19, 0.52)';
+          overlayCtx.lineWidth = 5;
+          overlayCtx.stroke();
+          overlayCtx.beginPath();
+          overlayCtx.arc(
+            longPressMove.sx,
+            longPressMove.sy - 18,
+            17,
+            -Math.PI * 0.5,
+            -Math.PI * 0.5 + Math.PI * 2 * prog
+          );
+          overlayCtx.strokeStyle = '#fde047';
+          overlayCtx.lineCap = 'round';
+          overlayCtx.lineWidth = 3.5;
+          overlayCtx.stroke();
+          overlayCtx.restore();
         }
       }
 
