@@ -1172,4 +1172,246 @@ describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
 
     renderer.destroy();
   });
+
+  it('places ingredientExitCells on every column bottom of stepped 10x10 boards without blocking obstacles', () => {
+    let steppedLevel = null as ReturnType<typeof getCandyLevelById> | null;
+    for (let id = 334; id <= 777; id++) {
+      const lv = getCandyLevelById(id);
+      if (
+        lv.size === 10 &&
+        lv.ingredientTarget > 0 &&
+        lv.portals.length === 0 &&
+        lv.mask[9][1] === 0 &&
+        lv.mask[8][1] === 1 &&
+        lv.mask[8][0] === 0 &&
+        lv.mask[7][0] === 1
+      ) {
+        steppedLevel = lv;
+        break;
+      }
+    }
+    expect(steppedLevel).not.toBeNull();
+    const lv = steppedLevel!;
+    expect(lv.ingredientExitCells).toHaveLength(10);
+
+    const exitByCol = new Map(lv.ingredientExitCells.map((ex) => [ex.c, ex.r]));
+    expect(exitByCol.get(0)).toBe(7);
+    expect(exitByCol.get(1)).toBe(8);
+    expect(exitByCol.get(8)).toBe(8);
+    expect(exitByCol.get(9)).toBe(7);
+    for (let c = 2; c <= 7; c++) {
+      expect(exitByCol.get(c)).toBe(9);
+    }
+
+    for (const ex of lv.ingredientExitCells) {
+      expect(lv.mask[ex.r][ex.c]).toBe(1);
+      expect(lv.iceGrid[ex.r][ex.c]).toBe(0);
+      expect(lv.frostingGrid[ex.r][ex.c]).toBe(0);
+      expect(lv.lockGrid[ex.r][ex.c]).toBe(0);
+      expect(lv.petrifyGrid[ex.r][ex.c]).toBe(0);
+      expect(lv.swirlGrid[ex.r][ex.c]).toBe(0);
+    }
+  });
+
+  it('extracts stacked and stepped-bottom ingredients during localized colScope swaps', async () => {
+    let steppedLevel = null as ReturnType<typeof getCandyLevelById> | null;
+    for (let id = 334; id <= 777; id++) {
+      const lv = getCandyLevelById(id);
+      if (
+        lv.size === 10 &&
+        lv.ingredientTarget >= 3 &&
+        lv.portals.length === 0 &&
+        lv.mask[9][1] === 0 &&
+        lv.mask[8][1] === 1
+      ) {
+        steppedLevel = lv;
+        break;
+      }
+    }
+    expect(steppedLevel).not.toBeNull();
+
+    const engine = new CandyHogwartsEngine(null);
+    engine.loadLevel(steppedLevel!, { house: 'gryffindor', instantAnimations: true });
+
+    // Sanitize obstacles on test board and paint a checkerboard of non-matching pieces
+    const sz = engine.size;
+    for (let r = 0; r < sz; r++) {
+      for (let c = 0; c < sz; c++) {
+        engine.jelly[r][c] = 0;
+        engine.ice[r][c] = 0;
+        engine.frosting[r][c] = 0;
+        engine.chocolate[r][c] = 0;
+        engine.cauldron[r][c] = 0;
+        engine.lockGrid[r][c] = 0;
+        engine.petrify[r][c] = 0;
+        engine.dementor[r][c] = 0;
+        engine.decree[r][c] = 0;
+        engine.fiendfyre[r][c] = 0;
+        engine.horcrux[r][c] = 0;
+        if (engine.mask[r][c] === 1) {
+          const color = (r * 2 + c) % engine.numColors;
+          engine.grid[r][c] = {
+            id: 50000 + r * sz + c,
+            color,
+            special: null,
+            blocker: null,
+            isIngredient: false,
+            bombTimer: null,
+            hasKey: false,
+            primedWrapped: false,
+            primedMega: false,
+            x: c,
+            y: r,
+            scale: 1,
+            alpha: 1,
+          };
+        } else {
+          engine.grid[r][c] = null;
+        }
+      }
+    }
+
+    const setColor = (r: number, c: number, color: number) => {
+      const cell = engine.grid[r][c]!;
+      cell.color = color;
+      cell.isIngredient = false;
+      cell.special = null;
+      cell.blocker = null;
+    };
+    const setStone = (r: number, c: number) => {
+      const cell = engine.grid[r][c]!;
+      cell.color = -1;
+      cell.isIngredient = true;
+      cell.special = null;
+      cell.blocker = null;
+    };
+
+    engine.ingredientTarget = 4;
+    engine.ingredientsCollected = 0;
+    engine.ingredientsSpawned = 3;
+
+    // 1) Stacked stones in column 3 directly above a localized 3-match swap (9,2) <-> (9,3)
+    setStone(7, 3);
+    setStone(8, 3);
+    setColor(9, 2, 0);
+    setColor(9, 3, 1);
+    setColor(9, 4, 0);
+    setColor(9, 5, 0);
+    setColor(8, 2, 2);
+    setColor(8, 4, 3);
+    setColor(8, 5, 4);
+    setColor(9, 6, 3);
+
+    const movedCol3 = await engine.trySwap({ r: 9, c: 2 }, { r: 9, c: 3 });
+    expect(movedCol3).toBe(true);
+    expect(engine.ingredientsCollected).toBe(2);
+    expect(engine.grid[9][3]).not.toBeNull();
+    expect(engine.grid[9][3]!.isIngredient).toBe(false);
+
+    // 2) Stone on stepped outer column 1 directly above (8,1) cleared via localized swap (7,3) <-> (8,3)
+    setStone(7, 1);
+    setColor(8, 1, 2);
+    setColor(8, 2, 2);
+    setColor(8, 3, 4);
+    setColor(7, 3, 2);
+    setColor(8, 4, 1);
+    setColor(6, 3, 3);
+    setColor(7, 2, 1);
+    setColor(7, 4, 0);
+    setColor(9, 3, 1);
+
+    const movedCol1 = await engine.trySwap({ r: 7, c: 3 }, { r: 8, c: 3 });
+    expect(movedCol1).toBe(true);
+    expect(engine.ingredientsCollected).toBe(3);
+    expect(engine.grid[8][1]).not.toBeNull();
+    expect(engine.grid[8][1]!.isIngredient).toBe(false);
+
+    engine.destroy();
+  });
+
+  it('heals stuck bottom-row and stepped-column ingredients during restoreSession', () => {
+    let steppedLevel = null as ReturnType<typeof getCandyLevelById> | null;
+    for (let id = 334; id <= 777; id++) {
+      const lv = getCandyLevelById(id);
+      if (
+        lv.size === 10 &&
+        lv.ingredientTarget >= 3 &&
+        lv.portals.length === 0 &&
+        lv.mask[9][1] === 0 &&
+        lv.mask[8][1] === 1
+      ) {
+        steppedLevel = lv;
+        break;
+      }
+    }
+    expect(steppedLevel).not.toBeNull();
+
+    const engine = new CandyHogwartsEngine(null);
+    engine.loadLevel(steppedLevel!, { house: 'gryffindor', instantAnimations: true });
+
+    const snap = engine.exportSession()!;
+    const sz = snap.size;
+    for (let r = 0; r < sz; r++) {
+      for (let c = 0; c < sz; c++) {
+        snap.ice[r][c] = 0;
+        snap.frosting[r][c] = 0;
+        snap.chocolate[r][c] = 0;
+        snap.lockGrid[r][c] = 0;
+        snap.petrify[r][c] = 0;
+        snap.cauldron[r][c] = 0;
+        snap.dementor[r][c] = 0;
+        snap.decree[r][c] = 0;
+        snap.fiendfyre[r][c] = 0;
+        snap.horcrux[r][c] = 0;
+      }
+    }
+    // Reproduce stacked stones stuck on bottom exit (9,3) & (8,3)
+    snap.ingredientsCollected = 0;
+    snap.ingredientsSpawned = 2;
+    snap.grid[9][3] = {
+      color: -1,
+      special: null,
+      blocker: null,
+      isIngredient: true,
+      bombTimer: null,
+      hasKey: false,
+      primedWrapped: false,
+      primedMega: false,
+    };
+    snap.grid[8][3] = {
+      color: -1,
+      special: null,
+      blocker: null,
+      isIngredient: true,
+      bombTimer: null,
+      hasKey: false,
+      primedWrapped: false,
+      primedMega: false,
+    };
+
+    const restored = new CandyHogwartsEngine(null);
+    // Simulate legacy session levelData missing stepped outer columns in ingredientExitCells
+    restored.loadLevel(
+      {
+        ...steppedLevel!,
+        ingredientTarget: 4,
+        ingredientExitCells: steppedLevel!.ingredientExitCells.filter((ex) => ex.r === sz - 1),
+      },
+      { house: 'gryffindor', instantAnimations: true }
+    );
+    expect(restored.restoreSession(snap)).toBe(true);
+
+    expect(restored.ingredientsCollected).toBe(2);
+    expect(restored.grid[9][3]).not.toBeNull();
+    expect(restored.grid[9][3]!.isIngredient).toBe(false);
+    expect(restored.grid[8][3]).not.toBeNull();
+    expect(restored.grid[8][3]!.isIngredient).toBe(false);
+    expect(restored.findMatchClusters()).toHaveLength(0);
+    expect(restored.findAnyValidMove(false)).not.toBeNull();
+    expect(restored.ingredientExitCells.some((ex) => ex.r === 8 && ex.c === 1)).toBe(true);
+    expect(restored.ingredientExitCells.some((ex) => ex.r === 7 && ex.c === 0)).toBe(true);
+
+    engine.destroy();
+    restored.destroy();
+  });
 });

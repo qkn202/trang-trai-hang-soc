@@ -1097,6 +1097,27 @@ export class CandyHogwartsEngine {
     return this.ingredientExitCells.some((ex) => ex.r === r && ex.c === c);
   }
 
+  private syncExitCellsWithMask(): void {
+    if (this.ingredientTarget <= 0 || this.ingredientExitCells.length <= 1) return;
+    const byCol = new Map<number, { r: number; c: number }>();
+    for (const ex of this.ingredientExitCells) {
+      if (ex.c < 0 || ex.c >= this.size) continue;
+      if (this.mask[ex.r]?.[ex.c] === 1 && ex.r > 0) {
+        byCol.set(ex.c, { ...ex });
+      }
+    }
+    for (let c = 0; c < this.size; c++) {
+      if (byCol.has(c)) continue;
+      for (let r = this.size - 1; r > 0; r--) {
+        if (this.mask[r]?.[c] === 1) {
+          byCol.set(c, { r, c });
+          break;
+        }
+      }
+    }
+    this.ingredientExitCells = Array.from(byCol.values()).sort((a, b) => a.c - b.c);
+  }
+
   private isPortalCell(r: number, c: number): boolean {
     return this.portals.some(
       (p) => (p.from.r === r && p.from.c === c) || (p.to.r === r && p.to.c === c)
@@ -2371,7 +2392,7 @@ export class CandyHogwartsEngine {
       }
 
       if (session === this.sessionId && !this.ended && this.activeAsyncSwaps === 0 && !this.busy) {
-        if (this.hasAnyOpenEmptyCell()) {
+        if (this.extractIngredientsAtExits() || this.hasAnyOpenEmptyCell()) {
           this.busy = true;
           try {
             await this.applyGravityAndRefill(session);
@@ -4034,25 +4055,31 @@ export class CandyHogwartsEngine {
     this.vfx.seekers.push({ r1, c1, r2, c2, color, life: 0.28, maxLife: 0.28 });
   }
 
-  private extractIngredientsAtExits(): boolean {
+  private extractIngredientsAtExits(colScope?: Set<number>, silent = false): boolean {
     if (this.ingredientExitCells.length === 0) return false;
     let extracted = false;
     for (const ex of this.ingredientExitCells) {
+      if (colScope && !colScope.has(ex.c)) continue;
+      if (this.isCellLocked(ex.r, ex.c)) continue;
       const p = this.grid[ex.r]?.[ex.c];
       if (p?.isIngredient) {
         this.grid[ex.r][ex.c] = null;
         this.ingredientsCollected++;
         extracted = true;
-        this.cb.audio?.onColorBomb?.();
         this.addPatronusCharge(15);
         this.damageBoss(180);
-        this.spawnRing(ex.r, ex.c, 1.6, '#10b981');
-        this.spawnBurst(ex.r, ex.c, '#34d399', 18);
-        this.spawnPopup(ex.r, ex.c, 'THU HỒI ĐÁ PHÙ THỦY!', '#6ee7b7', 16);
-        this.addScore(1000, ex.r, ex.c, '#34d399', false);
+        if (silent) {
+          this.score += 1000;
+        } else {
+          this.cb.audio?.onColorBomb?.();
+          this.spawnRing(ex.r, ex.c, 1.6, '#10b981');
+          this.spawnBurst(ex.r, ex.c, '#34d399', 18);
+          this.spawnPopup(ex.r, ex.c, 'THU HỒI ĐÁ PHÙ THỦY!', '#6ee7b7', 16);
+          this.addScore(1000, ex.r, ex.c, '#34d399', false);
+        }
       }
     }
-    if (extracted) this.emitHudState();
+    if (extracted && !silent) this.emitHudState();
     return extracted;
   }
 
@@ -4165,9 +4192,7 @@ export class CandyHogwartsEngine {
     }
 
     const colSpawnCounts = new Array<number>(this.size).fill(0);
-    if (fullScope) {
-      this.extractIngredientsAtExits();
-    }
+    this.extractIngredientsAtExits(colScope);
 
     let portalPlayed = false;
     const maxTicks = this.size * 4 + 14;
@@ -4254,7 +4279,7 @@ export class CandyHogwartsEngine {
         }
       }
 
-      if (fullScope && this.extractIngredientsAtExits()) {
+      if (this.extractIngredientsAtExits(colScope)) {
         moved = true;
       }
 
@@ -4271,9 +4296,7 @@ export class CandyHogwartsEngine {
         }
       }
     }
-    if (fullScope) {
-      this.extractIngredientsAtExits();
-    }
+    this.extractIngredientsAtExits(colScope);
 
     if (this.countGridSum(this.lockGrid) > 0 && this.countKeysOnBoard() === 0) {
       this.ensureSugarKeysOnBoard(1);
@@ -6065,6 +6088,7 @@ export class CandyHogwartsEngine {
     this.fiendfyre = nextFiendfyre;
     this.horcrux = nextHorcrux;
     this.grid = nextGrid;
+    this.syncExitCellsWithMask();
 
     let healedEmpty = false;
     for (let r = 0; r < sz; r++) {
@@ -6138,6 +6162,91 @@ export class CandyHogwartsEngine {
       const reloadSuper = this.superRainbow;
       this.loadLevel(this.level, { house: reloadHouse, superRainbow: reloadSuper });
       return false;
+    }
+
+    if (!this.ended && this.status === 'playing' && this.ingredientTarget > 0) {
+      let healedStuckStones = false;
+      for (let pass = 0; pass < sz + 2; pass++) {
+        if (!this.extractIngredientsAtExits(undefined, true)) break;
+        healedStuckStones = true;
+        for (let tick = 0; tick < sz; tick++) {
+          let moved = false;
+          for (let r = sz - 2; r >= 0; r--) {
+            for (let c = 0; c < sz; c++) {
+              if (!this.canPieceFall(r, c)) continue;
+              let targetR = -1;
+              if (this.isOpenEmpty(r + 1, c)) {
+                targetR = r + 1;
+              } else if (this.mask[r + 1]?.[c] === 0) {
+                for (let rr = r + 2; rr < sz; rr++) {
+                  if (this.mask[rr]?.[c] === 0) continue;
+                  if (this.isOpenEmpty(rr, c)) targetR = rr;
+                  break;
+                }
+              }
+              if (targetR !== -1) {
+                const falling = this.grid[r][c]!;
+                this.grid[targetR][c] = falling;
+                this.grid[r][c] = null;
+                falling.x = c;
+                falling.y = targetR;
+                moved = true;
+              }
+            }
+          }
+          if (!moved) break;
+        }
+        for (let r = 0; r < sz; r++) {
+          for (let c = 0; c < sz; c++) {
+            if (this.isOpenEmpty(r, c)) {
+              this.grid[r][c] = this.createNonMatchingPiece(r, c);
+            }
+          }
+        }
+      }
+
+      if (healedStuckStones) {
+        for (let pass = 0; pass < 18; pass++) {
+          const clusters = this.findMatchClusters();
+          if (clusters.length === 0) break;
+          let changed = false;
+          for (const cl of clusters) {
+            for (const cell of cl.cells) {
+              const p = this.grid[cell.r]?.[cell.c];
+              if (
+                !p ||
+                this.isCellLocked(cell.r, cell.c) ||
+                p.special ||
+                !this.isMatchablePiece(p)
+              ) {
+                continue;
+              }
+              if (!this.quickCheckMatchAt(cell.r, cell.c)) continue;
+              for (let candidate = 0; candidate < this.numColors; candidate++) {
+                if (candidate === p.color) continue;
+                p.color = candidate;
+                if (!this.quickCheckMatchAt(cell.r, cell.c)) {
+                  changed = true;
+                  break;
+                }
+              }
+            }
+          }
+          if (!changed) break;
+        }
+
+        if (!this.findAnyValidMove(false)) {
+          this.grantEmergencyMovePiece();
+        }
+        if (this.areAllObjectivesComplete()) {
+          const restoredSession = this.sessionId;
+          queueMicrotask(() => {
+            if (!this.ended && this.sessionId === restoredSession) {
+              void this.checkPostTurnState(restoredSession, false);
+            }
+          });
+        }
+      }
     }
 
     this.resetIdleHint();

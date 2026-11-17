@@ -1634,7 +1634,12 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
       }
     }
     for (let c = 0; c < size; c++) {
-      if (mask[size - 1][c] === 1) ingredientExitCells.push({ r: size - 1, c });
+      for (let r = size - 1; r > 0; r--) {
+        if (mask[r][c] === 1) {
+          ingredientExitCells.push({ r, c });
+          break;
+        }
+      }
     }
   }
 

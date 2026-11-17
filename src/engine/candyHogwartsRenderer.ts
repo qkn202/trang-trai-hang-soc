@@ -782,12 +782,6 @@ export class CandyHogwartsBoardRenderer {
       );
     }
 
-    for (const ex of ingredientExitCells) {
-      if (mask[ex.r]?.[ex.c] === 1) {
-        this.drawIngredientExitArrow(ctx, ex.r, ex.c, cs, now);
-      }
-    }
-
     if (activeBooster === 'hammer' || activeBooster === 'swap') {
       roundRectPath(
         ctx,
@@ -857,6 +851,12 @@ export class CandyHogwartsBoardRenderer {
           const y = this.padding + piece.y * cs + 2;
           this.drawGringottsPadlock(ctx, x, y, cs - 4, cs - 4, cs * 0.16, now);
         }
+      }
+    }
+
+    for (const ex of ingredientExitCells) {
+      if (mask[ex.r]?.[ex.c] === 1) {
+        this.drawIngredientExitArrow(ctx, ex.r, ex.c, cs, now);
       }
     }
 
@@ -1470,7 +1470,7 @@ export class CandyHogwartsBoardRenderer {
     now: number
   ): void {
     const center = this.cellCenter(r, c);
-    const yBase = this.padding + (r + 1) * cs - 2;
+    const yBase = this.padding + (r + 1) * cs + 1;
     const bob = Math.sin(now * 0.006) * 2;
 
     ctx.save();
