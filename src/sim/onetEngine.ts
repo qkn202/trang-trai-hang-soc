@@ -156,7 +156,12 @@ export interface OnetMatchVfxEvent {
   speciesId: string;
   segments: number;
   combo: number;
+  bonusTimeSec?: number;
 }
+
+export const ONET_STAGE_TIME_LIMIT_SEC = 20 * 60;
+export const ONET_MATCH_BONUS_SEC = 20;
+export const ONET_MAX_TIME_SEC = 7200;
 
 export interface OnetSlideVfxEvent {
   speciesId: string;
@@ -199,9 +204,9 @@ const ONET_PROGRESSION_TIERS: readonly OnetTierSpec[] = [
     rows: 4,
     cols: 6,
     speciesCount: 6,
-    timeStartSec: 90,
-    timeEndSec: 80,
-    matchBonusSec: 1.0,
+    timeStartSec: ONET_STAGE_TIME_LIMIT_SEC,
+    timeEndSec: ONET_STAGE_TIME_LIMIT_SEC,
+    matchBonusSec: ONET_MATCH_BONUS_SEC,
     maxLives: 6,
   },
   // Bậc 2 (Màn 4–7): 4 × 8 = 32 ô (16 cặp, 12 loài)
@@ -211,9 +216,9 @@ const ONET_PROGRESSION_TIERS: readonly OnetTierSpec[] = [
     rows: 4,
     cols: 8,
     speciesCount: 12,
-    timeStartSec: 86,
-    timeEndSec: 80,
-    matchBonusSec: 1.0,
+    timeStartSec: ONET_STAGE_TIME_LIMIT_SEC,
+    timeEndSec: ONET_STAGE_TIME_LIMIT_SEC,
+    matchBonusSec: ONET_MATCH_BONUS_SEC,
     maxLives: 6,
   },
   // Bậc 3 (Màn 8–12): 5 × 8 = 40 ô (20 cặp, 15 loài)
@@ -223,9 +228,9 @@ const ONET_PROGRESSION_TIERS: readonly OnetTierSpec[] = [
     rows: 5,
     cols: 8,
     speciesCount: 15,
-    timeStartSec: 96,
-    timeEndSec: 88,
-    matchBonusSec: 1.0,
+    timeStartSec: ONET_STAGE_TIME_LIMIT_SEC,
+    timeEndSec: ONET_STAGE_TIME_LIMIT_SEC,
+    matchBonusSec: ONET_MATCH_BONUS_SEC,
     maxLives: 6,
   },
   // Bậc 4 (Màn 13–19): 6 × 8 = 48 ô (24 cặp, 18 loài)
@@ -235,9 +240,9 @@ const ONET_PROGRESSION_TIERS: readonly OnetTierSpec[] = [
     rows: 6,
     cols: 8,
     speciesCount: 18,
-    timeStartSec: 106,
-    timeEndSec: 98,
-    matchBonusSec: 0.9,
+    timeStartSec: ONET_STAGE_TIME_LIMIT_SEC,
+    timeEndSec: ONET_STAGE_TIME_LIMIT_SEC,
+    matchBonusSec: ONET_MATCH_BONUS_SEC,
     maxLives: 6,
   },
   // Bậc 5 (Màn 20–29): 6 × 10 = 60 ô (30 cặp, 22 loài)
@@ -247,9 +252,9 @@ const ONET_PROGRESSION_TIERS: readonly OnetTierSpec[] = [
     rows: 6,
     cols: 10,
     speciesCount: 22,
-    timeStartSec: 122,
-    timeEndSec: 112,
-    matchBonusSec: 0.9,
+    timeStartSec: ONET_STAGE_TIME_LIMIT_SEC,
+    timeEndSec: ONET_STAGE_TIME_LIMIT_SEC,
+    matchBonusSec: ONET_MATCH_BONUS_SEC,
     maxLives: 6,
   },
   // Bậc 6 (Màn 30–44): 6 × 12 = 72 ô (36 cặp, 26 loài)
@@ -259,9 +264,9 @@ const ONET_PROGRESSION_TIERS: readonly OnetTierSpec[] = [
     rows: 6,
     cols: 12,
     speciesCount: 26,
-    timeStartSec: 138,
-    timeEndSec: 126,
-    matchBonusSec: 0.8,
+    timeStartSec: ONET_STAGE_TIME_LIMIT_SEC,
+    timeEndSec: ONET_STAGE_TIME_LIMIT_SEC,
+    matchBonusSec: ONET_MATCH_BONUS_SEC,
     maxLives: 6,
   },
   // Bậc 7 (Màn 45–64): 7 × 12 = 84 ô (42 cặp, 30 loài)
@@ -271,9 +276,9 @@ const ONET_PROGRESSION_TIERS: readonly OnetTierSpec[] = [
     rows: 7,
     cols: 12,
     speciesCount: 30,
-    timeStartSec: 152,
-    timeEndSec: 140,
-    matchBonusSec: 0.8,
+    timeStartSec: ONET_STAGE_TIME_LIMIT_SEC,
+    timeEndSec: ONET_STAGE_TIME_LIMIT_SEC,
+    matchBonusSec: ONET_MATCH_BONUS_SEC,
     maxLives: 5,
   },
   // Bậc 8 (Màn 65–94): 8 × 12 = 96 ô (48 cặp, 33 loài)
@@ -283,9 +288,9 @@ const ONET_PROGRESSION_TIERS: readonly OnetTierSpec[] = [
     rows: 8,
     cols: 12,
     speciesCount: 33,
-    timeStartSec: 166,
-    timeEndSec: 152,
-    matchBonusSec: 0.75,
+    timeStartSec: ONET_STAGE_TIME_LIMIT_SEC,
+    timeEndSec: ONET_STAGE_TIME_LIMIT_SEC,
+    matchBonusSec: ONET_MATCH_BONUS_SEC,
     maxLives: 5,
   },
   // Bậc 9 (Màn 95–139): 8 × 14 = 112 ô (56 cặp, 35 loài)
@@ -295,9 +300,9 @@ const ONET_PROGRESSION_TIERS: readonly OnetTierSpec[] = [
     rows: 8,
     cols: 14,
     speciesCount: 35,
-    timeStartSec: 182,
-    timeEndSec: 166,
-    matchBonusSec: 0.7,
+    timeStartSec: ONET_STAGE_TIME_LIMIT_SEC,
+    timeEndSec: ONET_STAGE_TIME_LIMIT_SEC,
+    matchBonusSec: ONET_MATCH_BONUS_SEC,
     maxLives: 5,
   },
   // Bậc 10 (Màn 140–199): 9 × 14 = 126 ô (63 cặp, 36 loài)
@@ -307,9 +312,9 @@ const ONET_PROGRESSION_TIERS: readonly OnetTierSpec[] = [
     rows: 9,
     cols: 14,
     speciesCount: 36,
-    timeStartSec: 196,
-    timeEndSec: 178,
-    matchBonusSec: 0.65,
+    timeStartSec: ONET_STAGE_TIME_LIMIT_SEC,
+    timeEndSec: ONET_STAGE_TIME_LIMIT_SEC,
+    matchBonusSec: ONET_MATCH_BONUS_SEC,
     maxLives: 5,
   },
   // Bậc 11 (Màn 200–399): 9 × 16 = 144 ô (72 cặp, đủ 36 loài chuẩn Pikachu 2003)
@@ -319,9 +324,9 @@ const ONET_PROGRESSION_TIERS: readonly OnetTierSpec[] = [
     rows: 9,
     cols: 16,
     speciesCount: 36,
-    timeStartSec: 212,
-    timeEndSec: 188,
-    matchBonusSec: 0.6,
+    timeStartSec: ONET_STAGE_TIME_LIMIT_SEC,
+    timeEndSec: ONET_STAGE_TIME_LIMIT_SEC,
+    matchBonusSec: ONET_MATCH_BONUS_SEC,
     maxLives: 5,
   },
   // Bậc 12 (Màn 400–777): 10 × 16 = 160 ô (80 cặp, đại trận kiện tướng)
@@ -331,9 +336,9 @@ const ONET_PROGRESSION_TIERS: readonly OnetTierSpec[] = [
     rows: 10,
     cols: 16,
     speciesCount: 36,
-    timeStartSec: 220,
-    timeEndSec: 180,
-    matchBonusSec: 0.55,
+    timeStartSec: ONET_STAGE_TIME_LIMIT_SEC,
+    timeEndSec: ONET_STAGE_TIME_LIMIT_SEC,
+    matchBonusSec: ONET_MATCH_BONUS_SEC,
     maxLives: 5,
   },
 ];
@@ -511,14 +516,19 @@ export class CreatureOnetEngine {
   public get isTimeCritical(): boolean {
     return (
       this.status === 'playing' &&
-      (this.timeRemainingSec <= 20 || this.timeProgressRatio <= 0.18)
+      this.timeRemainingSec > 0 &&
+      this.timeRemainingSec <= Math.min(60, Math.max(20, this.timeLimitSec * 0.12))
     );
   }
 
   public formatRemainingTime(): string {
     const totalSec = Math.max(0, Math.ceil(this.timeRemainingSec));
-    const mins = Math.floor(totalSec / 60);
+    const hrs = Math.floor(totalSec / 3600);
+    const mins = Math.floor((totalSec % 3600) / 60);
     const secs = totalSec % 60;
+    if (hrs > 0) {
+      return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   }
 
@@ -530,7 +540,7 @@ export class CreatureOnetEngine {
       return { wholeSecondChanged: false, timedOut: false };
     }
     if (infiniteTime) {
-      this.timeRemainingSec = this.timeLimitSec;
+      this.timeRemainingSec = Math.max(this.timeLimitSec, this.timeRemainingSec);
       return { wholeSecondChanged: false, timedOut: false };
     }
     const prevWhole = Math.ceil(this.timeRemainingSec);
@@ -553,7 +563,7 @@ export class CreatureOnetEngine {
   public addBonusTime(extraSec: number): void {
     if (!Number.isFinite(extraSec) || extraSec <= 0) return;
     this.timeRemainingSec = Math.min(
-      this.timeLimitSec,
+      ONET_MAX_TIME_SEC,
       Math.max(0, this.timeRemainingSec) + extraSec
     );
     if (this.status === 'lost' && this.lossReason === 'timeout' && this.timeRemainingSec > 0) {
@@ -1169,6 +1179,7 @@ export class CreatureOnetEngine {
       speciesId: clickedSp,
       segments,
       combo: this.combo,
+      bonusTimeSec: this.matchBonusSec,
     });
 
     const spMeta = CreatureOnetEngine.getSpeciesDef(clickedSp);
@@ -1187,6 +1198,12 @@ export class CreatureOnetEngine {
       };
     }
 
+    // Mỗi lần nối cặp thành công cộng thêm đúng +20s (cho phép tích luỹ vượt mốc 20:00 ban đầu tới trần an toàn)
+    this.timeRemainingSec = Math.min(
+      ONET_MAX_TIME_SEC,
+      Math.max(0, this.timeRemainingSec) + this.matchBonusSec
+    );
+
     if (this.matchedPairs >= this.totalPairs) {
       this.status = 'won';
       this.lossReason = null;
@@ -1201,10 +1218,6 @@ export class CreatureOnetEngine {
         won: true,
       };
     }
-
-    // Classic Pikachu match time refill (extra +0.6s when chaining combo >= 3)
-    const bonusSec = this.matchBonusSec + (this.combo >= 3 ? 0.6 : 0);
-    this.timeRemainingSec = Math.min(this.timeLimitSec, this.timeRemainingSec + bonusSec);
 
     // Apply classic 9-mode Pikachu gravity/sliding!
     this.applyStageShift();
@@ -1279,7 +1292,7 @@ export class CreatureOnetEngine {
     this.lives += Math.max(1, Math.floor(extraLives));
     if (extraTimeSec > 0) {
       this.timeRemainingSec = Math.min(
-        this.timeLimitSec,
+        ONET_MAX_TIME_SEC,
         Math.max(0, this.timeRemainingSec) + extraTimeSec
       );
     }
@@ -1311,7 +1324,7 @@ export class CreatureOnetEngine {
     this.lossReason = null;
     const bonusTimeSec = Math.max(45, Math.round(this.timeLimitSec * 0.35));
     this.timeRemainingSec = Math.min(
-      this.timeLimitSec,
+      ONET_MAX_TIME_SEC,
       Math.max(0, this.timeRemainingSec) + bonusTimeSec
     );
     this.selected = null;
@@ -1527,7 +1540,18 @@ export class CreatureOnetEngine {
     this.talismanUsed = Boolean(snap.talismanUsed);
 
     if (typeof snap.timeRemainingSec === 'number' && Number.isFinite(snap.timeRemainingSec)) {
-      this.timeRemainingSec = Math.max(0, Math.min(this.timeLimitSec, snap.timeRemainingSec));
+      let restoredSec = snap.timeRemainingSec;
+      if (
+        snap.status === 'playing' &&
+        restoredSec > 0 &&
+        typeof snap.timeLimitSec === 'number' &&
+        Number.isFinite(snap.timeLimitSec) &&
+        snap.timeLimitSec > 0 &&
+        snap.timeLimitSec < this.timeLimitSec
+      ) {
+        restoredSec += this.timeLimitSec - snap.timeLimitSec;
+      }
+      this.timeRemainingSec = Math.max(0, Math.min(ONET_MAX_TIME_SEC, restoredSec));
     } else {
       this.timeRemainingSec = this.timeLimitSec;
     }

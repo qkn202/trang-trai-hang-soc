@@ -583,6 +583,7 @@ export class PuzzleArcadeModalController {
     accent: string;
     age: number;
     duration: number;
+    bonusTimeSec?: number;
   }> = [];
   private onetSlideAnims = new Map<
     string,
@@ -4615,7 +4616,8 @@ export class PuzzleArcadeModalController {
         points: pts,
         accent: '#ef4444',
         age: 0,
-        duration: 0.3,
+        duration: 0.45,
+        bonusTimeSec: ev.bonusTimeSec,
       });
       const pFrom = this.onetPointToPixel(ev.from, this.onetEngine, m);
       const pTo = this.onetPointToPixel(ev.to, this.onetEngine, m);
@@ -5154,7 +5156,7 @@ export class PuzzleArcadeModalController {
     if (ratio > 0.004) {
       const fillW = Math.max(2, Math.min(trackW, trackW * ratio));
       const fillGrad = ctx.createLinearGradient(trackX, trackY, trackX, trackY + trackH);
-      if (!isSandbox && (ratio <= 0.2 || engine.timeRemainingSec <= 20)) {
+      if (!isSandbox && engine.isTimeCritical) {
         const pulseRed = 0.72 + 0.28 * Math.sin(now * 0.016);
         fillGrad.addColorStop(0, `rgba(252, 165, 165, ${pulseRed.toFixed(2)})`);
         fillGrad.addColorStop(1, `rgba(220, 38, 38, ${pulseRed.toFixed(2)})`);
@@ -5348,6 +5350,21 @@ export class PuzzleArcadeModalController {
         ctx.fillRect(pt.x - outerR, pt.y - outerR, outerR * 2, outerR * 2);
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(pt.x - innerR, pt.y - innerR, innerR * 2, innerR * 2);
+      }
+
+      if (!isSandbox && beam.bonusTimeSec && beam.bonusTimeSec > 0) {
+        const endPt = beam.points[beam.points.length - 1];
+        const riseY = endPt.y - 8 - t * 18;
+        ctx.globalAlpha = Math.max(0, Math.min(1, (1 - t) * 1.35));
+        ctx.font = '800 12px "Be Vietnam Pro", system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(15, 23, 18, 0.92)';
+        const label = `+${Math.round(beam.bonusTimeSec)}s`;
+        ctx.strokeText(label, endPt.x, riseY);
+        ctx.fillStyle = '#4ade80';
+        ctx.fillText(label, endPt.x, riseY);
       }
       ctx.restore();
     }

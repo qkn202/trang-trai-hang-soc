@@ -146,15 +146,15 @@ describe('Minigame Difficulty Upgrade (except Sudoku)', () => {
     const cfg1 = getOnetStageConfig(1);
     expect(cfg1.rows).toBe(4);
     expect(cfg1.cols).toBe(6);
-    expect(cfg1.timeLimitSec).toBe(90);
+    expect(cfg1.timeLimitSec).toBe(1200);
+    expect(cfg1.matchBonusSec).toBe(20);
     expect(cfg1.speciesCount).toBe(6);
     expect(cfg1.maxLives).toBe(6);
 
     const cfg4 = getOnetStageConfig(4);
     expect(cfg4.speciesCount).toBe(12);
-    expect(cfg4.timeLimitSec).toBeLessThan(110);
-    expect(cfg4.timeLimitSec).toBeGreaterThanOrEqual(80);
-    expect(cfg4.matchBonusSec).toBeLessThanOrEqual(1.0);
+    expect(cfg4.timeLimitSec).toBe(1200);
+    expect(cfg4.matchBonusSec).toBe(20);
 
     const cfg50 = getOnetStageConfig(50);
     expect(cfg50.maxLives).toBe(5);

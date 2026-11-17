@@ -202,6 +202,7 @@ import {
   JIGSAW_PAINTINGS,
   PuzzleRewardSpec,
 } from './puzzleShared';
+import { ONET_MAX_TIME_SEC, ONET_STAGE_TIME_LIMIT_SEC } from './onetEngine';
 import {
   ActiveQuizChallenge,
   createInitialLanguageQuizState,
@@ -1514,10 +1515,20 @@ export function sanitizeSavedOnetSession(
     paidShufflesLeft: Math.round(clampFinite(rec.paidShufflesLeft, 0, 15, 1)),
     talismanUsed: Boolean(rec.talismanUsed),
     ...(typeof rec.timeLimitSec === 'number' && Number.isFinite(rec.timeLimitSec)
-      ? { timeLimitSec: Math.round(clampFinite(rec.timeLimitSec, 30, 1200, 180)) }
+      ? {
+          timeLimitSec: Math.round(
+            clampFinite(rec.timeLimitSec, 30, ONET_MAX_TIME_SEC, ONET_STAGE_TIME_LIMIT_SEC)
+          ),
+        }
       : {}),
     ...(typeof rec.timeRemainingSec === 'number' && Number.isFinite(rec.timeRemainingSec)
-      ? { timeRemainingSec: Math.round(clampFinite(rec.timeRemainingSec, 0, 1200, 180) * 100) / 100 }
+      ? {
+          timeRemainingSec:
+            Math.round(
+              clampFinite(rec.timeRemainingSec, 0, ONET_MAX_TIME_SEC, ONET_STAGE_TIME_LIMIT_SEC) *
+                100
+            ) / 100,
+        }
       : {}),
     lossReason:
       rec.lossReason === 'timeout' || rec.lossReason === 'deadlock' ? rec.lossReason : null,

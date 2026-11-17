@@ -442,13 +442,14 @@ describe('Per-Mini-Game Leaderboards (4 Scored Games: Match-3, Sudoku, Pikachu &
     expect(lv777.cols).toBe(16);
     expect(lv777.totalPairs).toBe(80); // Grandmaster 160 tiles
 
-    // Monotonic non-decreasing tile count & even cell count across all 777 stages
+    // Monotonic non-decreasing tile count, even cell count, fixed 20-minute timer & +20s match bonus across all 777 stages
     let prevTiles = 0;
     for (let s = 1; s <= 777; s++) {
       const cfg = getOnetStageConfig(s);
       expect(cfg.totalTiles % 2).toBe(0);
       expect(cfg.totalTiles).toBeGreaterThanOrEqual(prevTiles);
-      expect(cfg.timeLimitSec).toBeGreaterThanOrEqual(80);
+      expect(cfg.timeLimitSec).toBe(1200);
+      expect(cfg.matchBonusSec).toBe(20);
       prevTiles = cfg.totalTiles;
     }
 
@@ -456,13 +457,14 @@ describe('Per-Mini-Game Leaderboards (4 Scored Games: Match-3, Sudoku, Pikachu &
     expect(lv250.findAnyValidPair()).not.toBeNull();
     expect(lv777.findAnyValidPair()).not.toBeNull();
 
-    // Countdown timer mechanics: format, tick, match refill, timeout loss, and bonus-time revival
-    expect(lv1.timeLimitSec).toBe(90);
-    expect(lv1.formatRemainingTime()).toBe('01:30');
+    // Countdown timer mechanics: 20:00 at every level, tick, +20s match refill, timeout loss, and bonus-time revival
+    expect(lv1.timeLimitSec).toBe(1200);
+    expect(lv777.timeLimitSec).toBe(1200);
+    expect(lv1.formatRemainingTime()).toBe('20:00');
     const tick1 = lv1.tickTimer(15.4);
     expect(tick1.timedOut).toBe(false);
     expect(tick1.wholeSecondChanged).toBe(true);
-    expect(lv1.formatRemainingTime()).toBe('01:15');
+    expect(lv1.formatRemainingTime()).toBe('19:45');
 
     // Sandbox / infiniteTime keeps clock full
     const sandboxGame = new CreatureOnetEngine(1);
@@ -521,10 +523,11 @@ describe('Per-Mini-Game Leaderboards (4 Scored Games: Match-3, Sudoku, Pikachu &
     custom.grid[2][4] = 'niffler';
     expect(custom.findConnectionPath({ r: 1, c: 1 }, { r: 2, c: 4 })).toBeNull();
 
-    // Stage 1 ('none') keeps remaining tiles stationary on match and refills matchBonusSec
+    // Stage 1 ('none') keeps remaining tiles stationary on match and adds exact +20s per successful connection (accumulating above 20:00)
     const staticGame = new CreatureOnetEngine(1);
     staticGame.tickTimer(10);
     const timeBeforeMatch = staticGame.timeRemainingSec;
+    expect(timeBeforeMatch).toBe(1190);
     const hintRes = staticGame.useHint();
     expect(hintRes.ok).toBe(true);
     const [pA, pB] = hintRes.pair!;
@@ -533,7 +536,12 @@ describe('Per-Mini-Game Leaderboards (4 Scored Games: Match-3, Sudoku, Pikachu &
     expect(staticGame.tapCell(pA.r, pA.c).action).toBe('selected');
     const matchStep = staticGame.tapCell(pB.r, pB.c);
     expect(matchStep.action).toBe('matched');
-    expect(staticGame.timeRemainingSec).toBeGreaterThan(timeBeforeMatch);
+    expect(staticGame.timeRemainingSec).toBe(timeBeforeMatch + 20);
+    expect(staticGame.formatRemainingTime()).toBe('20:10');
+    const exportedAbove20Min = staticGame.exportSession();
+    const restoredAbove20Min = new CreatureOnetEngine(1);
+    expect(restoredAbove20Min.restoreSession(exportedAbove20Min)).toBe(true);
+    expect(restoredAbove20Min.timeRemainingSec).toBe(1210);
     expect(staticGame.grid[pA.r][pA.c]).toBeNull();
     expect(staticGame.grid[pB.r][pB.c]).toBeNull();
     if (!matchStep.autoShuffled) {
