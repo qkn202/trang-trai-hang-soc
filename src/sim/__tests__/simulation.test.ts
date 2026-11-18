@@ -789,11 +789,11 @@ describe('ParkSimulation & Progression Tests', () => {
   });
 
   describe('(i) 8 hạt giống hoa mới, Ô Vườn Hoa Cảnh & Đồng Cỏ Chăn Thả ghép liền rào', () => {
-    it('Đủ 34 loại hạt giống (20 loài hoa có isFlowerCrop), gieo & gặt hoa vào Kho và bó hoa quà tặng', () => {
+    it('Đủ 42 loại hạt giống (21 loài hoa có isFlowerCrop), gieo & gặt hoa vào Kho và bó hoa quà tặng', () => {
       const allCrops = Object.values(FARM_CROPS);
       const flowerCrops = allCrops.filter((c) => c.isFlowerCrop);
-      expect(allCrops.length).toBe(34);
-      expect(flowerCrops.length).toBe(20);
+      expect(allCrops.length).toBe(42);
+      expect(flowerCrops.length).toBe(21);
       expect(FARM_CROPS.moonlight_flower.nocturnalGlowColor).toBeTruthy();
       expect(FARM_CROPS.phoenix_fireflower.nocturnalGlowColor).toBeTruthy();
 
@@ -829,7 +829,7 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(animalPasture.isAnimalPasturePlot).toBe(true);
       expect(getItemPuzzleStarCost(flowerGarden)).toBe(0);
       expect(getItemPuzzleStarCost(animalPasture)).toBe(0);
-      expect(Object.keys(PASTURE_ANIMALS).length).toBe(8);
+      expect(Object.keys(PASTURE_ANIMALS).length).toBe(15);
 
       const sim = new ParkSimulation(createMockAudio());
       sim.state.level = 15;
@@ -1006,9 +1006,9 @@ describe('ParkSimulation & Progression Tests', () => {
       );
       expect(formatDurationCompactVi(MAX_WAIT_DURATION_SECONDS)).toBe('3 ngày');
 
-      // 2. Kiểm tra hoạt động kinh tế (34 hạt giống, 8 thú chăn thả, 22 công thức xưởng) mặc định 1 tiếng (3.600s) ở lần thu hoạch đầu và nhân 2 ở các lần tiếp theo
+      // 2. Kiểm tra hoạt động kinh tế (42 hạt giống, 15 thú chăn thả, 32 công thức xưởng) mặc định 1 tiếng (3.600s) ở lần thu hoạch đầu và nhân 2 ở các lần tiếp theo
       const cropsSorted = Object.values(FARM_CROPS);
-      expect(cropsSorted).toHaveLength(34);
+      expect(cropsSorted).toHaveLength(42);
       for (const crop of cropsSorted) {
         expect(crop.growSec).toBe(FIRST_ECONOMIC_CYCLE_SEC);
       }
@@ -1018,9 +1018,9 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(computeEconomicCycleSeconds(3)).toBe(21600);
       expect(computeEconomicCycleSeconds(20)).toBe(21600);
 
-      // 3. Kiểm tra 8 thú chăn thả mặc định 1 tiếng (3.600s) ở lần thu hoạch đầu
+      // 3. Kiểm tra 15 thú chăn thả mặc định 1 tiếng (3.600s) ở lần thu hoạch đầu
       const animalsSorted = Object.values(PASTURE_ANIMALS);
-      expect(animalsSorted).toHaveLength(8);
+      expect(animalsSorted).toHaveLength(15);
       for (const animal of animalsSorted) {
         expect(animal.cycleSec).toBe(FIRST_ECONOMIC_CYCLE_SEC);
       }
@@ -1147,7 +1147,7 @@ describe('ParkSimulation & Progression Tests', () => {
 
       const buildable = CATALOG.filter((c) => c.category !== 'terrain' && !c.isThemeParkLegacy);
       const winterItems = buildable.filter((c) => isWinterChristmasBuildItem(c));
-      expect(winterItems).toHaveLength(105);
+      expect(winterItems).toHaveLength(123);
       expect(winterItems.some((c) => c.id === 'snowy_pines')).toBe(true);
 
       const nonWinterDecor = buildable.filter(
@@ -1396,11 +1396,11 @@ describe('ParkSimulation & Progression Tests', () => {
     // HPVN: upstream's «5. Khóa cứng Sandbox» case is dropped: HPVN keeps its own dev-only gating and has no local save slots.
   });
 
-  describe('(m) Christmas × Harry Potter Mega-Update (104 Yule Decor, 12 Winter Crops, Yule Theme)', () => {
-    it('Đủ 104 vật phẩm trang trí Giáng Sinh (yule_*) ở 11 bộ sưu tập, tốn 0 🌟 Sao, 0 giây xây và có đủ sprite 2.5D', () => {
+  describe('(m) Christmas × Harry Potter & Vietnam Dual-Theme Mega-Update (122 Yule Decor, 20 Winter Crops, Yule Theme)', () => {
+    it('Đủ 122 vật phẩm trang trí Giáng Sinh (yule_*) ở 12 bộ sưu tập, tốn 0 🌟 Sao, 0 giây xây và có đủ sprite 2.5D', () => {
       const spriteSet = new Set<string>(SPRITE_KEYS);
       const yuleItems = CATALOG.filter((it) => it.id.startsWith('yule_'));
-      expect(yuleItems).toHaveLength(104);
+      expect(yuleItems).toHaveLength(122);
 
       const collections = new Set<string>();
       for (const it of yuleItems) {
@@ -1414,7 +1414,7 @@ describe('ParkSimulation & Progression Tests', () => {
         collections.add(it.yuleCollection!);
         expect(Boolean(it.spriteKey && spriteSet.has(it.spriteKey))).toBe(true);
       }
-      expect(collections.size).toBe(11);
+      expect(collections.size).toBe(12);
 
       // Kiểm tra 4 linh vật Nhà (bao gồm Đại Bàng Đồng Ravenclaw chuẩn sách) & Lâu đài Hogwarts thu nhỏ 3×3
       const ravenclawEagle = getCatalogItem('yule_ravenclaw_eagle_mascot')!;

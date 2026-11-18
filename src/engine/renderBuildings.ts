@@ -1385,6 +1385,11 @@ const WINTER_STEAM_OR_SMOKE_IDS = new Set<string>([
   'yule_shell_cottage_mini',
   'yule_mini_hogwarts_castle',
   'yule_flying_car_tree',
+  'yule_vn_grilled_corn_stall',
+  'yule_vn_phin_coffee_cart',
+  'yule_vn_banh_mi_soymilk_cart',
+  'yule_burrow_armchair_tea',
+  'yule_christmas_roast_table',
 ]);
 
 const WINTER_BLUE_FLAME_IDS = new Set<string>([
@@ -1392,6 +1397,7 @@ const WINTER_BLUE_FLAME_IDS = new Set<string>([
   'yule_hermione_bluebell_jars',
   'yule_molly_pudding_table',
   'yule_slytherin_serpent_mascot',
+  'yule_floo_emerald_hearth',
 ]);
 
 const WINTER_ICE_CRYSTAL_IDS = new Set<string>([
@@ -1407,6 +1413,7 @@ const WINTER_ICE_CRYSTAL_IDS = new Set<string>([
   'yule_crystal_banquet_table',
   'yule_blue_spruce_starlight',
   'yule_weeping_frost_willow',
+  'yule_yuleball_ice_arch',
 ]);
 
 const WINTER_MUSIC_IDS = new Set<string>([
@@ -1499,7 +1506,7 @@ export function drawWinterAssetLiveEffects(
 
   // D. Sapphire-blue / emerald magical embers
   if (WINTER_BLUE_FLAME_IDS.has(itemId)) {
-    const isEmerald = itemId === 'yule_slytherin_serpent_mascot';
+    const isEmerald = itemId === 'yule_slytherin_serpent_mascot' || itemId === 'yule_floo_emerald_hearth';
     for (let e = 0; e < 4; e++) {
       const ep = ((self.tick * 0.03 + e * 0.25 + seed * 0.13) % 1);
       const ex = cx + Math.sin(ep * Math.PI * 3 + e) * drawW * 0.16;

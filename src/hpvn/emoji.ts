@@ -34,6 +34,13 @@ export const SPRITE: Record<string, string> = {
   '⏳': 'res_time_sand', '⌛': 'res_time_sand', '🍁': 'res_festival_leaf',
   // Yule crops (catalog iconKey, upstream fbe6866)
   '🍒': 'ui_icon_crop_yule_holly_sprig', '🤍': 'ui_icon_crop_yule_paperwhite',
+  // Dual-Theme Christmas crops, dishes & companions
+  '🟣': 'ui_icon_crop_yule_sugarplum_bush', '🫚': 'ui_icon_crop_yule_ginger_anise',
+  '🌰': 'ui_icon_crop_yule_ember_chestnut', '🍊': 'ui_icon_crop_vn_noel_golden_kumquat',
+  '🍠': 'ui_icon_crop_vn_winter_sweet_potato', '🍰': 'ui_icon_yule_log_cake',
+  '🍮': 'ui_icon_yule_flaming_pudding', '🍗': 'ui_icon_yule_roast_turkey',
+  '🥖': 'ui_icon_vn_banh_mi_soymilk', '🥣': 'ui_icon_vn_che_troi_nuoc',
+  '🐈': 'beast_vn_tabby_cat', '🐃': 'beast_vn_brocade_calf',
 };
 // pictographic code points that are plain text glyphs here (the rest of the keep list is not pictographic at all)
 export const KEEP = new Set([...'♥♦♟♂♀↔↕↖↗↘↙↩↪⬆⬇⬅➡▶◀©®™']);

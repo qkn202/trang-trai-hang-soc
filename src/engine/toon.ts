@@ -108,6 +108,14 @@ const NO_OUTLINE_KEYS = new Set([
   'prop_waterwheel_rotor',
   'prop_construction_site',
   'prop_ribbon_unveil',
+  // Dual-Theme Christmas Pasture Beasts & Vietnamese Pets (already painted with crisp oak outlines)
+  'beast_yule_phoenix',
+  'beast_yule_unicorn',
+  'beast_yule_dragon',
+  'beast_vn_bac_ha_dog',
+  'beast_vn_tabby_cat',
+  'beast_vn_brocade_calf',
+  'beast_vn_scarf_hen',
 ]);
 
 export function shouldOutline(key: string): boolean {

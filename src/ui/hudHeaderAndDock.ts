@@ -1639,12 +1639,15 @@ export function headerRefreshDock(hud: GameHUD): void {
           const it = getCatalogItem(id);
           return Boolean(it && isWinterChristmasBuildItem(it));
         }).length;
+        const totalWinterCount = CATALOG.filter(
+          (it) => it.category === 'decor' && !it.isThemeParkLegacy && isWinterChristmasBuildItem(it)
+        ).length;
         const activeCf = hud.activeChristmasFilter ?? 'all';
         const christmasChips: Array<{
           id: 'all' | 'recent' | 'stashed' | YuleCollectionId;
           label: string;
         }> = [
-          { id: 'all', label: '✨ Tất cả (105)' },
+          { id: 'all', label: `✨ Tất cả (${totalWinterCount})` },
           {
             id: 'recent',
             label: recentWinterCount > 0 ? `Gần đây (${recentWinterCount})` : 'Gần đây',
@@ -1653,6 +1656,7 @@ export function headerRefreshDock(hud: GameHUD): void {
             id: 'stashed',
             label: stashedWinterCount > 0 ? `📦 Trong kho (${stashedWinterCount})` : '📦 Trong kho',
           },
+          { id: 'vietnam_noel', label: '🏮 Noel Việt Nam' },
           { id: 'yule_trees', label: '🌲 Cây tuyết' },
           { id: 'yule_flowers', label: '🌺 Hoa đông' },
           { id: 'modular', label: '❄️ Hàng rào' },

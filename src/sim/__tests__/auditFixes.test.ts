@@ -89,8 +89,8 @@ describe('Audit Fixes — Hosting CSP, SW Dev Port, 2.5D Props, Stashed Decor 0G
 
   // HPVN: no hosting CSP files, service worker or dev cache-bypass script ship here (the HPVN server sets the CSP
   // and serves /game/trang-trai-hang-soc/), so upstream's two hosting checks are left out; the sprite count stays.
-  it('giữ nguyên 288 SPRITE_KEYS', () => {
-    expect(SPRITE_KEYS.length).toBe(288);
+  it('giữ nguyên 331 SPRITE_KEYS', () => {
+    expect(SPRITE_KEYS.length).toBe(331);
   });
 
   it('resolveCatalogPropSpriteKey ánh xạ đủ 3 prop không có spriteKey tới ảnh tồn tại trên đĩa và bật groundBlend', async () => {

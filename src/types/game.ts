@@ -103,7 +103,15 @@ export type FarmCropId =
   | 'yule_dwarf_fir'
   | 'yule_edelweiss'
   | 'yule_winter_camellia'
-  | 'yule_frost_orchid';
+  | 'yule_frost_orchid'
+  | 'yule_peppermint_cane'
+  | 'yule_sugarplum_bush'
+  | 'yule_ginger_anise'
+  | 'yule_ember_chestnut'
+  | 'vn_dalat_frost_strawberry'
+  | 'vn_noel_golden_kumquat'
+  | 'vn_highland_coffee_berry'
+  | 'vn_winter_sweet_potato';
 
 export type YuleCollectionId =
   | 'burrow'
@@ -116,7 +124,8 @@ export type YuleCollectionId =
   | 'book_lore'
   | 'yule_trees'
   | 'yule_flowers'
-  | 'hogwarts_crests';
+  | 'hogwarts_crests'
+  | 'vietnam_noel';
 
 export type YuleThemeMode = 'auto' | 'on' | 'off';
 
@@ -134,7 +143,17 @@ export type FarmGoodId =
   | 'choc_frog_sweet'
   | 'sprout_growth_elixir'
   | 'floral_bouquet_gift'
-  | 'creamy_dairy_milk';
+  | 'creamy_dairy_milk'
+  | 'yule_log_cake'
+  | 'yule_flaming_pudding'
+  | 'yule_gingerbread_burrow'
+  | 'yule_spiced_butterbeer_set'
+  | 'yule_roast_turkey_feast'
+  | 'vn_egg_coffee_cookies'
+  | 'vn_grilled_corn_sweetpotato'
+  | 'vn_banh_mi_ginger_soymilk'
+  | 'vn_pandan_berry_yule_log'
+  | 'vn_ginger_sweet_rice_balls';
 
 export type PastureAnimalId =
   | 'burrow_hen'
@@ -144,7 +163,14 @@ export type PastureAnimalId =
   | 'treasure_niffler'
   | 'silver_hippogriff'
   | 'shadow_thestral'
-  | 'moon_unicorn';
+  | 'moon_unicorn'
+  | 'yule_star_phoenix'
+  | 'yule_holly_unicorn'
+  | 'yule_candle_dragon'
+  | 'vn_noel_bac_ha_dog'
+  | 'vn_noel_tabby_cat'
+  | 'vn_noel_brocade_calf'
+  | 'vn_noel_scarf_hen';
 
 export type FarmItemId = FarmCropId | FarmGoodId;
 

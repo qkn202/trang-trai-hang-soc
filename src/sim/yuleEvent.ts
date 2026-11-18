@@ -10,7 +10,28 @@ export type YuleTaskKind = 'harvest_yule_crop' | 'build_yule_decor' | 'deliver_o
 export interface YuleTaskDef { id: string; titleVi: string; kind: YuleTaskKind; amount: number; targetId?: string; rewardSickles: number; rewardXp: number; }
 export interface YuleDayDef { day: number; titleVi: string; giver: string; main: YuleTaskDef; side: YuleTaskDef[]; unlockIds: string[]; }
 
-const cropIds: FarmCropId[] = ['yule_poinsettia','yule_snowdrop','yule_hellebore','yule_holly_sprig','yule_paperwhite','yule_frost_cranberry','yule_amaryllis','yule_mistletoe','yule_dwarf_fir','yule_edelweiss','yule_winter_camellia','yule_frost_orchid'];
+const cropIds: FarmCropId[] = [
+  'yule_poinsettia',
+  'yule_snowdrop',
+  'yule_hellebore',
+  'yule_holly_sprig',
+  'yule_paperwhite',
+  'yule_frost_cranberry',
+  'yule_amaryllis',
+  'yule_mistletoe',
+  'yule_dwarf_fir',
+  'yule_edelweiss',
+  'yule_winter_camellia',
+  'yule_frost_orchid',
+  'yule_peppermint_cane',
+  'yule_sugarplum_bush',
+  'yule_ginger_anise',
+  'yule_ember_chestnut',
+  'vn_dalat_frost_strawberry',
+  'vn_noel_golden_kumquat',
+  'vn_highland_coffee_berry',
+  'vn_winter_sweet_potato',
+];
 const decorIds = CATALOG.filter((x) => x.id.startsWith('yule_')).map((x) => x.id);
 const crop = (n: number): YuleTaskDef => ({ id: `yule_main_crop_${n}`, titleVi: `Gieo và thu hoạch ${n} cây mùa đông`, kind: 'harvest_yule_crop', amount: n, rewardSickles: 0, rewardXp: 30 });
 const decor = (n: number): YuleTaskDef => ({ id: `yule_main_decor_${n}`, titleVi: `Dựng ${n} trang trí Yule`, kind: 'build_yule_decor', amount: n, rewardSickles: 0, rewardXp: 40 });
