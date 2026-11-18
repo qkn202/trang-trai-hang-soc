@@ -12,6 +12,8 @@ import {
   getCatalogItem,
   getFarmItemMeta,
   getMinRemainingBuildFloorSec,
+  getWorkshopMaxQueueSlots,
+  getWorkshopStarSpeedMultiplier,
   PASTURE_ANIMALS,
   TIME_SAND_SKIP_SECONDS,
 } from '../data/catalog';
@@ -874,7 +876,7 @@ export function questsEnqueueWorkshopRecipe(sim: ParkSimulation, uid: string, re
     );
     if (!recipe) return { ok: false, msg: 'Công thức không hợp lệ!' };
 
-    const maxQueue = 3 + Math.min(2, Math.max(0, b.stars - 1));
+    const maxQueue = getWorkshopMaxQueueSlots(b.stars);
     const curQueue = b.workshopQueue ?? [];
     if (curQueue.length >= maxQueue) {
       return { ok: false, msg: `Hàng đợi lò đã đầy (${maxQueue}/${maxQueue} khay)!` };
@@ -900,7 +902,7 @@ export function questsEnqueueWorkshopRecipe(sim: ParkSimulation, uid: string, re
     }
 
     const now = Date.now();
-    const starSpeed = Math.max(0.65, 1 - (b.stars - 1) * 0.08);
+    const starSpeed = getWorkshopStarSpeedMultiplier(b.stars);
     const slotOrder = (b.harvestCycleCount ?? 0) + (b.readyFarmGoods?.length ?? 0) + curQueue.length;
     const baseCraftSec = computeEconomicCycleSeconds(slotOrder, recipe.craftSec);
     const durMs = sim.state.sandboxMode

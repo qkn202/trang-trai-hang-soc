@@ -157,6 +157,14 @@ export class SpineSlotAdapter {
   private readonly prog: WebGLProgram;
   private readonly vao: WebGLVertexArrayObject;
   private readonly indexCount: number;
+  private readonly uAlbedoLoc: WebGLUniformLocation | null;
+  private readonly uUvTableLoc: WebGLUniformLocation | null;
+  private readonly uCameraLoc: WebGLUniformLocation | null;
+  private readonly uViewportLoc: WebGLUniformLocation | null;
+  private readonly uPoseRectLoc: WebGLUniformLocation | null;
+  private readonly uBoneParamsLoc: WebGLUniformLocation | null;
+  private readonly uAmbientTintLoc: WebGLUniformLocation | null;
+  private readonly uAlphaLoc: WebGLUniformLocation | null;
   public externalSpineLoaded = false;
 
   constructor(gl: WebGL2RenderingContext) {
@@ -174,6 +182,15 @@ export class SpineSlotAdapter {
     gl.deleteShader(vs);
     gl.deleteShader(fs);
     this.prog = prog;
+
+    this.uAlbedoLoc = gl.getUniformLocation(prog, 'uAlbedo');
+    this.uUvTableLoc = gl.getUniformLocation(prog, 'uUvTable');
+    this.uCameraLoc = gl.getUniformLocation(prog, 'uCamera');
+    this.uViewportLoc = gl.getUniformLocation(prog, 'uViewport');
+    this.uPoseRectLoc = gl.getUniformLocation(prog, 'uPoseRect');
+    this.uBoneParamsLoc = gl.getUniformLocation(prog, 'uBoneParams');
+    this.uAmbientTintLoc = gl.getUniformLocation(prog, 'uAmbientTint');
+    this.uAlphaLoc = gl.getUniformLocation(prog, 'uAlpha');
 
     // Build 4x6 subdivided ribbon mesh so torso breath, cloak hem & head sway deform smoothly
     const cols = 4;
@@ -232,26 +249,26 @@ export class SpineSlotAdapter {
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, uvTableTex);
 
-    gl.uniform1i(gl.getUniformLocation(this.prog, 'uAlbedo'), 0);
-    gl.uniform1i(gl.getUniformLocation(this.prog, 'uUvTable'), 2);
-    gl.uniform3f(gl.getUniformLocation(this.prog, 'uCamera'), camX, camY, camZoom);
-    gl.uniform2f(gl.getUniformLocation(this.prog, 'uViewport'), cssW, cssH);
+    gl.uniform1i(this.uAlbedoLoc, 0);
+    gl.uniform1i(this.uUvTableLoc, 2);
+    gl.uniform3f(this.uCameraLoc, camX, camY, camZoom);
+    gl.uniform2f(this.uViewportLoc, cssW, cssH);
     gl.uniform4f(
-      gl.getUniformLocation(this.prog, 'uPoseRect'),
+      this.uPoseRectLoc,
       pose.wx,
       pose.wy,
       pose.drawW,
       pose.drawH
     );
     gl.uniform4f(
-      gl.getUniformLocation(this.prog, 'uBoneParams'),
+      this.uBoneParamsLoc,
       timeSec,
       pose.walkPhase,
       pose.isWalking ? 1.0 : 0.0,
       pose.spriteId
     );
-    gl.uniform3fv(gl.getUniformLocation(this.prog, 'uAmbientTint'), ambient);
-    gl.uniform1f(gl.getUniformLocation(this.prog, 'uAlpha'), pose.alpha);
+    gl.uniform3fv(this.uAmbientTintLoc, ambient);
+    gl.uniform1f(this.uAlphaLoc, pose.alpha);
 
     gl.bindVertexArray(this.vao);
     gl.drawElements(gl.TRIANGLES, this.indexCount, gl.UNSIGNED_SHORT, 0);

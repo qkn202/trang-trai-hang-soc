@@ -144,12 +144,27 @@ export class CrossLayerFlyingCollectibles {
     };
   }
 
+  private lastPulseByKind = new Map<FlyRewardKind, number>();
+
   private pulseHudTarget(kind: FlyRewardKind): void {
     const el = this.root.querySelector(`[data-fly-target="${kind}"]`) as HTMLElement | null;
     if (!el) return;
-    el.classList.remove('hud-chip-pulse');
-    void el.offsetWidth;
-    el.classList.add('hud-chip-pulse');
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const prev = this.lastPulseByKind.get(kind) ?? 0;
+    if (now - prev < 120) return;
+    this.lastPulseByKind.set(kind, now);
+    if (typeof el.animate === 'function') {
+      el.animate(
+        [
+          { transform: 'scale(1)' },
+          { transform: 'scale(1.15)' },
+          { transform: 'scale(1)' },
+        ],
+        { duration: 220, easing: 'ease-out' }
+      );
+    } else {
+      el.classList.add('hud-chip-pulse');
+    }
   }
 
   public spawnBurstToHud(

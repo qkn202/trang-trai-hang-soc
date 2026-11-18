@@ -323,7 +323,8 @@ export class CaroGameEngine {
       return { ok: false, won: false, draw: false, aiThinking: false };
     }
 
-    const bestCandidate = this.computeBestMoveFor(1, 3);
+    // O(candidates) lightweight tactical evaluation (<0.3ms) so stone placement never blocks UI
+    const bestCandidate = this.computeBestMoveFor(1, 1);
     const playedEval =
       this.scorePlacementAt(r, c, 1) + this.scorePlacementAt(r, c, 2) * 1.15;
     const bestEval =

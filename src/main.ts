@@ -94,6 +94,9 @@ async function bootstrap(): Promise<void> {
   centerCameraOnGrid(cam, 18.0, 24.5);
 
   const renderer = new IsometricRenderer(canvas, sprites);
+  sprites.onBatchLoaded(() => {
+    renderer.groundCacheKey = '';
+  });
   const hud = new GameHUD(app, sim, cam, canvas, sprites);
   const hudTopLeft = app.querySelector('.ts-hud-topleft');
   if (hudTopLeft) placeShellNav(hudTopLeft);
@@ -143,6 +146,7 @@ async function bootstrap(): Promise<void> {
   let directGpuSettings: import('./render/core/renderDevice').GpuMockSettings | null = null;
   let gpuInitFailed = false;
   const gpuPointerClient = { x: 0, y: 0, moved: false };
+  const ptrWorldScratch = { wx: 0, wy: 0, active: false };
   const bindGpuPointerTracking = () => {
     window.addEventListener(
       'pointermove',
@@ -183,6 +187,7 @@ async function bootstrap(): Promise<void> {
     }
     bindGpuPointerTracking();
     window.addEventListener('hangsoc:toon-changed', () => {
+      renderer.groundCacheKey = '';
       gpuWorldRenderer?.invalidateSpriteAtlas();
     });
   } catch (err) {
@@ -2864,12 +2869,21 @@ async function bootstrap(): Promise<void> {
 
       if (gpuWorldRenderer && activeGpuSettings && !gpuWorldRenderer.gpuDevice.contextLost) {
         if (gpuMode !== 'canvas') {
-          const ptrWorld = { wx: 0, wy: 0, active: false };
+          if (gpuPointerClient.moved && !document.querySelector('dialog[open]')) {
+            const viewW = Math.max(1, window.innerWidth);
+            const viewH = Math.max(1, window.innerHeight);
+            const invZoom = 1 / Math.max(0.15, cam.zoom);
+            ptrWorldScratch.wx = (gpuPointerClient.x - viewW * 0.5) * invZoom + cam.x;
+            ptrWorldScratch.wy = (gpuPointerClient.y - viewH * 0.5) * invZoom + cam.y;
+            ptrWorldScratch.active = true;
+          } else {
+            ptrWorldScratch.active = false;
+          }
           gpuWorldRenderer.renderFrame(
             sim,
             cam,
             activeGpuSettings,
-            ptrWorld,
+            ptrWorldScratch,
             Date.now(),
             {
               hoverTile: effectiveHoverTile,

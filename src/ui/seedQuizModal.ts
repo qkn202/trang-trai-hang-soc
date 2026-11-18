@@ -1,3 +1,4 @@
+import '../styles/seedQuizModal.css';
 import {
   FARM_CROPS,
   formatDurationCompactVi,

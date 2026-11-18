@@ -1,13 +1,15 @@
-import { ChessWorkerSearchPayload, WizardChessEngine } from './puzzleArcadeEngine';
+import { ChessMove, ChessWorkerSearchPayload, WizardChessEngine } from './puzzleArcadeEngine';
 
 export interface ChessWorkerRequestMessage {
   reqId: number;
+  mode?: 'ai' | 'best_white';
   payload: ChessWorkerSearchPayload;
 }
 
 export interface ChessWorkerResponseMessage {
   reqId: number;
-  move: ReturnType<typeof WizardChessEngine.computeAiMoveFromPayload>;
+  mode?: 'ai' | 'best_white';
+  move: ChessMove | null;
 }
 
 const workerScope = self as unknown as {
@@ -16,7 +18,10 @@ const workerScope = self as unknown as {
 };
 
 workerScope.onmessage = (ev: MessageEvent<ChessWorkerRequestMessage>) => {
-  const { reqId, payload } = ev.data;
-  const move = WizardChessEngine.computeAiMoveFromPayload(payload);
-  workerScope.postMessage({ reqId, move });
+  const { reqId, mode = 'ai', payload } = ev.data;
+  const move =
+    mode === 'best_white'
+      ? WizardChessEngine.computeBestWhiteMoveFromPayload(payload)
+      : WizardChessEngine.computeAiMoveFromPayload(payload);
+  workerScope.postMessage({ reqId, mode, move });
 };

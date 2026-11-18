@@ -1473,14 +1473,19 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
     box.querySelectorAll<HTMLButtonElement>('[data-toon]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const on = btn.dataset.toon === 'on';
-        hud.sprites?.setToonEnabled(on);
         hud.sim.state.settings.toonEnabled = on; // HPVN: kept in the save
         hud.sim.saveToStorage();
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('hangsoc:toon-changed'));
-        }
-        hud.refreshAll();
         questsUiRenderSettingsDialog(hud);
+        const applyPromise = hud.sprites
+          ? hud.sprites.setToonEnabledAsync(on)
+          : Promise.resolve();
+        void applyPromise.then(() => {
+          if (hud.sim.state.settings.toonEnabled !== on) return;
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('hangsoc:toon-changed'));
+          }
+          hud.refreshAll();
+        });
       });
     });
 

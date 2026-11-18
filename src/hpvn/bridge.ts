@@ -174,9 +174,32 @@ export function placeShellNav(hud: Element) {
     }, () => {});
   };
   const soon = () => { if (!navFrame) navFrame = requestAnimationFrame(() => send()); };
+  const onMutation = (records: MutationRecord[]) => {
+    for (let i = 0; i < records.length; i++) {
+      const rec = records[i];
+      if (rec.type === 'attributes') {
+        soon();
+        return;
+      }
+      if (rec.type === 'childList') {
+        for (let j = 0; j < rec.addedNodes.length; j++) {
+          if (rec.addedNodes[j].nodeType === 1) {
+            soon();
+            return;
+          }
+        }
+        for (let j = 0; j < rec.removedNodes.length; j++) {
+          if (rec.removedNodes[j].nodeType === 1) {
+            soon();
+            return;
+          }
+        }
+      }
+    }
+  };
   new ResizeObserver(soon).observe(hud);
   addEventListener('resize', () => send(true)); // the dock comes and goes with the shell's width
-  new MutationObserver(soon).observe(document.body, {
+  new MutationObserver(onMutation).observe(document.body, {
     subtree: true,
     childList: true,
     attributes: true,

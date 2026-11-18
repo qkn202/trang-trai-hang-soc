@@ -211,6 +211,41 @@ def synth_fanfare_win(_rng: np.random.Generator) -> np.ndarray:
     return out * 0.68
 
 
+def synth_powerup_blast(rng: np.random.Generator) -> np.ndarray:
+    n = int(0.62 * SR)
+    t = np.arange(n) / SR
+    # Punchy sub-bass thump (124Hz -> 36Hz) + crisp burst crackle + golden harmonic bloom
+    f_sub = 36.0 + 88.0 * np.exp(-t * 24.0)
+    sub = np.sin(2 * math.pi * np.cumsum(f_sub) / SR) * env_ad(n, 0.002, 0.14) * 0.68
+    crackle = bandpass_1pole(rng.normal(0, 1, n), 240, 4200) * env_ad(n, 0.001, 0.09) * 0.42
+    bloom = np.zeros(n)
+    i0 = int(0.025 * SR)
+    m = n - i0
+    tb = np.arange(m) / SR
+    bloom[i0:] = (
+        0.34 * np.sin(2 * math.pi * 523.25 * tb) * env_ad(m, 0.004, 0.22)
+        + 0.24 * np.sin(2 * math.pi * 783.99 * tb) * env_ad(m, 0.003, 0.18)
+        + 0.18 * np.sin(2 * math.pi * 1046.50 * tb) * env_ad(m, 0.002, 0.14)
+    )
+    return (sub + crackle + bloom) * 0.78
+
+
+def synth_wand_spell(rng: np.random.Generator) -> np.ndarray:
+    n = int(0.52 * SR)
+    # Silky wand swish + crystalline E-major celesta shimmer
+    whoosh = bandpass_1pole(rng.normal(0, 1, n), 850, 5200) * env_ad(n, 0.03, 0.14) * 0.30
+    shimmer = np.zeros(n)
+    for idx, freq in enumerate([659.25, 783.99, 987.77, 1318.51]):
+        i0 = int(idx * 0.036 * SR)
+        m = n - i0
+        tm = np.arange(m) / SR
+        shimmer[i0:] += (
+            0.36 * np.sin(2 * math.pi * freq * tm) * env_ad(m, 0.003, 0.18)
+            + 0.16 * np.sin(2 * math.pi * freq * 2.0 * tm) * env_ad(m, 0.002, 0.11)
+        )
+    return (whoosh + shimmer) * 0.74
+
+
 def main() -> None:
     rng = np.random.default_rng(7772026)
     # Fixed offsets matching SFX_ATLAS_CUES in src/engine/audio.ts
@@ -225,9 +260,11 @@ def main() -> None:
         ("talisman_blast", 5.6, synth_talisman_blast(rng)),
         ("build_complete", 6.8, synth_build_complete(rng)),
         ("fanfare_win", 8.1, synth_fanfare_win(rng)),
+        ("powerup_blast", 9.9, synth_powerup_blast(rng)),
+        ("wand_spell", 10.8, synth_wand_spell(rng)),
     ]
 
-    total_sec = 9.8
+    total_sec = 11.6
     total_samples = int(total_sec * SR)
     left = np.zeros(total_samples, dtype=np.float64)
     right = np.zeros(total_samples, dtype=np.float64)

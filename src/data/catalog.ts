@@ -2911,6 +2911,18 @@ export function getBuildingEffectiveCycleSec(
   return computeEconomicCycleSeconds(b?.harvestCycleCount ?? 0, item.cycleSec);
 }
 
+/** Workshop star mastery (1★..5★): expands active queue from 3 up to 7 slots. */
+export function getWorkshopMaxQueueSlots(stars: number): number {
+  const clamped = Math.max(1, Math.min(5, Math.floor(Number(stars) || 1)));
+  return 3 + (clamped - 1);
+}
+
+/** Workshop star mastery (1★..5★): reduces crafting time by 8% per star above 1★ (up to −32%). */
+export function getWorkshopStarSpeedMultiplier(stars: number): number {
+  const clamped = Math.max(1, Math.min(5, Math.floor(Number(stars) || 1)));
+  return Math.max(0.68, Number((1 - (clamped - 1) * 0.08).toFixed(2)));
+}
+
 /**
  * Mức thời gian còn lại tối thiểu mà người chơi có thể rút ngắn công trình đang xây
  * thông qua thắng Minigame (Match-3 / 4 môn Giải Đố) hoặc trả lời đúng Quiz Ngoại Ngữ:

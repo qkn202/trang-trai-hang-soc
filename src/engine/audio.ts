@@ -142,7 +142,9 @@ export type SfxAtlasCueId =
   | 'match_pop'
   | 'talisman_blast'
   | 'build_complete'
-  | 'fanfare_win';
+  | 'fanfare_win'
+  | 'powerup_blast'
+  | 'wand_spell';
 
 export const SFX_ATLAS_URL = '/game/trang-trai-hang-soc/audio/sfx_atlas.mp3';
 
@@ -157,6 +159,8 @@ export const SFX_ATLAS_CUES: Record<SfxAtlasCueId, { offset: number; duration: n
   talisman_blast: { offset: 5.6, duration: 0.95 },
   build_complete: { offset: 6.8, duration: 1.05 },
   fanfare_win: { offset: 8.1, duration: 1.45 },
+  powerup_blast: { offset: 9.9, duration: 0.62 },
+  wand_spell: { offset: 10.8, duration: 0.52 },
 };
 
 interface BgmSlot {
@@ -847,6 +851,9 @@ export class MagicalAudio {
 
   public playSpell(): void {
     if (!this.enabled) return;
+    if (typeof window !== 'undefined' && this.playAtlasCue('wand_spell', 0.34, 0.97 + Math.random() * 0.06)) {
+      return;
+    }
     const notes = [659.25, 783.99, 987.77, 1318.51];
     notes.forEach((n, i) => this.playTone(n, 0.24, 'sine', 0.055, i * 0.045));
   }
@@ -947,6 +954,7 @@ export class MagicalAudio {
 
   public playPowerupBlast(): void {
     if (!this.enabled || typeof window === 'undefined') return;
+    if (this.playAtlasCue('powerup_blast', 0.42, 0.95 + Math.random() * 0.08)) return;
     this.playTone(220, 0.28, 'triangle', 0.085, 0);
     this.playTone(440, 0.24, 'sine', 0.065, 0.03);
     this.playTone(880, 0.3, 'sine', 0.055, 0.07);

@@ -481,8 +481,8 @@ describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
       getContext: () => null,
     } as unknown as HTMLCanvasElement);
 
-    // 6 normal candies + 6 Gardenscapes colorless power-ups (firecracker, bomb, dynamite, tnt, seeker, rainbow) + 4 obstacles = 16
-    expect(instances).toHaveLength(16);
+    // 6 normal candies + 6 Gardenscapes colorless power-ups + 4 base obstacles + 7 painted obstacles = 23
+    expect(instances).toHaveLength(23);
     const srcs = instances.map((im) => im.src);
     expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-firecracker.webp?v=${CANDY_ASSET_REV}`);
     expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-bomb.webp?v=${CANDY_ASSET_REV}`);
@@ -494,6 +494,13 @@ describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
     expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-chocolate-deluxe.webp?v=${CANDY_ASSET_REV}`);
     expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-frosting.webp?v=${CANDY_ASSET_REV}`);
     expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-swirl.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-cauldron.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-padlock.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-petrify.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-dementor.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-decree.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-fiendfyre.webp?v=${CANDY_ASSET_REV}`);
+    expect(srcs).toContain(`/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-horcrux.webp?v=${CANDY_ASSET_REV}`);
     // Ensure old Candy Crush striped/wrapped sprites are NOT loaded on the board
     expect(srcs.some((s) => /-sh\.webp|-sv\.webp|-wrapped\.webp|candy-colorbomb\.webp/.test(s))).toBe(false);
 

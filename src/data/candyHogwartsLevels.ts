@@ -449,7 +449,7 @@ export function toEstateHouseName(houseId: CandyHouseId): HouseName {
   return CANDY_HOUSES[houseId].houseName;
 }
 
-export const CANDY_ASSET_REV = 'hs4';
+export const CANDY_ASSET_REV = 'hs5';
 
 export const CANDY_TILE_TYPES: ReadonlyArray<CandyTileTypeDef> = [
   {
@@ -527,14 +527,14 @@ export const CANDY_OBSTACLE_ICONS: Record<string, string> = {
   chocolate: `<picture><source srcset="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-chocolate.webp?v=${CANDY_ASSET_REV}" type="image/webp" /><img src="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-chocolate.webp?v=${CANDY_ASSET_REV}" alt="" class="m3-goal-sprite" /></picture>`,
   swirl: `<picture><source srcset="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-swirl.webp?v=${CANDY_ASSET_REV}" type="image/webp" /><img src="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-swirl.webp?v=${CANDY_ASSET_REV}" alt="" class="m3-goal-sprite" /></picture>`,
   ingredient: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><polygon points="22,3 38,16 32,39 12,39 6,16" fill="#dc2626" stroke="#fde047" stroke-width="3"/><polygon points="22,8 31,18 22,33 13,18" fill="#fca5a5" opacity="0.65"/></svg>`,
-  cauldron: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><ellipse cx="22" cy="13" rx="13" ry="5" fill="#10b981" stroke="#fde047" stroke-width="2.4"/><path d="M8 15H36L33 34C32 38 28 40 22 40C16 40 12 38 11 34L8 15Z" fill="#1e1b4b" stroke="#c084fc" stroke-width="2.6"/><circle cx="18" cy="11" r="2.5" fill="#bef264"/><circle cx="26" cy="9" r="2" fill="#bef264"/></svg>`,
-  key_lock: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><path d="M14 19V13C14 8.5 17.5 5 22 5C26.5 5 30 8.5 30 13V19" fill="none" stroke="#fde047" stroke-width="3.6" stroke-linecap="round"/><rect x="9" y="18" width="26" height="21" rx="6" fill="#92400e" stroke="#fde047" stroke-width="2.8"/><circle cx="22" cy="27" r="3" fill="#fef08a"/><path d="M22 30V34" stroke="#fef08a" stroke-width="2.8" stroke-linecap="round"/></svg>`,
-  petrify: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><rect x="4" y="4" width="36" height="36" rx="10" fill="#334155" stroke="#6ee7b7" stroke-width="2.8"/><path d="M15 30C15 23 29 21 29 14" stroke="#34d399" stroke-width="3.4" stroke-linecap="round"/><circle cx="29" cy="14" r="3" fill="#fde047"/><path d="M10 13L18 20M34 26L26 33" stroke="#cbd5e1" stroke-width="2.2" stroke-linecap="round"/></svg>`,
-  dementor: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><path d="M22 5C13 5 8 13 8 23L11 39L18 34L22 40L26 34L33 39L36 23C36 13 31 5 22 5Z" fill="#0f172a" stroke="#7dd3fc" stroke-width="2.6"/><ellipse cx="22" cy="18" rx="6" ry="7" fill="#020617" stroke="#38bdf8" stroke-width="1.8"/><circle cx="19.5" cy="17" r="1.5" fill="#bae6fd"/><circle cx="24.5" cy="17" r="1.5" fill="#bae6fd"/></svg>`,
+  cauldron: `<picture><source srcset="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-cauldron.webp?v=${CANDY_ASSET_REV}" type="image/webp" /><img src="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-cauldron.webp?v=${CANDY_ASSET_REV}" alt="" class="m3-goal-sprite" decoding="async" /></picture>`,
+  key_lock: `<picture><source srcset="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-padlock.webp?v=${CANDY_ASSET_REV}" type="image/webp" /><img src="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-padlock.webp?v=${CANDY_ASSET_REV}" alt="" class="m3-goal-sprite" decoding="async" /></picture>`,
+  petrify: `<picture><source srcset="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-petrify.webp?v=${CANDY_ASSET_REV}" type="image/webp" /><img src="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-petrify.webp?v=${CANDY_ASSET_REV}" alt="" class="m3-goal-sprite" decoding="async" /></picture>`,
+  dementor: `<picture><source srcset="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-dementor.webp?v=${CANDY_ASSET_REV}" type="image/webp" /><img src="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-dementor.webp?v=${CANDY_ASSET_REV}" alt="" class="m3-goal-sprite" decoding="async" /></picture>`,
   maze: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><rect x="4" y="4" width="36" height="36" rx="10" fill="#064e3b" stroke="#fde047" stroke-width="2.6"/><path d="M11 16H29L25 12M33 28H15L19 32" fill="none" stroke="#6ee7b7" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-  decree: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><rect x="6" y="4" width="32" height="36" rx="6" fill="#831843" stroke="#f9a8d4" stroke-width="2.8"/><rect x="11" y="9" width="22" height="26" rx="3" fill="none" stroke="#fde047" stroke-width="1.8"/><path d="M15 16H29M15 22H29M15 28H23" stroke="#fbcfe8" stroke-width="2.5" stroke-linecap="round"/><circle cx="28" cy="29" r="3.5" fill="#ec4899" stroke="#fde047" stroke-width="1.5"/></svg>`,
-  fiendfyre: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><path d="M22 4C27 12 36 16 35 27C34 35 28 40 22 40C16 40 10 35 9 27C8 19 14 14 16 10C17 15 20 15 22 4Z" fill="#ea580c" stroke="#fde047" stroke-width="2.5"/><path d="M22 16C25 21 28 24 27 30C26 34 24 36 22 36C20 36 18 34 17 30C16 25 19 21 22 16Z" fill="#fef08a"/></svg>`,
-  horcrux: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><polygon points="22,3 38,14 34,36 22,41 10,36 6,14" fill="#1e1b4b" stroke="#fde047" stroke-width="2.8"/><polygon points="22,10 31,18 28,32 22,35 16,32 13,18" fill="#064e3b" stroke="#34d399" stroke-width="2"/><circle cx="22" cy="22" r="4.5" fill="#a855f7" stroke="#fef08a" stroke-width="1.8"/></svg>`,
+  decree: `<picture><source srcset="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-decree.webp?v=${CANDY_ASSET_REV}" type="image/webp" /><img src="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-decree.webp?v=${CANDY_ASSET_REV}" alt="" class="m3-goal-sprite" decoding="async" /></picture>`,
+  fiendfyre: `<picture><source srcset="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-fiendfyre.webp?v=${CANDY_ASSET_REV}" type="image/webp" /><img src="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-fiendfyre.webp?v=${CANDY_ASSET_REV}" alt="" class="m3-goal-sprite" decoding="async" /></picture>`,
+  horcrux: `<picture><source srcset="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-horcrux.webp?v=${CANDY_ASSET_REV}" type="image/webp" /><img src="/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-horcrux.webp?v=${CANDY_ASSET_REV}" alt="" class="m3-goal-sprite" decoding="async" /></picture>`,
   boss: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><polygon points="22,3 39,13 35,35 22,41 9,35 5,13" fill="#581c87" stroke="#fde047" stroke-width="2.8"/><path d="M15 19L20 23M29 19L24 23" stroke="#f87171" stroke-width="3" stroke-linecap="round"/><path d="M16 31C19 28 25 28 28 31" stroke="#fde047" stroke-width="2.6" stroke-linecap="round"/></svg>`,
   score: `<svg viewBox="0 0 44 44" width="28" height="28" aria-hidden="true"><path d="M22 4L27.5 15.5L40 17.3L31 26.1L33.1 38.5L22 32.6L10.9 38.5L13 26.1L4 17.3L16.5 15.5L22 4Z" fill="#f59e0b" stroke="#fef9c3" stroke-width="2.6"/></svg>`,
   special_seeker: `<img src="/game/trang-trai-hang-soc/paintings/candy-hogwarts/powerup-seeker.webp?v=${CANDY_ASSET_REV}" alt="" class="m3-goal-sprite" loading="lazy" decoding="async" />`,
@@ -1615,18 +1615,25 @@ function getSpecialOrderSpec(
   ascensionRank: number,
   isBoss: boolean,
   isSeasonFinale: boolean,
-  hasDecree: boolean
+  hasDecree: boolean,
+  moves: number
 ): { specialKind: 'striped' | 'wrapped' | 'color_bomb' | 'seeker'; target: number } | null {
   if (isBoss || isSeasonFinale || hasDecree) return null;
   if (levelNum <= 100) {
     const preset = FIRST_100_SPECIAL_ORDERS[levelNum];
-    if (preset) {
-      return {
-        specialKind: preset.specialKind,
-        target: preset.target + (preset.specialKind === 'color_bomb' ? 1 : 2),
-      };
-    }
-    return null;
+    if (!preset) return null;
+    const cap =
+      preset.specialKind === 'color_bomb'
+        ? Math.min(4, Math.max(2, Math.floor(moves * 0.24)))
+        : preset.specialKind === 'wrapped'
+          ? Math.min(6, Math.max(3, Math.floor(moves * 0.4)))
+          : preset.specialKind === 'seeker'
+            ? Math.min(7, Math.max(4, Math.floor(moves * 0.46)))
+            : Math.min(8, Math.max(4, Math.floor(moves * 0.52)));
+    return {
+      specialKind: preset.specialKind,
+      target: Math.min(cap, preset.target),
+    };
   }
   if (levelNum % 14 !== 5 && !(ascensionRank >= 2 && levelNum % 17 === 8)) return null;
 
@@ -1637,16 +1644,27 @@ function getSpecialOrderSpec(
     'color_bomb',
   ];
   const kind = kinds[(Math.floor(levelNum / 14) + seasonId + ascensionRank) % kinds.length];
-  const bonus = Math.min(8, 1 + Math.floor(seasonId / 2) + Math.ceil(ascensionRank * 0.6));
   if (kind === 'color_bomb') {
+    const rawTarget = 2 + Math.floor((seasonId + ascensionRank) / 4);
+    const maxCap = Math.min(4, Math.max(2, Math.floor(moves * 0.24)));
     return {
       specialKind: 'color_bomb',
-      target: Math.min(6, 2 + Math.floor((seasonId + ascensionRank) / 3)),
+      target: Math.min(maxCap, rawTarget),
     };
   }
-  if (kind === 'wrapped') return { specialKind: 'wrapped', target: 5 + bonus };
-  if (kind === 'seeker') return { specialKind: 'seeker', target: 5 + bonus };
-  return { specialKind: 'striped', target: 6 + bonus };
+  if (kind === 'wrapped') {
+    const rawTarget = 3 + Math.floor(seasonId / 2) + Math.floor(ascensionRank * 0.25);
+    const maxCap = Math.min(6, Math.max(3, Math.floor(moves * 0.4)));
+    return { specialKind: 'wrapped', target: Math.min(maxCap, rawTarget) };
+  }
+  if (kind === 'seeker') {
+    const rawTarget = 4 + Math.floor(seasonId / 2) + Math.floor(ascensionRank * 0.3);
+    const maxCap = Math.min(7, Math.max(4, Math.floor(moves * 0.46)));
+    return { specialKind: 'seeker', target: Math.min(maxCap, rawTarget) };
+  }
+  const rawTarget = 4 + Math.floor(seasonId / 2) + Math.floor(ascensionRank * 0.35);
+  const maxCap = Math.min(8, Math.max(4, Math.floor(moves * 0.52)));
+  return { specialKind: 'striped', target: Math.min(maxCap, rawTarget) };
 }
 
 export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLevel {
@@ -2372,23 +2390,7 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
     };
   }
 
-  // 9. Số màu kẹo trên bàn cờ (phủ 6 màu ngay từ Màn 4+, 100% 6 màu từ Màn 300..7777)
-  const specialOrder = getSpecialOrderSpec(
-    levelNum,
-    seasonId,
-    ascensionRank,
-    isBoss,
-    isSeasonFinale,
-    actualDecrees > 0
-  );
-  let numColors = 6;
-  if (levelNum <= 3) {
-    numColors = 5;
-  } else if (levelNum < 300 && specialOrder?.specialKind === 'color_bomb') {
-    numColors = 5;
-  }
-
-  // 10. Ngân sách Lượt đi siết chặt chuẩn Gardenscapes +2 bậc (13–21 lượt, 100% khả giải khi ghép combo)
+  // 9. Ngân sách Lượt đi siết chặt chuẩn Gardenscapes +2 bậc (13–21 lượt, 100% khả giải khi ghép combo)
   let moves = 14;
   if (levelNum === 1) {
     moves = 16;
@@ -2419,6 +2421,24 @@ export function generateCandyHogwartsLevel(rawLevelNum: number): CandyHogwartsLe
   if (actualHorcruxes >= 6 && !isBoss) moves += 2;
   else if (actualHorcruxes >= 4 && !isBoss) moves += 1;
   moves = Math.max(13, moves);
+
+  // 10. Lệnh chế tạo Kẹo Phép & Số màu kẹo trên bàn cờ (giữ cân bằng 5 màu ở các màn đòi >= 3 Cầu Vồng)
+  const specialOrder = getSpecialOrderSpec(
+    levelNum,
+    seasonId,
+    ascensionRank,
+    isBoss,
+    isSeasonFinale,
+    actualDecrees > 0,
+    moves
+  );
+  let numColors = 6;
+  if (levelNum <= 3) {
+    numColors = 5;
+  } else if (specialOrder?.specialKind === 'color_bomb' && specialOrder.target >= 3) {
+    numColors = 5;
+    moves = Math.max(moves, specialOrder.target >= 4 ? 17 : 15);
+  }
 
   // 11. Ngưỡng 1–2–3 Sao tăng dần xuyên suốt 1 -> 7777
   const baseStar1 = Math.round(

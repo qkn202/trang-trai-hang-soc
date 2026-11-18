@@ -327,6 +327,44 @@ export const CATALOG_PROP_SPRITE_PATHS: Readonly<Record<string, string>> = {
   catalog_patronus_ward_lantern: '/game/trang-trai-hang-soc/paintings/catalog/patronus_ward_lantern.webp',
 };
 
+/** Phase-1 startup sprites required immediately on the opening Hang Sóc farmstead viewport. */
+const CRITICAL_BOOT_KEYS: ReadonlySet<string> = new Set([
+  // Core Hang Sóc starter buildings & landmarks
+  'burrow_house_canon', 'arthur_ford_shed', 'molly_apple_bakery', 'burrow_owl_post',
+  'burrow_pumpkin_gnomes', 'burrow_reed_pond_mill', 'burrow_apple_orchard',
+  'burrow_greenhouse_canon', 'burrow_honeydukes_canon', 'burrow_broomsticks_canon',
+  'burrow_feast_marquee', 'burrow_self_knitting_loom', 'burrow_cider_apiary',
+  'burrow_windmill_canon', 'hagrid_pumpkin_hut', 'burrow_chicken_coop',
+  'burrow_puffskein_pasture', 'burrow_flower_garden', 'burrow_animal_pasture',
+  'floo_fireplace_gate', 'hogsmeade_stone_bridge', 'hogsmeade_harvest_fountain',
+  // Connectable plot bases, kinetic props & construction scaffolding
+  'crop_plot_tilled', 'crop_plot_sprouts', 'prop_windmill_sails',
+  'prop_waterwheel_rotor', 'prop_construction_site', 'prop_ribbon_unveil',
+  // Opening environment greenery & pond boat
+  'env_tree_oak', 'env_tree_pine', 'env_tree_magic', 'env_bush_flowers',
+  'env_mossy_rock', 'env_flower_patch', 'vehicle_lake_boat',
+  // Villagers, staff & tutorial Molly portraits
+  'staff_molly_weasley', 'staff_arthur_weasley', 'guest_ron_gnome', 'staff_hagrid_farm',
+  'villager_molly_idle', 'villager_molly_walk', 'villager_arthur_idle', 'villager_arthur_walk',
+  'villager_ron_idle', 'villager_ron_walk', 'villager_ginny_idle', 'villager_ginny_walk',
+  'villager_hagrid_idle', 'villager_hagrid_walk', 'villager_hermione_idle', 'villager_hermione_walk',
+  'npc_molly_welcome', 'npc_molly_guide', 'npc_molly_cheer',
+  // Livestock & early creatures
+  'beast_hen', 'beast_hen_peck', 'beast_sheep', 'beast_sheep_graze',
+  'beast_cow', 'beast_cow_graze', 'beast_puffskein', 'beast_puffskein_bounce',
+  'beast_niffler', 'beast_niffler_play',
+  // Early crops & core HUD icons
+  'ui_icon_crop_ottery_wheat', 'ui_icon_crop_honey_carrot', 'ui_icon_crop_garden_pumpkin',
+  'ui_icon_crop_golden_corn', 'ui_icon_crop_crisp_cabbage', 'ui_icon_crop_burrow_potato',
+  'ui_icon_crop_ruby_strawberry', 'ui_icon_crop_meadow_daisy',
+  'ui_icon_jigsaw', 'ui_icon_accio', 'ui_icon_suitcase', 'ui_icon_path',
+  'ui_icon_terrain', 'ui_icon_shop', 'ui_icon_creature', 'ui_icon_decor',
+  'ui_icon_staff', 'ui_icon_pie_ready', 'ui_icon_owl_orders', 'ui_icon_seed_sack',
+  'ui_icon_hammer_wand', 'ui_icon_world_map', 'ui_icon_sweater_ready',
+  'ui_icon_watering_can', 'ui_icon_golden_sickle', 'ui_icon_cider',
+  'ui_icon_honey_jar', 'ui_icon_flour_sack', 'ui_icon_egg_basket',
+]);
+
 export function resolveCatalogPropSpriteKey(
   itemId: string,
   spriteKey?: string
@@ -361,6 +399,18 @@ export class SpriteRegistry {
   private readScratchCanvas: HTMLCanvasElement | null = null;
   private readScratchCtx: CanvasRenderingContext2D | null = null;
   private toonEnabled = false;
+  private toonOpId = 0;
+  private bgLoadPromise: Promise<void> = Promise.resolve();
+  private batchListeners = new Set<() => void>();
+
+  public onBatchLoaded(cb: () => void): () => void {
+    this.batchListeners.add(cb);
+    return () => this.batchListeners.delete(cb);
+  }
+
+  public whenAllLoaded(): Promise<void> {
+    return this.bgLoadPromise;
+  }
 
   private getReadScratchCtx(w: number, h: number): CanvasRenderingContext2D | null {
     if (typeof document === 'undefined') return null;
@@ -388,6 +438,7 @@ export class SpriteRegistry {
    * or a quick A/B of the illustrated look).
    */
   public setToonEnabled(enabled: boolean): void {
+    this.toonOpId += 1;
     if (this.toonEnabled === enabled) return;
     this.toonEnabled = enabled;
     this.connectedFarmlandCache.clear();
@@ -398,6 +449,31 @@ export class SpriteRegistry {
       this.images.set(key, built);
     }
     this.releaseReadScratch();
+  }
+
+  /** Cooperative chunked Toon rebuild (~14 sprites/frame) so Settings toggles stay jank-free. */
+  public async setToonEnabledAsync(enabled: boolean): Promise<void> {
+    const opId = ++this.toonOpId;
+    if (this.toonEnabled === enabled) return;
+    this.toonEnabled = enabled;
+    this.connectedFarmlandCache.clear();
+    this.connectedFarmlandMips.clear();
+    this.mips.clear();
+    const entries = [...this.raw.entries()];
+    const CHUNK = 14;
+    for (let i = 0; i < entries.length; i += CHUNK) {
+      if (opId !== this.toonOpId) return;
+      const slice = entries.slice(i, i + CHUNK);
+      for (const [key, img] of slice) {
+        this.images.set(key, this.buildSprite(key, img));
+      }
+      if (i + CHUNK < entries.length) {
+        await yieldToMainThread();
+      }
+    }
+    if (opId === this.toonOpId) {
+      this.releaseReadScratch();
+    }
   }
 
   public isToonEnabled(): boolean {
@@ -471,13 +547,12 @@ export class SpriteRegistry {
   }
 
   async loadAll(): Promise<void> {
-    const decoded: Array<{ key: string; img: HTMLImageElement }> = [];
     const loadSingleWithRetry = (
       key: string,
       assetUrl: string,
       attempt = 0
-    ): Promise<void> =>
-      new Promise<void>((resolve) => {
+    ): Promise<{ key: string; img: HTMLImageElement } | null> =>
+      new Promise((resolve) => {
         let settled = false;
         const img = new Image();
         img.decoding = 'async';
@@ -490,7 +565,7 @@ export class SpriteRegistry {
           if (attempt < 1) {
             void loadSingleWithRetry(key, assetUrl, attempt + 1).then(resolve);
           } else {
-            resolve();
+            resolve(null);
           }
         }, 8000);
         img.onload = () => {
@@ -498,8 +573,7 @@ export class SpriteRegistry {
           settled = true;
           clearTimeout(timer);
           this.raw.set(key, img);
-          decoded.push({ key, img });
-          resolve();
+          resolve({ key, img });
         };
         img.onerror = () => {
           if (settled) return;
@@ -508,37 +582,76 @@ export class SpriteRegistry {
           if (attempt < 1) {
             void loadSingleWithRetry(key, assetUrl, attempt + 1).then(resolve);
           } else {
-            resolve();
+            resolve(null);
           }
         };
         img.src = attempt > 0 ? `${assetUrl}?r=${attempt}` : assetUrl;
       });
 
-    const loadJobs: Array<Promise<void>> = [
-      ...SPRITE_KEYS.map((key) => loadSingleWithRetry(key, `/game/trang-trai-hang-soc/sprites/${key}.webp`)),
-      ...Object.entries(CATALOG_PROP_SPRITE_PATHS).map(([key, url]) =>
-        loadSingleWithRetry(key, url)
-      ),
-    ];
-    await Promise.all(loadJobs);
-
-    const nowFn = () =>
-      typeof performance !== 'undefined' ? performance.now() : Date.now();
-    let deadline = nowFn() + 36;
-
-    for (let i = 0; i < decoded.length; i++) {
-      const { key, img } = decoded[i];
-      const built = this.buildSprite(key, img);
-      this.images.set(key, built);
-      this.buildAlphaMask(key, img);
-
-      if (nowFn() >= deadline && i + 1 < decoded.length) {
-        await yieldToMainThread();
-        deadline = nowFn() + 36;
+    const processDecodedList = async (items: Array<{ key: string; img: HTMLImageElement }>) => {
+      const nowFn = () =>
+        typeof performance !== 'undefined' ? performance.now() : Date.now();
+      let deadline = nowFn() + 36;
+      for (let i = 0; i < items.length; i++) {
+        const { key, img } = items[i];
+        const built = this.buildSprite(key, img);
+        this.images.set(key, built);
+        this.buildAlphaMask(key, img);
+        if (nowFn() >= deadline && i + 1 < items.length) {
+          await yieldToMainThread();
+          deadline = nowFn() + 36;
+        }
       }
+      this.releaseReadScratch();
+    };
+
+    const allSpecs: Array<{ key: string; url: string; critical: boolean }> = [
+      ...SPRITE_KEYS.map((key) => ({
+        key,
+        url: `/game/trang-trai-hang-soc/sprites/${key}.webp`,
+        critical: CRITICAL_BOOT_KEYS.has(key),
+      })),
+      ...Object.entries(CATALOG_PROP_SPRITE_PATHS).map(([key, url]) => ({
+        key,
+        url,
+        critical: true,
+      })),
+    ];
+
+    const phase1Specs = allSpecs.filter((s) => s.critical);
+    const phase2Specs = allSpecs.filter((s) => !s.critical);
+
+    const phase1Loaded = (
+      await Promise.all(phase1Specs.map((s) => loadSingleWithRetry(s.key, s.url)))
+    ).filter((x): x is { key: string; img: HTMLImageElement } => x !== null);
+    await processDecodedList(phase1Loaded);
+
+    if (phase2Specs.length === 0) {
+      this.bgLoadPromise = Promise.resolve();
+      return;
     }
 
-    this.releaseReadScratch();
+    // Stream remaining ~200+ sprites in background batches of 24 without delaying first paint!
+    this.bgLoadPromise = (async () => {
+      const BATCH_SIZE = 24;
+      for (let i = 0; i < phase2Specs.length; i += BATCH_SIZE) {
+        const slice = phase2Specs.slice(i, i + BATCH_SIZE);
+        const loaded = (
+          await Promise.all(slice.map((s) => loadSingleWithRetry(s.key, s.url)))
+        ).filter((x): x is { key: string; img: HTMLImageElement } => x !== null);
+        if (loaded.length > 0) {
+          await processDecodedList(loaded);
+          for (const cb of this.batchListeners) {
+            try {
+              cb();
+            } catch {
+              // Ignore listener errors
+            }
+          }
+        }
+        await yieldToMainThread();
+      }
+    })();
   }
 
   get(key?: string): SpriteSource | undefined {

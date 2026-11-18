@@ -228,7 +228,6 @@ import {
   migrateLoadedState,
   PHOENIX_FORGE_ELIGIBLE_GOODS,
   PHOENIX_FORGE_GOLD_COST,
-  PLAYFUL_BREAKDOWNS,
   sanitizePlainText,
   sanitizeQuestList,
   SAVE_KEY,
@@ -473,6 +472,7 @@ import {
 
 import {
   villagersHireStaff,
+  villagersDismissStaff,
   villagersGetHourlyStaffWage,
   villagersSyncStaffEntities,
   villagersSetStaffPatrolZone,
@@ -947,6 +947,8 @@ export class ParkSimulation {
 
   public hireStaff(role: keyof GameState['staffHired']): boolean { return villagersHireStaff(this, role); }
 
+  public dismissStaff(role: keyof GameState['staffHired']): boolean { return villagersDismissStaff(this, role); }
+
   public getHourlyStaffWage(): number { return villagersGetHourlyStaffWage(this); }
 
   public syncStaffEntities(): void { return villagersSyncStaffEntities(this); }
@@ -1095,7 +1097,7 @@ export class ParkSimulation {
           // HPVN: say once why Sickle drops while idle (there is no dismiss option, so no way to stop it)
           if (wage > 0 && !this.state.wageToastShown) {
             this.state.wageToastShown = true;
-            this.onToast?.(`Lương phụ tá: các phụ tá của bạn (Lao Công Phép Thuật, Phù Thủy Bảo Trì, Nhà Sinh Vật Học…) nhận ${wage} Sickle mỗi 45 giây. Trong game chưa có cách cho nghỉ việc.`, '🪙');
+            this.onToast?.(`Lương phụ tá: các phụ tá của bạn (Lao Công Phép Thuật, Phù Thủy Bảo Trì, Nhà Sinh Vật Học…) nhận ${wage} Sickle mỗi 45 giây. Bạn có thể cho phụ tá tạm nghỉ bất cứ lúc nào trong mục Nhân Sự.`, '🪙');
           }
         }
         this.state.finance.staffWagesPaid += wage;
@@ -1178,36 +1180,12 @@ export class ParkSimulation {
     }
   }
 
-  private updateRideQueues(dt: number, now: number): void {
+  private updateRideQueues(_dt: number, now: number): void {
+    // Cozy farmstead mode: no random contraption breakdowns during normal operation.
     for (const b of this.state.buildings) {
-      const it = getCatalogItem(b.itemId);
-      if (
-        !it ||
-        it.category !== 'ride' ||
-        it.isThemeParkLegacy ||
-        it.isCoasterTrackPiece ||
-        it.isFlooPortal
-      ) {
-        continue;
-      }
       if (now < b.constructEndsAt) continue;
-
-      // Gentle ambient wear & playful breakdown check!
-      if (!b.isBrokenDown) {
-        b.durability = Math.max(15, (b.durability ?? 100) - dt * 0.14);
-        if (b.durability <= 22) {
-          b.isBrokenDown = true;
-          b.breakdownReason =
-            PLAYFUL_BREAKDOWNS[Math.floor(Math.random() * PLAYFUL_BREAKDOWNS.length)];
-          this.spawnFloatingText(b.gx + 1, b.gy + 1, '⚙️ Cần Reparo!', '#c084fc');
-          if (!this.isHeadmasterPreview) {
-            this.onToast?.(
-              `🔧 ${it.name} tạm dừng: "${b.breakdownReason}" — Phù Thủy Bảo Trì đang tới hoặc bấm Reparo!`,
-              '🪄'
-            );
-          }
-          this.onUiChange?.();
-        }
+      if (!b.isBrokenDown && (b.durability ?? 100) < 100) {
+        b.durability = 100;
       }
     }
   }

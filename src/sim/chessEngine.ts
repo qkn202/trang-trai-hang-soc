@@ -1102,6 +1102,33 @@ export class WizardChessEngine {
     return probe.computeBestAiMoveOnly();
   }
 
+  public static computeBestWhiteMoveFromPayload(payload: ChessWorkerSearchPayload): ChessMove | null {
+    const probe = new WizardChessEngine(payload.stage, 'match');
+    probe.board = cloneChessBoard(payload.board);
+    probe.turn = 'w';
+    probe.castling = { ...payload.castling };
+    probe.enPassant = payload.enPassant ? { ...payload.enPassant } : null;
+    probe.status = 'playing';
+    return probe.computeBestWhiteMoveOnly();
+  }
+
+  public computeBestWhiteMoveOnly(): ChessMove | null {
+    if (this.status !== 'playing' || this.turn !== 'w') return null;
+    const legal = this.getAllLegalMovesForState(this.board, 'w', this.castling, this.enPassant);
+    if (legal.length === 0) return null;
+    const depth = legal.length <= 24 ? 4 : 3;
+    const res = this.searchAlphaBeta(
+      this.board,
+      'w',
+      this.castling,
+      this.enPassant,
+      depth,
+      -Infinity,
+      Infinity
+    );
+    return res.move ?? legal[0] ?? null;
+  }
+
   public stepAiMove(): {
     move: ChessMove | null;
     aiWon: boolean;
@@ -1252,7 +1279,7 @@ export class WizardChessEngine {
    * Hiển thị gợi ý nước đi tối ưu (`this.hintMove` + chọn sẵn quân gợi ý) mà KHÔNG tự động đi thay người chơi,
    * đảm bảo bấm "💡 Gợi Ý" không bao giờ tự động qua màn ở các thế cờ chiếu bí 1 nước.
    */
-  public useBestMoveHint(): {
+  public applyPrecomputedHintMove(precomputedMove: ChessMove | null): {
     ok: boolean;
     move: ChessMove | null;
     labelVi: string;
@@ -1264,17 +1291,16 @@ export class WizardChessEngine {
     if (legal.length === 0) {
       return { ok: false, move: null, labelVi: '' };
     }
-    const depth = legal.length <= 24 ? 4 : 3;
-    const res = this.searchAlphaBeta(
-      this.board,
-      'w',
-      this.castling,
-      this.enPassant,
-      depth,
-      -Infinity,
-      Infinity
-    );
-    const chosen = res.move ?? legal[0];
+    const chosen = precomputedMove
+      ? (legal.find(
+          (m) =>
+            m.fromR === precomputedMove.fromR &&
+            m.fromC === precomputedMove.fromC &&
+            m.toR === precomputedMove.toR &&
+            m.toC === precomputedMove.toC &&
+            (m.promotion ?? undefined) === (precomputedMove.promotion ?? undefined)
+        ) ?? legal[0])
+      : legal[0];
     if (!chosen) {
       return { ok: false, move: null, labelVi: '' };
     }
@@ -1290,6 +1316,14 @@ export class WizardChessEngine {
       move: chosen,
       labelVi: formatChessMoveReviewVi(this.board, chosen),
     };
+  }
+
+  public useBestMoveHint(): {
+    ok: boolean;
+    move: ChessMove | null;
+    labelVi: string;
+  } {
+    return this.applyPrecomputedHintMove(this.computeBestWhiteMoveOnly());
   }
 
   public useBestMoveAssist(): {
@@ -1324,7 +1358,7 @@ export class WizardChessEngine {
     };
   }
 
-  public applyPhoenixTalisman(): {
+  public applyPhoenixTalismanWithMove(precomputedMove: ChessMove | null): {
     ok: boolean;
     move: ChessMove | null;
     won: boolean;
@@ -1369,17 +1403,17 @@ export class WizardChessEngine {
       };
     }
 
-    const depth = legal.length <= 24 ? 4 : 3;
-    const res = this.searchAlphaBeta(
-      this.board,
-      'w',
-      this.castling,
-      this.enPassant,
-      depth,
-      -Infinity,
-      Infinity
-    );
-    if (!res.move) {
+    const chosen = precomputedMove
+      ? (legal.find(
+          (m) =>
+            m.fromR === precomputedMove.fromR &&
+            m.fromC === precomputedMove.fromC &&
+            m.toR === precomputedMove.toR &&
+            m.toC === precomputedMove.toC &&
+            (m.promotion ?? undefined) === (precomputedMove.promotion ?? undefined)
+        ) ?? legal[0])
+      : legal[0];
+    if (!chosen) {
       return {
         ok: false,
         move: null,
@@ -1392,15 +1426,39 @@ export class WizardChessEngine {
 
     this.talismanUsed = true;
     this.freeHintsLeft += 1;
-    const nextStatus = this.commitMove(res.move);
+    const nextStatus = this.commitMove(chosen);
     return {
       ok: true,
-      move: res.move,
+      move: chosen,
       won: nextStatus === 'won',
       draw: nextStatus === 'draw',
       aiThinking: nextStatus === 'ai_thinking',
       msg: '🔥 Phượng Hoàng Fawkes dẫn lối: Đã đi nước cờ Kiện Tướng & tặng thêm +1 Gợi Ý!',
     };
+  }
+
+  public applyPhoenixTalisman(): {
+    ok: boolean;
+    move: ChessMove | null;
+    won: boolean;
+    draw: boolean;
+    aiThinking: boolean;
+    msg: string;
+  } {
+    if (this.talismanUsed || this.status === 'won' || this.status === 'ai_thinking') {
+      return {
+        ok: false,
+        move: null,
+        won: this.status === 'won',
+        draw: false,
+        aiThinking: false,
+        msg: 'Bùa Phượng Hoàng chỉ dùng tối đa 1 lần mỗi lượt thử màn!',
+      };
+    }
+    if (this.status === 'lost' || this.status === 'draw') {
+      this.undoTurnPair();
+    }
+    return this.applyPhoenixTalismanWithMove(this.computeBestWhiteMoveOnly());
   }
 
   public exportSession(extra?: {

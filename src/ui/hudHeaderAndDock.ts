@@ -1371,7 +1371,6 @@ export function headerRefreshHeader(hud: GameHUD): void {
     }
 
     headerSyncProgressiveHudVisibility(hud);
-    headerRefreshHeaderClock(hud);
 
     // Sync Heatmap button label & active highlight
     const btnHm = hud.root.querySelector('#btnCycleHeatmap') as HTMLButtonElement | null;
@@ -2076,6 +2075,11 @@ export function headerRenderStaffDrawer(hud: GameHUD, drawer: HTMLElement): void
             >
               ${maxed ? `✓ ${MAX_STAFF_PER_ROLE}/${MAX_STAFF_PER_ROLE}` : `+ 🪙 ${cost}`}
             </button>
+            ${
+              count > 0
+                ? `<button type="button" data-dismiss="${r.key}" class="brass-btn" style="width:100%;margin-top:4px;padding:4px 8px;font-size:12px;">Cho nghỉ</button>`
+                : ''
+            }
           </div>
         `;
       })
@@ -2107,6 +2111,17 @@ export function headerRenderStaffDrawer(hud: GameHUD, drawer: HTMLElement): void
           headerCollapseBuildDock(hud);
           headerRefreshAll(hud);
           headerShowToast(hud, 'Đã đón nhân sự mới gia nhập công viên!', '🧙');
+        }
+      });
+    });
+
+    drawer.querySelectorAll<HTMLButtonElement>('[data-dismiss]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const role = btn.dataset.dismiss as keyof ParkSimulation['state']['staffHired'];
+        if (hud.sim.dismissStaff(role)) {
+          headerRefreshAll(hud);
+          headerRenderStaffDrawer(hud, drawer);
+          headerShowToast(hud, 'Đã cho phụ tá tạm nghỉ ngơi!', '🧙');
         }
       });
     });

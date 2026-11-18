@@ -22,6 +22,8 @@ export interface CandyBoardPiece {
   x: number;
   y: number;
   scale: number;
+  scaleX?: number;
+  scaleY?: number;
   alpha: number;
 }
 
@@ -244,6 +246,13 @@ export class CandyHogwartsBoardRenderer {
     load('chocolate_deluxe', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-chocolate-deluxe.webp${q}`);
     load('frosting_waffle', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-frosting.webp${q}`);
     load('swirl_piece', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-swirl.webp${q}`);
+    load('obs_cauldron', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-cauldron.webp${q}`);
+    load('obs_padlock', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-padlock.webp${q}`);
+    load('obs_petrify', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-petrify.webp${q}`);
+    load('obs_dementor', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-dementor.webp${q}`);
+    load('obs_decree', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-decree.webp${q}`);
+    load('obs_fiendfyre', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-fiendfyre.webp${q}`);
+    load('obs_horcrux', `/game/trang-trai-hang-soc/paintings/candy-hogwarts/candy-horcrux.webp${q}`);
   }
 
   private isYuleSkinActive(): boolean {
@@ -265,9 +274,7 @@ export class CandyHogwartsBoardRenderer {
         this.onSpriteReady?.();
       };
       img.onerror = () => {
-        if (/\.webp(\?.*)?$/.test(url)) {
-          img.src = url.replace(/\.webp(\?.*)?$/, '.png$1');
-        }
+        delete this.yuleSprites[key];
       };
       img.src = url;
       this.yuleSprites[key] = img;
@@ -1119,6 +1126,23 @@ export class CandyHogwartsBoardRenderer {
     layer: number
   ): void {
     ctx.save();
+    const sprite = this.sprites.obs_petrify;
+    if (sprite && sprite.complete && sprite.naturalWidth > 0) {
+      ctx.globalAlpha = layer >= 2 ? 0.92 : 0.84;
+      const pad = -w * 0.02;
+      ctx.drawImage(sprite, x + pad, y + pad, w - pad * 2, h - pad * 2);
+      ctx.globalAlpha = 1;
+      roundRectPath(ctx, x + 1, y + 1, w - 2, h - 2, rad);
+      ctx.lineWidth = layer >= 2 ? 2.6 : 1.8;
+      ctx.strokeStyle = layer >= 3 ? '#fde047' : '#6ee7b7';
+      ctx.stroke();
+      if (layer >= 2) {
+        this.drawLayerBadge(ctx, x, y, w, h, layer, '#064e3b', '#6ee7b7', '#fef08a');
+      }
+      ctx.restore();
+      return;
+    }
+
     roundRectPath(ctx, x, y, w, h, rad);
     ctx.fillStyle = layer >= 2 ? 'rgba(51, 65, 85, 0.72)' : 'rgba(71, 85, 105, 0.52)';
     ctx.fill();
@@ -1172,6 +1196,31 @@ export class CandyHogwartsBoardRenderer {
   ): void {
     const hover = Math.sin(now * 0.005 + x * 0.04) * 2;
     ctx.save();
+    const sprite = this.sprites.obs_dementor;
+    if (sprite && sprite.complete && sprite.naturalWidth > 0) {
+      roundRectPath(ctx, x, y, w, h, rad);
+      ctx.fillStyle = 'rgba(8, 20, 42, 0.82)';
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#38bdf8';
+      ctx.stroke();
+      const pad = w * 0.04;
+      ctx.drawImage(sprite, x + pad, y + pad + hover * 0.7, w - pad * 2, h - pad * 2);
+      const cx = x + w * 0.5;
+      const maxPips = Math.max(3, hp);
+      const span = w * 0.56;
+      for (let i = 0; i < maxPips; i++) {
+        const gx = cx - span * 0.5 + (maxPips === 1 ? 0 : (i / (maxPips - 1)) * span);
+        const gy = y + h * 0.87;
+        ctx.beginPath();
+        ctx.arc(gx, gy, Math.max(2, w * 0.052), 0, Math.PI * 2);
+        ctx.fillStyle = i < hp ? '#38bdf8' : 'rgba(148, 163, 184, 0.35)';
+        ctx.fill();
+      }
+      ctx.restore();
+      return;
+    }
+
     roundRectPath(ctx, x, y, w, h, rad);
     ctx.fillStyle = 'rgba(8, 20, 42, 0.92)';
     ctx.fill();
@@ -1289,6 +1338,15 @@ export class CandyHogwartsBoardRenderer {
   ): void {
     const pulse = 0.82 + 0.18 * Math.sin(now * 0.006);
     ctx.save();
+    const sprite = this.sprites.obs_decree;
+    if (sprite && sprite.complete && sprite.naturalWidth > 0) {
+      const pad = -w * 0.02;
+      ctx.drawImage(sprite, x + pad, y + pad, w - pad * 2, h - pad * 2);
+      this.drawLayerBadge(ctx, x, y, w, h, hp, '#500724', '#f9a8d4', '#fef08a');
+      ctx.restore();
+      return;
+    }
+
     roundRectPath(ctx, x + w * 0.06, y, w * 0.88, h, rad);
     const g = ctx.createLinearGradient(x, y, x, y + h);
     g.addColorStop(0, '#be185d');
@@ -1333,6 +1391,25 @@ export class CandyHogwartsBoardRenderer {
   ): void {
     const flicker = Math.sin(now * 0.011 + x * 0.1) * (w * 0.045);
     ctx.save();
+    const sprite = this.sprites.obs_fiendfyre;
+    if (sprite && sprite.complete && sprite.naturalWidth > 0) {
+      roundRectPath(ctx, x, y, w, h, rad);
+      ctx.fillStyle = 'rgba(67, 20, 7, 0.78)';
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = hp >= 2 ? '#fb923c' : '#fde047';
+      ctx.stroke();
+      const s = 1 + 0.03 * Math.sin(now * 0.012 + x * 0.06);
+      const dw = w * 0.94 * s;
+      const dh = h * 0.94 * s;
+      ctx.drawImage(sprite, x + (w - dw) * 0.5, y + (h - dh) * 0.5, dw, dh);
+      if (hp >= 2) {
+        this.drawLayerBadge(ctx, x, y, w, h, hp, '#431407', '#fb923c', '#fef08a');
+      }
+      ctx.restore();
+      return;
+    }
+
     roundRectPath(ctx, x, y, w, h, rad);
     ctx.fillStyle = 'rgba(67, 20, 7, 0.9)';
     ctx.fill();
@@ -1384,6 +1461,38 @@ export class CandyHogwartsBoardRenderer {
     const r = Math.min(w, h) * 0.38;
 
     ctx.save();
+    const sprite = this.sprites.obs_horcrux;
+    if (sprite && sprite.complete && sprite.naturalWidth > 0) {
+      roundRectPath(ctx, x, y, w, h, rad);
+      ctx.fillStyle = shielded ? 'rgba(30, 11, 56, 0.88)' : 'rgba(6, 46, 36, 0.84)';
+      ctx.fill();
+      ctx.lineWidth = shielded ? 2.6 : 2;
+      ctx.strokeStyle = shielded ? `rgba(192, 132, 252, ${pulse})` : '#34d399';
+      ctx.stroke();
+      const pad = w * 0.04;
+      ctx.drawImage(sprite, x + pad, y + pad, w - pad * 2, h - pad * 2);
+      if (shielded) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * 1.15, 0, Math.PI * 2);
+        ctx.lineWidth = 2.4;
+        ctx.strokeStyle = `rgba(253, 224, 71, ${pulse})`;
+        ctx.stroke();
+      }
+      this.drawLayerBadge(
+        ctx,
+        x,
+        y,
+        w,
+        h,
+        hp,
+        shielded ? '#581c87' : '#064e3b',
+        shielded ? '#fde047' : '#6ee7b7',
+        '#ffffff'
+      );
+      ctx.restore();
+      return;
+    }
+
     roundRectPath(ctx, x, y, w, h, rad);
     ctx.fillStyle = shielded ? 'rgba(30, 11, 56, 0.94)' : 'rgba(6, 46, 36, 0.92)';
     ctx.fill();
@@ -1555,6 +1664,13 @@ export class CandyHogwartsBoardRenderer {
     if (drawSize <= 2) return;
     ctx.save();
     ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+    const sx = piece.scaleX ?? 1;
+    const sy = piece.scaleY ?? 1;
+    if (Math.abs(sx - 1) > 0.002 || Math.abs(sy - 1) > 0.002) {
+      ctx.translate(cx, cy);
+      ctx.scale(sx, sy);
+      ctx.translate(-cx, -cy);
+    }
 
     if (piece.isIngredient) {
       this.drawPhilosopherStone(ctx, cx, cy, drawSize, now);
@@ -1974,6 +2090,29 @@ export class CandyHogwartsBoardRenderer {
     now: number
   ): void {
     ctx.save();
+    const sprite = this.sprites.obs_cauldron;
+    if (sprite && sprite.complete && sprite.naturalWidth > 0) {
+      roundRectPath(ctx, x, y, w, h, rad);
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.84)';
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#a855f7';
+      ctx.stroke();
+      const pad = w * 0.04;
+      ctx.drawImage(sprite, x + pad, y + pad * 0.6, w - pad * 2, h - pad * 2);
+      const cx = x + w * 0.5;
+      for (let i = 0; i < 3; i++) {
+        const gx = cx + (i - 1) * w * 0.19;
+        const gy = y + h * 0.87;
+        ctx.beginPath();
+        ctx.arc(gx, gy, w * 0.062, 0, Math.PI * 2);
+        ctx.fillStyle = i < hp ? '#fde047' : 'rgba(148, 163, 184, 0.35)';
+        ctx.fill();
+      }
+      ctx.restore();
+      return;
+    }
+
     roundRectPath(ctx, x, y, w, h, rad);
     ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
     ctx.fill();
@@ -2042,6 +2181,22 @@ export class CandyHogwartsBoardRenderer {
     now: number
   ): void {
     ctx.save();
+    const sprite = this.sprites.obs_padlock;
+    if (sprite && sprite.complete && sprite.naturalWidth > 0) {
+      roundRectPath(ctx, x, y, w, h, rad);
+      ctx.fillStyle = 'rgba(120, 53, 15, 0.24)';
+      ctx.fill();
+      ctx.lineWidth = 2.4;
+      ctx.strokeStyle = '#fbbf24';
+      ctx.stroke();
+      const pad = w * 0.14;
+      const pulse = 0.94 + 0.06 * Math.sin(now * 0.006);
+      const sz = (w - pad * 2) * pulse;
+      ctx.drawImage(sprite, x + (w - sz) * 0.5, y + (h - sz) * 0.5, sz, sz);
+      ctx.restore();
+      return;
+    }
+
     roundRectPath(ctx, x, y, w, h, rad);
     ctx.fillStyle = 'rgba(120, 53, 15, 0.24)';
     ctx.fill();

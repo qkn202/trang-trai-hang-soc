@@ -1,3 +1,4 @@
+import '../styles/match3Modal.css';
 import { formatDurationCompactVi } from '../data/catalog';
 import {
   CANDY_ASSET_REV,

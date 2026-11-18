@@ -241,6 +241,18 @@ export function villagersHireStaff(sim: ParkSimulation, role: keyof GameState['s
     return true;
 }
 
+export function villagersDismissStaff(sim: ParkSimulation, role: keyof GameState['staffHired']): boolean {
+    if ((sim.state.staffHired[role] ?? 0) <= 0) {
+      return false;
+    }
+    sim.state.staffHired[role] = Math.max(0, sim.state.staffHired[role] - 1);
+    villagersSyncStaffEntities(sim);
+    sim.audio.playClick();
+    sim.saveToStorage();
+    sim.onUiChange?.();
+    return true;
+}
+
 export function villagersGetHourlyStaffWage(sim: ParkSimulation): number {
     const s = sim.state.staffHired;
     return s.caretaker * 4 + s.artificer * 6 + s.magizoologist * 9 + s.auror * 12 + s.house_elf * 3;

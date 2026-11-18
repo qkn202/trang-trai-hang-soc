@@ -14,6 +14,8 @@ import {
   getCropMasteryTierInfo,
   getFarmItemIconSrc,
   getFarmItemMeta,
+  getWorkshopMaxQueueSlots,
+  getWorkshopStarSpeedMultiplier,
   PASTURE_ANIMALS,
 } from '../data/catalog';
 import {
@@ -361,7 +363,8 @@ export function inspectorRenderInspector(hud: GameHUD): void {
               const recipes = hud.sim.getWorkshopRecipesForBuilding(item);
               const queue = b.workshopQueue ?? [];
               const readyGoods = b.readyFarmGoods ?? [];
-              const maxSlots = 3 + Math.min(2, Math.max(0, b.stars - 1));
+              const maxSlots = getWorkshopMaxQueueSlots(b.stars);
+              const starSpeedMult = getWorkshopStarSpeedMultiplier(b.stars);
 
               const readyShelfHtml =
                 readyGoods.length > 0
@@ -421,7 +424,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                       <div class="ws-recipe-ings">
                         ${lockedRec ? `🔒 Lv.${rec.unlockLevel}` : reqFormula}
                       </div>
-                      <div class="ws-recipe-time">⏱️ ${formatDurationCompactVi(rec.craftSec)}</div>
+                      <div class="ws-recipe-time">⏱️ ${formatDurationCompactVi(Math.max(5, Math.round(rec.craftSec * starSpeedMult)))}</div>
                     </button>
                   `;
                 })
@@ -731,7 +734,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         }
 
         ${
-          isRide && !isBuilding && !item.isFlooPortal
+          isRide && !isBuilding && !item.isFlooPortal && b.isBrokenDown
             ? `
               <div class="quest-card-mini" style="margin-bottom:6px;font-size:12px;">
                 <div style="display:flex;justify-content:space-between;font-weight:700;margin-bottom:4px;">
@@ -858,7 +861,11 @@ export function inspectorRenderInspector(hud: GameHUD): void {
             ? `<div class="hs-insp-actions-row">
                 ${
                   b.stars < 5
-                    ? `<button id="btnUpgStar" type="button" class="brass-btn hs-insp-upg-btn">Nâng ${b.stars + 1}★ · 🌟${getUpgradePuzzleStarCost(b.stars, item)} + 🪙${upgCost.toLocaleString('vi-VN')}</button>`
+                    ? `<button id="btnUpgStar" type="button" class="brass-btn hs-insp-upg-btn">${
+                        item.workshopGroupId
+                          ? `Nâng ${b.stars + 1}★ (+1 khay, −8% giờ lò)`
+                          : `Nâng ${b.stars + 1}★`
+                      } · 🌟${getUpgradePuzzleStarCost(b.stars, item)} + 🪙${upgCost.toLocaleString('vi-VN')}</button>`
                     : `<span class="hs-insp-max-stars">5★ Tối đa</span>`
                 }
               </div>`

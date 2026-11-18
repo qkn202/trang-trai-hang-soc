@@ -191,6 +191,7 @@ export class IsometricRenderer {
   private prevRipeSceneKey = '';
   private cachedUnlockedZonesSet = new Set<string>();
   private cachedUnlockedZonesSig = '';
+  private drawListScratch: TopologicalDrawCmd[] = [];
   public activeSeedBrushCropId: FarmCropId | null = null;
   public activePastureBrushAnimalId: PastureAnimalId | null = null;
   public activeMovingUid: string | null = null;
@@ -613,7 +614,8 @@ export class IsometricRenderer {
     this.drawScrollingCloudShadows(cam, viewW, viewH, period, weather);
 
     // 3. Kahn's Topological 2.5D Depth-Sorted Drawables (Multi-tile Buildings, Fences, Coasters, Guests, Staff, Beasts)
-    const drawList: TopologicalDrawCmd[] = [];
+    const drawList = this.drawListScratch;
+    drawList.length = 0;
     const timeSec = now / 1000;
 
     // 3a. Zoo Fences & Custom Coaster Track Tiles (frustum-culled & rotation-aware!)

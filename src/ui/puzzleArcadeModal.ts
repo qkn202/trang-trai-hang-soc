@@ -1,3 +1,4 @@
+import '../styles/puzzleArcadeModal.css';
 import { formatDurationCompactVi } from '../data/catalog';
 import { getMilestoneBossMeta, MAX_MINIGAME_STAGE } from '../data/match3Levels';
 import { SpriteRegistry } from '../engine/spriteLoader';
@@ -488,6 +489,13 @@ export class PuzzleArcadeModalController {
   private chessWorkerDisabled = false;
   private chessWorkerReqSeq = 0;
   private pendingChessWorkerReqId: number | null = null;
+  private pendingChessAction: {
+    reqId: number;
+    kind: 'ai' | 'hint' | 'talisman';
+    stage: number;
+    spentFree?: boolean;
+    spentGold?: number;
+  } | null = null;
   private hitStopTimer = 0;
   private inspectingTurningPoint = false;
   private companionCharge = 0;
@@ -498,8 +506,25 @@ export class PuzzleArcadeModalController {
   private victoryClaimed = false;
   public rescueContext: MinigameRescueContext | null = null;
 
-  private terminateChessWorker(): void {
+  private refundPendingChessActionIfAny(): void {
+    const act = this.pendingChessAction;
+    this.pendingChessAction = null;
     this.pendingChessWorkerReqId = null;
+    if (!act) return;
+    if (act.kind === 'hint' && this.chessEngine && this.chessEngine.stage === act.stage) {
+      if (act.spentFree) {
+        this.chessEngine.freeHintsLeft += 1;
+      } else if (act.spentGold && act.spentGold > 0 && !this.sim.state.sandboxMode) {
+        this.sim.state.galleons += act.spentGold;
+        this.chessEngine.paidAssistsLeft += 1;
+      }
+    } else if (act.kind === 'talisman') {
+      this.sim.refundPhoenixTalismanAttempt('chess');
+    }
+  }
+
+  private terminateChessWorker(): void {
+    this.refundPendingChessActionIfAny();
     if (this.chessWorker) {
       try {
         this.chessWorker.terminate();
@@ -1416,7 +1441,7 @@ export class PuzzleArcadeModalController {
     this.chessSpellBeams = [];
     this.chessShakeTimer = 0;
     this.chessShakeAmp = 0;
-    this.pendingChessWorkerReqId = null;
+    this.refundPendingChessActionIfAny();
     this.hitStopTimer = 0;
     this.inspectingTurningPoint = false;
     this.aiThinkTimer = 0;
@@ -1436,7 +1461,7 @@ export class PuzzleArcadeModalController {
         };
         w.onerror = () => {
           this.chessWorkerDisabled = true;
-          this.pendingChessWorkerReqId = null;
+          this.refundPendingChessActionIfAny();
           this.chessWorker = null;
           try {
             w.terminate();
@@ -1503,13 +1528,16 @@ export class PuzzleArcadeModalController {
       try {
         const reqId = ++this.chessWorkerReqSeq;
         this.pendingChessWorkerReqId = reqId;
+        this.pendingChessAction = { reqId, kind: 'ai', stage: this.chessEngine.stage };
         const msg: ChessWorkerRequestMessage = {
           reqId,
+          mode: 'ai',
           payload: this.chessEngine.exportWorkerPayload(),
         };
         worker.postMessage(msg);
         return;
       } catch {
+        this.pendingChessAction = null;
         this.pendingChessWorkerReqId = null;
         this.chessWorker = null;
       }
@@ -1518,17 +1546,121 @@ export class PuzzleArcadeModalController {
     this.applyCompletedChessAiResult(aiRes);
   }
 
+  private applyCompletedChessHintResult(
+    res: ReturnType<WizardChessEngine['applyPrecomputedHintMove']>,
+    spentFree: boolean,
+    spentGold: number
+  ): void {
+    const we = this.chessEngine;
+    if (!we) return;
+    if (!res.ok || !res.move) {
+      if (spentFree) {
+        we.freeHintsLeft += 1;
+      } else if (spentGold > 0 && !this.sim.state.sandboxMode) {
+        this.sim.state.galleons += spentGold;
+        we.paidAssistsLeft += 1;
+      }
+      return;
+    }
+    const cm = this.getChessBoardMetrics();
+    const x0 = cm.boardX + (res.move.fromC + 0.5) * cm.cellPx;
+    const y0 = cm.boardY + (res.move.fromR + 0.5) * cm.cellPx;
+    const x1 = cm.boardX + (res.move.toC + 0.5) * cm.cellPx;
+    const y1 = cm.boardY + (res.move.toR + 0.5) * cm.cellPx;
+    this.spawnBurst(x0, y0, '#fde047', 14);
+    this.spawnBurst(x1, y1, '#34d399', 18);
+    this.sim.audio.playMatchPop(2);
+    this.persistModeSession('chess', true);
+    this.onParentRefresh();
+    this.showToast(`💡 Gợi ý: ${res.labelVi} — chạm ô đích sáng ngọc để đi quân!`, '💡');
+    this.renderDOM();
+  }
+
+  private applyCompletedChessTalismanResult(
+    res: ReturnType<WizardChessEngine['applyPhoenixTalismanWithMove']>
+  ): void {
+    const we = this.chessEngine;
+    if (!we) return;
+    if (!res.ok) {
+      this.sim.refundPhoenixTalismanAttempt('chess');
+      this.showToast(res.msg, '🔥');
+      return;
+    }
+    if (res.move) {
+      const movedPiece =
+        we.board[res.move.toR]?.[res.move.toC] ?? { color: 'w' as const, type: 'q' as const };
+      this.triggerChessMoveVfx(
+        res.move.fromR,
+        res.move.fromC,
+        res.move.toR,
+        res.move.toC,
+        movedPiece,
+        Boolean(res.move.captured || res.move.isEnPassant),
+        res.won
+      );
+    } else {
+      const chm = this.getChessBoardMetrics();
+      this.spawnWeasleyFireworks(
+        chm.boardX + chm.boardPx * 0.5,
+        chm.boardY + chm.boardPx * 0.5,
+        2
+      );
+    }
+    this.sim.audio.playPowerupBlast();
+    this.showToast(res.msg, '🔥');
+    this.onParentRefresh();
+    if (res.won) {
+      this.checkAndClaimVictory();
+    } else if (res.aiThinking) {
+      this.aiThinkTimer = 0.42;
+      this.persistModeSession('chess', true);
+      this.renderDOM();
+    } else {
+      this.persistModeSession('chess', true);
+      this.renderDOM();
+    }
+  }
+
   private handleChessWorkerMessage(data: ChessWorkerResponseMessage): void {
     if (!data || data.reqId !== this.pendingChessWorkerReqId) return;
+    const action = this.pendingChessAction;
     this.pendingChessWorkerReqId = null;
+    this.pendingChessAction = null;
+
     if (
+      !action ||
       this.victoryClaimed ||
       this.mode !== 'chess' ||
       !this.chessEngine ||
-      this.chessEngine.status !== 'ai_thinking'
+      this.chessEngine.stage !== action.stage
     ) {
+      if (action?.kind === 'talisman') {
+        this.sim.refundPhoenixTalismanAttempt('chess');
+      }
       return;
     }
+
+    if (action.kind === 'hint') {
+      if (this.chessEngine.status !== 'playing' || this.chessEngine.turn !== 'w') {
+        if (action.spentFree) this.chessEngine.freeHintsLeft += 1;
+        else if (action.spentGold && action.spentGold > 0 && !this.sim.state.sandboxMode) {
+          this.sim.state.galleons += action.spentGold;
+          this.chessEngine.paidAssistsLeft += 1;
+        }
+        return;
+      }
+      const res = this.chessEngine.applyPrecomputedHintMove(data.move);
+      this.applyCompletedChessHintResult(res, Boolean(action.spentFree), action.spentGold ?? 0);
+      return;
+    }
+
+    if (action.kind === 'talisman') {
+      const res = this.chessEngine.applyPhoenixTalismanWithMove(data.move);
+      this.applyCompletedChessTalismanResult(res);
+      return;
+    }
+
+    if (this.chessEngine.status !== 'ai_thinking') return;
     const aiRes = this.chessEngine.applyChosenAiMove(data.move);
     this.applyCompletedChessAiResult(aiRes);
   }
@@ -3191,7 +3323,7 @@ export class PuzzleArcadeModalController {
         }
       }
       if (we.undoTurnPair()) {
-        this.pendingChessWorkerReqId = null;
+        this.refundPendingChessActionIfAny();
         this.aiThinkTimer = 0;
         this.inspectingTurningPoint = false;
         this.persistModeSession('chess', true);
@@ -3220,6 +3352,7 @@ export class PuzzleArcadeModalController {
         return;
       }
 
+      if (this.pendingChessWorkerReqId !== null) return;
       if (!this.sim.state.sandboxMode && we.freeHintsLeft <= 0 && we.paidAssistsLeft <= 0) {
         this.showToast('Màn này đã dùng hết lượt Gợi Ý nước đi!', '💡');
         return;
@@ -3240,28 +3373,31 @@ export class PuzzleArcadeModalController {
           we.paidAssistsLeft = Math.max(0, we.paidAssistsLeft - 1);
         }
       }
-      const res = we.useBestMoveHint();
-      if (!res.ok || !res.move) {
-        if (spentFree) {
-          we.freeHintsLeft += 1;
-        } else if (spentGold > 0 && !this.sim.state.sandboxMode) {
-          this.sim.state.galleons += spentGold;
-          we.paidAssistsLeft += 1;
+      const worker = this.ensureChessWorker();
+      if (worker) {
+        try {
+          const reqId = ++this.chessWorkerReqSeq;
+          this.pendingChessWorkerReqId = reqId;
+          this.pendingChessAction = {
+            reqId,
+            kind: 'hint',
+            stage: we.stage,
+            spentFree,
+            spentGold,
+          };
+          worker.postMessage({
+            reqId,
+            mode: 'best_white',
+            payload: we.exportWorkerPayload(),
+          } satisfies ChessWorkerRequestMessage);
+          return;
+        } catch {
+          this.pendingChessWorkerReqId = null;
+          this.pendingChessAction = null;
         }
-        return;
       }
-      const cm = this.getChessBoardMetrics();
-      const x0 = cm.boardX + (res.move.fromC + 0.5) * cm.cellPx;
-      const y0 = cm.boardY + (res.move.fromR + 0.5) * cm.cellPx;
-      const x1 = cm.boardX + (res.move.toC + 0.5) * cm.cellPx;
-      const y1 = cm.boardY + (res.move.toR + 0.5) * cm.cellPx;
-      this.spawnBurst(x0, y0, '#fde047', 14);
-      this.spawnBurst(x1, y1, '#34d399', 18);
-      this.sim.audio.playMatchPop(2);
-      this.persistModeSession('chess', true);
-      this.onParentRefresh();
-      this.showToast(`💡 Gợi ý: ${res.labelVi} — chạm ô đích sáng ngọc để đi quân!`, '💡');
-      this.renderDOM();
+      const res = we.useBestMoveHint();
+      this.applyCompletedChessHintResult(res, spentFree, spentGold);
     });
 
     box.querySelector('#btnPaNextStage')?.addEventListener('click', () => {
@@ -3506,45 +3642,42 @@ export class PuzzleArcadeModalController {
         this.onParentRefresh();
         this.renderDOM();
       } else if (this.mode === 'chess' && this.chessEngine) {
-        const res = this.chessEngine.applyPhoenixTalisman();
-        if (!res.ok) {
+        const we = this.chessEngine;
+        if (this.pendingChessWorkerReqId !== null) {
           this.sim.refundPhoenixTalismanAttempt(this.mode);
-          this.showToast(res.msg, '🔥');
           return;
         }
-        if (res.move) {
-          const movedPiece =
-            this.chessEngine.board[res.move.toR]?.[res.move.toC] ?? { color: 'w', type: 'q' };
-          this.triggerChessMoveVfx(
-            res.move.fromR,
-            res.move.fromC,
-            res.move.toR,
-            res.move.toC,
-            movedPiece,
-            Boolean(res.move.captured || res.move.isEnPassant),
-            res.won
-          );
-        } else {
-          const chm = this.getChessBoardMetrics();
-          this.spawnWeasleyFireworks(
-            chm.boardX + chm.boardPx * 0.5,
-            chm.boardY + chm.boardPx * 0.5,
-            2
-          );
+        if (we.status === 'lost' || we.status === 'draw') {
+          we.undoTurnPair();
         }
-        this.sim.audio.playPowerupBlast();
-        this.showToast(res.msg, '🔥');
-        this.onParentRefresh();
-        if (res.won) {
-          this.checkAndClaimVictory();
-        } else if (res.aiThinking) {
-          this.aiThinkTimer = 0.42;
-          this.persistModeSession('chess', true);
-          this.renderDOM();
-        } else {
-          this.persistModeSession('chess', true);
-          this.renderDOM();
+        if (we.talismanUsed || we.status !== 'playing' || we.turn !== 'w') {
+          const fallbackRes = we.applyPhoenixTalisman();
+          this.applyCompletedChessTalismanResult(fallbackRes);
+          return;
         }
+        const worker = this.ensureChessWorker();
+        if (worker) {
+          try {
+            const reqId = ++this.chessWorkerReqSeq;
+            this.pendingChessWorkerReqId = reqId;
+            this.pendingChessAction = {
+              reqId,
+              kind: 'talisman',
+              stage: we.stage,
+            };
+            worker.postMessage({
+              reqId,
+              mode: 'best_white',
+              payload: we.exportWorkerPayload(),
+            } satisfies ChessWorkerRequestMessage);
+            return;
+          } catch {
+            this.pendingChessWorkerReqId = null;
+            this.pendingChessAction = null;
+          }
+        }
+        const res = we.applyPhoenixTalisman();
+        this.applyCompletedChessTalismanResult(res);
       } else if (this.mode === 'blocks' && this.onetEngine) {
         const res = this.onetEngine.applyPhoenixTalisman();
         if (!res.ok) {

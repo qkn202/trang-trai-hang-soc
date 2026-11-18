@@ -1263,6 +1263,7 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
   private bloomTexB: WebGLTexture | null = null;
 
   private uploadedStaticGen = -1;
+  private uniformLocs = new WeakMap<WebGLProgram, Map<string, WebGLUniformLocation | null>>();
   private readonly lightPosUniform = new Float32Array(16 * 4);
   private readonly lightColUniform = new Float32Array(16 * 4);
 
@@ -1297,6 +1298,7 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
       onContextRestored: () => {
         this.uploadedStaticGen = -1;
         this.uvTableDirty = true;
+        this.uniformLocs = new WeakMap();
       },
     });
     const gl = this.gpuDevice.gl;
@@ -1469,6 +1471,20 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
     this.uploadScratchCtx = this.uploadScratchCanvas.getContext('2d')!;
   }
 
+  private uLoc(prog: WebGLProgram, name: string): WebGLUniformLocation | null {
+    let byName = this.uniformLocs.get(prog);
+    if (!byName) {
+      byName = new Map();
+      this.uniformLocs.set(prog, byName);
+    }
+    let loc = byName.get(name);
+    if (loc === undefined) {
+      loc = this.gl.getUniformLocation(prog, name);
+      byName.set(name, loc);
+    }
+    return loc;
+  }
+
   public invalidateSpriteAtlas(): void {
     this.spriteHandles.clear();
     this.shelf.layer = 0;
@@ -1586,9 +1602,9 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
     gl.useProgram(this.bakeNormalProg);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.albedoArrayTex);
-    gl.uniform1i(gl.getUniformLocation(this.bakeNormalProg, 'uAlbedo'), 0);
-    gl.uniform1f(gl.getUniformLocation(this.bakeNormalProg, 'uLayer'), layer);
-    gl.uniform2f(gl.getUniformLocation(this.bakeNormalProg, 'uTexel'), 1 / ATLAS_SIZE, 1 / ATLAS_SIZE);
+    gl.uniform1i(this.uLoc(this.bakeNormalProg, 'uAlbedo'), 0);
+    gl.uniform1f(this.uLoc(this.bakeNormalProg, 'uLayer'), layer);
+    gl.uniform2f(this.uLoc(this.bakeNormalProg, 'uTexel'), 1 / ATLAS_SIZE, 1 / ATLAS_SIZE);
     // Map vUv [0..1] inside viewport(x,y,pw,ph)? No: vUv of fullscreen triangle inside viewport(x,y,pw,ph) spans [0..1],
     // so we set viewport to (0, 0, ATLAS_SIZE, ATLAS_SIZE) and scissor(x, y, pw, ph)!
     gl.viewport(0, 0, ATLAS_SIZE, ATLAS_SIZE);
@@ -2047,9 +2063,9 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
 
     // PASS 1: Atmospheric Sky Backdrop
     gl.useProgram(this.skyProg);
-    gl.uniform1f(gl.getUniformLocation(this.skyProg, 'uTime'), timeSec);
-    gl.uniform1i(gl.getUniformLocation(this.skyProg, 'uPeriod'), periodIdx);
-    gl.uniform1i(gl.getUniformLocation(this.skyProg, 'uWeather'), weatherIdx);
+    gl.uniform1f(this.uLoc(this.skyProg, 'uTime'), timeSec);
+    gl.uniform1i(this.uLoc(this.skyProg, 'uPeriod'), periodIdx);
+    gl.uniform1i(this.uLoc(this.skyProg, 'uWeather'), weatherIdx);
     gl.bindVertexArray(this.emptyVao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     drawCalls++;
@@ -2057,15 +2073,15 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
     // PASS 2: Isometric Terrain + Cobblestone Paths + Cloud Shadows + Ground Light Pools
     if (this.snapshot.terrainCount > 0) {
       gl.useProgram(this.terrainProg);
-      gl.uniform3f(gl.getUniformLocation(this.terrainProg, 'uCamera'), cam.x, cam.y, cam.zoom);
-      gl.uniform2f(gl.getUniformLocation(this.terrainProg, 'uViewport'), cssW, cssH);
-      gl.uniform1f(gl.getUniformLocation(this.terrainProg, 'uTime'), timeSec);
-      gl.uniform1f(gl.getUniformLocation(this.terrainProg, 'uWinterSnow'), winterSnowAmount);
-      gl.uniform3fv(gl.getUniformLocation(this.terrainProg, 'uAmbientTint'), ambient);
-      gl.uniform1i(gl.getUniformLocation(this.terrainProg, 'uLightCount'), lc);
+      gl.uniform3f(this.uLoc(this.terrainProg, 'uCamera'), cam.x, cam.y, cam.zoom);
+      gl.uniform2f(this.uLoc(this.terrainProg, 'uViewport'), cssW, cssH);
+      gl.uniform1f(this.uLoc(this.terrainProg, 'uTime'), timeSec);
+      gl.uniform1f(this.uLoc(this.terrainProg, 'uWinterSnow'), winterSnowAmount);
+      gl.uniform3fv(this.uLoc(this.terrainProg, 'uAmbientTint'), ambient);
+      gl.uniform1i(this.uLoc(this.terrainProg, 'uLightCount'), lc);
       if (lc > 0) {
-        gl.uniform4fv(gl.getUniformLocation(this.terrainProg, 'uLightPosRad'), this.lightPosUniform);
-        gl.uniform4fv(gl.getUniformLocation(this.terrainProg, 'uLightColInt'), this.lightColUniform);
+        gl.uniform4fv(this.uLoc(this.terrainProg, 'uLightPosRad'), this.lightPosUniform);
+        gl.uniform4fv(this.uLoc(this.terrainProg, 'uLightColInt'), this.lightColUniform);
       }
       gl.bindVertexArray(this.terrainVao);
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.snapshot.terrainCount);
@@ -2077,27 +2093,27 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     if (this.snapshot.waterCount > 0) {
       gl.useProgram(this.waterProg);
-      gl.uniform3f(gl.getUniformLocation(this.waterProg, 'uCamera'), cam.x, cam.y, cam.zoom);
-      gl.uniform2f(gl.getUniformLocation(this.waterProg, 'uViewport'), cssW, cssH);
-      gl.uniform1f(gl.getUniformLocation(this.waterProg, 'uTime'), timeSec);
-      gl.uniform1f(gl.getUniformLocation(this.waterProg, 'uWinterSnow'), winterSnowAmount);
-      gl.uniform3fv(gl.getUniformLocation(this.waterProg, 'uAmbientTint'), ambient);
-      gl.uniform3fv(gl.getUniformLocation(this.waterProg, 'uSkyReflectColor'), skyRefl);
-      gl.uniform3fv(gl.getUniformLocation(this.waterProg, 'uSunColor'), sunCol);
+      gl.uniform3f(this.uLoc(this.waterProg, 'uCamera'), cam.x, cam.y, cam.zoom);
+      gl.uniform2f(this.uLoc(this.waterProg, 'uViewport'), cssW, cssH);
+      gl.uniform1f(this.uLoc(this.waterProg, 'uTime'), timeSec);
+      gl.uniform1f(this.uLoc(this.waterProg, 'uWinterSnow'), winterSnowAmount);
+      gl.uniform3fv(this.uLoc(this.waterProg, 'uAmbientTint'), ambient);
+      gl.uniform3fv(this.uLoc(this.waterProg, 'uSkyReflectColor'), skyRefl);
+      gl.uniform3fv(this.uLoc(this.waterProg, 'uSunColor'), sunCol);
       gl.uniform1i(
-        gl.getUniformLocation(this.waterProg, 'uInteractorCount'),
+        this.uLoc(this.waterProg, 'uInteractorCount'),
         this.snapshot.interactorCount
       );
       if (this.snapshot.interactorCount > 0) {
         gl.uniform4fv(
-          gl.getUniformLocation(this.waterProg, 'uInteractors'),
+          this.uLoc(this.waterProg, 'uInteractors'),
           this.snapshot.interactorData
         );
       }
-      gl.uniform1i(gl.getUniformLocation(this.waterProg, 'uLightCount'), lc);
+      gl.uniform1i(this.uLoc(this.waterProg, 'uLightCount'), lc);
       if (lc > 0) {
-        gl.uniform4fv(gl.getUniformLocation(this.waterProg, 'uLightPosRad'), this.lightPosUniform);
-        gl.uniform4fv(gl.getUniformLocation(this.waterProg, 'uLightColInt'), this.lightColUniform);
+        gl.uniform4fv(this.uLoc(this.waterProg, 'uLightPosRad'), this.lightPosUniform);
+        gl.uniform4fv(this.uLoc(this.waterProg, 'uLightColInt'), this.lightColUniform);
       }
       gl.bindVertexArray(this.waterVao);
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.snapshot.waterCount);
@@ -2107,27 +2123,27 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
     // PASS 4: GPU Instanced Wind-Swaying & Proximity-Bending Meadow Grass + Wildflowers
     if (this.snapshot.grassCount > 0) {
       gl.useProgram(this.grassProg);
-      gl.uniform3f(gl.getUniformLocation(this.grassProg, 'uCamera'), cam.x, cam.y, cam.zoom);
-      gl.uniform2f(gl.getUniformLocation(this.grassProg, 'uViewport'), cssW, cssH);
-      gl.uniform1f(gl.getUniformLocation(this.grassProg, 'uTime'), timeSec);
-      gl.uniform1f(gl.getUniformLocation(this.grassProg, 'uWindStrength'), settings.windStrength);
-      gl.uniform1f(gl.getUniformLocation(this.grassProg, 'uWinterSnow'), winterSnowAmount);
-      gl.uniform3fv(gl.getUniformLocation(this.grassProg, 'uAmbientTint'), ambient);
-      gl.uniform3fv(gl.getUniformLocation(this.grassProg, 'uSunColor'), sunCol);
+      gl.uniform3f(this.uLoc(this.grassProg, 'uCamera'), cam.x, cam.y, cam.zoom);
+      gl.uniform2f(this.uLoc(this.grassProg, 'uViewport'), cssW, cssH);
+      gl.uniform1f(this.uLoc(this.grassProg, 'uTime'), timeSec);
+      gl.uniform1f(this.uLoc(this.grassProg, 'uWindStrength'), settings.windStrength);
+      gl.uniform1f(this.uLoc(this.grassProg, 'uWinterSnow'), winterSnowAmount);
+      gl.uniform3fv(this.uLoc(this.grassProg, 'uAmbientTint'), ambient);
+      gl.uniform3fv(this.uLoc(this.grassProg, 'uSunColor'), sunCol);
       gl.uniform1i(
-        gl.getUniformLocation(this.grassProg, 'uInteractorCount'),
+        this.uLoc(this.grassProg, 'uInteractorCount'),
         this.snapshot.interactorCount
       );
       if (this.snapshot.interactorCount > 0) {
         gl.uniform4fv(
-          gl.getUniformLocation(this.grassProg, 'uInteractors'),
+          this.uLoc(this.grassProg, 'uInteractors'),
           this.snapshot.interactorData
         );
       }
-      gl.uniform1i(gl.getUniformLocation(this.grassProg, 'uLightCount'), lc);
+      gl.uniform1i(this.uLoc(this.grassProg, 'uLightCount'), lc);
       if (lc > 0) {
-        gl.uniform4fv(gl.getUniformLocation(this.grassProg, 'uLightPosRad'), this.lightPosUniform);
-        gl.uniform4fv(gl.getUniformLocation(this.grassProg, 'uLightColInt'), this.lightColUniform);
+        gl.uniform4fv(this.uLoc(this.grassProg, 'uLightPosRad'), this.lightPosUniform);
+        gl.uniform4fv(this.uLoc(this.grassProg, 'uLightColInt'), this.lightColUniform);
       }
       gl.bindVertexArray(this.grassVao);
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.snapshot.grassCount);
@@ -2149,50 +2165,42 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
 
       // 5a. Directional Sun/Moon Ground Shadows (reset attribute offsets to 0 first)
       gl.useProgram(this.shadowProg);
-      gl.uniform3f(gl.getUniformLocation(this.shadowProg, 'uCamera'), cam.x, cam.y, cam.zoom);
-      gl.uniform2f(gl.getUniformLocation(this.shadowProg, 'uViewport'), cssW, cssH);
-      gl.uniform1i(gl.getUniformLocation(this.shadowProg, 'uAlbedo'), 0);
-      gl.uniform1i(gl.getUniformLocation(this.shadowProg, 'uUvTable'), 2);
+      gl.uniform3f(this.uLoc(this.shadowProg, 'uCamera'), cam.x, cam.y, cam.zoom);
+      gl.uniform2f(this.uLoc(this.shadowProg, 'uViewport'), cssW, cssH);
+      gl.uniform1i(this.uLoc(this.shadowProg, 'uAlbedo'), 0);
+      gl.uniform1i(this.uLoc(this.shadowProg, 'uUvTable'), 2);
       gl.uniform2f(
-        gl.getUniformLocation(this.shadowProg, 'uShadowSkew'),
+        this.uLoc(this.shadowProg, 'uShadowSkew'),
         this.snapshot.sunShadowDx,
         this.snapshot.sunShadowDy
       );
-      gl.uniform1f(gl.getUniformLocation(this.shadowProg, 'uTime'), timeSec);
-      gl.uniform1f(gl.getUniformLocation(this.shadowProg, 'uWindStrength'), settings.windStrength);
-      gl.uniform3fv(gl.getUniformLocation(this.shadowProg, 'uShadowTint'), shadowTint);
+      gl.uniform1f(this.uLoc(this.shadowProg, 'uTime'), timeSec);
+      gl.uniform1f(this.uLoc(this.shadowProg, 'uWindStrength'), settings.windStrength);
+      gl.uniform3fv(this.uLoc(this.shadowProg, 'uShadowTint'), shadowTint);
       this.drawInstancedSceneRange(0, this.snapshot.sceneCount);
       drawCalls++;
 
-      // 5b. Range-Sliced IsoSceneSortedPass with Interleaved Articulated Spine 2D Slots (Iron Law #3)
-      const bindScenePassState = () => {
-        gl.useProgram(this.sceneProg);
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.albedoArrayTex);
-        gl.activeTexture(gl.TEXTURE1);
-        gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.normalEmissiveArrayTex);
-        gl.activeTexture(gl.TEXTURE2);
-        gl.bindTexture(gl.TEXTURE_2D, this.uvTableTex);
-        gl.uniform3f(gl.getUniformLocation(this.sceneProg, 'uCamera'), cam.x, cam.y, cam.zoom);
-        gl.uniform2f(gl.getUniformLocation(this.sceneProg, 'uViewport'), cssW, cssH);
-        gl.uniform1i(gl.getUniformLocation(this.sceneProg, 'uAlbedo'), 0);
-        gl.uniform1i(gl.getUniformLocation(this.sceneProg, 'uNormalEmissive'), 1);
-        gl.uniform1i(gl.getUniformLocation(this.sceneProg, 'uUvTable'), 2);
-        gl.uniform1f(gl.getUniformLocation(this.sceneProg, 'uTime'), timeSec);
-        gl.uniform1f(gl.getUniformLocation(this.sceneProg, 'uWindStrength'), settings.windStrength);
-        gl.uniform3fv(gl.getUniformLocation(this.sceneProg, 'uAmbientTint'), ambient);
-        gl.uniform3fv(gl.getUniformLocation(this.sceneProg, 'uSunDir'), sunDir);
-        gl.uniform3fv(gl.getUniformLocation(this.sceneProg, 'uSunColor'), sunCol);
-        gl.uniform1f(gl.getUniformLocation(this.sceneProg, 'uNormalStrength'), settings.normalStrength);
-        gl.uniform1f(gl.getUniformLocation(this.sceneProg, 'uWindowGlowStrength'), winGlow);
-        gl.uniform1f(gl.getUniformLocation(this.sceneProg, 'uWinterSnow'), winterSnowAmount);
-        gl.uniform1i(gl.getUniformLocation(this.sceneProg, 'uLightCount'), lc);
-        if (lc > 0) {
-          gl.uniform4fv(gl.getUniformLocation(this.sceneProg, 'uLightPosRad'), this.lightPosUniform);
-          gl.uniform4fv(gl.getUniformLocation(this.sceneProg, 'uLightColInt'), this.lightColUniform);
-        }
-        gl.bindVertexArray(this.sceneVao);
-      };
+      // 5b. Range-Sliced IsoSceneSortedPass with Interleaved Articulated Spine 2D Slots
+      // Uniforms live per-program in WebGL2: upload frame-invariant scene uniforms ONCE, then rebind VAO/program only on slice switches!
+      gl.useProgram(this.sceneProg);
+      gl.uniform3f(this.uLoc(this.sceneProg, 'uCamera'), cam.x, cam.y, cam.zoom);
+      gl.uniform2f(this.uLoc(this.sceneProg, 'uViewport'), cssW, cssH);
+      gl.uniform1i(this.uLoc(this.sceneProg, 'uAlbedo'), 0);
+      gl.uniform1i(this.uLoc(this.sceneProg, 'uNormalEmissive'), 1);
+      gl.uniform1i(this.uLoc(this.sceneProg, 'uUvTable'), 2);
+      gl.uniform1f(this.uLoc(this.sceneProg, 'uTime'), timeSec);
+      gl.uniform1f(this.uLoc(this.sceneProg, 'uWindStrength'), settings.windStrength);
+      gl.uniform3fv(this.uLoc(this.sceneProg, 'uAmbientTint'), ambient);
+      gl.uniform3fv(this.uLoc(this.sceneProg, 'uSunDir'), sunDir);
+      gl.uniform3fv(this.uLoc(this.sceneProg, 'uSunColor'), sunCol);
+      gl.uniform1f(this.uLoc(this.sceneProg, 'uNormalStrength'), settings.normalStrength);
+      gl.uniform1f(this.uLoc(this.sceneProg, 'uWindowGlowStrength'), winGlow);
+      gl.uniform1f(this.uLoc(this.sceneProg, 'uWinterSnow'), winterSnowAmount);
+      gl.uniform1i(this.uLoc(this.sceneProg, 'uLightCount'), lc);
+      if (lc > 0) {
+        gl.uniform4fv(this.uLoc(this.sceneProg, 'uLightPosRad'), this.lightPosUniform);
+        gl.uniform4fv(this.uLoc(this.sceneProg, 'uLightColInt'), this.lightColUniform);
+      }
 
       const sliceCount = buildIsoSceneRangeSlices(
         this.snapshot.sceneCount,
@@ -2200,13 +2208,13 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
         this.snapshot.skeletalCount,
         this.rangeSlices
       );
-      bindScenePassState();
       let sceneStateBound = true;
       for (let sIdx = 0; sIdx < sliceCount; sIdx++) {
         const seg = this.rangeSlices[sIdx];
         if (seg.kind === 'instanced_range') {
           if (!sceneStateBound) {
-            bindScenePassState();
+            gl.useProgram(this.sceneProg);
+            gl.bindVertexArray(this.sceneVao);
             sceneStateBound = true;
           }
           this.drawInstancedSceneRange(seg.firstInstance, seg.instanceCount);
@@ -2242,9 +2250,9 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
       }
       gl.useProgram(this.particleProg);
-      gl.uniform3f(gl.getUniformLocation(this.particleProg, 'uCamera'), cam.x, cam.y, cam.zoom);
-      gl.uniform2f(gl.getUniformLocation(this.particleProg, 'uViewport'), cssW, cssH);
-      gl.uniform1f(gl.getUniformLocation(this.particleProg, 'uIsSnow'), snowParticles ? 1.0 : 0.0);
+      gl.uniform3f(this.uLoc(this.particleProg, 'uCamera'), cam.x, cam.y, cam.zoom);
+      gl.uniform2f(this.uLoc(this.particleProg, 'uViewport'), cssW, cssH);
+      gl.uniform1f(this.uLoc(this.particleProg, 'uIsSnow'), snowParticles ? 1.0 : 0.0);
       gl.bindVertexArray(this.particleVao);
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.snapshot.particleCount);
       drawCalls++;
@@ -2263,23 +2271,23 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
       gl.useProgram(this.bloomExtractProg);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, this.sceneColorTex);
-      gl.uniform1i(gl.getUniformLocation(this.bloomExtractProg, 'uScene'), 0);
+      gl.uniform1i(this.uLoc(this.bloomExtractProg, 'uScene'), 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       drawCalls++;
 
       // 7b. Kawase Ping-Pong Blur (2 wide passes)
       gl.useProgram(this.bloomBlurProg);
-      gl.uniform1i(gl.getUniformLocation(this.bloomBlurProg, 'uTex'), 0);
+      gl.uniform1i(this.uLoc(this.bloomBlurProg, 'uTex'), 0);
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.bloomFboB);
       gl.bindTexture(gl.TEXTURE_2D, this.bloomTexA);
-      gl.uniform2f(gl.getUniformLocation(this.bloomBlurProg, 'uOffset'), 1.5 / bw, 1.5 / bh);
+      gl.uniform2f(this.uLoc(this.bloomBlurProg, 'uOffset'), 1.5 / bw, 1.5 / bh);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       drawCalls++;
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.bloomFboA);
       gl.bindTexture(gl.TEXTURE_2D, this.bloomTexB);
-      gl.uniform2f(gl.getUniformLocation(this.bloomBlurProg, 'uOffset'), 3.2 / bw, 3.2 / bh);
+      gl.uniform2f(this.uLoc(this.bloomBlurProg, 'uOffset'), 3.2 / bw, 3.2 / bh);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       drawCalls++;
 
@@ -2289,12 +2297,12 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
       gl.useProgram(this.compositeProg);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, this.sceneColorTex);
-      gl.uniform1i(gl.getUniformLocation(this.compositeProg, 'uScene'), 0);
+      gl.uniform1i(this.uLoc(this.compositeProg, 'uScene'), 0);
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, this.bloomTexA);
-      gl.uniform1i(gl.getUniformLocation(this.compositeProg, 'uBloom'), 1);
+      gl.uniform1i(this.uLoc(this.compositeProg, 'uBloom'), 1);
       gl.uniform1f(
-        gl.getUniformLocation(this.compositeProg, 'uBloomIntensity'),
+        this.uLoc(this.compositeProg, 'uBloomIntensity'),
         settings.bloomIntensity
       );
       gl.drawArrays(gl.TRIANGLES, 0, 3);

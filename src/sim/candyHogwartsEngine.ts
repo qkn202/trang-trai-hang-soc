@@ -293,6 +293,7 @@ export class CandyHogwartsEngine {
   private specialUsedThisTurn = false;
 
   public selected: { r: number; c: number } | null = null;
+  private selectedAtMs = 0;
   public kbCursor: { r: number; c: number } | null = null;
   public activeBooster: 'hammer' | 'swap' | null = null;
   public busy = false;
@@ -620,6 +621,7 @@ export class CandyHogwartsEngine {
 
     if (!this.selected) {
       this.selected = { r: cell.r, c: cell.c };
+      this.selectedAtMs = nowMs();
       this.cb.audio?.onSelect?.();
       this.emitHudState();
     } else if (this.selected.r === cell.r && this.selected.c === cell.c) {
@@ -639,6 +641,7 @@ export class CandyHogwartsEngine {
       void this.trySwap(first, { r: cell.r, c: cell.c });
     } else {
       this.selected = { r: cell.r, c: cell.c };
+      this.selectedAtMs = nowMs();
       this.cb.audio?.onSelect?.();
       this.emitHudState();
     }
@@ -866,12 +869,12 @@ export class CandyHogwartsEngine {
     }
   }
 
-  private hasActiveVisualMotion(): boolean {
+  private hasActiveVisualMotion(now = nowMs()): boolean {
     if (
       this.busy ||
       this.activeAsyncSwaps > 0 ||
       Boolean(this.pointerState) ||
-      Boolean(this.selected) ||
+      (Boolean(this.selected) && now - this.selectedAtMs < 1200) ||
       this.vfx.shake > 0.2 ||
       this.vfx.particles.length > 0 ||
       this.vfx.beams.length > 0 ||
@@ -891,8 +894,29 @@ export class CandyHogwartsEngine {
         if (
           piece.primedWrapped ||
           piece.scale > 1.005 ||
+          (piece.scaleX !== undefined && Math.abs(piece.scaleX - 1) > 0.005) ||
+          (piece.scaleY !== undefined && Math.abs(piece.scaleY - 1) > 0.005) ||
           Math.abs(piece.x - c) > 0.01 ||
           Math.abs(piece.y - r) > 0.01
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private hasAmbientBoardShimmer(): boolean {
+    if (this.hintPair || this.selected || (this.bossHp > 0 && this.bossConfig)) {
+      return true;
+    }
+    for (let r = 0; r < this.size; r++) {
+      for (let c = 0; c < this.size; c++) {
+        if (
+          (this.dementor[r]?.[c] || 0) > 0 ||
+          (this.fiendfyre[r]?.[c] || 0) > 0 ||
+          (this.horcrux[r]?.[c] || 0) > 0 ||
+          (this.cauldron[r]?.[c] || 0) > 0
         ) {
           return true;
         }
@@ -916,7 +940,9 @@ export class CandyHogwartsEngine {
       this.lastFrameTime = now;
       this.update(dt, now);
       if (this.level && this.renderer) {
-        if (lastRenderAt === 0 || this.hasActiveVisualMotion() || now - lastRenderAt >= 48) {
+        const activeMotion = this.hasActiveVisualMotion(now);
+        const idleIntervalMs = this.hasAmbientBoardShimmer() ? 180 : 500;
+        if (lastRenderAt === 0 || activeMotion || now - lastRenderAt >= idleIntervalMs) {
           lastRenderAt = now;
           this.renderer.render(this.getRenderState(), now);
         }
@@ -3244,7 +3270,8 @@ export class CandyHogwartsEngine {
     this.petrify[r][c]--;
     this.addPatronusCharge(5);
     this.cb.audio?.onIceBreak?.();
-    this.spawnBurst(r, c, '#94a3b8', 11);
+    this.spawnBurst(r, c, '#94a3b8', 8);
+    this.spawnBurst(r, c, '#6ee7b7', 6);
     if (this.petrify[r][c] <= 0) {
       this.petrify[r][c] = 0;
       this.spawnPopup(r, c, 'GIẢI HOÁ ĐÁ!', '#6ee7b7', 13);
@@ -3420,7 +3447,8 @@ export class CandyHogwartsEngine {
           this.addPatronusCharge(5);
           this.damageBoss(35);
           this.cb.audio?.onIceBreak?.();
-          this.spawnBurst(nr, nc, '#cbd5e1', 9);
+          this.spawnBurst(nr, nc, '#fef3c7', 7);
+          this.spawnBurst(nr, nc, '#cbd5e1', 5);
           this.addScore(90, nr, nc, '#e2e8f0', false, 'blocker');
         } else if ((this.chocolate[nr]?.[nc] || 0) > 0) {
           blockerHitSet.add(key);
@@ -3614,7 +3642,8 @@ export class CandyHogwartsEngine {
         this.addPatronusCharge(5);
         this.damageBoss(35);
         this.cb.audio?.onIceBreak?.();
-        this.spawnBurst(r, c, '#cbd5e1', 10);
+        this.spawnBurst(r, c, '#fef3c7', 7);
+        this.spawnBurst(r, c, '#cbd5e1', 5);
         this.addScore(90, r, c, '#e2e8f0', false, 'blocker');
       }
       return;
@@ -4336,7 +4365,7 @@ export class CandyHogwartsEngine {
       const maxDist = Math.max(
         ...animItems.map((m) => Math.hypot(m.toX - m.fromX, m.toY - m.fromY))
       );
-      const duration = Math.min(300, Math.max(140, maxDist * 42));
+      const duration = Math.min(310, Math.max(145, 145 + maxDist * 24));
       const start = nowMs();
 
       await new Promise<void>((resolve) => {
@@ -4346,12 +4375,42 @@ export class CandyHogwartsEngine {
             return;
           }
           const t = Math.min(1, (now - start) / duration);
-          const ease = 1 - Math.pow(1 - t, 2.35);
-          for (const m of animItems) {
-            m.piece.x = m.fromX + (m.toX - m.fromX) * ease;
-            m.piece.y = m.fromY + (m.toY - m.fromY) * ease;
-            if (m.piece.scale > 1 && !m.piece.primedWrapped) {
-              m.piece.scale = 1 + (m.piece.scale - 1) * (1 - t);
+          // True t^2 gravity acceleration (0..0.78) + crisp damped micro-rebound & landing squash (0.78..1.0)
+          const fallSplit = 0.78;
+          if (t < fallSplit) {
+            const u = t / fallSplit;
+            const grav = u * u;
+            const stretchY = 1 + 0.055 * u;
+            const stretchX = 1 - 0.032 * u;
+            for (const m of animItems) {
+              m.piece.x = m.fromX + (m.toX - m.fromX) * grav;
+              m.piece.y = m.fromY + (m.toY - m.fromY) * grav;
+              if (Math.abs(m.toY - m.fromY) > 0.25) {
+                m.piece.scaleX = stretchX;
+                m.piece.scaleY = stretchY;
+              }
+              if (m.piece.scale > 1 && !m.piece.primedWrapped) {
+                m.piece.scale = 1 + (m.piece.scale - 1) * (1 - t);
+              }
+            }
+          } else {
+            const b = (t - fallSplit) / (1 - fallSplit);
+            const bounceSin = Math.sin(b * Math.PI);
+            const damp = 1 - b * 0.35;
+            const sqWave = bounceSin * damp;
+            for (const m of animItems) {
+              const dy = m.toY - m.fromY;
+              const bounceLift =
+                dy > 0.25 ? -bounceSin * Math.min(0.14, dy * 0.036) * damp : 0;
+              m.piece.x = m.toX;
+              m.piece.y = m.toY + bounceLift;
+              if (dy > 0.25) {
+                m.piece.scaleX = 1 + 0.068 * sqWave;
+                m.piece.scaleY = 1 - 0.068 * sqWave;
+              }
+              if (m.piece.scale > 1 && !m.piece.primedWrapped) {
+                m.piece.scale = 1 + (m.piece.scale - 1) * (1 - t);
+              }
             }
           }
           if (t < 1) nextAnimFrame(step);
@@ -4365,6 +4424,8 @@ export class CandyHogwartsEngine {
     for (const m of animItems) {
       m.piece.x = m.toX;
       m.piece.y = m.toY;
+      m.piece.scaleX = 1;
+      m.piece.scaleY = 1;
       if (!m.piece.primedWrapped) m.piece.scale = 1;
     }
   }
