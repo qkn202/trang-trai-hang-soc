@@ -1239,13 +1239,39 @@ export function headerRefreshHeader(hud: GameHUD): void {
     // HPVN: names and stages without emoji; the accessible name joins the three filtered lines
     const playTagText = formatToastMessage(playTag);
     const playStageLine = formatToastMessage(playStageText.replace('👑', 'Màn'));
-    // the level itself is on the HUD ring: the card only counts the wins toward the next one («53/54 màn»)
+    let bestNeedStars = 0;
+    if (!st.sandboxMode && lastGame === 'match3' && st.level < MAX_LEVEL) {
+      const curStars = st.match3?.stars ?? 0;
+      const builtSet = new Set(st.buildings.map((b) => b.itemId));
+      const unlockedZoneSet = new Set(st.unlockedZones);
+      for (const z of ZONES) {
+        if (unlockedZoneSet.has(z.id) || st.level < z.unlockLevel) continue;
+        const need = getZonePuzzleStarCost(z) - curStars;
+        if (need >= 1 && need <= 25 && (bestNeedStars === 0 || need < bestNeedStars)) {
+          bestNeedStars = need;
+        }
+      }
+      for (const c of CATALOG) {
+        if (c.isThemeParkLegacy || builtSet.has(c.id)) continue;
+        if (!hud.sim.isCatalogItemUnlocked(c)) continue;
+        const sc = hud.sim.getEffectiveItemStarCost(c);
+        const need = sc - curStars;
+        if (sc > 0 && need >= 1 && need <= 25 && (bestNeedStars === 0 || need < bestNeedStars)) {
+          bestNeedStars = need;
+        }
+      }
+    }
+    // the level itself is on the HUD ring: the card counts wins toward the next level + optional urgent star goal
     const playSubLine = st.level >= MAX_LEVEL
       ? `Cấp ${MAX_LEVEL}`
-      : `${winsProg.current}/${winsProg.required} màn`;
+      : bestNeedStars > 0
+        ? `Cần +${bestNeedStars} Sao · ${winsProg.current}/${winsProg.required} màn`
+        : `${winsProg.current}/${winsProg.required} màn`;
     const playSubSpoken = st.level >= MAX_LEVEL
       ? `Cấp ${MAX_LEVEL}`
-      : `Lên cấp ${st.level + 1}: ${winsProg.current}/${winsProg.required} màn`;
+      : bestNeedStars > 0
+        ? `Cần thêm ${bestNeedStars} Sao · Lên cấp ${st.level + 1}: ${winsProg.current}/${winsProg.required} màn`
+        : `Lên cấp ${st.level + 1}: ${winsProg.current}/${winsProg.required} màn`;
     const badgeCornerBonus = hud.root.querySelector('#badgeCornerPlayBonus') as HTMLElement | null;
     if (badgeCornerBonus) {
       badgeCornerBonus.textContent = playTagText;

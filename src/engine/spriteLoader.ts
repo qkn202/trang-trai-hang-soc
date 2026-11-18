@@ -357,12 +357,19 @@ export const SPRITE_KEYS = [
   'yule_vn_banh_mi_soymilk_cart',
   'yule_vn_hoian_lantern_stand',
   'beast_yule_phoenix',
+  'beast_yule_phoenix_soar',
   'beast_yule_unicorn',
+  'beast_yule_unicorn_prance',
   'beast_yule_dragon',
+  'beast_yule_dragon_puff',
   'beast_vn_bac_ha_dog',
+  'beast_vn_bac_ha_dog_wag',
   'beast_vn_tabby_cat',
+  'beast_vn_tabby_cat_play',
   'beast_vn_brocade_calf',
+  'beast_vn_brocade_calf_graze',
   'beast_vn_scarf_hen',
+  'beast_vn_scarf_hen_peck',
 ] as const;
 
 export const CATALOG_PROP_SPRITE_PATHS: Readonly<Record<string, string>> = {

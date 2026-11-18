@@ -25,6 +25,8 @@ import {
   WINTER_VALLEY_CHRISTMAS_SPOTS,
 } from '../engine/rendererShared';
 import { resolveCatalogPropSpriteKey } from '../engine/spriteLoader';
+import { getHarmonizedSpriteScale } from './spriteLightingProfile';
+import { computeWorkshopKineticState } from './workshopKinetics';
 import type { ParkSimulation } from '../sim/simulation';
 import {
   CatalogItem,
@@ -725,6 +727,9 @@ export class WorldRenderSnapshotCollector {
   ): void {
     const viewRot = cam.viewRot ?? 0;
     const cutaway = Boolean(sim.state.settings.cutawayMode);
+    const reducedMotion =
+      typeof window !== 'undefined' &&
+      Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
     const invZoom = 1 / Math.max(0.15, cam.zoom);
     const marginW = (viewW * 0.5 + 380) * invZoom;
     const marginH = (viewH * 0.5 + 420) * invZoom;
@@ -953,10 +958,11 @@ export class WorldRenderSnapshotCollector {
       if (!spHandle) continue;
 
       const isNonSquare = item.width !== item.height;
-      const scaleMult = underConstruction ? 1.04 : (item.spriteScale ?? (isNonSquare ? 1.0 : 1.05));
+      const scaleMult = underConstruction ? 1.04 : getHarmonizedSpriteScale(item);
       const footprintW = (bw + bh) * (TILE_W * 0.5);
       const drawW = footprintW * scaleMult;
       const drawH = drawW * (spHandle.height / spHandle.width);
+      const wsKin = computeWorkshopKineticState(item, b, nowMs, reducedMotion);
 
       const rotTotal = (b.rotation + viewRot) % 4;
       const flipX = isConnectable
@@ -984,8 +990,10 @@ export class WorldRenderSnapshotCollector {
       s.depth = rx0 + rbw + ry0 + rbh - 0.05;
       s.wx = worldCx;
       s.wy = worldBottomY + 4.0;
-      s.drawW = flipX ? -drawW : drawW;
-      s.drawH = drawH;
+      const effDrawW = drawW * wsKin.scaleX;
+      const effDrawH = drawH * wsKin.scaleY;
+      s.drawW = flipX ? -effDrawW : effDrawW;
+      s.drawH = effDrawH;
       s.spriteId = spHandle.id;
       s.swayAmp = isFoliage ? 3.8 : item.category === 'creature' ? 1.4 : 0.0;
       s.rotRad = 0;
@@ -995,13 +1003,14 @@ export class WorldRenderSnapshotCollector {
       s.skeletalPoseIdx = -1;
       const yuleLight = resolveYuleMagicalLightProfile(item.id);
       s.shadowScale = isConnectable ? 0.0 : 1.0;
-      s.emissiveBoost = item.isFlooPortal
-        ? 1.35
-        : yuleLight
-          ? yuleLight.emissiveBoost
-          : isConnectable
-            ? 0.0
-            : 0.85;
+      s.emissiveBoost =
+        (item.isFlooPortal
+          ? 1.35
+          : yuleLight
+            ? yuleLight.emissiveBoost
+            : isConnectable
+              ? 0.0
+              : 0.85) + wsKin.furnaceGlowBoost;
       s.phaseSeed = b.gx * 1.7 + b.gy * 2.3;
       s.extraStart = extraCountTotal;
       s.extraCount = 0;
@@ -1049,7 +1058,7 @@ export class WorldRenderSnapshotCollector {
         }
       }
 
-      // Attach spinning windmill sails / waterwheel rotor
+      // Attach spinning windmill sails / waterwheel rotor & active workshop crafting emblem
       if (!underConstruction && item.id === 'burrow_windmill_canon') {
         const sailHandle = sprites.resolve('prop_windmill_sails');
         if (sailHandle && extraCountTotal < this.extras.length) {
@@ -1061,7 +1070,7 @@ export class WorldRenderSnapshotCollector {
           ex.drawH = sailSize;
           ex.spriteId = sailHandle.id;
           ex.swayAmp = 0;
-          ex.rotRad = (nowMs * 0.0013) % 6.28318;
+          ex.rotRad = reducedMotion ? 0.38 : (nowMs * 0.0013 + wsKin.extraRotorRad) % 6.28318;
           ex.pivotY = 0.5;
           ex.alpha = s.alpha;
           ex.tintFlag = buildingTint;
@@ -1080,11 +1089,41 @@ export class WorldRenderSnapshotCollector {
           ex.drawH = wheelSize;
           ex.spriteId = wheelHandle.id;
           ex.swayAmp = 0;
-          ex.rotRad = (nowMs * 0.0018) % 6.28318;
+          ex.rotRad = reducedMotion ? 0.2 : (nowMs * 0.0018 + wsKin.extraRotorRad) % 6.28318;
           ex.pivotY = 0.5;
           ex.alpha = s.alpha;
           ex.tintFlag = buildingTint;
           ex.emissiveBoost = 0.05;
+          ex.phaseSeed = s.phaseSeed;
+          s.extraCount++;
+        }
+      }
+
+      // Floating subtle crafting-good badge above actively baking/milling workshops when ready shelf is empty
+      if (
+        !underConstruction &&
+        wsKin.isActive &&
+        wsKin.activeGoodIconKey &&
+        !(b.readyFarmGoods && b.readyFarmGoods.length > 0) &&
+        !(b.readyBubbles && b.readyBubbles > 0) &&
+        extraCountTotal < this.extras.length
+      ) {
+        const goodHandle = sprites.resolve(wsKin.activeGoodIconKey);
+        if (goodHandle) {
+          const ex = this.extras[extraCountTotal++];
+          const gBob = reducedMotion ? 0 : Math.sin(nowMs * 0.0052 + s.phaseSeed) * 2.8;
+          const gSize = Math.min(26, Math.max(18, drawW * 0.2));
+          ex.wx = worldCx;
+          ex.wy = worldBottomY - Math.max(30, drawH * 0.72) + gBob;
+          ex.drawW = gSize;
+          ex.drawH = gSize * (goodHandle.height / goodHandle.width);
+          ex.spriteId = goodHandle.id;
+          ex.swayAmp = 0;
+          ex.rotRad = 0;
+          ex.pivotY = 0.5;
+          ex.alpha = 0.9 * s.alpha;
+          ex.tintFlag = 0;
+          ex.emissiveBoost = 0.65;
           ex.phaseSeed = s.phaseSeed;
           s.extraCount++;
         }
@@ -1140,9 +1179,14 @@ export class WorldRenderSnapshotCollector {
                 : 38;
           const tickApprox = Math.floor(nowMs / 16.67);
           const baseBottomY = worldBottomY + 4.0;
+          const pastureRipe = Boolean(b.pastureReadyAt && nowMs >= b.pastureReadyAt);
+          const isNightDoze = this.period === 'night' && !pastureRipe;
+          const roamSpeedMult = isNightDoze ? 0.25 : 1.0;
 
           for (let idx = 0; idx < 2 && extraCountTotal < this.extras.length; idx++) {
             const useAction =
+              !reducedMotion &&
+              !isNightDoze &&
               Math.floor((tickApprox + b.gx * 11 + b.gy * 17 + idx * 29) / 42) % 2 === 1;
             const spKey = animalMeta.spritePair[useAction ? 1 : 0];
             const animalHandle =
@@ -1150,18 +1194,28 @@ export class WorldRenderSnapshotCollector {
             if (!animalHandle) continue;
 
             const phase =
-              nowMs * (idx === 0 ? 0.00144 : 0.00114) + b.gx * 1.9 + b.gy * 1.3 + idx * 2.6;
+              nowMs * (idx === 0 ? 0.00144 : 0.00114) * roamSpeedMult +
+              b.gx * 1.9 +
+              b.gy * 1.3 +
+              idx * 2.6;
             const ax =
               worldCx + Math.sin(phase) * spanX + (idx === 0 ? -drawW * 0.06 : drawW * 0.09);
-            const hop = Math.abs(Math.sin(nowMs * 0.0066 + idx * 1.7 + b.gx)) * 2.4;
+            const hop =
+              reducedMotion || isNightDoze
+                ? 0
+                : Math.abs(Math.sin(nowMs * 0.0066 + idx * 1.7 + b.gx)) * 2.4;
+            const dozeBreath =
+              !reducedMotion && isNightDoze
+                ? Math.sin(nowMs * 0.0016 + b.gx * 1.3 + idx * 2.1) * 0.022
+                : 0;
             const ay =
               baseBottomY -
               drawH * (idx === 0 ? 0.44 : 0.32) +
               Math.cos(phase * 0.85) * spanY -
               hop;
             const szScale = idx === 0 ? 1.0 : 0.82;
-            const bwPx = baseScale * szScale;
-            const bhPx = bwPx * (animalHandle.height / animalHandle.width);
+            const bwPx = baseScale * szScale * (1 - dozeBreath * 0.7);
+            const bhPx = baseScale * szScale * (animalHandle.height / animalHandle.width) * (1 + dozeBreath);
             const facingLeft = Math.cos(phase) < 0;
 
             const ex = this.extras[extraCountTotal++];
@@ -1406,6 +1460,18 @@ export class WorldRenderSnapshotCollector {
                 1.15 * (0.92 + Math.sin(nowMs * 0.0068) * 0.08)
               );
             }
+          } else if (wsKin.isActive) {
+            const furnaceFlicker = 0.9 + Math.sin(nowMs * 0.009 + b.gx * 1.7) * 0.1;
+            pushLightCandidate(
+              worldCx,
+              worldBottomY - 12,
+              36,
+              150,
+              1.0,
+              0.68,
+              0.24,
+              0.75 * furnaceFlicker
+            );
           }
         }
       }

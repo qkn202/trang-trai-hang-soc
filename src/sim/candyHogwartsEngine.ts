@@ -298,7 +298,9 @@ export class CandyHogwartsEngine {
   public activeBooster: 'hammer' | 'swap' | null = null;
   public busy = false;
   public activeAsyncSwaps = 0;
+  private swapSeqCounter = 0;
   private colBusyCounts = new Uint8Array(12);
+  private colOwnerSeq = new Uint32Array(12);
   private pendingConsumedTurns = 0;
   public ended = false;
 
@@ -493,23 +495,67 @@ export class CandyHogwartsEngine {
     return out;
   }
 
-  private acquireColumnSet(cols: Iterable<number>): Set<number> {
+  private acquireColumnSet(cols: Iterable<number>, ownerSeq = 0): Set<number> {
     const owned = new Set<number>();
     for (const c of cols) {
       if (c >= 0 && c < this.size && !owned.has(c)) {
         owned.add(c);
         this.colBusyCounts[c] = (this.colBusyCounts[c] ?? 0) + 1;
+        if (ownerSeq > 0 && (this.colOwnerSeq[c] ?? 0) === 0) {
+          this.colOwnerSeq[c] = ownerSeq;
+        }
       }
     }
     return owned;
   }
 
-  private expandColumnSet(owned: Set<number>, cols: Iterable<number>): void {
+  private expandColumnSet(owned: Set<number>, cols: Iterable<number>, ownerSeq = 0): void {
     for (const c of cols) {
       if (c >= 0 && c < this.size && !owned.has(c) && (this.colBusyCounts[c] ?? 0) === 0) {
         owned.add(c);
         this.colBusyCounts[c] = (this.colBusyCounts[c] ?? 0) + 1;
+        if (ownerSeq > 0) {
+          this.colOwnerSeq[c] = ownerSeq;
+        }
       }
+    }
+  }
+
+  private async awaitOlderAdjacentColumnLocks(
+    minC: number,
+    maxC: number,
+    mySeq: number,
+    ownedCols: Set<number>,
+    session: number
+  ): Promise<void> {
+    const leftC = Math.max(0, minC - 4);
+    const rightC = Math.min(this.size - 1, maxC + 4);
+    const hasOlderBusyCol = (): boolean => {
+      for (let c = leftC; c <= rightC; c++) {
+        if (
+          !ownedCols.has(c) &&
+          (this.colBusyCounts[c] ?? 0) > 0 &&
+          (this.colOwnerSeq[c] ?? 0) > 0 &&
+          (this.colOwnerSeq[c] ?? 0) < mySeq
+        ) {
+          return true;
+        }
+      }
+      return false;
+    };
+    if (!hasOlderBusyCol()) return;
+
+    const start = nowMs();
+    let ticks = 0;
+    while (session === this.sessionId && hasOlderBusyCol() && nowMs() - start < 900 && ticks < 120) {
+      ticks++;
+      await new Promise<void>((resolve) => {
+        if (this.instantAnimations || !this.renderer) {
+          setTimeout(resolve, 0);
+        } else {
+          nextAnimFrame(() => resolve());
+        }
+      });
     }
   }
 
@@ -543,6 +589,9 @@ export class CandyHogwartsEngine {
     for (const c of owned) {
       if (c >= 0 && c < this.colBusyCounts.length && this.colBusyCounts[c]! > 0) {
         this.colBusyCounts[c]!--;
+        if (this.colBusyCounts[c] === 0) {
+          this.colOwnerSeq[c] = 0;
+        }
       }
     }
     owned.clear();
@@ -550,6 +599,7 @@ export class CandyHogwartsEngine {
 
   private resetAsyncLocks(): void {
     this.colBusyCounts.fill(0);
+    this.colOwnerSeq.fill(0);
     this.activeAsyncSwaps = 0;
     this.pendingConsumedTurns = 0;
   }
@@ -2322,6 +2372,7 @@ export class CandyHogwartsEngine {
         ? 2
         : 1;
 
+    const swapSeq = ++this.swapSeqCounter;
     let ownedCols: Set<number> | null = null;
     if (needsGlobalBoardLock) {
       this.busy = true;
@@ -2330,7 +2381,7 @@ export class CandyHogwartsEngine {
       for (let mc = Math.max(0, minC - blastMargin); mc <= Math.min(this.size - 1, maxC + blastMargin); mc++) {
         if (!this.isColumnBusy(mc)) seedCols.push(mc);
       }
-      ownedCols = this.acquireColumnSet(seedCols);
+      ownedCols = this.acquireColumnSet(seedCols, swapSeq);
       this.activeAsyncSwaps++;
     }
 
@@ -2345,6 +2396,10 @@ export class CandyHogwartsEngine {
       if (session !== this.sessionId) return false;
 
       const specialCombo = isFreeSwapBooster ? null : this.detectSwapSpecialCombo(a, b);
+      if (!specialCombo && ownedCols) {
+        await this.awaitOlderAdjacentColumnLocks(minC, maxC, swapSeq, ownedCols, session);
+        if (session !== this.sessionId) return false;
+      }
       const clusters = specialCombo
         ? []
         : this.findMatchClusters([b, a], ownedCols ?? undefined);
@@ -2361,7 +2416,8 @@ export class CandyHogwartsEngine {
         for (const cl of clusters) {
           this.expandColumnSet(
             ownedCols,
-            cl.cells.map((pt) => pt.c)
+            cl.cells.map((pt) => pt.c),
+            swapSeq
           );
         }
       }
@@ -2380,11 +2436,6 @@ export class CandyHogwartsEngine {
       }
       this.emitHudState();
 
-      if (this.extractIngredientsAtExits()) {
-        await this.applyGravityAndRefill(session, ownedCols ?? undefined);
-        if (session !== this.sessionId) return true;
-      }
-
       if (specialCombo) {
         this.specialUsedThisTurn = true;
         await this.executeSpecialCombo(specialCombo, a, b, session);
@@ -2401,6 +2452,10 @@ export class CandyHogwartsEngine {
         await this.resolveAllCascades(2, session, ownedCols ?? undefined);
         if (session !== this.sessionId) return true;
       } else {
+        if (this.extractIngredientsAtExits(ownedCols ?? undefined)) {
+          await this.applyGravityAndRefill(session, ownedCols ?? undefined);
+          if (session !== this.sessionId) return true;
+        }
         await this.resolveAllCascades(1, session, ownedCols ?? undefined);
         if (session !== this.sessionId) return true;
       }
@@ -3499,23 +3554,35 @@ export class CandyHogwartsEngine {
       c: number;
       color: number;
       special: CandySpecialType;
+      fallbackCells: Array<{ r: number; c: number }>;
     }> = [];
     let decreeWarnedThisWave = false;
 
     for (const cluster of clusters) {
+      this.damageAdjacentBlockers(cluster.cells, adjacentBlockerHits);
+
       let spawnCell: { r: number; c: number } | null = null;
       let suppressedByDecree = false;
       if (cluster.spawnSpecial) {
-        suppressedByDecree = cluster.cells.some((ce) => this.isSuppressedByDecree(ce.r, ce.c));
-        if (suppressedByDecree) {
-          if (!decreeWarnedThisWave) {
-            decreeWarnedThisWave = true;
-            const mid = cluster.cells[Math.floor(cluster.cells.length / 2)];
-            this.spawnPopup(mid.r, mid.c, '📜 CẤM KẾT TINH PHÉP!', '#fbcfe8', 15);
+        const isHighTierFivePlus =
+          cluster.spawnSpecial === 'bomb' ||
+          cluster.spawnSpecial === 'dynamite' ||
+          cluster.spawnSpecial === 'tnt';
+
+        for (const anchor of preferredAnchors) {
+          const found = cluster.cells.find(
+            (ce) =>
+              ce.r === anchor.r &&
+              ce.c === anchor.c &&
+              !this.isCellLocked(ce.r, ce.c) &&
+              (isHighTierFivePlus || !this.isSuppressedByDecree(ce.r, ce.c))
+          );
+          if (found) {
+            spawnCell = found;
+            break;
           }
-        } else {
-          this.specialUsedThisTurn = true;
-          this.addPatronusCharge(7);
+        }
+        if (!spawnCell) {
           for (const anchor of preferredAnchors) {
             const found = cluster.cells.find(
               (ce) => ce.r === anchor.r && ce.c === anchor.c && !this.isCellLocked(ce.r, ce.c)
@@ -3525,25 +3592,45 @@ export class CandyHogwartsEngine {
               break;
             }
           }
-          if (!spawnCell) {
-            const intersection = cluster.cells.find(
-              (ce) => ce.count > 1 && !this.isCellLocked(ce.r, ce.c)
-            );
-            spawnCell =
-              intersection ||
-              cluster.cells.find((ce) => !this.isCellLocked(ce.r, ce.c)) ||
-              cluster.cells[0];
+        }
+        if (!spawnCell) {
+          const midCandidate = cluster.cells[Math.floor(cluster.cells.length / 2)];
+          const intersection = cluster.cells.find(
+            (ce) => ce.count > 1 && !this.isCellLocked(ce.r, ce.c)
+          );
+          spawnCell =
+            intersection ||
+            (midCandidate && !this.isCellLocked(midCandidate.r, midCandidate.c)
+              ? midCandidate
+              : null) ||
+            cluster.cells.find((ce) => !this.isCellLocked(ce.r, ce.c)) ||
+            midCandidate ||
+            cluster.cells[0];
+        }
+
+        suppressedByDecree =
+          !isHighTierFivePlus && this.isSuppressedByDecree(spawnCell.r, spawnCell.c);
+
+        if (suppressedByDecree) {
+          if (!decreeWarnedThisWave) {
+            decreeWarnedThisWave = true;
+            this.spawnPopup(spawnCell.r, spawnCell.c, '📜 CẤM KẾT TINH PHÉP!', '#fbcfe8', 15);
           }
+        } else {
+          if (isHighTierFivePlus && this.isSuppressedByDecree(spawnCell.r, spawnCell.c)) {
+            this.spawnPopup(spawnCell.r, spawnCell.c, '⚡ ĐẠI PHÉP XUYÊN SẮC LỆNH!', '#fde047', 15);
+          }
+          this.specialUsedThisTurn = true;
+          this.addPatronusCharge(7);
           pendingSpawns.push({
             r: spawnCell.r,
             c: spawnCell.c,
             color: cluster.color,
             special: cluster.spawnSpecial,
+            fallbackCells: cluster.cells,
           });
         }
       }
-
-      this.damageAdjacentBlockers(cluster.cells, adjacentBlockerHits);
 
       for (const cell of cluster.cells) {
         this.damageCell(cell.r, cell.c, triggered, false);
@@ -3566,13 +3653,28 @@ export class CandyHogwartsEngine {
     }
 
     for (const sp of pendingSpawns) {
-      if (!this.isCellLocked(sp.r, sp.c) && !this.hasStaticBlocker(sp.r, sp.c)) {
-        if (!this.grid[sp.r]?.[sp.c] || !this.grid[sp.r]?.[sp.c]?.primedWrapped) {
-          const piece = this.createPiece(sp.color, sp.c, sp.r, sp.special);
-          piece.scale = 1.28;
-          this.grid[sp.r][sp.c] = piece;
-          this.spawnRing(sp.r, sp.c, 1.15, '#fde047');
+      const canPlaceAt = (r: number, c: number): boolean =>
+        !this.isCellLocked(r, c) &&
+        !this.hasStaticBlocker(r, c) &&
+        (!this.grid[r]?.[c] || !this.grid[r]?.[c]?.primedWrapped);
+
+      let target: { r: number; c: number } | null = canPlaceAt(sp.r, sp.c)
+        ? { r: sp.r, c: sp.c }
+        : null;
+      if (!target) {
+        const openFallback = sp.fallbackCells.find(
+          (ce) => !this.grid[ce.r]?.[ce.c] && canPlaceAt(ce.r, ce.c)
+        );
+        const anyFallback = openFallback || sp.fallbackCells.find((ce) => canPlaceAt(ce.r, ce.c));
+        if (anyFallback) {
+          target = { r: anyFallback.r, c: anyFallback.c };
         }
+      }
+      if (target) {
+        const piece = this.createPiece(sp.color, target.c, target.r, sp.special);
+        piece.scale = 1.28;
+        this.grid[target.r][target.c] = piece;
+        this.spawnRing(target.r, target.c, 1.15, '#fde047');
       }
     }
 

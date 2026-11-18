@@ -32,6 +32,7 @@ import {
   GpuMockSettings,
 } from '../core/renderDevice';
 import { PixiGpuDevice } from '../pixi/pixiGpuDevice';
+import { getSpriteLightingProfile } from '../spriteLightingProfile';
 import {
   buildIsoSceneRangeSlices,
   RangeSliceSegment,
@@ -138,7 +139,7 @@ void main() {
 }
 `;
 
-// GPU Bake Pass: computes 2.5D rounded silhouette bevel normals + interior detail normals + warm cottage window emissive mask!
+// GPU Bake Pass: computes 2.5D rounded silhouette bevel normals + dome foliage relief + smart local-contrast window emissive!
 const BAKE_NORMAL_FS = `#version 300 es
 precision highp float;
 precision highp sampler2DArray;
@@ -146,6 +147,8 @@ in vec2 vUv;
 uniform sampler2DArray uAlbedo;
 uniform float uLayer;
 uniform vec2 uTexel;
+uniform int uLightingProfile; // 0 = non-emissive organic/dome, 1 = framed architectural windows, 2 = magic/lantern glow
+uniform vec4 uSpriteBounds;   // (x0, y0, w, h) in normalized atlas space
 out vec4 fragColor;
 
 float luma(vec3 c) {
@@ -189,14 +192,29 @@ void main() {
   // Screen Y points downward: silhouette empty above -> normal points UP (negative screen Y)
   float nx = (aL1 - aR1) * 0.85 + (aL2 - aR2) * 1.15 + (lL - lR) * 0.45;
   float ny = (aU1 - aD1) * 0.85 + (aU2 - aD2) * 1.15 + (lU - lD) * 0.45;
+  if (uLightingProfile == 0) {
+    vec2 localUv = clamp((vUv - uSpriteBounds.xy) / max(uSpriteBounds.zw, vec2(0.0001)), vec2(0.0), vec2(1.0));
+    vec2 dome = vec2(localUv.x - 0.5, localUv.y - 0.45) * 0.85;
+    nx = mix(nx, nx + dome.x, 0.35);
+    ny = mix(ny, ny + dome.y, 0.35);
+  }
   vec3 n = normalize(vec3(nx, ny, 1.0));
 
-  // Detect warm lit cottage windows (amber/gold panes), emerald Floo & icy Yule blue-flame/Patronus cores
+  // Detect warm lit cottage windows & magical cores with lighting-profile discipline
   float lum = luma(c.rgb);
   float warmth = c.r * 0.58 + c.g * 0.42 - c.b * 0.72;
-  float warmWindow = smoothstep(0.22, 0.48, warmth) * smoothstep(0.56, 0.84, lum);
-  float magicCore = smoothstep(0.18, 0.46, max(c.g, c.b) - c.r * 0.78) * smoothstep(0.52, 0.85, lum);
-  float emissive = clamp(max(warmWindow, magicCore * 0.96), 0.0, 1.0);
+  float emissive = 0.0;
+  if (uLightingProfile == 2) {
+    float warmGlow = smoothstep(0.20, 0.46, warmth) * smoothstep(0.54, 0.82, lum);
+    float magicCore = smoothstep(0.18, 0.46, max(c.g, c.b) - c.r * 0.78) * smoothstep(0.52, 0.85, lum);
+    emissive = clamp(max(warmGlow, magicCore * 0.96), 0.0, 1.0);
+  } else if (uLightingProfile == 1) {
+    float minNeighborLum = min(min(lL, lR), min(lU, lD));
+    float localContrast = clamp((lum - minNeighborLum - 0.08) / 0.24, 0.0, 1.0);
+    float warmWindow = smoothstep(0.24, 0.50, warmth) * smoothstep(0.64, 0.90, lum);
+    float magicPane = smoothstep(0.20, 0.48, max(c.g, c.b) - c.r * 0.78) * smoothstep(0.60, 0.88, lum);
+    emissive = clamp(max(warmWindow, magicPane * 0.92) * mix(0.14, 1.0, localContrast), 0.0, 1.0);
+  }
 
   fragColor = vec4(n * 0.5 + 0.5, emissive);
 }
@@ -1605,6 +1623,14 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
     gl.uniform1i(this.uLoc(this.bakeNormalProg, 'uAlbedo'), 0);
     gl.uniform1f(this.uLoc(this.bakeNormalProg, 'uLayer'), layer);
     gl.uniform2f(this.uLoc(this.bakeNormalProg, 'uTexel'), 1 / ATLAS_SIZE, 1 / ATLAS_SIZE);
+    gl.uniform1i(this.uLoc(this.bakeNormalProg, 'uLightingProfile'), getSpriteLightingProfile(key));
+    gl.uniform4f(
+      this.uLoc(this.bakeNormalProg, 'uSpriteBounds'),
+      x / ATLAS_SIZE,
+      y / ATLAS_SIZE,
+      pw / ATLAS_SIZE,
+      ph / ATLAS_SIZE
+    );
     // Map vUv [0..1] inside viewport(x,y,pw,ph)? No: vUv of fullscreen triangle inside viewport(x,y,pw,ph) spans [0..1],
     // so we set viewport to (0, 0, ATLAS_SIZE, ATLAS_SIZE) and scissor(x, y, pw, ph)!
     gl.viewport(0, 0, ATLAS_SIZE, ATLAS_SIZE);

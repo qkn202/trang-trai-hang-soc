@@ -839,14 +839,17 @@ export function shellBindEvents(hud: GameHUD): void {
       hud.closeHudPopovers();
       const actives = hud.sim.getActiveConstructions(Date.now());
       if (actives.length === 0) return;
-      const nextB = actives[0];
+      hud.activeBuildCycleIdx = (hud.activeBuildCycleIdx + 1) % actives.length;
+      const nextB = actives[hud.activeBuildCycleIdx];
       const it = getCatalogItem(nextB.itemId);
+      const targetGx = nextB.gx + (it?.width ?? 1) * 0.5;
+      const targetGy = nextB.gy + (it?.height ?? 1) * 0.5;
       clearBuildToolModes(hud);
-      centerCameraOnGrid(
-        hud.cam,
-        nextB.gx + (it?.width ?? 1) * 0.5,
-        nextB.gy + (it?.height ?? 1) * 0.5
-      );
+      if (hud.onFocusGridSmooth) {
+        hud.onFocusGridSmooth(targetGx, targetGy, Math.max(hud.cam.zoom, 0.95));
+      } else {
+        centerCameraOnGrid(hud.cam, targetGx, targetGy);
+      }
       hud.inspectSelection = { kind: 'building', uid: nextB.uid };
       hud.renderInspector();
     });

@@ -42,6 +42,8 @@ import {
 import { resolveCatalogPropSpriteKey, SpriteRegistry } from './spriteLoader';
 import { computeWaterShoreLoops, WaterLoop } from './waterOutlines';
 import { JuiceFX } from './juiceFx';
+import { getHarmonizedSpriteScale } from '../render/spriteLightingProfile';
+import { computeWorkshopKineticState } from '../render/workshopKinetics';
 import {
   InWorldTimerBadgeInfo,
   InWorldTimerKind,
@@ -426,7 +428,7 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
     }
     if (rawSprite) {
       const isNonSquare = item.width !== item.height;
-      const scaleMult = item.spriteScale ?? (isNonSquare ? 1.0 : 1.05);
+      const scaleMult = getHarmonizedSpriteScale(item);
       const drawW = footprintW * scaleMult;
       const drawH = drawW * (rawSprite.height / rawSprite.width);
       const sprite = isConnectablePlot
@@ -520,15 +522,9 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
         );
       }
 
-      const isActivelyCrafting = Boolean(
-        !self.reducedMotion && b.workshopQueue && b.workshopQueue.length > 0
-      );
-      const craftBreathX = isActivelyCrafting
-        ? 1 + Math.sin(self.tick * 0.13 + b.gx * 1.7) * 0.013
-        : 1;
-      const craftBreathY = isActivelyCrafting
-        ? 1 - Math.sin(self.tick * 0.13 + b.gx * 1.7) * 0.015
-        : 1;
+      const wsKin = computeWorkshopKineticState(item, b, now, self.reducedMotion);
+      const craftBreathX = wsKin.scaleX;
+      const craftBreathY = wsKin.scaleY;
       const isFoliageProp =
         Boolean(item.spriteKey?.startsWith('env_')) && item.spriteKey !== 'env_mossy_rock';
       const foliageShear =
@@ -850,6 +846,8 @@ export function buildingsDrawLiveBuildingAnimations(self: IsometricRenderer,
   ): void {
     const ctx = self.ctx;
     const itemId = item.id;
+    const nowMs = Date.now();
+    const wsKin = computeWorkshopKineticState(item, b, nowMs, self.reducedMotion);
 
     // 0a. Ceremonial Red-and-Gold Ribbon Unveiling Crown (`prop_ribbon_unveil`)!
     if (b.awaitingUnveil) {
@@ -879,7 +877,7 @@ export function buildingsDrawLiveBuildingAnimations(self: IsometricRenderer,
         const hubX = cx - drawW * 0.06;
         const hubY = bottomY - drawH * 0.67;
         const sailSize = drawW * 0.78;
-        const angle = self.reducedMotion ? 0.38 : self.tick * 0.022;
+        const angle = self.reducedMotion ? 0.38 : self.tick * 0.022 + wsKin.extraRotorRad;
         ctx.save();
         ctx.translate(hubX, hubY);
         // Foreshorten onto the SW-facing isometric windmill dome plane!
@@ -909,7 +907,7 @@ export function buildingsDrawLiveBuildingAnimations(self: IsometricRenderer,
         const wheelX = cx + drawW * 0.21;
         const wheelY = bottomY - drawH * 0.33;
         const wheelSize = drawW * 0.40;
-        const angle = self.reducedMotion ? 0.2 : self.tick * 0.032;
+        const angle = self.reducedMotion ? 0.2 : self.tick * 0.032 + wsKin.extraRotorRad;
         ctx.save();
         ctx.translate(wheelX, wheelY);
         // Foreshorten onto the SE-facing stone millrace wall!
@@ -929,6 +927,31 @@ export function buildingsDrawLiveBuildingAnimations(self: IsometricRenderer,
             ctx.fill();
           }
         }
+      }
+    }
+
+    // 0c-2. Subtle active crafting badge over working workshops when ready shelf is empty
+    if (
+      wsKin.isActive &&
+      wsKin.activeGoodIconKey &&
+      !(b.readyFarmGoods && b.readyFarmGoods.length > 0) &&
+      !(b.readyBubbles && b.readyBubbles > 0)
+    ) {
+      const goodSp = self.sprites.get(wsKin.activeGoodIconKey);
+      if (goodSp) {
+        const gBob = self.reducedMotion ? 0 : Math.sin(nowMs * 0.0052 + b.gx) * 2.5 * zoom;
+        const gSize = Math.min(24 * zoom, Math.max(16 * zoom, drawW * 0.2));
+        const gh = gSize * (goodSp.height / goodSp.width);
+        ctx.save();
+        ctx.globalAlpha = 0.9;
+        ctx.drawImage(
+          goodSp,
+          cx - gSize * 0.5,
+          bottomY - Math.max(30 * zoom, drawH * 0.72) + gBob - gh * 0.5,
+          gSize,
+          gh
+        );
+        ctx.restore();
       }
     }
 
@@ -1090,27 +1113,41 @@ export function buildingsDrawLiveBuildingAnimations(self: IsometricRenderer,
               ? 40
               : 34;
 
+        const pastureRipe = Boolean(b.pastureReadyAt && nowMs >= b.pastureReadyAt);
+        const isNightDoze = isNight && !pastureRipe;
+        const roamSpeedMult = isNightDoze ? 0.25 : 1.0;
+
         for (let idx = 0; idx < 2; idx++) {
           const useAction =
             !self.reducedMotion &&
+            !isNightDoze &&
             Math.floor((self.tick + b.gx * 11 + b.gy * 17 + idx * 29) / 42) % 2 === 1;
           const spKey = animalMeta.spritePair[useAction ? 1 : 0];
           const beastSp = self.sprites.get(spKey) ?? self.sprites.get(animalMeta.spritePair[0]);
           if (!beastSp) continue;
 
-          const phase = self.tick * (idx === 0 ? 0.024 : 0.019) + b.gx * 1.9 + b.gy * 1.3 + idx * 2.6;
+          const phase =
+            self.tick * (idx === 0 ? 0.024 : 0.019) * roamSpeedMult +
+            b.gx * 1.9 +
+            b.gy * 1.3 +
+            idx * 2.6;
           const ax = cx + Math.sin(phase) * spanX + (idx === 0 ? -drawW * 0.06 : drawW * 0.09);
-          const hop = self.reducedMotion
-            ? 0
-            : Math.abs(Math.sin(self.tick * 0.11 + idx * 1.7 + b.gx)) * 2.4 * zoom;
+          const hop =
+            self.reducedMotion || isNightDoze
+              ? 0
+              : Math.abs(Math.sin(self.tick * 0.11 + idx * 1.7 + b.gx)) * 2.4 * zoom;
+          const dozeBreath =
+            !self.reducedMotion && isNightDoze
+              ? Math.sin(nowMs * 0.0016 + b.gx * 1.3 + idx * 2.1) * 0.022
+              : 0;
           const ay =
             bottomY -
             drawH * (idx === 0 ? 0.44 : 0.32) +
             Math.cos(phase * 0.85) * spanY -
             hop;
           const szScale = idx === 0 ? 1.0 : 0.8;
-          const bwPx = baseScale * szScale * zoom;
-          const bhPx = bwPx * (beastSp.height / beastSp.width);
+          const bwPx = baseScale * szScale * zoom * (1 - dozeBreath * 0.7);
+          const bhPx = baseScale * szScale * zoom * (beastSp.height / beastSp.width) * (1 + dozeBreath);
 
           if (b.pastureAnimalId === 'moon_unicorn') {
             self.drawRadialGlow(ax, ay - bhPx * 0.45, 18 * zoom, 'rgba(224, 242, 254, 0.5)');

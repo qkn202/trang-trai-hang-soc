@@ -1101,6 +1101,7 @@ export function worldUnlockZone(sim: ParkSimulation, zoneId: ZoneId): { ok: bool
     const cy = (z.y1 + z.y2) * 0.5;
     sim.spawnFloatingText(cx, cy, `✨ Đã mở ${z.name}! +${bonusXp} ⭐`, '#fbbf24');
     sim.onToast?.(`Sương mù tan biến! Chào mừng tới ${z.name}!`, '🗺️');
+    sim.onZoneUnlocked?.(zoneId, cx, cy);
     sim.saveToStorage();
     sim.onUiChange?.();
     return { ok: true, msg: `Đã mở khóa ${z.name}!` };

@@ -5,6 +5,7 @@ import { getLevelInfo } from './data/levels';
 import { TUTORIAL_STEPS } from './data/quests';
 import { GRID_SIZE } from './data/zones';
 import { MagicalAudio } from './engine/audio';
+import { CameraDirector } from './engine/cameraDirector';
 import {
   Camera,
   centerCameraOnGrid,
@@ -218,8 +219,19 @@ async function bootstrap(): Promise<void> {
     toY: number;
     toZoom: number;
   } | null = null;
+  const camDirector = new CameraDirector();
   hud.onCameraJump = () => {
     introGlide = null;
+    camDirector.cancel();
+  };
+  hud.onFocusGridSmooth = (gx, gy, targetZoom) => {
+    introGlide = null;
+    hud.rideCamUid = null;
+    camDirector.panToGrid(cam, gx, gy, {
+      targetZoom,
+      durationMs: 480,
+      reducedMotion: renderer.reducedMotion,
+    });
   };
   if (!hasExplicitCamParam && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
     const targetX = cam.x;
@@ -631,10 +643,30 @@ async function bootstrap(): Promise<void> {
     renderer.triggerSquash(uid);
   };
   sim.onRibbonUnveiled = (info) => {
+    if (!document.querySelector('dialog[open]')) {
+      introGlide = null;
+      hud.rideCamUid = null;
+      camDirector.panToGrid(cam, info.gx, info.gy, {
+        targetZoom: Math.max(cam.zoom, 0.96),
+        durationMs: 460,
+        reducedMotion: renderer.reducedMotion,
+      });
+    }
     const pt = gridToScreen(info.gx, info.gy, cam, canvas.clientWidth, canvas.clientHeight, 36);
     renderer.triggerRibbonUnveilPop(info.uid, pt.sx, pt.sy);
     hud.showRibbonUnveilBanner(info);
     haptic('levelup');
+  };
+  sim.onZoneUnlocked = (_zoneId, cx, cy) => {
+    if (!document.querySelector('dialog[open]')) {
+      introGlide = null;
+      hud.rideCamUid = null;
+      camDirector.panToGrid(cam, cx, cy, {
+        targetZoom: Math.min(cam.zoom, 0.86),
+        durationMs: 620,
+        reducedMotion: renderer.reducedMotion,
+      });
+    }
   };
   const flyingCollectibles = new CrossLayerFlyingCollectibles(hud.root, {
     onArrival: (_kind, idx) => {
@@ -1204,6 +1236,7 @@ async function bootstrap(): Promise<void> {
         scr.sy > viewH * 0.76
       ) {
         introGlide = null;
+        camDirector.cancel();
         centerCameraOnGrid(cam, spot.gx + bw * 0.5, spot.gy + bh * 0.5);
       }
     }
@@ -1252,6 +1285,7 @@ async function bootstrap(): Promise<void> {
     hud.recordRecentDecorItem(placedItem.id);
     const { bw, bh } = sim.getBuildingFootprint(placedItem, rot);
     introGlide = null;
+    camDirector.cancel();
     centerCameraOnGrid(cam, target.gx + bw * 0.5, target.gy + bh * 0.5);
     hud.pendingTouchTile = null;
     if (!isRepeatableCatalogItem(placedItem)) {
@@ -1391,6 +1425,7 @@ async function bootstrap(): Promise<void> {
 
     // Handle 2-finger Pinch-to-Zoom!
     if (activePointers.size >= 2) {
+      camDirector.cancel();
       cancelPendingTouchPaint();
       cancelLongPressMove();
       isPaintingTiles = false;
@@ -1577,6 +1612,7 @@ async function bootstrap(): Promise<void> {
     }
     if (isDraggingCam) {
       introGlide = null;
+      camDirector.cancel();
       cam.x = camStartX - dx / cam.zoom;
       cam.y = camStartY - dy / cam.zoom;
     }
@@ -2514,6 +2550,7 @@ async function bootstrap(): Promise<void> {
     (e) => {
       e.preventDefault();
       introGlide = null;
+      camDirector.cancel();
       const rect = canvas.getBoundingClientRect();
       const sx = e.clientX - rect.left;
       const sy = e.clientY - rect.top;
@@ -2653,6 +2690,7 @@ async function bootstrap(): Promise<void> {
     if (gp.connected) {
       if (gp.panDx !== 0 || gp.panDy !== 0) {
         introGlide = null;
+        camDirector.cancel();
         hud.rideCamUid = null;
         const gpSpeed = (380 / cam.zoom) * Math.min(0.05, dt);
         cam.x += gp.panDx * gpSpeed;
@@ -2702,6 +2740,7 @@ async function bootstrap(): Promise<void> {
       keysPressed.has('arrowright')
     ) {
       introGlide = null;
+      camDirector.cancel();
     }
     if (introGlide) {
       const gt = Math.min(1, Math.max(0, (now - introGlide.startMs) / introGlide.durationMs));
@@ -2712,6 +2751,8 @@ async function bootstrap(): Promise<void> {
       if (gt >= 1) {
         introGlide = null;
       }
+    } else if (!hud.rideCamUid) {
+      camDirector.update(cam, dt);
     }
 
     const panSpeed = (340 / cam.zoom) * Math.min(0.05, dt);

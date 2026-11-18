@@ -67,11 +67,11 @@ describe('Master Upgrade 10/10 Suite (Đợt 1, Đợt 2 & Đợt 3)', () => {
     mockLocalStorage.clear();
   });
 
-  describe('Đợt 1 — 331 Sprite Plinth-Free & Thung Lũng Sống Động (Dân Làng Đi Dạo + Bộ Sưu Tập Giáng Sinh)', () => {
-    it('đăng ký đúng 331 sprite duy nhất bao gồm rotor động, công trường, khánh thành, 12 cư dân & 159 sprite Giáng Sinh 2 chủ đề', () => {
-      expect(SPRITE_KEYS.length).toBe(331);
+  describe('Đợt 1 — 338 Sprite Plinth-Free & Thung Lũng Sống Động (Dân Làng Đi Dạo + Bộ Sưu Tập Giáng Sinh 2-Pose)', () => {
+    it('đăng ký đúng 338 sprite duy nhất bao gồm rotor động, công trường, khánh thành, 12 cư dân & toàn bộ thú 2-pose', () => {
+      expect(SPRITE_KEYS.length).toBe(338);
       const unique = new Set(SPRITE_KEYS);
-      expect(unique.size).toBe(331);
+      expect(unique.size).toBe(338);
 
       for (const requiredKey of [
         'prop_windmill_sails',

@@ -97,18 +97,32 @@ void main() {
   float phase = uBoneParams.y;
   float walking = uBoneParams.z;
 
-  // 3-Bone Articulated 2.5D Deformation (Feet Stride + Torso Breath + Cloak/Head Follow-Through)
-  float breath = sin(t * 2.7 + phase) * (1.0 - walking * 0.5);
-  float verticalStretch = 1.0 + breath * 0.022 * smoothstep(0.18, 0.95, h);
+  // 5-Zone Anatomical 2.5D Rig (8x10 grid): L/R Alternating Feet, Hip Bob, Counter Arms, Torso Breath & Head Tilt
+  float breath = sin(t * 2.7 + phase) * (1.0 - walking * 0.45);
+  float hipBob = abs(sin(phase)) * 2.4 * walking * smoothstep(0.05, 0.35, h);
 
-  // Lower hem / stride shear when walking
-  float hemWave = walking * sin(phase * 2.1 + aLocal.x * 2.4) * 2.6 * (1.0 - smoothstep(0.0, 0.45, h));
-  // Upper torso / head secondary counter-sway
-  float headSway = (walking * sin(phase * 1.05 - 0.45) * 2.8 + breath * 1.1) * smoothstep(0.35, 1.0, h);
+  // Zone 1 & 2: Left vs Right foot alternating stride + vertical lift
+  float legWeight = 1.0 - smoothstep(0.08, 0.30, h);
+  float sideSign = clamp(aLocal.x * 6.0, -1.0, 1.0);
+  float legSwing = sin(phase) * sideSign;
+  float footLiftY = max(0.0, legSwing) * 3.2 * walking * legWeight;
+  float footStrideX = legSwing * 2.6 * walking * legWeight;
+
+  // Zone 3: Outer arms & cloak sleeves counter-swinging opposite legs
+  float armMask =
+    smoothstep(0.24, 0.38, h) *
+    (1.0 - smoothstep(0.64, 0.76, h)) *
+    smoothstep(0.12, 0.28, abs(aLocal.x));
+  float armSwingX = -sin(phase) * sideSign * 3.0 * walking * armMask;
+
+  // Zone 4 & 5: Torso breath stretch + head/hat follow-through tilt
+  float verticalStretch = 1.0 + breath * 0.022 * smoothstep(0.20, 0.95, h);
+  float headMask = smoothstep(0.66, 0.92, h);
+  float headTiltX = (walking * sin(phase * 1.05 - 0.38) * 2.3 + breath * 0.9) * headMask;
 
   vec2 deformed = vec2(
-    aLocal.x * uPoseRect.z + hemWave + headSway,
-    -aLocal.y * uPoseRect.w * verticalStretch
+    aLocal.x * uPoseRect.z + footStrideX + armSwingX + headTiltX,
+    -aLocal.y * uPoseRect.w * verticalStretch - hipBob - footLiftY
   );
 
   vec2 wp = uPoseRect.xy + deformed;
@@ -118,7 +132,9 @@ void main() {
 
   vLocalUv = vec2(aLocal.x + 0.5, 1.0 - aLocal.y);
   vSpriteId = uBoneParams.w;
-  vShade = 0.96 + 0.06 * h;
+  float dirSign = uPoseRect.z < 0.0 ? -1.0 : 1.0;
+  float sunRim = clamp(0.5 - aLocal.x * dirSign, 0.0, 1.0) * smoothstep(0.35, 0.95, h);
+  vShade = 0.95 + 0.06 * h + 0.05 * sunRim;
 }
 `;
 
@@ -150,7 +166,7 @@ void main() {
 `;
 
 /**
- * Articulated 4×6 Ribbon Grid GPU Rig + optional `@esotericsoftware/spine-pixi-v8` `.skel` hook.
+ * Articulated 8×10 Ribbon Grid GPU Rig + optional `@esotericsoftware/spine-pixi-v8` `.skel` hook.
  */
 export class SpineSlotAdapter {
   private readonly gl: WebGL2RenderingContext;
@@ -192,9 +208,9 @@ export class SpineSlotAdapter {
     this.uAmbientTintLoc = gl.getUniformLocation(prog, 'uAmbientTint');
     this.uAlphaLoc = gl.getUniformLocation(prog, 'uAlpha');
 
-    // Build 4x6 subdivided ribbon mesh so torso breath, cloak hem & head sway deform smoothly
-    const cols = 4;
-    const rows = 6;
+    // Build 8x10 subdivided anatomical ribbon mesh so L/R stride, arms, torso breath & head tilt deform cleanly
+    const cols = 8;
+    const rows = 10;
     const verts: number[] = [];
     const indices: number[] = [];
     for (let r = 0; r <= rows; r++) {

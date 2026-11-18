@@ -1317,11 +1317,11 @@ export class CandyHogwartsBoardRenderer {
   ): void {
     ctx.save();
     roundRectPath(ctx, x + 1, y + 1, w - 2, h - 2, rad);
-    ctx.fillStyle = 'rgba(236, 72, 153, 0.11)';
+    ctx.fillStyle = 'rgba(236, 72, 153, 0.17)';
     ctx.fill();
     ctx.setLineDash([4, 4]);
-    ctx.lineWidth = 1.4;
-    ctx.strokeStyle = 'rgba(244, 114, 182, 0.52)';
+    ctx.lineWidth = 1.7;
+    ctx.strokeStyle = 'rgba(244, 114, 182, 0.68)';
     ctx.stroke();
     ctx.restore();
   }

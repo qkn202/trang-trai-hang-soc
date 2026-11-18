@@ -31,9 +31,9 @@ function findFreeSpot(sim: ParkSimulation, item: CatalogItem): [number, number] 
 }
 
 describe('Dual-Theme Christmas Expansion (Harry Potter + Vietnam — Zero Human Characters)', () => {
-  it('registers all 43 new sprites cleanly in SPRITE_KEYS with zero overlap', () => {
+  it('registers all 43 + 7 second-frame Christmas beast sprites cleanly in SPRITE_KEYS with zero overlap', () => {
     const unique = new Set<string>(SPRITE_KEYS);
-    expect(unique.size).toBe(331);
+    expect(unique.size).toBe(338);
     for (const crop of Object.values(FARM_CROPS)) {
       expect(unique.has(crop.iconKey)).toBe(true);
       expect(getFarmItemIconSrc(crop.id)).toBe(`/game/trang-trai-hang-soc/sprites/${crop.iconKey}.webp`);
@@ -44,6 +44,7 @@ describe('Dual-Theme Christmas Expansion (Harry Potter + Vietnam — Zero Human 
     for (const animal of Object.values(PASTURE_ANIMALS)) {
       expect(unique.has(animal.spritePair[0])).toBe(true);
       expect(unique.has(animal.spritePair[1])).toBe(true);
+      expect(animal.spritePair[0]).not.toBe(animal.spritePair[1]);
     }
   });
 

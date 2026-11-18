@@ -288,6 +288,8 @@ export class GameHUD {
   public onRotateActivePlacement: (() => void) | null = null;
   public onStartMoveBuilding: ((uid: string) => void) | null = null;
   public onCameraJump: (() => void) | null = null;
+  public onFocusGridSmooth: ((gx: number, gy: number, targetZoom?: number) => void) | null = null;
+  public activeBuildCycleIdx = -1;
   public photoModeActive = false;
   public inspectSelection: InspectSelection = null;
   public minimapCanvas!: HTMLCanvasElement;

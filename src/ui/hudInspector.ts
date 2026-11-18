@@ -138,6 +138,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
     if (!hud.inspectSelection) {
       hud.lastInspectedKey = '';
       hud.inspectorCollapsed = false;
+      delete panel.dataset.inspSig;
       panel.classList.add('hidden');
       panel.classList.remove('inspector-collapsed');
       hud.syncHudFocusVisibility();
@@ -161,6 +162,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
       const b = hud.sim.state.buildings.find((x) => x.uid === targetUid);
       if (!b) {
         hud.inspectSelection = null;
+        delete panel.dataset.inspSig;
         panel.classList.add('hidden');
         hud.syncHudFocusVisibility();
         return;
@@ -177,6 +179,182 @@ export function inspectorRenderInspector(hud: GameHUD): void {
       const isRide = item.category === 'ride' && !item.isCoasterTrackPiece;
       const canRideCam = Boolean(item.isCustomCoasterStation) && !isBuilding;
 
+      // Precompute live countdown metrics & structural signature so 1s timer ticks patch in-place without rebuilding DOM
+      let cropSig = 'none';
+      let cropLeftText = '';
+      let cropGrowPct = 0;
+      if (item.isFarmlandPlot && !isBuilding) {
+        if (!b.cropId) {
+          const soilEntry = hud.sim.state.plotSoilState?.[`${b.gx},${b.gy}`];
+          const seedSig = Object.keys(FARM_CROPS)
+            .map((cid) => hud.sim.getSeedCount(cid as FarmCropId))
+            .join('.');
+          cropSig = `empty:${hud.seedFilterMode}:${soilEntry?.lastFamily ?? ''}:${b.harvestCycleCount ?? 0}:${seedSig}`;
+        } else {
+          const cropDef = FARM_CROPS[b.cropId];
+          const readyAt = b.cropReadyAt ?? now;
+          const masteryCount = hud.sim.state.cropMastery?.[cropDef.id] ?? 0;
+          const fallbackDurSec = computeStrategicPlotGrowSeconds(0, false, masteryCount, cropDef.growSec).growSec;
+          const plantedAt = b.cropPlantedAt ?? readyAt - fallbackDurSec * 1000;
+          const cropLeftSec = Math.max(0, Math.ceil((readyAt - now) / 1000));
+          const isRipe = cropLeftSec <= 0;
+          cropGrowPct = isRipe
+            ? 100
+            : Math.max(6, Math.min(98, Math.round(((now - plantedAt) / Math.max(1000, readyAt - plantedAt)) * 100)));
+          cropLeftText = `${isRipe ? 'Chín' : formatDurationCountdownVi(cropLeftSec)}${b.cropRotatedBonus ? ' · ×2' : ''}`;
+          cropSig = `${cropDef.id}:${isRipe ? 1 : 0}:${b.cropWateredBoost ? 1 : 0}:${b.cropRotatedBonus ? 1 : 0}:${hud.sim.state.morningDewPhials ?? 0}`;
+        }
+      }
+
+      let pastureSig = 'none';
+      let pastureLeftText = '';
+      let pastureGrazePct = 0;
+      if (item.isAnimalPasturePlot && !isBuilding) {
+        if (!b.pastureAnimalId) {
+          pastureSig = 'empty';
+        } else {
+          const animalDef = PASTURE_ANIMALS[b.pastureAnimalId];
+          const readyAt = b.pastureReadyAt ?? now;
+          const stockedAt = b.pastureStockedAt ?? readyAt - animalDef.cycleSec * 1000;
+          const leftSec = Math.max(0, Math.ceil((readyAt - now) / 1000));
+          const isReady = leftSec <= 0;
+          pastureGrazePct = isReady
+            ? 100
+            : Math.max(6, Math.min(98, Math.round(((now - stockedAt) / Math.max(1000, readyAt - stockedAt)) * 100)));
+          const prodMeta = animalDef.goodId ? getFarmItemMeta(animalDef.goodId) : null;
+          pastureLeftText = isReady
+            ? `🧺 +${animalDef.sellValue} Sickle${prodMeta ? ` +${animalDef.yieldQty} ${prodMeta.name}` : ''}`
+            : `⏱️ ${formatDurationCountdownVi(leftSec)}`;
+          pastureSig = `${b.pastureAnimalId}:${isReady ? 1 : 0}:${b.pastureFedBoost ? 1 : 0}:${hud.sim.state.morningDewPhials ?? 0}`;
+        }
+      }
+
+      let wsSig = 'none';
+      let wsLeftText = '';
+      if (item.workshopGroupId && !isBuilding) {
+        const recipes = hud.sim.getWorkshopRecipesForBuilding(item);
+        const queue = b.workshopQueue ?? [];
+        const readyGoods = b.readyFarmGoods ?? [];
+        const recSig = recipes
+          .map((rec) => {
+            const lockedRec = !hud.sim.state.sandboxMode && hud.sim.state.level < rec.unlockLevel;
+            const canCraft =
+              !lockedRec &&
+              (hud.sim.state.sandboxMode ||
+                rec.inputs.every((inp) => hud.sim.getFarmItemCount(inp.itemId) >= inp.qty));
+            return `${rec.id}:${lockedRec ? 'L' : canCraft ? 'Y' : 'N'}:${rec.inputs.map((inp) => (hud.sim.state.sandboxMode ? 'X' : hud.sim.getFarmItemCount(inp.itemId))).join('.')}`;
+          })
+          .join(',');
+        const activeSlot = queue[0];
+        const activeLeftSec = activeSlot ? Math.max(0, Math.ceil((activeSlot.endsAt - now) / 1000)) : 0;
+        wsLeftText = activeSlot ? formatDurationCountdownVi(activeLeftSec) : 'Trống';
+        wsSig = `${readyGoods.join(',')}|${queue.map((q) => q.goodId).join(',')}|${recSig}`;
+      }
+
+      let buildSig = 'done';
+      let buildPctVal = 100;
+      let buildTimerText = '';
+      let buildPctText = '';
+      if (isBuilding) {
+        const reducedSec = Math.max(0, b.buildReducedSec ?? 0);
+        const totalMs = Math.max(
+          1000,
+          item.buildDurationSec * 1000,
+          b.constructEndsAt - (b.placedAt || now - 1000) + reducedSec * 1000
+        );
+        buildPctVal = Math.max(1, Math.min(99, Math.floor((1 - (b.constructEndsAt - now) / totalMs) * 100)));
+        const floorSec = hud.sim.getBuildingMinFloorSec(b);
+        const reducibleSec = Math.max(0, remainSec - floorSec);
+        const hasOtherReducible =
+          reducibleSec <= 0 &&
+          hud.sim
+            .getActiveConstructions(now)
+            .some(
+              (x) =>
+                x.uid !== b.uid &&
+                Math.ceil((x.constructEndsAt - now) / 1000) > hud.sim.getBuildingMinFloorSec(x)
+            );
+        const canTriggerSpeedup = reducibleSec > 0 || hasOtherReducible;
+        buildTimerText = `${formatDurationCountdownVi(remainSec)}${reducedSec > 0 ? ` (−${formatDurationCompactVi(reducedSec)})` : ''}`;
+        buildPctText = `${buildPctVal}%`;
+        buildSig = `1:${reducedSec}:${reducibleSec > 0 ? 1 : 0}:${canTriggerSpeedup ? 1 : 0}:${hud.sim.state.morningDewPhials ?? 0}`;
+      }
+
+      let prodCycText = '';
+      if (!isBuilding && !b.awaitingUnveil && item.baseIncome > 0 && item.cycleSec > 0 && !item.isFarmlandPlot && !item.isAnimalPasturePlot) {
+        const festSpeed = hud.sim.getActiveFestival() === 'quidditch_cup' ? 0.85 : 1.0;
+        const baseCycle = getBuildingEffectiveCycleSec(b, item);
+        const effCycle = Math.max(1, baseCycle * festSpeed);
+        const rawEl = Math.max(0, (now - (b.lastTickAt || now)) / 1000);
+        const cycLeft = Math.max(1, Math.ceil(effCycle - (rawEl % effCycle)));
+        prodCycText = formatDurationCountdownVi(cycLeft);
+      }
+
+      const bio = item.isCreatureHabitat ? hud.sim.biomeCache.get(b.uid) : undefined;
+      const backstage = item.isBackstage ? hud.sim.backstageCache.get(b.uid) : undefined;
+
+      const inspStructSig = [
+        b.uid,
+        b.itemId,
+        b.stars,
+        b.rotation,
+        b.awaitingUnveil ? 1 : 0,
+        isConnected ? 1 : 0,
+        synGold.toFixed(2),
+        b.visitorsServed,
+        queueCount,
+        b.storedSickle,
+        prod.galleons,
+        prod.xp,
+        Math.round(b.durability),
+        b.isBrokenDown ? 1 : 0,
+        b.creatureBondLevel ?? 1,
+        b.creatureStage ?? '',
+        Math.round(b.creatureHunger ?? 90),
+        bio?.score ?? 50,
+        backstage ? `${backstage.shieldCount}/${backstage.needed}` : '',
+        hud.sim.state.level,
+        hud.sim.state.sandboxMode ? 1 : 0,
+        hud.sim.isVisitingNeighbor ? 1 : 0,
+        !isBuilding && hud.sim.canStashBuilding(b.uid) ? 1 : 0,
+        hud.sim.getActiveFestival(),
+        buildSig,
+        cropSig,
+        pastureSig,
+        wsSig,
+      ].join('#');
+
+      if (!panel.classList.contains('hidden') && panel.dataset.inspSig === inspStructSig) {
+        const setLiveText = (key: string, val: string) => {
+          const el = panel.querySelector(`[data-insp-live="${key}"]`);
+          if (el && el.textContent !== val) el.textContent = val;
+        };
+        if (cropLeftText) {
+          setLiveText('crop-timer', cropLeftText);
+          const bar = panel.querySelector<HTMLElement>('[data-insp-live="crop-bar"]');
+          if (bar) bar.style.width = `${cropGrowPct}%`;
+        }
+        if (pastureLeftText) {
+          setLiveText('pasture-timer', pastureLeftText);
+          const bar = panel.querySelector<HTMLElement>('[data-insp-live="pasture-bar"]');
+          if (bar) bar.style.width = `${pastureGrazePct}%`;
+        }
+        if (wsSig !== 'none') {
+          setLiveText('ws-timer', wsLeftText);
+        }
+        if (isBuilding) {
+          setLiveText('build-timer', buildTimerText);
+          setLiveText('build-pct', buildPctText);
+          const bBar = panel.querySelector<HTMLProgressElement>('[data-insp-live="build-bar"]');
+          if (bBar) bBar.value = buildPctVal;
+        }
+        if (prodCycText) {
+          setLiveText('prod-cycle', prodCycText);
+        }
+        return;
+      }
+      panel.dataset.inspSig = inspStructSig;
+
       const stageNames: Record<string, string> = {
         egg: '🥚 Trứng',
         baby: '🐣 Non',
@@ -184,8 +362,6 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         legendary: '🌟 Huyền thoại',
       };
 
-      const bio = item.isCreatureHabitat ? hud.sim.biomeCache.get(b.uid) : undefined;
-      const backstage = item.isBackstage ? hud.sim.backstageCache.get(b.uid) : undefined;
       const hasPriceSlider = false;
       const priceBounds = getItemPriceBounds(item);
       const curPrice = hud.sim.getEffectivePrice(b, item);
@@ -317,14 +493,14 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                     <img src="${getFarmItemIconSrc(cropDef.id)}" alt="${escapeHtml(cropDef.name)}" style="width:40px;height:40px;object-fit:contain;" />
                     <div style="flex:1;min-width:0;">
                       <div class="hs-insp-name">${escapeHtml(cropDef.name)} <span class="hs-insp-meta">· Bậc ${masteryInfo.labelRom}</span></div>
-                      <div class="hs-insp-stat">
+                      <div class="hs-insp-stat" data-insp-live="crop-timer">
                         ${isRipe ? 'Chín' : formatDurationCountdownVi(cropLeftSec)}${b.cropRotatedBonus ? ' · ×2' : ''}
                       </div>
                       <div class="hs-insp-meta">${masteryCount} vụ</div>
                     </div>
                   </div>
                   <div class="quest-bar" style="height:8px;margin-bottom:8px;">
-                    <div class="quest-bar-fill" style="width:${growPct}%"></div>
+                    <div class="quest-bar-fill" data-insp-live="crop-bar" style="width:${growPct}%"></div>
                   </div>
                   <div style="display:flex;gap:8px;flex-wrap:wrap;">
                     ${
@@ -478,8 +654,8 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                       <div class="ws-oven-caption">
                         ${
                           activeSlot
-                            ? `<strong>${formatDurationCountdownVi(activeLeftSec)}</strong>`
-                            : `<strong>Trống</strong>`
+                            ? `<strong data-insp-live="ws-timer">${formatDurationCountdownVi(activeLeftSec)}</strong>`
+                            : `<strong data-insp-live="ws-timer">Trống</strong>`
                         }
                       </div>
                       ${
@@ -551,7 +727,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                     <img src="/game/trang-trai-hang-soc/sprites/${animalDef.spritePair[0]}.webp" alt="${escapeHtml(animalDef.name)}" style="width:46px;height:46px;object-fit:contain;" />
                     <div style="flex:1;">
                       <div class="hs-insp-title">${escapeHtml(animalDef.name)}</div>
-                      <div style="font-size:12px;font-weight:700;opacity:0.86;">
+                      <div style="font-size:12px;font-weight:700;opacity:0.86;" data-insp-live="pasture-timer">
                         ${
                           isReady
                             ? `🧺 +${animalDef.sellValue} Sickle${prodMeta ? ` +${animalDef.yieldQty} ${escapeHtml(prodMeta.name)}` : ''}`
@@ -561,7 +737,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                     </div>
                   </div>
                   <div class="quest-bar" style="height:8px;margin-bottom:8px;">
-                    <div class="quest-bar-fill" style="width:${grazePct}%"></div>
+                    <div class="quest-bar-fill" data-insp-live="pasture-bar" style="width:${grazePct}%"></div>
                   </div>
                   <div style="display:flex;gap:6px;flex-wrap:wrap;">
                     ${
@@ -669,12 +845,12 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                 return `
                   <div class="hs-insp-build-wrap">
                     <div class="hs-insp-build-head">
-                      <span>${item.isCreatureHabitat ? 'Đang ấp' : 'Đang xây'} · <strong>${formatDurationCountdownVi(remainSec)}</strong>${
+                      <span>${item.isCreatureHabitat ? 'Đang ấp' : 'Đang xây'} · <strong data-insp-live="build-timer">${formatDurationCountdownVi(remainSec)}${
                         reducedSec > 0 ? ` (−${formatDurationCompactVi(reducedSec)})` : ''
-                      }</span>
-                      <span>${buildPct}%</span>
+                      }</strong></span>
+                      <span data-insp-live="build-pct">${buildPct}%</span>
                     </div>
-                    <progress class="ts-build-progress" max="100" value="${buildPct}" aria-label="${progLabel}"></progress>
+                    <progress class="ts-build-progress" data-insp-live="build-bar" max="100" value="${buildPct}" aria-label="${progLabel}"></progress>
                     <div class="hs-insp-actions-row">
                       <button id="btnInspPlayMinigameSpeed" type="button" class="brass-btn gold-cta hs-insp-speed-btn" ${canTriggerSpeedup ? '' : 'disabled'} title="Thắng 1 màn trừ 30–75p giờ xây">Khảo thí −30p</button>
                       <button id="btnInspQuizSpeed" type="button" class="brass-btn hs-insp-speed-btn" ${canTriggerSpeedup ? '' : 'disabled'} title="Đố ngoại ngữ trừ 10–25p giờ xây">Thần chú −10p</button>
@@ -718,7 +894,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                       <div class="hs-insp-prod-copy">
                         <strong id="lblBuildingProdVal">+${pastureAnimal?.sellValue ?? prod.galleons}🪙 +${pastureAnimal?.xp ?? prod.xp}⭐</strong> / ${formatDurationCompactVi(pastureAnimal?.cycleSec ?? baseCycle)}${
                           item.cycleSec > 0 && !item.isFarmlandPlot && !item.isAnimalPasturePlot
-                            ? ` · ${formatDurationCountdownVi(cycLeft)}`
+                            ? ` · <span data-insp-live="prod-cycle">${formatDurationCountdownVi(cycLeft)}</span>`
                             : ''
                         } · Kho: <strong>${b.storedSickle}🪙</strong>
                       </div>
@@ -1179,6 +1355,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
     }
 
     if (hud.inspectSelection.kind === 'staff') {
+      delete panel.dataset.inspSig;
       const targetStaffId = hud.inspectSelection.id;
       const st = hud.sim.staff.find((x) => x.id === targetStaffId);
       if (!st) {
@@ -1231,6 +1408,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
     }
 
     if (hud.inspectSelection.kind === 'zone') {
+      delete panel.dataset.inspSig;
       const z = getZoneById(hud.inspectSelection.zoneId);
       const zStars = getZonePuzzleStarCost(z);
       const canLv = hud.sim.state.level >= z.unlockLevel || hud.sim.state.sandboxMode;

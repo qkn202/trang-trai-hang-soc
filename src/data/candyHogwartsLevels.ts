@@ -318,7 +318,7 @@ export const HOGWARTS_SEASONS: ReadonlyArray<CandySeasonDef> = [
     signatureIcon: '📜',
     signatureName: 'Bia Sắc Lệnh Umbridge (2–4 HP)',
     signatureDesc:
-      'Bia Sắc Lệnh Hồng toả vùng cấm phép 3×3: ghép 4, 5 hay T/L sát bia sẽ chỉ nổ thường mà không kết tinh Kẹo Phép cho đến khi đập vỡ bia!',
+      'Bia Sắc Lệnh Hồng toả vùng cấm phép 3×3 chặn kết tinh Pháo 4 ô & Chong Chóng 2×2 ngay sát bia cho tới khi đập vỡ (tổ hợp 5+ ô vẫn xuyên phá tạo Bom)!',
     accentColor: '#ec4899',
   },
   {

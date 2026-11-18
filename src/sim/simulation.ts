@@ -575,6 +575,7 @@ export class ParkSimulation {
    *  doesn't trigger dozens of celebration pops at once. */
   public onBuildingCompleted: ((uid: string) => void) | null = null;
   public onRibbonUnveiled: ((info: RibbonUnveilCelebration) => void) | null = null;
+  public onZoneUnlocked: ((zoneId: ZoneId, cx: number, cy: number) => void) | null = null;
   public onTutorialStepChanged: ((stepId: TutorialStepId) => void) | null = null;
   public villagerGreetCooldown = new Map<ValleyVillagerId, number>();
   /** Công trình đang xây được người chơi bấm rút ngắn trực tiếp trong #inspectorPanel. */

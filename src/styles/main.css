@@ -16058,6 +16058,25 @@ body:has(#tutorialCoachCard:not(.docked-top):popover-open) .owl-toast-stack[popo
 #inspectorPanel.inspector-panel.hidden {
   display: none;
 }
+@keyframes hsInspSlideUp {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+#inspectorPanel.inspector-panel:not(.hidden) {
+  animation: hsInspSlideUp 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform, opacity;
+}
+@media (prefers-reduced-motion: reduce) {
+  #inspectorPanel.inspector-panel:not(.hidden) {
+    animation: none;
+  }
+}
 #inspectorPanel .inspector-header-bar {
   display: flex;
   align-items: center;

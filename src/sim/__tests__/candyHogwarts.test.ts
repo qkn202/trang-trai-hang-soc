@@ -1530,4 +1530,142 @@ describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
 
     eng2500.destroy();
   });
+
+  it('guarantees straight 5-in-a-row swaps spawn Bomb on Stage 49x (Decree 3x3 aura, async column locks, exit ingredients, and multi-layer ice)', async () => {
+    const lv495 = getCandyLevelById(495);
+    expect(lv495.seasonId).toBe(5);
+    const engine = new CandyHogwartsEngine(null);
+
+    const setupClean495 = () => {
+      engine.loadLevel(lv495, { house: 'ravenclaw', instantAnimations: true });
+      for (let r = 0; r < engine.size; r++) {
+        for (let c = 0; c < engine.size; c++) {
+          engine.mask[r][c] = 1;
+          engine.jelly[r][c] = 0;
+          engine.ice[r][c] = 0;
+          engine.frosting[r][c] = 0;
+          engine.chocolate[r][c] = 0;
+          engine.cauldron[r][c] = 0;
+          engine.lockGrid[r][c] = 0;
+          engine.petrify[r][c] = 0;
+          engine.dementor[r][c] = 0;
+          engine.decree[r][c] = 0;
+          engine.fiendfyre[r][c] = 0;
+          engine.horcrux[r][c] = 0;
+          engine.grid[r][c] = engine.createPiece((r * 2 + c) % 4, c, r, null);
+        }
+      }
+      engine.portals = [];
+      engine.conveyorLoops = [];
+      engine.mazeConfig = null;
+      engine.level = {
+        ...engine.level!,
+        objectives: [{ type: 'score', target: 99_999_999 }],
+      };
+    };
+
+    const countBoardBombs = (): number => {
+      let n = 0;
+      for (let r = 0; r < engine.size; r++) {
+        for (let c = 0; c < engine.size; c++) {
+          if (engine.grid[r][c]?.special === 'bomb') n++;
+        }
+      }
+      return n;
+    };
+
+    // Mock refill colors 0..3 so cascades never detonate or form extra color-5 matches
+    let dropSeq = 0;
+    vi.spyOn(Math, 'random').mockImplementation(() => {
+      const vals = [0.04, 0.21, 0.39, 0.56];
+      return vals[dropSeq++ % vals.length];
+    });
+
+    // 1. Stage 495 with active Umbridge Decree (HP = 3) right next to a straight horizontal 5-in-a-row:
+    // Swapping (2,4) -> (3,4) completes (3,2..6) right inside Decree (4,4)'s 3x3 aura -> MUST still spawn 'bomb'!
+    setupClean495();
+    engine.decree[4][4] = 3;
+    engine.grid[4][4] = null;
+    engine.grid[3][2]!.color = 5;
+    engine.grid[3][3]!.color = 5;
+    engine.grid[2][4]!.color = 5;
+    engine.grid[3][5]!.color = 5;
+    engine.grid[3][6]!.color = 5;
+
+    const swappedDecreeH = await engine.trySwap({ r: 2, c: 4 }, { r: 3, c: 4 });
+    expect(swappedDecreeH).toBe(true);
+    expect(engine.decree[4][4]).toBe(2);
+    expect(countBoardBombs()).toBe(1);
+
+    // 2. Straight vertical 5-in-a-row right next to Decree (4,4) -> MUST also spawn 'bomb'!
+    setupClean495();
+    engine.decree[4][4] = 3;
+    engine.grid[4][4] = null;
+    engine.grid[2][3]!.color = 5;
+    engine.grid[3][3]!.color = 5;
+    engine.grid[4][2]!.color = 5;
+    engine.grid[5][3]!.color = 5;
+    engine.grid[6][3]!.color = 5;
+
+    const swappedDecreeV = await engine.trySwap({ r: 4, c: 2 }, { r: 4, c: 3 });
+    expect(swappedDecreeV).toBe(true);
+    expect(countBoardBombs()).toBe(1);
+
+    // 3. Fast async swipe where an older swap briefly holds colBusyCounts on col 5 while player swaps (2,3)->(3,3) for 5-in-a-row (3,1..5):
+    setupClean495();
+    engine.grid[3][1]!.color = 5;
+    engine.grid[3][2]!.color = 5;
+    engine.grid[2][3]!.color = 5;
+    engine.grid[3][4]!.color = 5;
+    engine.grid[3][5]!.color = 5;
+
+    // Simulate an older in-flight async swap holding column 5 for 1 macrotask tick
+    const internal = engine as unknown as {
+      acquireColumnSet: (cols: Iterable<number>, seq?: number) => Set<number>;
+      releaseColumnSet: (owned: Set<number>) => void;
+      swapSeqCounter: number;
+    };
+    const olderSeq = ++internal.swapSeqCounter;
+    const held = internal.acquireColumnSet([5, 6], olderSeq);
+    setTimeout(() => {
+      internal.releaseColumnSet(held);
+    }, 0);
+
+    const swappedAsync = await engine.trySwap({ r: 2, c: 3 }, { r: 3, c: 3 });
+    expect(swappedAsync).toBe(true);
+    expect(countBoardBombs()).toBe(1);
+
+    // 4. Simultaneous Ingredient at bottom exit cell in the same column as a straight 5-in-a-row swap:
+    setupClean495();
+    engine.ingredientTarget = 2;
+    engine.ingredientsCollected = 0;
+    engine.ingredientExitCells = [{ r: 9, c: 3 }];
+    engine.grid[9][3] = engine.createIngredientPiece(3, 9);
+    engine.grid[4][1]!.color = 5;
+    engine.grid[4][2]!.color = 5;
+    engine.grid[3][3]!.color = 5;
+    engine.grid[4][4]!.color = 5;
+    engine.grid[4][5]!.color = 5;
+
+    const swappedWithExitIng = await engine.trySwap({ r: 3, c: 3 }, { r: 4, c: 3 });
+    expect(swappedWithExitIng).toBe(true);
+    expect(engine.ingredientsCollected).toBe(1);
+    expect(countBoardBombs()).toBe(1);
+
+    // 5. Cascade / multi-layer ice straight 5-in-a-row where cells[0] has ice=2 and cells[1..4] have ice=1:
+    setupClean495();
+    for (let c = 1; c <= 5; c++) {
+      engine.grid[5][c]!.color = 5;
+      engine.ice[5][c] = c === 1 ? 2 : 1;
+    }
+    const iceClusters = engine.findMatchClusters([]);
+    expect(iceClusters.find((cl) => cl.color === 5)?.spawnSpecial).toBe('bomb');
+    await (engine as unknown as { clearClusters: (c: unknown[]) => Promise<void> }).clearClusters(
+      iceClusters
+    );
+    expect(countBoardBombs()).toBe(1);
+
+    vi.restoreAllMocks();
+    engine.destroy();
+  });
 });
