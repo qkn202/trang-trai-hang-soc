@@ -535,7 +535,10 @@ describe('MinesweeperEngine (Dò Mìn Phép Thuật — 777 Màn) & FishShooterE
       expect(htmlCaro).not.toContain('Cờ Caro');
       expect(titleEl.innerHTML).toContain('Dò Mìn Phép Thuật');
 
-      expect(htmlCaro).toContain('phoenix_seal.webp');
+      expect(htmlCaro).toContain('mines_flag.webp');
+      expect(htmlCaro).toContain('btnPaMinesDig');
+      expect(htmlCaro).toContain('btnPaMinesFlag');
+      expect(htmlCaro).toContain('paMinesFlags');
       expect(htmlCaro).toContain('m3_sp_bomb.webp');
       expect(htmlCaro).not.toContain('🧯');
 

@@ -1204,7 +1204,7 @@ export function headerRefreshHeader(hud: GameHUD): void {
     if (lastGame === 'caro') {
       const info = hud.sim.getDisciplineStageInfo('caro');
       playTag = '🧨 Dò Mìn';
-      playIcon = '/game/trang-trai-hang-soc/paintings/caro/phoenix_seal.webp';
+      playIcon = '/game/trang-trai-hang-soc/paintings/mines_flag.webp?v=flag1';
       playStageText = info.isMaxed ? `👑 ${MAX_MINIGAME_STAGE}` : `Màn ${info.currentStage}`;
     } else if (lastGame === 'sudoku') {
       const info = hud.sim.getDisciplineStageInfo('sudoku');

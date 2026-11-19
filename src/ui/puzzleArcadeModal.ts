@@ -1207,6 +1207,7 @@ export class PuzzleArcadeModalController {
     this.unicornLakeBgImage = unicornLakeImg;
 
     const paintingTokenKeys = [
+      'mines_flag',
       'caro/phoenix_seal',
       'caro/dark_mark_seal',
       'caro-yule/phoenix_seal',
@@ -1220,7 +1221,7 @@ export class PuzzleArcadeModalController {
       pImg.onload = () => {
         this.forceImmediateRedraw = true;
       };
-      pImg.src = `/game/trang-trai-hang-soc/paintings/${tk}.webp`;
+      pImg.src = `/game/trang-trai-hang-soc/paintings/${tk}.webp${tk === 'mines_flag' ? '?v=flag1' : ''}`;
       this.paintingTokenImages.set(tk, pImg);
     }
 
@@ -2194,7 +2195,7 @@ export class PuzzleArcadeModalController {
           '<img src="/game/trang-trai-hang-soc/sprites/m3_piece_scroll.webp" alt="" style="width:26px;height:26px;object-fit:contain;vertical-align:-6px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Số Học Huyền Bí';
       } else if (this.mode === 'caro') {
         modalTitle.innerHTML =
-          '<img src="/game/trang-trai-hang-soc/paintings/caro/phoenix_seal.webp" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Dò Mìn Phép Thuật';
+          '<img src="/game/trang-trai-hang-soc/paintings/mines_flag.webp?v=flag1" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Dò Mìn Phép Thuật';
       } else if (this.mode === 'jigsaw') {
         modalTitle.innerHTML =
           '<img src="/game/trang-trai-hang-soc/sprites/ui_icon_jigsaw.webp" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Tranh Ghép Phép Thuật';
@@ -2327,7 +2328,14 @@ export class PuzzleArcadeModalController {
     } else if (this.mode === 'caro' && this.minesEngine) {
       const me = this.minesEngine;
       stageSub = `${me.rows}×${me.cols} · Khiên ${st.sandboxMode ? '∞' : me.shieldsLeft}`;
+      const flagStatIcon =
+        '<img class="hs-ico" src="/game/trang-trai-hang-soc/paintings/mines_flag.webp?v=flag1" alt="" aria-hidden="true">';
       stageStats =
+        lvStat(
+          'Cờ cắm',
+          `<strong id="paMinesFlags">${me.flaggedCount}/${me.totalMines}</strong>`,
+          flagStatIcon
+        ) +
         lvStat('Mìn còn', `<strong id="paMinesLeft">${me.remainingMinesCount}</strong>`, lvIcon('m3_sp_bomb')) +
         lvStat('Đã mở', `<strong id="paMinesProgress">${me.revealedSafeCount}/${me.safeCellCount}</strong>`, lvIcon('m3_icon_star'));
       const canMinesHint =
@@ -2346,7 +2354,10 @@ export class PuzzleArcadeModalController {
             ? `${me.hintGoldCost} Sickle`
             : '0';
       controlsHtml = `
-        <button id="btnPaMinesFlag" type="button" class="pa-tool-btn ${me.flagMode ? 'active' : ''}" aria-pressed="${me.flagMode}" ${me.status !== 'playing' ? 'disabled' : ''} title="Bật/tắt Ấn Sáp Phượng Hoàng cắm cờ phong ấn bẫy (F)"><span class="pa-ico"><img class="hs-ico" src="/game/trang-trai-hang-soc/paintings/caro/phoenix_seal.webp" alt="" aria-hidden="true" draggable="false"></span>Cắm Cờ${me.flagMode ? ' ✓' : ''}</button>
+        <div class="pa-submode-switch" role="group" aria-label="Chế độ mở ô hoặc cắm cờ">
+          <button id="btnPaMinesDig" type="button" class="pa-mini-pill ${!me.flagMode ? 'active' : ''}" aria-pressed="${!me.flagMode}" ${me.status !== 'playing' ? 'disabled' : ''} title="Chế độ Mở Ô: chạm ô để mở (F)">🪄 Mở Ô</button>
+          <button id="btnPaMinesFlag" type="button" class="pa-mini-pill ${me.flagMode ? 'active' : ''}" aria-pressed="${me.flagMode}" ${me.status !== 'playing' ? 'disabled' : ''} title="Chế độ Cắm Cờ: chạm ô để cắm hoặc gỡ cờ đánh dấu (F)"><span class="pa-ico"><img class="hs-ico" src="/game/trang-trai-hang-soc/paintings/mines_flag.webp?v=flag1" alt="" aria-hidden="true" draggable="false"></span>Cắm Cờ</button>
+        </div>
         <button id="btnPaMinesHint" type="button" class="pa-tool-btn gold" ${!canMinesHint ? 'disabled' : ''} title="Dò và mở an toàn 1 ô trên Bản Đồ Đạo Tặc (H)">
           🪄 Dò An Toàn <span class="pa-cost-pill">${hintLbl}</span>
         </button>
@@ -2792,6 +2803,10 @@ export class PuzzleArcadeModalController {
       }
     } else if (this.mode === 'caro' && this.minesEngine) {
       const me = this.minesEngine;
+      const flagsEl = box.querySelector('#paMinesFlags');
+      if (flagsEl) {
+        flagsEl.textContent = `${me.flaggedCount}/${me.totalMines}`;
+      }
       const leftEl = box.querySelector('#paMinesLeft');
       if (leftEl) {
         leftEl.textContent = String(me.remainingMinesCount);
@@ -2799,6 +2814,12 @@ export class PuzzleArcadeModalController {
       const progEl = box.querySelector('#paMinesProgress');
       if (progEl) {
         progEl.textContent = `${me.revealedSafeCount}/${me.safeCellCount}`;
+      }
+      const digBtn = box.querySelector('#btnPaMinesDig') as HTMLButtonElement | null;
+      if (digBtn) {
+        digBtn.disabled = me.status !== 'playing';
+        digBtn.classList.toggle('active', !me.flagMode);
+        digBtn.setAttribute('aria-pressed', String(!me.flagMode));
       }
       const flagBtn = box.querySelector('#btnPaMinesFlag') as HTMLButtonElement | null;
       if (flagBtn) {
@@ -3019,6 +3040,16 @@ export class PuzzleArcadeModalController {
     });
 
     // Minesweeper ("Dò Mìn Phép Thuật") controls
+    box.querySelector('#btnPaMinesDig')?.addEventListener('click', () => {
+      const me = this.minesEngine;
+      if (!me || me.status !== 'playing') return;
+      if (!me.flagMode) return;
+      me.flagMode = false;
+      this.persistModeSession('caro', true);
+      this.sim.audio.playClick();
+      this.renderDOM();
+    });
+
     box.querySelector('#btnPaMinesFlag')?.addEventListener('click', () => {
       const me = this.minesEngine;
       if (!me || me.status !== 'playing') return;
@@ -3639,21 +3670,29 @@ export class PuzzleArcadeModalController {
     });
 
     let pendingTouchTap = false;
+    let lastRightFlagAt = 0;
 
     cvs.addEventListener('contextmenu', (ev) => {
       if (this.mode === 'caro' && this.minesEngine?.status === 'playing') {
         ev.preventDefault();
-        const pos = toVirtual(ev as unknown as PointerEvent);
-        const cell = this.getMinesCellAt(pos.vx, pos.vy);
-        if (cell) {
-          this.handleMinesFlagAt(cell.r, cell.c);
+        if (performance.now() - lastRightFlagAt > 400) {
+          const pos = toVirtual(ev as unknown as PointerEvent);
+          const cell = this.getMinesCellAt(pos.vx, pos.vy);
+          if (cell) {
+            this.handleMinesFlagAt(cell.r, cell.c);
+          }
         }
       }
     });
 
     cvs.addEventListener('pointerdown', (ev) => {
-      if (ev.button === 2 && this.mode === 'caro' && this.minesEngine?.status === 'playing') {
+      if (
+        (ev.button === 2 || (ev.pointerType === 'mouse' && ev.button === 0 && ev.ctrlKey)) &&
+        this.mode === 'caro' &&
+        this.minesEngine?.status === 'playing'
+      ) {
         ev.preventDefault();
+        lastRightFlagAt = performance.now();
         const pos = toVirtual(ev);
         const cell = this.getMinesCellAt(pos.vx, pos.vy);
         if (cell) this.handleMinesFlagAt(cell.r, cell.c);
@@ -6384,37 +6423,55 @@ export class PuzzleArcadeModalController {
     cy: number,
     sz: number
   ): void {
-    const isYule = this.isYuleSkinActive();
-    const sealImg =
-      this.getPaintingTokenImage(isYule ? 'caro-yule/phoenix_seal' : 'caro/phoenix_seal') ??
-      this.getPaintingTokenImage('caro/phoenix_seal');
+    const flagImg = this.getPaintingTokenImage('mines_flag');
 
     ctx.save();
-    // Golden Protego runic aura ring
-    ctx.beginPath();
-    ctx.arc(cx, cy, sz * 0.42, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(250, 204, 21, 0.72)';
-    ctx.lineWidth = Math.max(1.2, sz * 0.045);
-    ctx.stroke();
-
-    if (sealImg) {
-      const sSz = sz * 0.82;
-      ctx.drawImage(sealImg, cx - sSz * 0.5, cy - sSz * 0.5, sSz, sSz);
+    if (flagImg) {
+      const fSz = sz * 0.86;
+      ctx.drawImage(flagImg, cx - fSz * 0.5, cy - fSz * 0.5, fSz, fSz);
     } else {
-      // Fallback Order of the Phoenix crimson-gold wax seal
-      const waxGrad = ctx.createRadialGradient(cx - sz * 0.08, cy - sz * 0.08, sz * 0.05, cx, cy, sz * 0.36);
-      waxGrad.addColorStop(0, '#ef4444');
-      waxGrad.addColorStop(0.7, '#991b1b');
-      waxGrad.addColorStop(1, '#450a0a');
+      // Fallback 2.5D Scarlet-Crimson & 24k-Gold Pennant Flag + Brass Pole & Pedestal
+      const poleX = cx - sz * 0.22;
+      const topY = cy - sz * 0.34;
+      const botY = cy + sz * 0.32;
+
+      // Brass pedestal base
       ctx.beginPath();
-      ctx.arc(cx, cy, sz * 0.35, 0, Math.PI * 2);
-      ctx.fillStyle = waxGrad;
+      ctx.ellipse(poleX, botY + sz * 0.03, sz * 0.14, sz * 0.06, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#ca8a04';
       ctx.fill();
-      ctx.strokeStyle = '#fde047';
-      ctx.lineWidth = Math.max(1.5, sz * 0.06);
+      ctx.strokeStyle = '#451a03';
+      ctx.lineWidth = Math.max(1, sz * 0.04);
       ctx.stroke();
+
+      // Waving scarlet swallowtail pennant flag
+      ctx.beginPath();
+      ctx.moveTo(poleX, topY + sz * 0.04);
+      ctx.quadraticCurveTo(cx + sz * 0.06, topY - sz * 0.03, cx + sz * 0.34, topY + sz * 0.08);
+      ctx.lineTo(cx + sz * 0.2, cy - sz * 0.02);
+      ctx.lineTo(cx + sz * 0.32, cy + sz * 0.12);
+      ctx.quadraticCurveTo(cx + sz * 0.05, cy + sz * 0.05, poleX, cy + sz * 0.12);
+      ctx.closePath();
+      const flagGrad = ctx.createLinearGradient(poleX, topY, cx + sz * 0.34, cy + sz * 0.12);
+      flagGrad.addColorStop(0, '#ef4444');
+      flagGrad.addColorStop(1, '#b91c1c');
+      ctx.fillStyle = flagGrad;
+      ctx.fill();
+      ctx.strokeStyle = '#facc15';
+      ctx.lineWidth = Math.max(1.2, sz * 0.048);
+      ctx.stroke();
+
+      // Golden brass pole + star finial
+      ctx.beginPath();
+      ctx.moveTo(poleX, topY);
+      ctx.lineTo(poleX, botY);
+      ctx.strokeStyle = '#fde047';
+      ctx.lineWidth = Math.max(2, sz * 0.075);
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(poleX, topY - sz * 0.02, Math.max(1.8, sz * 0.065), 0, Math.PI * 2);
       ctx.fillStyle = '#fef08a';
-      this.drawFourPointStar(ctx, cx, cy, sz * 0.2, sz * 0.07);
       ctx.fill();
     }
     ctx.restore();
@@ -6547,10 +6604,6 @@ export class PuzzleArcadeModalController {
       this.getPaintingTokenImage(isYule ? 'caro-yule/dark_mark_seal' : 'caro/dark_mark_seal') ??
       this.getPaintingTokenImage('caro/dark_mark_seal') ??
       this.getSpriteImage('m3_sp_bomb');
-    const horcruxShieldImg =
-      this.getPaintingTokenImage('candy-hogwarts/candy-horcrux') ??
-      this.getSpriteImage('m3_sp_bomb');
-    const snitchImg = this.getSpriteImage('m3_sp_snitch') ?? this.getSpriteImage('ui_lock');
     const pad = Math.max(1, Math.round(m.cellSize * 0.04));
 
     for (let r = 0; r < engine.rows; r++) {
@@ -6663,10 +6716,7 @@ export class PuzzleArcadeModalController {
         }
 
         if (cell.defused) {
-          if (horcruxShieldImg) {
-            const bSz = innerSz * 0.72;
-            ctx.drawImage(horcruxShieldImg, midX - bSz * 0.5, midY - bSz * 0.5, bSz, bSz);
-          }
+          this.drawMinesFlagGlyph(ctx, midX, midY, innerSz * 0.9);
           ctx.fillStyle = '#064e3b';
           fillCheck(
             ctx,
@@ -6703,25 +6753,20 @@ export class PuzzleArcadeModalController {
             ctx.stroke();
           }
         } else if (engine.status === 'won' && cell.hasMine) {
-          if (snitchImg) {
-            const sSz = innerSz * 0.76;
-            ctx.drawImage(snitchImg, midX - sSz * 0.5, midY - sSz * 0.5, sSz, sSz);
-          } else {
-            this.drawMinesFlagGlyph(ctx, midX, midY, innerSz);
-          }
+          this.drawMinesFlagGlyph(ctx, midX, midY, innerSz);
         }
       }
     }
 
-    // Top Marauder's Map / Order of the Phoenix Crest Ribbon
-    const badgeW = Math.min(m.frameW - 4, isFlagging ? 228 : 234);
+    // Top Marauder's Map / Flag Mode Ribbon
+    const badgeW = Math.min(m.frameW - 4, isFlagging ? 236 : 234);
     const ribbonText =
       badgeW < 205
         ? isFlagging
-          ? 'PHONG ẤN • CẮM CỜ'
+          ? 'ĐANG CẮM CỜ • CHẠM Ô'
           : 'BẢN ĐỒ ĐẠO TẶC'
         : isFlagging
-          ? 'PHONG ẤN PHƯỢNG HOÀNG • CẮM CỜ'
+          ? 'CHẾ ĐỘ CẮM CỜ • CHẠM Ô ĐỂ ĐÁNH DẤU'
           : 'BẢN ĐỒ ĐẠO TẶC • PHÁ BẪY HẮC ÁM';
     const badgeH = 18;
     const bx = m.originX + (m.boardW - badgeW) * 0.5;
