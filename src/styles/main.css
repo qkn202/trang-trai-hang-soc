@@ -5836,8 +5836,8 @@ input, textarea { user-select: text; -webkit-user-select: text; }
 .hs-cup-me { padding-top: 16px; border-top: 1px solid rgba(122, 86, 56, 0.24); }
 .hs-cup-row { display: grid; grid-template-columns: var(--hs-cup-cols); column-gap: 12px; row-gap: 4px; align-items: center; margin: 0; }
 .hs-cup-crest { grid-row: span 2; width: 32px; height: 32px; object-fit: contain; }
-.hs-cup-name { display: flex; align-items: baseline; gap: 8px; min-width: 0; margin: 0; font-size: 16px; font-weight: 700; color: var(--hs-house, var(--ink)); }
-.hs-cup-you { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-gold); }
+.hs-cup-name { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 0; font-size: 16px; font-weight: 700; color: var(--hs-house, var(--ink)); }
+.hs-cup-you { flex: none; white-space: nowrap; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-gold); }
 .hs-cup-pts { margin: 0; font-size: 16px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
 .hs-cup-me .hs-cup-name { font-size: 14px; font-weight: 400; color: var(--ink-soft); }
 .hs-cup-me .hs-cup-pts { font-size: 14px; }
@@ -9095,6 +9095,61 @@ body:has(#managePopoverMenu:not(.hidden)) .ts-corner-right {
 }
 #houseCupIntroDialogContent .hs-dlg-actions > .brass-btn {
   font-size: var(--hs-text-14);
+}
+
+/* Liên Minh 2 vs 2 xoay vòng mỗi tuần + Đấu trường từng môn (Đua Huy Chương Cúp 4 Nhà) */
+.hs-cup-alliances { display: flex; flex-direction: column; gap: var(--hs-space-2); padding: 10px 12px; border: var(--hs-line) solid rgba(176, 125, 67, 0.45); border-radius: var(--hs-radius-m); background: var(--hs-cream); }
+.hs-cup-ally-title-row, .hs-cup-disc-title-row { display: flex; align-items: center; justify-content: space-between; gap: var(--hs-space-2); }
+.hs-cup-ally-vs { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: stretch; gap: 8px; }
+.hs-cup-ally-divider { align-self: center; padding: 3px 6px; border-radius: var(--radius-pill); background: rgba(122, 86, 56, 0.14); color: var(--hs-ink-soft); font-size: var(--hs-text-11); font-weight: var(--hs-weight-title); letter-spacing: 0.04em; }
+.hs-cup-ally-side { display: flex; flex-direction: column; gap: 3px; min-inline-size: 0; padding: 8px 9px; border: var(--hs-line) solid rgba(176, 125, 67, 0.36); border-radius: var(--hs-radius-s); background: var(--hs-paper); }
+.hs-cup-ally-side.is-mine { border-color: var(--farm-green-soft-border); background: var(--farm-green-soft-bg); }
+.hs-cup-ally-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.hs-cup-ally-crests { display: inline-flex; align-items: center; gap: 3px; flex: none; }
+.hs-cup-ally-crests img { inline-size: 22px; block-size: 22px; object-fit: contain; }
+.hs-cup-ally-pts { color: var(--hs-ink); font-size: var(--hs-text-14); font-weight: var(--hs-weight-title); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hs-cup-ally-name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; color: var(--hs-ink); font-size: var(--hs-text-12); font-weight: var(--hs-weight-title); line-height: 1.25; }
+.hs-cup-ally-badge { padding: 1px 6px; border-radius: var(--radius-pill); background: var(--farm-green-text); color: var(--hs-cream); font-size: 10px; font-weight: var(--hs-weight-label); white-space: nowrap; }
+.hs-cup-ally-houses { color: var(--hs-ink-soft); font-size: var(--hs-text-11); line-height: 1.2; }
+.hs-cup-tugbar { display: flex; gap: 3px; block-size: 8px; border-radius: var(--radius-pill); overflow: hidden; background: rgba(122, 86, 56, 0.14); }
+.hs-cup-tugbar > i { display: block; block-size: 100%; transition: width 0.35s ease; }
+.hs-cup-tugbar > i.is-a { background: var(--hs-brass); border-radius: var(--radius-pill) 0 0 var(--radius-pill); }
+.hs-cup-tugbar > i.is-b { background: var(--ink-soft); border-radius: 0 var(--radius-pill) var(--radius-pill) 0; }
+.hs-cup-ally-foot { color: var(--hs-ink-soft); font-size: var(--hs-text-11); line-height: 1.3; }
+.hs-cup-medals { margin-inline-start: auto; padding: 2px 7px; border-radius: var(--radius-pill); background: rgba(176, 125, 67, 0.16); color: var(--hs-ink); font-size: var(--hs-text-11); font-weight: var(--hs-weight-label); white-space: nowrap; }
+.hs-cup-disciplines { display: flex; flex-direction: column; gap: var(--hs-space-2); padding-top: var(--hs-space-2); border-top: var(--hs-line) solid rgba(122, 86, 56, 0.22); }
+.hs-cup-disc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--hs-space-2); }
+.hs-cup-disc-card { display: flex; flex-direction: column; align-items: stretch; gap: 5px; min-block-size: 82px; padding: 9px 10px; border: var(--hs-line) solid rgba(176, 125, 67, 0.45); border-radius: var(--hs-radius-m); background: var(--hs-cream); color: var(--hs-ink); text-align: start; cursor: pointer; transition: border-color 0.14s ease, transform 0.12s ease, background-color 0.14s ease; }
+.hs-cup-disc-card:hover { border-color: var(--hs-brass); background: var(--hs-paper); }
+.hs-cup-disc-card:active { transform: translateY(1px); }
+.hs-cup-disc-card.is-leading { border-color: var(--farm-green-soft-border); background: var(--farm-green-soft-bg); }
+.hs-cup-disc-head { display: flex; align-items: center; gap: 6px; min-inline-size: 0; }
+.hs-cup-disc-ico { flex: none; inline-size: 22px; block-size: 22px; object-fit: contain; }
+.hs-cup-disc-name { flex: 1 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--hs-text-13); font-weight: var(--hs-weight-title); color: var(--hs-ink); }
+.hs-cup-disc-cta { flex: none; padding: 2px 8px; border-radius: var(--radius-pill); background: rgba(176, 125, 67, 0.2); color: var(--hs-ink); font-size: var(--hs-text-11); font-weight: var(--hs-weight-label); }
+.hs-cup-disc-lead { display: flex; align-items: center; gap: 5px; min-inline-size: 0; font-size: var(--hs-text-12); color: var(--hs-house, var(--hs-ink)); }
+.hs-cup-disc-lead[data-house='Gryffindor'] { --hs-house: #b3373b; }
+.hs-cup-disc-lead[data-house='Slytherin'] { --hs-house: #1f8a5c; }
+.hs-cup-disc-lead[data-house='Ravenclaw'] { --hs-house: #3a68ad; }
+.hs-cup-disc-lead[data-house='Hufflepuff'] { --hs-house: #b7862a; }
+.hs-cup-disc-lead.is-empty { color: var(--hs-ink-soft); }
+.hs-cup-disc-lead > strong { margin-inline-start: auto; font-weight: var(--hs-weight-label); font-variant-numeric: tabular-nums; }
+.hs-cup-disc-crest { flex: none; inline-size: 16px; block-size: 16px; object-fit: contain; }
+.hs-cup-disc-me { font-size: var(--hs-text-11); font-weight: var(--hs-weight-label); color: var(--hs-ink-soft); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hs-cup-disc-card.is-leading .hs-cup-disc-me { color: var(--farm-green-text); }
+.hs-cup-rank-box { display: flex; flex-direction: column; gap: 6px; padding: 9px 11px; border: var(--hs-line) solid rgba(176, 125, 67, 0.38); border-radius: var(--hs-radius-m); background: var(--hs-cream); }
+.hs-cup-rank-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.hs-cup-rank-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border-radius: var(--hs-radius-s); border: var(--hs-line) solid rgba(176, 125, 67, 0.32); background: var(--hs-paper); color: var(--hs-ink-soft); font-size: var(--hs-text-11); font-variant-numeric: tabular-nums; }
+.hs-cup-rank-chip > strong { color: var(--hs-ink); font-weight: var(--hs-weight-title); }
+.hs-lb-house-pts { color: var(--farm-green-text); font-weight: var(--hs-weight-label); font-size: var(--hs-text-11); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hs-lb-block > .hs-lb-house-pts { display: block; margin-top: 2px; padding: 1px 5px; border-radius: var(--radius-pill); background: rgba(255, 250, 238, 0.85); color: var(--farm-green-text); font-size: 10px; }
+.hs-lb-house-need { color: var(--hs-ink-soft); font-size: var(--hs-text-11); white-space: nowrap; }
+@media (max-width: 440px) {
+  .hs-cup-ally-vs { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .hs-cup-ally-divider { justify-self: center; }
+  .hs-cup-name { font-size: 14px; gap: 5px; }
+  .hs-cup-medals { padding: 2px 6px; }
+  .hs-cup-disc-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Icon-First Compact Stat Pills (Step 4 — AAA UI Compaction) */

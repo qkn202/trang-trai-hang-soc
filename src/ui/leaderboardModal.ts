@@ -1,4 +1,9 @@
 import { avatarGlyph } from '../hpvn/emoji';
+import {
+  computeHousePointsForLeaderboardRank,
+  houseCupMinStagesForPoints,
+  houseCupRankTiers,
+} from '../hpvn/houseCup';
 import { buildAvatarBadgeHtml, wireAvatarImgFallbacks } from './hudSocialAndTutorial';
 import {
   ALL_LEADERBOARD_GAMES,
@@ -42,6 +47,26 @@ const visitHtml = (e: LeaderboardRowEntry): string =>
     ? `<button type="button" class="hs-lb-hit" data-lb-visit="${escapeHtml(e.neighborId)}" aria-label="Thăm vườn ${escapeHtml(e.name)}"></button>`
     : '';
 
+function houseRankPtsTag(e: LeaderboardRowEntry, compact = false): string {
+  const minStages = houseCupMinStagesForPoints();
+  const pts = computeHousePointsForLeaderboardRank(
+    e.rank,
+    e.primaryValue,
+    minStages,
+    houseCupRankTiers()
+  );
+  if (pts > 0) {
+    return compact
+      ? `<span class="hs-lb-house-pts">+${pts} đ Nhà</span>`
+      : `<span class="hs-lb-house-pts">· +${pts} đ Nhà</span>`;
+  }
+  if (e.isPlayer && !compact) {
+    const cur = Math.max(0, Math.floor(e.primaryValue));
+    return `<span class="hs-lb-house-need">· ${cur}/${minStages} màn ghi điểm Nhà</span>`;
+  }
+  return '';
+}
+
 // a real podium: three blocks side by side as steps (#2 · #1 highest · #3), the rank cut into each block face with the points
 // under it; the avatar stands on its block in a metal ring (#1 larger, with its house crest), the name between them
 function podiumHtml(e: LeaderboardRowEntry, place: 1 | 2 | 3): string {
@@ -52,7 +77,7 @@ function podiumHtml(e: LeaderboardRowEntry, place: 1 | 2 | 3): string {
     <li class="hs-lb-pod place-${place}${e.isPlayer ? ' is-me' : ''}" data-house="${escapeHtml(e.house)}">
       <span class="hs-lb-pod-av">${avatarHtml(e)}${crest}</span>
       ${nameHtml(e)}
-      <span class="hs-lb-block"><span class="hs-lb-place" role="img" aria-label="Hạng ${place}">${place}</span><span class="hs-lb-pts">${escapeHtml(e.ratingDisplayVi)}</span><span class="hs-lb-pod-lv">${escapeHtml(e.primaryDisplayVi.replace(/\/\d+$/, ''))}</span></span>
+      <span class="hs-lb-block"><span class="hs-lb-place" role="img" aria-label="Hạng ${place}">${place}</span><span class="hs-lb-pts">${escapeHtml(e.ratingDisplayVi)}</span><span class="hs-lb-pod-lv">${escapeHtml(e.primaryDisplayVi.replace(/\/\d+$/, ''))}</span>${houseRankPtsTag(e, true)}</span>
       ${visitHtml(e)}
     </li>`;
 }
@@ -65,7 +90,7 @@ function rowHtml(e: LeaderboardRowEntry): string {
     <li class="hs-lb-row${e.isPlayer ? ' is-me' : ''}" data-house="${escapeHtml(e.house)}">
       <span class="hs-lb-rank">${e.rank.toLocaleString('vi-VN')}</span>
       ${avatarHtml(e)}
-      <span class="hs-lb-who">${nameHtml(e)}<span class="hs-lb-sub">${houseHtml(e)}<span class="hs-lb-lv">· ${escapeHtml(e.primaryDisplayVi.replace(/\/\d+$/, ''))}</span>${league}</span></span>
+      <span class="hs-lb-who">${nameHtml(e)}<span class="hs-lb-sub">${houseHtml(e)}<span class="hs-lb-lv">· ${escapeHtml(e.primaryDisplayVi.replace(/\/\d+$/, ''))}</span>${houseRankPtsTag(e, false)}${league}</span></span>
       <span class="hs-lb-pts">${escapeHtml(e.ratingDisplayVi)}</span>
       ${visitHtml(e)}
     </li>`;

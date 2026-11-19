@@ -2,7 +2,18 @@
 // Pattern delegation: hàm nhận `hud` để giữ nguyên state, không đổi hành vi.
 
 import { avatarGlyph } from '../hpvn/emoji';
-import { fetchHouseCup, houseCup, houseWeekPoints } from '../hpvn/houseCup';
+import {
+  fetchHouseCup,
+  HOUSE_CUP_DEFAULT_MEDAL_POINTS,
+  houseCup,
+  houseCupAllianceStandings,
+  houseCupDisciplineSummaries,
+  houseCupFirstPlaceCounts,
+  houseCupMinStagesForPoints,
+  houseCupRankTiers,
+  HouseCupDisciplineId,
+  houseWeekPoints,
+} from '../hpvn/houseCup';
 import { renderFarmExchange } from '../hpvn/exchange';
 import { secondsToVietnamMidnight } from '../sim/neighborSocial'; // HPVN: real countdown to VN midnight
 import {
@@ -365,22 +376,176 @@ function refreshHouseCup(hud: GameHUD) {
   });
 }
 
+const CUP_DISCIPLINE_META: Record<HouseCupDisciplineId, { nameVi: string; spriteIcon: string }> = {
+  match3: { nameVi: 'Bùa Gặt', spriteIcon: '/game/trang-trai-hang-soc/sprites/m3_farm_pinwheel.webp' },
+  caro: { nameVi: 'Dò Mìn', spriteIcon: '/game/trang-trai-hang-soc/paintings/mines_flag.webp?v=flag1' },
+  sudoku: { nameVi: 'Số Học', spriteIcon: '/game/trang-trai-hang-soc/sprites/m3_piece_scroll.webp' },
+  chess: { nameVi: 'Bắn Cá', spriteIcon: '/game/trang-trai-hang-soc/paintings/plimpy_icon.webp?v=sea2' },
+  blocks: { nameVi: 'Sinh Vật', spriteIcon: '/game/trang-trai-hang-soc/sprites/beast_niffler.webp' },
+  jigsaw: { nameVi: 'Tranh Ghép', spriteIcon: '/game/trang-trai-hang-soc/sprites/ui_icon_jigsaw.webp' },
+};
+
+function openHouseCupDiscipline(hud: GameHUD, discId: HouseCupDisciplineId): void {
+  if (discId === 'match3') {
+    hud.openMatch3Dialog();
+  } else {
+    hud.openPuzzleArcadeDialog(discId);
+  }
+}
+
+function buildHouseCupDisciplinesHtml(playerHouse: HouseName, noHouse: boolean): string {
+  const summaries = houseCupDisciplineSummaries();
+  if (summaries.length === 0) return '';
+  const cardsHtml = summaries
+    .map((disc) => {
+      const meta = CUP_DISCIPLINE_META[disc.id];
+      const myRow = disc.byHouse[playerHouse];
+      const isLeading = !noHouse && disc.leaderHouse !== null && myRow?.rank === 1 && myRow.rawPoints > 0;
+      const leaderHtml = disc.leaderHouse
+        ? `<span class="hs-cup-disc-lead" data-house="${disc.leaderHouse}">
+            <img class="hs-cup-disc-crest" src="/game/trang-trai-hang-soc/sprites/crest-${disc.leaderHouse.toLowerCase()}.webp" alt="" width="16" height="16">
+            <span>${disc.leaderHouse}</span>
+            <strong>${disc.leaderRawPoints.toLocaleString('vi-VN')}</strong>
+          </span>`
+        : `<span class="hs-cup-disc-lead is-empty">Chưa có đội dẫn đầu</span>`;
+
+      let statusText = 'Chưa phân Nhà';
+      if (!noHouse && myRow) {
+        if (myRow.rawPoints <= 0) {
+          statusText = 'Nhà bạn: 0 đ (+0 Cúp)';
+        } else if (myRow.rank === 1) {
+          statusText = `Hạng 1 · +${myRow.cupPoints} đ Cúp`;
+        } else {
+          statusText = `Hạng ${myRow.rank} (+${myRow.cupPoints} đ) · Kém ${myRow.gapToFirst.toLocaleString('vi-VN')}`;
+        }
+      }
+
+      return `
+        <button type="button" class="hs-cup-disc-card${isLeading ? ' is-leading' : ''}" data-cup-play="${disc.id}">
+          <span class="hs-cup-disc-head">
+            <img class="hs-cup-disc-ico" src="${meta.spriteIcon}" alt="" width="22" height="22">
+            <strong class="hs-cup-disc-name">${meta.nameVi}</strong>
+            <span class="hs-cup-disc-cta">Đua</span>
+          </span>
+          ${leaderHtml}
+          <span class="hs-cup-disc-me">${statusText}</span>
+        </button>`;
+    })
+    .join('');
+
+  return `
+    <div class="hs-cup-disciplines">
+      <div class="hs-cup-disc-title-row">
+        <span class="hs-cup-kicker">Đấu trường từng môn (chạm để đua ngay)</span>
+      </div>
+      <div class="hs-cup-disc-grid">${cardsHtml}</div>
+    </div>`;
+}
+
+function bindHouseCupDisciplineButtons(
+  box: HTMLElement,
+  dialogId: '#houseCupIntroDialog' | '#albumDialog',
+  hud: GameHUD
+): void {
+  if (typeof box.querySelectorAll !== 'function') return;
+  box.querySelectorAll<HTMLButtonElement>('[data-cup-play]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.cupPlay as HouseCupDisciplineId | undefined;
+      if (!id || !(id in CUP_DISCIPLINE_META)) return;
+      (hud.root.querySelector(dialogId) as HTMLDialogElement | null)?.close();
+      openHouseCupDiscipline(hud, id);
+    });
+  });
+}
+
+function buildHouseCupAlliancesHtml(
+  playerHouse: HouseName,
+  noHouse: boolean,
+  cup: ReturnType<typeof houseCup>
+): string {
+  const [first, second] = houseCupAllianceStandings(noHouse ? null : playerHouse);
+  const myAlliance = first.isPlayerAlliance ? first : second.isPlayerAlliance ? second : null;
+  const sideHtml = (a: typeof first, slot: 'a' | 'b') => {
+    const [h0, h1] = a.houses;
+    return `
+      <div class="hs-cup-ally-side${a.isPlayerAlliance ? ' is-mine' : ''}" data-slot="${slot}">
+        <div class="hs-cup-ally-head">
+          <span class="hs-cup-ally-crests">
+            <img src="/game/trang-trai-hang-soc/sprites/crest-${h0.toLowerCase()}.webp" alt="${h0}" width="22" height="22">
+            <img src="/game/trang-trai-hang-soc/sprites/crest-${h1.toLowerCase()}.webp" alt="${h1}" width="22" height="22">
+          </span>
+          <strong class="hs-cup-ally-pts">${cup ? `${a.points.toLocaleString('vi-VN')} đ` : '…'}</strong>
+        </div>
+        <div class="hs-cup-ally-name">${escapeHtml(a.nameVi)}${a.isPlayerAlliance ? '<span class="hs-cup-ally-badge">Liên minh bạn</span>' : ''}</div>
+        <div class="hs-cup-ally-houses">${h0} + ${h1}</div>
+      </div>`;
+  };
+
+  const leadPct = Math.max(12, Math.min(88, first.sharePercent));
+  const footText = myAlliance?.allyHouse
+    ? `Đồng minh tuần này: Nhà ${myAlliance.allyHouse} · Đổi cặp Liên Minh mới mỗi Thứ Hai`
+    : '2 Liên Minh (2 vs 2) xoay vòng đổi cặp mới mỗi Thứ Hai';
+
+  return `
+    <div class="hs-cup-alliances">
+      <div class="hs-cup-ally-title-row">
+        <span class="hs-cup-kicker">Liên Minh Tuần Này (2 vs 2)</span>
+      </div>
+      <div class="hs-cup-ally-vs">
+        ${sideHtml(first, 'a')}
+        <span class="hs-cup-ally-divider" aria-hidden="true">VS</span>
+        ${sideHtml(second, 'b')}
+      </div>
+      <div class="hs-cup-tugbar" aria-hidden="true">
+        <i class="is-a" style="width:${leadPct}%"></i>
+        <i class="is-b" style="width:${100 - leadPct}%"></i>
+      </div>
+      <div class="hs-cup-ally-foot">${footText}</div>
+    </div>`;
+}
+
+function buildHouseCupRankTiersHtml(): string {
+  const minStages = houseCupMinStagesForPoints();
+  const tiers = houseCupRankTiers();
+  const chipsHtml = tiers
+    .map(
+      (t) =>
+        `<span class="hs-cup-rank-chip"><span>${escapeHtml(t.labelVi)}</span><strong>+${t.points} đ</strong></span>`
+    )
+    .join('');
+  return `
+    <div class="hs-cup-rank-box">
+      <div class="hs-cup-kicker">Điểm Nhà theo hạng BXH (vượt từ ${minStages} màn là có điểm)</div>
+      <div class="hs-cup-rank-chips">${chipsHtml}</div>
+    </div>`;
+}
+
 function buildHouseCupStandingsHtml(playerHouse: HouseName, cup: ReturnType<typeof houseCup>): {
+  alliancesHtml: string;
   listHtml: string;
+  disciplinesHtml: string;
+  rankTiersHtml: string;
+  isMedalMode: boolean;
   noHouse: boolean;
   perTier: number;
   bank: number;
 } {
+  const summaries = houseCupDisciplineSummaries();
+  const isMedalMode = cup?.mode === 'medals' || summaries.length > 0;
+  const firstCounts = isMedalMode ? houseCupFirstPlaceCounts() : null;
   const houses = (['Gryffindor', 'Slytherin', 'Ravenclaw', 'Hufflepuff'] as HouseName[])
-    .map((house) => ({ house, pts: houseWeekPoints(house) }))
-    .sort((x, y) => y.pts - x.pts);
+    .map((house) => ({ house, pts: houseWeekPoints(house), firsts: firstCounts?.[house] ?? 0 }))
+    .sort((x, y) => y.pts - x.pts || y.firsts - x.firsts);
   const top = Math.max(1, houses[0].pts);
   const noHouse = cup?.house === null;
   const pts = (v: number) => `${v.toLocaleString('vi-VN')} đ`;
   const listHtml = houses
     .map((h) => {
       const mine = !noHouse && h.house === playerHouse;
-      const name = `${h.house}${mine ? '<span class="hs-cup-you">Nhà bạn</span>' : ''}`;
+      const crownTag = isMedalMode && h.firsts > 0
+        ? `<span class="hs-cup-medals">${h.firsts} nhất môn</span>`
+        : '';
+      const name = `${h.house}${mine ? '<span class="hs-cup-you">Nhà bạn</span>' : ''}${crownTag}`;
       const crest = `<img class="hs-cup-crest" src="/game/trang-trai-hang-soc/sprites/crest-${h.house.toLowerCase()}.webp" alt="" width="32" height="32">`;
       const pct = Math.round((h.pts / top) * 100);
       return `
@@ -394,7 +559,10 @@ function buildHouseCupStandingsHtml(playerHouse: HouseName, cup: ReturnType<type
     .join('');
   const perTier = cup?.perTier ?? 300;
   const bank = Math.min(perTier, cup?.memberBank ?? 0);
-  return { listHtml, noHouse, perTier, bank };
+  const alliancesHtml = buildHouseCupAlliancesHtml(playerHouse, noHouse, cup);
+  const disciplinesHtml = isMedalMode ? buildHouseCupDisciplinesHtml(playerHouse, noHouse) : '';
+  const rankTiersHtml = buildHouseCupRankTiersHtml();
+  return { alliancesHtml, listHtml, disciplinesHtml, rankTiersHtml, isMedalMode, noHouse, perTier, bank };
 }
 
 /** Mở pop-up thông tin Cúp 4 Nhà Hogwarts (khi mới vào game hoặc xem thể lệ). */
@@ -416,18 +584,49 @@ export function questsUiRenderHouseCupIntroDialog(hud: GameHUD): void {
   const cup = houseCup();
   refreshHouseCup(hud).catch(() => {});
 
-  const { listHtml, noHouse, perTier, bank } = buildHouseCupStandingsHtml(playerHouse, cup);
+  const { alliancesHtml, listHtml, disciplinesHtml, rankTiersHtml, isMedalMode, noHouse, perTier, bank } =
+    buildHouseCupStandingsHtml(playerHouse, cup);
+  const minStages = houseCupMinStagesForPoints();
+  const rankTiers = houseCupRankTiers();
+  const topRankPts = rankTiers[0]?.points ?? 100;
+  const floorRankPts = rankTiers[rankTiers.length - 1]?.points ?? 20;
   const tierNum = cup?.memberTier ?? 1;
   const dailyCap = cup?.memberDailyCap ?? 0;
   const todayPts = cup?.memberTodayPoints ?? 0;
+  const medalPts = cup?.medalPoints ?? HOUSE_CUP_DEFAULT_MEDAL_POINTS;
+  const summaries = houseCupDisciplineSummaries();
+  const activeDiscNames = (summaries.length > 0
+    ? summaries.map((s) => CUP_DISCIPLINE_META[s.id].nameVi)
+    : ['Bùa Gặt', 'Số Học', 'Sinh Vật', 'Tranh Ghép']
+  )
+    .map((n) => `<strong>${n}</strong>`)
+    .join(', ');
   const crestSrc = noHouse
     ? '/game/trang-trai-hang-soc/sprites/ui_trophy_cup.webp'
     : `/game/trang-trai-hang-soc/sprites/crest-${playerHouse.toLowerCase()}.webp`;
+  const todayLabel =
+    isMedalMode && (cup?.unlimited || dailyCap === 0)
+      ? `Hôm nay: ${todayPts.toLocaleString('vi-VN')} đ (không giới hạn)`
+      : `Hôm nay: ${todayPts.toLocaleString('vi-VN')}${dailyCap > 0 ? `/${dailyCap.toLocaleString('vi-VN')}` : ''} đ`;
   const subText = noHouse
     ? 'Đội Nón Phân Loại trên HPVN để bắt đầu góp điểm và nhận quà Cúp Đợt.'
     : cup
-      ? `Hôm nay: ${todayPts.toLocaleString('vi-VN')}${dailyCap > 0 ? `/${dailyCap.toLocaleString('vi-VN')}` : ''} đ · Cúp Đợt ${tierNum}: ${bank.toLocaleString('vi-VN')}/${perTier.toLocaleString('vi-VN')} đ`
+      ? `${todayLabel} · Cúp Đợt ${tierNum}: ${bank.toLocaleString('vi-VN')}/${perTier.toLocaleString('vi-VN')} đ`
       : 'Đang tải bảng điểm tuần từ máy chủ HPVN…';
+
+  const rulesPointsHtml = isMedalMode
+    ? `
+          <li><strong>2 Liên Minh xoay vòng mỗi tuần:</strong> 4 Nhà được ghép thành <strong>2 Liên Minh (2 vs 2)</strong> cộng tổng điểm Cúp và tự động đổi cặp Liên Minh mới vào mỗi Thứ Hai.</li>
+          <li><strong>Vượt từ ${minStages} màn là có điểm Nhà:</strong> Chỉ cần vượt qua từ <strong>${minStages} màn</strong> trở lên trên BXH là chắc chắn ghi điểm cho Nhà (tối thiểu <strong>+${floorRankPts} đ</strong>); xếp thứ hạng càng cao điểm càng nhiều (Hạng 1 nhận <strong>+${topRankPts} đ</strong>).</li>
+          <li><strong>Đua Huy Chương Từng Môn (không trần):</strong> Cày điểm <strong>không giới hạn</strong> ở từng đấu trường (${activeDiscNames}); mỗi môn quy đổi độc lập: Hạng 1 <strong>+${medalPts[0]} đ</strong> · Hạng 2 <strong>+${medalPts[1]} đ</strong> · Hạng 3 <strong>+${medalPts[2]} đ</strong> · Hạng 4 <strong>+${medalPts[3]} đ</strong>.</li>
+          <li><strong>Thưởng Cúp Đợt tự động:</strong> Mỗi khi tích đủ <strong>${perTier.toLocaleString('vi-VN')} đ</strong> cá nhân, máy chủ HPVN trao ngay quà <strong>Sickle</strong>, <strong>XP</strong> và <strong>Cát Thời Gian</strong> thẳng vào trang trại.</li>
+        `
+    : `
+          <li><strong>2 Liên Minh xoay vòng mỗi tuần:</strong> 4 Nhà được ghép thành <strong>2 Liên Minh (2 vs 2)</strong> cộng tổng điểm tuần và tự động đổi cặp Liên Minh mới mỗi Thứ Hai.</li>
+          <li><strong>Vượt từ ${minStages} màn là có điểm Nhà:</strong> Chỉ cần vượt qua từ <strong>${minStages} màn</strong> trên BXH (<strong>Bùa Gặt</strong>, <strong>Số Học</strong>, <strong>Sinh Vật</strong>, <strong>Tranh Ghép</strong>) là có điểm cho Nhà (tối thiểu <strong>+${floorRankPts} đ</strong>), xếp thứ hạng càng cao điểm càng nhiều (lên tới <strong>+${topRankPts} đ</strong> cho Hạng 1).</li>
+          <li><strong>Thưởng Cúp Đợt tự động:</strong> Mỗi khi tích đủ <strong>${perTier.toLocaleString('vi-VN')} đ</strong>, máy chủ HPVN trao ngay quà <strong>Sickle</strong>, <strong>XP</strong> và <strong>Cát Thời Gian</strong> thẳng vào trang trại.</li>
+          <li><strong>Đua Cúp hàng tuần:</strong> Điểm của toàn bộ học sinh cùng Nhà trên HPVN được cộng dồn suốt tuần lễ. Xem lại bất cứ lúc nào tại <strong>Hồ Sơ &amp; BXH → Cúp Nhà</strong>.</li>
+        `;
 
   box.innerHTML = `
     <div class="hs-cup hs-cup-intro">
@@ -440,15 +639,14 @@ export function questsUiRenderHouseCupIntroDialog(hud: GameHUD): void {
         </div>
       </div>
 
+      ${alliancesHtml}
       <ol class="hs-cup-list hs-cup-intro-standings">${listHtml}</ol>
+      ${disciplinesHtml}
+      ${rankTiersHtml}
 
       <div class="quest-card-mini hs-cup-intro-rules">
         <h3 class="hs-section-title">Thể lệ &amp; Phần thưởng Cúp Nhà</h3>
-        <ul class="hs-cup-intro-points">
-          <li><strong>Ghi điểm cho Nhà:</strong> Thắng màn mới ở 4 môn tính điểm (<strong>Bùa Gặt</strong>, <strong>Số Học</strong>, <strong>Sinh Vật</strong>, <strong>Tranh Ghép</strong>) góp từ <strong>20 đ/màn</strong> vào quỹ điểm tuần của Nhà${dailyCap > 0 ? ` (tối đa ${dailyCap.toLocaleString('vi-VN')} đ/ngày)` : ''}.</li>
-          <li><strong>Thưởng Cúp Đợt tự động:</strong> Mỗi khi tích đủ <strong>${perTier.toLocaleString('vi-VN')} đ</strong>, máy chủ HPVN trao ngay quà <strong>Sickle</strong>, <strong>XP</strong> và <strong>Cát Thời Gian</strong> thẳng vào trang trại.</li>
-          <li><strong>Đua Cúp hàng tuần:</strong> Điểm của toàn bộ học sinh cùng Nhà trên HPVN được cộng dồn suốt tuần lễ. Xem lại bất cứ lúc nào tại <strong>Hồ Sơ &amp; BXH → Cúp Nhà</strong>.</li>
-        </ul>
+        <ul class="hs-cup-intro-points">${rulesPointsHtml}</ul>
       </div>
 
       <div class="hs-dlg-actions">
@@ -465,12 +663,31 @@ export function questsUiRenderHouseCupIntroDialog(hud: GameHUD): void {
   box.querySelector('#btnCupIntroPlay')?.addEventListener('click', () => {
     (hud.root.querySelector('#houseCupIntroDialog') as HTMLDialogElement | null)?.close();
     const last = hud.sim.getLastPlayedMinigame();
+    if (isMedalMode) {
+      const activeIds = new Set(summaries.map((s) => s.id));
+      if (last !== 'seedquiz' && activeIds.has(last)) {
+        openHouseCupDiscipline(hud, last);
+        return;
+      }
+      // Prefer the closest trailing discipline for the player's House when switching from an unscored game
+      if (!noHouse && summaries.length > 0) {
+        const trailing = summaries
+          .filter((s) => (s.byHouse[playerHouse]?.rank ?? 4) > 1)
+          .sort((a, b) => (a.byHouse[playerHouse]?.gapToFirst ?? 0) - (b.byHouse[playerHouse]?.gapToFirst ?? 0));
+        if (trailing.length > 0) {
+          openHouseCupDiscipline(hud, trailing[0].id);
+          return;
+        }
+      }
+    }
     if (last === 'sudoku' || last === 'blocks' || last === 'jigsaw') {
       hud.openPuzzleArcadeDialog(last);
     } else {
       hud.openMatch3Dialog();
     }
   });
+
+  bindHouseCupDisciplineButtons(box, '#houseCupIntroDialog', hud);
 }
 
 export function questsUiRenderAlbumDialog(hud: GameHUD): void {
@@ -506,7 +723,10 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
       // HPVN: server numbers only (week totals per HPVN house, the member's day and milestone bank); nothing local.
       const cup = houseCup();
       refreshHouseCup(hud).catch(() => {});
-      const { listHtml, noHouse, perTier, bank } = buildHouseCupStandingsHtml(playerHouse, cup);
+      const { alliancesHtml, listHtml, disciplinesHtml, rankTiersHtml, isMedalMode, noHouse, perTier, bank } =
+        buildHouseCupStandingsHtml(playerHouse, cup);
+      const minStages = houseCupMinStagesForPoints();
+      const medalPts = cup?.medalPoints ?? HOUSE_CUP_DEFAULT_MEDAL_POINTS;
       const pts = (v: number) => `${v.toLocaleString('vi-VN')} đ`;
       const row = (lead: string, name: string, value: string, pct: number | null, house = '', mine = false) => `
         <li class="hs-cup-row"${house ? ` data-house="${house}" data-mine="${mine}"` : ''}>
@@ -518,9 +738,13 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
       const meHtml = cup
         ? noHouse
           ? row('', 'Chưa phân Nhà trên HPVN', '0 đ', null)
-          : row('', 'Hôm nay', pts(cup.memberTodayPoints), null) +
+          : row('', isMedalMode && (cup.unlimited || cup.memberDailyCap === 0) ? 'Hôm nay (không trần)' : 'Hôm nay', pts(cup.memberTodayPoints), null) +
             row('', `Đợt ${cup.memberTier}`, `${bank} / ${pts(perTier)}`, Math.round((bank / perTier) * 100))
         : '';
+
+      const cupNote = isMedalMode
+        ? `2 Liên Minh xoay vòng mỗi tuần · Vượt từ ${minStages} màn là có điểm Nhà (hạng càng cao điểm càng nhiều) · Huy chương môn (${medalPts[0]}/${medalPts[1]}/${medalPts[2]}/${medalPts[3]} đ).`
+        : `2 Liên Minh (2 vs 2) đổi cặp mỗi tuần · Chỉ cần vượt từ ${minStages} màn là có điểm Nhà, xếp hạng càng cao điểm càng nhiều.`;
 
       bodyHtml = `
         <div class="hs-cup">
@@ -528,9 +752,12 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
             <span>${cup?.weekKey ? `Tuần ${cup.weekKey}` : 'Đang tải…'}</span>
             <button id="btnOpenCupIntroFromTab" type="button" class="brass-btn hs-cup-info-btn">Thể lệ</button>
           </div>
+          ${alliancesHtml}
           <ol class="hs-cup-list">${listHtml}</ol>
+          ${disciplinesHtml}
+          ${rankTiersHtml}
           ${meHtml ? `<ul class="hs-cup-me">${meHtml}</ul>` : ''}
-          <p class="hs-cup-note">Thắng màn mới Bùa Gặt, Số Học, Sinh Vật, Tranh Ghép: từ 20 đ/màn.</p>
+          <p class="hs-cup-note">${cupNote}</p>
         </div>
       `;
     } else if (hud.activeAlbumTab === 'leaderboard') {
@@ -753,6 +980,7 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
       (hud.root.querySelector('#albumDialog') as HTMLDialogElement | null)?.close();
       questsUiOpenHouseCupIntroDialog(hud);
     });
+    bindHouseCupDisciplineButtons(box, '#albumDialog', hud);
 
     box.querySelectorAll<HTMLButtonElement>('[data-atab]').forEach((btn) => {
       btn.addEventListener('click', () => {

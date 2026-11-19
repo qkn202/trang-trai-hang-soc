@@ -79,12 +79,23 @@ function buildLocalCupStub() {
     hufflepuff: 'Hufflepuff',
   };
   const house = houseMap[String(identity?.house || '').toLowerCase()] ?? null;
+  const disciplines = {
+    match3: { Gryffindor: 420, Ravenclaw: 1860, Hufflepuff: 380, Slytherin: 540 },
+    caro: { Gryffindor: 260, Ravenclaw: 140, Hufflepuff: 220, Slytherin: 180 },
+    sudoku: { Gryffindor: 240, Ravenclaw: 200, Hufflepuff: 300, Slytherin: 160 },
+    chess: { Gryffindor: 320, Ravenclaw: 180, Hufflepuff: 200, Slytherin: 280 },
+    blocks: { Gryffindor: 180, Ravenclaw: 220, Hufflepuff: 260, Slytherin: 300 },
+    jigsaw: { Gryffindor: 220, Ravenclaw: 160, Hufflepuff: 240, Slytherin: 140 },
+  };
   return {
     weekKey: 'Local',
-    houses: { Gryffindor: 320, Ravenclaw: 310, Hufflepuff: 300, Slytherin: 290 },
+    mode: 'medals',
+    unlimited: true,
+    medalPoints: [100, 75, 50, 25],
+    disciplines,
     house,
     memberTodayPoints: 0,
-    memberDailyCap: 60,
+    memberDailyCap: 0,
     memberBank: 0,
     memberTier: 1,
     perTier: 300,
