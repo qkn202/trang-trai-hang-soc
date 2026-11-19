@@ -123,7 +123,7 @@ describe('MinesweeperEngine (Dò Mìn Phép Thuật — 777 Màn) & FishShooterE
     expect(me2.status).toBe('won');
   });
 
-  it('MinesweeperEngine fresh layout per attemptSeed & Quick-Flag Chord on revealed number cells', () => {
+  it('MinesweeperEngine fresh layout per attemptSeed & strict Chord Reveal ONLY after manual flags are placed (never auto-flags)', () => {
     const a = new MinesweeperEngine(1, 101);
     const b = new MinesweeperEngine(1, 202);
     a.tapCell(0, 0);
@@ -138,34 +138,56 @@ describe('MinesweeperEngine (Dò Mìn Phép Thuật — 777 Màn) & FishShooterE
     }
     expect(layoutA.join('')).not.toBe(layoutB.join(''));
 
-    // Quick-Flag Chord: tapping a revealed cell whose unrevealed neighbor count equals adjacentMines flags them all
-    let qfTarget: { r: number; c: number; hidden: Array<{ r: number; c: number }> } | null = null;
-    for (let r = 0; r < a.rows && !qfTarget; r++) {
-      for (let c = 0; c < a.cols && !qfTarget; c++) {
+    // 1. Tapping a revealed number BEFORE placing flags must NEVER auto-flag neighbors
+    let chordCandidate: {
+      r: number;
+      c: number;
+      mineNeighbors: Array<{ r: number; c: number }>;
+      safeNeighbors: Array<{ r: number; c: number }>;
+    } | null = null;
+    for (let r = 0; r < a.rows; r++) {
+      for (let c = 0; c < a.cols; c++) {
         const cell = a.grid[r][c];
         if (!cell.revealed || cell.adjacentMines <= 0) continue;
-        const hidden: Array<{ r: number; c: number }> = [];
-        let flaggedNb = 0;
+        const mineNeighbors: Array<{ r: number; c: number }> = [];
+        const safeNeighbors: Array<{ r: number; c: number }> = [];
         for (let dr = -1; dr <= 1; dr++) {
           for (let dc = -1; dc <= 1; dc++) {
             if (dr === 0 && dc === 0) continue;
             const nb = a.grid[r + dr]?.[c + dc];
-            if (!nb) continue;
-            if (nb.flagged || nb.defused) flaggedNb++;
-            else if (!nb.revealed) hidden.push({ r: nb.r, c: nb.c });
+            if (!nb || nb.revealed) continue;
+            if (nb.hasMine) mineNeighbors.push({ r: nb.r, c: nb.c });
+            else safeNeighbors.push({ r: nb.r, c: nb.c });
           }
         }
-        if (hidden.length > 0 && flaggedNb + hidden.length === cell.adjacentMines) {
-          qfTarget = { r, c, hidden };
+        // Check even corner cells where unrevealed count === adjacentMines -> still must NOT auto-flag!
+        if (mineNeighbors.length === cell.adjacentMines && safeNeighbors.length === 0) {
+          const preTap = a.tapCell(r, c);
+          expect(preTap.action).toBe('noop');
+          for (const m of mineNeighbors) {
+            expect(a.grid[m.r][m.c].flagged).toBe(false);
+          }
+        }
+        if (!chordCandidate && mineNeighbors.length === cell.adjacentMines && safeNeighbors.length > 0) {
+          chordCandidate = { r, c, mineNeighbors, safeNeighbors };
         }
       }
     }
-    expect(qfTarget).toBeTruthy();
-    const qfRes = a.tapCell(qfTarget!.r, qfTarget!.c);
-    expect(qfRes.action).toBe('flagged');
-    expect(qfRes.revealedCells.length).toBe(qfTarget!.hidden.length);
-    for (const h of qfTarget!.hidden) {
-      expect(a.grid[h.r][h.c].flagged).toBe(true);
+
+    expect(chordCandidate).toBeTruthy();
+    // Before placing flags: tapping the number is a noop and flags 0 cells
+    expect(a.tapCell(chordCandidate!.r, chordCandidate!.c).action).toBe('noop');
+    expect(a.flaggedCount).toBe(0);
+
+    // 2. Place flags manually on the surrounding mines, THEN tap the number -> opens all surrounding safe cells!
+    for (const m of chordCandidate!.mineNeighbors) {
+      expect(a.toggleFlag(m.r, m.c).flagged).toBe(true);
+    }
+    const chordRes = a.tapCell(chordCandidate!.r, chordCandidate!.c);
+    expect(chordRes.action).toBe('chord');
+    expect(chordRes.revealedCells.length).toBeGreaterThanOrEqual(chordCandidate!.safeNeighbors.length);
+    for (const s of chordCandidate!.safeNeighbors) {
+      expect(a.grid[s.r][s.c].revealed).toBe(true);
     }
   });
 

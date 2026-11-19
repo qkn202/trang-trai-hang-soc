@@ -468,30 +468,7 @@ export class MinesweeperEngine {
         else if (!nb.revealed) targets.push(nb);
       }
     }
-    if (targets.length === 0) {
-      return empty;
-    }
-
-    if (flaggedNeighbors + targets.length === center.adjacentMines) {
-      const flaggedCells: Array<{ r: number; c: number }> = [];
-      for (const t of targets) {
-        t.flagged = true;
-        flaggedCells.push({ r: t.r, c: t.c });
-        if (this.lastHintCell && this.lastHintCell.r === t.r && this.lastHintCell.c === t.c) {
-          this.lastHintCell = null;
-        }
-      }
-      this.movesCount += 1;
-      return {
-        action: 'flagged',
-        revealedCells: flaggedCells,
-        shieldSaved: false,
-        won: false,
-        lost: false,
-      };
-    }
-
-    if (flaggedNeighbors !== center.adjacentMines) {
+    if (targets.length === 0 || flaggedNeighbors !== center.adjacentMines) {
       return empty;
     }
 
