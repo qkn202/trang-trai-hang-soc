@@ -122,7 +122,15 @@ export function sanitizeSavedMinesweeperSession(
     }
     return out;
   };
-  const status = r.status === 'won' || r.status === 'lost' ? r.status : 'playing';
+  if (r.status !== 'playing' && r.status !== 'lost') {
+    return null;
+  }
+  const status = r.status;
+  const mineIndices = sanitizeIdxList(r.mineIndices);
+  const revealedIndices = sanitizeIdxList(r.revealedIndices);
+  if (status === 'playing' && Boolean(r.minesGenerated) && revealedIndices.length >= totalCells - totalMines) {
+    return null;
+  }
   const rawExp = r.explodedIndex;
   const explodedIndex =
     typeof rawExp === 'number' && Number.isFinite(rawExp) && rawExp >= 0 && rawExp < totalCells
@@ -136,8 +144,8 @@ export function sanitizeSavedMinesweeperSession(
     cols,
     totalMines,
     minesGenerated: Boolean(r.minesGenerated),
-    mineIndices: sanitizeIdxList(r.mineIndices),
-    revealedIndices: sanitizeIdxList(r.revealedIndices),
+    mineIndices,
+    revealedIndices,
     flaggedIndices: sanitizeIdxList(r.flaggedIndices),
     defusedIndices: sanitizeIdxList(r.defusedIndices),
     shieldsLeft: Math.max(0, Math.min(9, Math.round(Number(r.shieldsLeft ?? 0)) || 0)),

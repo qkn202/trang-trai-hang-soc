@@ -1433,6 +1433,17 @@ export class MasterJigsawEngine {
     const lockedFlags = decodeBitsetBase64(saved.placedBitsetB64, this.totalPieces);
     if (!lockedFlags) return false;
 
+    let locked = 0;
+    for (let i = 0; i < this.totalPieces; i++) {
+      if (lockedFlags[i] === 1) {
+        locked += 1;
+      }
+    }
+    if (locked >= this.totalPieces) {
+      // Phiên thắng dở chưa kịp đóng: trả false trước khi ghi đè trạng thái bàn chơi mới
+      return false;
+    }
+
     this.pieceState.fill(JIGSAW_PIECE_TRAY);
     this.clusterDeltaX.fill(0);
     this.clusterDeltaY.fill(0);
@@ -1440,13 +1451,8 @@ export class MasterJigsawEngine {
       this.ufParent[i] = i;
       this.ufSize[i] = 1;
       this.clusterZ[i] = 1;
-    }
-
-    let locked = 0;
-    for (let i = 0; i < this.totalPieces; i++) {
       if (lockedFlags[i] === 1) {
         this.pieceState[i] = JIGSAW_PIECE_LOCKED;
-        locked += 1;
       }
     }
     this.lockedCount = locked;
@@ -1497,10 +1503,6 @@ export class MasterJigsawEngine {
     this.paidHintsLeft = Math.max(0, Math.min(20, Math.round(saved.paidHintsLeft ?? 3)));
     this.talismanUsed = Boolean(saved.talismanUsed);
 
-    if (this.lockedCount >= this.totalPieces) {
-      // Phiên thắng dở chưa kịp đóng: trả false để khởi tạo màn mới sạch sẽ
-      return false;
-    }
     if (saved.status === 'lost' || this.timeRemainingSec <= 0) {
       this.timeRemainingSec = 0;
       this.status = 'lost';
@@ -1683,8 +1685,16 @@ export function sanitizeSavedJigsawSession(
   if (rows !== spec.rows || cols !== spec.cols) return null;
   if (typeof obj.placedBitsetB64 !== 'string' || obj.placedBitsetB64.length > 600) return null;
 
+  if (obj.status !== undefined && obj.status !== 'playing' && obj.status !== 'lost') return null;
+
   const totalPieces = rows * cols;
-  if (!decodeBitsetBase64(obj.placedBitsetB64, totalPieces)) return null;
+  const decodedFlags = decodeBitsetBase64(obj.placedBitsetB64, totalPieces);
+  if (!decodedFlags) return null;
+  let lockedPieces = 0;
+  for (let i = 0; i < totalPieces; i++) {
+    if (decodedFlags[i] === 1) lockedPieces += 1;
+  }
+  if (lockedPieces >= totalPieces) return null;
 
   const validFilters: readonly JigsawTrayFilter[] = ['all', 'edges', 'q0', 'q1', 'q2', 'q3'];
   const trayFilter = validFilters.includes(obj.trayFilter as JigsawTrayFilter)

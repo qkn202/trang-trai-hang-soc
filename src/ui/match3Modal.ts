@@ -953,8 +953,10 @@ export class Match3ModalController {
     if (payload.won) {
       this.cancelDeferredSave();
       if (!this.victoryClaimed) {
-        this.victoryClaimed = true;
+        const resolvedStage = this.engine?.level?.id ?? payload.levelId;
         if (this.rescueContext) {
+          if (resolvedStage !== this.rescueContext.stage) return;
+          this.victoryClaimed = true;
           const out = this.sim.completeNeighborMinigameRescue(this.rescueContext);
           this.rescueVictoryOutcome = {
             tokensEarned: out.tokensEarned,
@@ -963,6 +965,8 @@ export class Match3ModalController {
             buildReduction: out.buildReduction,
           };
         } else {
+          if (resolvedStage !== this.sim.state.match3.currentLevel) return;
+          this.victoryClaimed = true;
           this.sim.state.match3.activeSession = null;
           this.clearActiveModalResumeMarker();
           const sealedPop =
@@ -975,7 +979,11 @@ export class Match3ModalController {
               : undefined;
           this.victorySummary = this.sim.completeMatch3LevelVictory(
             payload.bonusCoinsFromLeftoverMoves,
-            { sessionScore: payload.score, proofOfPlay: validPop }
+            {
+              sessionScore: payload.score,
+              proofOfPlay: validPop,
+              completedStage: resolvedStage,
+            }
           );
         }
         this.onParentRefresh();

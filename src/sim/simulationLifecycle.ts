@@ -440,6 +440,7 @@ export function lifecycleToggleHeadmasterPreview(sim: ParkSimulation, targetLeve
       sim.state.phoenixTalismans = MAX_PHOENIX_TALISMANS;
       sim.state.quizTalismanProgress = 0;
       sim.state.puzzleArcade = {
+        arcadeDisciplineRev: 2,
         activeMode: 'chess',
         sudokuStage: MAX_MINIGAME_STAGE,
         caroStage: MAX_MINIGAME_STAGE,

@@ -1022,6 +1022,7 @@ export interface SavedFishShooterSession {
 }
 
 export interface PuzzleArcadeState {
+  arcadeDisciplineRev?: number;
   activeMode: PuzzleArcadeMode;
   sudokuStage: number;
   caroStage: number;

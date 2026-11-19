@@ -1827,7 +1827,7 @@ export class CandyHogwartsEngine {
   }
 
   public addExtraMoves(amount = 5): void {
-    if (!this.level || this.status === 'won') return;
+    if (!this.level || this.status === 'won' || (this.ended && this.status !== 'out_of_moves')) return;
     this.ended = false;
     this.busy = false;
     this.status = 'playing';
@@ -1846,7 +1846,7 @@ export class CandyHogwartsEngine {
   }
 
   public async applyPhoenixTalisman(): Promise<{ ok: boolean; msg: string }> {
-    if (!this.level || this.status === 'won') {
+    if (!this.level || this.status === 'won' || (this.ended && this.status !== 'out_of_moves')) {
       return { ok: false, msg: 'Màn chơi đã hoàn thành!' };
     }
     if (this.talismanUsed) {
@@ -1907,7 +1907,7 @@ export class CandyHogwartsEngine {
   }
 
   public triggerFarmCompanion(bondLevel = 1): void {
-    if (!this.level || this.status === 'won') return;
+    if (!this.level || this.status === 'won' || (this.ended && this.status !== 'out_of_moves')) return;
     this.ended = false;
     this.busy = false;
     this.status = 'playing';
@@ -5617,7 +5617,7 @@ export class CandyHogwartsEngine {
     session = this.sessionId,
     consumedPlayerTurn = false
   ): Promise<void> {
-    if (session !== this.sessionId || !this.level) return;
+    if (session !== this.sessionId || !this.level || this.ended || this.status === 'won') return;
     this.emitHudState();
 
     if (this.areAllObjectivesComplete()) {
@@ -5761,7 +5761,7 @@ export class CandyHogwartsEngine {
   }
 
   private async finishVictorySequence(session = this.sessionId): Promise<void> {
-    if (!this.level) return;
+    if (session !== this.sessionId || !this.level || this.ended || this.status === 'won') return;
     this.ended = true;
     this.busy = true;
     this.selected = null;

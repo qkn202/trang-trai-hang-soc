@@ -223,8 +223,11 @@ export function isArcadeSubModeLocked(stage: number): boolean {
   return Math.floor(stage) > 10;
 }
 
+export const CURRENT_ARCADE_DISCIPLINE_REV = 2;
+
 export function createInitialPuzzleArcadeState(): PuzzleArcadeState {
   return {
+    arcadeDisciplineRev: CURRENT_ARCADE_DISCIPLINE_REV,
     activeMode: 'caro',
     sudokuStage: 1,
     caroStage: 1,

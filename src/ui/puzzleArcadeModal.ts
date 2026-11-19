@@ -1448,6 +1448,7 @@ export class PuzzleArcadeModalController {
   }
 
   public switchMode(nextMode: PuzzleArcadeMode): void {
+    if (this.rescueContext) return;
     if (
       (this.minesWinRevealTimer > 0 ||
         this.fishWinRevealTimer > 0 ||
@@ -2023,6 +2024,7 @@ export class PuzzleArcadeModalController {
     if (!isWon) return;
 
     if (this.rescueContext && this.rescueContext.kind === this.mode) {
+      if (this.getActiveEngineStage() !== this.rescueContext.stage) return;
       this.victoryClaimed = true;
       const out = this.sim.completeNeighborMinigameRescue(this.rescueContext);
       this.rescueVictoryOutcome = {
@@ -2037,7 +2039,10 @@ export class PuzzleArcadeModalController {
       return;
     }
 
+    const expectedStage = this.sim.getDisciplineStageInfo(this.mode).currentStage;
+
     if (this.mode === 'sudoku' && this.sudokuEngine?.status === 'won') {
+      if (this.sudokuEngine.stage !== expectedStage) return;
       this.victoryClaimed = true;
       this.sim.state.puzzleArcade.sudokuSession = null;
       this.clearActiveModalResumeMarker();
@@ -2052,12 +2057,14 @@ export class PuzzleArcadeModalController {
           sessionScore: sudokuScore,
           efficiency: this.sudokuEngine.mistakesCount,
           proofOfPlay: this.sealValidProofOfPlay('sudoku', sudokuScore),
+          completedStage: this.sudokuEngine.stage,
         }
       );
       this.spawnCelebrationConfetti();
       this.onParentRefresh();
       this.renderDOM();
     } else if (this.mode === 'caro' && this.minesEngine?.status === 'won') {
+      if (this.minesEngine.stage !== expectedStage) return;
       this.victoryClaimed = true;
       this.sim.state.puzzleArcade.minesSession = null;
       this.clearActiveModalResumeMarker();
@@ -2067,22 +2074,26 @@ export class PuzzleArcadeModalController {
           2600 + this.minesEngine.totalMines * 25 - this.minesEngine.movesCount * 4
         ),
         efficiency: Math.max(1, this.minesEngine.movesCount),
+        completedStage: this.minesEngine.stage,
       });
       this.spawnCelebrationConfetti();
       this.onParentRefresh();
       this.renderDOM();
     } else if (this.mode === 'chess' && this.fishEngine?.status === 'won') {
+      if (this.fishEngine.stage !== expectedStage) return;
       this.victoryClaimed = true;
       this.sim.state.puzzleArcade.fishingSession = null;
       this.clearActiveModalResumeMarker();
       this.victorySummary = this.sim.completePuzzleArcadeVictory('chess', this.fishEngine.reward, {
         sessionScore: Math.max(1200, this.fishEngine.score),
         efficiency: Math.max(1, this.fishEngine.maxCombo),
+        completedStage: this.fishEngine.stage,
       });
       this.spawnCelebrationConfetti();
       this.onParentRefresh();
       this.renderDOM();
     } else if (this.mode === 'blocks' && this.onetEngine?.status === 'won') {
+      if (this.onetEngine.stage !== expectedStage) return;
       this.victoryClaimed = true;
       this.sim.state.puzzleArcade.onetSession = null;
       this.clearActiveModalResumeMarker();
@@ -2094,12 +2105,14 @@ export class PuzzleArcadeModalController {
           sessionScore: onetScore,
           efficiency: Math.max(1, this.onetEngine.maxCombo),
           proofOfPlay: this.sealValidProofOfPlay('blocks', onetScore),
+          completedStage: this.onetEngine.stage,
         }
       );
       this.spawnCelebrationConfetti();
       this.onParentRefresh();
       this.renderDOM();
     } else if (this.mode === 'jigsaw' && this.jigsawEngine?.status === 'won') {
+      if (this.jigsawEngine.stage !== expectedStage) return;
       this.victoryClaimed = true;
       this.cleanupJigsawTrayDrag();
       this.sim.state.puzzleArcade.jigsawSession = null;
@@ -2112,6 +2125,7 @@ export class PuzzleArcadeModalController {
           sessionScore: jigsawScore,
           efficiency: Math.max(1, this.jigsawEngine.maxCombo),
           proofOfPlay: this.sealValidProofOfPlay('jigsaw', jigsawScore),
+          completedStage: this.jigsawEngine.stage,
         }
       );
       this.spawnCelebrationConfetti();
@@ -2419,18 +2433,25 @@ export class PuzzleArcadeModalController {
       }
     } else if (this.mode === 'chess' && this.fishEngine) {
       const fe = this.fishEngine;
+      const isCompactFishBar = this.isMobileBoardLayout();
       const activeWeaponText =
         fe.activeWeaponTimer > 0 && fe.activeWeapon !== 'normal'
-          ? `${fe.activeWeaponDef.shortVi} (${Math.ceil(fe.activeWeaponTimer)}s)`
+          ? isCompactFishBar
+            ? `${fe.activeWeaponDef.shortVi} ${Math.ceil(fe.activeWeaponTimer)}s`
+            : `${fe.activeWeaponDef.shortVi} (${Math.ceil(fe.activeWeaponTimer)}s)`
           : 'Ngọc ∞';
-      const fishSubText = this.isMobileBoardLayout()
-        ? `Đũa ×${fe.cannonTier} · ×${Math.max(1, fe.combo)}`
-        : `Đũa ×${fe.cannonTier} · Combo ×${Math.max(1, fe.combo)}`;
-      stageSub = `<span id="paFishSub">${fishSubText}</span>`;
-      stageStats =
-        lvStat('Thời gian', `<strong id="paFishTimer" class="${!st.sandboxMode && fe.isTimeCritical ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : fe.formatRemainingTime()}</strong>`, timeIcon) +
-        lvStat('Điểm', `<strong id="paFishScore">${fe.score.toLocaleString('vi-VN')}/${fe.targetScore.toLocaleString('vi-VN')}</strong>`, lvIcon('m3_icon_star')) +
-        lvStat('Loại đạn', `<strong id="paFishAmmo">${escapeHtml(activeWeaponText)}</strong>`, lvIcon('m3_gem_sapphire'));
+      if (isCompactFishBar) {
+        stageSub = `<span id="paFishSub">Đũa ×${fe.cannonTier}</span> · <span id="paFishAmmo">${escapeHtml(activeWeaponText)}</span>`;
+        stageStats =
+          lvStat('Thời gian', `<strong id="paFishTimer" class="${!st.sandboxMode && fe.isTimeCritical ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : fe.formatRemainingTime()}</strong>`, timeIcon) +
+          lvStat('Điểm', `<strong id="paFishScore">${fe.score.toLocaleString('vi-VN')}/${fe.targetScore.toLocaleString('vi-VN')}</strong>`, lvIcon('m3_icon_star'));
+      } else {
+        stageSub = `<span id="paFishSub">Đũa ×${fe.cannonTier} · Combo ×${Math.max(1, fe.combo)}</span>`;
+        stageStats =
+          lvStat('Thời gian', `<strong id="paFishTimer" class="${!st.sandboxMode && fe.isTimeCritical ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : fe.formatRemainingTime()}</strong>`, timeIcon) +
+          lvStat('Điểm', `<strong id="paFishScore">${fe.score.toLocaleString('vi-VN')}/${fe.targetScore.toLocaleString('vi-VN')}</strong>`, lvIcon('m3_icon_star')) +
+          lvStat('Loại đạn', `<strong id="paFishAmmo">${escapeHtml(activeWeaponText)}</strong>`, lvIcon('m3_gem_sapphire'));
+      }
       const canFishSkill =
         fe.status === 'playing' && (st.sandboxMode || fe.freeSkillsLeft + fe.paidSkillsLeft > 0);
       const talismanLocked = fe.talismanUsed || usedTodayInMode;
@@ -2895,10 +2916,11 @@ export class PuzzleArcadeModalController {
       }
     } else if (this.mode === 'chess' && this.fishEngine) {
       const fe = this.fishEngine;
+      const isCompactFishBar = this.isMobileBoardLayout();
       const subEl = box.querySelector('#paFishSub');
       if (subEl) {
-        subEl.textContent = this.isMobileBoardLayout()
-          ? `Đũa ×${fe.cannonTier} · ×${Math.max(1, fe.combo)}`
+        subEl.textContent = isCompactFishBar
+          ? `Đũa ×${fe.cannonTier}`
           : `Đũa ×${fe.cannonTier} · Combo ×${Math.max(1, fe.combo)}`;
       }
       const timerEl = box.querySelector('#paFishTimer');
@@ -2914,7 +2936,9 @@ export class PuzzleArcadeModalController {
       if (ammoEl) {
         ammoEl.textContent =
           fe.activeWeaponTimer > 0 && fe.activeWeapon !== 'normal'
-            ? `${fe.activeWeaponDef.shortVi} (${Math.ceil(fe.activeWeaponTimer)}s)`
+            ? isCompactFishBar
+              ? `${fe.activeWeaponDef.shortVi} ${Math.ceil(fe.activeWeaponTimer)}s`
+              : `${fe.activeWeaponDef.shortVi} (${Math.ceil(fe.activeWeaponTimer)}s)`
             : 'Ngọc ∞';
         ammoEl.classList.remove('pa-err-inline');
       }

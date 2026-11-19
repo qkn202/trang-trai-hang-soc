@@ -1360,7 +1360,11 @@ export class ParkSimulation {
 
   public completeMatch3LevelVictory(
     bonusCoinsFromMoves = 0,
-    sessionMetrics?: { sessionScore?: number; proofOfPlay?: ProofOfPlayEnvelope }
+    sessionMetrics?: {
+      sessionScore?: number;
+      proofOfPlay?: ProofOfPlayEnvelope;
+      completedStage?: number;
+    }
   ): {
     starsEarned: number;
     goldEarned: number;
@@ -1412,6 +1416,7 @@ export class ParkSimulation {
       sessionScore?: number;
       efficiency?: number;
       proofOfPlay?: ProofOfPlayEnvelope;
+      completedStage?: number;
     }
   ): {
     starsEarned: number;

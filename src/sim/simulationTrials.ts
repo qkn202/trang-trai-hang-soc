@@ -606,7 +606,11 @@ export function trialsGetAllPersonalLeaderboardSummaries(sim: ParkSimulation): P
 
 export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation, 
     bonusCoinsFromMoves = 0,
-    sessionMetrics?: { sessionScore?: number; proofOfPlay?: ProofOfPlayEnvelope }
+    sessionMetrics?: {
+      sessionScore?: number;
+      proofOfPlay?: ProofOfPlayEnvelope;
+      completedStage?: number;
+    }
   ): {
     starsEarned: number;
     goldEarned: number;
@@ -625,6 +629,22 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
     const m3 = sim.state.match3;
     const pa = sim.state.puzzleArcade;
     const playedStage = Math.max(1, Math.min(MAX_MATCH3_STAGE, m3.currentLevel ?? 1));
+    if (
+      typeof sessionMetrics?.completedStage === 'number' &&
+      Number.isFinite(sessionMetrics.completedStage) &&
+      Math.round(sessionMetrics.completedStage) !== playedStage
+    ) {
+      return {
+        starsEarned: 0,
+        goldEarned: 0,
+        xpEarned: 0,
+        sandEarned: 0,
+        nextLevel: playedStage,
+        featuredBonusApplied: false,
+        newMasterLevel: sim.state.level,
+        isMasterReplay: true,
+      };
+    }
     const prevCleared = Math.max(
       0,
       Math.min(MAX_MATCH3_STAGE, m3.maxClearedLevel ?? Math.max(0, playedStage - 1))
@@ -1024,6 +1044,7 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
       sessionScore?: number;
       efficiency?: number;
       proofOfPlay?: ProofOfPlayEnvelope;
+      completedStage?: number;
     }
   ): {
     starsEarned: number;
@@ -1046,6 +1067,23 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
 
     const infoBefore = trialsGetDisciplineStageInfo(sim, mode);
     const playedStage = infoBefore.currentStage;
+    if (
+      typeof sessionMetrics?.completedStage === 'number' &&
+      Number.isFinite(sessionMetrics.completedStage) &&
+      Math.round(sessionMetrics.completedStage) !== playedStage
+    ) {
+      return {
+        starsEarned: 0,
+        sandEarned: 0,
+        goldEarned: 0,
+        xpEarned: 0,
+        newlyRestoredPainting: false,
+        nextStage: playedStage,
+        featuredBonusApplied: false,
+        newMasterLevel: sim.state.level,
+        isMasterReplay: true,
+      };
+    }
     const prevCleared = infoBefore.clearedStages;
     const isFirstClear = prevCleared < MAX_MINIGAME_STAGE && playedStage > prevCleared;
 

@@ -6663,9 +6663,12 @@ body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(96px + ma
    row (the board sits beside the dock, nothing below it moves). */
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout] .pa-layout-shell .pa-side-dock .pa-stage-banner.hs-lv { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: var(--hs-space-2); box-sizing: border-box; block-size: 44px; min-block-size: 0; padding: 0 var(--hs-space-1) 0 var(--hs-space-3); border: var(--hs-line-shell) solid transparent; border-inline-width: 0; border-radius: 0; color: var(--hs-cream); }
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout] .pa-side-dock .hs-lv-meta { flex: 1 1 0%; min-inline-size: 0; display: flex; flex-direction: column; gap: 0; text-align: start; }
-:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout] .pa-side-dock .hs-lv-stage { color: inherit; font-size: var(--hs-text-13); font-weight: var(--hs-weight-label); line-height: 18px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout] .pa-side-dock .hs-lv-stage { min-inline-size: 0; overflow: hidden; color: inherit; font-size: var(--hs-text-13); font-weight: var(--hs-weight-label); line-height: 18px; white-space: nowrap; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout] .pa-side-dock .hs-lv-sub { min-inline-size: 0; overflow: hidden; contain: inline-size; color: var(--hs-paper-2); font-size: var(--hs-text-12); font-weight: var(--hs-weight-body); line-height: 16px; white-space: nowrap; text-overflow: ellipsis; }
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout] .pa-side-dock .hs-lv-stats { flex: none; display: flex; align-items: center; block-size: 36px; }
+@media (max-width: 480px) {
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .hs-lv-stat { gap: 3px; padding: 0 5px; }
+}
 /* the stage never gives way (the sub line adds nothing to the title block's minimum); Sinh Vật's shift direction is a tag on it */
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout] .pa-side-dock .hs-lv-sub .hs-lv-tag { color: var(--hs-cream); font-weight: var(--hs-weight-label); }
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout] .pa-side-dock .hs-lv-stat { display: flex; align-items: center; justify-content: center; gap: var(--hs-space-1); box-sizing: border-box; block-size: 100%; padding: 0 var(--hs-space-2); border-radius: var(--hs-radius-s); white-space: nowrap; }
@@ -7359,6 +7362,9 @@ b {
 }
 dialog > .owl-toast-stack[popover] {
   inset: 12px auto auto 50%;
+}
+#seedQuizDialog[open] > .owl-toast-stack[popover] {
+  inset: auto auto calc(16px + var(--hpvn-bottom)) 50%;
 }
 body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack[popover] {
   inset: auto auto calc(96px + max(12px, var(--hpvn-bottom))) 50%;

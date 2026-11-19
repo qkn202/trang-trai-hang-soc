@@ -4,8 +4,10 @@ import {
   FISH_SPECIES_CATALOG,
   FISH_WEAPON_CATALOG,
   FishShooterEngine,
+  MasterJigsawEngine,
   MinesweeperEngine,
   sanitizeSavedFishShooterSession,
+  sanitizeSavedJigsawSession,
   sanitizeSavedMinesweeperSession,
 } from '../puzzleArcadeEngine';
 import { ParkSimulation } from '../simulation';
@@ -808,5 +810,145 @@ describe('MinesweeperEngine (Dò Mìn Phép Thuật — 777 Màn) & FishShooterE
     const shieldRes = meSandbox.tapCell(mineCoords!.r, mineCoords!.c, true);
     expect(shieldRes.action).toBe('shield_saved');
     expect(meSandbox.shieldsLeft).toBe(shieldsBefore);
+  });
+
+  it('prevents Stage 1 -> Stage 6 jumps across legacy saves, desynced *Cleared fields, pre-won sessions & stale victory callbacks', () => {
+    // 1. Legacy pre-Minesweeper/pre-FishShooter save (missing arcadeDisciplineRev) with old Caro/Chess at Stage 6 / Cleared 5
+    //    (even when autoFire already fired shots on FishShooter Stage 6!) resets cleanly to Stage 1 -> wins to Stage 2!
+    const seedSim = new ParkSimulation(new MagicalAudio());
+    const legacyRaw = JSON.parse(seedSim.exportSaveJson()) as Record<string, unknown>;
+    const legacyPa = legacyRaw.puzzleArcade as Record<string, unknown>;
+    delete legacyPa.arcadeDisciplineRev;
+    legacyPa.caroStage = 1;
+    legacyPa.caroCleared = 5; // Exact desync that previously jumped Stage 1 -> Stage 6 on win!
+    legacyPa.chessStage = 6;
+    legacyPa.chessCleared = 5;
+    legacyPa.minesSession = new MinesweeperEngine(1).exportSession(); // 0 moves
+    const autoFiredStage6 = new FishShooterEngine(6);
+    autoFiredStage6.fireShot(340, 200);
+    expect(autoFiredStage6.shotsFired).toBeGreaterThan(0);
+    legacyPa.fishingSession = autoFiredStage6.exportSession(); // autoFire shots on legacy Stage 6
+    (legacyRaw.stats as Record<string, unknown>).minigamesWon = 5;
+    legacyPa.totalPuzzlesSolved = 5;
+    mockLocalStorage.setItem('burrow_hogsmeade_777_v3', JSON.stringify(legacyRaw));
+
+    const migratedSim = new ParkSimulation(new MagicalAudio());
+    expect(migratedSim.state.puzzleArcade.arcadeDisciplineRev).toBe(2);
+    expect(migratedSim.state.puzzleArcade.caroStage).toBe(1);
+    expect(migratedSim.state.puzzleArcade.caroCleared).toBe(0);
+    expect(migratedSim.state.puzzleArcade.chessStage).toBe(1);
+    expect(migratedSim.state.puzzleArcade.chessCleared).toBe(0);
+    expect(migratedSim.state.puzzleArcade.fishingSession).toBeNull();
+
+    const winCaro1 = migratedSim.completePuzzleArcadeVictory(
+      'caro',
+      new MinesweeperEngine(1).reward,
+      { sessionScore: 2600, completedStage: 1 }
+    );
+    expect(winCaro1.nextStage).toBe(2);
+    expect(migratedSim.state.puzzleArcade.caroStage).toBe(2);
+    expect(migratedSim.state.puzzleArcade.caroCleared).toBe(1);
+
+    const winChess1 = migratedSim.completePuzzleArcadeVictory(
+      'chess',
+      new FishShooterEngine(1).reward,
+      { sessionScore: 12500, completedStage: 1 }
+    );
+    expect(winChess1.nextStage).toBe(2);
+    expect(migratedSim.state.puzzleArcade.chessStage).toBe(2);
+    expect(migratedSim.state.puzzleArcade.chessCleared).toBe(1);
+
+    // Reloading after arcadeDisciplineRev = 2 preserves Stage 2 progress
+    const reloadedAfterV2 = new ParkSimulation(new MagicalAudio());
+    expect(reloadedAfterV2.state.puzzleArcade.caroStage).toBe(2);
+    expect(reloadedAfterV2.state.puzzleArcade.chessStage).toBe(2);
+
+    // 2. Active mid-game Stage 1 Minesweeper (movesCount > 0) during migration preserves Stage 1 session cleanly
+    const midMe = new MinesweeperEngine(1);
+    midMe.tapCell(0, 0);
+    expect(midMe.movesCount).toBeGreaterThan(0);
+    const activeRaw = JSON.parse(seedSim.exportSaveJson()) as Record<string, unknown>;
+    const activePa = activeRaw.puzzleArcade as Record<string, unknown>;
+    delete activePa.arcadeDisciplineRev;
+    activePa.caroStage = 1;
+    activePa.caroCleared = 0;
+    activePa.minesSession = midMe.exportSession();
+    mockLocalStorage.setItem('burrow_hogsmeade_777_v3', JSON.stringify(activeRaw));
+
+    const activeMigrated = new ParkSimulation(new MagicalAudio());
+    expect(activeMigrated.state.puzzleArcade.caroStage).toBe(1);
+    expect(activeMigrated.state.puzzleArcade.caroCleared).toBe(0);
+    expect(activeMigrated.state.puzzleArcade.minesSession?.movesCount).toBeGreaterThan(0);
+
+    // 3. Desynced Match-3 / Sudoku save on load reconciles (never leaves currentStage=1 with cleared=5)
+    const desyncRaw = JSON.parse(seedSim.exportSaveJson()) as Record<string, unknown>;
+    const desyncM3 = desyncRaw.match3 as Record<string, unknown>;
+    desyncM3.currentLevel = 1;
+    desyncM3.maxClearedLevel = 5;
+    desyncM3.levelsWon = 0; // Never actually won any Match-3 stage -> heals corrupted maxClearedLevel to 0!
+    const desyncPa = desyncRaw.puzzleArcade as Record<string, unknown>;
+    desyncPa.sudokuStage = 1;
+    desyncPa.sudokuCleared = 5;
+    desyncPa.totalPuzzlesSolved = 5; // Actually solved 5 stages -> reconciles sudokuStage to 6!
+    mockLocalStorage.setItem('burrow_hogsmeade_777_v3', JSON.stringify(desyncRaw));
+
+    const healedSim = new ParkSimulation(new MagicalAudio());
+    expect(healedSim.state.match3.currentLevel).toBe(1);
+    expect(healedSim.state.match3.maxClearedLevel).toBe(0);
+    expect(healedSim.state.puzzleArcade.sudokuStage).toBe(6);
+    expect(healedSim.state.puzzleArcade.sudokuCleared).toBe(5);
+
+    const m3Win1 = healedSim.completeMatch3LevelVictory(10, {
+      sessionScore: 2500,
+      completedStage: 1,
+    });
+    expect(m3Win1.nextLevel).toBe(2);
+    expect(healedSim.state.match3.currentLevel).toBe(2);
+
+    // 4. Stale / duplicate completedStage callback is ignored and never advances stage a second time
+    const staleM3 = healedSim.completeMatch3LevelVictory(10, {
+      sessionScore: 2500,
+      completedStage: 1,
+    });
+    expect(staleM3.starsEarned).toBe(0);
+    expect(healedSim.state.match3.currentLevel).toBe(2);
+
+    const stalePa = healedSim.completePuzzleArcadeVictory(
+      'sudoku',
+      { stars: 2, sand: 0, gold: 40, xp: 20 },
+      { sessionScore: 2400, completedStage: 5 }
+    );
+    expect(stalePa.starsEarned).toBe(0);
+    expect(healedSim.state.puzzleArcade.sudokuStage).toBe(6);
+
+    // 5. sanitizeSavedMinesweeperSession & sanitizeSavedFishShooterSession reject status='won' & auto-win scores
+    const wonMe = new MinesweeperEngine(1).exportSession();
+    expect(sanitizeSavedMinesweeperSession({ ...wonMe, status: 'won' }, 1)).toBeNull();
+
+    const wonFe = new FishShooterEngine(1).exportSession();
+    expect(sanitizeSavedFishShooterSession({ ...wonFe, status: 'won' }, 1)).toBeNull();
+
+    const highScoreFe = new FishShooterEngine(1);
+    const overTargetSnap = {
+      ...highScoreFe.exportSession(),
+      status: 'playing' as const,
+      score: highScoreFe.targetScore + 5000,
+    };
+    const restoredFe = new FishShooterEngine(1);
+    expect(restoredFe.restoreSession(overTargetSnap)).toBe(true);
+    expect(restoredFe.score).toBe(restoredFe.targetScore - 1);
+    expect(restoredFe.tick(0.016).won).toBe(false);
+
+    // 6. sanitizeSavedJigsawSession & MasterJigsawEngine.restoreSession reject pre-won boards without mutating fresh engine
+    const wonJe = new MasterJigsawEngine(1);
+    while (wonJe.status !== 'won') {
+      wonJe.useMagicHint();
+    }
+    const wonJigsawSnap = wonJe.exportSession();
+    expect(sanitizeSavedJigsawSession(wonJigsawSnap, 1)).toBeNull();
+    const freshJe = new MasterJigsawEngine(1);
+    expect(freshJe.restoreSession({ ...wonJigsawSnap, status: 'playing' })).toBe(false);
+    expect(freshJe.lockedCount).toBe(0);
+    expect(freshJe.status).toBe('playing');
   });
 });

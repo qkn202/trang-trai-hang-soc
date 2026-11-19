@@ -206,6 +206,7 @@ import {
   submitPlayerCloudLeaderboardEntry,
 } from './minigameLeaderboard';
 import {
+  CURRENT_ARCADE_DISCIPLINE_REV,
   createInitialPuzzleArcadeState,
   JIGSAW_PAINTINGS,
   PuzzleRewardSpec,
@@ -2415,17 +2416,28 @@ export function migrateLoadedState(parsed: GameState): GameState {
       totalMorphsHatched: Math.round(clampFinite(rawSuitcase.totalMorphsHatched, 0, 999999, 0)),
     },
     match3: (() => {
-      const safeM3Level = Math.round(clampFinite(parsed.match3?.currentLevel, 1, MAX_MATCH3_STAGE, 1));
+      let safeM3Level = Math.round(clampFinite(parsed.match3?.currentLevel, 1, MAX_MATCH3_STAGE, 1));
+      const safeLevelsWon = Math.round(clampFinite(parsed.match3?.levelsWon, 0, 999999, 0));
       const defaultM3Cleared = Math.max(0, Math.min(MAX_MATCH3_STAGE, safeM3Level - 1));
+      let safeM3Cleared = Math.round(
+        clampFinite(parsed.match3?.maxClearedLevel, 0, MAX_MATCH3_STAGE, defaultM3Cleared)
+      );
+      if (safeLevelsWon === 0 && safeM3Level === 1 && !parsed.match3?.activeSession) {
+        safeM3Cleared = 0;
+      } else if (
+        !sandboxAllowedOnLoad &&
+        safeM3Cleared > 0 &&
+        safeM3Level < Math.min(MAX_MATCH3_STAGE, safeM3Cleared + 1)
+      ) {
+        safeM3Level = Math.min(MAX_MATCH3_STAGE, safeM3Cleared + 1);
+      }
       return {
         stars: Math.round(clampFinite(parsed.match3?.stars, 0, 999999, def.match3.stars)),
         totalStarsEarned: Math.round(
           clampFinite(parsed.match3?.totalStarsEarned, 0, 999999, def.match3.totalStarsEarned)
         ),
         currentLevel: safeM3Level,
-        maxClearedLevel: Math.round(
-          clampFinite(parsed.match3?.maxClearedLevel, 0, MAX_MATCH3_STAGE, defaultM3Cleared)
-        ),
+        maxClearedLevel: safeM3Cleared,
         winStreak: Math.round(clampFinite(parsed.match3?.winStreak, 0, 9999, 0)),
         hearts: Math.round(clampFinite(parsed.match3?.hearts, 0, MAX_MATCH3_HEARTS, MAX_MATCH3_HEARTS)),
         nextHeartAt: Math.round(clampFinite(parsed.match3?.nextHeartAt, 0, Number.MAX_SAFE_INTEGER, 0)),
@@ -2445,53 +2457,133 @@ export function migrateLoadedState(parsed: GameState): GameState {
             )
           ),
         },
-        levelsWon: Math.round(clampFinite(parsed.match3?.levelsWon, 0, 999999, 0)),
+        levelsWon: safeLevelsWon,
         activeSession: sanitizeSavedMatch3Session(parsed.match3?.activeSession, safeM3Level),
       };
     })(),
     puzzleArcade: (() => {
-      const safeSudokuStage = Math.round(
-        clampFinite(parsed.puzzleArcade?.sudokuStage, 1, MAX_MINIGAME_STAGE, 1)
+      const prevDisciplineRev = Math.round(
+        clampFinite(parsed.puzzleArcade?.arcadeDisciplineRev, 0, 99, 0)
       );
-      const safeCaroStage = Math.round(
-        clampFinite(parsed.puzzleArcade?.caroStage, 1, MAX_MINIGAME_STAGE, 1)
+      const safeTotalSolved = Math.round(
+        clampFinite(parsed.puzzleArcade?.totalPuzzlesSolved, 0, 999999, 0)
       );
-      const safeChessStage = Math.round(
-        clampFinite(parsed.puzzleArcade?.chessStage, 1, MAX_MINIGAME_STAGE, 1)
+      const safeMinigamesWon = Math.round(
+        clampFinite(parsed.stats?.minigamesWon, 0, 9999999, 0)
       );
-      const safeBlockStage = Math.round(
-        clampFinite(parsed.puzzleArcade?.blockStage, 1, MAX_MINIGAME_STAGE, 1)
+      const zeroWinsEver = safeTotalSolved === 0 && safeMinigamesWon === 0;
+
+      const reconcileStagePair = (
+        rawStageVal: unknown,
+        rawClearedVal: unknown,
+        hasSession: boolean
+      ): { stage: number; cleared: number } => {
+        let stage = Math.round(clampFinite(rawStageVal, 1, MAX_MINIGAME_STAGE, 1));
+        let cleared = Math.round(clampFinite(rawClearedVal, 0, MAX_MINIGAME_STAGE, stage - 1));
+        if (zeroWinsEver && stage === 1 && !hasSession) {
+          cleared = 0;
+        } else if (
+          !sandboxAllowedOnLoad &&
+          cleared > 0 &&
+          stage < Math.min(MAX_MINIGAME_STAGE, cleared + 1)
+        ) {
+          stage = Math.min(MAX_MINIGAME_STAGE, cleared + 1);
+        }
+        return { stage, cleared };
+      };
+
+      const sudokuPair = reconcileStagePair(
+        parsed.puzzleArcade?.sudokuStage,
+        parsed.puzzleArcade?.sudokuCleared,
+        Boolean(parsed.puzzleArcade?.sudokuSession)
       );
-      const safeJigsawStage = Math.round(
-        clampFinite(parsed.puzzleArcade?.jigsawStage, 1, MAX_MINIGAME_STAGE, 1)
+      let caroPair = reconcileStagePair(
+        parsed.puzzleArcade?.caroStage,
+        parsed.puzzleArcade?.caroCleared,
+        Boolean(parsed.puzzleArcade?.minesSession || parsed.puzzleArcade?.caroSession)
       );
+      let chessPair = reconcileStagePair(
+        parsed.puzzleArcade?.chessStage,
+        parsed.puzzleArcade?.chessCleared,
+        Boolean(parsed.puzzleArcade?.fishingSession || parsed.puzzleArcade?.chessSession)
+      );
+      const blockPair = reconcileStagePair(
+        parsed.puzzleArcade?.blockStage,
+        parsed.puzzleArcade?.blockCleared,
+        Boolean(parsed.puzzleArcade?.onetSession)
+      );
+      const jigsawPair = reconcileStagePair(
+        parsed.puzzleArcade?.jigsawStage,
+        parsed.puzzleArcade?.jigsawCleared,
+        Boolean(parsed.puzzleArcade?.jigsawSession)
+      );
+
+      let migratedCaroSession = sanitizeSavedCaroSession(
+        parsed.puzzleArcade?.caroSession,
+        caroPair.stage
+      );
+      let migratedChessSession = sanitizeSavedChessSession(
+        parsed.puzzleArcade?.chessSession,
+        chessPair.stage
+      );
+      let migratedMinesSession = sanitizeSavedMinesweeperSession(
+        parsed.puzzleArcade?.minesSession,
+        caroPair.stage
+      );
+      let migratedFishingSession = sanitizeSavedFishShooterSession(
+        parsed.puzzleArcade?.fishingSession,
+        chessPair.stage
+      );
+
+      if (
+        prevDisciplineRev < CURRENT_ARCADE_DISCIPLINE_REV &&
+        !(sandboxAllowedOnLoad && Boolean(parsed.sandboxMode))
+      ) {
+        if (
+          migratedMinesSession &&
+          migratedMinesSession.stage === 1 &&
+          migratedMinesSession.movesCount > 0
+        ) {
+          caroPair = { stage: 1, cleared: 0 };
+          migratedCaroSession = null;
+        } else {
+          caroPair = { stage: 1, cleared: 0 };
+          migratedCaroSession = null;
+          migratedMinesSession = null;
+        }
+
+        if (
+          migratedFishingSession &&
+          migratedFishingSession.stage === 1 &&
+          migratedFishingSession.shotsFired > 0
+        ) {
+          chessPair = { stage: 1, cleared: 0 };
+          migratedChessSession = null;
+        } else {
+          chessPair = { stage: 1, cleared: 0 };
+          migratedChessSession = null;
+          migratedFishingSession = null;
+        }
+      }
+
       return {
+        arcadeDisciplineRev: CURRENT_ARCADE_DISCIPLINE_REV,
         activeMode: (
           ['sudoku', 'caro', 'chess', 'blocks', 'jigsaw'] as const
         ).includes(parsed.puzzleArcade?.activeMode as PuzzleArcadeMode)
           ? (parsed.puzzleArcade!.activeMode as PuzzleArcadeMode)
           : 'caro',
-        sudokuStage: safeSudokuStage,
-        caroStage: safeCaroStage,
-        chessStage: safeChessStage,
-        jigsawStage: safeJigsawStage,
-        blockStage: safeBlockStage,
+        sudokuStage: sudokuPair.stage,
+        caroStage: caroPair.stage,
+        chessStage: chessPair.stage,
+        jigsawStage: jigsawPair.stage,
+        blockStage: blockPair.stage,
         tileStage: Math.round(clampFinite(parsed.puzzleArcade?.tileStage, 1, 99999, 1)),
-        sudokuCleared: Math.round(
-          clampFinite(parsed.puzzleArcade?.sudokuCleared, 0, MAX_MINIGAME_STAGE, safeSudokuStage - 1)
-        ),
-        caroCleared: Math.round(
-          clampFinite(parsed.puzzleArcade?.caroCleared, 0, MAX_MINIGAME_STAGE, safeCaroStage - 1)
-        ),
-        chessCleared: Math.round(
-          clampFinite(parsed.puzzleArcade?.chessCleared, 0, MAX_MINIGAME_STAGE, safeChessStage - 1)
-        ),
-        blockCleared: Math.round(
-          clampFinite(parsed.puzzleArcade?.blockCleared, 0, MAX_MINIGAME_STAGE, safeBlockStage - 1)
-        ),
-        jigsawCleared: Math.round(
-          clampFinite(parsed.puzzleArcade?.jigsawCleared, 0, MAX_MINIGAME_STAGE, safeJigsawStage - 1)
-        ),
+        sudokuCleared: sudokuPair.cleared,
+        caroCleared: caroPair.cleared,
+        chessCleared: chessPair.cleared,
+        blockCleared: blockPair.cleared,
+        jigsawCleared: jigsawPair.cleared,
         featuredWinsCount: Math.round(
           clampFinite(parsed.puzzleArcade?.featuredWinsCount, 0, 999999, 0)
         ),
@@ -2504,36 +2596,22 @@ export function migrateLoadedState(parsed: GameState): GameState {
               )
             )
           : [],
-        totalPuzzlesSolved: Math.round(
-          clampFinite(parsed.puzzleArcade?.totalPuzzlesSolved, 0, 999999, 0)
-        ),
+        totalPuzzlesSolved: safeTotalSolved,
         sudokuSession: sanitizeSavedSudokuSession(
           parsed.puzzleArcade?.sudokuSession,
-          safeSudokuStage
+          sudokuPair.stage
         ),
-        caroSession: sanitizeSavedCaroSession(
-          parsed.puzzleArcade?.caroSession,
-          safeCaroStage
-        ),
-        chessSession: sanitizeSavedChessSession(
-          parsed.puzzleArcade?.chessSession,
-          safeChessStage
-        ),
-        minesSession: sanitizeSavedMinesweeperSession(
-          parsed.puzzleArcade?.minesSession,
-          safeCaroStage
-        ),
-        fishingSession: sanitizeSavedFishShooterSession(
-          parsed.puzzleArcade?.fishingSession,
-          safeChessStage
-        ),
+        caroSession: migratedCaroSession,
+        chessSession: migratedChessSession,
+        minesSession: migratedMinesSession,
+        fishingSession: migratedFishingSession,
         onetSession: sanitizeSavedOnetSession(
           parsed.puzzleArcade?.onetSession,
-          safeBlockStage
+          blockPair.stage
         ),
         jigsawSession: sanitizeSavedJigsawSession(
           parsed.puzzleArcade?.jigsawSession,
-          safeJigsawStage
+          jigsawPair.stage
         ),
       };
     })(),

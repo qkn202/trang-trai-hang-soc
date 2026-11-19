@@ -370,7 +370,10 @@ export function sanitizeSavedFishShooterSession(
   const targetScore = Math.max(200, Math.min(500000, Math.round(Number(r.targetScore) || 12500)));
   const score = Math.max(0, Math.min(9999999, Math.round(Number(r.score) || 0)));
   const cannonTier = r.cannonTier === 2 || r.cannonTier === 3 ? r.cannonTier : 1;
-  const status = r.status === 'won' || r.status === 'lost' ? r.status : 'playing';
+  if (r.status !== 'playing' && r.status !== 'lost') {
+    return null;
+  }
+  const status = r.status;
   const rawWeaponTimer = Math.max(0, Math.min(30, Number(r.activeWeaponTimer) || 0));
   const rawWeapon = sanitizeWeaponId(r.activeWeapon);
   const activeWeapon: FishWeaponId = rawWeapon !== 'normal' && rawWeaponTimer > 0 ? rawWeapon : 'normal';
@@ -1558,10 +1561,14 @@ export class FishShooterEngine {
   public restoreSession(raw: unknown): boolean {
     const s = sanitizeSavedFishShooterSession(raw, this.stage);
     if (!s) return false;
-    this.score =
+    const scaledScore =
       s.status === 'playing' && s.targetScore > 0 && s.targetScore < 5000 && this.targetScore >= 10000
         ? Math.min(this.targetScore - 100, Math.round(s.score * (this.targetScore / s.targetScore)))
         : s.score;
+    this.score =
+      s.status === 'playing'
+        ? Math.min(Math.max(0, this.targetScore - 1), scaledScore)
+        : scaledScore;
     this.ammo = s.ammo;
     this.cannonTier = s.cannonTier;
     this.remainingSec =
