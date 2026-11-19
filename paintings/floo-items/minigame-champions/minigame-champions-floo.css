@@ -1,0 +1,254 @@
+/* ==========================================================================
+   Mạng Floo HPVN — Bộ 6 Khung Bong Bóng Đương Kim Hạng 1 Của 6 Mini-Game
+   Thiết kế đã duyệt chốt:
+     - Màu nền: Bảo Ngọc Tươi đặc trưng riêng cho từng môn (không trùng lặp)
+     - Huy hiệu Quán Quân (::after — 54x54px): Đặt ngay chính giữa viền trên
+       1. "champ-match3" : Bùa Gặt Honeydukes    — Hồng Kẹo Dâu + Hũ kẹo chong chóng số 1
+       2. "champ-caro"   : Dò Mìn Phép Thuật     — Cam Đỏ Lửa Mìn + Khối đá cổ ngữ cắm cờ số 1
+       3. "champ-sudoku" : Số Học Huyền Bí       — Tím Thạch Anh + Bánh xe Thần Số Học 1–9
+       4. "champ-chess"  : Bắn Cá Hồ Đen         — Xanh Ngọc Thủy Cung + Mỹ nhân ngư Hồ Đen HP
+       5. "champ-blocks" : Sinh Vật Huyền Bí     — Xanh Lá Lục Bảo + Niffler ôm Galleon số 1
+       6. "champ-jigsaw" : Tranh Ghép Phép Thuật — Xanh Lam Sao Trời + Huy chương vàng ghép tranh
+     - Góc phụ (::before): Không gắn gì để huy hiệu ở giữa viền trên đối xứng hoàn hảo
+   Đường dẫn ảnh trên repo hpvn-archive.net:
+     public/images/floo-items/minigame-champions/ -> /images/floo-items/minigame-champions/*
+   ========================================================================== */
+
+.shout-message-row[data-store-frame^="champ-"] {
+  --sf-oklab: ;
+  --sf-edge: #fde047;
+  --sf-text: #ffffff;
+  --sf-author: #fef08a;
+  --sf-meta: #f1f5f9;
+  --sf-link: #fef9c3;
+  --sf-quote-bg: rgba(255, 255, 255, 0.14);
+  --sf-quote-border: #fde047;
+  --sf-author-shadow: 0 1px 2px rgba(10, 6, 2, 0.88);
+  --sf-glow: rgba(250, 204, 21, 0.48);
+}
+
+@supports (background: linear-gradient(in oklab, white, black)) {
+  .shout-message-row[data-store-frame^="champ-"] {
+    --sf-oklab: in oklab;
+  }
+}
+
+/* 1. Bùa Gặt Honeydukes — Hồng Kẹo Dâu Ngọt Ngào */
+.shout-message-row[data-store-frame="champ-match3"] {
+  --sf-text: #fff5f8;
+  --sf-meta: #fce7f3;
+  --sf-glow: rgba(244, 114, 182, 0.58);
+  --sf-shadow:
+    0 0 0 1.5px #4a0826,
+    0 0 0 3.6px #f472b6,
+    0 0 0 5px #831843,
+    0 5px 18px rgba(236, 72, 153, 0.4),
+    inset 0 1px 0 rgba(255, 241, 242, 0.55);
+  --sf-paper:
+    radial-gradient(circle at 16% 24%, rgba(254, 240, 138, 0.78) 0 1.5px, transparent 2.6px),
+    radial-gradient(circle at 84% 22%, rgba(167, 243, 208, 0.72) 0 1.4px, transparent 2.5px),
+    radial-gradient(circle at 74% 78%, rgba(254, 205, 211, 0.7) 0 1.3px, transparent 2.4px),
+    radial-gradient(70% 60% at 50% 0%, rgba(253, 224, 71, 0.26), transparent 68%),
+    linear-gradient(135deg var(--sf-oklab), #b81d62 0%, #8f134a 54%, #5e0b30 100%);
+  --sf-badge-png: url("/images/floo-items/minigame-champions/champ-match3.png");
+  --sf-badge-set: image-set(
+    url("/images/floo-items/minigame-champions/champ-match3.webp") type("image/webp") 1x,
+    url("/images/floo-items/minigame-champions/champ-match3-2x.webp") type("image/webp") 2x,
+    url("/images/floo-items/minigame-champions/champ-match3.png") type("image/png") 1x
+  );
+}
+
+/* 2. Dò Mìn Phép Thuật — Cam Đỏ Lửa Mìn & Đá Cổ Ngữ */
+.shout-message-row[data-store-frame="champ-caro"] {
+  --sf-text: #fff8f1;
+  --sf-meta: #ffedd5;
+  --sf-glow: rgba(251, 146, 60, 0.58);
+  --sf-shadow:
+    0 0 0 1.5px #2e0f06,
+    0 0 0 3.6px #fb923c,
+    0 0 0 5px #5c200e,
+    0 5px 18px rgba(234, 88, 12, 0.4),
+    inset 0 1px 0 rgba(255, 237, 213, 0.55);
+  --sf-paper:
+    radial-gradient(circle at 18% 26%, rgba(254, 215, 170, 0.78) 0 1.5px, transparent 2.6px),
+    radial-gradient(circle at 83% 24%, rgba(253, 224, 71, 0.72) 0 1.4px, transparent 2.5px),
+    radial-gradient(circle at 28% 78%, rgba(253, 186, 116, 0.65) 0 1.3px, transparent 2.4px),
+    radial-gradient(70% 60% at 50% 0%, rgba(251, 146, 60, 0.3), transparent 68%),
+    linear-gradient(135deg var(--sf-oklab), #a6360e 0%, #782212 54%, #3d1610 100%);
+  --sf-badge-png: url("/images/floo-items/minigame-champions/champ-caro.png");
+  --sf-badge-set: image-set(
+    url("/images/floo-items/minigame-champions/champ-caro.webp") type("image/webp") 1x,
+    url("/images/floo-items/minigame-champions/champ-caro-2x.webp") type("image/webp") 2x,
+    url("/images/floo-items/minigame-champions/champ-caro.png") type("image/png") 1x
+  );
+}
+
+/* 3. Số Học Huyền Bí — Tím Thạch Anh & Bánh Xe Thần Số Học 1–9 */
+.shout-message-row[data-store-frame="champ-sudoku"] {
+  --sf-text: #faf5ff;
+  --sf-meta: #f3e8ff;
+  --sf-glow: rgba(192, 132, 252, 0.58);
+  --sf-shadow:
+    0 0 0 1.5px #22084a,
+    0 0 0 3.6px #c084fc,
+    0 0 0 5px #4c1d95,
+    0 5px 18px rgba(147, 51, 234, 0.42),
+    inset 0 1px 0 rgba(243, 232, 255, 0.55);
+  --sf-paper:
+    radial-gradient(circle at 18% 26%, rgba(243, 232, 255, 0.78) 0 1.5px, transparent 2.6px),
+    radial-gradient(circle at 84% 22%, rgba(253, 224, 71, 0.74) 0 1.4px, transparent 2.5px),
+    radial-gradient(circle at 74% 78%, rgba(216, 180, 254, 0.65) 0 1.3px, transparent 2.4px),
+    radial-gradient(70% 60% at 50% 0%, rgba(250, 204, 21, 0.25), transparent 68%),
+    linear-gradient(135deg var(--sf-oklab), #6b26d1 0%, #4c1a99 54%, #2e0f66 100%);
+  --sf-badge-png: url("/images/floo-items/minigame-champions/champ-sudoku.png");
+  --sf-badge-set: image-set(
+    url("/images/floo-items/minigame-champions/champ-sudoku.webp") type("image/webp") 1x,
+    url("/images/floo-items/minigame-champions/champ-sudoku-2x.webp") type("image/webp") 2x,
+    url("/images/floo-items/minigame-champions/champ-sudoku.png") type("image/png") 1x
+  );
+}
+
+/* 4. Bắn Cá Hồ Đen — Xanh Ngọc Thủy Cung & Mỹ Nhân Ngư Hồ Đen Harry Potter */
+.shout-message-row[data-store-frame="champ-chess"] {
+  --sf-text: #f0fdfa;
+  --sf-meta: #ccfbf1;
+  --sf-link: #99f6e4;
+  --sf-glow: rgba(45, 212, 191, 0.58);
+  --sf-shadow:
+    0 0 0 1.5px #04242e,
+    0 0 0 3.6px #2dd4bf,
+    0 0 0 5px #0f525e,
+    0 5px 18px rgba(20, 184, 166, 0.42),
+    inset 0 1px 0 rgba(204, 251, 241, 0.55);
+  --sf-paper:
+    radial-gradient(circle at 16% 28%, rgba(204, 251, 241, 0.8) 0 1.7px, transparent 2.9px),
+    radial-gradient(circle at 84% 24%, rgba(254, 240, 138, 0.72) 0 1.4px, transparent 2.5px),
+    radial-gradient(circle at 28% 76%, rgba(153, 246, 228, 0.68) 0 1.5px, transparent 2.7px),
+    radial-gradient(70% 60% at 50% 0%, rgba(94, 234, 212, 0.3), transparent 68%),
+    linear-gradient(135deg var(--sf-oklab), #0b6c7a 0%, #0b4f66 54%, #083347 100%);
+  --sf-badge-png: url("/images/floo-items/minigame-champions/champ-chess.png");
+  --sf-badge-set: image-set(
+    url("/images/floo-items/minigame-champions/champ-chess.webp") type("image/webp") 1x,
+    url("/images/floo-items/minigame-champions/champ-chess-2x.webp") type("image/webp") 2x,
+    url("/images/floo-items/minigame-champions/champ-chess.png") type("image/png") 1x
+  );
+}
+
+/* 5. Sinh Vật Huyền Bí — Xanh Lá Lục Bảo Rừng Phép & Niffler Số 1 */
+.shout-message-row[data-store-frame="champ-blocks"] {
+  --sf-text: #f2fbf5;
+  --sf-meta: #d1fae5;
+  --sf-glow: rgba(52, 211, 153, 0.56);
+  --sf-shadow:
+    0 0 0 1.5px #052616,
+    0 0 0 3.6px #34d399,
+    0 0 0 5px #0f5132,
+    0 5px 18px rgba(16, 185, 129, 0.4),
+    inset 0 1px 0 rgba(209, 250, 229, 0.55);
+  --sf-paper:
+    radial-gradient(circle at 18% 26%, rgba(253, 224, 71, 0.8) 0 1.5px, transparent 2.6px),
+    radial-gradient(circle at 84% 24%, rgba(167, 243, 208, 0.74) 0 1.4px, transparent 2.5px),
+    radial-gradient(circle at 74% 78%, rgba(253, 224, 71, 0.65) 0 1.3px, transparent 2.4px),
+    radial-gradient(70% 60% at 50% 0%, rgba(250, 204, 21, 0.26), transparent 68%),
+    linear-gradient(135deg var(--sf-oklab), #11693e 0%, #0d4f2f 54%, #08331e 100%);
+  --sf-badge-png: url("/images/floo-items/minigame-champions/champ-blocks.png");
+  --sf-badge-set: image-set(
+    url("/images/floo-items/minigame-champions/champ-blocks.webp") type("image/webp") 1x,
+    url("/images/floo-items/minigame-champions/champ-blocks-2x.webp") type("image/webp") 2x,
+    url("/images/floo-items/minigame-champions/champ-blocks.png") type("image/png") 1x
+  );
+}
+
+/* 6. Tranh Ghép Phép Thuật — Xanh Lam Sao Trời & Huy Chương Vàng Ghép Tranh */
+.shout-message-row[data-store-frame="champ-jigsaw"] {
+  --sf-text: #f5f8ff;
+  --sf-meta: #dbeafe;
+  --sf-glow: rgba(96, 165, 250, 0.58);
+  --sf-shadow:
+    0 0 0 1.5px #0a1945,
+    0 0 0 3.6px #60a5fa,
+    0 0 0 5px #1e3a8a,
+    0 5px 18px rgba(59, 130, 246, 0.42),
+    inset 0 1px 0 rgba(219, 234, 254, 0.55);
+  --sf-paper:
+    radial-gradient(circle at 18% 26%, rgba(253, 224, 71, 0.82) 0 1.5px, transparent 2.6px),
+    radial-gradient(circle at 82% 24%, rgba(219, 234, 254, 0.78) 0 1.4px, transparent 2.5px),
+    radial-gradient(circle at 68% 76%, rgba(253, 224, 71, 0.7) 0 1.3px, transparent 2.4px),
+    radial-gradient(75% 75% at 100% 100%, rgba(190, 24, 93, 0.36), transparent 62%),
+    linear-gradient(135deg var(--sf-oklab), #1d49b8 0%, #18338a 55%, #10205c 100%);
+  --sf-badge-png: url("/images/floo-items/minigame-champions/champ-jigsaw.png");
+  --sf-badge-set: image-set(
+    url("/images/floo-items/minigame-champions/champ-jigsaw.webp") type("image/webp") 1x,
+    url("/images/floo-items/minigame-champions/champ-jigsaw-2x.webp") type("image/webp") 2x,
+    url("/images/floo-items/minigame-champions/champ-jigsaw.png") type("image/png") 1x
+  );
+}
+
+@media (forced-colors: active) {
+  .shout-message-row[data-store-frame^="champ-"]
+    .shout-message-bubble:not(:has(.shout-image-album.is-stack)) {
+    border: 2px solid CanvasText !important;
+    background: Canvas !important;
+    color: CanvasText !important;
+  }
+}
+
+.shout-message-row[data-store-frame^="champ-"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack)) {
+  color: var(--sf-text);
+  min-width: 148px;
+  margin-top: 24px;
+  padding: 23px 22px 12px 22px;
+}
+
+.shout-message-row[data-store-frame^="champ-"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack))
+  .shout-message-author {
+  color: var(--sf-author) !important;
+  text-shadow: var(--sf-author-shadow);
+}
+
+.shout-message-row[data-store-frame^="champ-"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack))
+  .shout-message-meta-time {
+  color: var(--sf-meta);
+}
+
+.shout-message-row[data-store-frame^="champ-"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack))
+  .shout-rich-text
+  a {
+  color: var(--sf-link);
+}
+
+.shout-message-row[data-store-frame^="champ-"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack))
+  .shout-quote-preview {
+  background: var(--sf-quote-bg);
+  border-left-color: var(--sf-quote-border);
+  color: var(--sf-text);
+}
+
+/* Huy hiệu Hạng 1 đặt ngay chính giữa viền trên (::after — 54x54px) */
+.shout-message-row[data-store-frame^="champ-"]
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack))::after {
+  content: "";
+  z-index: 3;
+  pointer-events: none;
+  position: absolute;
+  width: 54px;
+  height: 54px;
+  top: 0;
+  bottom: auto;
+  left: 50%;
+  right: auto;
+  transform: translate(-50%, -56%);
+  filter:
+    drop-shadow(0 2px 5px rgba(12, 6, 2, 0.78))
+    drop-shadow(0 0 8px var(--sf-glow));
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  background-image: var(--sf-badge-png);
+  background-image: var(--sf-badge-set);
+}

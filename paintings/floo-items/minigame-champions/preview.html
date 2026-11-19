@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bộ 6 Khung Floo Chốt — Đương Kim Hạng 1 Của 6 Mini-Game</title>
+  <link rel="stylesheet" href="./minigame-champions-floo.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: #120c08;
+      color: #fef3c7;
+    }
+
+    .demo-shell {
+      max-width: 920px;
+      margin: 0 auto;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: #fde68a;
+      margin: 0 0 18px;
+    }
+
+    .grid-6 {
+      background: #160f09;
+      border: 1px solid rgba(197, 166, 107, 0.45);
+      border-radius: 14px;
+      padding: 28px 22px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 26px 24px;
+    }
+
+    .shout-message-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      position: relative;
+    }
+
+    .shout-house-seal {
+      width: 28px;
+      height: 28px;
+      flex: 0 0 28px;
+      border-radius: 8px;
+      border: 1px solid rgba(250, 204, 21, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 24px;
+      background: #3b2306;
+      font-size: 15px;
+    }
+
+    .shout-message-content {
+      max-width: 88%;
+      min-width: 0;
+    }
+
+    .shout-message-row[data-store-frame] .shout-message-bubble {
+      position: relative;
+      box-sizing: border-box;
+      width: fit-content;
+      max-width: 100%;
+      background: var(--sf-paper);
+      box-shadow: var(--sf-shadow);
+      border: 1px solid var(--sf-edge) !important;
+      border-radius: 12px 12px 12px 4px;
+      font-size: 13.5px;
+      line-height: 1.45;
+    }
+
+    /* Dùng đường dẫn tương đối khi mở trực tiếp preview.html từ ổ đĩa */
+    .shout-message-row[data-store-frame="champ-match3"] .shout-message-bubble::after { background-image: url("./champ-match3-2x.webp") !important; }
+    .shout-message-row[data-store-frame="champ-caro"] .shout-message-bubble::after   { background-image: url("./champ-caro-2x.webp") !important; }
+    .shout-message-row[data-store-frame="champ-sudoku"] .shout-message-bubble::after { background-image: url("./champ-sudoku-2x.webp") !important; }
+    .shout-message-row[data-store-frame="champ-chess"] .shout-message-bubble::after  { background-image: url("./champ-chess-2x.webp") !important; }
+    .shout-message-row[data-store-frame="champ-blocks"] .shout-message-bubble::after { background-image: url("./champ-blocks-2x.webp") !important; }
+    .shout-message-row[data-store-frame="champ-jigsaw"] .shout-message-bubble::after { background-image: url("./champ-jigsaw-2x.webp") !important; }
+
+    .shout-meta-line {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 3px;
+      font-size: 12px;
+    }
+
+    .shout-message-author {
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-shell">
+    <h1 style="font-size: 18px; margin: 0 0 6px; color: #fde047;">🏆 Bộ 6 Khung Bong Bóng Đương Kim Hạng 1 Của 6 Mini-Game (Thiết Kế Chốt)</h1>
+    <p class="subtitle">Màu nền Bảo Ngọc Tươi riêng cho từng môn • Huy hiệu Hạng 1 (54×54px) đặt ngay chính giữa viền trên</p>
+
+    <div class="grid-6">
+      <div class="shout-message-row is-other" data-store-frame="champ-match3">
+        <div class="shout-house-seal" aria-hidden="true">🍬</div>
+        <div class="shout-message-content">
+          <div class="shout-message-bubble">
+            <div class="shout-meta-line">
+              <span class="shout-message-author">Top 1 Bùa Gặt</span>
+              <span class="shout-message-meta-time">champ-match3</span>
+            </div>
+            <div class="shout-rich-text">Hạng 1 <b>Bùa Gặt Honeydukes</b> — nền Hồng Kẹo Dâu &amp; hũ kẹo chong chóng số 1 ngay giữa!</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="shout-message-row is-other" data-store-frame="champ-caro">
+        <div class="shout-house-seal" aria-hidden="true">🧨</div>
+        <div class="shout-message-content">
+          <div class="shout-message-bubble">
+            <div class="shout-meta-line">
+              <span class="shout-message-author">Top 1 Dò Mìn</span>
+              <span class="shout-message-meta-time">champ-caro</span>
+            </div>
+            <div class="shout-rich-text">Hạng 1 <b>Dò Mìn Phép Thuật</b> — nền Cam Đỏ Lửa Mìn &amp; khối đá cổ ngữ cắm cờ số 1!</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="shout-message-row is-other" data-store-frame="champ-sudoku">
+        <div class="shout-house-seal" aria-hidden="true">🔢</div>
+        <div class="shout-message-content">
+          <div class="shout-message-bubble">
+            <div class="shout-meta-line">
+              <span class="shout-message-author">Top 1 Số Học</span>
+              <span class="shout-message-meta-time">champ-sudoku</span>
+            </div>
+            <div class="shout-rich-text">Hạng 1 <b>Số Học Huyền Bí</b> — nền Tím Thạch Anh &amp; <b>Bánh xe Thần Số Học 1–9</b> ở giữa!</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="shout-message-row is-other" data-store-frame="champ-chess">
+        <div class="shout-house-seal" aria-hidden="true">🧜‍♀️</div>
+        <div class="shout-message-content">
+          <div class="shout-message-bubble">
+            <div class="shout-meta-line">
+              <span class="shout-message-author">Top 1 Bắn Cá</span>
+              <span class="shout-message-meta-time">champ-chess</span>
+            </div>
+            <div class="shout-rich-text">Hạng 1 <b>Bắn Cá Hồ Đen</b> — nền Xanh Ngọc Thủy Cung &amp; <b>Mỹ nhân ngư Hồ Đen Harry Potter</b>!</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="shout-message-row is-other" data-store-frame="champ-blocks">
+        <div class="shout-house-seal" aria-hidden="true">🦄</div>
+        <div class="shout-message-content">
+          <div class="shout-message-bubble">
+            <div class="shout-meta-line">
+              <span class="shout-message-author">Top 1 Sinh Vật</span>
+              <span class="shout-message-meta-time">champ-blocks</span>
+            </div>
+            <div class="shout-rich-text">Hạng 1 <b>Sinh Vật Huyền Bí</b> — nền Xanh Lá Lục Bảo &amp; chú Niffler ôm đồng Galleon số 1!</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="shout-message-row is-other" data-store-frame="champ-jigsaw">
+        <div class="shout-house-seal" aria-hidden="true">🏅</div>
+        <div class="shout-message-content">
+          <div class="shout-message-bubble">
+            <div class="shout-meta-line">
+              <span class="shout-message-author">Top 1 Tranh Ghép</span>
+              <span class="shout-message-meta-time">champ-jigsaw</span>
+            </div>
+            <div class="shout-rich-text">Hạng 1 <b>Tranh Ghép Phép Thuật</b> — nền Lam Sao Trời &amp; <b>Huy chương vàng ghép tranh</b> ở giữa!</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
