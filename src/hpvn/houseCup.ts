@@ -129,7 +129,7 @@ export interface HouseCupAllianceStanding {
   nameVi: string;
   houses: readonly [HouseName, HouseName];
   points: number;
-  housePoints: readonly [number, number];
+  memberHouseScores: readonly [number, number];
   firstPlaceCount: number;
   sharePercent: number;
   rank: 1 | 2;
@@ -395,7 +395,7 @@ export function houseCupAllianceStandings(
     return {
       spec,
       points,
-      housePoints: [p0, p1] as readonly [number, number],
+      memberHouseScores: [p0, p1] as readonly [number, number],
       firstPlaceCount: (firstCounts[h0] ?? 0) + (firstCounts[h1] ?? 0),
       isPlayerAlliance: isMine,
       allyHouse,
@@ -415,7 +415,7 @@ export function houseCupAllianceStandings(
     nameVi: item.spec.nameVi,
     houses: item.spec.houses,
     points: item.points,
-    housePoints: item.housePoints,
+    memberHouseScores: item.memberHouseScores,
     firstPlaceCount: item.firstPlaceCount,
     sharePercent: totalPts > 0 ? Math.round((item.points / totalPts) * 100) : 50,
     rank,

@@ -9144,6 +9144,11 @@ body:has(#managePopoverMenu:not(.hidden)) .ts-corner-right {
 .hs-lb-house-pts { color: var(--farm-green-text); font-weight: var(--hs-weight-label); font-size: var(--hs-text-11); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .hs-lb-block > .hs-lb-house-pts { display: block; margin-top: 2px; padding: 1px 5px; border-radius: var(--radius-pill); background: rgba(255, 250, 238, 0.85); color: var(--farm-green-text); font-size: 10px; }
 .hs-lb-house-need { color: var(--hs-ink-soft); font-size: var(--hs-text-11); white-space: nowrap; }
+.hpvn-exchange .hs-gringotts-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px; font-size: var(--hs-text-14); font-weight: var(--hs-weight-title); margin-bottom: 8px; color: var(--hs-ink); }
+.hpvn-exchange .hs-gringotts-packs { display: flex; flex-wrap: wrap; gap: 6px; }
+.hpvn-exchange .hs-gringotts-reverse { margin-top: 12px; padding-top: 10px; border-top: var(--hs-line) solid rgba(122, 86, 56, 0.24); }
+.hpvn-exchange .hs-gringotts-note { font-size: var(--hs-text-12); margin-top: 6px; color: var(--hs-ink-soft); }
+.hpvn-exchange .hs-gringotts-warn { font-size: var(--hs-text-12); font-weight: var(--hs-weight-label); margin-top: 6px; color: var(--hs-bad); }
 @media (max-width: 440px) {
   .hs-cup-ally-vs { grid-template-columns: minmax(0, 1fr); gap: 6px; }
   .hs-cup-ally-divider { justify-self: center; }
