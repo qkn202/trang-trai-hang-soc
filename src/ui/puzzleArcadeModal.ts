@@ -1185,7 +1185,7 @@ export class PuzzleArcadeModalController {
       this.cachedFishBgKey = '';
       this.forceImmediateRedraw = true;
     };
-    blackLakeBgImg.src = '/game/trang-trai-hang-soc/paintings/black_lake_underwater_bg.webp';
+    blackLakeBgImg.src = '/game/trang-trai-hang-soc/paintings/black_lake_underwater_bg.webp?v=sea2';
     this.blackLakeUnderwaterBgImage = blackLakeBgImg;
 
     const blackLakeCreaturesImg = new Image();
@@ -1193,7 +1193,7 @@ export class PuzzleArcadeModalController {
     blackLakeCreaturesImg.onload = () => {
       this.forceImmediateRedraw = true;
     };
-    blackLakeCreaturesImg.src = '/game/trang-trai-hang-soc/paintings/black_lake_creatures.webp';
+    blackLakeCreaturesImg.src = '/game/trang-trai-hang-soc/paintings/black_lake_creatures.webp?v=sea2';
     this.blackLakeCreaturesAtlas = blackLakeCreaturesImg;
 
     const lakeImg = new Image();
@@ -2188,7 +2188,7 @@ export class PuzzleArcadeModalController {
 
     if (this.mode === 'chess') {
         modalTitle.innerHTML =
-          '<img src="/game/trang-trai-hang-soc/paintings/plimpy_icon.webp" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Bắn Cá Hồ Đen';
+          '<img src="/game/trang-trai-hang-soc/paintings/plimpy_icon.webp?v=sea2" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Bắn Cá Hồ Đen';
       } else if (this.mode === 'sudoku') {
         modalTitle.innerHTML =
           '<img src="/game/trang-trai-hang-soc/sprites/m3_piece_scroll.webp" alt="" style="width:26px;height:26px;object-fit:contain;vertical-align:-6px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Số Học Huyền Bí';
@@ -6799,9 +6799,9 @@ export class PuzzleArcadeModalController {
             const dh = img.naturalHeight * scale;
             octx.drawImage(img, (virtW - dw) * 0.5, (virtH - dh) * 0.5, dw, dh);
             const deepTint = octx.createLinearGradient(0, 0, 0, virtH);
-            deepTint.addColorStop(0, 'rgba(4, 42, 54, 0.24)');
-            deepTint.addColorStop(0.6, 'rgba(4, 32, 46, 0.28)');
-            deepTint.addColorStop(1, 'rgba(3, 16, 28, 0.48)');
+            deepTint.addColorStop(0, 'rgba(3, 38, 58, 0.14)');
+            deepTint.addColorStop(0.6, 'rgba(3, 28, 46, 0.18)');
+            deepTint.addColorStop(1, 'rgba(2, 14, 28, 0.34)');
             octx.fillStyle = deepTint;
             octx.fillRect(0, 0, virtW, virtH);
           } else {
@@ -6828,9 +6828,9 @@ export class PuzzleArcadeModalController {
         const dh = img.naturalHeight * scale;
         ctx.drawImage(img, (virtW - dw) * 0.5, (virtH - dh) * 0.5, dw, dh);
         const deepTint = ctx.createLinearGradient(0, 0, 0, virtH);
-        deepTint.addColorStop(0, 'rgba(4, 42, 54, 0.24)');
-        deepTint.addColorStop(0.6, 'rgba(4, 32, 46, 0.28)');
-        deepTint.addColorStop(1, 'rgba(3, 16, 28, 0.48)');
+        deepTint.addColorStop(0, 'rgba(3, 38, 58, 0.14)');
+        deepTint.addColorStop(0.6, 'rgba(3, 28, 46, 0.18)');
+        deepTint.addColorStop(1, 'rgba(2, 14, 28, 0.34)');
         ctx.fillStyle = deepTint;
         ctx.fillRect(0, 0, virtW, virtH);
       } else {
@@ -6932,7 +6932,7 @@ export class PuzzleArcadeModalController {
     ctx.fill();
 
     ctx.save();
-    ctx.scale(fish.species === 'puffer_bomb' ? 1 : fish.dir, 1);
+    ctx.scale(fish.dir, 1);
 
     const atlas =
       this.blackLakeCreaturesAtlas &&
@@ -6942,49 +6942,49 @@ export class PuzzleArcadeModalController {
         : null;
 
     if (atlas) {
-      // Painterly 2.5D Harry Potter Black Lake Creature Atlas (4×2 of 256×256)
+      // Painterly 2.5D Mystical Underwater Sea Creature Atlas (4×2 of 256×256)
       let cellCol = 0;
       let cellRow = 0;
       let sizeMult = 2.55;
       switch (fish.species) {
-        case 'minnow': // Cá Plimpy Lam
+        case 'minnow': // Cá Plimpy Lam (Lantern Anglerfish)
           cellCol = 0;
           cellRow = 0;
-          sizeMult = 2.5;
+          sizeMult = 2.52;
           break;
-        case 'clown': // Quỷ Nước Grindylow
+        case 'clown': // Quỷ Nước Grindylow (Leafy Sea-Dragon / Hippocampus)
           cellCol = 1;
           cellRow = 0;
-          sizeMult = 2.6;
+          sizeMult = 2.62;
           break;
-        case 'emerald_koi': // Thủy Xà Slytherin
+        case 'emerald_koi': // Thủy Xà Slytherin (Emerald Sea-Serpent Dragon)
           cellCol = 2;
           cellRow = 0;
-          sizeMult = 2.68;
+          sizeMult = 2.7;
           break;
-        case 'moon_jelly': // Linh Quang Hộ Mệnh
+        case 'moon_jelly': // Sứa Ánh Trăng Huyền Bí (Moon Crystal Jellyfish)
           cellCol = 3;
           cellRow = 0;
           sizeMult = 2.62;
           break;
-        case 'puffer_bomb': // Thủy Lôi Pháo Hoa Weasley
+        case 'puffer_bomb': // Cá Nóc Gai Tinh Quang (Glowing Spiky Sea Pufferfish)
           cellCol = 0;
           cellRow = 1;
-          sizeMult = 2.55;
+          sizeMult = 2.58;
           break;
-        case 'golden_ray': // Snitch Thủy Hoàng Kim
+        case 'golden_ray': // Cá Đuối Hoàng Kim (Golden Celestial Manta Ray)
           cellCol = 1;
           cellRow = 1;
-          sizeMult = 2.68;
+          sizeMult = 2.74;
           break;
-        case 'leviathan_carp': // Mực Khổng Lồ Hồ Đen (Boss)
+        case 'leviathan_carp': // Mực Khổng Lồ Hồ Đen (Colossal Royal Kraken Boss)
           cellCol = 2;
           cellRow = 1;
           sizeMult = 2.95;
           break;
       }
 
-      // Magical species-specific Hogwarts underwater aura behind sprite
+      // Magical underwater bioluminescent aura behind special sea creatures
       if (fish.species === 'leviathan_carp') {
         ctx.save();
         ctx.rotate(nowSec * 0.75);
@@ -7000,8 +7000,8 @@ export class PuzzleArcadeModalController {
         const pulse = 1 + Math.sin(nowSec * 7.5 + fish.uid) * 0.07;
         ctx.beginPath();
         ctx.arc(0, 0, r * 1.12 * pulse, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(251, 146, 60, 0.68)';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(45, 212, 191, 0.68)';
+        ctx.lineWidth = 1.8;
         ctx.stroke();
       } else if (fish.species === 'golden_ray') {
         for (let s = 1; s <= 3; s++) {
@@ -7023,10 +7023,7 @@ export class PuzzleArcadeModalController {
         ctx.fill();
       }
 
-      const swimTilt =
-        fish.species === 'puffer_bomb'
-          ? Math.sin(nowSec * 3.5 + fish.uid) * 0.06
-          : Math.sin(fish.tailPhase) * 0.085;
+      const swimTilt = Math.sin(fish.tailPhase) * 0.082;
       const squash = 1 + Math.sin(fish.tailPhase * 1.35) * 0.032;
       ctx.save();
       ctx.rotate(swimTilt);
@@ -7127,100 +7124,88 @@ export class PuzzleArcadeModalController {
       ctx.fillStyle = '#0f172a';
       ctx.fill();
     } else if (fish.species === 'golden_ray') {
-      // SNITCH THỦY HOÀNG KIM (Winged Golden Snitch Relic)
-      const flutter = Math.sin(fish.tailPhase * 2.1);
-      // Trailing golden stardust wake
-      for (let s = 1; s <= 3; s++) {
-        ctx.beginPath();
-        ctx.arc(-r * (0.55 + s * 0.28), Math.sin(nowSec * 7 + s) * r * 0.14, Math.max(1.4, r * (0.09 - s * 0.02)), 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(253, 224, 71, 0.65)';
-        ctx.fill();
-      }
-
-      // Twin feathered silver-gold Snitch wings
-      for (const side of [-1, 1]) {
-        ctx.save();
-        ctx.scale(1, side);
-        ctx.rotate(flutter * 0.34);
-        ctx.beginPath();
-        ctx.moveTo(0, -r * 0.22);
-        ctx.quadraticCurveTo(-r * 0.55, -r * 1.38, -r * 1.35, -r * 0.98);
-        ctx.quadraticCurveTo(-r * 0.85, -r * 0.42, -r * 0.18, -r * 0.12);
-        ctx.closePath();
-        const wGrad = ctx.createLinearGradient(0, -r * 0.2, -r * 1.25, -r * 1.1);
-        wGrad.addColorStop(0, '#fef08a');
-        wGrad.addColorStop(0.6, '#f8fafc');
-        wGrad.addColorStop(1, '#cbd5e1');
-        ctx.fillStyle = wGrad;
-        ctx.fill();
-        ctx.strokeStyle = '#ca8a04';
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      // Engraved 24k Golden Snitch sphere
-      const coreR = r * 0.54;
-      const gGrad = ctx.createRadialGradient(coreR * 0.28, -coreR * 0.28, coreR * 0.1, 0, 0, coreR);
-      gGrad.addColorStop(0, fish.hitFlash > 0 ? '#ffffff' : '#fef9c3');
-      gGrad.addColorStop(0.55, '#facc15');
-      gGrad.addColorStop(1, '#a16207');
+      // CÁ ĐUỐI HOÀNG KIM (Golden Celestial Manta Ray)
+      const glide = Math.sin(fish.tailPhase * 1.6) * r * 0.18;
+      // Whip-like golden manta tail
       ctx.beginPath();
-      ctx.arc(r * 0.12, 0, coreR, 0, Math.PI * 2);
+      ctx.moveTo(-r * 0.45, 0);
+      ctx.quadraticCurveTo(-r * 1.05, glide, -r * 1.55, -glide * 0.65);
+      ctx.strokeStyle = '#facc15';
+      ctx.lineWidth = Math.max(2, r * 0.09);
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // Wide sweeping diamond manta ray wings
+      ctx.beginPath();
+      ctx.moveTo(r * 0.95, 0);
+      ctx.quadraticCurveTo(r * 0.25, -r * 1.08 + glide * 0.5, -r * 0.55, -r * 0.24);
+      ctx.lineTo(-r * 0.65, 0);
+      ctx.lineTo(-r * 0.55, r * 0.24);
+      ctx.quadraticCurveTo(r * 0.25, r * 1.08 - glide * 0.5, r * 0.95, 0);
+      ctx.closePath();
+      const gGrad = ctx.createRadialGradient(r * 0.18, -r * 0.12, r * 0.08, 0, 0, r * 1.05);
+      gGrad.addColorStop(0, fish.hitFlash > 0 ? '#ffffff' : '#fef9c3');
+      gGrad.addColorStop(0.55, '#eab308');
+      gGrad.addColorStop(1, '#854d0e');
       ctx.fillStyle = gGrad;
       ctx.fill();
       ctx.lineWidth = 1.6;
       ctx.strokeStyle = '#fef08a';
       ctx.stroke();
 
-      // Engraved Snitch seam rings
-      ctx.beginPath();
-      ctx.arc(r * 0.12, 0, coreR * 0.68, -0.9, 0.9);
-      ctx.strokeStyle = 'rgba(120, 53, 15, 0.65)';
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-    } else if (fish.species === 'puffer_bomb') {
-      // THỦY LÔI PHÁO HOA WEASLEY (Weasleys' Wizard Wheezes Orb — 'W')
-      const pulse = 1 + Math.sin(nowSec * 8 + fish.uid) * 0.06;
-      ctx.beginPath();
-      ctx.arc(0, 0, r * 1.12 * pulse, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(251, 146, 60, 0.65)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      // Brass studs around the cauldron-mine
-      for (let i = 0; i < 8; i++) {
-        const ang = (Math.PI / 4) * i + nowSec * 0.8;
+      // Bioluminescent aqua rune spots on manta wings
+      ctx.fillStyle = '#67e8f9';
+      for (const side of [-1, 1]) {
         ctx.beginPath();
-        ctx.arc(Math.cos(ang) * r * 0.88, Math.sin(ang) * r * 0.88, Math.max(2, r * 0.12), 0, Math.PI * 2);
-        ctx.fillStyle = '#facc15';
+        ctx.arc(r * 0.12, side * r * 0.36, Math.max(1.8, r * 0.07), 0, Math.PI * 2);
         ctx.fill();
       }
-
-      // Royal purple & molten orange Weasley firework sphere
+    } else if (fish.species === 'puffer_bomb') {
+      // CÁ NÓC GAI TINH QUANG (Glowing Spiky Sea Pufferfish)
+      const pulse = 1 + Math.sin(nowSec * 6.5 + fish.uid) * 0.055;
+      // Fluttering caudal tail fin
       ctx.beginPath();
-      ctx.arc(0, 0, r * 0.84, 0, Math.PI * 2);
-      const wOrb = ctx.createRadialGradient(-r * 0.22, -r * 0.24, r * 0.08, 0, 0, r * 0.86);
-      wOrb.addColorStop(0, fish.hitFlash > 0 ? '#ffffff' : '#e879f9');
-      wOrb.addColorStop(0.55, fish.hitFlash > 0 ? '#fde047' : '#7e22ce');
-      wOrb.addColorStop(1, '#3b0764');
-      ctx.fillStyle = wOrb;
+      ctx.moveTo(-r * 0.65, 0);
+      ctx.lineTo(-r * 1.15, -r * 0.32 + wag * r * 0.25);
+      ctx.lineTo(-r * 1.15, r * 0.32 + wag * r * 0.25);
+      ctx.closePath();
+      ctx.fillStyle = '#2dd4bf';
       ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#facc15';
+
+      // Radiating crystal sea-spines around inflated pufferfish body
+      for (let i = 0; i < 10; i++) {
+        const ang = ((Math.PI * 2) / 10) * i;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(ang) * r * 0.72 * pulse, Math.sin(ang) * r * 0.68 * pulse);
+        ctx.lineTo(Math.cos(ang) * r * 1.04 * pulse, Math.sin(ang) * r * 0.98 * pulse);
+        ctx.strokeStyle = i % 2 === 0 ? '#67e8f9' : '#fde047';
+        ctx.lineWidth = Math.max(1.8, r * 0.08);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+
+      // Inflated golden-coral pufferfish body
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r * 0.82 * pulse, r * 0.74 * pulse, 0, 0, Math.PI * 2);
+      const pOrb = ctx.createRadialGradient(r * 0.2, -r * 0.2, r * 0.08, 0, 0, r * 0.86);
+      pOrb.addColorStop(0, fish.hitFlash > 0 ? '#ffffff' : '#fef3c7');
+      pOrb.addColorStop(0.58, fish.hitFlash > 0 ? '#fde047' : '#f59e0b');
+      pOrb.addColorStop(1, '#b45309');
+      ctx.fillStyle = pOrb;
+      ctx.fill();
+      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = '#67e8f9';
       ctx.stroke();
 
-      // Fizzing fuse spark on top
-      ctx.fillStyle = '#fde047';
-      this.drawFourPointStar(ctx, 0, -r * 0.96, r * 0.26 * pulse, r * 0.09);
+      // Wide expressive sea-pufferfish eye
+      ctx.beginPath();
+      ctx.arc(r * 0.38, -r * 0.14, Math.max(2.6, r * 0.18), 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
       ctx.fill();
-
-      // Iconic Golden 'W' (Weasley) crest
-      ctx.fillStyle = '#fde047';
-      ctx.font = `800 ${Math.max(10, Math.round(r * 0.72))}px "Be Vietnam Pro", system-ui, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('W', 0, 1);
+      ctx.beginPath();
+      ctx.arc(r * 0.42, -r * 0.14, Math.max(1.3, r * 0.09), 0, Math.PI * 2);
+      ctx.fillStyle = '#0f172a';
+      ctx.fill();
     } else if (fish.species === 'moon_jelly') {
       // LINH QUANG HỘ MỆNH (Expecto Patronum Silvery Spirit Wisp)
       const pulse = 1 + Math.sin(nowSec * 4.2 + fish.uid) * 0.09;
@@ -7588,31 +7573,31 @@ export class PuzzleArcadeModalController {
       ctx.beginPath();
       ctx.arc(nx, ny, rad, 0, Math.PI * 2);
       ctx.fillStyle = net.isExplosion
-        ? 'rgba(249, 115, 22, 0.28)'
+        ? 'rgba(45, 212, 191, 0.28)'
         : net.tier === 3
           ? 'rgba(250, 204, 21, 0.24)'
           : net.tier === 2
-            ? 'rgba(192, 132, 252, 0.22)'
-            : 'rgba(251, 113, 133, 0.22)';
+            ? 'rgba(56, 189, 248, 0.22)'
+            : 'rgba(103, 232, 249, 0.22)';
       ctx.fill();
       ctx.lineWidth = net.isExplosion ? 3.2 : 2.2;
       ctx.strokeStyle = net.isExplosion
-        ? '#fde047'
+        ? '#67e8f9'
         : net.tier === 3
           ? '#fde047'
           : net.tier === 2
-            ? '#e879f9'
-            : '#fda4af';
+            ? '#38bdf8'
+            : '#a5f3fc';
       ctx.stroke();
 
       if (net.isExplosion) {
-        // Weasley Wildfire Whiz-Bang firework rays & stars
+        // Bioluminescent Pufferfish Sea-Crystal Tidal Shockwave Rays
         for (let i = 0; i < 8; i++) {
           const ang = (Math.PI / 4) * i + t * 0.8;
           ctx.beginPath();
           ctx.moveTo(nx + Math.cos(ang) * rad * 0.25, ny + Math.sin(ang) * rad * 0.25);
           ctx.lineTo(nx + Math.cos(ang) * rad * 0.96, ny + Math.sin(ang) * rad * 0.96);
-          ctx.strokeStyle = i % 2 === 0 ? '#fde047' : '#e879f9';
+          ctx.strokeStyle = i % 2 === 0 ? '#67e8f9' : '#fde047';
           ctx.lineWidth = 2;
           ctx.stroke();
         }
@@ -7762,18 +7747,18 @@ export class PuzzleArcadeModalController {
     ctx.setLineDash([]);
     ctx.restore();
 
-    // Carved Hogwarts Gothic Brass & Obsidian Dais
+    // Carved Atlantean Sea-Stone, Pearl & Gold Coral Dais
     ctx.beginPath();
     ctx.arc(tx, ty + 8, baseR * 1.24, Math.PI, 0);
     ctx.closePath();
     const pedGrad = ctx.createLinearGradient(tx - baseR, ty - baseR, tx + baseR, ty + 14);
-    pedGrad.addColorStop(0, '#facc15');
-    pedGrad.addColorStop(0.45, '#78350f');
-    pedGrad.addColorStop(1, '#1c1917');
+    pedGrad.addColorStop(0, '#67e8f9');
+    pedGrad.addColorStop(0.45, '#0f766e');
+    pedGrad.addColorStop(1, '#042f2e');
     ctx.fillStyle = pedGrad;
     ctx.fill();
     ctx.lineWidth = 2;
-    ctx.strokeStyle = '#fef08a';
+    ctx.strokeStyle = '#fde047';
     ctx.stroke();
 
     // Rotating Elder Wand (Đũa Phép Cơm Nguội with sculpted berry knots & spell-crystal tip)

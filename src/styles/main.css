@@ -5171,7 +5171,7 @@ html[data-yule-theme='true'] #puzzleArcadeDialog .pa-modal-inner {
 html[data-yule-theme='true'] #puzzleArcadeDialog .pa-modal-inner.pa-great-hall-mode {
   background:
     linear-gradient(180deg, var(--great-hall-scrim-top) 0%, var(--great-hall-scrim-bot) 100%),
-    url('/game/trang-trai-hang-soc/paintings/black_lake_underwater_bg.webp') center center / cover no-repeat;
+    url('/game/trang-trai-hang-soc/paintings/black_lake_underwater_bg.webp?v=sea2') center center / cover no-repeat;
 }
 
 html[data-yule-theme='true'] #puzzleArcadeDialog .pa-modal-inner.pa-marauder-caro-mode {
@@ -6755,7 +6755,7 @@ body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(96px + ma
   :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .pa-mode-tabs .pa-tab-trial { inset: 50% var(--hs-space-3) auto auto; inline-size: 8px; block-size: 8px; translate: 0 -50%; }
   :is(#puzzleArcadeDialog, #match3Dialog) .pa-mode-tab:is([data-pa-mode='caro'], [data-m3-jump-arcade='caro']) { --hs-tab-sprite: url('/game/trang-trai-hang-soc/paintings/caro/phoenix_seal.webp'); }
   :is(#puzzleArcadeDialog, #match3Dialog) .pa-mode-tab:is([data-pa-mode='sudoku'], [data-m3-jump-arcade='sudoku']) { --hs-tab-sprite: url('/game/trang-trai-hang-soc/sprites/m3_piece_scroll.webp'); }
-  :is(#puzzleArcadeDialog, #match3Dialog) .pa-mode-tab:is([data-pa-mode='chess'], [data-m3-jump-arcade='chess']) { --hs-tab-sprite: url('/game/trang-trai-hang-soc/paintings/plimpy_icon.webp'); }
+  :is(#puzzleArcadeDialog, #match3Dialog) .pa-mode-tab:is([data-pa-mode='chess'], [data-m3-jump-arcade='chess']) { --hs-tab-sprite: url('/game/trang-trai-hang-soc/paintings/plimpy_icon.webp?v=sea2'); }
   :is(#puzzleArcadeDialog, #match3Dialog) .pa-mode-tab:is([data-pa-mode='blocks'], [data-m3-jump-arcade='blocks']) { --hs-tab-sprite: url('/game/trang-trai-hang-soc/sprites/beast_niffler.webp'); }
   :is(#puzzleArcadeDialog, #match3Dialog) .pa-mode-tab:is([data-pa-mode='jigsaw'], [data-m3-jump-arcade='jigsaw']) { --hs-tab-sprite: url('/game/trang-trai-hang-soc/sprites/ui_icon_jigsaw.webp'); }
   :is(#btnPaGoMatch3, #match3Dialog .pa-mode-tab:not([data-m3-jump-arcade])) { --hs-tab-sprite: url('/game/trang-trai-hang-soc/sprites/m3_farm_pinwheel.webp'); }

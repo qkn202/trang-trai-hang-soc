@@ -1219,7 +1219,7 @@ export function headerRefreshHeader(hud: GameHUD): void {
     } else if (lastGame === 'chess') {
       const info = hud.sim.getDisciplineStageInfo('chess');
       playTag = '🎯 Bắn Cá';
-      playIcon = '/game/trang-trai-hang-soc/paintings/plimpy_icon.webp';
+      playIcon = '/game/trang-trai-hang-soc/paintings/plimpy_icon.webp?v=sea2';
       playStageText = info.isMaxed ? `👑 ${MAX_MINIGAME_STAGE}` : `Màn ${info.currentStage}`;
     } else if (lastGame === 'jigsaw') {
       const info = hud.sim.getDisciplineStageInfo('jigsaw');

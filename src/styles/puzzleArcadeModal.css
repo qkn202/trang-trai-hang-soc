@@ -56,7 +56,7 @@
 #puzzleArcadeDialog .pa-modal-inner.pa-great-hall-mode {
   background:
     linear-gradient(180deg, var(--great-hall-scrim-top) 0%, var(--great-hall-scrim-bot) 100%),
-    url('/game/trang-trai-hang-soc/paintings/black_lake_underwater_bg.webp') center center / cover no-repeat;
+    url('/game/trang-trai-hang-soc/paintings/black_lake_underwater_bg.webp?v=sea2') center center / cover no-repeat;
 }
 
 #puzzleArcadeDialog .pa-modal-inner.pa-potions-sudoku-mode {
