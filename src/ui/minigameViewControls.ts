@@ -229,6 +229,8 @@ export function computeResponsiveBoardBox(
   const safeW = Math.max(120, Math.floor(Number.isFinite(availW) ? availW : 320));
   const safeH = Math.max(120, Math.floor(Number.isFinite(availH) ? availH : 320));
   if (
+    gameId === 'caro' ||
+    gameId === 'chess' ||
     gameId === 'blocks' ||
     gameId === 'jigsaw' ||
     gameId === 'seedquiz' ||
@@ -624,7 +626,8 @@ export class MinigameViewportManager {
       const vpW = Math.floor(panAreaEl.clientWidth);
       const vpH = Math.floor(panAreaEl.clientHeight);
       if (vpW <= 24 || vpH <= 24) return;
-      const isFluidStage = gameId === 'blocks' || gameId === 'jigsaw';
+      const isFluidStage =
+        gameId === 'caro' || gameId === 'chess' || gameId === 'blocks' || gameId === 'jigsaw';
       const fitW = isFluidStage ? vpW : Math.max(120, vpW - 2);
       const fitH = isFluidStage ? vpH : Math.max(120, vpH - 4);
       const ratio = getBoardAspectRatio

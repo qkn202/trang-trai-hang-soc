@@ -1265,7 +1265,7 @@ export function headerRefreshHeader(hud: GameHUD): void {
     const playSubLine = st.level >= MAX_LEVEL
       ? `Cấp ${MAX_LEVEL}`
       : bestNeedStars > 0
-        ? `Cần +${bestNeedStars} Sao · ${winsProg.current}/${winsProg.required} màn`
+        ? `Cần +${bestNeedStars} Sao`
         : `${winsProg.current}/${winsProg.required} màn`;
     const playSubSpoken = st.level >= MAX_LEVEL
       ? `Cấp ${MAX_LEVEL}`

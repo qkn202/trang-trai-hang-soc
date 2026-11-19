@@ -15,8 +15,8 @@ export function applyFarmInbox(state: GameState, entries: unknown, now = Date.no
     .filter((entry) => Number.isSafeInteger(entry?.seq) && entry.seq > (state.hpvnInboxSeq ?? 0))
     .sort((a, b) => a.seq - b.seq);
   for (const entry of fresh) {
-    if ((entry.kind === 'sickles' || entry.kind === 'cup') && Number.isSafeInteger(entry.sickle) && entry.sickle! > 0) {
-      wallet.galleons += entry.sickle!;
+    if (entry.kind === 'sickles' || entry.kind === 'cup') {
+      if (Number.isSafeInteger(entry.sickle) && entry.sickle! > 0) wallet.galleons += entry.sickle!;
       if (entry.kind === 'cup' && Number.isSafeInteger(entry.sand) && entry.sand! > 0) wallet.timeSand += entry.sand!;
     } else if (entry.kind === 'help') {
       for (const b of state.buildings) {

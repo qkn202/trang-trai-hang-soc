@@ -988,6 +988,14 @@ export interface SavedMinesweeperSession {
   snackPieUsed?: boolean;
 }
 
+export type FishWeaponId =
+  | 'normal'
+  | 'trident_spread'
+  | 'chain_lightning'
+  | 'piercing_lance'
+  | 'vortex_bomb'
+  | 'rapid_frost';
+
 export interface SavedFishShooterSession {
   v: 1;
   stage: number;
@@ -1006,6 +1014,9 @@ export interface SavedFishShooterSession {
   freezeTimer: number;
   talismanUsed: boolean;
   status: 'playing' | 'won' | 'lost';
+  autoFire?: boolean;
+  activeWeapon?: FishWeaponId;
+  activeWeaponTimer?: number;
   companionCharge?: number;
   snackPieUsed?: boolean;
 }

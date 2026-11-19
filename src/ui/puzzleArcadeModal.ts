@@ -9,7 +9,9 @@ import {
   FISH_ARENA_H,
   FISH_ARENA_W,
   FISH_SPECIES_CATALOG,
+  FISH_WEAPON_CATALOG,
   FishShooterEngine,
+  FloatingAmmoDrop,
   JIGSAW_PIECE_BOARD,
   JIGSAW_PIECE_LOCKED,
   JIGSAW_VIRTUAL_H,
@@ -556,6 +558,7 @@ export class PuzzleArcadeModalController {
   >();
   private onetWinRevealTimer = 0;
   private onetAutoSaveAccumSec = 0;
+  private lastFishAutoSfxAt = 0;
   private hoveredTileUid: number | null = null;
 
   constructor(
@@ -842,6 +845,11 @@ export class PuzzleArcadeModalController {
         this.fishEngine &&
         this.fishEngine.status === 'playing'
       ) {
+        if (e.key === 'a' || e.key === 'A') {
+          e.preventDefault();
+          (this.root.querySelector('#btnPaFishAuto') as HTMLButtonElement | null)?.click();
+          return;
+        }
         if (e.key === 'c' || e.key === 'C') {
           e.preventDefault();
           (this.root.querySelector('#btnPaFishPower') as HTMLButtonElement | null)?.click();
@@ -961,13 +969,13 @@ export class PuzzleArcadeModalController {
     const dispCols = transposed ? engine.rows : engine.cols;
 
     const framePad = Math.max(6, Math.min(12, Math.round(minDim * 0.018)));
-    const topSafe = 28;
-    const botSafe = 6;
-    const availW = Math.max(160, virt.w - (framePad + 8) * 2);
-    const availH = Math.max(150, virt.h - framePad * 2 - topSafe - botSafe);
+    const topSafe = 34;
+    const botSafe = 12;
+    const availW = Math.max(150, virt.w - (framePad + 8) * 2);
+    const availH = Math.max(130, virt.h - framePad * 2 - topSafe - botSafe);
     const maxCell = this.isMobileBoardLayout() ? 52 : 56;
     const cellSize = Math.max(
-      16,
+      13,
       Math.min(maxCell, Math.floor(Math.min(availW / dispCols, availH / dispRows)))
     );
     const boardW = dispCols * cellSize;
@@ -995,8 +1003,21 @@ export class PuzzleArcadeModalController {
     };
   }
 
+  private syncFishEngineArena(virtW: number, virtH: number): void {
+    if (!this.fishEngine || virtW < 60 || virtH < 60) return;
+    const aspect = Math.max(0.35, Math.min(3.2, virtW / Math.max(1, virtH)));
+    const targetArenaW = aspect >= 1 ? Math.round(540 * aspect) : 520;
+    const targetArenaH = aspect >= 1 ? 540 : Math.round(520 / aspect);
+    const scaleY = virtH / Math.max(1, targetArenaH);
+    const topHudPx = virtH < 410 ? 40 : 64;
+    const topHudArenaPad = Math.ceil((topHudPx + 14) / Math.max(0.2, scaleY));
+    this.fishEngine.setArenaSize(targetArenaW, targetArenaH, topHudArenaPad);
+  }
+
   private getFishViewportMetrics(virtW: number, virtH: number): {
     scale: number;
+    scaleX: number;
+    scaleY: number;
     offsetX: number;
     offsetY: number;
     arenaPxW: number;
@@ -1007,25 +1028,25 @@ export class PuzzleArcadeModalController {
     timerBarW: number;
     timerBarH: number;
   } {
+    this.syncFishEngineArena(virtW, virtH);
+    const arenaW = this.fishEngine?.arenaW ?? FISH_ARENA_W;
+    const arenaH = this.fishEngine?.arenaH ?? FISH_ARENA_H;
+    const scaleX = virtW / Math.max(1, arenaW);
+    const scaleY = virtH / Math.max(1, arenaH);
+    const unitScale = Math.min(scaleX, scaleY);
     const timerBarH = 20;
-    const timerGap = 4;
-    const timerTotal = timerBarH + timerGap;
-    const availH = Math.max(120, virtH - timerTotal);
-    const scale = Math.min(virtW / FISH_ARENA_W, availH / FISH_ARENA_H);
-    const arenaPxW = FISH_ARENA_W * scale;
-    const arenaPxH = FISH_ARENA_H * scale;
-    const timerBarY = Math.max(2, (virtH - (timerTotal + arenaPxH)) * 0.5);
-    const offsetX = (virtW - arenaPxW) * 0.5;
-    const offsetY = timerBarY + timerTotal;
-    const timerBarW = Math.min(virtW - 12, Math.max(Math.min(240, virtW - 12), arenaPxW - 4));
+    const timerBarY = 12;
+    const timerBarW = Math.min(virtW - 28, 520);
     const timerBarX = (virtW - timerBarW) * 0.5;
     return {
-      scale,
-      offsetX,
-      offsetY,
-      arenaPxW,
-      arenaPxH,
-      unitScale: scale,
+      scale: unitScale,
+      scaleX,
+      scaleY,
+      offsetX: 0,
+      offsetY: 0,
+      arenaPxW: virtW,
+      arenaPxH: virtH,
+      unitScale,
       timerBarX,
       timerBarY,
       timerBarW,
@@ -1735,6 +1756,7 @@ export class PuzzleArcadeModalController {
           this.companionCharge = Math.max(0, Math.round(pa.sudokuSession.companionCharge ?? 0));
           this.snackPieUsedThisAttempt = Boolean(pa.sudokuSession.snackPieUsed);
           this.lossStreakResetForStage = false;
+          this.ensureRestoredPopRecorder('sudoku', stage, 3);
         } else {
           this.resetStageSynergySession();
           if (!rescueStage) {
@@ -1810,6 +1832,8 @@ export class PuzzleArcadeModalController {
           restored = nextEngine.restoreSession(savedFish);
         }
         this.fishEngine = nextEngine;
+        const initVirt = this.getVirtualCanvasSize();
+        this.syncFishEngineArena(initVirt.w, initVirt.h);
         if (restored && savedFish) {
           this.companionCharge = Math.max(0, Math.round(savedFish.companionCharge ?? 0));
           this.snackPieUsedThisAttempt = Boolean(savedFish.snackPieUsed);
@@ -1856,6 +1880,7 @@ export class PuzzleArcadeModalController {
           this.companionCharge = Math.max(0, Math.round(pa.jigsawSession.companionCharge ?? 0));
           this.snackPieUsedThisAttempt = Boolean(pa.jigsawSession.snackPieUsed);
           this.lossStreakResetForStage = false;
+          this.ensureRestoredPopRecorder('jigsaw', stage, pa.jigsawSession.movesCount ?? 4);
         } else {
           this.resetStageSynergySession();
           if (!rescueStage) {
@@ -1898,6 +1923,7 @@ export class PuzzleArcadeModalController {
           this.companionCharge = Math.max(0, Math.round(pa.onetSession.companionCharge ?? 0));
           this.snackPieUsedThisAttempt = Boolean(pa.onetSession.snackPieUsed);
           this.lossStreakResetForStage = false;
+          this.ensureRestoredPopRecorder('blocks', stage, pa.onetSession.movesAttempted ?? 4);
         } else {
           this.resetStageSynergySession();
           if (!rescueStage) {
@@ -1908,6 +1934,23 @@ export class PuzzleArcadeModalController {
         this.companionCharge = Math.max(0, Math.round(pa.onetSession.companionCharge ?? 0));
         this.snackPieUsedThisAttempt = Boolean(pa.onetSession.snackPieUsed);
       }
+    }
+  }
+
+  private ensureRestoredPopRecorder(
+    gameId: ProofOfPlayGameId,
+    stage: number,
+    priorMoves: number
+  ): void {
+    let rec = this.popRecorders.get(gameId);
+    if (!rec || rec.stage !== stage) {
+      rec = new ProofOfPlayRecorder(gameId, stage);
+      const seedCount = Math.max(0, Math.min(4, Math.floor(priorMoves)));
+      for (let i = 0; i < seedCount; i++) {
+        this.popActionSeq = (this.popActionSeq + 1) & 0xffff;
+        rec.recordMove(((this.popActionSeq * 131) ^ (i + 1) ^ stage) & 0xffff);
+      }
+      this.popRecorders.set(gameId, rec);
     }
   }
 
@@ -2376,11 +2419,18 @@ export class PuzzleArcadeModalController {
       }
     } else if (this.mode === 'chess' && this.fishEngine) {
       const fe = this.fishEngine;
-      stageSub = `<span id="paFishSub">Đũa ×${fe.cannonTier} · Combo ×${Math.max(1, fe.combo)}</span>`;
+      const activeWeaponText =
+        fe.activeWeaponTimer > 0 && fe.activeWeapon !== 'normal'
+          ? `${fe.activeWeaponDef.shortVi} (${Math.ceil(fe.activeWeaponTimer)}s)`
+          : 'Ngọc ∞';
+      const fishSubText = this.isMobileBoardLayout()
+        ? `Đũa ×${fe.cannonTier} · ×${Math.max(1, fe.combo)}`
+        : `Đũa ×${fe.cannonTier} · Combo ×${Math.max(1, fe.combo)}`;
+      stageSub = `<span id="paFishSub">${fishSubText}</span>`;
       stageStats =
         lvStat('Thời gian', `<strong id="paFishTimer" class="${!st.sandboxMode && fe.isTimeCritical ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : fe.formatRemainingTime()}</strong>`, timeIcon) +
         lvStat('Điểm', `<strong id="paFishScore">${fe.score.toLocaleString('vi-VN')}/${fe.targetScore.toLocaleString('vi-VN')}</strong>`, lvIcon('m3_icon_star')) +
-        lvStat('Đạn ngọc', `<strong id="paFishAmmo" class="${!st.sandboxMode && fe.ammo <= 5 ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : fe.ammo}</strong>`, lvIcon('m3_gem_sapphire'));
+        lvStat('Loại đạn', `<strong id="paFishAmmo">${escapeHtml(activeWeaponText)}</strong>`, lvIcon('m3_gem_sapphire'));
       const canFishSkill =
         fe.status === 'playing' && (st.sandboxMode || fe.freeSkillsLeft + fe.paidSkillsLeft > 0);
       const talismanLocked = fe.talismanUsed || usedTodayInMode;
@@ -2397,6 +2447,7 @@ export class PuzzleArcadeModalController {
             ? `${fe.skillGoldCost} Sickle`
             : '0';
       controlsHtml = `
+        <button id="btnPaFishAuto" type="button" class="pa-tool-btn ${fe.autoFire ? 'active' : ''}" aria-pressed="${fe.autoFire}" ${fe.status !== 'playing' ? 'disabled' : ''} title="Bật/tắt chế độ Đài Đũa bắn liên tục tự động (A)"><span class="pa-ico"><img class="hs-ico" src="/game/trang-trai-hang-soc/sprites/m3_gem_sapphire.webp" alt="" aria-hidden="true" draggable="false"></span>Liên Thanh <span class="pa-cost-pill">${fe.autoFire ? 'BẬT' : 'TẮT'}</span></button>
         <button id="btnPaFishPower" type="button" class="pa-tool-btn ${fe.cannonTier > 1 ? 'active' : ''}" ${fe.status !== 'playing' ? 'disabled' : ''} title="Đổi bậc Đũa Phép ×1 / ×2 / ×3 (C)"><span class="pa-ico"><img class="hs-ico" src="/game/trang-trai-hang-soc/sprites/ui_icon_hammer_wand.webp" alt="" aria-hidden="true" draggable="false"></span>Đũa Phép <span class="pa-cost-pill">×${fe.cannonTier}</span></button>
         <button id="btnPaFishSkill" type="button" class="pa-tool-btn gold" ${!canFishSkill ? 'disabled' : ''} title="Băng Phong Glacius đóng băng toàn Hồ Đen (H)"><span class="pa-ico"><img class="hs-ico" src="/game/trang-trai-hang-soc/sprites/m3_obs_ice.webp" alt="" aria-hidden="true" draggable="false"></span>Băng Phong <span class="pa-cost-pill">${skillLbl}</span></button>
         <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="${talismanTooltip}">
@@ -2846,7 +2897,9 @@ export class PuzzleArcadeModalController {
       const fe = this.fishEngine;
       const subEl = box.querySelector('#paFishSub');
       if (subEl) {
-        subEl.textContent = `Đũa ×${fe.cannonTier} · Combo ×${Math.max(1, fe.combo)}`;
+        subEl.textContent = this.isMobileBoardLayout()
+          ? `Đũa ×${fe.cannonTier} · ×${Math.max(1, fe.combo)}`
+          : `Đũa ×${fe.cannonTier} · Combo ×${Math.max(1, fe.combo)}`;
       }
       const timerEl = box.querySelector('#paFishTimer');
       if (timerEl) {
@@ -2859,8 +2912,19 @@ export class PuzzleArcadeModalController {
       }
       const ammoEl = box.querySelector('#paFishAmmo');
       if (ammoEl) {
-        ammoEl.textContent = st.sandboxMode ? '∞' : String(fe.ammo);
-        ammoEl.classList.toggle('pa-err-inline', !st.sandboxMode && fe.ammo <= 5);
+        ammoEl.textContent =
+          fe.activeWeaponTimer > 0 && fe.activeWeapon !== 'normal'
+            ? `${fe.activeWeaponDef.shortVi} (${Math.ceil(fe.activeWeaponTimer)}s)`
+            : 'Ngọc ∞';
+        ammoEl.classList.remove('pa-err-inline');
+      }
+      const autoBtn = box.querySelector('#btnPaFishAuto') as HTMLButtonElement | null;
+      if (autoBtn) {
+        autoBtn.disabled = fe.status !== 'playing';
+        autoBtn.classList.toggle('active', fe.autoFire);
+        autoBtn.setAttribute('aria-pressed', String(fe.autoFire));
+        const pill = autoBtn.querySelector('.pa-cost-pill');
+        if (pill) pill.textContent = fe.autoFire ? 'BẬT' : 'TẮT';
       }
       const powerBtn = box.querySelector('#btnPaFishPower') as HTMLButtonElement | null;
       if (powerBtn) {
@@ -3102,6 +3166,16 @@ export class PuzzleArcadeModalController {
     });
 
     // Fish Shooter ("Bắn Cá Hồ Đen") controls
+    box.querySelector('#btnPaFishAuto')?.addEventListener('click', () => {
+      const fe = this.fishEngine;
+      if (!fe || fe.status !== 'playing') return;
+      fe.toggleAutoFire();
+      this.persistModeSession('chess', false);
+      this.sim.audio.playClick();
+      this.updateLiveCountersOnly();
+      this.forceImmediateRedraw = true;
+    });
+
     box.querySelector('#btnPaFishPower')?.addEventListener('click', () => {
       const fe = this.fishEngine;
       if (!fe || fe.status !== 'playing') return;
@@ -3890,6 +3964,7 @@ export class PuzzleArcadeModalController {
     }
     const res = se.useMagicHint();
     if (res.ok) {
+      this.bumpCompanionCharge(res.r * 9 + res.c);
       const sm = this.getSudokuLayoutMetrics();
       const cx = sm.boardX + (res.c + 0.5) * sm.cellPx;
       const cy = sm.boardY + (res.r + 0.5) * sm.cellPx;
@@ -4017,6 +4092,9 @@ export class PuzzleArcadeModalController {
     if (!me || me.status !== 'playing') return;
     const res = me.toggleFlag(r, c);
     if (!res.changed) return;
+    if (res.flagged) {
+      this.bumpCompanionCharge(r * 31 + c);
+    }
     const m = this.computeMinesBoardMetrics(me);
     const dc = m.transposed ? r : c;
     const dr = m.transposed ? c : r;
@@ -4031,7 +4109,8 @@ export class PuzzleArcadeModalController {
   private handleMinesCellTap(r: number, c: number): void {
     const me = this.minesEngine;
     if (!me || me.status !== 'playing') return;
-    const res = me.tapCell(r, c);
+    const isSandbox = Boolean(this.sim.state.sandboxMode);
+    const res = me.tapCell(r, c, isSandbox);
     if (res.action === 'noop' || res.action === 'blocked_flag') {
       this.sim.audio.playClick();
       return;
@@ -4039,13 +4118,18 @@ export class PuzzleArcadeModalController {
     const m = this.computeMinesBoardMetrics(me);
     if (res.action === 'flagged') {
       const targets = res.revealedCells.length > 0 ? res.revealedCells : [{ r, c }];
+      const nowFlagged = Boolean(me.grid[r]?.[c]?.flagged);
+      if (nowFlagged || res.revealedCells.length > 0) {
+        this.bumpCompanionCharge(r * 31 + c);
+      }
       for (const pt of targets.slice(0, 8)) {
         const dc = m.transposed ? pt.r : pt.c;
         const dr = m.transposed ? pt.c : pt.r;
+        const ptFlagged = Boolean(me.grid[pt.r]?.[pt.c]?.flagged);
         this.spawnBurst(
           m.originX + (dc + 0.5) * m.cellSize,
           m.originY + (dr + 0.5) * m.cellSize,
-          '#ef4444',
+          ptFlagged ? '#ef4444' : '#fde047',
           10
         );
       }
@@ -4097,8 +4181,8 @@ export class PuzzleArcadeModalController {
     const virt = this.getVirtualCanvasSize();
     const vp = this.getFishViewportMetrics(virt.w, virt.h);
     return {
-      ax: (vx - vp.offsetX) / Math.max(0.01, vp.scale),
-      ay: (vy - vp.offsetY) / Math.max(0.01, vp.scale),
+      ax: (vx - vp.offsetX) / Math.max(0.01, vp.scaleX),
+      ay: (vy - vp.offsetY) / Math.max(0.01, vp.scaleY),
     };
   }
 
@@ -4119,6 +4203,7 @@ export class PuzzleArcadeModalController {
       fe.cycleCannonTier();
       this.activePointerId = null;
       this.pointerDownPos = null;
+      this.persistModeSession('chess', false);
       this.sim.audio.playClick();
       this.updateLiveCountersOnly();
       return;
@@ -4126,14 +4211,28 @@ export class PuzzleArcadeModalController {
 
     const res = fe.fireShot(ax, ay, Boolean(this.sim.state.sandboxMode));
     if (res.fired) {
-      this.bumpCompanionCharge();
-      const virt = this.getVirtualCanvasSize();
-      const vp = this.getFishViewportMetrics(virt.w, virt.h);
-      const muzzleX = vp.offsetX + (fe.turretX + Math.cos(fe.aimAngle) * 32) * vp.scale;
-      const muzzleY = vp.offsetY + (fe.turretY + Math.sin(fe.aimAngle) * 32) * vp.scale;
-      this.spawnBurst(muzzleX, muzzleY, res.tier === 3 ? '#fbbf24' : '#38bdf8', 7);
-      this.sim.audio.playClick();
-      this.updateLiveCountersOnly();
+      if (!fromAutoFireHold) {
+        this.bumpCompanionCharge();
+        const virt = this.getVirtualCanvasSize();
+        const vp = this.getFishViewportMetrics(virt.w, virt.h);
+        const muzzleX = vp.offsetX + (fe.turretX + Math.cos(fe.aimAngle) * 32) * vp.scaleX;
+        const muzzleY = vp.offsetY + (fe.turretY + Math.sin(fe.aimAngle) * 32) * vp.scaleY;
+        const muzzleColor =
+          res.weaponId !== 'normal'
+            ? FISH_WEAPON_CATALOG[res.weaponId].accentColor
+            : res.tier === 3
+              ? '#fbbf24'
+              : '#38bdf8';
+        this.spawnBurst(muzzleX, muzzleY, muzzleColor, 5);
+      }
+      const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      if (!fromAutoFireHold || nowMs - this.lastFishAutoSfxAt >= 280) {
+        this.lastFishAutoSfxAt = nowMs;
+        this.sim.audio.playClick();
+      }
+      if (!fromAutoFireHold) {
+        this.updateLiveCountersOnly();
+      }
     } else if (res.reason === 'no_ammo') {
       this.sim.audio.playClick();
     }
@@ -4801,21 +4900,49 @@ export class PuzzleArcadeModalController {
           const isPageHidden = typeof document !== 'undefined' && document.hidden;
           const openDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
           if (!isPageHidden && openDlg?.open) {
-            if (this.activePointerId !== null && this.fishEngine.fireCooldown <= 0) {
-              this.fireFishShooterAtCanvas(this.pointerCurrPos.vx, this.pointerCurrPos.vy, false, true);
+            if (
+              (this.fishEngine.autoFire || this.activePointerId !== null) &&
+              this.fishEngine.fireCooldown <= 0
+            ) {
+              if (this.activePointerId !== null) {
+                this.fireFishShooterAtCanvas(
+                  this.pointerCurrPos.vx,
+                  this.pointerCurrPos.vy,
+                  false,
+                  true
+                );
+              } else {
+                this.fireFishShooterAtCanvas(
+                  this.fishEngine.aimX,
+                  this.fishEngine.aimY,
+                  true,
+                  true
+                );
+              }
             }
             const tick = this.fishEngine.tick(dt, Boolean(this.sim.state.sandboxMode));
             const virt = this.getVirtualCanvasSize();
             const vp = this.getFishViewportMetrics(virt.w, virt.h);
             if (tick.wallBounces?.length) {
-              for (const wb of tick.wallBounces) {
-                this.spawnBurst(vp.offsetX + wb.x * vp.scale, vp.offsetY + wb.y * vp.scale, '#67e8f9', 5);
+              for (const wb of tick.wallBounces.slice(0, 2)) {
+                this.spawnBurst(vp.offsetX + wb.x * vp.scaleX, vp.offsetY + wb.y * vp.scaleY, '#67e8f9', 2);
               }
             }
+            if (tick.collectedDrops?.length) {
+              for (const dropEv of tick.collectedDrops) {
+                const dx = vp.offsetX + dropEv.x * vp.scaleX;
+                const dy = vp.offsetY + dropEv.y * vp.scaleY;
+                this.spawnBurst(dx, dy, dropEv.color, 14);
+                this.sim.audio.playPowerupBlast();
+              }
+            }
+            if (tick.caughtEvents.length > 0) {
+              this.bumpCompanionCharge();
+            }
             for (const ev of tick.caughtEvents) {
-              const cx = vp.offsetX + ev.x * vp.scale;
-              const cy = vp.offsetY + ev.y * vp.scale;
-              this.spawnBurst(cx, cy, ev.isExplosion ? '#fb923c' : '#fde047', ev.isExplosion ? 20 : 11);
+              const cx = vp.offsetX + ev.x * vp.scaleX;
+              const cy = vp.offsetY + ev.y * vp.scaleY;
+              this.spawnBurst(cx, cy, ev.isExplosion ? '#67e8f9' : '#fde047', ev.isExplosion ? 14 : 8);
               if (ev.isExplosion) {
                 this.sim.audio.playPowerupBlast();
                 const reducedMotion =
@@ -4884,6 +5011,7 @@ export class PuzzleArcadeModalController {
       }
     }
 
+    const isUnderwater = this.mode === 'chess';
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.age += dt;
@@ -4893,7 +5021,13 @@ export class PuzzleArcadeModalController {
       }
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      p.vy += 320 * dt;
+      if (isUnderwater) {
+        p.vy -= 38 * dt;
+        p.vx *= Math.max(0, 1 - 2.2 * dt);
+        p.vy *= Math.max(0, 1 - 1.6 * dt);
+      } else {
+        p.vy += 320 * dt;
+      }
       p.rot += p.vRot * dt;
     }
 
@@ -6601,7 +6735,6 @@ export class PuzzleArcadeModalController {
     };
 
     const darkMarkImg =
-      this.getPaintingTokenImage(isYule ? 'caro-yule/dark_mark_seal' : 'caro/dark_mark_seal') ??
       this.getPaintingTokenImage('caro/dark_mark_seal') ??
       this.getSpriteImage('m3_sp_bomb');
     const pad = Math.max(1, Math.round(m.cellSize * 0.04));
@@ -6688,6 +6821,12 @@ export class PuzzleArcadeModalController {
         if (cell.defused) {
           tileGrad.addColorStop(0, '#a7f3d0');
           tileGrad.addColorStop(1, '#10b981');
+        } else if (cell.flagged) {
+          tileGrad.addColorStop(0, '#fef08a');
+          tileGrad.addColorStop(1, '#f59e0b');
+        } else if (isHovered && isFlagging) {
+          tileGrad.addColorStop(0, '#ffe4e6');
+          tileGrad.addColorStop(1, '#fda4af');
         } else if (isHovered) {
           tileGrad.addColorStop(0, '#fef9c3');
           tileGrad.addColorStop(1, '#eab308');
@@ -6703,10 +6842,14 @@ export class PuzzleArcadeModalController {
 
         ctx.strokeStyle = cell.defused
           ? '#065f46'
-          : isHovered
-            ? '#fde047'
-            : 'rgba(255, 251, 235, 0.76)';
-        ctx.lineWidth = 1.2;
+          : cell.flagged
+            ? '#dc2626'
+            : isHovered && isFlagging
+              ? '#f43f5e'
+              : isHovered
+                ? '#fde047'
+                : 'rgba(255, 251, 235, 0.76)';
+        ctx.lineWidth = cell.flagged ? 1.5 : 1.2;
         ctx.stroke();
 
         if (!cell.defused && !cell.flagged && !(engine.status === 'lost' && cell.hasMine) && engine.status !== 'won') {
@@ -6726,12 +6869,15 @@ export class PuzzleArcadeModalController {
           );
         } else if (engine.status === 'lost' && cell.hasMine && !cell.flagged) {
           drawRoundedRect(ctx, innerX + 1, innerY + 1, innerSz - 2, innerSz - 2, 4);
-          ctx.fillStyle = 'rgba(6, 78, 59, 0.58)';
+          ctx.fillStyle = 'rgba(20, 83, 45, 0.72)';
           ctx.fill();
+          ctx.strokeStyle = '#6ee7b7';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
           if (darkMarkImg) {
-            const bSz = innerSz * 0.78;
+            const bSz = innerSz * 0.82;
             ctx.save();
-            ctx.globalAlpha = 0.92;
+            ctx.globalAlpha = 0.96;
             ctx.drawImage(darkMarkImg, midX - bSz * 0.5, midY - bSz * 0.5, bSz, bSz);
             ctx.restore();
           } else {
@@ -6759,19 +6905,20 @@ export class PuzzleArcadeModalController {
     }
 
     // Top Marauder's Map / Flag Mode Ribbon
-    const badgeW = Math.min(m.frameW - 4, isFlagging ? 236 : 234);
+    const virt = this.getVirtualCanvasSize();
+    const badgeW = Math.min(virt.w - 20, Math.max(m.frameW - 4, isFlagging ? 276 : 264));
     const ribbonText =
-      badgeW < 205
+      badgeW < 220
         ? isFlagging
           ? 'ĐANG CẮM CỜ • CHẠM Ô'
           : 'BẢN ĐỒ ĐẠO TẶC'
         : isFlagging
           ? 'CHẾ ĐỘ CẮM CỜ • CHẠM Ô ĐỂ ĐÁNH DẤU'
           : 'BẢN ĐỒ ĐẠO TẶC • PHÁ BẪY HẮC ÁM';
-    const badgeH = 18;
+    const badgeH = 20;
     const bx = m.originX + (m.boardW - badgeW) * 0.5;
-    const by = Math.max(2, m.frameY - 25);
-    drawRoundedRect(ctx, bx, by, badgeW, badgeH, 9);
+    const by = Math.max(8, m.frameY - 25);
+    drawRoundedRect(ctx, bx, by, badgeW, badgeH, 10);
     ctx.fillStyle = isFlagging
       ? '#991b1b'
       : isYule
@@ -6782,10 +6929,10 @@ export class PuzzleArcadeModalController {
     ctx.strokeStyle = isFlagging ? '#fde047' : '#f4c668';
     ctx.stroke();
     ctx.fillStyle = isFlagging ? '#fffbeb' : '#fde68a';
-    ctx.font = '800 10px "Be Vietnam Pro", system-ui, sans-serif';
+    ctx.font = '700 11px "Be Vietnam Pro", system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(ribbonText, bx + badgeW * 0.5, by + badgeH * 0.5, Math.max(80, badgeW - 14));
+    ctx.fillText(ribbonText, bx + badgeW * 0.5, by + badgeH * 0.5, Math.max(90, badgeW - 14));
 
     if (engine.lastHintCell && engine.status === 'playing') {
       const pulse = 0.75 + 0.25 * Math.sin(now * 0.008);
@@ -6827,7 +6974,7 @@ export class PuzzleArcadeModalController {
           ? this.lakeBgImage
           : this.unicornLakeBgImage;
     const imgReady = Boolean(img && img.complete && img.naturalWidth > 0);
-    const cacheKey = `${virtW}x${virtH}:${imgReady ? img!.src : 'grad'}`;
+    const cacheKey = `${virtW}x${virtH}:b2:${imgReady ? img!.src : 'grad'}`;
     let drewCached = false;
     if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
       if (!this.cachedFishBgCanvas || this.cachedFishBgKey !== cacheKey) {
@@ -6842,7 +6989,7 @@ export class PuzzleArcadeModalController {
             const scale = Math.max(virtW / img.naturalWidth, virtH / img.naturalHeight);
             const dw = img.naturalWidth * scale;
             const dh = img.naturalHeight * scale;
-            octx.drawImage(img, (virtW - dw) * 0.5, (virtH - dh) * 0.5, dw, dh);
+            octx.drawImage(img, (virtW - dw) * 0.5, virtH - dh, dw, dh);
             const deepTint = octx.createLinearGradient(0, 0, 0, virtH);
             deepTint.addColorStop(0, 'rgba(3, 38, 58, 0.14)');
             deepTint.addColorStop(0.6, 'rgba(3, 28, 46, 0.18)');
@@ -6871,7 +7018,7 @@ export class PuzzleArcadeModalController {
         const scale = Math.max(virtW / img.naturalWidth, virtH / img.naturalHeight);
         const dw = img.naturalWidth * scale;
         const dh = img.naturalHeight * scale;
-        ctx.drawImage(img, (virtW - dw) * 0.5, (virtH - dh) * 0.5, dw, dh);
+        ctx.drawImage(img, (virtW - dw) * 0.5, virtH - dh, dw, dh);
         const deepTint = ctx.createLinearGradient(0, 0, 0, virtH);
         deepTint.addColorStop(0, 'rgba(3, 38, 58, 0.14)');
         deepTint.addColorStop(0.6, 'rgba(3, 28, 46, 0.18)');
@@ -7439,8 +7586,8 @@ export class PuzzleArcadeModalController {
 
     ctx.restore(); // end flip scale
 
-    // Frost shimmer crystal ring when Glacius is active
-    if (frozen) {
+    // Frost shimmer crystal ring when Glacius or Frost Shard chill is active
+    if (frozen || (fish.chillTimer ?? 0) > 0) {
       ctx.beginPath();
       ctx.arc(0, 0, r * 1.06, 0, Math.PI * 2);
       ctx.strokeStyle = 'rgba(186, 230, 253, 0.88)';
@@ -7473,6 +7620,169 @@ export class PuzzleArcadeModalController {
     ctx.restore();
   }
 
+  private drawFishAmmoDrop(
+    ctx: CanvasRenderingContext2D,
+    drop: FloatingAmmoDrop,
+    dx: number,
+    dy: number,
+    unitScale: number,
+    nowSec: number
+  ): void {
+    const wDef = FISH_WEAPON_CATALOG[drop.weaponId];
+    const r = Math.max(16, drop.radius * unitScale);
+    const remainAge = drop.maxAge - drop.age;
+    if (remainAge < 2.8 && Math.sin(nowSec * 18) < -0.25) {
+      return;
+    }
+
+    ctx.save();
+    ctx.translate(dx, dy);
+
+    // Outer pulsing sea-pearl beacon aura
+    const pulse = 0.88 + 0.14 * Math.sin(nowSec * 5.2 + drop.uid);
+    const halo = ctx.createRadialGradient(0, 0, r * 0.25, 0, 0, r * 1.65 * pulse);
+    halo.addColorStop(0, wDef.accentColor);
+    halo.addColorStop(0.55, 'rgba(56, 189, 248, 0.24)');
+    halo.addColorStop(1, 'rgba(56, 189, 248, 0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.65 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Rotating golden-aqua shoot-target reticle ring
+    ctx.save();
+    ctx.rotate(nowSec * 1.35 + drop.uid);
+    ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.18, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // Iridescent ocean pearl-bubble capsule body
+    const sphereGrad = ctx.createRadialGradient(-r * 0.3, -r * 0.32, r * 0.1, 0, 0, r);
+    sphereGrad.addColorStop(0, '#ffffff');
+    sphereGrad.addColorStop(0.32, wDef.accentColor);
+    sphereGrad.addColorStop(0.78, 'rgba(8, 47, 73, 0.92)');
+    sphereGrad.addColorStop(1, 'rgba(4, 22, 38, 0.96)');
+    ctx.fillStyle = sphereGrad;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#fffbeb';
+    ctx.stroke();
+
+    // Distinct crisp weapon vector emblem inside the capsule
+    ctx.save();
+    ctx.strokeStyle = '#fffbeb';
+    ctx.fillStyle = '#fde047';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (drop.weaponId === 'trident_spread') {
+      // 3-prong golden trident head
+      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = '#fde047';
+      for (const ang of [-0.42, 0, 0.42]) {
+        ctx.save();
+        ctx.rotate(ang);
+        ctx.beginPath();
+        ctx.moveTo(0, r * 0.42);
+        ctx.lineTo(0, -r * 0.46);
+        ctx.lineTo(-r * 0.14, -r * 0.24);
+        ctx.moveTo(0, -r * 0.46);
+        ctx.lineTo(r * 0.14, -r * 0.24);
+        ctx.stroke();
+        ctx.restore();
+      }
+    } else if (drop.weaponId === 'chain_lightning') {
+      // Crackling thunderbolt glyph
+      ctx.fillStyle = '#fef08a';
+      ctx.beginPath();
+      ctx.moveTo(r * 0.12, -r * 0.56);
+      ctx.lineTo(-r * 0.32, r * 0.04);
+      ctx.lineTo(r * 0.02, r * 0.04);
+      ctx.lineTo(-r * 0.14, r * 0.56);
+      ctx.lineTo(r * 0.34, -r * 0.08);
+      ctx.lineTo(0, -r * 0.08);
+      ctx.closePath();
+      ctx.fill();
+    } else if (drop.weaponId === 'piercing_lance') {
+      // Diagonal emerald-gold armor-piercing sea harpoon
+      ctx.rotate(-Math.PI * 0.25);
+      ctx.fillStyle = '#fef08a';
+      ctx.beginPath();
+      ctx.moveTo(r * 0.58, 0);
+      ctx.lineTo(-r * 0.12, -r * 0.26);
+      ctx.lineTo(-r * 0.02, 0);
+      ctx.lineTo(-r * 0.12, r * 0.26);
+      ctx.closePath();
+      ctx.fill();
+      ctx.lineWidth = 2.4;
+      ctx.strokeStyle = '#6ee7b7';
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.55, 0);
+      ctx.lineTo(r * 0.35, 0);
+      ctx.stroke();
+    } else if (drop.weaponId === 'vortex_bomb') {
+      // Swirling tidal whirlpool spiral
+      ctx.lineWidth = 2.1;
+      ctx.strokeStyle = '#fffbeb';
+      for (let arm = 0; arm < 3; arm++) {
+        const baseA = nowSec * 3.2 + arm * ((Math.PI * 2) / 3);
+        ctx.beginPath();
+        for (let st = 0; st <= 10; st++) {
+          const frac = st / 10;
+          const a = baseA + frac * 2.2;
+          const sr = frac * r * 0.56;
+          const px = Math.cos(a) * sr;
+          const py = Math.sin(a) * sr;
+          if (st === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+    } else {
+      // Rapid Frost 6-point glacial star
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#ffffff';
+      for (let k = 0; k < 3; k++) {
+        const a = (k * Math.PI) / 3 + nowSec * 0.8;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * -r * 0.5, Math.sin(a) * -r * 0.5);
+        ctx.lineTo(Math.cos(a) * r * 0.5, Math.sin(a) * r * 0.5);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+
+    // Glossy pearl specular crescent at top-left
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.52)';
+    ctx.beginPath();
+    ctx.ellipse(-r * 0.32, -r * 0.34, r * 0.26, r * 0.14, -0.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Clear mini tag right below orb so players immediately know to shoot it
+    const tagText = `BẮN: ${wDef.badgeVi}`;
+    ctx.font = '700 11px "Be Vietnam Pro", system-ui, sans-serif';
+    const tagW = Math.max(62, Math.ceil(ctx.measureText(tagText).width) + 12);
+    const tagH = 17;
+    drawRoundedRect(ctx, -tagW * 0.5, r + 4, tagW, tagH, 8);
+    ctx.fillStyle = 'rgba(4, 22, 36, 0.92)';
+    ctx.fill();
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = wDef.accentColor;
+    ctx.stroke();
+    ctx.fillStyle = '#fffbeb';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(tagText, 0, r + 4 + tagH * 0.5);
+
+    ctx.restore();
+  }
+
   private drawFishShooterScene(
     ctx: CanvasRenderingContext2D,
     engine: FishShooterEngine
@@ -7482,123 +7792,18 @@ export class PuzzleArcadeModalController {
     const now = performance.now();
     const nowSec = now * 0.001;
     const isSandbox = Boolean(this.sim.state.sandboxMode);
-    const toX = (ax: number) => vp.offsetX + ax * vp.scale;
-    const toY = (ay: number) => vp.offsetY + ay * vp.scale;
+    const toX = (ax: number) => vp.offsetX + ax * vp.scaleX;
+    const toY = (ay: number) => vp.offsetY + ay * vp.scaleY;
 
-    // 0A. Top Dedicated Countdown Timer Bar right above the lake frame
+    const wardX = toX(6);
+    const wardY = toY(6);
+    const wardW = (engine.arenaW - 12) * vp.scaleX;
+    const wardH = (engine.arenaH - 14) * vp.scaleY;
+
+    // Clip ocean creatures, floating drops, nets & projectiles cleanly inside the golden ward frame
     ctx.save();
-    drawRoundedRect(ctx, vp.timerBarX, vp.timerBarY, vp.timerBarW, vp.timerBarH, 8);
-    const tBg = ctx.createLinearGradient(0, vp.timerBarY, 0, vp.timerBarY + vp.timerBarH);
-    tBg.addColorStop(0, 'rgba(7, 30, 46, 0.95)');
-    tBg.addColorStop(1, 'rgba(4, 18, 30, 0.98)');
-    ctx.fillStyle = tBg;
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.32)';
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetY = 1.5;
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
-    ctx.lineWidth = 1.2;
-    ctx.strokeStyle =
-      !isSandbox && engine.isTimeCritical
-        ? 'rgba(239, 68, 68, 0.92)'
-        : engine.timeFlashTimer > 0
-          ? 'rgba(52, 211, 153, 0.92)'
-          : 'rgba(103, 232, 249, 0.62)';
-    ctx.stroke();
-
-    // Crisp vector stopwatch icon (no emoji)
-    const swX = vp.timerBarX + 14;
-    const swY = vp.timerBarY + vp.timerBarH * 0.5 + 0.5;
-    const swColor =
-      !isSandbox && engine.isTimeCritical
-        ? '#fca5a5'
-        : engine.timeFlashTimer > 0
-          ? '#6ee7b7'
-          : '#67e8f9';
-    ctx.strokeStyle = swColor;
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.arc(swX, swY, 5.2, 0, Math.PI * 2);
-    ctx.moveTo(swX - 2, swY - 6.8);
-    ctx.lineTo(swX + 2, swY - 6.8);
-    ctx.moveTo(swX, swY - 5.2);
-    ctx.lineTo(swX, swY);
-    ctx.lineTo(swX + 2.8, swY + 1.4);
-    ctx.stroke();
-
-    const timeText = isSandbox
-      ? '∞'
-      : `${engine.formatRemainingTime()}${engine.timeFlashTimer > 0 && engine.lastBonusSecAdded > 0 ? ` (+${engine.lastBonusSecAdded}s)` : ''}`;
-    const rightText = vp.timerBarW >= 340 ? '+giây khi thu phục' : '+s/thu';
-    ctx.font = '800 11px "Be Vietnam Pro", system-ui, sans-serif';
-    ctx.textBaseline = 'middle';
-    const timeTextStartX = vp.timerBarX + 24;
-    const leftW = 24 + Math.ceil(ctx.measureText(timeText).width) + 10;
-    const rightW = Math.ceil(ctx.measureText(rightText).width) + 14;
-
-    ctx.fillStyle =
-      !isSandbox && engine.isTimeCritical
-        ? 0.5 + 0.5 * Math.sin(now * 0.014) > 0.45
-          ? '#fecaca'
-          : '#f87171'
-        : engine.timeFlashTimer > 0
-          ? '#6ee7b7'
-          : '#fef3c7';
-    ctx.textAlign = 'left';
-    ctx.fillText(timeText, timeTextStartX, vp.timerBarY + vp.timerBarH * 0.5);
-
-    ctx.fillStyle = 'rgba(186, 230, 253, 0.9)';
-    ctx.font = '700 10px "Be Vietnam Pro", system-ui, sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText(rightText, vp.timerBarX + vp.timerBarW - 8, vp.timerBarY + vp.timerBarH * 0.5);
-
-    const trackX = vp.timerBarX + leftW;
-    const trackW = Math.max(40, vp.timerBarW - leftW - rightW);
-    const trackH = 7;
-    const trackY = vp.timerBarY + (vp.timerBarH - trackH) * 0.5;
-    drawRoundedRect(ctx, trackX, trackY, trackW, trackH, 3.5);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.52)';
-    ctx.fill();
-
-    const tRatio = isSandbox ? 1 : engine.timeProgressRatio;
-    if (tRatio > 0.005) {
-      const fillW = Math.max(4, Math.min(trackW, trackW * tRatio));
-      drawRoundedRect(ctx, trackX, trackY, fillW, trackH, 3.5);
-      const tFill = ctx.createLinearGradient(trackX, trackY, trackX + fillW, trackY);
-      if (!isSandbox && engine.isTimeCritical) {
-        tFill.addColorStop(0, '#fca5a5');
-        tFill.addColorStop(1, '#dc2626');
-      } else if (engine.timeFlashTimer > 0) {
-        tFill.addColorStop(0, '#6ee7b7');
-        tFill.addColorStop(1, '#10b981');
-      } else if (tRatio <= 0.45) {
-        tFill.addColorStop(0, '#fde047');
-        tFill.addColorStop(1, '#f59e0b');
-      } else {
-        tFill.addColorStop(0, '#38bdf8');
-        tFill.addColorStop(1, '#22c55e');
-      }
-      ctx.fillStyle = tFill;
-      ctx.fill();
-    }
-    ctx.restore();
-
-    // 0B. Hogwarts Runic Ward Boundary Frame (shows exact spell-ricochet wall limits)
-    ctx.save();
-    const wardX = toX(10);
-    const wardY = toY(12);
-    const wardW = (FISH_ARENA_W - 20) * vp.scale;
-    const wardH = (FISH_ARENA_H - 30) * vp.scale;
     drawRoundedRect(ctx, wardX, wardY, wardW, wardH, 12);
-    ctx.lineWidth = 1.6;
-    ctx.strokeStyle =
-      engine.freezeTimer > 0
-        ? 'rgba(186, 230, 253, 0.65)'
-        : 'rgba(244, 198, 104, 0.36)';
-    ctx.stroke();
-    this.drawBrassCornerBrackets(ctx, wardX, wardY, wardW, wardH, 12);
-    ctx.restore();
+    ctx.clip();
 
     // 1. Swimming Black Lake Magical Creatures
     const frozen = engine.freezeTimer > 0;
@@ -7606,36 +7811,65 @@ export class PuzzleArcadeModalController {
       this.drawFishEntity(ctx, fish, toX(fish.x), toY(fish.y), vp.unitScale, frozen, nowSec);
     }
 
-    // 2. Expanding Hogwarts Runic Binding Circles (Incarcerous) & Weasley Firework Blasts
+    // 1B. Floating Shoot-to-Collect Mystical Ocean Ammo Capsules ("bắn vào để lấy")
+    for (const drop of engine.ammoDrops) {
+      this.drawFishAmmoDrop(ctx, drop, toX(drop.x), toY(drop.y), vp.unitScale, nowSec);
+    }
+
+    // 2. Expanding Hogwarts Runic Binding Circles, Whirlpool Vortexes & Shockwave Blasts
     for (const net of engine.nets) {
       const t = Math.min(1, net.age / net.duration);
       const alpha = Math.max(0, 1 - t);
       const nx = toX(net.x);
       const ny = toY(net.y);
       const rad = net.radius * (0.45 + t * 0.65) * vp.unitScale;
+      const wStyle = net.weaponId && net.weaponId !== 'normal' ? FISH_WEAPON_CATALOG[net.weaponId] : null;
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.beginPath();
       ctx.arc(nx, ny, rad, 0, Math.PI * 2);
-      ctx.fillStyle = net.isExplosion
-        ? 'rgba(45, 212, 191, 0.28)'
-        : net.tier === 3
-          ? 'rgba(250, 204, 21, 0.24)'
-          : net.tier === 2
-            ? 'rgba(56, 189, 248, 0.22)'
-            : 'rgba(103, 232, 249, 0.22)';
+      ctx.fillStyle =
+        net.weaponId === 'vortex_bomb'
+          ? 'rgba(251, 113, 133, 0.26)'
+          : net.isExplosion
+            ? 'rgba(45, 212, 191, 0.28)'
+            : net.tier === 3
+              ? 'rgba(250, 204, 21, 0.24)'
+              : net.tier === 2
+                ? 'rgba(56, 189, 248, 0.22)'
+                : 'rgba(103, 232, 249, 0.22)';
       ctx.fill();
       ctx.lineWidth = net.isExplosion ? 3.2 : 2.2;
-      ctx.strokeStyle = net.isExplosion
-        ? '#67e8f9'
-        : net.tier === 3
-          ? '#fde047'
-          : net.tier === 2
-            ? '#38bdf8'
-            : '#a5f3fc';
+      ctx.strokeStyle = wStyle
+        ? wStyle.accentColor
+        : net.isExplosion
+          ? '#67e8f9'
+          : net.tier === 3
+            ? '#fde047'
+            : net.tier === 2
+              ? '#38bdf8'
+              : '#a5f3fc';
       ctx.stroke();
 
-      if (net.isExplosion) {
+      if (net.weaponId === 'vortex_bomb') {
+        // Swirling abyssal whirlpool spiral arms
+        for (let arm = 0; arm < 4; arm++) {
+          const baseA = -t * 4.2 + arm * (Math.PI * 0.5);
+          ctx.beginPath();
+          for (let st = 0; st <= 8; st++) {
+            const frac = st / 8;
+            const a = baseA + frac * 1.8;
+            const sr = rad * (0.18 + frac * 0.78);
+            const px = nx + Math.cos(a) * sr;
+            const py = ny + Math.sin(a) * sr;
+            if (st === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.strokeStyle = arm % 2 === 0 ? '#fb7185' : '#2dd4bf';
+          ctx.lineWidth = 2.2;
+          ctx.stroke();
+        }
+      } else if (net.isExplosion) {
         // Bioluminescent Pufferfish Sea-Crystal Tidal Shockwave Rays
         for (let i = 0; i < 8; i++) {
           const ang = (Math.PI / 4) * i + t * 0.8;
@@ -7669,58 +7903,311 @@ export class PuzzleArcadeModalController {
       ctx.restore();
     }
 
-    // 3. Flying Wand Spell-Bolts (Stupefy / Protego / Expecto Patronum)
+    // 2B. Crackling Chain-Lightning Arcs jumping across sea creatures
+    for (const arc of engine.lightningArcs) {
+      const alpha = Math.max(0, 1 - arc.age / arc.duration);
+      const x1 = toX(arc.x1);
+      const y1 = toY(arc.y1);
+      const x2 = toX(arc.x2);
+      const y2 = toY(arc.y2);
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len = Math.max(1, Math.hypot(dx, dy));
+      const nx = -dy / len;
+      const ny = dx / len;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      for (const pass of [
+        { w: 4.4, col: 'rgba(56, 189, 248, 0.55)' },
+        { w: 1.9, col: '#ffffff' },
+      ]) {
+        ctx.strokeStyle = pass.col;
+        ctx.lineWidth = pass.w;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        const segs = 5;
+        for (let s = 1; s < segs; s++) {
+          const frac = s / segs;
+          const jitter = Math.sin(nowSec * 42 + s * 2.7 + arc.x1) * 9 * vp.unitScale;
+          ctx.lineTo(x1 + dx * frac + nx * jitter, y1 + dy * frac + ny * jitter);
+        }
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // 3. Flying Wand Projectiles (Distinct Visuals per Active Ammo Type)
     for (const b of engine.bolts) {
       const bx = toX(b.x);
       const by = toY(b.y);
+      const bWeapon = b.weaponId ?? 'normal';
+      const wDef = FISH_WEAPON_CATALOG[bWeapon];
       const rad = (5 + b.tier * 2) * vp.unitScale;
       const ang = Math.atan2(b.vy, b.vx);
-      const coreColor = b.tier === 3 ? '#fde047' : b.tier === 2 ? '#c084fc' : '#fb7185';
+      const coreColor =
+        bWeapon !== 'normal'
+          ? wDef.accentColor
+          : b.tier === 3
+            ? '#fde047'
+            : b.tier === 2
+              ? '#c084fc'
+              : '#fb7185';
       ctx.save();
       ctx.translate(bx, by);
       ctx.rotate(ang);
 
-      // Luminous spell comet trail
-      const tailLen = rad * (2.9 + b.tier * 0.55);
-      const tailGrad = ctx.createLinearGradient(-tailLen, 0, rad * 0.5, 0);
-      tailGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
-      tailGrad.addColorStop(1, coreColor);
-      ctx.fillStyle = tailGrad;
-      ctx.beginPath();
-      ctx.moveTo(-tailLen, 0);
-      ctx.lineTo(0, -rad * 0.58);
-      ctx.lineTo(0, rad * 0.58);
-      ctx.closePath();
-      ctx.fill();
+      if (bWeapon === 'piercing_lance') {
+        // Long blazing emerald-gold armor-piercing sea harpoon
+        const lanceLen = rad * 4.4;
+        const tailGrad = ctx.createLinearGradient(-lanceLen, 0, rad * 1.4, 0);
+        tailGrad.addColorStop(0, 'rgba(52, 211, 153, 0)');
+        tailGrad.addColorStop(0.65, '#34d399');
+        tailGrad.addColorStop(1, '#fef08a');
+        ctx.fillStyle = tailGrad;
+        ctx.beginPath();
+        ctx.moveTo(-lanceLen, 0);
+        ctx.lineTo(-rad * 0.4, -rad * 0.55);
+        ctx.lineTo(rad * 1.65, 0);
+        ctx.lineTo(-rad * 0.4, rad * 0.55);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        ctx.moveTo(-lanceLen * 0.5, 0);
+        ctx.lineTo(rad * 1.4, 0);
+        ctx.stroke();
+      } else if (bWeapon === 'trident_spread') {
+        // 3-pronged aqua-gold mini trident bolt
+        const tailLen = rad * 3.1;
+        const tailGrad = ctx.createLinearGradient(-tailLen, 0, rad, 0);
+        tailGrad.addColorStop(0, 'rgba(45, 212, 191, 0)');
+        tailGrad.addColorStop(1, '#2dd4bf');
+        ctx.fillStyle = tailGrad;
+        ctx.beginPath();
+        ctx.moveTo(-tailLen, 0);
+        ctx.lineTo(0, -rad * 0.65);
+        ctx.lineTo(0, rad * 0.65);
+        ctx.closePath();
+        ctx.fill();
 
-      // Blazing spell core
-      const orbGrad = ctx.createRadialGradient(0, 0, 1, 0, 0, rad * 1.4);
-      orbGrad.addColorStop(0, '#ffffff');
-      orbGrad.addColorStop(0.55, coreColor);
-      orbGrad.addColorStop(1, 'rgba(253, 224, 71, 0)');
-      ctx.fillStyle = orbGrad;
-      ctx.beginPath();
-      ctx.arc(0, 0, rad * 1.4, 0, Math.PI * 2);
-      ctx.fill();
+        ctx.strokeStyle = '#fde047';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-rad * 0.5, 0);
+        ctx.lineTo(rad * 1.25, 0);
+        ctx.moveTo(0, -rad * 0.72);
+        ctx.lineTo(rad * 0.95, -rad * 0.42);
+        ctx.moveTo(0, rad * 0.72);
+        ctx.lineTo(rad * 0.95, rad * 0.42);
+        ctx.stroke();
+      } else if (bWeapon === 'vortex_bomb') {
+        // Spinning coral-teal whirlpool plasma sphere
+        const orbR = rad * 1.35;
+        const vGrad = ctx.createRadialGradient(0, 0, 1, 0, 0, orbR * 1.35);
+        vGrad.addColorStop(0, '#ffffff');
+        vGrad.addColorStop(0.45, '#fb7185');
+        vGrad.addColorStop(0.85, '#2dd4bf');
+        vGrad.addColorStop(1, 'rgba(45, 212, 191, 0)');
+        ctx.fillStyle = vGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, orbR * 1.35, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.rotate(nowSec * 9);
+        ctx.strokeStyle = '#fffbeb';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, orbR * 0.78, 0, Math.PI * 1.35);
+        ctx.stroke();
+      } else if (bWeapon === 'chain_lightning') {
+        // Crackling electric cyan-violet plasma bolt
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.moveTo(-rad * 3.2, 0);
+        ctx.lineTo(-rad * 2.1, -rad * 0.55);
+        ctx.lineTo(-rad * 1.0, rad * 0.55);
+        ctx.lineTo(rad * 0.4, 0);
+        ctx.stroke();
+        const eGrad = ctx.createRadialGradient(0, 0, 1, 0, 0, rad * 1.45);
+        eGrad.addColorStop(0, '#ffffff');
+        eGrad.addColorStop(0.5, '#38bdf8');
+        eGrad.addColorStop(1, 'rgba(192, 132, 252, 0)');
+        ctx.fillStyle = eGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, rad * 1.45, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (bWeapon === 'rapid_frost') {
+        // Crystalline glacial ice-diamond shard
+        ctx.fillStyle = 'rgba(186, 230, 253, 0.55)';
+        ctx.beginPath();
+        ctx.moveTo(-rad * 2.6, 0);
+        ctx.lineTo(0, -rad * 0.5);
+        ctx.lineTo(0, rad * 0.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#e0f2fe';
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(rad * 1.35, 0);
+        ctx.lineTo(0, -rad * 0.68);
+        ctx.lineTo(-rad * 0.75, 0);
+        ctx.lineTo(0, rad * 0.68);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        // Default luminous spell comet trail
+        const tailLen = rad * (2.9 + b.tier * 0.55);
+        const tailGrad = ctx.createLinearGradient(-tailLen, 0, rad * 0.5, 0);
+        tailGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+        tailGrad.addColorStop(1, coreColor);
+        ctx.fillStyle = tailGrad;
+        ctx.beginPath();
+        ctx.moveTo(-tailLen, 0);
+        ctx.lineTo(0, -rad * 0.58);
+        ctx.lineTo(0, rad * 0.58);
+        ctx.closePath();
+        ctx.fill();
 
-      // 4-point wand spark star at tip
-      ctx.fillStyle = '#ffffff';
-      this.drawFourPointStar(ctx, rad * 0.2, 0, rad * 0.95, rad * 0.32);
-      ctx.fill();
+        const orbGrad = ctx.createRadialGradient(0, 0, 1, 0, 0, rad * 1.4);
+        orbGrad.addColorStop(0, '#ffffff');
+        orbGrad.addColorStop(0.55, coreColor);
+        orbGrad.addColorStop(1, 'rgba(253, 224, 71, 0)');
+        ctx.fillStyle = orbGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, rad * 1.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        this.drawFourPointStar(ctx, rad * 0.2, 0, rad * 0.95, rad * 0.32);
+        ctx.fill();
+      }
       ctx.restore();
     }
 
-    // 4. Top Black Lake Score & Target Arcane Gauge Bar (drawn ABOVE creatures & bolts so text is never occluded)
+    ctx.restore(); // end ward clip
+
+    // 3B. Full-Backdrop Hogwarts Runic Ward Boundary Frame & Brass Corner Brackets (drawn ABOVE clipped entities)
     ctx.save();
-    const hudW = Math.min(vp.arenaPxW - 24, 440);
+    drawRoundedRect(ctx, wardX, wardY, wardW, wardH, 12);
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle =
+      engine.freezeTimer > 0
+        ? 'rgba(186, 230, 253, 0.72)'
+        : 'rgba(244, 198, 104, 0.48)';
+    ctx.stroke();
+    this.drawBrassCornerBrackets(ctx, wardX, wardY, wardW, wardH, 12);
+    ctx.restore();
+
+    const compactLandscapeHud = virt.h < 410;
+
+    // 4A. Top Dedicated Countdown Timer Bar (drawn ABOVE creatures & bolts inside the full-backdrop ocean)
+    if (!compactLandscapeHud) {
+      ctx.save();
+      drawRoundedRect(ctx, vp.timerBarX, vp.timerBarY, vp.timerBarW, vp.timerBarH, 8);
+      const tBg = ctx.createLinearGradient(0, vp.timerBarY, 0, vp.timerBarY + vp.timerBarH);
+      tBg.addColorStop(0, 'rgba(7, 30, 46, 0.94)');
+      tBg.addColorStop(1, 'rgba(4, 18, 30, 0.97)');
+      ctx.fillStyle = tBg;
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.32)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetY = 1.5;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle =
+        !isSandbox && engine.isTimeCritical
+          ? 'rgba(239, 68, 68, 0.92)'
+          : engine.timeFlashTimer > 0
+            ? 'rgba(52, 211, 153, 0.92)'
+            : 'rgba(103, 232, 249, 0.62)';
+      ctx.stroke();
+
+      const swX = vp.timerBarX + 14;
+      const swY = vp.timerBarY + vp.timerBarH * 0.5 + 0.5;
+      const swColor =
+        !isSandbox && engine.isTimeCritical
+          ? '#fca5a5'
+          : engine.timeFlashTimer > 0
+            ? '#6ee7b7'
+            : '#67e8f9';
+      ctx.strokeStyle = swColor;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(swX, swY, 5.2, 0, Math.PI * 2);
+      ctx.moveTo(swX - 2, swY - 6.8);
+      ctx.lineTo(swX + 2, swY - 6.8);
+      ctx.moveTo(swX, swY - 5.2);
+      ctx.lineTo(swX, swY);
+      ctx.lineTo(swX + 2.8, swY + 1.4);
+      ctx.stroke();
+
+      const timeText = isSandbox ? '∞' : engine.formatRemainingTime();
+      ctx.font = '800 11px "Be Vietnam Pro", system-ui, sans-serif';
+      ctx.textBaseline = 'middle';
+      const timeTextStartX = vp.timerBarX + 24;
+      const leftW = 24 + Math.ceil(ctx.measureText(timeText).width) + 10;
+      const rightPad = 10;
+
+      ctx.fillStyle =
+        !isSandbox && engine.isTimeCritical
+          ? 0.5 + 0.5 * Math.sin(now * 0.014) > 0.45
+            ? '#fecaca'
+            : '#f87171'
+          : '#fef3c7';
+      ctx.textAlign = 'left';
+      ctx.fillText(timeText, timeTextStartX, vp.timerBarY + vp.timerBarH * 0.5);
+
+      const trackX = vp.timerBarX + leftW;
+      const trackW = Math.max(40, vp.timerBarW - leftW - rightPad);
+      const trackH = 7;
+      const trackY = vp.timerBarY + (vp.timerBarH - trackH) * 0.5;
+      drawRoundedRect(ctx, trackX, trackY, trackW, trackH, 3.5);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.52)';
+      ctx.fill();
+
+      const tRatio = isSandbox ? 1 : engine.timeProgressRatio;
+      if (tRatio > 0.005) {
+        const fillW = Math.max(4, Math.min(trackW, trackW * tRatio));
+        drawRoundedRect(ctx, trackX, trackY, fillW, trackH, 3.5);
+        const tFill = ctx.createLinearGradient(trackX, trackY, trackX + fillW, trackY);
+        if (!isSandbox && engine.isTimeCritical) {
+          tFill.addColorStop(0, '#fca5a5');
+          tFill.addColorStop(1, '#dc2626');
+        } else if (engine.timeFlashTimer > 0) {
+          tFill.addColorStop(0, '#6ee7b7');
+          tFill.addColorStop(1, '#10b981');
+        } else if (tRatio <= 0.45) {
+          tFill.addColorStop(0, '#fde047');
+          tFill.addColorStop(1, '#f59e0b');
+        } else {
+          tFill.addColorStop(0, '#38bdf8');
+          tFill.addColorStop(1, '#22c55e');
+        }
+        ctx.fillStyle = tFill;
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // 4B. Top Black Lake Score & Target Arcane Gauge Bar (unified single bar on short landscape)
+    ctx.save();
+    const hudW = Math.min(vp.arenaPxW - 28, 480);
     const hudX = vp.offsetX + (vp.arenaPxW - hudW) * 0.5;
-    const hudY = vp.offsetY + 6;
+    const hudY = compactLandscapeHud ? 10 : vp.timerBarY + vp.timerBarH + 4;
     const hudH = 22;
     drawRoundedRect(ctx, hudX, hudY, hudW, hudH, 11);
     ctx.fillStyle = 'rgba(6, 28, 36, 0.92)';
     ctx.fill();
     ctx.lineWidth = 1.4;
-    ctx.strokeStyle = 'rgba(244, 198, 104, 0.78)';
+    ctx.strokeStyle =
+      engine.activeWeaponTimer > 0 && engine.activeWeapon !== 'normal'
+        ? engine.activeWeaponDef.accentColor
+        : 'rgba(244, 198, 104, 0.78)';
     ctx.stroke();
 
     const ratio = Math.max(0, Math.min(1, engine.score / Math.max(1, engine.targetScore)));
@@ -7739,9 +8226,16 @@ export class PuzzleArcadeModalController {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const sep = hudW < 360 ? ' • ' : '  •  ';
-    const scoreLbl = `${engine.score.toLocaleString('vi-VN')} / ${engine.targetScore.toLocaleString('vi-VN')} điểm${
+    const compactTimePrefix = compactLandscapeHud
+      ? `${isSandbox ? '∞' : engine.formatRemainingTime()}${sep}`
+      : '';
+    const activeWepTag =
+      engine.activeWeaponTimer > 0 && engine.activeWeapon !== 'normal'
+        ? `${sep}${engine.activeWeaponDef.badgeVi} ${Math.ceil(engine.activeWeaponTimer)}s`
+        : '';
+    const scoreLbl = `${compactTimePrefix}${engine.score.toLocaleString('vi-VN')} / ${engine.targetScore.toLocaleString('vi-VN')} điểm${
       engine.combo >= 2 ? `${sep}COMBO ×${engine.combo}` : ''
-    }${engine.freezeTimer > 0 ? `${sep}GLACIUS ${Math.ceil(engine.freezeTimer)}s` : ''}`;
+    }${activeWepTag}${engine.freezeTimer > 0 ? `${sep}GLACIUS ${Math.ceil(engine.freezeTimer)}s` : ''}`;
     ctx.fillText(scoreLbl, hudX + hudW * 0.5, hudY + hudH * 0.5, Math.max(120, hudW - 18));
     ctx.restore();
 
@@ -7750,70 +8244,95 @@ export class PuzzleArcadeModalController {
     const ty = toY(engine.turretY);
     const ax = toX(engine.aimX);
     const ay = toY(engine.aimY);
+    const hasSpecialWep = engine.activeWeaponTimer > 0 && engine.activeWeapon !== 'normal';
+    const aimColor = hasSpecialWep ? engine.activeWeaponDef.accentColor : '#fde047';
     if (engine.status === 'playing') {
       ctx.save();
       ctx.setLineDash([4, 6]);
-      ctx.strokeStyle = 'rgba(253, 224, 71, 0.44)';
+      ctx.strokeStyle = hasSpecialWep ? aimColor : 'rgba(253, 224, 71, 0.44)';
+      ctx.globalAlpha = hasSpecialWep ? 0.62 : 1;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(tx, ty);
       ctx.lineTo(ax, ay);
       ctx.stroke();
       ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
 
       ctx.beginPath();
       ctx.arc(ax, ay, 11, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(253, 224, 71, 0.82)';
+      ctx.strokeStyle = aimColor;
       ctx.lineWidth = 1.5;
       ctx.stroke();
-      ctx.fillStyle = '#fde047';
+      ctx.fillStyle = aimColor;
       this.drawFourPointStar(ctx, ax, ay, 5.5, 1.8);
       ctx.fill();
       ctx.restore();
     }
 
-    // 6. Bottom-Center Hogwarts Elder Wand Arcane Pedestal (Đài Đũa Phép Cơm Nguội)
+    // 6. Bottom-Center Hogwarts Elder Wand Arcane Pedestal (Đài Đũa Phép Cơm Nguội — Liên Thanh)
     ctx.save();
-    const baseR = Math.max(22, 26 * vp.unitScale);
+    const baseR = Math.max(19, 24 * vp.unitScale);
     const screenAngle = Math.atan2(ay - ty, ax - tx);
-    const wandGemColor =
-      engine.cannonTier === 3 ? '#fde047' : engine.cannonTier === 2 ? '#e879f9' : '#fb7185';
+    const wandGemColor = hasSpecialWep
+      ? engine.activeWeaponDef.accentColor
+      : engine.cannonTier === 3
+        ? '#fde047'
+        : engine.cannonTier === 2
+          ? '#e879f9'
+          : '#fb7185';
 
-    // Rotating Hogwarts runic aura ring on the lakebed plinth
+    // Active special weapon duration arc around the turret base
+    if (hasSpecialWep) {
+      const wepFrac = Math.max(
+        0,
+        Math.min(1, engine.activeWeaponTimer / Math.max(1, engine.activeWeaponMaxTimer))
+      );
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(tx, ty, baseR * 1.44, Math.PI, Math.PI + Math.PI * wepFrac);
+      ctx.strokeStyle = engine.activeWeaponDef.accentColor;
+      ctx.lineWidth = 3.2;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Rotating Hogwarts runic aura ring around stationary turret socket
     ctx.save();
-    ctx.translate(tx, ty + 2);
-    ctx.rotate(nowSec * 0.55);
+    ctx.translate(tx, ty);
+    ctx.rotate(nowSec * (engine.autoFire ? 1.15 : 0.55));
     ctx.beginPath();
-    ctx.arc(0, 0, baseR * 1.34, Math.PI * 1.05, Math.PI * 1.95);
+    ctx.arc(0, 0, baseR * 1.28, Math.PI * 1.04, Math.PI * 1.96);
     ctx.setLineDash([4, 4]);
-    ctx.strokeStyle = 'rgba(250, 204, 21, 0.65)';
+    ctx.strokeStyle = hasSpecialWep ? engine.activeWeaponDef.accentColor : 'rgba(250, 204, 21, 0.7)';
     ctx.lineWidth = 1.6;
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.restore();
 
-    // Carved Atlantean Sea-Stone, Pearl & Gold Coral Dais
+    // Stationary Gilded Atlantean Sea-Pearl Turret Socket (never tilts sideways)
+    const sockGrad = ctx.createRadialGradient(tx, ty - baseR * 0.25, baseR * 0.12, tx, ty, baseR * 1.06);
+    sockGrad.addColorStop(0, hasSpecialWep ? engine.activeWeaponDef.accentColor : '#67e8f9');
+    sockGrad.addColorStop(0.55, '#0f766e');
+    sockGrad.addColorStop(1, '#042f2e');
     ctx.beginPath();
-    ctx.arc(tx, ty + 8, baseR * 1.24, Math.PI, 0);
+    ctx.arc(tx, ty + 2, baseR * 1.04, Math.PI, 0);
     ctx.closePath();
-    const pedGrad = ctx.createLinearGradient(tx - baseR, ty - baseR, tx + baseR, ty + 14);
-    pedGrad.addColorStop(0, '#67e8f9');
-    pedGrad.addColorStop(0.45, '#0f766e');
-    pedGrad.addColorStop(1, '#042f2e');
-    ctx.fillStyle = pedGrad;
+    ctx.fillStyle = sockGrad;
     ctx.fill();
     ctx.lineWidth = 2;
-    ctx.strokeStyle = '#fde047';
+    ctx.strokeStyle = hasSpecialWep ? engine.activeWeaponDef.accentColor : '#fde047';
     ctx.stroke();
 
-    // Rotating Elder Wand (Đũa Phép Cơm Nguội with sculpted berry knots & spell-crystal tip)
+    // Rotating Wand / Trident Barrel ONLY (cropped above the stone coral base so base never rotates!)
     ctx.save();
-    ctx.translate(tx, ty);
+    ctx.translate(tx, ty - 2);
     ctx.rotate(screenAngle + Math.PI * 0.5);
-    const recoilOffset = engine.cannonRecoil * 7;
+    const recoilOffset = engine.cannonRecoil * 5.5;
     ctx.translate(0, recoilOffset);
 
-    const wandLen = baseR * 1.95;
+    const wandLen = baseR * 1.85;
     const wandAtlas =
       this.blackLakeCreaturesAtlas &&
       this.blackLakeCreaturesAtlas.complete &&
@@ -7822,68 +8341,82 @@ export class PuzzleArcadeModalController {
         : null;
 
     if (wandAtlas) {
-      const wBox = wandLen * 1.62;
-      ctx.drawImage(wandAtlas, 3 * 256, 1 * 256, 256, 256, -wBox * 0.5, -wandLen * 1.24, wBox, wBox);
+      const cropSrcH = 148;
+      const wBoxW = wandLen * 1.48;
+      const wBoxH = wBoxW * (cropSrcH / 256);
+      ctx.drawImage(
+        wandAtlas,
+        3 * 256,
+        1 * 256,
+        256,
+        cropSrcH,
+        -wBoxW * 0.5,
+        -wBoxH + baseR * 0.14,
+        wBoxW,
+        wBoxH
+      );
     } else {
-      // Tapered carved elder-wood shaft fallback
       const shaftGrad = ctx.createLinearGradient(-baseR * 0.18, 0, baseR * 0.18, 0);
       shaftGrad.addColorStop(0, '#78350f');
       shaftGrad.addColorStop(0.5, '#d97706');
       shaftGrad.addColorStop(1, '#3f1d0b');
       ctx.fillStyle = shaftGrad;
       ctx.beginPath();
-      ctx.moveTo(-baseR * 0.19, baseR * 0.25);
+      ctx.moveTo(-baseR * 0.19, baseR * 0.2);
       ctx.lineTo(-baseR * 0.07, -wandLen);
       ctx.lineTo(baseR * 0.07, -wandLen);
-      ctx.lineTo(baseR * 0.19, baseR * 0.25);
+      ctx.lineTo(baseR * 0.19, baseR * 0.2);
       ctx.closePath();
       ctx.fill();
       ctx.strokeStyle = '#fde68a';
       ctx.lineWidth = 1.1;
       ctx.stroke();
-
-      for (const ky of [0.05, -0.38, -0.82, -1.26]) {
-        const kr = baseR * (ky > -0.5 ? 0.19 : 0.15);
-        ctx.beginPath();
-        ctx.arc(0, baseR * ky, kr, 0, Math.PI * 2);
-        ctx.fillStyle = '#92400e';
-        ctx.fill();
-        ctx.strokeStyle = '#facc15';
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
-      }
     }
 
-    // Blazing spell-tip aura at wand tip (color-coded by wand tier ×1/×2/×3)
-    const tipGlow = ctx.createRadialGradient(0, -wandLen, 1, 0, -wandLen, baseR * 0.52);
-    tipGlow.addColorStop(0, wandAtlas ? 'rgba(255, 255, 255, 0.55)' : '#ffffff');
+    // Blazing spell-tip aura at wand tip
+    const tipY = wandAtlas ? -wandLen * 0.78 : -wandLen;
+    const tipGlow = ctx.createRadialGradient(0, tipY, 1, 0, tipY, baseR * 0.52);
+    tipGlow.addColorStop(0, wandAtlas ? 'rgba(255, 255, 255, 0.62)' : '#ffffff');
     tipGlow.addColorStop(0.45, wandGemColor);
     tipGlow.addColorStop(1, 'rgba(253, 224, 71, 0)');
     ctx.fillStyle = tipGlow;
     ctx.beginPath();
-    ctx.arc(0, -wandLen, baseR * 0.52, 0, Math.PI * 2);
+    ctx.arc(0, tipY, baseR * 0.52, 0, Math.PI * 2);
     ctx.fill();
     if (!wandAtlas) {
       ctx.fillStyle = '#ffffff';
-      this.drawFourPointStar(ctx, 0, -wandLen, baseR * 0.28, baseR * 0.09);
+      this.drawFourPointStar(ctx, 0, tipY, baseR * 0.28, baseR * 0.09);
       ctx.fill();
     }
     ctx.restore();
 
-    // Tier badge on the Hogwarts wand pedestal
-    const badgeW = 68;
+    // Central pearl pivot cabochon covering wand hinge
+    ctx.beginPath();
+    ctx.arc(tx, ty - 2, Math.max(4.5, baseR * 0.24), 0, Math.PI * 2);
+    ctx.fillStyle = '#fef08a';
+    ctx.fill();
+    ctx.strokeStyle = '#92400e';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    // Tier + Active Weapon badge cleanly inside the bottom ward frame
+    const pedLabel = hasSpecialWep
+      ? `${engine.activeWeaponDef.badgeVi} • ${Math.ceil(engine.activeWeaponTimer)}s`
+      : `ĐÀI ĐŨA ×${engine.cannonTier} • ∞`;
+    ctx.font = '700 11px "Be Vietnam Pro", system-ui, sans-serif';
+    const badgeW = Math.max(82, Math.ceil(ctx.measureText(pedLabel).width) + 14);
     const badgeH = 18;
-    drawRoundedRect(ctx, tx - badgeW * 0.5, ty + 6, badgeW, badgeH, 9);
-    ctx.fillStyle = '#1c1917';
+    const badgeY = Math.min(wardY + wardH - badgeH - 3, ty + 1);
+    drawRoundedRect(ctx, tx - badgeW * 0.5, badgeY, badgeW, badgeH, 9);
+    ctx.fillStyle = 'rgba(12, 22, 32, 0.94)';
     ctx.fill();
     ctx.lineWidth = 1.4;
-    ctx.strokeStyle = '#fde047';
+    ctx.strokeStyle = hasSpecialWep ? engine.activeWeaponDef.accentColor : '#fde047';
     ctx.stroke();
-    ctx.fillStyle = '#fef08a';
-    ctx.font = '800 10px "Be Vietnam Pro", system-ui, sans-serif';
+    ctx.fillStyle = hasSpecialWep ? '#ffffff' : '#fef08a';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`ĐÀI ĐŨA ×${engine.cannonTier}`, tx, ty + 15);
+    ctx.fillText(pedLabel, tx, badgeY + badgeH * 0.5);
     ctx.restore();
 
     // 7. Floating "+Points" Catch Popups
@@ -8928,14 +9461,27 @@ export class PuzzleArcadeModalController {
   }
 
   private drawParticles(ctx: CanvasRenderingContext2D): void {
+    const isUnderwater = this.mode === 'chess';
     for (const p of this.particles) {
       const alpha = Math.max(0, 1 - p.age / p.duration);
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.translate(p.x, p.y);
-      ctx.rotate(p.rot);
-      ctx.fillStyle = p.color;
-      ctx.fillRect(-p.size * 0.5, -p.size * 0.5, p.size, p.size);
+      if (isUnderwater) {
+        const r = Math.max(1.8, p.size * 0.52);
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(-r * 0.25, -r * 0.25, r * 0.42, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+      } else {
+        ctx.rotate(p.rot);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.size * 0.5, -p.size * 0.5, p.size, p.size);
+      }
       ctx.restore();
     }
   }

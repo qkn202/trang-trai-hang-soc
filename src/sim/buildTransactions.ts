@@ -16,11 +16,22 @@ import type { ParkSimulation } from './simulation';
 export interface BuildSnapshot {
   galleons: number;
   xp: number;
+  level?: number;
   stars: number;
   buildings: PlacedBuilding[];
   tileOverrides: Record<string, TileOverrideData>;
   stashedDecorInventory?: Record<string, number>;
   stashedDecorStars?: Record<string, number[]>;
+  after?: {
+    galleons: number;
+    xp: number;
+    level?: number;
+    stars: number;
+    buildings: PlacedBuilding[];
+    tileOverrides: Record<string, TileOverrideData>;
+    stashedDecorInventory?: Record<string, number>;
+    stashedDecorStars?: Record<string, number[]>;
+  };
 }
 
 const MAX_BUILD_UNDO = 30;
@@ -29,6 +40,7 @@ export function buildTxnCapture(sim: ParkSimulation): BuildSnapshot {
   return {
     galleons: sim.state.galleons,
     xp: sim.state.xp,
+    level: sim.state.level,
     stars: sim.state.match3?.stars ?? 0,
     buildings: structuredClone(sim.state.buildings),
     tileOverrides: structuredClone(sim.state.tileOverrides),
@@ -41,9 +53,128 @@ export function buildTxnCapture(sim: ParkSimulation): BuildSnapshot {
   };
 }
 
-function buildTxnRestore(sim: ParkSimulation, s: BuildSnapshot): void {
+function hasActiveFarmWork(b: PlacedBuilding): boolean {
+  return Boolean(
+    b.cropId ||
+      b.pastureAnimalId ||
+      (b.workshopQueue && b.workshopQueue.length > 0) ||
+      (b.readyFarmGoods && b.readyFarmGoods.length > 0)
+  );
+}
+
+function buildTxnApplyTransition(
+  sim: ParkSimulation,
+  fromSnap: Omit<BuildSnapshot, 'after'>,
+  toSnap: Omit<BuildSnapshot, 'after'>
+): boolean {
+  const deltaSickles = toSnap.galleons - fromSnap.galleons;
+  const deltaStars = toSnap.stars - fromSnap.stars;
+  const deltaXp = toSnap.xp - fromSnap.xp;
+
+  const curStars = sim.state.match3?.stars ?? 0;
+  if (sim.state.galleons + deltaSickles < 0 || curStars + deltaStars < 0) {
+    return false;
+  }
+
+  const fromByUid = new Map(fromSnap.buildings.map((b) => [b.uid, b]));
+  const toByUid = new Map(toSnap.buildings.map((b) => [b.uid, b]));
+  const liveByUid = new Map(sim.state.buildings.map((b) => [b.uid, b]));
+
+  // Refuse undoing/removing a building that subsequently started growing crops, grazing animals, or crafting
+  for (const [uid, fromB] of fromByUid) {
+    const toB = toByUid.get(uid);
+    if (!toB) {
+      const liveB = liveByUid.get(uid);
+      if (!liveB) return false;
+      if (!hasActiveFarmWork(fromB) && hasActiveFarmWork(liveB)) {
+        return false;
+      }
+    }
+  }
+
+  sim.state.galleons = Math.max(0, sim.state.galleons + deltaSickles);
+  sim.state.xp = Math.max(0, sim.state.xp + deltaXp);
+  if (sim.state.match3) {
+    sim.state.match3.stars = Math.max(0, curStars + deltaStars);
+  }
+
+  // Apply per-building diff while preserving unrelated live buildings (e.g. crops planted on other plots)
+  const nextBuildings: PlacedBuilding[] = [];
+  const handledUids = new Set<string>();
+  for (const liveB of sim.state.buildings) {
+    const inFrom = fromByUid.get(liveB.uid);
+    const inTo = toByUid.get(liveB.uid);
+    if (inFrom && !inTo) {
+      handledUids.add(liveB.uid);
+      continue; // removed in this transition
+    }
+    if (inFrom && inTo) {
+      handledUids.add(liveB.uid);
+      const changedInStroke = JSON.stringify(inFrom) !== JSON.stringify(inTo);
+      nextBuildings.push(changedInStroke ? structuredClone(inTo) : liveB);
+      continue;
+    }
+    nextBuildings.push(liveB);
+  }
+  for (const toB of toSnap.buildings) {
+    if (!handledUids.has(toB.uid) && !liveByUid.has(toB.uid)) {
+      nextBuildings.push(structuredClone(toB));
+    }
+  }
+  sim.state.buildings = nextBuildings;
+
+  // Apply per-tile override diff only for tiles touched by this stroke
+  const allTileKeys = new Set([
+    ...Object.keys(fromSnap.tileOverrides),
+    ...Object.keys(toSnap.tileOverrides),
+  ]);
+  for (const key of allTileKeys) {
+    const fVal = fromSnap.tileOverrides[key];
+    const tVal = toSnap.tileOverrides[key];
+    if (JSON.stringify(fVal) === JSON.stringify(tVal)) continue;
+    if (tVal === undefined) {
+      delete sim.state.tileOverrides[key];
+    } else {
+      sim.state.tileOverrides[key] = structuredClone(tVal);
+    }
+  }
+
+  // Apply stashed decor inventory deltas
+  if (fromSnap.stashedDecorInventory || toSnap.stashedDecorInventory) {
+    const fInv = fromSnap.stashedDecorInventory ?? {};
+    const tInv = toSnap.stashedDecorInventory ?? {};
+    const curInv = { ...(sim.state.stashedDecorInventory ?? {}) };
+    const invKeys = new Set([...Object.keys(fInv), ...Object.keys(tInv)]);
+    for (const k of invKeys) {
+      const diff = (tInv[k] ?? 0) - (fInv[k] ?? 0);
+      if (diff !== 0) {
+        const nextQty = Math.max(0, (curInv[k] ?? 0) + diff);
+        if (nextQty > 0) curInv[k] = nextQty;
+        else delete curInv[k];
+      }
+    }
+    sim.state.stashedDecorInventory = Object.keys(curInv).length > 0 ? curInv : undefined;
+  }
+  if (fromSnap.stashedDecorStars || toSnap.stashedDecorStars) {
+    sim.state.stashedDecorStars = toSnap.stashedDecorStars
+      ? structuredClone(toSnap.stashedDecorStars)
+      : undefined;
+  }
+
+  sim.rideQueues.clear();
+  sim.rideQueueTailSpot.clear();
+  sim.rebuildGrid();
+  sim.syncStaffEntities();
+  sim.syncValleyVillagers();
+  return true;
+}
+
+function buildTxnRestoreImmediate(sim: ParkSimulation, s: BuildSnapshot): void {
   sim.state.galleons = s.galleons;
   sim.state.xp = s.xp;
+  if (typeof s.level === 'number') {
+    sim.state.level = s.level;
+  }
   if (sim.state.match3) {
     sim.state.match3.stars = s.stars;
   }
@@ -55,7 +186,6 @@ function buildTxnRestore(sim: ParkSimulation, s: BuildSnapshot): void {
   sim.state.stashedDecorStars = s.stashedDecorStars
     ? structuredClone(s.stashedDecorStars)
     : undefined;
-  // Rời các transient map tham chiếu building uid khỏi vòng đời building cũ.
   sim.rideQueues.clear();
   sim.rideQueueTailSpot.clear();
   sim.rebuildGrid();
@@ -94,6 +224,17 @@ export function buildTxnCommitStroke(sim: ParkSimulation): void {
   }
   const mutated = sim.buildStrokeMutated;
   if (mutated && !sim.isVisitingNeighbor) {
+    const afterSnap = buildTxnCapture(sim);
+    sim.pendingBuildStroke.after = {
+      galleons: afterSnap.galleons,
+      xp: afterSnap.xp,
+      level: afterSnap.level ?? sim.state.level,
+      stars: afterSnap.stars,
+      buildings: afterSnap.buildings,
+      tileOverrides: afterSnap.tileOverrides,
+      stashedDecorInventory: afterSnap.stashedDecorInventory,
+      stashedDecorStars: afterSnap.stashedDecorStars,
+    };
     sim.buildUndoStack.push(sim.pendingBuildStroke);
     if (sim.buildUndoStack.length > MAX_BUILD_UNDO) sim.buildUndoStack.shift();
     sim.buildRedoStack.length = 0;
@@ -123,7 +264,7 @@ export function buildTxnCancelStroke(sim: ParkSimulation): void {
   sim.buildStrokeMutated = false;
   if (!snap) return;
   if (sim.isVisitingNeighbor) return;
-  buildTxnRestore(sim, snap);
+  buildTxnRestoreImmediate(sim, snap);
   sim.saveToStorage();
   sim.onUiChange?.();
 }
@@ -138,10 +279,17 @@ export function buildTxnCanRedo(sim: ParkSimulation): boolean {
 
 export function buildTxnUndo(sim: ParkSimulation): boolean {
   if (sim.isVisitingNeighbor) return false;
-  const snap = sim.buildUndoStack.pop();
+  const snap = sim.buildUndoStack.at(-1);
   if (!snap) return false;
-  sim.buildRedoStack.push(buildTxnCapture(sim));
-  buildTxnRestore(sim, snap);
+  const fromState = snap.after ?? buildTxnCapture(sim);
+  if (!buildTxnApplyTransition(sim, fromState, snap)) {
+    return false;
+  }
+  sim.buildUndoStack.pop();
+  sim.buildRedoStack.push({
+    ...snap,
+    after: fromState,
+  });
   sim.saveToStorage();
   sim.onUiChange?.();
   return true;
@@ -149,10 +297,13 @@ export function buildTxnUndo(sim: ParkSimulation): boolean {
 
 export function buildTxnRedo(sim: ParkSimulation): boolean {
   if (sim.isVisitingNeighbor) return false;
-  const snap = sim.buildRedoStack.pop();
-  if (!snap) return false;
-  sim.buildUndoStack.push(buildTxnCapture(sim));
-  buildTxnRestore(sim, snap);
+  const snap = sim.buildRedoStack.at(-1);
+  if (!snap || !snap.after) return false;
+  if (!buildTxnApplyTransition(sim, snap, snap.after)) {
+    return false;
+  }
+  sim.buildRedoStack.pop();
+  sim.buildUndoStack.push(snap);
   sim.saveToStorage();
   sim.onUiChange?.();
   return true;

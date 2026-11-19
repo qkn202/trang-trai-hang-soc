@@ -362,14 +362,15 @@ export class ProofOfPlayRecorder {
     const wallElapsed = Math.max(0, Math.round(nowEpochMs - this.startedAt));
     const minHuman = getMinHumanElapsedMs(this.gameId, this.moveCount);
     const elapsedMs = Math.max(minHuman, wallElapsed, summedStepMs);
-    // Cân bằng bước cuối nếu người chơi suy nghĩ trước khi thắng để tổng dt khớp elapsedMs
+    // Cân bằng các bước nếu người chơi tạm nghỉ lâu trước khi thắng để tổng dt khớp elapsedMs (không kẹt trần 0xffff của 1 bước đơn lẻ)
     if (steps.length > 0 && elapsedMs > summedStepMs) {
-      const extra10 = Math.min(
-        0xffff - steps[steps.length - 1]!.dt16,
-        Math.round((elapsedMs - summedStepMs) / 10)
-      );
-      if (extra10 > 0) {
-        steps[steps.length - 1]!.dt16 = (steps[steps.length - 1]!.dt16 + extra10) & 0xffff;
+      let rem10 = Math.round((elapsedMs - summedStepMs) / 10);
+      for (let idx = steps.length - 1; idx >= 0 && rem10 > 0; idx--) {
+        const room = Math.max(0, 0xffff - steps[idx]!.dt16);
+        if (room <= 0) continue;
+        const add10 = Math.min(room, rem10);
+        steps[idx]!.dt16 = (steps[idx]!.dt16 + add10) & 0xffff;
+        rem10 -= add10;
       }
     }
 

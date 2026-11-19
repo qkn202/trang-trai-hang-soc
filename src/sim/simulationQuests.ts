@@ -537,12 +537,16 @@ export function questsGetStoryAutoActionPreview(sim: ParkSimulation): {
       };
     }
     if (story.objectiveType === 'place_paths') {
+      const needed = Math.max(1, story.targetAmount - story.progress);
+      const pathItem = getCatalogItem('path_cobble');
+      const unitGold = pathItem?.cost ?? 10;
+      const totalGold = needed * unitGold;
       return {
         kind: 'auto_paths',
-        shortLabel: '🌟 1 Sao Lát Ngay',
-        longLabel: '🌟 Dùng 1 Sao Phép Thuật Lát Đường Đá Tự Động & Hoàn Tất Ngay!',
-        starCost: 1,
-        goldCost: 0,
+        shortLabel: `🔨 Lát Ngay (${totalGold} Sickle)`,
+        longLabel: `🔨 Lát Tự Động ${needed} ô Đường Đá (${totalGold} Sickle) & Hoàn Tất Ngay!`,
+        starCost: 0,
+        goldCost: totalGold,
       };
     }
     if (story.objectiveType === 'unlock_zone' && story.targetId) {
@@ -555,7 +559,7 @@ export function questsGetStoryAutoActionPreview(sim: ParkSimulation): {
           shortLabel: `🔒 Mở ở Cấp ${z.unlockLevel}`,
           longLabel: `🔒 Cần đạt Cấp Giải Đố ${z.unlockLevel} để mở "${z.name}" — Bấm nút ▶️ góc phải chơi Giải Đố tăng cấp!`,
           starCost: zStars,
-          goldCost: 0,
+          goldCost: z.unlockCost,
         };
       }
       if (!sim.state.sandboxMode && zStars > 0 && curStars < zStars) {
@@ -564,15 +568,18 @@ export function questsGetStoryAutoActionPreview(sim: ParkSimulation): {
           shortLabel: `🌟 Cần ${zStars} Sao (${curStars}/${zStars}🌟)`,
           longLabel: `🌟 Cần thêm ${zStars - curStars} Sao Phép Thuật (${curStars}/${zStars} 🌟) để phá phong ấn "${z.name}"!`,
           starCost: zStars,
-          goldCost: 0,
+          goldCost: z.unlockCost,
         };
       }
       return {
         kind: 'auto_unlock_zone',
-        shortLabel: `🔓 Mở Khu (${zStars} 🌟)`,
-        longLabel: `🔓 Phá Phong Ấn "${z.name}" (${zStars} 🌟 Sao Phép Thuật) & Nhận Thưởng!`,
+        shortLabel:
+          z.unlockCost > 0
+            ? `🔓 Mở Khu (${zStars} 🌟 + ${z.unlockCost} Sickle)`
+            : `🔓 Mở Khu (${zStars} 🌟)`,
+        longLabel: `🔓 Phá Phong Ấn "${z.name}" & Nhận Thưởng!`,
         starCost: zStars,
-        goldCost: 0,
+        goldCost: z.unlockCost,
       };
     }
     if (story.objectiveType === 'build_item' && story.targetId) {
@@ -660,12 +667,14 @@ export function questsCompleteStoryStepWithStar(sim: ParkSimulation): {
       let laid = 0;
       let lastGx = 7;
       let lastGy = 17;
+      const seedTiles =
+        sim.connectedPathTiles.size > 0 ? sim.connectedPathTiles : new Set<string>(['18,22', '7,17']);
 
       while (laid < needed) {
         if (!sim.state.sandboxMode && sim.state.galleons < unitGold) break;
         let bestTile: [number, number] | null = null;
         let bestScore = -9999;
-        for (const pk of sim.connectedPathTiles) {
+        for (const pk of seedTiles) {
           const [px, py] = pk.split(',').map(Number);
           for (const [dx, dy] of [
             [1, 0],
@@ -697,12 +706,21 @@ export function questsCompleteStoryStepWithStar(sim: ParkSimulation): {
           path: 'cobble',
         };
         sim.connectedPathTiles.add(`${tx},${ty}`);
+        seedTiles.add(`${tx},${ty}`);
         sim.state.stats.pathsPlaced += 1;
         questsRecordQuestProgress(sim, 'place_paths', 'path_cobble', 1);
         sim.spawnFloatingText(tx, ty, '🌟 Lát đá!', '#fde047');
         lastGx = tx;
         lastGy = ty;
         laid++;
+      }
+
+      if (laid === 0) {
+        return {
+          ok: false,
+          reason: 'no_space',
+          msg: 'Không tìm thấy ô trống hợp lệ để lát thêm Đường Đá!',
+        };
       }
 
       sim.recomputeAllCoastersAndBiomes();
@@ -712,7 +730,7 @@ export function questsCompleteStoryStepWithStar(sim: ParkSimulation): {
         ? `🪨 Đã lát tự động ${laid} ô Đường Đá & hoàn thành "${story.title}" (+${story.rewardSickle} Sickle)!`
         : `🪨 Đã lát thêm ${laid} ô Đường Đá cho "${story.title}"!`;
       sim.onToast?.(msg, '🪨');
-      return { ok: laid > 0, msg, placedGx: lastGx, placedGy: lastGy };
+      return { ok: true, msg, placedGx: lastGx, placedGy: lastGy };
     }
 
     // 2. Unlock fogged zone (`unlock_zone`) cleanly respecting level, Star, and Gold costs!

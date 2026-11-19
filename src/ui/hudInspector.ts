@@ -1530,6 +1530,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
       delete panel.dataset.inspSig;
       const z = getZoneById(hud.inspectSelection.zoneId);
       const zStars = getZonePuzzleStarCost(z);
+      const zSickles = z.unlockCost > 0 ? ` · ${z.unlockCost.toLocaleString('vi-VN')} Sickle` : '';
       const canLv = hud.sim.state.level >= z.unlockLevel || hud.sim.state.sandboxMode;
       panel.classList.remove('hidden');
       panel.classList.remove('inspector-wide-ws');
@@ -1538,11 +1539,11 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         <div class="inspector-header-bar">
           <div>
             <div class="hs-insp-title">${escapeHtml(z.name)}</div>
-            <div class="hs-insp-meta">Cấp ${z.unlockLevel} · 🌟 ${zStars}</div>
+            <div class="hs-insp-meta">Cấp ${z.unlockLevel} · 🌟 ${zStars}${zSickles}</div>
           </div>
           <button id="btnCloseInsp" type="button" class="brass-btn hs-insp-icon-btn" aria-label="Đóng bảng chi tiết">✕</button>
         </div>
-        <button id="btnConfirmUnlockZone" type="button" class="brass-btn ${canLv ? 'gold-cta' : ''}" style="width:100%;">Mở khu vực · 🌟 ${zStars}</button>
+        <button id="btnConfirmUnlockZone" type="button" class="brass-btn ${canLv ? 'gold-cta' : ''}" style="width:100%;">Mở khu vực · 🌟 ${zStars}${zSickles}</button>
       `;
       panel.querySelector('#btnCloseInsp')?.addEventListener('click', () => {
         hud.inspectSelection = null;
@@ -1553,7 +1554,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         hud.showToast(res.msg, res.ok ? '✨' : '🔒');
         if (res.ok) {
           hud.inspectSelection = null;
-          inspectorRenderInspector(hud);
+          hud.refreshAll();
         }
       });
     }

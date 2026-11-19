@@ -2596,6 +2596,20 @@ async function bootstrap(): Promise<void> {
       }
     }
 
+    const clickedTile = sim.grid[gPos.gy]?.[gPos.gx];
+    if (
+      !sim.isVisitingNeighbor &&
+      clickedTile &&
+      !sim.state.unlockedZones.includes(clickedTile.zoneId)
+    ) {
+      hud.clearBuildToolModes();
+      hud.closeSeedTray();
+      hud.closePastureTray();
+      hud.inspectSelection = { kind: 'zone', zoneId: clickedTile.zoneId };
+      hud.refreshAll();
+      return;
+    }
+
     hud.inspectSelection = null;
     hud.refreshAll();
   });

@@ -649,7 +649,6 @@
 .m3-reward-badges {
   display: flex;
   flex-wrap: wrap;
-  flex-wrap: balance;
   justify-content: center;
   gap: 6px;
   margin-top: 2px;

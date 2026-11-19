@@ -594,9 +594,10 @@ describe('MasterJigsawEngine & 777 Harry Potter Paintings ("Tranh Ghép Phép Th
       expect(strip.hidden).toBe(true);
       expect(scatterBtn.disabled).toBe(true);
 
-      // Picking a scattered piece directly from the board works without opening the tray
-      const pickPos = jeScatter.getBoardPieceNormCenter(0);
-      expect(jeScatter.pickBoardPieceAtNorm(pickPos.nx, pickPos.ny)).toBe(0);
+      // Picking the top-most scattered piece directly from the board works without opening the tray
+      const topCluster = jeScatter.getBoardClustersSortedByZ(true).at(-1)!;
+      const pickPos = jeScatter.getBoardPieceNormCenter(topCluster.root);
+      expect(jeScatter.pickBoardPieceAtNorm(pickPos.nx, pickPos.ny)).toBe(topCluster.root);
 
       // Opening the tray back & tidying returns all loose singletons to the tray
       toggleBtn.dispatch('click');

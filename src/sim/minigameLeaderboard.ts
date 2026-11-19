@@ -71,7 +71,7 @@ export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMet
   caro: {
     id: 'caro',
     icon: '🧨',
-    spriteIcon: '/game/trang-trai-hang-soc/sprites/m3_sp_bomb.webp',
+    spriteIcon: '/game/trang-trai-hang-soc/paintings/mines_flag.webp?v=flag1',
     shortVi: 'Dò Mìn Phép Thuật',
     tabVi: 'Dò Mìn',
     titleVi: 'Dò Mìn Phép Thuật',
@@ -97,7 +97,7 @@ export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMet
   chess: {
     id: 'chess',
     icon: '🎯',
-    spriteIcon: '/game/trang-trai-hang-soc/sprites/m3_boost_cannon.webp',
+    spriteIcon: '/game/trang-trai-hang-soc/paintings/plimpy_icon.webp?v=sea2',
     shortVi: 'Bắn Cá Hồ Đen',
     tabVi: 'Bắn Cá',
     titleVi: 'Bắn Cá Hồ Đen',

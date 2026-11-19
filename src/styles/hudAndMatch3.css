@@ -1927,7 +1927,6 @@
   align-items: center;
   gap: 5px;
   flex-wrap: wrap;
-  flex-wrap: balance;
 }
 
 .seed-filter-pill {

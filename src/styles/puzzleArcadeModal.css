@@ -403,6 +403,8 @@
   background: transparent;
 }
 
+.pa-canvas-shell[data-pa-board-mode='caro'] #paBoardCanvas,
+.pa-canvas-shell[data-pa-board-mode='chess'] #paBoardCanvas,
 .pa-canvas-shell[data-pa-board-mode='blocks'] #paBoardCanvas,
 .pa-canvas-shell[data-pa-board-mode='jigsaw'] #paBoardCanvas {
   width: 100%;

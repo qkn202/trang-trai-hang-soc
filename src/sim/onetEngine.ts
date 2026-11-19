@@ -1470,6 +1470,7 @@ export class CreatureOnetEngine {
     if (!Array.isArray(snap.grid) || snap.grid.length !== this.rows) return false;
 
     const validSpecies = new Set(CREATURE_ONET_SPECIES.map((s) => s.id));
+    const speciesCounts = new Map<string, number>();
     let remainingTiles = 0;
     const nextGrid: Array<Array<string | null>> = [];
     for (let r = 0; r < this.rows; r++) {
@@ -1482,6 +1483,7 @@ export class CreatureOnetEngine {
           nextRow.push(null);
         } else if (typeof val === 'string' && validSpecies.has(val)) {
           nextRow.push(val);
+          speciesCounts.set(val, (speciesCounts.get(val) ?? 0) + 1);
           remainingTiles++;
         } else {
           return false;
@@ -1491,6 +1493,9 @@ export class CreatureOnetEngine {
     }
 
     if (remainingTiles < 2 || remainingTiles % 2 !== 0) return false;
+    for (const cnt of speciesCounts.values()) {
+      if (cnt % 2 !== 0) return false;
+    }
     const expectedMatched = this.totalPairs - remainingTiles / 2;
     if (expectedMatched < 0 || expectedMatched >= this.totalPairs) return false;
 

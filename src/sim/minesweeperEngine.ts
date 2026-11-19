@@ -377,7 +377,7 @@ export class MinesweeperEngine {
     return { changed: true, flagged: cell.flagged };
   }
 
-  public tapCell(r: number, c: number): MinesweeperTapResult {
+  public tapCell(r: number, c: number, infiniteShields = false): MinesweeperTapResult {
     const empty: MinesweeperTapResult = {
       action: 'noop',
       revealedCells: [],
@@ -396,7 +396,7 @@ export class MinesweeperEngine {
     }
 
     if (cell.revealed) {
-      return this.tryChordReveal(r, c);
+      return this.tryChordReveal(r, c, infiniteShields);
     }
 
     if (cell.flagged || cell.defused) {
@@ -410,8 +410,8 @@ export class MinesweeperEngine {
     }
 
     if (cell.hasMine) {
-      if (this.shieldsLeft > 0) {
-        this.shieldsLeft -= 1;
+      if (infiniteShields || this.shieldsLeft > 0) {
+        if (!infiniteShields) this.shieldsLeft -= 1;
         cell.defused = true;
         cell.flagged = true;
         return {
@@ -446,7 +446,7 @@ export class MinesweeperEngine {
     };
   }
 
-  private tryChordReveal(r: number, c: number): MinesweeperTapResult {
+  private tryChordReveal(r: number, c: number, infiniteShields = false): MinesweeperTapResult {
     const empty: MinesweeperTapResult = {
       action: 'noop',
       revealedCells: [],
@@ -503,8 +503,8 @@ export class MinesweeperEngine {
     for (const t of targets) {
       if (t.revealed || t.flagged || t.defused) continue;
       if (t.hasMine) {
-        if (this.shieldsLeft > 0) {
-          this.shieldsLeft -= 1;
+        if (infiniteShields || this.shieldsLeft > 0) {
+          if (!infiniteShields) this.shieldsLeft -= 1;
           t.defused = true;
           t.flagged = true;
           shieldSaved = true;
@@ -579,7 +579,9 @@ export class MinesweeperEngine {
       flaggedMineCell = { r: m.r, c: m.c };
     }
 
-    const pool = frontierSafe.length > 0 ? frontierSafe : anySafe;
+    const rawPool = frontierSafe.length > 0 ? frontierSafe : anySafe;
+    const unflaggedPool = rawPool.filter((cell) => !cell.flagged);
+    const pool = unflaggedPool.length > 0 ? unflaggedPool : rawPool;
     if (pool.length === 0) {
       const won = this.checkVictoryAndAutoFlag();
       return { ok: Boolean(flaggedMineCell || won), revealedCells: [], flaggedMineCell, won };
@@ -754,7 +756,21 @@ export class MinesweeperEngine {
 
   public restoreSession(raw: unknown): boolean {
     const s = sanitizeSavedMinesweeperSession(raw, this.stage);
-    if (!s || s.rows !== this.rows || s.cols !== this.cols) return false;
+    if (!s || s.rows !== this.rows || s.cols !== this.cols || s.totalMines !== this.totalMines) {
+      return false;
+    }
+    if (s.minesGenerated && s.mineIndices.length !== this.totalMines) {
+      return false;
+    }
+    if (!s.minesGenerated && s.mineIndices.length > 0) {
+      return false;
+    }
+    if (s.status === 'playing' && s.minesGenerated) {
+      const mineSet = new Set(s.mineIndices);
+      for (const revIdx of s.revealedIndices) {
+        if (mineSet.has(revIdx)) return false;
+      }
+    }
     this.grid = this.createEmptyGrid();
     this.minesGenerated = s.minesGenerated;
 

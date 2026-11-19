@@ -6135,7 +6135,7 @@ body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(96px + ma
 .hud-shell-root .ts-corner-right.hg-play-corner .ts-card-btn.hg-hero-play-btn { min-width: max-content; padding-inline: var(--hs-space-2); border-width: var(--hs-line-shell); }
 .hud-shell-root .ts-corner-right.hg-play-corner :is(.hg-play-stage, .hg-play-sub) { color: var(--hs-ink); font-weight: var(--hs-weight-label); line-height: var(--hs-leading-label); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .hud-shell-root .ts-corner-right.hg-play-corner .hg-play-stage { font-size: var(--hs-text-13); }
-.hud-shell-root .ts-corner-right.hg-play-corner .hg-play-sub { font-size: var(--hs-text-11); }
+.hud-shell-root .ts-corner-right.hg-play-corner .hg-play-sub { font-size: var(--hs-text-11); max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; }
 .hg-play-game-tag { top: -12px; padding: var(--hs-space-1) var(--hs-space-2); font-size: var(--hs-text-11); font-weight: var(--hs-weight-label); line-height: var(--hs-leading-label); }
 @media (max-width: 599px) {
   /* HUD row from the frame's 8px edge (level ring under the shell's ☰); the pill keeps 8px at its ends; each figure is a
@@ -6635,6 +6635,7 @@ body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(96px + ma
 :is(#albumDialog, #leaderboardDialog) .hs-lb-sub { display: flex; align-items: baseline; gap: var(--hs-space-1); min-inline-size: 0; overflow: hidden; color: var(--hs-ink-soft); font-size: var(--hs-text-12); font-weight: var(--hs-weight-body); line-height: var(--hs-leading-body); white-space: nowrap; text-overflow: ellipsis; }
 :is(#albumDialog, #leaderboardDialog) .hs-lb-house { flex: 0 0 auto; color: var(--hs-lb-house, var(--hs-ink-soft)); font-weight: var(--hs-weight-label); }
 :is(#albumDialog, #leaderboardDialog) .hs-lb-lv { flex: none; }
+:is(#albumDialog, #leaderboardDialog) .hs-lb-lv + .hs-lb-lv { flex: 0 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
 :is(#albumDialog, #leaderboardDialog) .hs-lb-pts { color: var(--hs-ink); font-size: var(--hs-text-14); font-weight: var(--hs-weight-label); line-height: var(--hs-leading-body); text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* you: light gold, pinned to the bottom while your row is out of view */
 :is(#albumDialog, #leaderboardDialog) .hs-lb-row.is-me { background: #fbe7b0; box-shadow: inset 0 0 0 var(--hs-line) var(--hs-gold-deep); }
@@ -7622,16 +7623,15 @@ body:has(#tutorialCoachCard:not(.docked-top):popover-open) .owl-toast-stack[popo
 }
 @media (min-width: 900px) {
   #seedBrushTray .seed-tray-actions {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
+    flex-wrap: wrap;
+    flex: 0 0 auto;
+    overflow: visible;
   }
   #seedBrushTray .seed-tray-header {
     flex-direction: row;
     align-items: center;
     gap: var(--hs-space-2);
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
   }
   #seedBrushTray .hs-tray-head,
   #seedBrushTray .hs-tray-toolbar {
@@ -8000,7 +8000,7 @@ body:has(#managePopoverMenu:not(.hidden)) .ts-corner-right {
   .hud-shell-root .ts-corner-right.hg-play-corner .ts-card-btn.hg-hero-play-btn:hover {
     transform: none;
     filter: none;
-    background: linear-gradient(180deg, #f8d481 0%, var(--hs-brass-bright) 100%);
+    background: linear-gradient(180deg, var(--speed-active-top) 0%, var(--hs-brass-bright) 100%);
   }
 }
 
@@ -8220,7 +8220,7 @@ body:has(#managePopoverMenu:not(.hidden)) .ts-corner-right {
   .owl-green-send-btn:hover:not(:disabled) {
     transform: none;
     filter: none;
-    background: linear-gradient(180deg, #f8d481 0%, var(--hs-brass-bright) 100%);
+    background: linear-gradient(180deg, var(--speed-active-top) 0%, var(--hs-brass-bright) 100%);
   }
   .owl-green-send-btn.not-ready:hover:not(:disabled) {
     background: var(--hs-paper-2);
@@ -9035,6 +9035,7 @@ body:has(#managePopoverMenu:not(.hidden)) .ts-corner-right {
 }
 #houseCupIntroDialogContent .hs-cup-intro {
   gap: var(--hs-space-3);
+  padding-block-end: var(--hs-space-2);
 }
 .hs-cup-intro-hero {
   display: flex;
@@ -9146,7 +9147,7 @@ button.brass-btn:hover:not(:disabled) {
   gap: var(--hs-space-2);
 }
 
-/* Sub-980px Landscape Minigame Side Dock: 2x3 mode tabs grid, comfy 2-line tool buttons, & non-overlapping stage toast */
+/* Sub-980px Landscape Minigame Side Dock: 2x3 mode tabs grid, non-overlapping cost pills, & non-overlapping stage toast */
 @media (max-width: 979px) {
   :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .pa-mode-tabs {
     display: grid;
@@ -9162,13 +9163,18 @@ button.brass-btn:hover:not(:disabled) {
   }
   :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell > .pa-controls-bar :is(button, .pa-tool-btn, .m3-booster-btn) {
     position: relative;
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 2px 4px;
     block-size: auto;
     min-block-size: 40px;
     max-block-size: none;
-    padding: 4px 6px;
-    line-height: 1.2;
+    padding: 4px 5px;
+    line-height: 1.15;
   }
-  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell > .pa-controls-bar :is(button, .pa-tool-btn) :is(.m3-booster-qty, .pa-cost-pill) {
+  #match3Dialog[data-mg-layout='landscape'] .pa-layout-shell > .pa-controls-bar .m3-booster-btn .m3-booster-qty {
     position: absolute;
     top: 2px;
     right: 3px;
@@ -9177,8 +9183,102 @@ button.brass-btn:hover:not(:disabled) {
     font-size: var(--hs-text-11);
     line-height: 14px;
   }
+  #puzzleArcadeDialog[data-mg-layout='landscape'] .pa-layout-shell > .pa-controls-bar .pa-tool-btn .pa-cost-pill {
+    position: static;
+    margin: 0;
+    padding: 0 5px;
+    font-size: var(--hs-text-11);
+    line-height: 15px;
+  }
   body:has(:is(#puzzleArcadeDialog, #match3Dialog)[open][data-mg-layout='landscape']) .owl-toast-stack[popover] {
     inset: 8px auto auto calc(50% + 96px);
     max-inline-size: calc(100vw - 232px);
   }
+}
+
+/* AAA Multi-Viewport Polish:
+   1) Mobile Build Toolbar (#secondaryMapToolsBar): flatten nested groups into a 3x2 onscreen grid so «Xong» & «Làm lại» never clip.
+   2) Compact Landscape (<=460px tall, e.g. 844x390): fit Match-3 & Arcade side-dock («Cầu Vồng 0%», goals & boosters) cleanly.
+   3) High-contrast segmented submode («Cắm Cờ»), legible disabled tool state, & clean scrollbar-free Jigsaw filter row. */
+@media (max-width: 680px) {
+  #secondaryMapToolsBar.secondary-map-tools-bar:not(.hidden) {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    inline-size: 100%;
+    max-inline-size: calc(100vw - 16px);
+    box-sizing: border-box;
+    padding: 5px;
+  }
+  #secondaryMapToolsBar.secondary-map-tools-bar:not(.hidden) > .build-toolbar-group {
+    display: contents;
+  }
+  #secondaryMapToolsBar.secondary-map-tools-bar:not(.hidden) > .build-toolbar-sep {
+    display: none;
+  }
+  #secondaryMapToolsBar.secondary-map-tools-bar:not(.hidden) .brass-btn {
+    min-inline-size: 0;
+    min-block-size: 40px;
+    padding: 0 6px;
+    font-size: var(--hs-text-12);
+    justify-content: center;
+    white-space: nowrap;
+  }
+}
+
+@media (max-height: 460px) and (orientation: landscape) {
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock {
+    min-block-size: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+    gap: 2px;
+    padding-block: 3px 2px;
+  }
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock::-webkit-scrollbar {
+    display: none;
+  }
+  #match3Dialog[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .m3-dock-hud {
+    gap: 2px;
+  }
+  #match3Dialog[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .m3-dock-hud .m3-moves-crest {
+    min-block-size: 28px;
+    padding: 2px 6px;
+  }
+  #match3Dialog[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .m3-dock-hud .m3-goals-list {
+    gap: 2px;
+  }
+  #match3Dialog[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .m3-dock-hud .m3-goal-pill {
+    min-block-size: 26px;
+    padding: 2px 6px;
+  }
+  #match3Dialog[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .m3-dock-hud .m3-rainbow-meter {
+    min-block-size: 26px;
+    padding: 2px 6px;
+  }
+  #match3Dialog[data-mg-layout='landscape'] .pa-layout-shell > .pa-controls-bar:has(> .pa-more-btn) :is(.m3-booster-btn, .pa-more-btn) {
+    min-block-size: 36px;
+    block-size: 36px;
+  }
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-layout-shell .pa-side-dock .pa-mode-tabs > .pa-mode-tab {
+  font-size: var(--hs-text-11);
+}
+
+#puzzleArcadeDialog .pa-controls-bar .pa-submode-switch > .pa-mini-pill:not(.active) {
+  color: var(--hs-cream);
+  opacity: 0.96;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog) .pa-controls-bar :is(.pa-tool-btn, .m3-booster-btn):disabled {
+  opacity: 0.6;
+}
+
+#puzzleArcadeDialog .pa-jigsaw-filter-scroll {
+  scrollbar-width: none;
+  padding-inline-end: 8px;
+}
+
+#puzzleArcadeDialog .pa-jigsaw-filter-scroll::-webkit-scrollbar {
+  display: none;
 }

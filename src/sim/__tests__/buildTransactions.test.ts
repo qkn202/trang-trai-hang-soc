@@ -108,4 +108,33 @@ describe('Build Mode Transactions (P0.3)', () => {
     expect(sim.undoBuild()).toBe(true);
     expect(sim.state.buildings.some((b) => b.uid === uid)).toBe(true);
   });
+
+  it('undo dùng delta nên giữ nguyên Sickle/Sao kiếm được giữa lúc xây và lúc hoàn tác, đồng thời chặn hoàn tác ô đã gieo hạt', () => {
+    const sim = new ParkSimulation(createMockAudio());
+    sim.state.galleons = 10_000;
+    sim.state.match3.stars = 20;
+    const plot = getCatalogItem('farmland_plot')!;
+
+    sim.beginBuildStroke();
+    expect(sim.placeItem(plot, 14, 16, 0)).toBe(true);
+    sim.commitBuildStroke();
+    const placed = sim.state.buildings.at(-1)!;
+    placed.constructEndsAt = Date.now() - 1000;
+
+    // Người chơi thắng minigame nhận thêm +500 Sickle và +3 Sao sau khi đặt ô
+    sim.state.galleons += 500;
+    sim.state.match3.stars += 3;
+    expect(sim.undoBuild()).toBe(true);
+    expect(sim.state.galleons).toBe(10_500);
+    expect(sim.state.match3.stars).toBe(23);
+
+    // Redo lại rồi gieo hạt vào ô đó -> không cho phép undo xoá mất cây trồng đang lớn
+    expect(sim.redoBuild()).toBe(true);
+    const redone = sim.state.buildings.find((b) => b.uid === placed.uid)!;
+    redone.constructEndsAt = Date.now() - 1000;
+    redone.cropId = 'ottery_wheat';
+    redone.cropReadyAt = Date.now() + 60_000;
+    expect(sim.undoBuild()).toBe(false);
+    expect(sim.state.buildings.some((b) => b.uid === placed.uid)).toBe(true);
+  });
 });

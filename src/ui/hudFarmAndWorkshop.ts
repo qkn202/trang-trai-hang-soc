@@ -911,7 +911,7 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
         </div>
 
         <div class="quest-card-mini" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-          <div style="font-size:12px;font-weight:700;">
+          <div style="flex:1 1 200px;min-width:0;font-size:12px;font-weight:700;white-space:normal;overflow-wrap:break-word;">
             🎪 <strong>Tiêu Điểm Hôm Nay:</strong> ${spCropMeta.emoji} ${escapeHtml(spCropMeta.name)} &amp; ${spGoodMeta.emoji} ${escapeHtml(spGoodMeta.name)}
           </div>
           <button type="button" class="brass-btn gold-cta" data-ws-tab="market" style="padding:5px 10px;font-size:12px;">

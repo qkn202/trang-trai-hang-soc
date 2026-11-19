@@ -678,8 +678,9 @@ export function farmHarvestCropPlot(sim: ParkSimulation, uid: string): { ok: boo
       (wasCompost ? 2 : 0) +
       (isGoldenRotation ? soilMeta.extraRotateYield : 0);
     const added = sim.addFarmItemToBarn(crop.id, yieldQty);
-    // HPVN: a full Kho sells the load at the normal sell value (same as selling it from the Kho), no flat bonus
-    const soldDirect = added === 0 ? getFarmItemMeta(crop.id).sellValue * yieldQty : 0;
+    // HPVN: any overflow beyond remaining Kho space sells at normal sell value so partial-space harvests never lose items
+    const overflowQty = Math.max(0, yieldQty - added);
+    const soldDirect = overflowQty > 0 ? getFarmItemMeta(crop.id).sellValue * overflowQty : 0;
 
     const prevMastery = sim.state.cropMastery?.[crop.id] ?? 0;
     const nextMastery = prevMastery + 1;
@@ -907,8 +908,9 @@ export function farmHarvestAnimalPasture(sim: ParkSimulation, uid: string): { ok
     const baseYield = animal.yieldQty + (b.stars >= 3 ? 1 : 0);
     const yieldQty = wasGourmet ? baseYield * 2 : baseYield;
     const added = sim.addFarmItemToBarn(animal.goodId, yieldQty);
-    // HPVN: a full Kho sells the load at the normal sell value (same as selling it from the Kho), no flat bonus
-    const soldDirect = added === 0 ? getFarmItemMeta(animal.goodId).sellValue * yieldQty : 0;
+    // HPVN: any overflow beyond remaining Kho space sells at normal sell value so partial-space harvests never lose items
+    const overflowQty = Math.max(0, yieldQty - added);
+    const soldDirect = overflowQty > 0 ? getFarmItemMeta(animal.goodId).sellValue * overflowQty : 0;
     const gold = wasGourmet ? Math.round(animal.sellValue * 1.5) : animal.sellValue;
     const xp = wasGourmet ? Math.round(animal.xp * 1.5) : animal.xp;
     const compostGain = wasGourmet ? 2 : 1;

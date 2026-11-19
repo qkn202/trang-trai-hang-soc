@@ -539,7 +539,7 @@ export function shellMountDOM(hud: GameHUD): void {
           <button type="button" data-cat="creature" aria-pressed="false" class="brass-btn"><img src="/game/trang-trai-hang-soc/sprites/ui_icon_creature.webp" alt="" class="hud-3d-icon" aria-hidden="true" /> Sản Xuất</button>
           <button type="button" data-cat="path" aria-pressed="false" class="brass-btn"><img src="/game/trang-trai-hang-soc/sprites/ui_icon_path.webp" alt="" class="hud-3d-icon" aria-hidden="true" /> Đường</button>
           <button type="button" data-cat="decor" aria-pressed="false" class="brass-btn"><img src="/game/trang-trai-hang-soc/sprites/ui_icon_decor.webp" alt="" class="hud-3d-icon" aria-hidden="true" /> Trang Trí</button>
-          <button type="button" data-decor-event="christmas" aria-pressed="false" class="brass-btn">Giáng Sinh</button>
+          <button type="button" data-decor-event="christmas" aria-pressed="false" class="brass-btn"><img src="/game/trang-trai-hang-soc/sprites/ui_gift_box.webp" alt="" class="hud-3d-icon" aria-hidden="true" /> Giáng Sinh</button>
         </div>
       </section>
 
