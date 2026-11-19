@@ -96,8 +96,10 @@ import {
   BuildReductionResult,
   CatalogItem,
   CraftedGoodId,
+  CropFamily,
   CreatureMorphVariant,
   EscapedCreatureEntity,
+  ExpressCargoCrate,
   FarmBarnState,
   FarmCropId,
   FarmGoodId,
@@ -111,6 +113,7 @@ import {
   HarvestFeastState,
   HarvestFeastTierDef,
   HeatmapMode,
+  HogsmeadeMarketFairState,
   HomeOwlLanternMark,
   HouseName,
   IsoDirection,
@@ -120,6 +123,8 @@ import {
   LeaderboardRankChange,
   LeaderboardScope,
   LevelTrialRequirement,
+  MarketFairDeal,
+  MarketFairDealKind,
   Match3BoosterId,
   MAX_STAFF_PER_ROLE,
   MinigameLeaderboardState,
@@ -133,6 +138,7 @@ import {
   NeighborSocialState,
   OfflineReport,
   PlacedBuilding,
+  PlotSoilStateEntry,
   PuzzleArcadeMode,
   QuestDef,
   QuestObjectiveType,
@@ -147,6 +153,7 @@ import {
   SavedOnetSession,
   SavedSudokuSession,
   SavedSudokuUndoItem,
+  SoilFertilityTier,
   StaffEntity,
   SuitcaseExpeditionId,
   TileCell,
@@ -204,6 +211,8 @@ import {
   PuzzleRewardSpec,
 } from './puzzleShared';
 import { ONET_MAX_TIME_SEC, ONET_STAGE_TIME_LIMIT_SEC } from './onetEngine';
+import { sanitizeSavedMinesweeperSession } from './minesweeperEngine';
+import { sanitizeSavedFishShooterSession } from './fishShooterEngine';
 import {
   ActiveQuizChallenge,
   createInitialLanguageQuizState,
@@ -761,14 +770,14 @@ export const VALLEY_VILLAGER_PROFILES: readonly ValleyVillagerProfile[] = [
   {
     id: 'ron',
     nameVi: 'Ron Weasley',
-    titleVi: 'Kiện Tướng Cờ Phù Thủy',
+    titleVi: 'Cao Thủ Khảo Thí Phép Thuật',
     idleSprite: 'villager_ron_idle',
     walkSprite: 'villager_ron_walk',
-    moodBubble: '♟️',
+    moodBubble: '🍀',
     unlockLevel: 2,
     favoriteItemIds: ['burrow_honeydukes_canon', 'burrow_broomsticks_canon', 'burrow_feast_marquee'],
     greetingsVi: [
-      'Làm một ván Cờ Phù Thủy 8×8 ở Đại Sảnh Khảo Thí không bạn hiền?',
+      'Ra Hồ Đen săn Thủy Quái hay làm ván Dò Mìn Phép Thuật ở Đại Sảnh không bạn hiền?',
       'Mùi kẹo Gác Xép Honeydukes với bánh bí ngô làm mình đói bụng quá!',
     ],
   },
@@ -974,6 +983,7 @@ export function createInitialGameState(): GameState {
     featuredStarClaimedLevel: 0,
     phoenixTalismans: 1,
     quizTalismanProgress: 0,
+    herbalCompost: 2,
     retention: createDefaultRetentionState(),
     yuleEvent: { schemaVersion: 1, claimedMainDays: [], claimedSideTaskIds: [], unlockedAssetIds: [], purchasedAssetIds: [] },
     staffPatrolZones: {},
@@ -1055,13 +1065,18 @@ export function sanitizeQuestList(raw: unknown, fallback: QuestDef[]): QuestDef[
     if (!q || typeof q !== 'object') continue;
     const rec = q as QuestDef;
     if (typeof rec.id !== 'string' || typeof rec.objectiveType !== 'string') continue;
+    const rawTitle = sanitizePlainText(rec.title, 200) || 'Nhiệm vụ phép thuật'; // HPVN: 120 cut the closing ")" of the 130-char exam quest title
+    const migratedTitle = rawTitle
+      .replace(/ván\s+Cờ\s+Vua\s+Phù\s+Thủy/gi, 'màn Bắn Cá Hồ Đen')
+      .replace(/Cờ\s+Vua\s+Phù\s+Thủy/gi, 'Bắn Cá Hồ Đen')
+      .replace(/Vàng\s+G[a]ll[e]on/gi, 'Sickle');
     cleaned.push({
       ...rec,
       id: sanitizePlainText(rec.id, 64),
       giverName: sanitizePlainText(rec.giverName, 64) || 'Cú Đưa Thư',
       giverTitle: sanitizePlainText(rec.giverTitle, 80),
       giverEmoji: sanitizePlainText(rec.giverEmoji, 8) || '🦉',
-      title: sanitizePlainText(rec.title, 200) || 'Nhiệm vụ phép thuật', // HPVN: 120 cut the closing ")" of the 130-char exam quest title
+      title: migratedTitle,
       dialogue: sanitizePlainText(rec.dialogue, 280),
       targetAmount: Math.round(clampFinite(rec.targetAmount, 1, 9999999, 1)),
       progress: Math.round(clampFinite(rec.progress, 0, 9999999, 0)),
@@ -1967,12 +1982,18 @@ export function migrateLoadedState(parsed: GameState): GameState {
       cropPlantedAt: item.isFarmlandPlot && typeof b.cropPlantedAt === 'number' ? b.cropPlantedAt : undefined,
       cropReadyAt: item.isFarmlandPlot && typeof b.cropReadyAt === 'number' ? b.cropReadyAt : undefined,
       cropWateredBoost: item.isFarmlandPlot ? Boolean(b.cropWateredBoost) : false,
+      cropCompostBoost: item.isFarmlandPlot ? Boolean(b.cropCompostBoost) : undefined,
+      soilTier:
+        item.isFarmlandPlot && typeof b.soilTier === 'number' && Number.isFinite(b.soilTier)
+          ? (Math.max(1, Math.min(5, Math.round(b.soilTier))) as SoilFertilityTier)
+          : undefined,
       pastureAnimalId: resolvedPastureAnimalId,
       pastureStockedAt:
         item.isAnimalPasturePlot && typeof b.pastureStockedAt === 'number' ? b.pastureStockedAt : undefined,
       pastureReadyAt:
         item.isAnimalPasturePlot && typeof b.pastureReadyAt === 'number' ? b.pastureReadyAt : undefined,
       pastureFedBoost: item.isAnimalPasturePlot ? Boolean(b.pastureFedBoost) : false,
+      pastureGourmetBoost: item.isAnimalPasturePlot ? Boolean(b.pastureGourmetBoost) : undefined,
       workshopQueue:
         Array.isArray(b.workshopQueue)
           ? b.workshopQueue
@@ -2328,7 +2349,15 @@ export function migrateLoadedState(parsed: GameState): GameState {
         playerOwlHelpRequests: Array.isArray(rawSoc.playerOwlHelpRequests)
           ? rawSoc.playerOwlHelpRequests.slice(0, 12)
           : [],
-        activityLog: Array.isArray(rawSoc.activityLog) ? rawSoc.activityLog.slice(0, 25) : defSoc.activityLog,
+        activityLog: Array.isArray(rawSoc.activityLog)
+          ? rawSoc.activityLog
+              .slice(0, 25)
+              .map((entry) =>
+                entry && typeof entry.textVi === 'string'
+                  ? { ...entry, textVi: entry.textVi.replace(/\(\+(\d+)\s*\x47,/g, '(+$1 Sickle,') }
+                  : entry
+              )
+          : defSoc.activityLog,
       };
       syncNeighborSocialDailyReset(merged);
       return merged;
@@ -2344,11 +2373,123 @@ export function migrateLoadedState(parsed: GameState): GameState {
         ...def.supply.goods,
         ...(parsedSupply.goods ?? {}),
       },
+      dailyNpcCargoHelpDayKey:
+        typeof parsedSupply.dailyNpcCargoHelpDayKey === 'string' &&
+        /^\d{4}-\d{2}-\d{2}$/.test(parsedSupply.dailyNpcCargoHelpDayKey)
+          ? parsedSupply.dailyNpcCargoHelpDayKey
+          : undefined,
       cargoCrates:
         Array.isArray(parsedSupply.cargoCrates) && parsedSupply.cargoCrates.length === 3
-          ? parsedSupply.cargoCrates
+          ? parsedSupply.cargoCrates.map((c): ExpressCargoCrate => ({
+              ...c,
+              farmItemId:
+                typeof c.farmItemId === 'string' &&
+                (c.farmItemId in FARM_CROPS || c.farmItemId in FARM_GOODS)
+                  ? (c.farmItemId as FarmItemId)
+                  : undefined,
+              helpRequestedAt:
+                typeof c.helpRequestedAt === 'number' && Number.isFinite(c.helpRequestedAt)
+                  ? c.helpRequestedAt
+                  : undefined,
+              helpedByNeighborName:
+                typeof c.helpedByNeighborName === 'string'
+                  ? sanitizePlainText(c.helpedByNeighborName, 40)
+                  : undefined,
+              helpedByNeighborEmoji:
+                typeof c.helpedByNeighborEmoji === 'string'
+                  ? sanitizePlainText(c.helpedByNeighborEmoji, 8)
+                  : undefined,
+            }))
           : createCargoCrates(safeLevel, parsedSupply.cargoTrainIndex ?? 1),
     },
+    herbalCompost: Math.round(clampFinite(parsed.herbalCompost, 0, 99999, 2)),
+    plotSoilState: (() => {
+      const rawSoil = parsed.plotSoilState;
+      if (!rawSoil || typeof rawSoil !== 'object') return undefined;
+      const out: Record<string, PlotSoilStateEntry> = {};
+      const validFams = new Set<CropFamily>(['grain', 'produce', 'flower', 'magical']);
+      for (const [k, entry] of Object.entries(rawSoil)) {
+        if (!/^\d+,\d+$/.test(k) || !entry || typeof entry !== 'object') continue;
+        const lastFamily: CropFamily = validFams.has(entry.lastFamily as CropFamily)
+          ? (entry.lastFamily as CropFamily)
+          : 'grain';
+        const soilTier =
+          typeof entry.soilTier === 'number' && Number.isFinite(entry.soilTier)
+            ? (Math.max(1, Math.min(5, Math.round(entry.soilTier))) as SoilFertilityTier)
+            : undefined;
+        out[k] = {
+          lastFamily,
+          fatigueStep: Math.round(clampFinite(entry.fatigueStep, 0, 50, 0)),
+          ...(soilTier ? { soilTier } : {}),
+          updatedAt: Math.round(clampFinite(entry.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0)),
+        };
+      }
+      return Object.keys(out).length > 0 ? out : undefined;
+    })(),
+    marketFair: (() => {
+      const rawFair = parsed.marketFair;
+      if (
+        !rawFair ||
+        typeof rawFair !== 'object' ||
+        typeof rawFair.dayKey !== 'string' ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(rawFair.dayKey) ||
+        !(rawFair.spotlightCropId in FARM_CROPS) ||
+        !(rawFair.spotlightGoodId in FARM_GOODS) ||
+        !Array.isArray(rawFair.deals)
+      ) {
+        return undefined;
+      }
+      const validKinds = new Set<MarketFairDealKind>(['bulk_buyout', 'seed_barter', 'artisan_plug']);
+      const safeDeals: MarketFairDeal[] = rawFair.deals
+        .filter(
+          (d): d is MarketFairDeal =>
+            Boolean(d && typeof d === 'object') &&
+            validKinds.has(d.kind as MarketFairDealKind) &&
+            typeof d.inputItemId === 'string' &&
+            (d.inputItemId in FARM_CROPS || d.inputItemId in FARM_GOODS)
+        )
+        .slice(0, 4)
+        .map((d) => ({
+          ...d,
+          id: sanitizePlainText(d.id, 60) || 'deal',
+          merchantName: sanitizePlainText(d.merchantName, 60) || 'Thương lái Hogsmeade',
+          merchantEmoji: sanitizePlainText(d.merchantEmoji, 8) || '🎪',
+          inputQty: Math.round(clampFinite(d.inputQty, 1, 50, 1)),
+          rewardSickle: Math.round(clampFinite(d.rewardSickle, 0, 999999, 0)),
+          rewardXp: Math.round(clampFinite(d.rewardXp, 0, 999999, 0)),
+          rewardCompost: d.rewardCompost
+            ? Math.round(clampFinite(d.rewardCompost, 0, 99, 0))
+            : undefined,
+          rewardSeedCropId:
+            d.rewardSeedCropId && d.rewardSeedCropId in FARM_CROPS ? d.rewardSeedCropId : undefined,
+          rewardSeedQty: d.rewardSeedQty
+            ? Math.round(clampFinite(d.rewardSeedQty, 0, 99, 0))
+            : undefined,
+          rewardMorningDew: d.rewardMorningDew
+            ? Math.round(clampFinite(d.rewardMorningDew, 0, 99, 0))
+            : undefined,
+          rewardMugglePlug: d.rewardMugglePlug
+            ? Math.round(clampFinite(d.rewardMugglePlug, 0, 99, 0))
+            : undefined,
+          rewardTimeSand: d.rewardTimeSand
+            ? Math.round(clampFinite(d.rewardTimeSand, 0, 99, 0))
+            : undefined,
+          rewardFeastPoints: d.rewardFeastPoints
+            ? Math.round(clampFinite(d.rewardFeastPoints, 0, 999, 0))
+            : undefined,
+          claimed: Boolean(d.claimed),
+        }));
+      const fairState: HogsmeadeMarketFairState = {
+        dayKey: rawFair.dayKey,
+        spotlightCropId: rawFair.spotlightCropId,
+        spotlightGoodId: rawFair.spotlightGoodId,
+        spotlightLotsSold: Math.round(clampFinite(rawFair.spotlightLotsSold, 0, 3, 0)),
+        rerollsUsed: Math.round(clampFinite(rawFair.rerollsUsed, 0, 1, 0)),
+        seedOffset: Math.round(clampFinite(rawFair.seedOffset, 0, 9999, 0)),
+        deals: safeDeals,
+      };
+      return fairState;
+    })(),
     suitcase: {
       ...def.suitcase,
       ...rawSuitcase,
@@ -2460,6 +2601,14 @@ export function migrateLoadedState(parsed: GameState): GameState {
         ),
         chessSession: sanitizeSavedChessSession(
           parsed.puzzleArcade?.chessSession,
+          safeChessStage
+        ),
+        minesSession: sanitizeSavedMinesweeperSession(
+          parsed.puzzleArcade?.minesSession,
+          safeCaroStage
+        ),
+        fishingSession: sanitizeSavedFishShooterSession(
+          parsed.puzzleArcade?.fishingSession,
           safeChessStage
         ),
         onetSession: sanitizeSavedOnetSession(

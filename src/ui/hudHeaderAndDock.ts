@@ -1074,7 +1074,7 @@ export function headerRefreshHeaderClock(hud: GameHUD): void {
         lblFest.textContent = '🎄 Giáng Sinh +25% 🪙';
       } else if (fest === 'quidditch_cup' && !winterMapActive) {
         lblFest.classList.remove('hidden');
-        lblFest.textContent = '🏆 +Cúp';
+        lblFest.textContent = '🏆 Quidditch +Cúp';
       } else if (winterMapActive) {
         lblFest.classList.remove('hidden');
         lblFest.textContent = '🎄 Đồi Tuyết Giáng Sinh';
@@ -1188,7 +1188,7 @@ export function headerRefreshHeader(hud: GameHUD): void {
     const lblHubTrial = hud.root.querySelector('#lblHudHubTrial') as HTMLElement | null;
     if (lblHubTrial) {
       if (st.level >= MAX_LEVEL || st.sandboxMode || hud.sim.isHeadmasterPreview || !reqTrial) {
-        lblHubTrial.textContent = `♟️ ${towerProg.cleared}/${towerProg.total}`;
+        lblHubTrial.textContent = `🌟 ${towerProg.cleared}/${towerProg.total}`;
       } else {
         lblHubTrial.textContent = `🔥 ${reqTrial.icon} ${winsProg.current}/${winsProg.required}`;
       }
@@ -1203,8 +1203,8 @@ export function headerRefreshHeader(hud: GameHUD): void {
     let playStageText = m3Info.isMaxed ? `👑 ${m3Info.maxStage}` : `Màn ${m3Info.currentStage}`;
     if (lastGame === 'caro') {
       const info = hud.sim.getDisciplineStageInfo('caro');
-      playTag = '🗺️ Ngũ Ấn';
-      playIcon = '/game/trang-trai-hang-soc/sprites/ui_icon_jigsaw.webp';
+      playTag = '🧨 Dò Mìn';
+      playIcon = '/game/trang-trai-hang-soc/paintings/caro/phoenix_seal.webp';
       playStageText = info.isMaxed ? `👑 ${MAX_MINIGAME_STAGE}` : `Màn ${info.currentStage}`;
     } else if (lastGame === 'sudoku') {
       const info = hud.sim.getDisciplineStageInfo('sudoku');
@@ -1218,8 +1218,8 @@ export function headerRefreshHeader(hud: GameHUD): void {
       playStageText = info.isMaxed ? `👑 ${MAX_MINIGAME_STAGE}` : `Màn ${info.currentStage}`;
     } else if (lastGame === 'chess') {
       const info = hud.sim.getDisciplineStageInfo('chess');
-      playTag = '🏰 Cờ Phù Thủy';
-      playIcon = '/game/trang-trai-hang-soc/sprites/ui_icon_jigsaw.webp';
+      playTag = '🎯 Bắn Cá';
+      playIcon = '/game/trang-trai-hang-soc/paintings/plimpy_icon.webp';
       playStageText = info.isMaxed ? `👑 ${MAX_MINIGAME_STAGE}` : `Màn ${info.currentStage}`;
     } else if (lastGame === 'jigsaw') {
       const info = hud.sim.getDisciplineStageInfo('jigsaw');
@@ -1349,10 +1349,14 @@ export function headerRefreshHeader(hud: GameHUD): void {
     }
     badge.closest('button')?.setAttribute('aria-label', totalReady > 0 ? `Đơn Hàng Cú & Nhiệm Vụ · ${totalReady} xong` : shownQuestCount > 0 ? `Đơn Hàng Cú & Nhiệm Vụ · ${shownQuestCount} đơn` : 'Đơn Hàng Cú & Nhiệm Vụ');
 
-    // Workshop & Cargo Train ready badge
-    const crateReadyCount = st.supply.cargoCrates.filter(
-      (c) => !c.fulfilled && (st.sandboxMode || (st.supply.goods[c.goodId] ?? 0) >= c.qtyRequired)
+    // Workshop, Market Fair & Cargo Train ready badge
+    const fairForBadge = hud.sim.ensureMarketFairState();
+    const dealReadyCount = fairForBadge.deals.filter(
+      (d) => !d.claimed && (st.sandboxMode || hud.sim.getFarmItemCount(d.inputItemId) >= d.inputQty)
     ).length;
+    const crateReadyCount =
+      st.supply.cargoCrates.filter((c) => hud.sim.getCargoCrateStockInfo(c).canFulfill).length +
+      dealReadyCount;
     const wsBadge = hud.root.querySelector('#badgeWorkshopCount') as HTMLElement | null;
     if (wsBadge) {
       if (crateReadyCount > 0) {

@@ -38,9 +38,9 @@ const FEATURED_DISCIPLINE_ROTATION: ReadonlyArray<{
   },
   {
     kind: 'caro',
-    icon: '🗺️',
-    shortVi: 'Ngũ Ấn Đạo Tặc',
-    descVi: 'Kết nối 5 Ấn Phượng Hoàng trong Ngũ Ấn Đạo Tặc (777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
+    icon: '🧨',
+    shortVi: 'Dò Mìn Phép Thuật',
+    descVi: 'Mở sạch bãi đá cổ và cắm cờ chuẩn xác trong Dò Mìn Phép Thuật (777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
   },
   {
     kind: 'sudoku',
@@ -50,9 +50,9 @@ const FEATURED_DISCIPLINE_ROTATION: ReadonlyArray<{
   },
   {
     kind: 'chess',
-    icon: '🏰',
-    shortVi: 'Cờ Phù Thủy',
-    descVi: 'Chiếu bí đối thủ trong Cờ Phù Thủy (777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
+    icon: '🎯',
+    shortVi: 'Bắn Cá Hồ Đen',
+    descVi: 'Điều khiển đại bác ngọc trai săn đàn cá phép trong Bắn Cá Hồ Đen (777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
   },
   {
     kind: 'blocks',

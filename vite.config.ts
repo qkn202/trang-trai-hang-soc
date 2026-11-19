@@ -11,6 +11,35 @@ export default defineConfig({
   },
   plugins: [
     {
+      name: 'redirect-root-to-base',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          if (req.url === '/' || req.url?.startsWith('/?')) {
+            const qIndex = req.url.indexOf('?');
+            const search = qIndex >= 0 ? req.url.slice(qIndex) : '';
+            res.statusCode = 302;
+            res.setHeader('Location', `/game/trang-trai-hang-soc/${search}`);
+            res.end();
+            return;
+          }
+          next();
+        });
+      },
+      configurePreviewServer(server) {
+        server.middlewares.use((req, res, next) => {
+          if (req.url === '/' || req.url?.startsWith('/?')) {
+            const qIndex = req.url.indexOf('?');
+            const search = qIndex >= 0 ? req.url.slice(qIndex) : '';
+            res.statusCode = 302;
+            res.setHeader('Location', `/game/trang-trai-hang-soc/${search}`);
+            res.end();
+            return;
+          }
+          next();
+        });
+      },
+    },
+    {
       name: 'inline-input-switch-polyfill-css',
       transform(code, id) {
         if (!id.includes('input-switch-polyfill') || !id.endsWith('.js')) return null;
@@ -62,6 +91,8 @@ export default defineConfig({
             id.includes('/src/sim/caroEngine') ||
             id.includes('/src/sim/chessPresets') ||
             id.includes('/src/sim/chessEngine') ||
+            id.includes('/src/sim/minesweeperEngine') ||
+            id.includes('/src/sim/fishShooterEngine') ||
             id.includes('/src/sim/onetEngine') ||
             id.includes('/src/sim/jigsawEngine') ||
             id.includes('/src/sim/jigsawPaintingComposer') ||

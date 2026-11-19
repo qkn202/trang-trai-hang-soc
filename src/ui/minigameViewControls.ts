@@ -3,17 +3,17 @@
  * tự nhiên trên màn hình cảm ứng di động (iOS Safari 16+ / Android) dùng chung
  * cho toàn bộ 6 mini game — KHÔNG dùng nút bấm phóng to/thu nhỏ trên giao diện:
  *   - match3   (Gác Xép Bùa Gặt Honeydukes)
- *   - caro     (Ngũ Ấn Đạo Tặc)
+ *   - caro     (Dò Mìn Phép Thuật)
  *   - sudoku   (Số Học Huyền Bí)
- *   - chess    (Cờ Phù Thủy)
+ *   - chess    (Bắn Cá Hồ Đen)
  *   - blocks   (Sinh Vật Huyền Bí — Pikachu)
  *   - seedquiz (Học Viện Thần Chú Đa Ngữ)
  *
  * Cơ chế cử chỉ cảm ứng chuẩn ứng dụng di động:
  *   1. Chụm / tách 2 ngón tay (Pinch-to-Zoom 100% – 300%) neo đúng tâm điểm giữa 2 ngón tay,
  *      kết hợp trượt 2 ngón đồng thời mượt mà 60 FPS; khép tay về gần 100% tự căn giữa lại bàn cờ.
- *   2. Khi đang phóng to (> 102%), kéo 1 ngón tay để dịch chuyển bàn cờ mượt trên Ngũ Ấn, Số Học,
- *      Pikachu, và trên ô trống/quân đối phương của Cờ Phù Thủy mà không cần nút chuyển chế độ.
+ *   2. Khi đang phóng to (> 102%), kéo 1 ngón tay để dịch chuyển bàn cờ mượt trên Dò Mìn, Số Học,
+ *      Pikachu mà không cần nút chuyển chế độ.
  *   3. Tự động huỷ thao tác chạm nhầm của ngón thứ nhất ngay khi ngón thứ hai chạm xuống bàn cờ.
  */
 

@@ -6,6 +6,7 @@ import {
   FarmItemId,
   FarmOrderRequirement,
   PastureAnimalId,
+  SoilFertilityTier,
   YuleCollectionId,
 } from '../types/game';
 
@@ -3311,6 +3312,98 @@ export function getCropMasteryTierInfo(harvestCount: number): {
   if (n >= 10) return { tier: 3, labelRom: 'III', valueMult: 1.2, speedMult: 0.97, nextTarget: 15 };
   if (n >= 5) return { tier: 2, labelRom: 'II', valueMult: 1.1, speedMult: 1.0, nextTarget: 10 };
   return { tier: 1, labelRom: 'I', valueMult: 1.0, speedMult: 1.0, nextTarget: 5 };
+}
+
+export interface SoilTierMeta {
+  tier: SoilFertilityTier;
+  labelRom: string;
+  nameVi: string;
+  unlockLevel: number;
+  upgradeSickle: number;
+  upgradeCompost: number;
+  yieldBonus: number;
+  harvestGoldXpMult: number;
+  rejuvenateOnRotate: boolean;
+  extraRotateYield: number;
+}
+
+export const SOIL_TIERS: Record<SoilFertilityTier, SoilTierMeta> = {
+  1: {
+    tier: 1,
+    labelRom: 'I',
+    nameVi: 'Đất Đồi Đỏ Ottery',
+    unlockLevel: 1,
+    upgradeSickle: 0,
+    upgradeCompost: 0,
+    yieldBonus: 0,
+    harvestGoldXpMult: 1.0,
+    rejuvenateOnRotate: false,
+    extraRotateYield: 0,
+  },
+  2: {
+    tier: 2,
+    labelRom: 'II',
+    nameVi: 'Đất Phù Sa Sông Ottery',
+    unlockLevel: 3,
+    upgradeSickle: 85,
+    upgradeCompost: 1,
+    yieldBonus: 1,
+    harvestGoldXpMult: 1.15,
+    rejuvenateOnRotate: false,
+    extraRotateYield: 0,
+  },
+  3: {
+    tier: 3,
+    labelRom: 'III',
+    nameVi: 'Đất Mùn Rừng Cấm',
+    unlockLevel: 8,
+    upgradeSickle: 180,
+    upgradeCompost: 2,
+    yieldBonus: 1,
+    harvestGoldXpMult: 1.3,
+    rejuvenateOnRotate: true,
+    extraRotateYield: 0,
+  },
+  4: {
+    tier: 4,
+    labelRom: 'IV',
+    nameVi: 'Đất Nhà Kính Bà Sprout',
+    unlockLevel: 15,
+    upgradeSickle: 320,
+    upgradeCompost: 3,
+    yieldBonus: 2,
+    harvestGoldXpMult: 1.5,
+    rejuvenateOnRotate: true,
+    extraRotateYield: 0,
+  },
+  5: {
+    tier: 5,
+    labelRom: 'V',
+    nameVi: 'Đất Tro Phượng Hoàng',
+    unlockLevel: 25,
+    upgradeSickle: 520,
+    upgradeCompost: 4,
+    yieldBonus: 3,
+    harvestGoldXpMult: 1.75,
+    rejuvenateOnRotate: true,
+    extraRotateYield: 1,
+  },
+};
+
+export const COMPOST_SHORTAGE_BUYOUT_SICKLE = 35;
+export const GOURMET_FEED_QTY = 2;
+export const GOURMET_FEED_CROP_PRIORITY: readonly FarmCropId[] = [
+  'ottery_wheat',
+  'golden_corn',
+  'honey_carrot',
+  'crisp_cabbage',
+  'garden_pumpkin',
+  'burrow_potato',
+];
+
+export function getSoilTierInfo(tier?: number): SoilTierMeta {
+  const clamped = Math.max(1, Math.min(5, Math.floor(Number(tier) || 1))) as SoilFertilityTier;
+  return SOIL_TIERS[clamped];
 }
 
 export function computeStrategicPlotGrowSeconds(

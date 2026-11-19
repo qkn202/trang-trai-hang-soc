@@ -130,6 +130,10 @@ import {
 } from '../types/game';
 import { buildSampleCoasterLoop, TrackWaypoint, traceCoasterCircuit } from './coaster';
 import {
+  captureEconomyBaseline,
+  verifyFarmEconomyDelta,
+} from './economyIntegrity';
+import {
   buildNeighborValleySnapshot,
   CANON_NPC_NEIGHBOR_IDS,
   classifyBuildingGardenHelpKind,
@@ -261,6 +265,8 @@ export function lifecycleSyncPlayerPrimitivesToHomeState(sim: ParkSimulation): v
     h.tutorial = sim.state.tutorial;
     h.harvestFeast = sim.state.harvestFeast;
     h.cropMastery = sim.state.cropMastery;
+    h.herbalCompost = sim.state.herbalCompost;
+    h.marketFair = sim.state.marketFair;
     h.morningDewPhials = sim.state.morningDewPhials;
     h.examWinStreak = sim.state.examWinStreak;
     h.a11ySettings = sim.state.a11ySettings;
@@ -310,6 +316,32 @@ export function lifecycleSaveToStorage(sim: ParkSimulation, touchTimestamp = tru
           cutawayMode: false,
         },
       };
+      const prevBase = sim.economyBaseline ?? captureEconomyBaseline(persistedState, now);
+      const verdict = verifyFarmEconomyDelta(
+        prevBase,
+        persistedState,
+        Math.max(0, now - prevBase.capturedAt),
+        {
+          allowInboxSickles: sim.pendingInboxSickles,
+          allowInboxSand: sim.pendingInboxSand,
+        }
+      );
+      sim.pendingInboxSickles = 0;
+      sim.pendingInboxSand = 0;
+      const prevInteg = persistedState.economyIntegrity;
+      const nextInteg = {
+        seal: verdict.seal,
+        verifiedAt: now,
+        anomalyCount: (prevInteg?.anomalyCount ?? 0) + (verdict.ok ? 0 : 1),
+        ...(verdict.ok
+          ? prevInteg?.lastFlags
+            ? { lastFlags: prevInteg.lastFlags }
+            : {}
+          : { lastFlags: verdict.flags.slice(0, 4) }),
+      };
+      persistedState.economyIntegrity = nextInteg;
+      baseState.economyIntegrity = nextInteg;
+      sim.economyBaseline = captureEconomyBaseline(persistedState, now);
       farmStore.write(JSON.stringify(persistedState));
     } catch {
       // Ignore quota errors
@@ -334,6 +366,7 @@ export function lifecycleImportSaveJson(sim: ParkSimulation, jsonStr: string): b
       sim.homeStateWhileVisiting = null;
       sim.backupMainStateJson = null;
       sim.state = migrateLoadedState(parsed);
+      sim.economyBaseline = captureEconomyBaseline(sim.state);
       sim.audio.enabled = sim.state.settings.soundEnabled;
       sim.audio.bgmEnabled = sim.state.settings.bgmEnabled;
       sim.rebuildGrid();
@@ -355,6 +388,7 @@ export function lifecycleResetNewGame(sim: ParkSimulation): void {
     sim.homeStateWhileVisiting = null;
     sim.backupMainStateJson = null;
     sim.state = createInitialGameState();
+    sim.economyBaseline = captureEconomyBaseline(sim.state);
     sim.rebuildGrid();
     sim.escapedCreatures = [];
     sim.rideQueues.clear();
@@ -607,6 +641,7 @@ export function lifecycleToggleHeadmasterPreview(sim: ParkSimulation, targetLeve
       sim.rebuildGrid();
       sim.syncStaffEntities();
       sim.syncValleyVillagers();
+      sim.economyBaseline = captureEconomyBaseline(sim.state);
 
       sim.onToast?.(
         `🌾 Đã bật Chế độ Xem Thử Đại Điền Trang Hang Sóc & Thung Lũng Hogsmeade (Cấp ${targetLevel})!`,
@@ -622,6 +657,7 @@ export function lifecycleToggleHeadmasterPreview(sim: ParkSimulation, targetLeve
       sim.rebuildGrid();
       sim.syncStaffEntities();
       sim.syncValleyVillagers();
+      sim.economyBaseline = captureEconomyBaseline(sim.state);
       sim.onToast?.('Đã quay về Trang Trại Hang Sóc của bạn!', '🦉');
     }
     sim.onUiChange?.();
@@ -645,7 +681,9 @@ export function lifecycleGetActiveFestival(sim: ParkSimulation, now = new Date()
     const m = now.getMonth();
     const d = now.getDate();
     if (m === 9 || (m === 10 && d <= 5)) return 'halloween';
-    if ((m === 10 && d >= 15) || m === 11 || (m === 0 && d <= 5)) return 'christmas';
+    if ((m === 10 && d >= 15) || m === 11 || (m === 0 && d <= 5)) {
+      if ((sim.state.settings.yuleThemeMode ?? 'auto') !== 'off') return 'christmas';
+    }
     const dayOfWeek = now.getDay();
     if (dayOfWeek === 0 || dayOfWeek === 6) return 'quidditch_cup';
     return 'none';

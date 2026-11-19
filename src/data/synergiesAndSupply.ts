@@ -1,10 +1,13 @@
 import {
   CraftedGoodId,
   ExpressCargoCrate,
+  FarmCropId,
+  FarmGoodId,
   PlacedBuilding,
   RawIngredientId,
   SupplyChainState,
 } from '../types/game';
+import { FARM_CROPS, FARM_GOODS } from './catalog';
 
 export interface DistrictSynergyDef {
   id: string;
@@ -206,12 +209,12 @@ export const RAW_INGREDIENTS_INFO: Record<
   },
   starlight_dust: {
     name: 'Bột Sao Cổ Ngữ',
-    emoji: '✨',
+    emoji: '🌟',
     sourceHint: 'Thu từ Đài Phun Nước, Tháp Thiên Văn, Lò Sưởi Floo',
   },
   magic_cacao: {
     name: 'Hạt Ca-cao Phép',
-    emoji: '🍫',
+    emoji: '🌰',
     sourceHint: 'Thu từ Xe Bia Bơ, Quán Ba Cây Chổi, Công Tước Mật',
   },
 };
@@ -235,16 +238,16 @@ export const CRAFT_RECIPES: CraftRecipeDef[] = [
     inputs: { sweet_pumpkin: 2, magic_cacao: 1 },
     effectSummary:
       'Cấp cho quầy tiệm (+85% doanh thu Tiệm 4 phút & hồi đầy 5/5 ❤️ Tim Bùa Gặt Honeydukes) hoặc đóng kiện Tàu Hàng.',
-    directUseLabel: '🍻 Uống & Cấp Tiệm (+85% Sickle • Đầy ❤️)',
+    directUseLabel: '🍻 Uống & Cấp Tiệm (+85% Sickle • Đầy Tim)',
   },
   {
     id: 'felix_potion',
     name: 'Phúc Lạc Dược (Felix Felicis)',
-    emoji: '🧪',
+    emoji: '🍯',
     brewSec: 3600,
     inputs: { mandrake_leaf: 2, starlight_dust: 1 },
     effectSummary: 'Tăng +35% Sao XP toàn trang trại trong 4 phút.',
-    directUseLabel: '✨ Kích Hoạt Vận May (4p)',
+    directUseLabel: '🌟 Kích Hoạt Vận May (4p)',
   },
   {
     id: 'golden_choc_box',
@@ -266,21 +269,71 @@ export const CRAFT_RECIPES: CraftRecipeDef[] = [
   },
 ];
 
+export const CRAFTED_TO_BARN_EQUIV: Record<CraftedGoodId, FarmGoodId> = {
+  aged_butterbeer: 'frothy_butterbeer',
+  felix_potion: 'sprout_growth_elixir',
+  golden_choc_box: 'choc_frog_sweet',
+  dragon_firework: 'cinnamon_apple_pie',
+};
+
+const CARGO_GOOD_TIERS: ReadonlyArray<{ id: FarmGoodId; minLevel: number }> = [
+  { id: 'cinnamon_apple_pie', minLevel: 1 },
+  { id: 'farm_egg_wool', minLevel: 1 },
+  { id: 'creamy_dairy_milk', minLevel: 1 },
+  { id: 'fine_wheat_flour', minLevel: 1 },
+  { id: 'pumpkin_pie', minLevel: 2 },
+  { id: 'blossom_honey_jar', minLevel: 3 },
+  { id: 'weasley_sweater_w', minLevel: 3 },
+  { id: 'honey_apple_cider', minLevel: 4 },
+  { id: 'frothy_butterbeer', minLevel: 6 },
+  { id: 'choc_frog_sweet', minLevel: 6 },
+  { id: 'sprout_growth_elixir', minLevel: 6 },
+  { id: 'floral_bouquet_gift', minLevel: 6 },
+];
+
 export function createCargoCrates(level: number, trainIndex: number): ExpressCargoCrate[] {
+  const safeLevel = Math.max(1, Math.floor(level || 1));
   const goodsOrder: CraftedGoodId[] = [
     'aged_butterbeer',
     'felix_potion',
     'golden_choc_box',
     'dragon_firework',
   ];
+  const unlockedCrops = (Object.keys(FARM_CROPS) as FarmCropId[]).filter(
+    (cid) =>
+      !cid.startsWith('yule_') &&
+      !cid.startsWith('vn_') &&
+      FARM_CROPS[cid].unlockLevel <= safeLevel
+  );
+  const cropPool: FarmCropId[] = unlockedCrops.length > 0 ? unlockedCrops : ['ottery_wheat'];
+  const unlockedGoods = CARGO_GOOD_TIERS.filter((g) => g.minLevel <= safeLevel && g.id in FARM_GOODS).map(
+    (g) => g.id
+  );
+  const goodPool: FarmGoodId[] = unlockedGoods.length > 0 ? unlockedGoods : ['cinnamon_apple_pie'];
+
   return [0, 1, 2].map((slot) => {
     const goodId = goodsOrder[(trainIndex + slot) % goodsOrder.length];
-    const qty = slot === 2 && level >= 20 ? 2 : 1;
-    const baseG = Math.max(1, Math.round(((130 + level * 26 + Math.pow(level, 1.35) * 4.5) * qty) / 5));
-    const baseXp = Math.round((85 + level * 19 + Math.pow(level, 1.36) * 3.8) * qty);
+    let farmItemId: FarmCropId | FarmGoodId;
+    let qty: number;
+    if (slot === 0) {
+      farmItemId = cropPool[(trainIndex + slot) % cropPool.length];
+      qty = safeLevel >= 12 ? 4 : 3;
+    } else if (slot === 1) {
+      farmItemId = goodPool[(trainIndex + slot) % goodPool.length];
+      qty = safeLevel >= 18 ? 2 : 1;
+    } else {
+      farmItemId = goodPool[(trainIndex + slot + 2) % goodPool.length];
+      qty = safeLevel >= 20 ? 2 : 1;
+    }
+    const baseG = Math.max(
+      1,
+      Math.round(((130 + safeLevel * 26 + Math.pow(safeLevel, 1.35) * 4.5) * (slot === 0 ? 1 : qty)) / 5)
+    );
+    const baseXp = Math.round((85 + safeLevel * 19 + Math.pow(safeLevel, 1.36) * 3.8) * (slot === 0 ? 1 : qty));
     return {
       id: `crate_${trainIndex}_${slot}`,
       goodId,
+      farmItemId,
       qtyRequired: qty,
       fulfilled: false,
       rewardSickle: baseG,

@@ -413,4 +413,115 @@ describe('Full-Game Loop 9/10 UX Polish & Hardening', () => {
     expect(fakeHud.refreshAll).toHaveBeenCalledTimes(1);
     expect(fakeHud.showToast).toHaveBeenCalledTimes(1);
   });
+
+  it('immediately equips & plants the chosen crop after buying from an out-of-seeds quiz redirect and retains tray scroll & selection on close', () => {
+    const sim = new ParkSimulation(createMockAudio());
+    sim.state.sandboxMode = false;
+    sim.state.level = 15;
+    sim.state.galleons = 5000;
+    sim.ensureFarmBarn().seeds = { garden_pumpkin: 0, ottery_wheat: 0 };
+
+    const clickHandlers = new Map<string, () => void>();
+    const makeBtnStub = (sel: string) => ({
+      addEventListener: (ev: string, fn: () => void) => {
+        if (ev === 'click') clickHandlers.set(sel, fn);
+      },
+      setAttribute: () => {},
+    });
+    const contentEl = new MockEl();
+    contentEl.querySelector = (sel?: string) => {
+      if (sel === '#btnSqBuy1' || sel === '#btnSqBuy3') {
+        return makeBtnStub(sel) as unknown as MockEl;
+      }
+      return null;
+    };
+    const dlgEl = Object.assign(new MockEl(), {
+      open: false,
+      showModal() {
+        this.open = true;
+      },
+      close() {
+        this.open = false;
+      },
+    });
+    const rootWithQuery = {
+      querySelector: (sel: string) => {
+        if (sel === '#seedQuizDialogContent') return contentEl;
+        if (sel === '#seedQuizDialog') return dlgEl;
+        return null;
+      },
+      querySelectorAll: () => [],
+    } as unknown as HTMLElement;
+
+    const onEquipAndSow = vi.fn();
+    const ctrl = new SeedQuizModalController(rootWithQuery, sim, vi.fn(), vi.fn(), onEquipAndSow);
+
+    // 1. Out-of-seeds card click opens modal for 'garden_pumpkin' targeting 'plot_1' -> clicking +1 seed immediately closes & plants
+    ctrl.open('garden_pumpkin', 'plot_1');
+    expect(dlgEl.open).toBe(true);
+    clickHandlers.get('#btnSqBuy1')?.();
+    expect(sim.getSeedCount('garden_pumpkin')).toBe(1);
+    expect(dlgEl.open).toBe(false);
+    expect(onEquipAndSow).toHaveBeenCalledWith('garden_pumpkin', 'plot_1');
+
+    // 2. Opening without cropId (from dock), buying seeds, then closing modal also preserves & equips targetCropId
+    onEquipAndSow.mockClear();
+    ctrl.open(undefined, null);
+    clickHandlers.get('#btnSqBuy1')?.();
+    expect(dlgEl.open).toBe(true); // stays open so player can keep practicing or buying more
+    ctrl.close();
+    expect(onEquipAndSow).toHaveBeenCalledWith('garden_pumpkin', null);
+
+    // 3. Seed Tray preserves horizontal scrollLeft across re-renders & #btnCloseSeedTray plants/keeps equipped bought seed
+    const plot = sim.state.buildings.find((b) => b.itemId === 'farmland_plot' && !b.cropId);
+    expect(plot).toBeDefined();
+    if (plot) {
+      plot.constructEndsAt = 0;
+    }
+    sim.ensureFarmBarn().seeds = { garden_pumpkin: 2 };
+    const closeHandlers: Array<() => void> = [];
+    const fakeScrollEl = { scrollLeft: 240 };
+    const trayEl = new MockEl();
+    trayEl.querySelector = ((sel: string) => {
+      if (sel === '.seed-tray-scroll') return fakeScrollEl;
+      if (sel === '#btnCloseSeedTray') {
+        return {
+          addEventListener: (ev: string, fn: () => void) => {
+            if (ev === 'click') closeHandlers.push(fn);
+          },
+        };
+      }
+      return null;
+    }) as unknown as MockEl['querySelector'];
+    trayEl.querySelectorAll = (() => []) as unknown as MockEl['querySelectorAll'];
+
+    const fakeHud = {
+      root: {
+        querySelector: (sel: string) => (sel === '#seedBrushTray' ? trayEl : null),
+      },
+      sim,
+      photoModeActive: false,
+      seedTrayOpen: true,
+      seedFilterMode: 'all' as const,
+      activeSeedCropId: 'garden_pumpkin' as const,
+      pendingSowPlotUid: plot?.uid ?? null,
+      inspectSelection: null,
+      showToast: vi.fn(),
+      refreshAll: vi.fn(),
+      syncHudFocusVisibility: vi.fn(),
+      openSeedQuizDialog: vi.fn(),
+    } as unknown as GameHUD;
+
+    farmUiRenderSeedTray(fakeHud);
+    expect(fakeScrollEl.scrollLeft).toBe(240);
+
+    // Closing the tray after buying 2 garden_pumpkin seeds plants 1 on pending plot AND retains 1 on the active seed brush
+    expect(closeHandlers.length).toBe(1);
+    closeHandlers[0]();
+    if (plot) {
+      expect(plot.cropId).toBe('garden_pumpkin');
+      expect(fakeHud.activeSeedCropId).toBe('garden_pumpkin');
+    }
+    expect(fakeHud.seedTrayOpen).toBe(false);
+  });
 });

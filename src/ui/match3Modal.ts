@@ -1,3 +1,4 @@
+import '../styles/puzzleArcadeModal.css';
 import '../styles/match3Modal.css';
 import { formatDurationCompactVi } from '../data/catalog';
 import {
@@ -387,12 +388,16 @@ export class Match3ModalController {
         this.engine?.cancelBoosterMode();
         const wasBusyOnClose = Boolean(this.engine?.hasAnyAsyncActivity());
         this.engine?.stopLoop();
+        if (typeof document === 'undefined' || !document.hidden) {
+          this.clearActiveModalResumeMarker();
+        }
         if (this.rescueContext) {
           this.cancelDeferredSave();
           this.rescueContext = null;
           this.rescueVictoryOutcome = null;
           this.engine?.destroy();
           this.engine = null;
+          this.sim.saveToStorage();
         } else if (this.devJumpReturnLevel !== null) {
           this.cancelDeferredSave();
           const maxNormal = Math.min(
@@ -416,9 +421,6 @@ export class Match3ModalController {
         } else {
           this.persistMatch3Session(true);
           this.flushDeferredSave();
-        }
-        if (typeof document === 'undefined' || !document.hidden) {
-          this.clearActiveModalResumeMarker();
         }
         const modalInner =
           typeof dlg.querySelector === 'function'
@@ -1484,19 +1486,19 @@ export class Match3ModalController {
             <strong id="m3ModalRankText">#${compactSickle(m3Rank)}</strong>
           </button>
           <form method="dialog" class="pa-inline-close-form">
-            <button type="submit" value="close" class="brass-btn pa-inline-close-btn" title="Đóng (Esc)" aria-label="Đóng">✕</button>
+            <button type="submit" value="close" class="brass-btn pa-inline-close-btn" title="Về Trang Trại (Esc)" aria-label="Về Trang Trại"><img src="/game/trang-trai-hang-soc/sprites/burrow_house_canon.webp" alt="" class="m3-res-icon pa-close-home-ico" aria-hidden="true" /><span class="pa-close-home-lbl">Về vườn</span></button>
           </form>
         </div>
 
         <div class="pa-mode-tabs" role="tablist"${globalThis.matchMedia?.('(min-width: 980px)').matches ? ' aria-orientation="vertical"' : ''} aria-label="Chọn môn khảo thí phép thuật Hogwarts" ${this.rescueContext ? 'style="opacity:0.65;pointer-events:none;"' : ''}>
-          <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="caro" class="pa-mode-tab" title="Ngũ Ấn Đạo Tặc">
-            <span class="pa-tab-name"><span class="pa-tab-name-full">🗺️ Ngũ Ấn Đạo Tặc</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🗺️</span> Ngũ Ấn</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('caro')}</span>${trialBadgeFor('caro')}</span>
+          <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="caro" class="pa-mode-tab" title="Dò Mìn Phép Thuật">
+            <span class="pa-tab-name"><span class="pa-tab-name-full">🧨 Dò Mìn Phép Thuật</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🧨</span> Dò Mìn</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('caro')}</span>${trialBadgeFor('caro')}</span>
           </button>
           <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="sudoku" class="pa-mode-tab" title="Số Học Huyền Bí">
             <span class="pa-tab-name"><span class="pa-tab-name-full">🔢 Số Học Huyền Bí</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🔢</span> Số Học</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('sudoku')}</span>${trialBadgeFor('sudoku')}</span>
           </button>
-          <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="chess" class="pa-mode-tab" title="Cờ Phù Thủy">
-            <span class="pa-tab-name"><span class="pa-tab-name-full">🏰 Cờ Phù Thủy</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🏰</span> Cờ</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('chess')}</span>${trialBadgeFor('chess')}</span>
+          <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="chess" class="pa-mode-tab" title="Bắn Cá Hồ Đen">
+            <span class="pa-tab-name"><span class="pa-tab-name-full">🎯 Bắn Cá Hồ Đen</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🎯</span> Bắn Cá</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('chess')}</span>${trialBadgeFor('chess')}</span>
           </button>
           <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="blocks" class="pa-mode-tab" title="Sinh Vật Huyền Bí">
             <span class="pa-tab-name"><span class="pa-tab-name-full">🦄 Sinh Vật Huyền Bí</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🦄</span> Sinh Vật</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('blocks')}</span>${trialBadgeFor('blocks')}</span>
@@ -1596,7 +1598,7 @@ export class Match3ModalController {
                   <button id="btnM3RefillHeartsNow" type="button" class="brass-btn gold-cta">
                     ${butterbeerQty > 0 ? `Bia Bơ · 5 ♥\uFE0E · ×${butterbeerQty}` : `5 ♥\uFE0E · ${REFILL_HEARTS_GOLD_COST} Sickle`}
                   </button>
-                  <button id="btnM3EmptyGoArcade" type="button" class="brass-btn">4 Môn Khảo Thí</button>
+                  <button id="btnM3EmptyGoArcade" type="button" class="brass-btn">5 Môn Khảo Thí</button>
                   <button id="btnM3BackToPark" type="button" class="brass-btn">Về vườn</button>
                 </div>
               </div>

@@ -77,6 +77,7 @@ import {
   CraftedGoodId,
   CreatureMorphVariant,
   EscapedCreatureEntity,
+  ExpressCargoCrate,
   FarmBarnState,
   FarmCropId,
   FarmGoodId,
@@ -91,6 +92,7 @@ import {
   HarvestFeastState,
   HarvestFeastTierDef,
   HeatmapMode,
+  HogsmeadeMarketFairState,
   HomeOwlLanternMark,
   HonorGardenTourDef,
   HouseName,
@@ -119,6 +121,7 @@ import {
   QuestDef,
   QuestObjectiveType,
   RibbonUnveilCelebration,
+  SoilFertilityTier,
   StaffEntity,
   SuitcaseExpeditionId,
   TileCell,
@@ -168,6 +171,12 @@ import {
   setPlayerHogwartsHouse,
   submitPlayerCloudLeaderboardEntry,
 } from './minigameLeaderboard';
+import {
+  captureEconomyBaseline,
+  EconomyBaselineSnapshot,
+  EconomyIntegrityVerdict,
+  verifyFarmEconomyDelta,
+} from './economyIntegrity';
 import type { ProofOfPlayEnvelope } from './proofOfPlay';
 import {
   createInitialPuzzleArcadeState,
@@ -283,8 +292,20 @@ import {
   farmBatchFeedPastures,
   farmBatchHarvestPastures,
   farmBatchPlantCrops,
+  farmGetPlotEffectiveSoilTier,
+  farmGetPlotSoilUpgradeCostInfo,
+  farmUpgradePlotSoilTier,
+  farmFertilizeCropPlotWithCompost,
+  farmGetAvailableGourmetFeedCrop,
+  farmFeedAnimalPastureGourmet,
+  farmEnsureMarketFairState,
+  farmIsItemMarketSpotlight,
+  farmGetOwlOrderSpotlightBonus,
+  farmSellMarketSpotlightLot,
+  farmFulfillMarketFairDeal,
+  farmRerollMarketFairDeals,
 } from './simulationFarm';
-import type { FarmBatchResult } from './simulationFarm';
+import type { FarmBatchResult, PlotSoilUpgradeCostInfo } from './simulationFarm';
 import {
   buildTxnBeginStroke,
   buildTxnCommitStroke,
@@ -335,7 +356,7 @@ import {
   worldStashBuilding,
 } from './simulationWorld';
 export { isDragPaintableCatalogItem, isRepeatableCatalogItem } from './simulationWorld';
-export type { BarnUpgradeCostInfo, FarmBatchResult } from './simulationFarm';
+export type { BarnUpgradeCostInfo, FarmBatchResult, PlotSoilUpgradeCostInfo } from './simulationFarm';
 
 import {
   creaturesFeedCreature,
@@ -424,6 +445,7 @@ import {
   questsStartBrewing,
   questsSpeedUpBrewing,
   questsUseCraftedGood,
+  questsGetCargoCrateStockInfo,
   questsFulfillCargoCrate,
   questsUnveilBuilding,
   questsEnsureHarvestFeast,
@@ -434,6 +456,8 @@ import {
   questsClaimAllHarvestFeastTiers,
   questsStartNextHarvestFeastCycle,
 } from './simulationQuests';
+import type { CargoCrateStockInfo } from './simulationQuests';
+export type { CargoCrateStockInfo } from './simulationQuests';
 
 import {
   socialEnsureNeighborSocial,
@@ -468,6 +492,7 @@ import {
   socialSyncFlooDirectoryMembers,
   socialHelpVisitedFlooMemberWholeGarden,
   socialRecordFlooShareOrPostcard,
+  socialRequestCargoCrateHelp,
 } from './simulationSocial';
 
 import {
@@ -599,16 +624,39 @@ export class ParkSimulation {
   public buildRedoStack: BuildSnapshot[] = [];
   /** Backup onUiChange khi stroke build active (buildTxnCommitStroke khôi phục). */
   public buildStrokeOnUiChangeBackup: (() => void) | null | undefined;
+  public economyBaseline: EconomyBaselineSnapshot | null = null;
+  public pendingInboxSickles = 0;
+  public pendingInboxSand = 0;
 
   constructor(audio: MagicalAudio) {
     this.audio = audio;
     const loaded = this.loadFromStorage();
     this.state = loaded ?? createInitialGameState();
+    this.economyBaseline = captureEconomyBaseline(this.state);
     this.audio.enabled = this.state.settings.soundEnabled;
     this.audio.bgmEnabled = this.state.settings.bgmEnabled;
     this.rebuildGrid();
     this.syncStaffEntities();
     this.syncValleyVillagers();
+  }
+
+  public creditVerifiedInboxGrant(sickles = 0, sand = 0): void {
+    if (Number.isFinite(sickles) && sickles > 0) {
+      this.pendingInboxSickles += Math.floor(sickles);
+    }
+    if (Number.isFinite(sand) && sand > 0) {
+      this.pendingInboxSand += Math.floor(sand);
+    }
+  }
+
+  public verifyEconomyDeltaFrom(
+    prevState: GameState | EconomyBaselineSnapshot,
+    elapsedMs: number
+  ): EconomyIntegrityVerdict {
+    return verifyFarmEconomyDelta(prevState, this.state, elapsedMs, {
+      allowInboxSickles: this.pendingInboxSickles,
+      allowInboxSand: this.pendingInboxSand,
+    });
   }
 
   public loadFromStorage(): GameState | null { return lifecycleLoadFromStorage(this); }
@@ -674,6 +722,7 @@ export class ParkSimulation {
     }
     this.state.timeSand = 999;
     this.state.morningDewPhials = 999;
+    this.state.herbalCompost = 999;
     this.state.phoenixTalismans = 12;
     this.state.unlockedZones = ZONES.map((z) => z.id);
     const now = Date.now();
@@ -977,7 +1026,15 @@ export class ParkSimulation {
 
   public useCraftedGood(goodId: CraftedGoodId): { ok: boolean; msg: string } { return questsUseCraftedGood(this, goodId); }
 
+  public getCargoCrateStockInfo(crate: ExpressCargoCrate): CargoCrateStockInfo {
+    return questsGetCargoCrateStockInfo(this, crate);
+  }
+
   public fulfillCargoCrate(crateId: string): { ok: boolean; msg: string } { return questsFulfillCargoCrate(this, crateId); }
+
+  public requestCargoCrateHelp(crateId: string): { ok: boolean; msg: string } {
+    return socialRequestCargoCrateHelp(this, crateId);
+  }
 
   // ==================== HỆ THỐNG #5: PHÁO HOA BẦU TRỜI & KHÁCH VIP NHẬT BÁO TIÊN TRI ====================
 
@@ -1427,6 +1484,59 @@ export class ParkSimulation {
 
   public clearAnimalFromPasture(uid: string): { ok: boolean; msg: string } { return farmClearAnimalFromPasture(this, uid); }
 
+  public getPlotEffectiveSoilTier(b: Pick<PlacedBuilding, 'gx' | 'gy' | 'soilTier'>): SoilFertilityTier {
+    return farmGetPlotEffectiveSoilTier(this, b);
+  }
+
+  public getPlotSoilUpgradeCostInfo(uid: string): PlotSoilUpgradeCostInfo | null {
+    return farmGetPlotSoilUpgradeCostInfo(this, uid);
+  }
+
+  public upgradePlotSoilTier(uid: string): { ok: boolean; msg: string; newTier?: SoilFertilityTier } {
+    return farmUpgradePlotSoilTier(this, uid);
+  }
+
+  public fertilizeCropPlotWithCompost(uid: string): { ok: boolean; msg: string } {
+    return farmFertilizeCropPlotWithCompost(this, uid);
+  }
+
+  public getAvailableGourmetFeedCrop(): FarmCropId | null {
+    return farmGetAvailableGourmetFeedCrop(this);
+  }
+
+  public feedAnimalPastureGourmet(uid: string): { ok: boolean; msg: string; cropUsed?: FarmCropId } {
+    return farmFeedAnimalPastureGourmet(this, uid);
+  }
+
+  public ensureMarketFairState(): HogsmeadeMarketFairState {
+    return farmEnsureMarketFairState(this);
+  }
+
+  public isItemMarketSpotlight(itemId: FarmItemId): boolean {
+    return farmIsItemMarketSpotlight(this, itemId);
+  }
+
+  public getOwlOrderSpotlightBonus(order: Pick<FarmOwlOrder, 'requirements'>): {
+    hasSpotlight: boolean;
+    bonusCompost: number;
+    bonusXp: number;
+    bonusFeastPoints: number;
+  } {
+    return farmGetOwlOrderSpotlightBonus(this, order);
+  }
+
+  public sellMarketSpotlightLot(kind: 'crop' | 'good'): { ok: boolean; msg: string } {
+    return farmSellMarketSpotlightLot(this, kind);
+  }
+
+  public fulfillMarketFairDeal(dealId: string): { ok: boolean; msg: string } {
+    return farmFulfillMarketFairDeal(this, dealId);
+  }
+
+  public rerollMarketFairDeals(): { ok: boolean; msg: string } {
+    return farmRerollMarketFairDeals(this);
+  }
+
   public beginBuildStroke(): void { return buildTxnBeginStroke(this); }
   public commitBuildStroke(): void { return buildTxnCommitStroke(this); }
   public noteBuildMutation(): void { return buildTxnNoteMutation(this); }
@@ -1729,7 +1839,7 @@ export class ParkSimulation {
       if (toDisplay.length === 1) {
         const def = toDisplay[0];
         this.onToast(
-          `🏅 Đạt Thành Tựu: ${def.titleVi} (+${def.rewardSickle} Sickle, +${def.rewardStars} 🌟 — nhận tại Sổ Vàng!)`,
+          `🏅 Đạt Thành Tựu: ${def.titleVi} (+${def.rewardSickle} Sickle, +${def.rewardStars} 🌟 — nhận tại Hồ Sơ!)`,
           def.icon
         );
       } else if (toDisplay.length > 1) {
@@ -1737,7 +1847,7 @@ export class ParkSimulation {
         const sumGold = toDisplay.reduce((acc, d) => acc + d.rewardSickle, 0);
         const sumStars = toDisplay.reduce((acc, d) => acc + d.rewardStars, 0);
         this.onToast(
-          `🏅 Mở khoá ${toDisplay.length} Thành Tựu mới (${top.titleVi}...) • +${sumGold} Sickle, +${sumStars} 🌟 — nhận tại Sổ Vàng!`,
+          `🏅 Mở khoá ${toDisplay.length} Thành Tựu mới (${top.titleVi}...) • +${sumGold} Sickle, +${sumStars} 🌟 — nhận tại Hồ Sơ!`,
           top.icon
         );
       }
@@ -1755,14 +1865,18 @@ export class ParkSimulation {
     rewardSickle: number;
     rewardStars: number;
   } {
+    if (this.isHeadmasterPreview || this.isVisitingHonorTour) {
+      return { ok: false, msg: 'Đang ở chế độ tham quan — hãy về vườn nhà để nhận thưởng!', rewardSickle: 0, rewardStars: 0 };
+    }
+    const targetState = this.homeStateWhileVisiting ?? this.state;
     const def = ACHIEVEMENT_REGISTRY.find((a) => a.id === achId);
-    const res = claimAchievementReward(this.state, achId);
+    const res = claimAchievementReward(targetState, achId);
     if (!res.ok || !def) {
       return { ok: false, msg: 'Thành tựu chưa mở khoá hoặc đã nhận thưởng!', rewardSickle: 0, rewardStars: 0 };
     }
     if (res.rewardStars > 0) {
-      this.state.match3.stars += res.rewardStars;
-      this.state.match3.totalStarsEarned += res.rewardStars;
+      targetState.match3.stars += res.rewardStars;
+      targetState.match3.totalStarsEarned += res.rewardStars;
       this.onRewardFly?.('stars', res.rewardStars);
     }
     if (res.rewardSickle > 0) {
@@ -1786,7 +1900,17 @@ export class ParkSimulation {
     rewardSickle: number;
     rewardStars: number;
   } {
-    const res = claimAllUnlockedAchievements(this.state);
+    if (this.isHeadmasterPreview || this.isVisitingHonorTour) {
+      return {
+        ok: false,
+        msg: 'Đang ở chế độ tham quan — hãy về vườn nhà để nhận thưởng!',
+        claimedCount: 0,
+        rewardSickle: 0,
+        rewardStars: 0,
+      };
+    }
+    const targetState = this.homeStateWhileVisiting ?? this.state;
+    const res = claimAllUnlockedAchievements(targetState);
     if (res.claimedIds.length === 0) {
       return {
         ok: false,
@@ -1797,8 +1921,8 @@ export class ParkSimulation {
       };
     }
     if (res.totalStars > 0) {
-      this.state.match3.stars += res.totalStars;
-      this.state.match3.totalStarsEarned += res.totalStars;
+      targetState.match3.stars += res.totalStars;
+      targetState.match3.totalStarsEarned += res.totalStars;
       this.onRewardFly?.('stars', res.totalStars);
     }
     if (res.totalSickle > 0) {
@@ -1825,11 +1949,11 @@ export class ParkSimulation {
     if (this.isHeadmasterPreview || this.isVisitingHonorTour || targetState.sandboxMode) {
       return { claimableAchievements: 0, claimableLoginDays: 0, total: 0 };
     }
-    return getClaimableRetentionCount(targetState, this.getUnlockedLoginDayMax());
+    return getClaimableRetentionCount(targetState, this.getUnlockedLoginDayMax(targetState));
   }
 
-  public getUnlockedLoginDayMax(): number {
-    const ret = ensureRetentionState(this.state);
+  public getUnlockedLoginDayMax(targetState = this.homeStateWhileVisiting ?? this.state): number {
+    const ret = ensureRetentionState(targetState);
     const todayKey = getLocalDateKey();
     if (ret.lastLoginClaimDayKey === todayKey) {
       return Math.min(7, Math.max(1, ret.claimedLoginDays.length));
@@ -1838,7 +1962,11 @@ export class ParkSimulation {
   }
 
   public claimLoginDayReward(dayNumber: number): { ok: boolean; msg: string } {
-    const ret = ensureRetentionState(this.state);
+    if (this.isHeadmasterPreview || this.isVisitingHonorTour) {
+      return { ok: false, msg: 'Đang ở chế độ tham quan — hãy về vườn nhà để nhận quà điểm danh!' };
+    }
+    const targetState = this.homeStateWhileVisiting ?? this.state;
+    const ret = ensureRetentionState(targetState);
     const todayKey = getLocalDateKey();
     if (ret.claimedLoginDays.includes(dayNumber)) {
       return { ok: false, msg: 'Quà điểm danh ngày này đã được nhận!' };
@@ -1846,17 +1974,17 @@ export class ParkSimulation {
     if (ret.lastLoginClaimDayKey === todayKey) {
       return { ok: false, msg: 'Hôm nay bạn đã nhận quà điểm danh rồi — hẹn quay lại vào ngày mai nhé!' };
     }
-    const maxDay = this.getUnlockedLoginDayMax();
+    const maxDay = this.getUnlockedLoginDayMax(targetState);
     if (dayNumber !== maxDay) {
       return { ok: false, msg: `Hãy nhận quà Ngày ${maxDay} trước nhé!` };
     }
-    const res = claimDailyRetentionReward(this.state, dayNumber, todayKey);
+    const res = claimDailyRetentionReward(targetState, dayNumber, todayKey);
     if (!res.ok || !res.reward) {
       return { ok: false, msg: 'Quà điểm danh ngày này đã được nhận!' };
     }
     if (res.reward.magicStars > 0) {
-      this.state.match3.stars += res.reward.magicStars;
-      this.state.match3.totalStarsEarned += res.reward.magicStars;
+      targetState.match3.stars += res.reward.magicStars;
+      targetState.match3.totalStarsEarned += res.reward.magicStars;
       this.onRewardFly?.('stars', res.reward.magicStars);
     }
     this.onRewardFly?.('galleons', res.reward.galleons);
@@ -1887,6 +2015,12 @@ export class ParkSimulation {
       };
     }
     const res = answerVillagerDialogue(this.state, villagerId, choiceIndex, todayKey);
+    const vEntity = this.villagers.find((x) => x.id === villagerId);
+    if (vEntity) {
+      vEntity.greetReactTimer = 2.4;
+      vEntity.pauseTimer = Math.max(vEntity.pauseTimer, 3.2);
+    }
+    this.audio.playVillagerVoiceBark?.(villagerId);
     const bonusGold = res.leveledUp ? 25 : 6;
     this.state.galleons += bonusGold;
     this.addXp(res.leveledUp ? 15 : 5);

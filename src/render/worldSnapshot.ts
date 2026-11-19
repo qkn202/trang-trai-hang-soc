@@ -287,6 +287,9 @@ export class WorldRenderSnapshotCollector {
       isWalking: false,
       facingLeft: false,
       alpha: 1,
+      greetWave: 0,
+      tendingLean: 0,
+      phaseSeed: 0,
     })
   );
   private readonly rawSkeletalPoses: SkeletalEntityPose[] = Array.from(
@@ -302,9 +305,15 @@ export class WorldRenderSnapshotCollector {
       isWalking: false,
       facingLeft: false,
       alpha: 1,
+      greetWave: 0,
+      tendingLean: 0,
+      phaseSeed: 0,
     })
   );
   public skeletalCount = 0;
+
+  private readonly chimneyEmitters = new Float32Array(12 * 3); // [wx, wy, seed]
+  public chimneyCount = 0;
 
   public readonly lightData = new Float32Array(MAX_LIGHT_SLOTS * LIGHT_STRIDE);
   public lightCount = 0;
@@ -423,10 +432,13 @@ export class WorldRenderSnapshotCollector {
     this.period = sim.getRealTimePeriod();
     const weather = sim.getCurrentWeather(nowMs);
     this.weatherKind = weather.kind;
+    const yuleMode = sim.state?.settings?.yuleThemeMode ?? 'auto';
     const yuleActive =
-      (typeof sim.isWinterMainMapActive === 'function' && sim.isWinterMainMapActive()) ||
-      sim.getActiveFestival() === 'christmas' ||
-      (typeof sim.isYuleVisualThemeActive === 'function' && sim.isYuleVisualThemeActive());
+      yuleMode === 'off'
+        ? sim.state?.settings?.activeFestival === 'christmas'
+        : (typeof sim.isWinterMainMapActive === 'function' && sim.isWinterMainMapActive()) ||
+          sim.getActiveFestival() === 'christmas' ||
+          (typeof sim.isYuleVisualThemeActive === 'function' && sim.isYuleVisualThemeActive());
     const season = resolveSeasonFromDayCount(sim.state.level ?? 1, yuleActive ? 'winter' : 'auto');
     this.seasonId = season.id;
 
@@ -742,6 +754,10 @@ export class WorldRenderSnapshotCollector {
     let extraCountTotal = 0;
     let rawSkelCount = 0;
     let lightCandCount = 0;
+    this.chimneyCount = 0;
+    const hasSupplyBrew = Boolean(
+      sim.state.supply.activeBrew && sim.state.supply.activeBrew.endsAt > nowMs
+    );
     const hoveredBulldozeUid =
       overlay?.bulldozerActive && overlay.hoverTile
         ? (sim.grid[overlay.hoverTile.gy]?.[overlay.hoverTile.gx]?.buildingUid ?? null)
@@ -962,7 +978,7 @@ export class WorldRenderSnapshotCollector {
       const footprintW = (bw + bh) * (TILE_W * 0.5);
       const drawW = footprintW * scaleMult;
       const drawH = drawW * (spHandle.height / spHandle.width);
-      const wsKin = computeWorkshopKineticState(item, b, nowMs, reducedMotion);
+      const wsKin = computeWorkshopKineticState(item, b, nowMs, reducedMotion, hasSupplyBrew);
 
       const rotTotal = (b.rotation + viewRot) % 4;
       const flipX = isConnectable
@@ -1014,6 +1030,14 @@ export class WorldRenderSnapshotCollector {
       s.phaseSeed = b.gx * 1.7 + b.gy * 2.3;
       s.extraStart = extraCountTotal;
       s.extraCount = 0;
+
+      if (!underConstruction && wsKin.smokeIntensity > 0 && this.chimneyCount < 12) {
+        const cb = this.chimneyCount * 3;
+        this.chimneyEmitters[cb] = worldCx + drawW * 0.14;
+        this.chimneyEmitters[cb + 1] = worldBottomY - drawH * 0.82;
+        this.chimneyEmitters[cb + 2] = s.phaseSeed;
+        this.chimneyCount++;
+      }
 
       // Enchanted Construction Hammer Overlay
       if (underConstruction) {
@@ -1651,6 +1675,11 @@ export class WorldRenderSnapshotCollector {
         sp.isWalking = isWalking;
         sp.facingLeft = Boolean(v.facingLeft);
         sp.alpha = 1.0;
+        sp.greetWave = reducedMotion
+          ? 0
+          : Math.min(1, Math.max(0, (v.greetReactTimer ?? 0) / 0.6));
+        sp.tendingLean = !reducedMotion && !isWalking && (v.tendingSpotTimer ?? 0) > 0 ? 1 : 0;
+        sp.phaseSeed = i * 2.1;
       }
 
       const s = this.slots[slotCount++];
@@ -1862,6 +1891,9 @@ export class WorldRenderSnapshotCollector {
         dstPose.isWalking = srcPose.isWalking;
         dstPose.facingLeft = srcPose.facingLeft;
         dstPose.alpha = srcPose.alpha;
+        dstPose.greetWave = srcPose.greetWave ?? 0;
+        dstPose.tendingLean = srcPose.tendingLean ?? 0;
+        dstPose.phaseSeed = srcPose.phaseSeed ?? 0;
       }
 
       const base = outCount * SCENE_STRIDE;
@@ -1943,17 +1975,16 @@ export class WorldRenderSnapshotCollector {
     const isRainOrFog =
       this.weatherKind === 'rain' || this.weatherKind === 'storm' || this.weatherKind === 'fog';
     const isSnow = !isRainOrFog && (this.weatherKind === 'snow' || this.seasonId === 'winter');
-    if (isRainOrFog) {
-      this.particleCount = 0;
-      return;
-    }
-    const count = isSnow ? 140 : isNightLike ? 130 : 80;
+    const chimneyParticles = Math.min(48, this.chimneyCount * 4);
+    const maxWeather = Math.max(0, MAX_PARTICLE_INSTANCES - chimneyParticles);
+    const rawWeatherCount = isRainOrFog ? 0 : isSnow ? 140 : isNightLike ? 130 : 80;
+    const weatherCount = Math.min(rawWeatherCount, maxWeather);
     const zoomSafe = Math.max(0.42, cam.zoom);
     const spanX = Math.max(920, 780 / zoomSafe);
     const spanY = Math.max(580, 500 / zoomSafe);
     const snowZoomComp = 1 / Math.max(0.65, Math.min(1.25, cam.zoom));
 
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < weatherCount; i++) {
       const s1 = hash2d(i, 17);
       const s2 = hash2d(i, 89);
       const s3 = hash2d(i, 233);
@@ -1997,6 +2028,25 @@ export class WorldRenderSnapshotCollector {
         }
       }
     }
-    this.particleCount = count;
+
+    let outCount = weatherCount;
+    for (let c = 0; c < this.chimneyCount; c++) {
+      const cb = c * 3;
+      const eWx = this.chimneyEmitters[cb];
+      const eWy = this.chimneyEmitters[cb + 1];
+      const seed = this.chimneyEmitters[cb + 2];
+      for (let p = 0; p < 4 && outCount < MAX_PARTICLE_INSTANCES; p++) {
+        const life = (t * 0.55 + p * 0.25 + seed * 0.17) % 1.0;
+        const base = outCount * PARTICLE_STRIDE;
+        this.particleData[base] = eWx + Math.sin(t * 1.8 + seed + p * 1.6) * (3 + life * 8);
+        this.particleData[base + 1] = eWy - life * 34;
+        this.particleData[base + 2] = 4.5 + life * 7.5;
+        this.particleData[base + 3] = -1.0;
+        this.particleData[base + 4] = Math.sin(life * Math.PI) * 0.46;
+        this.particleData[base + 5] = 0.65;
+        outCount++;
+      }
+    }
+    this.particleCount = outCount;
   }
 }

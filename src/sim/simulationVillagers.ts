@@ -1058,6 +1058,12 @@ export function villagersUpdateValleyVillagers(sim: ParkSimulation, dt: number, 
       if (v.greetCooldownSec > 0) {
         v.greetCooldownSec = Math.max(0, v.greetCooldownSec - dt);
       }
+      if ((v.greetReactTimer ?? 0) > 0) {
+        v.greetReactTimer = Math.max(0, (v.greetReactTimer ?? 0) - dt);
+      }
+      if ((v.tendingSpotTimer ?? 0) > 0) {
+        v.tendingSpotTimer = Math.max(0, (v.tendingSpotTimer ?? 0) - dt);
+      }
 
       const dx = v.targetGx - v.gx;
       const dy = v.targetGy - v.gy;
@@ -1128,6 +1134,7 @@ export function villagersUpdateValleyVillagers(sim: ParkSimulation, dt: number, 
             v.targetGy = fPick.gy;
             v.state = 'walking';
             v.pauseTimer = 3.4 + (i % 3) * 0.6;
+            v.tendingSpotTimer = 6.5;
             if (!isRainy && prof) {
               v.moodBubble = prof.moodBubble;
               v.bubbleTimer = 3.2;
@@ -1202,8 +1209,10 @@ export function villagersGreetVillager(sim: ParkSimulation, id: ValleyVillagerId
 
     v.state = 'admiring';
     v.pauseTimer = 3.6;
+    v.greetReactTimer = 2.4;
     v.moodBubble = prof.moodBubble;
     v.bubbleTimer = 4.8;
+    sim.audio.playVillagerVoiceBark?.(id);
 
     let bonusSickle = 0;
     let friendLevelUpNote = '';

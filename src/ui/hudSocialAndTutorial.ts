@@ -283,6 +283,9 @@ export function socialUiApplyAuthoritativeSnapshotIdentity(
       // hoặc số dư trên ví diễn đàn cao hơn (tránh xóa mất Sickle vừa cày offline khi mới mở lại mạng)
       if (hasReceipt || isFreshLocal || nextSickle >= homeOrActive.galleons) {
         if (homeOrActive.galleons !== nextSickle) {
+          if (nextSickle > homeOrActive.galleons) {
+            hud.sim.pendingInboxSickles += nextSickle - homeOrActive.galleons;
+          }
           homeOrActive.galleons = nextSickle;
           if (hud.sim.homeStateWhileVisiting) {
             hud.sim.state.galleons = nextSickle;
@@ -780,7 +783,7 @@ export function socialUiRenderVisitorDockBar(hud: GameHUD): void {
     bar.classList.remove('hidden');
     bar.innerHTML = `
       <div class="visitor-dock-head">
-        <span class="visitor-avatar-pill" aria-hidden="true">${escapeHtml(honorTour.avatarEmoji)}</span>
+        <span class="visitor-avatar-pill" aria-hidden="true">${escapeHtml(avatarGlyph(honorTour.avatarEmoji, honorTour.titleVi))}</span>
         <div class="visitor-meta-col">
           <div class="visitor-title-row">
             <strong>${escapeHtml(honorTour.titleVi)}</strong>
@@ -1497,14 +1500,14 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
           </div>
           <div class="nb-chest-rewards">
             <span class="owl-rew-pill gold">🌟 +2</span>
-            <span class="owl-rew-pill plug">🔥 +1</span>
+            <span class="owl-rew-pill plug"><img class="hs-ico" src="/game/trang-trai-hang-soc/sprites/beast_phoenix.webp" alt="" aria-hidden="true" draggable="false"> +1 Bùa</span>
             <span class="owl-rew-pill xp">🌱 +2</span>
             <span class="owl-rew-pill gold">🪙 +150 Sickle</span>
           </div>
           <div class="floo-chest-foot">
             <span class="floo-chest-count">Đã mở: ${social.chestsOpened}</span>
             <button id="btnNbOpenFriendshipChest" type="button" class="brass-btn gold-cta" ${!chestReady ? 'disabled' : ''}>
-              Mở rương (${FRIENDSHIP_CHEST_TOKEN_COST} 🍀)
+              Mở rương (🍀 ${FRIENDSHIP_CHEST_TOKEN_COST})
             </button>
           </div>
         </section>

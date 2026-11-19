@@ -672,7 +672,7 @@ export function getNpcScheduleForPeriod(
     },
     ron: {
       dawn: { zoneId: 'burrow_core', activityVi: 'Cho cú Pigwidgeon ăn hạt', mood: 'cozy' },
-      day: { zoneId: 'hogsmeade_lane', activityVi: 'Luyện khai cuộc Cờ Phù Thủy', mood: 'focused' },
+      day: { zoneId: 'hogsmeade_lane', activityVi: 'Rèn phản xạ khảo thí tại Đại Sảnh', mood: 'focused' },
       dusk: { zoneId: 'honeydukes_sweet', activityVi: 'Thử kẹo nổ ở tiệm Công Tước Mật', mood: 'cheerful' },
       night: { zoneId: 'burrow_core', activityVi: 'Ngắm sao từ gác xép Hang Sóc', mood: 'dreamy' },
     },

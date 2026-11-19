@@ -195,11 +195,11 @@ export function getMinigameKindLabelVi(kind: MinigameTrialKind): {
     case 'match3':
       return { icon: '🍬', nameVi: 'Bùa Gặt Honeydukes' };
     case 'caro':
-      return { icon: '🗺️', nameVi: 'Ngũ Ấn Đạo Tặc' };
+      return { icon: '🧨', nameVi: 'Dò Mìn Phép Thuật' };
     case 'sudoku':
       return { icon: '🔢', nameVi: 'Số Học Huyền Bí' };
     case 'chess':
-      return { icon: '🏰', nameVi: 'Cờ Phù Thủy' };
+      return { icon: '🎯', nameVi: 'Bắn Cá Hồ Đen' };
     case 'blocks':
       return { icon: '🦄', nameVi: 'Sinh Vật Huyền Bí' };
     case 'jigsaw':
@@ -332,9 +332,9 @@ const OWL_CRATE_POOL: ReadonlyArray<{
 
 const SOS_NOTES_BY_KIND: Record<MinigameTrialKind, string> = {
   match3: 'Màn Bùa Gặt Honeydukes này nhiều thùng gỗ quá, bồ vào ghép kẹo trái cây vượt giúp mình với!',
-  caro: 'Ấn Đầu Lâu Xà vây kín bàn Ngũ Ấn Đạo Tặc 13×13 rồi, nhờ cao thủ kết 5 Ấn Phượng Hoàng giải vây!',
+  caro: 'Bãi đá cổ dày đặc mìn phép quá, nhờ cao thủ dò đường mở sạch giúp mình với!',
   sudoku: 'Bảng Số Học Huyền Bí 9×9 đang hóc ở vài ô cuối, nhờ bồ suy luận điền số vượt màn này giúp mình nhé!',
-  chess: 'Thế Cờ Phù Thủy căng quá, nhờ bồ cầm quân Gryffindor chiếu thắng giúp mình!',
+  chess: 'Mực Khổng Lồ & đàn Grindylow dưới Hồ Đen lượn nhanh quá, nhờ cao thủ phóng bùa thu phục giúp mình!',
   blocks: 'Màn Sinh Vật Huyền Bí này đông quá làm mình hoa cả mắt, nhờ bồ nối cặp vượt màn này giúp mình nha!',
   jigsaw: 'Bức Tranh Ghép Phép Thuật Hogwarts nhiều mảnh viền quá, nhờ bồ tinh mắt ghép nốt giúp mình nha!',
 };

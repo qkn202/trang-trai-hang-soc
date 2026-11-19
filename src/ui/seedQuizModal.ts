@@ -60,6 +60,8 @@ export class SeedQuizModalController {
 
   private targetCropId: FarmCropId = 'ottery_wheat';
   private pendingPlotUid: string | null = null;
+  private openedFromSowIntent = false;
+  private seedsAcquiredInSession = false;
   private challenge: ActiveQuizChallenge | null = null;
   private capNoticeShown = false; // HPVN: daily-cap notice shown once
   private answeredOutcome: (QuizAttemptOutcome & { newSeedCount: number; cropName: string }) | null =
@@ -158,6 +160,8 @@ export class SeedQuizModalController {
     if (overrideSubView === 'practice' || overrideSubView === 'codex') {
       this.activeSubView = overrideSubView;
     }
+    this.openedFromSowIntent = Boolean(cropId);
+    this.seedsAcquiredInSession = false;
     const unlockedCrops = Object.values(FARM_CROPS).filter(
       (c) => this.sim.state.sandboxMode || this.sim.state.level >= c.unlockLevel
     );
@@ -298,6 +302,7 @@ export class SeedQuizModalController {
     if (dlg?.open) {
       dlg.close();
     }
+    this.flushPendingSowOnDismiss();
   }
 
   private resetInteractiveQuestionState(): void {
@@ -367,6 +372,9 @@ export class SeedQuizModalController {
         this.onToast('Hôm nay đã nhận đủ 30 câu có thưởng, giờ là luyện tập', '📖');
       }
     } else if (outcome.correct) {
+      if ((outcome.seedsAwarded ?? 0) > 0) {
+        this.seedsAcquiredInSession = true;
+      }
       const promoNote = outcome.tierAutoPromoted
         ? ` • Thăng hạng ${QUIZ_LANGUAGES[this.challenge.lang].tierLabels[outcome.tierAutoPromoted]}!`
         : '';
@@ -399,14 +407,27 @@ export class SeedQuizModalController {
     });
   }
 
+  private flushPendingSowOnDismiss(): void {
+    if (!this.seedsAcquiredInSession) return;
+    this.seedsAcquiredInSession = false;
+    this.openedFromSowIntent = false;
+    if (this.sim.state.sandboxMode || this.sim.getSeedCount(this.targetCropId) > 0) {
+      const targetPlot = this.pendingPlotUid;
+      this.pendingPlotUid = null;
+      this.onEquipAndSow(this.targetCropId, targetPlot);
+    }
+  }
+
   private handleSowEquippedSeed(): void {
     const count = this.sim.getSeedCount(this.targetCropId);
-    if (count <= 0) {
+    if (!this.sim.state.sandboxMode && count <= 0) {
       this.onToast('Túi hạt đang trống — hãy mua bằng Sickle hoặc niệm 1 câu Thần Chú Đa Ngữ bên cạnh nhé!', '🌱');
       return;
     }
     const targetPlot = this.pendingPlotUid;
     this.pendingPlotUid = null;
+    this.seedsAcquiredInSession = false;
+    this.openedFromSowIntent = false;
     this.close();
     this.onEquipAndSow(this.targetCropId, targetPlot);
   }
@@ -415,6 +436,11 @@ export class SeedQuizModalController {
     const res = this.sim.buyCropSeedWithGold(this.targetCropId, qty);
     this.onToast(res.msg, res.ok ? '🌱' : '🪙');
     if (res.ok) {
+      this.seedsAcquiredInSession = true;
+      if (this.openedFromSowIntent) {
+        this.handleSowEquippedSeed();
+        return;
+      }
       this.onRefreshHud();
       this.render();
     }
@@ -445,6 +471,7 @@ export class SeedQuizModalController {
             ? (dlg.querySelector('.sq-modal-inner') as HTMLElement | null)
             : null;
         sharedMinigameViewport.clearDialogOrientation(dlg, inner);
+        this.flushPendingSowOnDismiss();
       });
     }
     sharedMinigameViewport.applyDialogOrientation(dlg, modalInner, true);
@@ -536,6 +563,12 @@ export class SeedQuizModalController {
       (fk) =>
         `<option value="${fk}" ${quiz.preferredFormat === fk ? 'selected' : ''}>${escapeHtml(formatNames[fk])}</option>`
     ).join('');
+    const activeCropLocked = !this.sim.state.sandboxMode && this.sim.state.level < crop.unlockLevel;
+    const activeCropOptionLabel = activeCropLocked
+      ? `Cấp ${crop.unlockLevel} · ${crop.name}`
+      : `${crop.name} (×${seedCount})`;
+    const activeTierLabel = tiers.find((t) => t.id === profile.tier)?.label ?? 'Tập Sự';
+    const activeFormatLabel = formatNames[quiz.preferredFormat] ?? 'Đủ dạng';
 
     const challengeHtml = this.challenge ? this.renderChallengeStage(this.challenge) : '';
     const isAnswered = this.answeredOutcome !== null;
@@ -558,16 +591,28 @@ export class SeedQuizModalController {
                   : `
                     <div class="sq-setup-row" title="${escapeHtml(langMeta.tierLabels[profile.tier])}">
                       <img src="${getFarmItemIconSrc(crop.id)}" alt="" width="22" height="22" class="sq-crop-pill-img" />
-                      <select id="selSqTargetCrop" class="sq-select sq-crop-select" aria-label="Chọn hạt giống nhận thưởng">
-                        <optgroup label="Cây trồng">${renderCropOptions(false)}</optgroup>
-                        <optgroup label="Hoa">${renderCropOptions(true)}</optgroup>
-                      </select>
+                      <div class="sq-select-shell sq-crop-select">
+                        <span class="sq-select-face" aria-hidden="true">
+                          <span class="sq-select-label">${escapeHtml(activeCropOptionLabel)}</span>
+                          <span class="sq-select-caret"></span>
+                        </span>
+                        <select id="selSqTargetCrop" class="sq-select" aria-label="Chọn hạt giống nhận thưởng">
+                          <optgroup label="Cây trồng">${renderCropOptions(false)}</optgroup>
+                          <optgroup label="Hoa">${renderCropOptions(true)}</optgroup>
+                        </select>
+                      </div>
                       ${
                         seedCount > 0
                           ? `<button id="btnSqSowNow" type="button" class="brass-btn gold-cta sq-sow-cta">Gieo ×${seedCount}</button>`
                           : ''
                       }
-                      <select id="selSqTier" class="sq-select sq-tier-select" aria-label="Chọn cấp độ">${tierOptionsHtml}</select>
+                      <div class="sq-select-shell sq-tier-select">
+                        <span class="sq-select-face" aria-hidden="true">
+                          <span class="sq-select-label">${escapeHtml(activeTierLabel)}</span>
+                          <span class="sq-select-caret"></span>
+                        </span>
+                        <select id="selSqTier" class="sq-select" aria-label="Chọn cấp độ">${tierOptionsHtml}</select>
+                      </div>
                     </div>
                     <div class="sq-buy-row" role="group" aria-label="Mua hạt giống bằng Sickle">
                       <button
@@ -590,7 +635,13 @@ export class SeedQuizModalController {
                       </span>
                     </div>
                     <div class="sq-tools-row">
-                      <select id="selSqFormat" class="sq-select sq-format-select" aria-label="Chọn dạng câu hỏi">${formatOptionsHtml}</select>
+                      <div class="sq-select-shell sq-format-select">
+                        <span class="sq-select-face" aria-hidden="true">
+                          <span class="sq-select-label">${escapeHtml(activeFormatLabel)}</span>
+                          <span class="sq-select-caret"></span>
+                        </span>
+                        <select id="selSqFormat" class="sq-select" aria-label="Chọn dạng câu hỏi">${formatOptionsHtml}</select>
+                      </div>
                       <button id="btnSqAutoSpeak" type="button" class="brass-btn sq-tool-pill" aria-pressed="${quiz.autoSpeak}">Tự đọc</button>
                       <button id="btnSqSpeakSlow" type="button" class="brass-btn sq-tool-pill" title="Nghe chậm">Chậm</button>
                       ${
@@ -820,7 +871,7 @@ export class SeedQuizModalController {
           <img src="${heroSprite}" alt="" class="sq-prompt-img" />
           <div class="sq-prompt-copy">
             <strong class="sq-prompt-word">${escapeHtml(heroShortVi)}</strong>
-            ${heroPh ? `<span class="sq-prompt-ph">[${escapeHtml(heroPh)}]</span>` : ''}
+            ${isAnswered && heroPh ? `<span class="sq-prompt-ph">[${escapeHtml(heroPh)}]</span>` : ''}
           </div>
           <button id="btnSqHeroAudio" type="button" class="brass-btn gold-cta sq-audio-btn">Nghe</button>
         </div>

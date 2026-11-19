@@ -415,10 +415,13 @@ export interface PlacedBuilding {
   cropReadyAt?: number;
   cropWateredBoost?: boolean;
   cropRotatedBonus?: boolean; // Mùa Vụ Vàng Luân Canh (+100% sản lượng khi đổi họ cây trồng)
+  soilTier?: SoilFertilityTier; // Bậc đất màu mỡ vĩnh viễn của thửa ruộng (I..V)
+  cropCompostBoost?: boolean; // Đã bón Phân Ủ Thảo Dược ở vụ hiện tại (+2 sản lượng & xoá mỏi đất)
   pastureAnimalId?: PastureAnimalId | null;
   pastureStockedAt?: number;
   pastureReadyAt?: number;
   pastureFedBoost?: boolean;
+  pastureGourmetBoost?: boolean; // Đã cho ăn Bữa Thượng Hạng từ nông sản ruộng (×2 sản lượng & +2 Phân Ủ)
   workshopQueue?: WorkshopQueueSlot[];
   readyFarmGoods?: FarmGoodId[];
   harvestCycleCount?: number; // Số lần đã thu hoạch / hoàn thành chu kỳ kinh tế (lần đầu = 1h, các lần sau nhân 2^n)
@@ -507,6 +510,8 @@ export interface ValleyVillagerEntity {
   greetCooldownSec: number;
   favoriteItemIds: string[];
   walkPhase: number;
+  greetReactTimer?: number;
+  tendingSpotTimer?: number;
 }
 
 export interface RibbonUnveilCelebration {
@@ -662,11 +667,15 @@ export interface FinanceLedger {
 export interface ExpressCargoCrate {
   id: string;
   goodId: CraftedGoodId;
+  farmItemId?: FarmItemId;
   qtyRequired: number;
   fulfilled: boolean;
   rewardSickle: number;
   rewardXp: number;
   rewardTimeSand: number;
+  helpRequestedAt?: number;
+  helpedByNeighborName?: string;
+  helpedByNeighborEmoji?: string;
 }
 
 export interface SupplyChainState {
@@ -682,6 +691,7 @@ export interface SupplyChainState {
   cargoCrates: ExpressCargoCrate[];
   lastHerbPlotHarvestAt: number;
   brewCompletedCount?: number; // Số mẻ nấu đã hoàn thành (lần đầu = 1h, các lần sau tăng theo cấp số nhân)
+  dailyNpcCargoHelpDayKey?: string; // 1 lần/ngày Bác Hagrid đóng hộ 1 kiện tàu khi chưa có bạn bè
 }
 
 export interface ActiveVipVisit {
@@ -955,6 +965,51 @@ export interface SavedJigsawSession {
   savedAt: number;
 }
 
+export interface SavedMinesweeperSession {
+  v: 1;
+  stage: number;
+  rows: number;
+  cols: number;
+  totalMines: number;
+  minesGenerated: boolean;
+  mineIndices: number[];
+  revealedIndices: number[];
+  flaggedIndices: number[];
+  defusedIndices: number[];
+  shieldsLeft: number;
+  explodedIndex: number | null;
+  flagMode: boolean;
+  movesCount: number;
+  freeHintsLeft: number;
+  paidHintsLeft: number;
+  talismanUsed: boolean;
+  status: 'playing' | 'won' | 'lost';
+  companionCharge?: number;
+  snackPieUsed?: boolean;
+}
+
+export interface SavedFishShooterSession {
+  v: 1;
+  stage: number;
+  score: number;
+  targetScore: number;
+  ammo: number;
+  cannonTier: 1 | 2 | 3;
+  remainingSec: number;
+  timeLimitSec: number;
+  combo: number;
+  maxCombo: number;
+  caughtCount: number;
+  shotsFired: number;
+  freeSkillsLeft: number;
+  paidSkillsLeft: number;
+  freezeTimer: number;
+  talismanUsed: boolean;
+  status: 'playing' | 'won' | 'lost';
+  companionCharge?: number;
+  snackPieUsed?: boolean;
+}
+
 export interface PuzzleArcadeState {
   activeMode: PuzzleArcadeMode;
   sudokuStage: number;
@@ -974,6 +1029,8 @@ export interface PuzzleArcadeState {
   sudokuSession?: SavedSudokuSession | null;
   caroSession?: SavedCaroSession | null;
   chessSession?: SavedChessSession | null;
+  minesSession?: SavedMinesweeperSession | null;
+  fishingSession?: SavedFishShooterSession | null;
   onetSession?: SavedOnetSession | null;
   jigsawSession?: SavedJigsawSession | null;
 }
@@ -1194,10 +1251,44 @@ export interface PlayerMinigameSosState {
 
 export type CropFamily = 'grain' | 'produce' | 'flower' | 'magical';
 
+export type SoilFertilityTier = 1 | 2 | 3 | 4 | 5;
+
 export interface PlotSoilStateEntry {
   lastFamily: CropFamily;
   fatigueStep: number;
+  soilTier?: SoilFertilityTier;
   updatedAt: number;
+}
+
+export type MarketFairDealKind = 'bulk_buyout' | 'seed_barter' | 'artisan_plug';
+
+export interface MarketFairDeal {
+  id: string;
+  kind: MarketFairDealKind;
+  merchantName: string;
+  merchantEmoji: string;
+  inputItemId: FarmItemId;
+  inputQty: number;
+  rewardSickle: number;
+  rewardXp: number;
+  rewardCompost?: number;
+  rewardSeedCropId?: FarmCropId;
+  rewardSeedQty?: number;
+  rewardMorningDew?: number;
+  rewardMugglePlug?: number;
+  rewardTimeSand?: number;
+  rewardFeastPoints?: number;
+  claimed?: boolean;
+}
+
+export interface HogsmeadeMarketFairState {
+  dayKey: string;
+  spotlightCropId: FarmCropId;
+  spotlightGoodId: FarmGoodId;
+  spotlightLotsSold: number;
+  rerollsUsed: number;
+  seedOffset: number;
+  deals: MarketFairDeal[];
 }
 
 export type LayoutPresetId = 'layout_1' | 'layout_2' | 'layout_3';
@@ -1363,6 +1454,8 @@ export interface GameState {
   quizTalismanProgress?: number; // 0..7 correct quiz answers toward next Phoenix Talisman
   cropMastery?: Partial<Record<FarmCropId, number>>; // Account-bound harvests per crop (Tier I..V)
   plotSoilState?: Record<string, PlotSoilStateEntry>; // Persisted by "gx,gy" to prevent bulldoze-plot reset exploit
+  herbalCompost?: number; // 🌿 Phân Ủ Thảo Dược (tạo từ chuồng thú, dùng nâng bậc đất & bón ruộng +2 sản lượng)
+  marketFair?: HogsmeadeMarketFairState; // 🎪 Chợ Phiên Hogsmeade hằng ngày
   morningDewPhials?: number; // 🧪 Bình Sương Mai (-15m targeted timer warp)
   examWinStreak?: number; // Consecutive minigame stage wins (x1 -> x3 timer reduction)
   stashedDecorInventory?: Record<string, number>; // Quick-stashed decor items ready to re-place for 0 Sickle
@@ -1424,6 +1517,12 @@ export interface GameState {
     rendererMode?: 'webgl2' | 'canvas';
     youtubeBgmEnabled?: boolean;
     youtubeBgmUrl?: string;
+  };
+  economyIntegrity?: {
+    seal: string;
+    verifiedAt: number;
+    anomalyCount: number;
+    lastFlags?: string[];
   };
   lastSavedAt: number;
 }

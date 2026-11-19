@@ -339,13 +339,13 @@ export function shellMountDOM(hud: GameHUD): void {
             <button id="btnOpenMatch3" type="button" data-switch-minigame="match3" class="hg-game-pill" title="Bùa Gặt Honeydukes — 7.777 Màn (Phím J)">
               Bùa Gặt <small id="lblMatch3Lv" class="sr-only-hud">1/7777</small>
             </button>
-            <button id="btnOpenPuzzleArcade" type="button" data-switch-minigame="caro" class="hg-game-pill" title="Ngũ Ấn Đạo Tặc (Phím K)">
-              Ngũ Ấn <small id="lblArcadeTowerLv" class="sr-only-hud">0/3885</small>
+            <button id="btnOpenPuzzleArcade" type="button" data-switch-minigame="caro" class="hg-game-pill" title="Dò Mìn Phép Thuật (Phím K)">
+              Dò Mìn <small id="lblArcadeTowerLv" class="sr-only-hud">0/3885</small>
             </button>
             <button type="button" data-switch-minigame="sudoku" class="hg-game-pill" aria-label="Số Học Huyền Bí">Số Học</button>
             <button type="button" data-switch-minigame="blocks" class="hg-game-pill" aria-label="Sinh Vật Huyền Bí">Sinh Vật</button>
             <button type="button" data-switch-minigame="jigsaw" class="hg-game-pill" aria-label="Tranh Ghép Phép Thuật">Tranh Ghép</button>
-            <button type="button" data-switch-minigame="chess" class="hg-game-pill" aria-label="Cờ Phù Thủy">Cờ Phù Thủy</button>
+            <button type="button" data-switch-minigame="chess" class="hg-game-pill" aria-label="Bắn Cá Hồ Đen">Bắn Cá</button>
             <button type="button" data-switch-minigame="seedquiz" class="hg-game-pill" aria-label="Học Viện Thần Chú">Thần Chú</button>
           </div>
 
@@ -675,7 +675,7 @@ export function shellMountDOM(hud: GameHUD): void {
       <dialog id="puzzleArcadeDialog" closedby="any" aria-labelledby="puzzleArcadeDialogTitle">
         <div class="parchment-panel modal-inner pa-modal-inner">
           <div class="modal-header">
-            <h2 id="puzzleArcadeDialogTitle" class="modal-title">Ngũ Ấn Đạo Tặc</h2>
+            <h2 id="puzzleArcadeDialogTitle" class="modal-title">Dò Mìn Phép Thuật</h2>
             <form method="dialog"><button type="submit" class="brass-btn" aria-label="Đóng">✕</button></form>
           </div>
           <div id="puzzleArcadeDialogContent"></div>
@@ -1481,7 +1481,10 @@ export function shellBindEvents(hud: GameHUD): void {
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement ||
         e.target instanceof HTMLSelectElement ||
-        (e.target instanceof HTMLElement && e.target.classList.contains('drag-handle'))
+        (e.target instanceof HTMLElement &&
+          (e.target.isContentEditable ||
+            e.target.classList.contains('drag-handle') ||
+            Boolean(e.target.closest('button, a, summary, [role="button"], [popover]'))))
       ) {
         return;
       }
@@ -1595,7 +1598,7 @@ export function shellBindEvents(hud: GameHUD): void {
         hud.refreshAll();
       } else if (e.key === ' ') {
         hud.rideCamUid = null;
-        centerCameraOnGrid(hud.cam, 16.0, 18.0);
+        centerCameraOnGrid(hud.cam, 18.0, 24.5);
         hud.refreshFloatingBanner();
       }
     });

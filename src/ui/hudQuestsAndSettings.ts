@@ -205,7 +205,8 @@ export function questsUiRenderHarvestFeastDialog(hud: GameHUD): void {
     const pct = Math.min(100, Math.round((feast.points / Math.max(1, maxPts)) * 100));
     const claimableCount = hud.sim.getClaimableHarvestFeastCount();
     const allClaimed = HARVEST_FEAST_TIERS.every((t) => claimedSet.has(t.tier));
-    const nextUnclaimed = HARVEST_FEAST_TIERS.find((t) => !claimedSet.has(t.tier));
+    const nextLocked = HARVEST_FEAST_TIERS.find((t) => feast.points < t.pointsRequired);
+    const nextUnclaimed = nextLocked ?? HARVEST_FEAST_TIERS.find((t) => !claimedSet.has(t.tier));
 
     const tiersHtml = HARVEST_FEAST_TIERS.map((tierDef) => {
       const isClaimed = claimedSet.has(tierDef.tier);
@@ -237,7 +238,7 @@ export function questsUiRenderHarvestFeastDialog(hud: GameHUD): void {
                 ? '<span class="feast-claimed-pill">✓</span>'
                 : canClaim
                   ? `<button type="button" data-claim-feast-tier="${tierDef.tier}" class="brass-btn gold-cta">🎁 Nhận</button>`
-                  : `<span class="feast-need-pill">-${(tierDef.pointsRequired - feast.points).toLocaleString('vi-VN')} 🍁</span>`
+                  : `<span class="feast-need-pill">Còn ${(tierDef.pointsRequired - feast.points).toLocaleString('vi-VN')} 🍁</span>`
             }
           </div>
         </article>
@@ -254,9 +255,11 @@ export function questsUiRenderHarvestFeastDialog(hud: GameHUD): void {
               ${
                 allClaimed
                   ? '🎉 30/30!'
-                  : nextUnclaimed
-                    ? ` Kế tiếp: #${nextUnclaimed.tier} (${nextUnclaimed.pointsRequired.toLocaleString('vi-VN')} 🍁)`
-                    : ''
+                  : nextLocked
+                    ? `Kế tiếp: #${nextLocked.tier} (🍁 ${nextLocked.pointsRequired.toLocaleString('vi-VN')})`
+                    : nextUnclaimed
+                      ? `Sẵn sàng nhận thưởng #${nextUnclaimed.tier}!`
+                      : ''
               }
             </div>
           </div>
@@ -472,7 +475,7 @@ export function questsUiRenderHouseCupIntroDialog(hud: GameHUD): void {
 
 export function questsUiRenderAlbumDialog(hud: GameHUD): void {
     const box = hud.root.querySelector('#albumDialogContent') as HTMLElement;
-    const st = hud.sim.state;
+    const st = hud.sim.homeStateWhileVisiting ?? hud.sim.state;
     hud.sim.checkAndToastAchievements();
     const ret = ensureRetentionState(st);
     const codex = getAchievementCodexSummary(st);
@@ -480,7 +483,7 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
       const e = ret.achievements[a.id];
       return Boolean(e?.unlockedAt && !e?.claimedAt);
     }).length;
-    const maxLoginDay = hud.sim.getUnlockedLoginDayMax();
+    const maxLoginDay = hud.sim.getUnlockedLoginDayMax(st);
     const claimableLoginCount = DAY_1_TO_7_REWARDS.filter(
       (d) => d.day <= maxLoginDay && !ret.claimedLoginDays.includes(d.day)
     ).length;
@@ -871,6 +874,7 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
             })
             .join('');
 
+          const spBonus = hud.sim.getOwlOrderSpotlightBonus(order);
           return `
             <button
               type="button"
@@ -882,6 +886,7 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
                 <div class="owl-note-sender">${escapeHtml(order.senderName)}</div>
                 <div class="owl-note-mini-row">${miniIcons}</div>
                 ${order.isFeastMarquee ? '<span class="owl-feast-tag">🎪 Tiệc</span>' : ''}
+                ${spBonus.hasSpotlight ? '<span class="owl-spotlight-tag">🎪 +1🌿</span>' : ''}
               </div>
               ${isReady ? '<span class="owl-ready-tick" aria-label="Đủ hàng">✓</span>' : ''}
             </button>
@@ -889,6 +894,7 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
         })
         .join('');
 
+      const selSpBonus = selectedOrder ? hud.sim.getOwlOrderSpotlightBonus(selectedOrder) : null;
       const detailHtml = selectedOrder
         ? `
           <div class="owl-detail-sheet">
@@ -939,7 +945,12 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
             <div class="owl-reward-box">
               <div class="owl-reward-pills">
                 <span class="owl-rew-pill gold">🪙 +${selectedOrder.rewardSickle}</span>
-                <span class="owl-rew-pill xp">⭐ +${selectedOrder.rewardXp}</span>
+                <span class="owl-rew-pill xp">⭐ +${selectedOrder.rewardXp + (selSpBonus?.bonusXp ?? 0)}</span>
+                ${
+                  selSpBonus?.hasSpotlight
+                    ? `<span class="owl-rew-pill plug">🎪 +${selSpBonus.bonusCompost}🌿</span>`
+                    : ''
+                }
                 ${
                   selectedOrder.rewardMugglePlug
                     ? `<span class="owl-rew-pill plug">🔌 +${selectedOrder.rewardMugglePlug}</span>`
@@ -1541,7 +1552,7 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
         hud.match3Modal?.resetSession();
         hud.puzzleArcadeModal?.resetSession();
         hud.sim.resetNewGame();
-        centerCameraOnGrid(hud.cam, 16.0, 18.0);
+        centerCameraOnGrid(hud.cam, 18.0, 24.5);
         (hud.root.querySelector('#settingsDialog') as HTMLDialogElement).close();
         hud.showToast('Chào mừng trở lại Trang Trại Hang Sóc bình yên!', '🏡');
       }

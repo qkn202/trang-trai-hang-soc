@@ -1129,10 +1129,12 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
       pa.caroStage = nextStage;
       pa.caroCleared = newCleared;
       pa.caroSession = null;
+      pa.minesSession = null;
     } else if (mode === 'chess') {
       pa.chessStage = nextStage;
       pa.chessCleared = newCleared;
       pa.chessSession = null;
+      pa.fishingSession = null;
     } else if (mode === 'jigsaw') {
       pa.jigsawStage = nextStage;
       pa.jigsawCleared = newCleared;

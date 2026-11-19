@@ -313,7 +313,7 @@ export const STORY_QUESTS: Omit<QuestDef, 'progress' | 'completed' | 'claimed'>[
     chapter: 3,
     giverName: 'Hermione Granger',
     giverTitle: 'Thủ Lĩnh Học Thuật Khảo Thí',
-    giverEmoji: '♟️',
+    giverEmoji: '🪄',
     title: 'Chương 3.6: Chinh Phục 12 Trận Khảo Thí Pháp Thuật',
     dialogue:
       'Tích lũy 12 chiến thắng tại Gác Xép Bùa Gặt Honeydukes hoặc Đại Sảnh Khảo Thí Hogwarts để rèn giũa bản lĩnh phù thủy!',
@@ -908,7 +908,7 @@ export const STORY_QUESTS: Omit<QuestDef, 'progress' | 'completed' | 'claimed'>[
     kind: 'story',
     chapter: 9,
     giverName: 'Minerva McGonagall',
-    giverTitle: 'Bậc Thầy Cờ Phù Thủy & Cổ Ngữ',
+    giverTitle: 'Bậc Thầy Khảo Thí & Cổ Ngữ Hogwarts',
     giverEmoji: '👑',
     title: 'Chương 9.5: Danh Hiệu Đại Kiện Tướng 110 Trận Thắng',
     dialogue:
@@ -1111,10 +1111,10 @@ export function createOwlOrderQuest(
       {
         targetId: 'caro',
         giverName: 'Ron Weasley',
-        giverTitle: 'Bàn Đạo Tặc Phòng Khách Hang Sóc',
-        giverEmoji: '🗺️',
-        title: 'Thắng 1 ván Ngũ Ấn Đạo Tặc',
-        dialogue: 'Ngồi xuống uống tách ca-cao nóng và đấu với mình 1 ván Ngũ Ấn Đạo Tặc nhé!',
+        giverTitle: 'Đội Dò Bãi Đá Cổ Hang Sóc',
+        giverEmoji: '🧨',
+        title: 'Thắng 1 màn Dò Mìn Phép Thuật',
+        dialogue: 'Ngồi xuống uống tách ca-cao nóng và giúp mình dò sạch bãi mìn phép thuật nhé!',
       },
       {
         targetId: 'sudoku',
@@ -1126,11 +1126,11 @@ export function createOwlOrderQuest(
       },
       {
         targetId: 'chess',
-        giverName: 'Giáo Sư McGonagall',
-        giverTitle: 'Câu Lạc Bộ Cờ Phù Thủy Hogwarts',
-        giverEmoji: '🏰',
-        title: 'Chiến thắng 1 ván Cờ Phù Thủy',
-        dialogue: 'Một người quản lý điền trang xuất sắc luôn biết tính trước 2 nước trên bàn Cờ Phù Thủy!',
+        giverName: 'Rubeus Hagrid',
+        giverTitle: 'Đội Săn Cá Hồ Đen Hogwarts',
+        giverEmoji: '🎯',
+        title: 'Chiến thắng 1 màn Bắn Cá Hồ Đen',
+        dialogue: 'Đàn cá phép dưới Hồ Đen đang bơi tấp nập lắm, cầm đại bác ngọc trai săn 1 mẻ lớn nhé!',
       },
     ][(seedIdx >>> 1) % 3];
     return {
@@ -1314,8 +1314,8 @@ export function createDailyQuests(level: number, dateKey: string): QuestDef[] {
       kind: 'daily',
       giverName: 'Ron & Hermione',
       giverTitle: 'Đại Sảnh Khảo Thí Pháp Thuật (Làm mới 00:00)',
-      giverEmoji: '♟️',
-      title: 'Thắng 2 màn Khảo Thí Pháp Thuật (Bùa Gặt Honeydukes, Ngũ Ấn Đạo Tặc, Số Học Huyền Bí, Cờ Phù Thủy hoặc Sinh Vật Huyền Bí)',
+      giverEmoji: '🪄',
+      title: 'Thắng 2 màn Khảo Thí Pháp Thuật (Bùa Gặt Honeydukes, Dò Mìn Phép Thuật, Số Học Huyền Bí, Bắn Cá Hồ Đen, Sinh Vật Huyền Bí hoặc Tranh Ghép Phép Thuật)',
       dialogue: 'Chinh phục các trò chơi phép thuật vừa tích 🌟 Sao mở khóa công trình, vừa vượt thử thách thăng cấp đó!',
       objectiveType: 'win_minigame',
       targetAmount: 2,
@@ -1405,7 +1405,7 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
     speakerTitle: 'Bùa Gặt Honeydukes & Đại Sảnh Khảo Thí',
     title: 'Bước 5/6 • Khảo Thí Pháp Thuật Nhận Sao 🌟',
     dialogue:
-      'Để dựng Tổ Ấm Hang Sóc và Lò Bánh Táo (cũng như rút ngắn thời gian chờ xây công trình!), con cần Sao Phép Thuật 🌟 từ Bùa Gặt Honeydukes, Ngũ Ấn Đạo Tặc, Số Học Huyền Bí, Cờ Phù Thủy hoặc Sinh Vật Huyền Bí. Thắng ngay 1 màn đầu tiên nhé!',
+      'Để dựng Tổ Ấm Hang Sóc và Lò Bánh Táo (cũng như rút ngắn thời gian chờ xây công trình!), con cần Sao Phép Thuật 🌟 từ Bùa Gặt Honeydukes, Dò Mìn Phép Thuật, Số Học Huyền Bí, Bắn Cá Hồ Đen, Sinh Vật Huyền Bí hoặc Tranh Ghép Phép Thuật. Thắng ngay 1 màn đầu tiên nhé!',
     hintVi: '🍬 Bấm nút Chơi góc phải (hoặc nút bên dưới) và chiến thắng 1 màn bất kỳ',
     ctaLabel: '🍬 Vượt Khảo Thí Nhận Sao',
     rewardLabel: '+2 🌟 Sao Phép Thuật • +50 🪙 Sickle • +25 ⭐',

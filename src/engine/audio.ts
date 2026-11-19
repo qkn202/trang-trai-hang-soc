@@ -144,7 +144,11 @@ export type SfxAtlasCueId =
   | 'build_complete'
   | 'fanfare_win'
   | 'powerup_blast'
-  | 'wand_spell';
+  | 'wand_spell'
+  | 'coin_chime'
+  | 'hearth_crackle'
+  | 'villager_hello_warm'
+  | 'villager_hello_jolly';
 
 export const SFX_ATLAS_URL = '/game/trang-trai-hang-soc/audio/sfx_atlas.mp3';
 
@@ -161,7 +165,49 @@ export const SFX_ATLAS_CUES: Record<SfxAtlasCueId, { offset: number; duration: n
   fanfare_win: { offset: 8.1, duration: 1.45 },
   powerup_blast: { offset: 9.9, duration: 0.62 },
   wand_spell: { offset: 10.8, duration: 0.52 },
+  coin_chime: { offset: 11.6, duration: 0.58 },
+  hearth_crackle: { offset: 12.4, duration: 0.85 },
+  villager_hello_warm: { offset: 13.5, duration: 0.68 },
+  villager_hello_jolly: { offset: 14.4, duration: 0.74 },
 };
+
+export interface ProximityAmbientInput {
+  camZoom: number;
+  waterDistPx: number;
+  activeWorkshopDistPx: number;
+  pastureDistPx: number;
+  ambienceBusGain: number;
+  modalMuffled: boolean;
+}
+
+/**
+ * Computes spatial + zoom ambient gain levels for River Ottery murmur,
+ * active workshop hearth fire, and sunlit animal pasture ambience.
+ */
+export function computeProximityAmbientMix(input: ProximityAmbientInput): {
+  riverGain: number;
+  hearthGain: number;
+  pastureGain: number;
+} {
+  const bus = Math.max(0, Math.min(1, Number.isFinite(input.ambienceBusGain) ? input.ambienceBusGain : 0));
+  if (bus <= 0.001) {
+    return { riverGain: 0, hearthGain: 0, pastureGain: 0 };
+  }
+  const safeZoom = Number.isFinite(input.camZoom) ? input.camZoom : 0.8;
+  const zoomFactor =
+    Math.max(0.1, Math.min(1.0, (safeZoom - 0.5) / 0.7)) * (input.modalMuffled ? 0.25 : 1.0);
+  const falloff = (distPx: number, radius = 460): number => {
+    if (!Number.isFinite(distPx) || distPx >= radius) return 0;
+    const d = Math.max(0, distPx);
+    const t = 1 - d / radius;
+    return t * t;
+  };
+  return {
+    riverGain: Number((falloff(input.waterDistPx) * zoomFactor * bus).toFixed(4)),
+    hearthGain: Number((falloff(input.activeWorkshopDistPx) * zoomFactor * bus).toFixed(4)),
+    pastureGain: Number((falloff(input.pastureDistPx) * zoomFactor * bus).toFixed(4)),
+  };
+}
 
 interface BgmSlot {
   id: 'A' | 'B';
@@ -184,6 +230,7 @@ export class MagicalAudio {
   private bgmStep = 0;
   private bgmAcc = 0;
   private ambientAcc = 0;
+  private proximityFoleyAcc = 0;
 
   // Dual <audio> deck architecture for smooth 1.2s crossfading
   private slotA: BgmSlot;
@@ -198,6 +245,9 @@ export class MagicalAudio {
   private rainSource: AudioBufferSourceNode | null = null;
   private rainGain: GainNode | null = null;
   private lastRainLevel = -1;
+  private riverSource: AudioBufferSourceNode | null = null;
+  private riverGain: GainNode | null = null;
+  private lastRiverLevel = -1;
   private sfxAtlasBuffer: AudioBuffer | null = null;
   private sfxAtlasLoading = false;
   private masterFilter: BiquadFilterNode | null = null;
@@ -570,6 +620,70 @@ export class MagicalAudio {
     }
   }
 
+  public setRiverAmbienceIntensity(intensity: number): void {
+    const level = this.enabled && this.unlocked ? Math.max(0, Math.min(1, intensity)) : 0;
+    if (Math.abs(level - this.lastRiverLevel) < 0.01) return;
+    this.lastRiverLevel = level;
+
+    const ctx = this.ensureCtx(level > 0.002);
+    if (!ctx) return;
+
+    if (level <= 0.001) {
+      if (this.riverSource && this.riverGain) {
+        const srcToStop = this.riverSource;
+        const gainToStop = this.riverGain;
+        this.riverSource = null;
+        this.riverGain = null;
+        try {
+          if (ctx.state === 'running') {
+            gainToStop.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.22);
+          }
+        } catch {
+          // Ignore ramp errors on suspended contexts
+        }
+        if (typeof window !== 'undefined') {
+          window.setTimeout(() => {
+            try {
+              srcToStop.stop();
+              srcToStop.disconnect();
+              gainToStop.disconnect();
+            } catch {
+              // Already stopped
+            }
+          }, 650);
+        }
+      }
+      return;
+    }
+
+    if (level > 0.002 && ctx.state === 'running' && !this.riverSource) {
+      const src = ctx.createBufferSource();
+      src.buffer = this.getNoiseBuffer(ctx);
+      src.loop = true;
+
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 460;
+      bp.Q.value = 0.85;
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+
+      src.connect(bp);
+      bp.connect(gain);
+      gain.connect(this.getMasterOutput(ctx));
+      src.start();
+
+      this.riverSource = src;
+      this.riverGain = gain;
+    }
+
+    if (this.riverGain && ctx.state === 'running') {
+      const targetGain = Math.max(0.0001, level * 0.028);
+      this.riverGain.gain.setTargetAtTime(targetGain, ctx.currentTime, 0.35);
+    }
+  }
+
   public playThunder(intensity = 0.75, delaySec = 0.35): void {
     if (!this.enabled || !this.unlocked) return;
     const ctx = this.ensureCtx();
@@ -678,6 +792,35 @@ export class MagicalAudio {
     }
   }
 
+  public playCoinChime(pan = 0): void {
+    if (!this.enabled) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (this.playAtlasCue('coin_chime', 0.34 * sfxGain, 0.98 + Math.random() * 0.05, pan)) return;
+    this.playTone(2093.0, 0.12, 'sine', 0.045 * sfxGain, 0, pan);
+    this.playTone(2637.02, 0.16, 'sine', 0.042 * sfxGain, 0.06, pan);
+  }
+
+  /**
+   * Non-verbal cozy greeting bark on villager interaction, routed through the `voice` bus.
+   */
+  public playVillagerVoiceBark(villagerId: string, pan = 0): void {
+    const voiceGain = this.ceiling.getEffectiveBusGain('voice');
+    if (!this.enabled || voiceGain <= 0.01) return;
+    const warmIds = new Set(['molly', 'hermione', 'luna', 'ginny']);
+    const cue: SfxAtlasCueId = warmIds.has(villagerId)
+      ? 'villager_hello_warm'
+      : 'villager_hello_jolly';
+    let idHash = 0;
+    for (let i = 0; i < villagerId.length; i++) {
+      idHash += villagerId.charCodeAt(i);
+    }
+    const pitchShift = 0.94 + (idHash % 13) * 0.01;
+    if (this.playAtlasCue(cue, 0.36 * voiceGain, pitchShift, pan)) return;
+    const base = warmIds.has(villagerId) ? 440 : 246.94;
+    this.playTone(base * pitchShift, 0.13, 'sine', 0.042 * voiceGain, 0, pan);
+    this.playTone(base * 1.25 * pitchShift, 0.18, 'triangle', 0.036 * voiceGain, 0.11, pan);
+  }
+
   public updateSoundscape(
     dt: number,
     isNight: boolean,
@@ -685,7 +828,12 @@ export class MagicalAudio {
     nearStation: boolean,
     weatherKind: WeatherKind = 'sunny',
     isFestival = false,
-    timeOfDay?: 'dawn' | 'day' | 'dusk' | 'night'
+    timeOfDay?: 'dawn' | 'day' | 'dusk' | 'night',
+    proximity?: {
+      waterDistPx: number;
+      activeWorkshopDistPx: number;
+      pastureDistPx: number;
+    }
   ): void {
     this.ceiling.tick(dt);
     if (!this.unlocked) return;
@@ -755,6 +903,36 @@ export class MagicalAudio {
           this.playTrainWhistle(0.022 * zoomGain);
         }
       }
+    }
+
+    // 3. Proximity & Zoom Ambient Foley Mixer (River Ottery brook, Hearth crackle, Pasture breeze)
+    if (proximity && this.enabled) {
+      const mix = computeProximityAmbientMix({
+        camZoom,
+        waterDistPx: proximity.waterDistPx,
+        activeWorkshopDistPx: proximity.activeWorkshopDistPx,
+        pastureDistPx: proximity.pastureDistPx,
+        ambienceBusGain: this.ceiling.getEffectiveBusGain('ambience'),
+        modalMuffled: this.modalMuffled,
+      });
+      this.setRiverAmbienceIntensity(mix.riverGain);
+      if (mix.hearthGain > 0.08 || mix.pastureGain > 0.08) {
+        this.proximityFoleyAcc += dt;
+        if (this.proximityFoleyAcc >= 5.2) {
+          this.proximityFoleyAcc = 0;
+          if (mix.hearthGain >= mix.pastureGain && mix.hearthGain > 0.08) {
+            this.playAtlasCue('hearth_crackle', mix.hearthGain * 0.22, 0.96 + Math.random() * 0.08, 0);
+          } else if (!isNight && mix.pastureGain > 0.08) {
+            if (!this.playAtlasCue('place', mix.pastureGain * 0.14, 1.38, 0.12)) {
+              this.playTone(783.99, 0.18, 'sine', mix.pastureGain * 0.025, 0, 0.12);
+            }
+          }
+        }
+      } else {
+        this.proximityFoleyAcc = 0;
+      }
+    } else {
+      this.setRiverAmbienceIntensity(0);
     }
   }
 
@@ -961,6 +1139,7 @@ export class MagicalAudio {
   }
 
   public pause(): void {
+    this.setRiverAmbienceIntensity(0);
     if (this.slotA.audio && !this.slotA.audio.paused) {
       this.slotA.audio.pause();
     }

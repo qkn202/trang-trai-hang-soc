@@ -3,6 +3,7 @@
 
 
 import {
+  COMPOST_SHORTAGE_BUYOUT_SICKLE,
   computeEconomicCycleSeconds,
   computeRealTimeBuildSeconds,
   computeStrategicPlotGrowSeconds,
@@ -16,8 +17,13 @@ import {
   getCropMasteryTierInfo,
   getFarmItemMeta,
   getMinRemainingBuildFloorSec,
+  getSoilTierInfo,
+  GOURMET_FEED_CROP_PRIORITY,
+  GOURMET_FEED_QTY,
   MINIGAME_CLEAR_REDUCTION_SEC,
   PASTURE_ANIMALS,
+  SOIL_TIERS,
+  SoilTierMeta,
   TIME_SAND_SKIP_SECONDS,
 } from '../data/catalog';
 import {
@@ -95,6 +101,7 @@ import {
   HarvestFeastState,
   HarvestFeastTierDef,
   HeatmapMode,
+  HogsmeadeMarketFairState,
   HomeOwlLanternMark,
   HouseName,
   IsoDirection,
@@ -103,6 +110,7 @@ import {
   LeaderboardRankChange,
   LeaderboardScope,
   LevelTrialRequirement,
+  MarketFairDeal,
   Match3BoosterId,
   MAX_STAFF_PER_ROLE,
   MinigameLeaderboardState,
@@ -120,6 +128,7 @@ import {
   QuestDef,
   QuestObjectiveType,
   RibbonUnveilCelebration,
+  SoilFertilityTier,
   StaffEntity,
   SuitcaseExpeditionId,
   TileCell,
@@ -659,9 +668,15 @@ export function farmHarvestCropPlot(sim: ParkSimulation, uid: string): { ok: boo
 
     const item = getCatalogItem(b.itemId);
     const crop = FARM_CROPS[b.cropId];
+    const soilTier = farmGetPlotEffectiveSoilTier(sim, b);
+    const soilMeta = getSoilTierInfo(soilTier);
     const isGoldenRotation = Boolean(b.cropRotatedBonus);
-    const baseYield = crop.yieldQty + (b.stars >= 3 ? 1 : 0);
-    const yieldQty = isGoldenRotation ? baseYield * 2 : baseYield;
+    const wasCompost = Boolean(b.cropCompostBoost);
+    const baseYield = crop.yieldQty + (b.stars >= 3 ? 1 : 0) + soilMeta.yieldBonus;
+    const yieldQty =
+      (isGoldenRotation ? baseYield * 2 : baseYield) +
+      (wasCompost ? 2 : 0) +
+      (isGoldenRotation ? soilMeta.extraRotateYield : 0);
     const added = sim.addFarmItemToBarn(crop.id, yieldQty);
     // HPVN: a full Kho sells the load at the normal sell value (same as selling it from the Kho), no flat bonus
     const soldDirect = added === 0 ? getFarmItemMeta(crop.id).sellValue * yieldQty : 0;
@@ -674,19 +689,29 @@ export function farmHarvestCropPlot(sim: ParkSimulation, uid: string): { ok: boo
     };
     const masteryBefore = getCropMasteryTierInfo(prevMastery);
     const masteryAfter = getCropMasteryTierInfo(nextMastery);
-    const gold = Math.round(crop.sellValue * masteryBefore.valueMult);
-    const xp = crop.xp + (isGoldenRotation ? 4 : 0);
+    const gold = Math.round(crop.sellValue * masteryBefore.valueMult * soilMeta.harvestGoldXpMult);
+    const xp = Math.round(
+      (crop.xp + (isGoldenRotation ? 4 : 0) + (wasCompost ? 8 : 0)) * soilMeta.harvestGoldXpMult
+    );
 
-    // Persist soil rotation & anti-bulldoze-exploit fatigue by tile coordinate!
+    // Persist soil rotation, permanent soil fertility tier & anti-bulldoze-exploit fatigue by tile coordinate!
     const soilKey = `${b.gx},${b.gy}`;
     const prevSoil = sim.state.plotSoilState?.[soilKey];
     const prevFatigue = Math.max(b.harvestCycleCount ?? 0, prevSoil?.fatigueStep ?? 0);
-    const nextFatigue = isGoldenRotation ? Math.max(1, prevFatigue) : prevFatigue + 1;
+    const nextFatigue = wasCompost
+      ? 0
+      : isGoldenRotation && soilMeta.rejuvenateOnRotate
+        ? Math.max(0, prevFatigue - 1)
+        : isGoldenRotation
+          ? Math.max(1, prevFatigue)
+          : prevFatigue + 1;
+    b.soilTier = soilTier;
     sim.state.plotSoilState = {
       ...(sim.state.plotSoilState ?? {}),
       [soilKey]: {
         lastFamily: getCropFamily(crop.id),
         fatigueStep: nextFatigue,
+        ...(soilTier > 1 ? { soilTier } : {}),
         updatedAt: now,
       },
     };
@@ -698,6 +723,7 @@ export function farmHarvestCropPlot(sim: ParkSimulation, uid: string): { ok: boo
     b.cropReadyAt = undefined;
     b.cropWateredBoost = false;
     b.cropRotatedBonus = false;
+    b.cropCompostBoost = false;
     b.readyBubbles = 0;
     b.storedSickle = 0;
     b.storedXp = 0;
@@ -877,12 +903,16 @@ export function farmHarvestAnimalPasture(sim: ParkSimulation, uid: string): { ok
     const item = getCatalogItem(b.itemId);
     const animal = PASTURE_ANIMALS[b.pastureAnimalId];
     const goodMeta = FARM_GOODS[animal.goodId];
-    const yieldQty = animal.yieldQty + (b.stars >= 3 ? 1 : 0);
+    const wasGourmet = Boolean(b.pastureGourmetBoost);
+    const baseYield = animal.yieldQty + (b.stars >= 3 ? 1 : 0);
+    const yieldQty = wasGourmet ? baseYield * 2 : baseYield;
     const added = sim.addFarmItemToBarn(animal.goodId, yieldQty);
     // HPVN: a full Kho sells the load at the normal sell value (same as selling it from the Kho), no flat bonus
     const soldDirect = added === 0 ? getFarmItemMeta(animal.goodId).sellValue * yieldQty : 0;
-    const gold = animal.sellValue;
-    const xp = animal.xp;
+    const gold = wasGourmet ? Math.round(animal.sellValue * 1.5) : animal.sellValue;
+    const xp = wasGourmet ? Math.round(animal.xp * 1.5) : animal.xp;
+    const compostGain = wasGourmet ? 2 : 1;
+    sim.state.herbalCompost = Math.min(99999, Math.max(0, Math.floor(sim.state.herbalCompost ?? 0)) + compostGain);
 
     // Automatically restart the next grazing cycle so the animal stays happily on the pasture!
     b.harvestCycleCount = (b.harvestCycleCount ?? 0) + 1;
@@ -891,6 +921,7 @@ export function farmHarvestAnimalPasture(sim: ParkSimulation, uid: string): { ok
     b.pastureStockedAt = now;
     b.pastureReadyAt = now + nextCycleMs;
     b.pastureFedBoost = false;
+    b.pastureGourmetBoost = false;
     b.readyBubbles = 0;
     b.storedSickle = 0;
     b.storedXp = 0;
@@ -938,8 +969,8 @@ export function farmHarvestAnimalPasture(sim: ParkSimulation, uid: string): { ok
       ok: true,
       msg:
         added > 0
-          ? `🐾 Thu hoạch +${added} ${goodMeta.emoji} ${goodMeta.name} từ ${animal.name} (+${gold} Sickle, +${xp} ⭐)!`
-          : `🏡 Kho Nông Sản đã đầy — bán trực tiếp sản vật thu +${gold + soldDirect} Sickle!`,
+          ? `🐾 Thu hoạch +${added} ${goodMeta.emoji} ${goodMeta.name} từ ${animal.name} (+${compostGain} 🌿 Phân Ủ, +${gold} Sickle, +${xp} ⭐)!`
+          : `🏡 Kho Nông Sản đã đầy — bán trực tiếp sản vật thu +${gold + soldDirect} Sickle (+${compostGain} 🌿 Phân Ủ)!`,
     };
 }
 
@@ -1049,6 +1080,7 @@ export function farmClearAnimalFromPasture(sim: ParkSimulation, uid: string): { 
     b.pastureStockedAt = undefined;
     b.pastureReadyAt = undefined;
     b.pastureFedBoost = false;
+    b.pastureGourmetBoost = false;
     b.readyBubbles = 0;
     b.storedSickle = 0;
     b.storedXp = 0;
@@ -1064,4 +1096,556 @@ export function farmClearAnimalFromPasture(sim: ParkSimulation, uid: string): { 
       ok: true,
       msg: `🐾 Đã đưa ${animal?.emoji ?? '🐾'} ${animal?.name ?? 'thú'} về chuồng nghỉ${refund > 0 ? ` (hoàn +${refund} Sickle)` : ''} — có thể chọn thú mới!`,
     };
+}
+
+// ==================== BẬC ĐẤT MÀU MỠ (I..V), PHÂN Ủ THẢO DƯỢC & THỨC ĂN THƯỢNG HẠNG ====================
+
+export interface PlotSoilUpgradeCostInfo {
+  currentTier: SoilFertilityTier;
+  currentMeta: SoilTierMeta;
+  nextTier: SoilFertilityTier | null;
+  nextMeta: SoilTierMeta | null;
+  compostCost: number;
+  compostOwned: number;
+  missingCompost: number;
+  baseSickleCost: number;
+  effectiveSickleCost: number;
+  unlockedByLevel: boolean;
+  canAfford: boolean;
+}
+
+export function farmGetPlotEffectiveSoilTier(
+  sim: ParkSimulation,
+  b: Pick<PlacedBuilding, 'gx' | 'gy' | 'soilTier'>
+): SoilFertilityTier {
+  const fromCoord = sim.state.plotSoilState?.[`${b.gx},${b.gy}`]?.soilTier ?? 1;
+  const raw = Math.max(1, Math.min(5, Math.max(b.soilTier ?? 1, fromCoord)));
+  return raw as SoilFertilityTier;
+}
+
+export function farmGetPlotSoilUpgradeCostInfo(
+  sim: ParkSimulation,
+  uid: string
+): PlotSoilUpgradeCostInfo | null {
+  const b = sim.state.buildings.find((x) => x.uid === uid);
+  if (!b) return null;
+  const item = getCatalogItem(b.itemId);
+  if (!item?.isFarmlandPlot) return null;
+  const currentTier = farmGetPlotEffectiveSoilTier(sim, b);
+  const currentMeta = getSoilTierInfo(currentTier);
+  const nextTier = currentTier < 5 ? ((currentTier + 1) as SoilFertilityTier) : null;
+  const nextMeta = nextTier ? SOIL_TIERS[nextTier] : null;
+  const compostOwned = Math.max(0, Math.floor(sim.state.herbalCompost ?? 0));
+  if (!nextMeta) {
+    return {
+      currentTier,
+      currentMeta,
+      nextTier: null,
+      nextMeta: null,
+      compostCost: 0,
+      compostOwned,
+      missingCompost: 0,
+      baseSickleCost: 0,
+      effectiveSickleCost: 0,
+      unlockedByLevel: false,
+      canAfford: false,
+    };
+  }
+  const unlockedByLevel = Boolean(sim.state.sandboxMode) || sim.state.level >= nextMeta.unlockLevel;
+  const compostUsed = Math.min(compostOwned, nextMeta.upgradeCompost);
+  const missingCompost = Math.max(0, nextMeta.upgradeCompost - compostUsed);
+  const baseSickleCost = nextMeta.upgradeSickle;
+  const effectiveSickleCost = sim.state.sandboxMode
+    ? 0
+    : baseSickleCost + missingCompost * COMPOST_SHORTAGE_BUYOUT_SICKLE;
+  const canAfford =
+    unlockedByLevel && (Boolean(sim.state.sandboxMode) || sim.state.galleons >= effectiveSickleCost);
+  return {
+    currentTier,
+    currentMeta,
+    nextTier,
+    nextMeta,
+    compostCost: nextMeta.upgradeCompost,
+    compostOwned,
+    missingCompost,
+    baseSickleCost,
+    effectiveSickleCost,
+    unlockedByLevel,
+    canAfford,
+  };
+}
+
+export function farmUpgradePlotSoilTier(
+  sim: ParkSimulation,
+  uid: string
+): { ok: boolean; msg: string; newTier?: SoilFertilityTier } {
+  if (sim.isVisitingNeighbor) {
+    return { ok: false, msg: 'Chế độ Khách Tham Quan — không thể cải tạo đất của bạn bè!' };
+  }
+  const b = sim.state.buildings.find((x) => x.uid === uid);
+  if (!b) return { ok: false, msg: 'Không tìm thấy thửa đất canh tác!' };
+  const info = farmGetPlotSoilUpgradeCostInfo(sim, uid);
+  if (!info || !info.nextTier || !info.nextMeta) {
+    return { ok: false, msg: 'Thửa ruộng đã đạt Đỉnh Đất Tro Phượng Hoàng (Bậc V)!' };
+  }
+  if (!info.unlockedByLevel) {
+    return {
+      ok: false,
+      msg: `🌿 ${info.nextMeta.nameVi} (Bậc ${info.nextMeta.labelRom}) mở khoá ở Cấp ${info.nextMeta.unlockLevel}!`,
+    };
+  }
+  if (!sim.state.sandboxMode && sim.state.galleons < info.effectiveSickleCost) {
+    return {
+      ok: false,
+      msg: `Cần ${info.effectiveSickleCost.toLocaleString('vi-VN')} Sickle để nâng lên ${info.nextMeta.nameVi}!`,
+    };
+  }
+
+  const now = Date.now();
+  let spendDesc = '';
+  if (!sim.state.sandboxMode) {
+    const usedCompost = Math.min(info.compostOwned, info.compostCost);
+    sim.state.herbalCompost = Math.max(0, info.compostOwned - usedCompost);
+    sim.state.galleons -= info.effectiveSickleCost;
+    sim.state.finance.constructionSpent += info.effectiveSickleCost;
+    spendDesc = ` (-${usedCompost} 🌿, -${info.effectiveSickleCost.toLocaleString('vi-VN')} Sickle)`;
+  }
+
+  const soilKey = `${b.gx},${b.gy}`;
+  const prevEntry = sim.state.plotSoilState?.[soilKey];
+  b.soilTier = info.nextTier;
+  sim.state.plotSoilState = {
+    ...(sim.state.plotSoilState ?? {}),
+    [soilKey]: {
+      lastFamily: prevEntry?.lastFamily ?? 'grain',
+      fatigueStep: prevEntry?.fatigueStep ?? Math.max(0, b.harvestCycleCount ?? 0),
+      soilTier: info.nextTier,
+      updatedAt: now,
+    },
+  };
+
+  const xpGain = 18 * info.nextTier;
+  sim.addXp(xpGain);
+  sim.addHarvestFeastPoints(8);
+  sim.audio.playLevelUp();
+  sim.onBuildingTactile?.(b.uid);
+  sim.spawnFloatingText(
+    b.gx + 1,
+    b.gy + 1,
+    `🌱 ${info.nextMeta.nameVi} (Bậc ${info.nextMeta.labelRom})!`,
+    '#34d399'
+  );
+  if (!sim.batchOperationActive) {
+    sim.saveToStorage();
+    sim.onUiChange?.();
+  }
+  return {
+    ok: true,
+    newTier: info.nextTier,
+    msg: `🌱 Nâng thành công lên ${info.nextMeta.nameVi} (Bậc ${info.nextMeta.labelRom} • +${info.nextMeta.yieldBonus} nông sản/vụ, ×${info.nextMeta.harvestGoldXpMult.toFixed(2)} 🪙/⭐)${spendDesc}!`,
+  };
+}
+
+export function farmFertilizeCropPlotWithCompost(
+  sim: ParkSimulation,
+  uid: string
+): { ok: boolean; msg: string } {
+  if (sim.isVisitingNeighbor) {
+    return { ok: false, msg: 'Chế độ Khách Tham Quan — không thể bón phân cho ruộng bạn bè!' };
+  }
+  const b = sim.state.buildings.find((x) => x.uid === uid);
+  if (!b) return { ok: false, msg: 'Không tìm thấy thửa đất canh tác!' };
+  const item = getCatalogItem(b.itemId);
+  if (!item?.isFarmlandPlot) {
+    return { ok: false, msg: 'Chỉ thửa đất canh tác mới bón được Phân Ủ Thảo Dược!' };
+  }
+  if (b.cropCompostBoost) {
+    return { ok: false, msg: 'Thửa đất này đã được bón 🌿 Phân Ủ Thảo Dược cho vụ hiện tại rồi!' };
+  }
+  const haveCompost = Math.max(0, Math.floor(sim.state.herbalCompost ?? 0));
+  if (!sim.state.sandboxMode && haveCompost < 1) {
+    return {
+      ok: false,
+      msg: 'Túi chưa có 🌿 Phân Ủ Thảo Dược — hãy thu hoạch Đồng Cỏ Chăn Thả hoặc Chợ Phiên để nhận thêm!',
+    };
+  }
+
+  if (!sim.state.sandboxMode) {
+    sim.state.herbalCompost = haveCompost - 1;
+  }
+  const now = Date.now();
+  b.cropCompostBoost = true;
+  b.harvestCycleCount = 0;
+  const soilKey = `${b.gx},${b.gy}`;
+  const prevSoil = sim.state.plotSoilState?.[soilKey];
+  const curTier = farmGetPlotEffectiveSoilTier(sim, b);
+  sim.state.plotSoilState = {
+    ...(sim.state.plotSoilState ?? {}),
+    [soilKey]: {
+      lastFamily: prevSoil?.lastFamily ?? 'grain',
+      fatigueStep: 0,
+      ...(curTier > 1 ? { soilTier: curTier } : {}),
+      updatedAt: now,
+    },
+  };
+  sim.addXp(6);
+  sim.audio.playSpell();
+  sim.onBuildingTactile?.(b.uid);
+  sim.spawnFloatingText(b.gx + 1, b.gy + 1, '🌿 Bón Phân Ủ! +2 Vụ & Hết Mỏi Đất!', '#4ade80');
+  if (!sim.batchOperationActive) {
+    sim.saveToStorage();
+    sim.onUiChange?.();
+  }
+  return {
+    ok: true,
+    msg: '🌿 Đã bón 1 Phân Ủ Thảo Dược! Vụ này thu thêm +2 nông sản và đã xoá sạch mỏi đất (+6 ⭐)!',
+  };
+}
+
+export function farmGetAvailableGourmetFeedCrop(sim: ParkSimulation): FarmCropId | null {
+  for (const cid of GOURMET_FEED_CROP_PRIORITY) {
+    if (sim.getFarmItemCount(cid) >= GOURMET_FEED_QTY) {
+      return cid;
+    }
+  }
+  return null;
+}
+
+export function farmFeedAnimalPastureGourmet(
+  sim: ParkSimulation,
+  uid: string
+): { ok: boolean; msg: string; cropUsed?: FarmCropId } {
+  if (sim.isVisitingNeighbor) {
+    return { ok: false, msg: 'Chế độ Khách Tham Quan — không thể dùng khẩu phần thượng hạng trên đồng cỏ bạn!' };
+  }
+  const b = sim.state.buildings.find((x) => x.uid === uid);
+  if (!b || !b.pastureAnimalId || !b.pastureReadyAt) {
+    return { ok: false, msg: 'Đồng cỏ đang trống — hãy chọn thú thả vào trước nhé!' };
+  }
+  const now = Date.now();
+  if (now >= b.pastureReadyAt) {
+    return { ok: false, msg: 'Sản vật đồng cỏ đã sẵn sàng — hãy thu hoạch ngay!' };
+  }
+  if (b.pastureGourmetBoost) {
+    return { ok: false, msg: 'Đàn thú đã được ăn Khẩu Phần Thượng Hạng (×2 sản lượng & +2 🌿) ở chu kỳ này rồi!' };
+  }
+
+  const pickCrop = sim.state.sandboxMode ? 'ottery_wheat' : farmGetAvailableGourmetFeedCrop(sim);
+  if (!pickCrop) {
+    return {
+      ok: false,
+      msg: `Cần ${GOURMET_FEED_QTY} nông sản đồng (Lúa Mì/Bắp/Cà Rốt/Bắp Cải/Bí Ngô/Khoai Tây) trong Kho Đỏ để thưởng Bữa Thượng Hạng!`,
+    };
+  }
+  const cropMeta = FARM_CROPS[pickCrop];
+  if (!sim.state.sandboxMode) {
+    sim.consumeFarmItemFromBarn(pickCrop, GOURMET_FEED_QTY);
+  }
+
+  b.pastureGourmetBoost = true;
+  if (!b.pastureFedBoost) {
+    const leftMs = b.pastureReadyAt - now;
+    const savedMs = Math.max(3000, Math.round(leftMs * 0.35));
+    b.pastureReadyAt = Math.max(now + 1000, b.pastureReadyAt - savedMs);
+    b.pastureFedBoost = true;
+  }
+  sim.addXp(10);
+  sim.recordQuestProgress('feed_creatures', undefined, 1);
+  sim.audio.playLevelUp();
+  sim.onBuildingTactile?.(b.uid);
+  sim.spawnFloatingText(b.gx + 1, b.gy + 1, '🌽 Thượng Hạng! ×2 Sản Lượng & +2 🌿!', '#fde047');
+  if (!sim.batchOperationActive) {
+    sim.saveToStorage();
+    sim.onUiChange?.();
+  }
+  return {
+    ok: true,
+    cropUsed: pickCrop,
+    msg: `🌽 Đã thưởng ${GOURMET_FEED_QTY} ${cropMeta.emoji} ${cropMeta.name}: Chu kỳ này thu ×2 sản phẩm, +50% Sickle/XP & +2 🌿 Phân Ủ!`,
+  };
+}
+
+// ==================== CHỢ PHIÊN HOGSMEADE (TIÊU ĐIỂM +50% & THƯƠNG VỤ HÀNG NGÀY) ====================
+
+const MARKET_GOOD_CANDIDATES: ReadonlyArray<{ id: FarmGoodId; minLevel: number }> = [
+  { id: 'cinnamon_apple_pie', minLevel: 1 },
+  { id: 'fine_wheat_flour', minLevel: 1 },
+  { id: 'farm_egg_wool', minLevel: 1 },
+  { id: 'creamy_dairy_milk', minLevel: 1 },
+  { id: 'pumpkin_pie', minLevel: 2 },
+  { id: 'blossom_honey_jar', minLevel: 3 },
+  { id: 'weasley_sweater_w', minLevel: 3 },
+  { id: 'honey_apple_cider', minLevel: 4 },
+  { id: 'frothy_butterbeer', minLevel: 6 },
+  { id: 'choc_frog_sweet', minLevel: 6 },
+  { id: 'sprout_growth_elixir', minLevel: 6 },
+  { id: 'floral_bouquet_gift', minLevel: 6 },
+];
+
+function hashStringSeed(input: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function buildDailyMarketFairState(level: number, dayKey: string, seedOffset = 0): HogsmeadeMarketFairState {
+  const safeLevel = Math.max(1, Math.floor(level || 1));
+  const seed = hashStringSeed(`${dayKey}#${seedOffset}`);
+  const unlockedCrops = (Object.keys(FARM_CROPS) as FarmCropId[]).filter(
+    (cid) => !cid.startsWith('yule_') && !cid.startsWith('vn_') && FARM_CROPS[cid].unlockLevel <= safeLevel
+  );
+  const cropPool: FarmCropId[] = unlockedCrops.length > 0 ? unlockedCrops : ['ottery_wheat'];
+  const unlockedGoods = MARKET_GOOD_CANDIDATES.filter(
+    (g) => g.minLevel <= safeLevel && g.id in FARM_GOODS
+  ).map((g) => g.id);
+  const goodPool: FarmGoodId[] = unlockedGoods.length > 0 ? unlockedGoods : ['cinnamon_apple_pie'];
+
+  const spotlightCropId = cropPool[seed % cropPool.length];
+  const spotlightGoodId = goodPool[(seed >>> 3) % goodPool.length];
+
+  const bulkCrop = cropPool[(seed + seedOffset + 1) % cropPool.length];
+  const bulkMeta = FARM_CROPS[bulkCrop];
+  const bulkQty = safeLevel >= 10 ? 4 : 3;
+
+  const barterInputs: FarmItemId[] = ['ottery_wheat', 'honey_carrot', 'garden_pumpkin', 'farm_egg_wool', 'creamy_dairy_milk'];
+  const barterInput = barterInputs[(seed + seedOffset + 2) % barterInputs.length];
+  const seedRewardCrop = cropPool[(seed + seedOffset + 3) % cropPool.length];
+
+  const artisanGood = goodPool[(seed + seedOffset + 1) % goodPool.length];
+  const artisanMeta = FARM_GOODS[artisanGood];
+  const artisanQty = safeLevel >= 14 ? 2 : 1;
+
+  const deals: MarketFairDeal[] = [
+    {
+      id: `deal_bulk_${dayKey}_${seedOffset}`,
+      kind: 'bulk_buyout',
+      merchantName: 'Bà Rosmerta • Quầy Sỉ Ba Cây Chổi',
+      merchantEmoji: '🍺',
+      inputItemId: bulkCrop,
+      inputQty: bulkQty,
+      rewardSickle: Math.max(20, Math.round(bulkMeta.sellValue * bulkQty * 1.65) + 12),
+      rewardXp: 20,
+      rewardCompost: 2,
+      rewardFeastPoints: 14,
+      claimed: false,
+    },
+    {
+      id: `deal_seed_${dayKey}_${seedOffset}`,
+      kind: 'seed_barter',
+      merchantName: 'Giáo Sư Sprout • Quầy Ươm Giống',
+      merchantEmoji: '🌿',
+      inputItemId: barterInput,
+      inputQty: 2,
+      rewardSickle: 10,
+      rewardXp: 18,
+      rewardSeedCropId: seedRewardCrop,
+      rewardSeedQty: 3,
+      rewardMorningDew: 1,
+      rewardFeastPoints: 14,
+      claimed: false,
+    },
+    {
+      id: `deal_plug_${dayKey}_${seedOffset}`,
+      kind: 'artisan_plug',
+      merchantName: 'Ông Arthur • Sạp Cơ Khí Hang Sóc',
+      merchantEmoji: '🔌',
+      inputItemId: artisanGood,
+      inputQty: artisanQty,
+      rewardSickle: Math.max(28, Math.round(artisanMeta.sellValue * artisanQty * 1.55) + 18),
+      rewardXp: 24,
+      rewardMugglePlug: 1,
+      rewardTimeSand: 1,
+      rewardFeastPoints: 24,
+      claimed: false,
+    },
+  ];
+
+  return {
+    dayKey,
+    spotlightCropId,
+    spotlightGoodId,
+    spotlightLotsSold: 0,
+    rerollsUsed: 0,
+    seedOffset,
+    deals,
+  };
+}
+
+export function farmEnsureMarketFairState(sim: ParkSimulation): HogsmeadeMarketFairState {
+  const dayKey = getVietnamCalendarKey();
+  const cur = sim.state.marketFair;
+  if (!cur || cur.dayKey !== dayKey || !Array.isArray(cur.deals) || cur.deals.length === 0) {
+    const next = buildDailyMarketFairState(sim.state.level, dayKey, 0);
+    sim.state.marketFair = next;
+    return next;
+  }
+  return cur;
+}
+
+export function farmIsItemMarketSpotlight(sim: ParkSimulation, itemId: FarmItemId): boolean {
+  const fair = farmEnsureMarketFairState(sim);
+  return itemId === fair.spotlightCropId || itemId === fair.spotlightGoodId;
+}
+
+export function farmGetOwlOrderSpotlightBonus(
+  sim: ParkSimulation,
+  order: Pick<FarmOwlOrder, 'requirements'>
+): { hasSpotlight: boolean; bonusCompost: number; bonusXp: number; bonusFeastPoints: number } {
+  const fair = farmEnsureMarketFairState(sim);
+  const hasSpotlight = order.requirements.some(
+    (r) => r.itemId === fair.spotlightCropId || r.itemId === fair.spotlightGoodId
+  );
+  if (!hasSpotlight) {
+    return { hasSpotlight: false, bonusCompost: 0, bonusXp: 0, bonusFeastPoints: 0 };
+  }
+  return {
+    hasSpotlight: true,
+    bonusCompost: 1,
+    bonusXp: 8,
+    bonusFeastPoints: 6,
+  };
+}
+
+export function farmSellMarketSpotlightLot(
+  sim: ParkSimulation,
+  kind: 'crop' | 'good'
+): { ok: boolean; msg: string } {
+  if (sim.isVisitingNeighbor) {
+    return { ok: false, msg: 'Chế độ Khách Tham Quan — hãy về trang trại nhà để bán hàng Chợ Phiên!' };
+  }
+  const fair = farmEnsureMarketFairState(sim);
+  if (fair.spotlightLotsSold >= 3) {
+    return { ok: false, msg: 'Hôm nay sạp Tiêu Điểm đã thu mua đủ 3/3 lô sỉ (hẹn ngày mai 00:00)!' };
+  }
+  const itemId: FarmItemId = kind === 'crop' ? fair.spotlightCropId : fair.spotlightGoodId;
+  const qty = kind === 'crop' ? 2 : 1;
+  const have = sim.getFarmItemCount(itemId);
+  if (!sim.state.sandboxMode && have < qty) {
+    const meta = getFarmItemMeta(itemId);
+    return { ok: false, msg: `Cần ${qty} ${meta.emoji} ${meta.name} trong Kho Đỏ để bán 1 lô sỉ Tiêu Điểm!` };
+  }
+
+  const meta = getFarmItemMeta(itemId);
+  if (!sim.state.sandboxMode) {
+    sim.consumeFarmItemFromBarn(itemId, qty);
+  }
+  const gold = Math.max(16, Math.round(meta.sellValue * qty * 1.6) + 12);
+  const xp = 15;
+  fair.spotlightLotsSold += 1;
+  sim.state.galleons += gold;
+  sim.state.finance.shopRevenue += gold;
+  sim.state.herbalCompost = Math.min(99999, Math.max(0, Math.floor(sim.state.herbalCompost ?? 0)) + 1);
+  sim.addXp(xp);
+  sim.addHarvestFeastPoints(12);
+  sim.recordQuestProgress('harvest_galleons', undefined, gold);
+  sim.audio.playCoinChime?.();
+  sim.audio.playHarvestBubble();
+  const msg = `🎪 Bán lô sỉ Tiêu Điểm ${qty} ${meta.emoji} ${meta.name} (${fair.spotlightLotsSold}/3): +${gold} Sickle, +1 🌿 Phân Ủ & +${xp} ⭐!`;
+  sim.onToast?.(msg, '🎪');
+  sim.saveToStorage();
+  sim.onUiChange?.();
+  return { ok: true, msg };
+}
+
+export function farmFulfillMarketFairDeal(
+  sim: ParkSimulation,
+  dealId: string
+): { ok: boolean; msg: string } {
+  if (sim.isVisitingNeighbor) {
+    return { ok: false, msg: 'Chế độ Khách Tham Quan — không thể giao dịch Chợ Phiên ở vườn bạn!' };
+  }
+  const fair = farmEnsureMarketFairState(sim);
+  const deal = fair.deals.find((d) => d.id === dealId);
+  if (!deal) return { ok: false, msg: 'Không tìm thấy sạp thương vụ này!' };
+  if (deal.claimed) return { ok: false, msg: 'Thương vụ này đã chốt đơn hôm nay rồi!' };
+
+  const have = sim.getFarmItemCount(deal.inputItemId);
+  const inMeta = getFarmItemMeta(deal.inputItemId);
+  if (!sim.state.sandboxMode && have < deal.inputQty) {
+    return {
+      ok: false,
+      msg: `Cần ${deal.inputQty} ${inMeta.emoji} ${inMeta.name} trong Kho Đỏ để đổi với ${deal.merchantName}!`,
+    };
+  }
+
+  if (!sim.state.sandboxMode) {
+    sim.consumeFarmItemFromBarn(deal.inputItemId, deal.inputQty);
+  }
+  deal.claimed = true;
+
+  sim.state.galleons += deal.rewardSickle;
+  sim.state.finance.shopRevenue += deal.rewardSickle;
+  if (deal.rewardCompost) {
+    sim.state.herbalCompost = Math.min(
+      99999,
+      Math.max(0, Math.floor(sim.state.herbalCompost ?? 0)) + deal.rewardCompost
+    );
+  }
+  if (deal.rewardSeedCropId && deal.rewardSeedQty) {
+    sim.addCropSeeds(deal.rewardSeedCropId, deal.rewardSeedQty);
+  }
+  if (deal.rewardMorningDew) {
+    sim.state.morningDewPhials = Math.min(99, (sim.state.morningDewPhials ?? 0) + deal.rewardMorningDew);
+  }
+  if (deal.rewardMugglePlug) {
+    const barn = sim.ensureFarmBarn();
+    barn.goods.muggle_plug_kit = (barn.goods.muggle_plug_kit ?? 0) + deal.rewardMugglePlug;
+  }
+  if (deal.rewardTimeSand) {
+    sim.state.timeSand += deal.rewardTimeSand;
+  }
+  sim.addXp(deal.rewardXp);
+  sim.addHarvestFeastPoints(deal.rewardFeastPoints ?? 14);
+  sim.recordQuestProgress('harvest_galleons', undefined, deal.rewardSickle);
+  sim.audio.playCoinChime?.();
+  sim.audio.playLevelUp();
+
+  const extras: string[] = [];
+  if (deal.rewardCompost) extras.push(`+${deal.rewardCompost} 🌿`);
+  if (deal.rewardSeedCropId && deal.rewardSeedQty) {
+    const sc = FARM_CROPS[deal.rewardSeedCropId];
+    extras.push(`+${deal.rewardSeedQty} hạt ${sc.emoji}`);
+  }
+  if (deal.rewardMorningDew) extras.push(`+${deal.rewardMorningDew} 🧪`);
+  if (deal.rewardMugglePlug) extras.push(`+${deal.rewardMugglePlug} 🔌`);
+  if (deal.rewardTimeSand) extras.push(`+${deal.rewardTimeSand} ⏳`);
+
+  const msg = `🎪 Đã chốt sạp ${deal.merchantEmoji} ${deal.merchantName}: +${deal.rewardSickle} Sickle, +${deal.rewardXp} ⭐${extras.length ? ` (${extras.join(', ')})` : ''}!`;
+  sim.onToast?.(msg, deal.merchantEmoji);
+  sim.saveToStorage();
+  sim.onUiChange?.();
+  return { ok: true, msg };
+}
+
+export function farmRerollMarketFairDeals(sim: ParkSimulation): { ok: boolean; msg: string } {
+  if (sim.isVisitingNeighbor) {
+    return { ok: false, msg: 'Chế độ Khách Tham Quan — không thể làm mới Chợ Phiên ở vườn bạn!' };
+  }
+  const fair = farmEnsureMarketFairState(sim);
+  if (fair.rerollsUsed >= 1) {
+    return { ok: false, msg: 'Hôm nay đã dùng hết lượt làm mới 3 thương vụ Chợ Phiên (reset lúc 00:00)!' };
+  }
+  const nextOffset = fair.seedOffset + 1;
+  const fresh = buildDailyMarketFairState(sim.state.level, fair.dayKey, nextOffset);
+  const mergedDeals = fresh.deals.map((d, i) =>
+    fair.deals[i]?.claimed ? fair.deals[i] : d
+  );
+  sim.state.marketFair = {
+    ...fresh,
+    deals: mergedDeals,
+    spotlightCropId: fair.spotlightCropId,
+    spotlightGoodId: fair.spotlightGoodId,
+    spotlightLotsSold: fair.spotlightLotsSold,
+    rerollsUsed: 1,
+    seedOffset: nextOffset,
+  };
+  sim.audio.playClick();
+  const msg = '🔄 Đã mời đoàn thương lái Chợ Phiên Hogsmeade mới mở 3 sạp giao dịch!';
+  sim.onToast?.(msg, '🎪');
+  sim.saveToStorage();
+  sim.onUiChange?.();
+  return { ok: true, msg };
 }

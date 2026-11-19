@@ -5,6 +5,7 @@ import {
   getJigsawStageArtworkSpec,
   getJigsawStageSpec,
   JIGSAW_ATLAS_MAX_SIDE,
+  JIGSAW_MAX_LOOSE_CLUSTERS,
   JIGSAW_MAX_PIECES,
   JIGSAW_MAX_TIME_SEC,
   JIGSAW_MIN_TIME_SEC,
@@ -16,6 +17,7 @@ import {
   resolveJigsawBoardAspect,
 } from '../puzzleArcadeEngine';
 import { ParkSimulation } from '../simulation';
+import { PuzzleArcadeModalController } from '../../ui/puzzleArcadeModal';
 
 const storageMap = new Map<string, string>();
 const mockLocalStorage = {
@@ -295,5 +297,372 @@ describe('MasterJigsawEngine & 777 Harry Potter Paintings ("Tranh Ghép Phép Th
     const restored = new MasterJigsawEngine(1);
     expect(restored.restoreSession(saved)).toBe(true);
     expect(restored.timeRemainingSec).toBe(240);
+  });
+
+  it('preserves Jigsaw tray scrollLeft in place across piece selection, board spawn, collapse toggle, and resets on filter change', () => {
+    class MiniDomClassList {
+      private cls = new Set<string>();
+      add(...items: string[]): void {
+        for (const it of items) {
+          for (const part of it.split(/\s+/)) {
+            if (part) this.cls.add(part);
+          }
+        }
+      }
+      remove(...items: string[]): void {
+        for (const it of items) this.cls.delete(it);
+      }
+      toggle(it: string, force?: boolean): boolean {
+        const next = force === undefined ? !this.cls.has(it) : Boolean(force);
+        if (next) this.cls.add(it);
+        else this.cls.delete(it);
+        return next;
+      }
+      contains(it: string): boolean {
+        return this.cls.has(it);
+      }
+    }
+
+    class MiniDomEl {
+      public tagName = 'DIV';
+      public id = '';
+      public type = '';
+      public className = '';
+      public classList = new MiniDomClassList();
+      public dataset: Record<string, string> = {};
+      public attributes = new Map<string, string>();
+      public style: Record<string, string> = {};
+      public children: MiniDomEl[] = [];
+      public parentElement: MiniDomEl | null = null;
+      public textContent = '';
+      public title = '';
+      public disabled = false;
+      public hidden = false;
+      public width = 0;
+      public height = 0;
+      public clientWidth = 0;
+      public scrollWidth = 0;
+      public scrollLeft = 0;
+      private listeners = new Map<string, Array<(ev: unknown) => void>>();
+
+      constructor(tagName = 'DIV') {
+        this.tagName = tagName.toUpperCase();
+      }
+      setAttribute(k: string, v: string): void {
+        this.attributes.set(k, v);
+        if (k === 'id') this.id = v;
+        if (k === 'hidden') this.hidden = true;
+        if (k.startsWith('data-')) {
+          const camel = k
+            .slice(5)
+            .replace(/-([a-z])/g, (_, ch: string) => ch.toUpperCase());
+          this.dataset[camel] = v;
+        }
+      }
+      getAttribute(k: string): string | null {
+        return this.attributes.get(k) ?? null;
+      }
+      appendChild(child: MiniDomEl): MiniDomEl {
+        if (child.parentElement) {
+          child.parentElement.children = child.parentElement.children.filter((x) => x !== child);
+        }
+        child.parentElement = this;
+        this.children.push(child);
+        return child;
+      }
+      insertBefore(child: MiniDomEl, refNode: MiniDomEl | null): MiniDomEl {
+        if (child.parentElement) {
+          child.parentElement.children = child.parentElement.children.filter((x) => x !== child);
+        }
+        child.parentElement = this;
+        if (!refNode) {
+          this.children.push(child);
+          return child;
+        }
+        const idx = this.children.indexOf(refNode);
+        if (idx === -1) this.children.push(child);
+        else this.children.splice(idx, 0, child);
+        return child;
+      }
+      remove(): void {
+        if (this.parentElement) {
+          this.parentElement.children = this.parentElement.children.filter((x) => x !== this);
+          this.parentElement = null;
+        }
+      }
+      setPointerCapture(): void {}
+      getContext(): null {
+        return null;
+      }
+      addEventListener(type: string, cb: (ev: unknown) => void): void {
+        const list = this.listeners.get(type) ?? [];
+        list.push(cb);
+        this.listeners.set(type, list);
+      }
+      dispatch(type: string, ev: Record<string, unknown> = {}): void {
+        const eventObj = {
+          type,
+          target: this,
+          preventDefault: () => {},
+          ...ev,
+        };
+        for (const cb of this.listeners.get(type) ?? []) {
+          cb(eventObj);
+        }
+      }
+      private matches(sel: string): boolean {
+        if (sel.startsWith('#')) return this.id === sel.slice(1);
+        if (sel.startsWith('.')) return this.classList.contains(sel.slice(1));
+        const attrMatch = sel.match(/^([a-z]*)\[([^=\]]+)(?:="([^"]*)")?\]$/i);
+        if (attrMatch) {
+          const [, tag, attr, val] = attrMatch;
+          if (tag && this.tagName !== tag.toUpperCase()) return false;
+          const got = this.attributes.get(attr);
+          if (got === undefined) {
+            if (attr.startsWith('data-')) {
+              const camel = attr
+                .slice(5)
+                .replace(/-([a-z])/g, (_, ch: string) => ch.toUpperCase());
+              const dVal = this.dataset[camel];
+              return val !== undefined ? dVal === val : dVal !== undefined;
+            }
+            return false;
+          }
+          return val !== undefined ? got === val : true;
+        }
+        return false;
+      }
+      querySelector(sel: string): MiniDomEl | null {
+        for (const c of this.children) {
+          if (c.matches(sel)) return c;
+          const nested = c.querySelector(sel);
+          if (nested) return nested;
+        }
+        return null;
+      }
+      querySelectorAll(sel: string): MiniDomEl[] {
+        const out: MiniDomEl[] = [];
+        for (const c of this.children) {
+          if (c.matches(sel)) out.push(c);
+          out.push(...c.querySelectorAll(sel));
+        }
+        return out;
+      }
+      set innerHTML(html: string) {
+        this.children = [];
+        const stack: MiniDomEl[] = [this];
+        const tagRe = /<\/?([a-zA-Z0-9]+)([^>]*)>/g;
+        let match: RegExpExecArray | null;
+        while ((match = tagRe.exec(html)) !== null) {
+          const full = match[0];
+          const tag = match[1];
+          const attrsStr = match[2];
+          if (full.startsWith('</')) {
+            if (stack.length > 1) stack.pop();
+            continue;
+          }
+          const el = new MiniDomEl(tag);
+          const attrRe = /([a-zA-Z0-9-]+)(?:="([^"]*)")?/g;
+          let am: RegExpExecArray | null;
+          while ((am = attrRe.exec(attrsStr)) !== null) {
+            const k = am[1];
+            const v = am[2] ?? '';
+            if (k === 'class') el.classList.add(v);
+            else el.setAttribute(k, v);
+          }
+          stack[stack.length - 1].appendChild(el);
+          if (!full.endsWith('/>')) stack.push(el);
+        }
+      }
+    }
+
+    const bodyEl = new MiniDomEl('body');
+    const dockEl = new MiniDomEl('div');
+    dockEl.setAttribute('id', 'paJigsawTrayDock');
+    const rootEl = new MiniDomEl('div');
+    rootEl.appendChild(dockEl);
+
+    const mockAudio = {
+      enabled: false,
+      bgmEnabled: false,
+      playClick: vi.fn(),
+      playMatchPop: vi.fn(),
+      playChessClack: vi.fn(),
+      playPowerupBlast: vi.fn(),
+      playLevelUp: vi.fn(),
+    } as unknown as MagicalAudio;
+    const sim = new ParkSimulation(mockAudio);
+
+    vi.stubGlobal('document', {
+      createElement: (tag: string) => new MiniDomEl(tag),
+      body: bodyEl,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    });
+    vi.stubGlobal(
+      'Image',
+      class {
+        public decoding = '';
+        public src = '';
+        public complete = false;
+        public naturalWidth = 0;
+      }
+    );
+
+    try {
+      const ctrl = new PuzzleArcadeModalController(
+        rootEl as unknown as HTMLElement,
+        sim,
+        vi.fn(),
+        vi.fn(),
+        vi.fn()
+      ) as unknown as {
+        mode: string;
+        jigsawEngine: MasterJigsawEngine;
+        renderJigsawTrayDockDOM: (preserveScroll?: boolean) => void;
+      };
+      const je = new MasterJigsawEngine(16); // 4x5 = 20 pieces in tray
+      ctrl.mode = 'jigsaw';
+      ctrl.jigsawEngine = je;
+      ctrl.renderJigsawTrayDockDOM();
+
+      const strip = dockEl.querySelector('#paJigsawTrayStrip')!;
+      expect(strip).not.toBeNull();
+      strip.clientWidth = 320;
+      strip.scrollWidth = 1280;
+      expect(strip.querySelectorAll('[data-jigsaw-piece]').length).toBe(20);
+
+      // Player scrolls tray strip to 360px
+      strip.scrollLeft = 360;
+      strip.dispatch('scroll');
+
+      // Taking piece out onto the board + re-rendering must keep same strip node & exact scrollLeft = 360
+      const trayPiecesBefore = je.getFilteredTrayPieces();
+      const keptBtn = strip.querySelector(`[data-jigsaw-piece="${trayPiecesBefore[7]}"]`)!;
+      expect(je.spawnTrayPieceOntoBoard(trayPiecesBefore[5], 0.5, 0.5)).toBe(true);
+      ctrl.renderJigsawTrayDockDOM();
+      expect(dockEl.querySelector('#paJigsawTrayStrip')).toBe(strip);
+      expect(strip.querySelector(`[data-jigsaw-piece="${trayPiecesBefore[7]}"]`)).toBe(keptBtn);
+      expect(strip.querySelectorAll('[data-jigsaw-piece]').length).toBe(19);
+      expect(strip.scrollLeft).toBe(360);
+
+      // Selecting & spawning a second piece also keeps scrollLeft at 360
+      keptBtn.dispatch('pointerdown', { pointerId: 1, button: 0, clientX: 200, clientY: 500, pointerType: 'mouse' });
+      keptBtn.dispatch('pointerup', { pointerId: 1, button: 0, clientX: 200, clientY: 500, pointerType: 'mouse' });
+      expect(je.selectedTrayPieceIdx).toBe(trayPiecesBefore[7]);
+      expect(strip.scrollLeft).toBe(360);
+
+      expect(je.spawnTrayPieceOntoBoard(trayPiecesBefore[7], 0.4, 0.4)).toBe(true);
+      ctrl.renderJigsawTrayDockDOM();
+      expect(strip.querySelectorAll('[data-jigsaw-piece]').length).toBe(18);
+      expect(strip.scrollLeft).toBe(360);
+
+      // Horizontal mouse drag along a piece button scrolls tray and stops at target without creating ghost
+      const dragBtn = strip.querySelector(`[data-jigsaw-piece="${trayPiecesBefore[10]}"]`)!;
+      dragBtn.dispatch('pointerdown', { pointerId: 2, button: 0, clientX: 250, clientY: 500, pointerType: 'mouse' });
+      dragBtn.dispatch('pointermove', { pointerId: 2, button: 0, clientX: 160, clientY: 502, pointerType: 'mouse' });
+      expect(bodyEl.querySelector('.pa-jigsaw-drag-ghost')).toBeNull();
+      expect(strip.scrollLeft).toBe(450);
+      dragBtn.dispatch('pointerup', { pointerId: 2, button: 0, clientX: 160, clientY: 502, pointerType: 'mouse' });
+      expect(strip.scrollLeft).toBe(450);
+
+      // Collapsing and re-opening tray preserves scrollLeft = 450
+      const toggleBtn = dockEl.querySelector('#btnPaJigsawToggleTray')!;
+      toggleBtn.dispatch('click');
+      expect(strip.hidden).toBe(true);
+      toggleBtn.dispatch('click');
+      expect(strip.hidden).toBe(false);
+      expect(strip.scrollLeft).toBe(450);
+
+      // Switching filter resets scrollLeft intentionally to 0 for the newly filtered list
+      const edgesChip = dockEl.querySelector('[data-jigsaw-filter="edges"]')!;
+      edgesChip.dispatch('click');
+      expect(je.trayFilter).toBe('edges');
+      expect(strip.scrollLeft).toBe(0);
+
+      // Clicking "Trải Bàn" scatters all tray pieces onto the board, collapses the tray, and disables the scatter button
+      const jeScatter = new MasterJigsawEngine(16);
+      ctrl.jigsawEngine = jeScatter;
+      ctrl.renderJigsawTrayDockDOM(false);
+      const scatterBtn = dockEl.querySelector('#btnPaJigsawScatterTray')!;
+      expect(scatterBtn.disabled).toBe(false);
+
+      scatterBtn.dispatch('click');
+      expect(jeScatter.getTrayCountForFilter('all')).toBe(0);
+      expect(jeScatter.getBoardClustersSortedByZ(true)).toHaveLength(20);
+      expect(dockEl.dataset.trayCollapsed).toBe('true');
+      expect(strip.hidden).toBe(true);
+      expect(scatterBtn.disabled).toBe(true);
+
+      // Picking a scattered piece directly from the board works without opening the tray
+      const pickPos = jeScatter.getBoardPieceNormCenter(0);
+      expect(jeScatter.pickBoardPieceAtNorm(pickPos.nx, pickPos.ny)).toBe(0);
+
+      // Opening the tray back & tidying returns all loose singletons to the tray
+      toggleBtn.dispatch('click');
+      expect(strip.hidden).toBe(false);
+      const tidied = jeScatter.tidyLooseSinglePieces();
+      expect(tidied).toBe(20);
+      ctrl.renderJigsawTrayDockDOM();
+      expect(scatterBtn.disabled).toBe(false);
+      expect(strip.querySelectorAll('[data-jigsaw-piece]').length).toBe(20);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.stubGlobal('localStorage', mockLocalStorage);
+    }
+  });
+
+  it('scatterTrayPiecesOntoBoard distributes scrambled pieces on the board away from their target slots and respects loose cap', () => {
+    // Stage 16 (4x5 = 20 pieces): scatters 100% of pieces cleanly out of order
+    const game20 = new MasterJigsawEngine(16);
+    const res20 = game20.scatterTrayPiecesOntoBoard(123456);
+    expect(res20.scatteredCount).toBe(20);
+    expect(res20.remainingInTray).toBe(0);
+    expect(game20.lockedCount).toBe(0);
+
+    const looseClusters = game20.getBoardClustersSortedByZ(true);
+    expect(looseClusters).toHaveLength(20);
+    for (const cl of looseClusters) {
+      expect(cl.members).toHaveLength(1);
+    }
+
+    const boardOrderByPos: Array<{ idx: number; nx: number; ny: number }> = [];
+    for (let idx = 0; idx < 20; idx++) {
+      expect(game20.pieceState[idx]).toBe(JIGSAW_PIECE_BOARD);
+      const pos = game20.getBoardPieceNormCenter(idx);
+      const target = game20.getTargetNormCenter(idx);
+      expect(pos.nx).toBeGreaterThanOrEqual(0.05);
+      expect(pos.nx).toBeLessThanOrEqual(0.95);
+      expect(pos.ny).toBeGreaterThanOrEqual(0.05);
+      expect(pos.ny).toBeLessThanOrEqual(0.95);
+      expect(Math.hypot(pos.nx - target.nx, pos.ny - target.ny)).toBeGreaterThanOrEqual(0.15);
+      boardOrderByPos.push({ idx, nx: pos.nx, ny: pos.ny });
+    }
+
+    // Visual tabletop order must be scrambled (not monotonic 0, 1, 2, ..., 19)
+    const sortedByScreenPos = [...boardOrderByPos]
+      .sort((a, b) => a.ny - b.ny || a.nx - b.nx)
+      .map((item) => item.idx);
+    expect(sortedByScreenPos).not.toEqual(Array.from({ length: 20 }, (_, i) => i));
+
+    // Picking every scattered piece from the board and dragging to target locks cleanly
+    const samplePos = game20.getBoardPieceNormCenter(7);
+    expect(game20.pickBoardPieceAtNorm(samplePos.nx, samplePos.ny)).not.toBeNull();
+    const target7 = game20.getTargetNormCenter(7);
+    game20.movePieceClusterToNorm(7, target7.nx, target7.ny);
+    const dropRes = game20.dropClusterAndResolve(7, 600, 480);
+    expect(dropRes.lockedPieces).toContain(7);
+
+    // Stage 100 (10x10 = 100 pieces): fits completely under JIGSAW_MAX_LOOSE_CLUSTERS = 100
+    const game100 = new MasterJigsawEngine(100);
+    const res100 = game100.scatterTrayPiecesOntoBoard(99991);
+    expect(res100.scatteredCount).toBe(100);
+    expect(res100.remainingInTray).toBe(0);
+
+    // Stage 200 (270 pieces): respects JIGSAW_MAX_LOOSE_CLUSTERS batch cap
+    const game200 = new MasterJigsawEngine(200);
+    const res200 = game200.scatterTrayPiecesOntoBoard(424242);
+    expect(res200.scatteredCount).toBe(JIGSAW_MAX_LOOSE_CLUSTERS);
+    expect(res200.remainingInTray).toBe(game200.totalPieces - JIGSAW_MAX_LOOSE_CLUSTERS);
   });
 });

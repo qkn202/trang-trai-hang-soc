@@ -24,7 +24,7 @@ export const JIGSAW_MAX_TIME_SEC = 7200; // Tối đa đúng 2 giờ (7.200 giâ
 export const JIGSAW_ATLAS_MAX_SIDE = 2048; // <= 4.19M px (an toàn tuyệt đối cho iOS 16 Safari)
 export const JIGSAW_LOCKED_CANVAS_MAX_W = 1280;
 export const JIGSAW_LOCKED_CANVAS_MAX_H = 1024;
-export const JIGSAW_MAX_LOOSE_CLUSTERS = 64;
+export const JIGSAW_MAX_LOOSE_CLUSTERS = 100;
 
 export const JIGSAW_PIECE_TRAY = 0;
 export const JIGSAW_PIECE_BOARD = 1;
@@ -748,6 +748,202 @@ export class MasterJigsawEngine {
       this.selectedTrayPieceIdx = null;
     }
     return true;
+  }
+
+  /**
+   * Trải ngẫu nhiên các mảnh đang nằm trong Khay ra mặt bàn (sắp xáo trộn, không theo thứ tự)
+   * để người chơi thu gọn khay và nhặt/ghép mảnh trực tiếp trên bàn.
+   */
+  public scatterTrayPiecesOntoBoard(seedOverride?: number): {
+    scatteredCount: number;
+    remainingInTray: number;
+    switchedFilterToAll: boolean;
+  } {
+    if (this.status !== 'playing') {
+      return {
+        scatteredCount: 0,
+        remainingInTray: this.getTrayCountForFilter('all'),
+        switchedFilterToAll: false,
+      };
+    }
+
+    let switchedFilterToAll = false;
+    let candidates = this.getFilteredTrayPieces();
+    if (candidates.length === 0 && this.trayFilter !== 'all') {
+      this.trayFilter = 'all';
+      candidates = this.getFilteredTrayPieces();
+      switchedFilterToAll = candidates.length > 0;
+    }
+
+    const activeLooseClusters = this.getBoardClustersSortedByZ(true).length;
+    const availableSlots = Math.max(0, JIGSAW_MAX_LOOSE_CLUSTERS - activeLooseClusters);
+    if (candidates.length === 0 || availableSlots <= 0) {
+      return {
+        scatteredCount: 0,
+        remainingInTray: this.getTrayCountForFilter('all'),
+        switchedFilterToAll,
+      };
+    }
+
+    const prngSeed =
+      (seedOverride ?? ((Date.now() ^ Math.imul(this.movesCount + 1, 0x9e3779b1) ^ this.seed) >>> 0)) || 1;
+    const rng = mulberry32(prngSeed);
+
+    const shuffled = [...candidates];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      const tmp = shuffled[i];
+      shuffled[i] = shuffled[j];
+      shuffled[j] = tmp;
+    }
+
+    const picked = shuffled.slice(0, availableSlots);
+    const k = picked.length;
+
+    const padX = Math.min(0.14, Math.max(0.06, 0.62 / this.cols));
+    const padY = Math.min(0.14, Math.max(0.06, 0.62 / this.rows));
+    const spanX = Math.max(0.1, 1 - padX * 2);
+    const spanY = Math.max(0.1, 1 - padY * 2);
+
+    const aspect = this.cols / Math.max(1, this.rows);
+    const gCols = Math.max(2, Math.ceil(Math.sqrt(k * aspect)));
+    const gRows = Math.max(2, Math.ceil(k / gCols));
+    const cellCount = gCols * gRows;
+    const cells: number[] = new Array(cellCount);
+    for (let i = 0; i < cellCount; i++) cells[i] = i;
+    for (let i = cellCount - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      const tmp = cells[i];
+      cells[i] = cells[j];
+      cells[j] = tmp;
+    }
+
+    const minTargetDist = Math.max(0.16, Math.min(0.34, 1.15 / Math.min(this.rows, this.cols)));
+    const minNeighborDelta = Math.max(0.10, 0.85 / Math.max(this.rows, this.cols));
+    const minSepX = 0.56 / Math.max(1, this.cols);
+    const minSepY = 0.56 / Math.max(1, this.rows);
+    const dirs = [
+      [-1, 0],
+      [1, 0],
+      [0, -1],
+      [0, 1],
+    ] as const;
+
+    const isAlignedWithBoardNeighbor = (
+      pIdx: number,
+      dx: number,
+      dy: number
+    ): boolean => {
+      const r = Math.floor(pIdx / this.cols);
+      const c = pIdx % this.cols;
+      for (const [dr, dc] of dirs) {
+        const nr = r + dr;
+        const nc = c + dc;
+        if (nr < 0 || nr >= this.rows || nc < 0 || nc >= this.cols) continue;
+        const nIdx = nr * this.cols + nc;
+        if (this.pieceState[nIdx] !== JIGSAW_PIECE_BOARD) continue;
+        const nRoot = this.findClusterRoot(nIdx);
+        if (
+          Math.hypot(dx - this.clusterDeltaX[nRoot], dy - this.clusterDeltaY[nRoot]) <
+          minNeighborDelta
+        ) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const placedCenters: Array<{ nx: number; ny: number }> = [];
+    for (let idx = 0; idx < this.totalPieces; idx++) {
+      if (this.pieceState[idx] === JIGSAW_PIECE_BOARD) {
+        placedCenters.push(this.getBoardPieceNormCenter(idx));
+      }
+    }
+
+    const isNearAnotherBoardPiece = (nx: number, ny: number): boolean => {
+      for (let p = 0; p < placedCenters.length; p++) {
+        if (
+          Math.abs(nx - placedCenters[p].nx) <= minSepX &&
+          Math.abs(ny - placedCenters[p].ny) <= minSepY
+        ) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const usedCellSlots = new Set<number>();
+
+    for (let i = 0; i < k; i++) {
+      const pIdx = picked[i];
+      const target = this.getTargetNormCenter(pIdx);
+      let chosenNx = 0.5;
+      let chosenNy = 0.5;
+      let chosenSlot = -1;
+      let fallbackNx: number | null = null;
+      let fallbackNy: number | null = null;
+      let fallbackSlot = -1;
+
+      for (let pass = 0; pass < cellCount; pass++) {
+        const slot = (i + pass) % cellCount;
+        if (usedCellSlots.has(slot)) continue;
+        const cellId = cells[slot];
+        const gr = Math.floor(cellId / gCols);
+        const gc = cellId % gCols;
+        const rawX = padX + ((gc + 0.5 + (rng() - 0.5) * 0.44) / gCols) * spanX;
+        const rawY = padY + ((gr + 0.5 + (rng() - 0.5) * 0.44) / gRows) * spanY;
+        const nx = Math.max(padX, Math.min(1 - padX, rawX));
+        const ny = Math.max(padY, Math.min(1 - padY, rawY));
+
+        if (Math.hypot(nx - target.nx, ny - target.ny) < minTargetDist) continue;
+        if (isAlignedWithBoardNeighbor(pIdx, nx - target.nx, ny - target.ny)) continue;
+
+        if (fallbackNx === null) {
+          fallbackNx = nx;
+          fallbackNy = ny;
+          fallbackSlot = slot;
+        }
+        if (isNearAnotherBoardPiece(nx, ny)) continue;
+
+        chosenNx = nx;
+        chosenNy = ny;
+        chosenSlot = slot;
+        break;
+      }
+
+      if (chosenSlot >= 0) {
+        usedCellSlots.add(chosenSlot);
+      } else if (fallbackNx !== null && fallbackNy !== null) {
+        chosenNx = fallbackNx;
+        chosenNy = fallbackNy;
+        if (fallbackSlot >= 0) usedCellSlots.add(fallbackSlot);
+      } else {
+        let nx = Math.max(
+          padX,
+          Math.min(1 - padX, 1 - target.nx + (rng() - 0.5) * 0.14)
+        );
+        let ny = Math.max(
+          padY,
+          Math.min(1 - padY, 1 - target.ny + (rng() - 0.5) * 0.14)
+        );
+        if (Math.hypot(nx - target.nx, ny - target.ny) < minTargetDist) {
+          nx = rng() < 0.5 ? padX + rng() * 0.08 : 1 - padX - rng() * 0.08;
+          ny = rng() < 0.5 ? padY + rng() * 0.08 : 1 - padY - rng() * 0.08;
+        }
+        chosenNx = nx;
+        chosenNy = ny;
+      }
+
+      placedCenters.push({ nx: chosenNx, ny: chosenNy });
+      this.spawnTrayPieceOntoBoard(pIdx, chosenNx, chosenNy);
+    }
+
+    this.selectedTrayPieceIdx = null;
+    return {
+      scatteredCount: k,
+      remainingInTray: this.getTrayCountForFilter('all'),
+      switchedFilterToAll,
+    };
   }
 
   public elevateCluster(pieceIdx: number): number {

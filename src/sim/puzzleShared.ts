@@ -243,6 +243,8 @@ export function createInitialPuzzleArcadeState(): PuzzleArcadeState {
     sudokuSession: null,
     caroSession: null,
     chessSession: null,
+    minesSession: null,
+    fishingSession: null,
     onetSession: null,
     jigsawSession: null,
   };

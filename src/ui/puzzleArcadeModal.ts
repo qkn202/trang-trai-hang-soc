@@ -2,20 +2,14 @@ import '../styles/puzzleArcadeModal.css';
 import { formatDurationCompactVi } from '../data/catalog';
 import { getMilestoneBossMeta, MAX_MINIGAME_STAGE } from '../data/match3Levels';
 import { SpriteRegistry } from '../engine/spriteLoader';
-import type {
-  ChessWorkerRequestMessage,
-  ChessWorkerResponseMessage,
-} from '../sim/chessAi.worker';
 import {
-  CARO_BOARD_SIZE,
-  CaroGameEngine,
-  CaroStone,
-  ChessPiece,
-  ChessPieceType,
-  ChessSubMode,
   createJigsawAtlasBakeCache,
   CREATURE_ONET_SPECIES,
   CreatureOnetEngine,
+  FISH_ARENA_H,
+  FISH_ARENA_W,
+  FISH_SPECIES_CATALOG,
+  FishShooterEngine,
   JIGSAW_PIECE_BOARD,
   JIGSAW_PIECE_LOCKED,
   JIGSAW_VIRTUAL_H,
@@ -24,16 +18,17 @@ import {
   JigsawAtlasBakeCache,
   LayeredTileCard,
   MasterJigsawEngine,
+  MinesweeperEngine,
   OnetPoint,
   resolveJigsawBoardAspect,
   stepJigsawAtlasBake,
   SudokuPuzzleEngine,
+  SwimmingFish,
   syncLockedPiecesToLayer,
   TILE_MATCH_SYMBOLS,
   TILE_TRAY_CAPACITY,
   TileMatchZenEngine,
   TurningPointReview,
-  WizardChessEngine,
   WizardingPortraitKey,
 } from '../sim/puzzleArcadeEngine';
 import { MAX_DAILY_MINIGAME_RESCUES } from '../sim/neighborSocial';
@@ -363,26 +358,6 @@ interface FlyingTileAnim {
   duration: number;
 }
 
-interface ChessMoveAnim {
-  fromR: number;
-  fromC: number;
-  toR: number;
-  toC: number;
-  piece: ChessPiece;
-  age: number;
-  duration: number;
-}
-
-interface ChessSpellBeamAnim {
-  x0: number;
-  y0: number;
-  x1: number;
-  y1: number;
-  isWhiteCaster: boolean;
-  age: number;
-  duration: number;
-}
-
 function escapeHtml(val: unknown): string {
   return String(val ?? '')
     .replace(/&/g, '&amp;')
@@ -391,10 +366,6 @@ function escapeHtml(val: unknown): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
-
-// the chess turn cell of the level bar: short words, the opponent is named on the sub line
-const chessTurnVi = (we: WizardChessEngine): string =>
-  we.status === 'ai_thinking' ? 'Lượt đối thủ' : we.isInCheck('w') ? 'Chiếu tướng' : 'Lượt bạn';
 
 function drawRoundedRect(
   ctx: CanvasRenderingContext2D,
@@ -424,16 +395,18 @@ export class PuzzleArcadeModalController {
   private sprites?: SpriteRegistry;
 
   private iconImages = new Map<string, HTMLImageElement>();
+  private paintingTokenImages = new Map<string, HTMLImageElement>();
   private chessPieceImages = new Map<string, HTMLImageElement>();
-  private caroSealImages = new Map<string, HTMLImageElement>();
   private jigsawPaintingImages = new Map<string, HTMLImageElement>();
   private parlorBgImage: HTMLImageElement | null = null;
-  private greatHallBgImage: HTMLImageElement | null = null;
-  private marauderCaroBgImage: HTMLImageElement | null = null;
+  private hogwartsMinesBgImage: HTMLImageElement | null = null;
+  private blackLakeUnderwaterBgImage: HTMLImageElement | null = null;
+  private blackLakeCreaturesAtlas: HTMLImageElement | null = null;
+  private cachedFishBgCanvas: HTMLCanvasElement | null = null;
+  private cachedFishBgKey = '';
+  private lakeBgImage: HTMLImageElement | null = null;
   private unicornLakeBgImage: HTMLImageElement | null = null;
   private yuleArcadeAssetsLoaded = false;
-  private yuleChessPieceImages = new Map<string, HTMLImageElement>();
-  private yuleCaroSealImages = new Map<string, HTMLImageElement>();
   private yuleSudokuRelicImages = new Map<number, HTMLImageElement>();
   private yuleGreatHallBgImage: HTMLImageElement | null = null;
   private yuleCaroBgImage: HTMLImageElement | null = null;
@@ -441,8 +414,8 @@ export class PuzzleArcadeModalController {
   public mode: PuzzleArcadeMode = 'caro';
   public sudokuDisplayMode: SudokuDisplayMode = 'num_only';
   public sudokuEngine: SudokuPuzzleEngine | null = null;
-  public caroEngine: CaroGameEngine | null = null;
-  public chessEngine: WizardChessEngine | null = null;
+  public minesEngine: MinesweeperEngine | null = null;
+  public fishEngine: FishShooterEngine | null = null;
   public onetEngine: CreatureOnetEngine | null = null;
   public jigsawEngine: MasterJigsawEngine | null = null;
   public tileEngine: TileMatchZenEngine | null = null;
@@ -450,6 +423,8 @@ export class PuzzleArcadeModalController {
   private jigsawAutoSaveAccumSec = 0;
   private jigsawWinRevealTimer = 0;
   private jigsawTrayPage = 0;
+  private jigsawTrayScrollLeft = 0;
+  private jigsawFilterScrollLeft = 0;
   private jigsawTrayCollapsed = false;
   private jigsawDragBoardPiece: number | null = null;
   private jigsawDragGrabOffsetNorm: { dx: number; dy: number } = { dx: 0, dy: 0 };
@@ -461,12 +436,12 @@ export class PuzzleArcadeModalController {
     startY: number;
     currX: number;
     currY: number;
+    startScrollLeft: number;
     pointerType: string;
+    gesture: 'undecided' | 'lift' | 'scroll';
     dragging: boolean;
     ghostEl: HTMLCanvasElement | null;
   } | null = null;
-  private chessForceSubMode?: ChessSubMode;
-  private aiThinkTimer = 0;
   private sudokuPadRects = new Map<number, { x: number; y: number; w: number; h: number }>();
   private sudokuActionRects = new Map<
     SudokuQuickActionKey,
@@ -475,27 +450,15 @@ export class PuzzleArcadeModalController {
   private sudokuHoverCell: { r: number; c: number } | null = null;
   private sudokuHoverPadDigit: number | null = null;
   private sudokuHoverAction: SudokuQuickActionKey | null = null;
-  private caroHoverCell: { r: number; c: number } | null = null;
-  private caroLastMoveAnim: { r: number; c: number; age: number; duration: number } | null = null;
-  private caroWinRevealTimer = 0;
-  private caroFireworkTimer = 0;
-  private chessDragFrom: { r: number; c: number } | null = null;
-  private chessHoverSquare: { r: number; c: number } | null = null;
-  private chessMoveAnim: ChessMoveAnim | null = null;
-  private chessSpellBeams: ChessSpellBeamAnim[] = [];
-  private chessShakeTimer = 0;
-  private chessShakeAmp = 0;
-  private chessWorker: Worker | null = null;
-  private chessWorkerDisabled = false;
-  private chessWorkerReqSeq = 0;
-  private pendingChessWorkerReqId: number | null = null;
-  private pendingChessAction: {
-    reqId: number;
-    kind: 'ai' | 'hint' | 'talisman';
-    stage: number;
-    spentFree?: boolean;
-    spentGold?: number;
-  } | null = null;
+  private minesHoverCell: { r: number; c: number } | null = null;
+  private minesWinRevealTimer = 0;
+  private minesFireworkTimer = 0;
+  private minesLongPressTimer: ReturnType<typeof setTimeout> | null = null;
+  private minesLongPressTriggered = false;
+  private fishWinRevealTimer = 0;
+  private fishAutoSaveAccumSec = 0;
+  private fishShakeTimer = 0;
+  private fishShakeAmp = 0;
   private hitStopTimer = 0;
   private inspectingTurningPoint = false;
   private companionCharge = 0;
@@ -506,43 +469,20 @@ export class PuzzleArcadeModalController {
   private victoryClaimed = false;
   public rescueContext: MinigameRescueContext | null = null;
 
-  private refundPendingChessActionIfAny(): void {
-    const act = this.pendingChessAction;
-    this.pendingChessAction = null;
-    this.pendingChessWorkerReqId = null;
-    if (!act) return;
-    if (act.kind === 'hint' && this.chessEngine && this.chessEngine.stage === act.stage) {
-      if (act.spentFree) {
-        this.chessEngine.freeHintsLeft += 1;
-      } else if (act.spentGold && act.spentGold > 0 && !this.sim.state.sandboxMode) {
-        this.sim.state.galleons += act.spentGold;
-        this.chessEngine.paidAssistsLeft += 1;
-      }
-    } else if (act.kind === 'talisman') {
-      this.sim.refundPhoenixTalismanAttempt('chess');
-    }
-  }
-
-  private terminateChessWorker(): void {
-    this.refundPendingChessActionIfAny();
-    if (this.chessWorker) {
-      try {
-        this.chessWorker.terminate();
-      } catch {
-        // Ignore worker termination errors
-      }
-      this.chessWorker = null;
+  private cancelMinesLongPress(): void {
+    if (this.minesLongPressTimer !== null) {
+      clearTimeout(this.minesLongPressTimer);
+      this.minesLongPressTimer = null;
     }
   }
 
   public resetSession(): void {
-    this.terminateChessWorker();
-    this.aiThinkTimer = 0;
+    this.cancelMinesLongPress();
     this.stopLoop();
     this.cleanupJigsawTrayDrag();
     this.sudokuEngine = null;
-    this.caroEngine = null;
-    this.chessEngine = null;
+    this.minesEngine = null;
+    this.fishEngine = null;
     this.onetEngine = null;
     this.jigsawEngine = null;
     this.jigsawBakeCache = null;
@@ -646,12 +586,16 @@ export class PuzzleArcadeModalController {
     dlg?.addEventListener('close', () => {
       if (dlg.open) return;
       dlg.returnValue = '';
-      this.terminateChessWorker();
+      this.cancelMinesLongPress();
       this.hitStopTimer = 0;
       this.inspectingTurningPoint = false;
       this.cleanupJigsawTrayDrag();
-      if (this.caroWinRevealTimer > 0 && !this.victoryClaimed) {
-        this.caroWinRevealTimer = 0;
+      if (this.minesWinRevealTimer > 0 && !this.victoryClaimed) {
+        this.minesWinRevealTimer = 0;
+        this.checkAndClaimVictory();
+      }
+      if (this.fishWinRevealTimer > 0 && !this.victoryClaimed) {
+        this.fishWinRevealTimer = 0;
         this.checkAndClaimVictory();
       }
       if (this.onetWinRevealTimer > 0 && !this.victoryClaimed) {
@@ -662,20 +606,21 @@ export class PuzzleArcadeModalController {
         this.jigsawWinRevealTimer = 0;
         this.checkAndClaimVictory();
       }
+      if (typeof document === 'undefined' || !document.hidden) {
+        this.clearActiveModalResumeMarker();
+      }
       if (this.rescueContext) {
         this.rescueContext = null;
         this.rescueVictoryOutcome = null;
         this.sudokuEngine = null;
-        this.caroEngine = null;
-        this.chessEngine = null;
+        this.minesEngine = null;
+        this.fishEngine = null;
         this.onetEngine = null;
         this.jigsawEngine = null;
         this.jigsawBakeCache = null;
+        this.sim.saveToStorage();
       } else {
         this.persistModeSession(this.mode, true);
-      }
-      if (typeof document === 'undefined' || !document.hidden) {
-        this.clearActiveModalResumeMarker();
       }
       const modalInner =
         typeof dlg.querySelector === 'function'
@@ -790,6 +735,11 @@ export class PuzzleArcadeModalController {
             (this.root.querySelector('#btnPaJigsawTidy') as HTMLButtonElement | null)?.click();
             return;
           }
+          if (e.key === 's' || e.key === 'S') {
+            e.preventDefault();
+            (this.root.querySelector('#btnPaJigsawScatterTray') as HTMLButtonElement | null)?.click();
+            return;
+          }
           if (
             this.jigsawActiveBoardPiece !== null &&
             je.pieceState[this.jigsawActiveBoardPiece] === JIGSAW_PIECE_BOARD
@@ -871,14 +821,42 @@ export class PuzzleArcadeModalController {
       }
 
       if (
-        this.mode === 'chess' &&
-        this.chessEngine &&
-        this.chessEngine.status === 'playing' &&
-        (e.key === 'h' || e.key === 'H')
+        this.mode === 'caro' &&
+        this.minesEngine &&
+        this.minesEngine.status === 'playing'
       ) {
-        e.preventDefault();
-        (this.root.querySelector('#btnPaChessAssist') as HTMLButtonElement | null)?.click();
-        return;
+        if (e.key === 'f' || e.key === 'F') {
+          e.preventDefault();
+          (this.root.querySelector('#btnPaMinesFlag') as HTMLButtonElement | null)?.click();
+          return;
+        }
+        if (e.key === 'h' || e.key === 'H') {
+          e.preventDefault();
+          (this.root.querySelector('#btnPaMinesHint') as HTMLButtonElement | null)?.click();
+          return;
+        }
+      }
+
+      if (
+        this.mode === 'chess' &&
+        this.fishEngine &&
+        this.fishEngine.status === 'playing'
+      ) {
+        if (e.key === 'c' || e.key === 'C') {
+          e.preventDefault();
+          (this.root.querySelector('#btnPaFishPower') as HTMLButtonElement | null)?.click();
+          return;
+        }
+        if (e.key === 'h' || e.key === 'H') {
+          e.preventDefault();
+          (this.root.querySelector('#btnPaFishSkill') as HTMLButtonElement | null)?.click();
+          return;
+        }
+        if (e.key === ' ') {
+          e.preventDefault();
+          this.fireFishShooterAtCanvas(this.fishEngine.aimX, this.fishEngine.aimY, true);
+          return;
+        }
       }
 
       if (
@@ -957,60 +935,101 @@ export class PuzzleArcadeModalController {
     return sharedMinigameViewport.getEffectiveLayout(false) === 'portrait';
   }
 
-  private getCaroBoardMetrics(): {
+  private computeMinesBoardMetrics(engine: MinesweeperEngine): {
     frameX: number;
     frameY: number;
-    framePx: number;
+    frameW: number;
+    frameH: number;
     originX: number;
     originY: number;
-    stepPx: number;
-    stoneScale: number;
+    cellSize: number;
+    boardW: number;
+    boardH: number;
+    dispRows: number;
+    dispCols: number;
+    transposed: boolean;
   } {
-    const minCss =
-      this.observedCanvasCssW >= 80 && this.observedCanvasCssH >= 80
-        ? Math.min(this.observedCanvasCssW, this.observedCanvasCssH)
-        : this.isMobileBoardLayout()
-          ? 360
-          : 480;
-    const t = Math.max(0, Math.min(1, (minCss - 330) / 110));
-    const origin = Math.round(18 + 6 * t);
-    const stepPx = (CARO_VIRTUAL_PX - origin * 2) / (CARO_BOARD_SIZE - 1);
-    const frameX = Math.max(2, Math.round(2 + 4 * t));
-    const framePx = CARO_VIRTUAL_PX - frameX * 2;
+    const virt = this.getVirtualCanvasSize();
+    const minDim = Math.min(virt.w, virt.h);
+    const transposed =
+      (virt.h > virt.w * 1.03 && engine.cols > engine.rows) ||
+      (virt.w > virt.h * 1.03 && engine.rows > engine.cols) ||
+      (Math.abs(virt.h - virt.w) <= virt.w * 0.03 &&
+        this.isMobileBoardLayout() &&
+        engine.cols > engine.rows);
+    const dispRows = transposed ? engine.cols : engine.rows;
+    const dispCols = transposed ? engine.rows : engine.cols;
+
+    const framePad = Math.max(6, Math.min(12, Math.round(minDim * 0.018)));
+    const topSafe = 28;
+    const botSafe = 6;
+    const availW = Math.max(160, virt.w - (framePad + 8) * 2);
+    const availH = Math.max(150, virt.h - framePad * 2 - topSafe - botSafe);
+    const maxCell = this.isMobileBoardLayout() ? 52 : 56;
+    const cellSize = Math.max(
+      16,
+      Math.min(maxCell, Math.floor(Math.min(availW / dispCols, availH / dispRows)))
+    );
+    const boardW = dispCols * cellSize;
+    const boardH = dispRows * cellSize;
+    const frameW = boardW + framePad * 2;
+    const frameH = boardH + framePad * 2;
+    const frameX = Math.round((virt.w - frameW) * 0.5);
+    const frameY = Math.max(
+      topSafe,
+      Math.round(topSafe + (availH + framePad * 2 - frameH) * 0.5)
+    );
     return {
       frameX,
-      frameY: frameX,
-      framePx,
-      originX: origin,
-      originY: origin,
-      stepPx,
-      stoneScale: stepPx / CARO_STEP_PX,
+      frameY,
+      frameW,
+      frameH,
+      originX: frameX + framePad,
+      originY: frameY + framePad,
+      cellSize,
+      boardW,
+      boardH,
+      dispRows,
+      dispCols,
+      transposed,
     };
   }
 
-  private getChessBoardMetrics(): {
-    boardX: number;
-    boardY: number;
-    cellPx: number;
-    boardPx: number;
-    coordsInsideSquares: boolean;
+  private getFishViewportMetrics(virtW: number, virtH: number): {
+    scale: number;
+    offsetX: number;
+    offsetY: number;
+    arenaPxW: number;
+    arenaPxH: number;
+    unitScale: number;
+    timerBarX: number;
+    timerBarY: number;
+    timerBarW: number;
+    timerBarH: number;
   } {
-    const minCss =
-      this.observedCanvasCssW >= 80 && this.observedCanvasCssH >= 80
-        ? Math.min(this.observedCanvasCssW, this.observedCanvasCssH)
-        : this.isMobileBoardLayout()
-          ? 360
-          : 480;
-    const t = Math.max(0, Math.min(1, (minCss - 330) / 110));
-    const boardX = Math.round(2 + 4 * t) * 2; // 4, 6, 8, 10, 12
-    const boardPx = CHESS_VIRTUAL_PX - boardX * 2;
-    const cellPx = boardPx / 8;
+    const timerBarH = 20;
+    const timerGap = 4;
+    const timerTotal = timerBarH + timerGap;
+    const availH = Math.max(120, virtH - timerTotal);
+    const scale = Math.min(virtW / FISH_ARENA_W, availH / FISH_ARENA_H);
+    const arenaPxW = FISH_ARENA_W * scale;
+    const arenaPxH = FISH_ARENA_H * scale;
+    const timerBarY = Math.max(2, (virtH - (timerTotal + arenaPxH)) * 0.5);
+    const offsetX = (virtW - arenaPxW) * 0.5;
+    const offsetY = timerBarY + timerTotal;
+    const timerBarW = Math.min(virtW - 12, Math.max(Math.min(240, virtW - 12), arenaPxW - 4));
+    const timerBarX = (virtW - timerBarW) * 0.5;
     return {
-      boardX,
-      boardY: boardX,
-      cellPx,
-      boardPx,
-      coordsInsideSquares: boardX < 10,
+      scale,
+      offsetX,
+      offsetY,
+      arenaPxW,
+      arenaPxH,
+      unitScale: scale,
+      timerBarX,
+      timerBarY,
+      timerBarW,
+      timerBarH,
     };
   }
 
@@ -1090,7 +1109,7 @@ export class PuzzleArcadeModalController {
     const boardX = 5;
     const boardY = 5;
     const virtW = boardPx + boardX * 2; // 496
-    const virtH = 561;
+    const virtH = 578;
     const trayY = boardY + boardPx + 6; // 497
     const trayH = virtH - trayY - 2;
     return {
@@ -1113,14 +1132,12 @@ export class PuzzleArcadeModalController {
 
   private getVirtualCanvasSize(): { w: number; h: number } {
     switch (this.mode) {
-      case 'caro':
-        return { w: CARO_VIRTUAL_PX, h: CARO_VIRTUAL_PX };
-      case 'chess':
-        return { w: CHESS_VIRTUAL_PX, h: CHESS_VIRTUAL_PX };
       case 'sudoku': {
         const sm = this.getSudokuLayoutMetrics();
         return { w: sm.virtW, h: sm.virtH };
       }
+      case 'caro':
+      case 'chess':
       case 'blocks':
       case 'jigsaw': {
         if (this.observedCanvasCssW >= 60 && this.observedCanvasCssH >= 60) {
@@ -1154,33 +1171,57 @@ export class PuzzleArcadeModalController {
     parlorImg.src = '/game/trang-trai-hang-soc/paintings/burrow_parlor_bg.webp';
     this.parlorBgImage = parlorImg;
 
-    const hallImg = new Image();
-    hallImg.decoding = 'async';
-    hallImg.src = '/game/trang-trai-hang-soc/paintings/great_hall_chess_bg.webp';
-    this.greatHallBgImage = hallImg;
+    const minesBgImg = new Image();
+    minesBgImg.decoding = 'async';
+    minesBgImg.onload = () => {
+      this.forceImmediateRedraw = true;
+    };
+    minesBgImg.src = '/game/trang-trai-hang-soc/paintings/hogwarts_mines_bg.webp';
+    this.hogwartsMinesBgImage = minesBgImg;
 
-    const marauderImg = new Image();
-    marauderImg.decoding = 'async';
-    marauderImg.src = '/game/trang-trai-hang-soc/paintings/marauder_caro_bg.webp';
-    this.marauderCaroBgImage = marauderImg;
+    const blackLakeBgImg = new Image();
+    blackLakeBgImg.decoding = 'async';
+    blackLakeBgImg.onload = () => {
+      this.cachedFishBgKey = '';
+      this.forceImmediateRedraw = true;
+    };
+    blackLakeBgImg.src = '/game/trang-trai-hang-soc/paintings/black_lake_underwater_bg.webp';
+    this.blackLakeUnderwaterBgImage = blackLakeBgImg;
+
+    const blackLakeCreaturesImg = new Image();
+    blackLakeCreaturesImg.decoding = 'async';
+    blackLakeCreaturesImg.onload = () => {
+      this.forceImmediateRedraw = true;
+    };
+    blackLakeCreaturesImg.src = '/game/trang-trai-hang-soc/paintings/black_lake_creatures.webp';
+    this.blackLakeCreaturesAtlas = blackLakeCreaturesImg;
+
+    const lakeImg = new Image();
+    lakeImg.decoding = 'async';
+    lakeImg.src = '/game/trang-trai-hang-soc/paintings/jigsaw_silver_stag_lake.webp';
+    this.lakeBgImage = lakeImg;
 
     const unicornLakeImg = new Image();
     unicornLakeImg.decoding = 'async';
     unicornLakeImg.src = '/game/trang-trai-hang-soc/paintings/p5_unicorn_lake.webp';
     this.unicornLakeBgImage = unicornLakeImg;
 
-    for (const key of HP_CHESS_PIECE_KEYS) {
+    const paintingTokenKeys = [
+      'caro/phoenix_seal',
+      'caro/dark_mark_seal',
+      'caro-yule/phoenix_seal',
+      'caro-yule/dark_mark_seal',
+      'candy-hogwarts/candy-horcrux',
+      'candy-hogwarts/candy-fiendfyre',
+    ];
+    for (const tk of paintingTokenKeys) {
       const pImg = new Image();
       pImg.decoding = 'async';
-      pImg.src = `/game/trang-trai-hang-soc/paintings/chess/${key}.webp?v=stone`;
-      this.chessPieceImages.set(key, pImg);
-    }
-
-    for (const sealKey of HP_CARO_SEAL_KEYS) {
-      const sImg = new Image();
-      sImg.decoding = 'async';
-      sImg.src = `/game/trang-trai-hang-soc/paintings/caro/${sealKey}.webp`;
-      this.caroSealImages.set(sealKey, sImg);
+      pImg.onload = () => {
+        this.forceImmediateRedraw = true;
+      };
+      pImg.src = `/game/trang-trai-hang-soc/paintings/${tk}.webp`;
+      this.paintingTokenImages.set(tk, pImg);
     }
 
     const spriteKeys = new Set<string>([
@@ -1190,6 +1231,12 @@ export class PuzzleArcadeModalController {
         .map((v) => v.spriteKey)
         .filter((k): k is string => Boolean(k)),
       'm3_icon_star',
+      'm3_sp_bomb',
+      'm3_farm_jam_bomb',
+      'm3_boost_cannon',
+      'm3_sp_snitch',
+      'm3_gem_sapphire',
+      'ui_lock',
       'ui_icon_hammer_wand',
       'ui_icon_golden_sickle',
     ]);
@@ -1225,22 +1272,6 @@ export class PuzzleArcadeModalController {
     yCaroBg.src = '/game/trang-trai-hang-soc/paintings/yule_caro_bg.webp';
     this.yuleCaroBgImage = yCaroBg;
 
-    for (const key of HP_CHESS_PIECE_KEYS) {
-      const pImg = new Image();
-      pImg.decoding = 'async';
-      pImg.onload = markReady;
-      pImg.src = `/game/trang-trai-hang-soc/paintings/chess-yule/${key}.webp`;
-      this.yuleChessPieceImages.set(key, pImg);
-    }
-
-    for (const sealKey of HP_CARO_SEAL_KEYS) {
-      const sImg = new Image();
-      sImg.decoding = 'async';
-      sImg.onload = markReady;
-      sImg.src = `/game/trang-trai-hang-soc/paintings/caro-yule/${sealKey}.webp`;
-      this.yuleCaroSealImages.set(sealKey, sImg);
-    }
-
     for (let d = 1; d <= 9; d++) {
       const rImg = new Image();
       rImg.decoding = 'async';
@@ -1258,23 +1289,38 @@ export class PuzzleArcadeModalController {
     return null;
   }
 
-  private getCaroSealImage(stone: 1 | 2): HTMLImageElement | null {
-    const key = stone === 1 ? 'phoenix_seal' : 'dark_mark_seal';
-    if (this.isYuleSkinActive()) {
-      this.ensureYuleArcadeAssetsLoaded();
-      const yImg = this.yuleCaroSealImages.get(key);
-      if (yImg && yImg.complete && yImg.naturalWidth > 0) return yImg;
-    }
-    const img = this.caroSealImages.get(key);
-    if (img && img.complete && img.naturalWidth > 0) return img;
-    return null;
-  }
-
   private getSpriteImage(key: string): HTMLImageElement | null {
     const fromReg = this.sprites?.getRaw(key);
     if (fromReg && fromReg.complete && fromReg.naturalWidth > 0) return fromReg;
-    const local = this.iconImages.get(key);
+    let local = this.iconImages.get(key);
+    if (!local && typeof Image !== 'undefined') {
+      local = new Image();
+      local.decoding = 'async';
+      local.onload = () => {
+        this.forceImmediateRedraw = true;
+        if (this.jigsawBakeCache?.waitingOnExternalImage) {
+          this.jigsawBakeCache = null;
+        }
+      };
+      local.src = `/game/trang-trai-hang-soc/sprites/${key}.webp`;
+      this.iconImages.set(key, local);
+    }
     if (local && local.complete && local.naturalWidth > 0) return local;
+    return null;
+  }
+
+  private getPaintingTokenImage(relKey: string): HTMLImageElement | null {
+    let img = this.paintingTokenImages.get(relKey);
+    if (!img && typeof Image !== 'undefined') {
+      img = new Image();
+      img.decoding = 'async';
+      img.onload = () => {
+        this.forceImmediateRedraw = true;
+      };
+      img.src = `/game/trang-trai-hang-soc/paintings/${relKey}.webp`;
+      this.paintingTokenImages.set(relKey, img);
+    }
+    if (img && img.complete && img.naturalWidth > 0) return img;
     return null;
   }
 
@@ -1381,21 +1427,20 @@ export class PuzzleArcadeModalController {
 
   public switchMode(nextMode: PuzzleArcadeMode): void {
     if (
-      (this.caroWinRevealTimer > 0 ||
+      (this.minesWinRevealTimer > 0 ||
+        this.fishWinRevealTimer > 0 ||
         this.onetWinRevealTimer > 0 ||
         this.jigsawWinRevealTimer > 0) &&
       !this.victoryClaimed
     ) {
-      this.caroWinRevealTimer = 0;
+      this.minesWinRevealTimer = 0;
+      this.fishWinRevealTimer = 0;
       this.onetWinRevealTimer = 0;
       this.jigsawWinRevealTimer = 0;
       this.checkAndClaimVictory();
     }
     if (!this.rescueContext) {
       this.persistModeSession(this.mode, false);
-    }
-    if (this.mode === 'chess' && nextMode !== 'chess') {
-      this.terminateChessWorker();
     }
     this.mode = nextMode;
     this.sim.state.puzzleArcade.activeMode = nextMode;
@@ -1414,6 +1459,8 @@ export class PuzzleArcadeModalController {
   }
 
   private resetInteractionState(): void {
+    this.cancelMinesLongPress();
+    this.minesLongPressTriggered = false;
     this.cleanupJigsawTrayDrag();
     this.activePointerId = null;
     this.onetHoverCell = null;
@@ -1426,251 +1473,32 @@ export class PuzzleArcadeModalController {
     this.jigsawAutoSaveAccumSec = 0;
     this.jigsawWinRevealTimer = 0;
     this.jigsawTrayPage = 0;
+    this.jigsawTrayScrollLeft = 0;
+    this.jigsawFilterScrollLeft = 0;
     this.jigsawDragBoardPiece = null;
     this.jigsawActiveBoardPiece = null;
     this.sudokuHoverCell = null;
     this.sudokuHoverPadDigit = null;
     this.sudokuHoverAction = null;
-    this.caroHoverCell = null;
-    this.caroLastMoveAnim = null;
-    this.caroWinRevealTimer = 0;
-    this.caroFireworkTimer = 0;
-    this.chessDragFrom = null;
-    this.chessHoverSquare = null;
-    this.chessMoveAnim = null;
-    this.chessSpellBeams = [];
-    this.chessShakeTimer = 0;
-    this.chessShakeAmp = 0;
-    this.refundPendingChessActionIfAny();
+    this.minesHoverCell = null;
+    this.minesWinRevealTimer = 0;
+    this.minesFireworkTimer = 0;
+    this.fishWinRevealTimer = 0;
+    this.fishAutoSaveAccumSec = 0;
+    this.fishShakeTimer = 0;
+    this.fishShakeAmp = 0;
     this.hitStopTimer = 0;
     this.inspectingTurningPoint = false;
-    this.aiThinkTimer = 0;
     this.particles = [];
     this.flyingTiles = [];
   }
 
-  private ensureChessWorker(): Worker | null {
-    if (this.chessWorkerDisabled || typeof Worker === 'undefined') return null;
-    if (!this.chessWorker) {
-      try {
-        const w = new Worker(new URL('../sim/chessAi.worker.ts', import.meta.url), {
-          type: 'module',
-        });
-        w.onmessage = (ev: MessageEvent<ChessWorkerResponseMessage>) => {
-          this.handleChessWorkerMessage(ev.data);
-        };
-        w.onerror = () => {
-          this.chessWorkerDisabled = true;
-          this.refundPendingChessActionIfAny();
-          this.chessWorker = null;
-          try {
-            w.terminate();
-          } catch {
-            // Ignore termination errors
-          }
-        };
-        this.chessWorker = w;
-      } catch {
-        this.chessWorkerDisabled = true;
-        this.chessWorker = null;
-      }
-    }
-    return this.chessWorker;
-  }
-
-  private applyCompletedChessAiResult(
-    aiRes: ReturnType<WizardChessEngine['stepAiMove']>
-  ): void {
-    if (!this.chessEngine) return;
-    if (aiRes?.move) {
-      const movedBlack =
-        this.chessEngine.board[aiRes.move.toR]?.[aiRes.move.toC] ?? {
-          color: 'b' as const,
-          type: 'p' as const,
-        };
-      const didCap = Boolean(aiRes.move.captured || aiRes.move.isEnPassant);
-      this.triggerChessMoveVfx(
-        aiRes.move.fromR,
-        aiRes.move.fromC,
-        aiRes.move.toR,
-        aiRes.move.toC,
-        movedBlack,
-        didCap,
-        Boolean(aiRes.aiWon)
-      );
-      this.sim.audio.playChessClack(didCap);
-      if (didCap) {
-        this.hitStopTimer = 0.035;
-        this.sim.audio.playPowerupBlast();
-      }
-      if (aiRes.playerWon) {
-        this.checkAndClaimVictory();
-      } else if (aiRes.aiWon || aiRes.draw || this.chessEngine.isInCheck('w')) {
-        this.persistModeSession('chess', true);
-        this.renderDOM();
-      } else {
-        this.persistModeSession('chess', true);
-        this.updateLiveCountersOnly();
-      }
-    } else if (aiRes?.playerWon) {
-      this.checkAndClaimVictory();
-    } else {
-      this.persistModeSession('chess', true);
-      this.renderDOM();
-    }
-  }
-
-  private dispatchChessAiTurn(): void {
-    if (!this.chessEngine || this.chessEngine.status !== 'ai_thinking') return;
-    if (this.pendingChessWorkerReqId !== null) return;
-    const worker = this.ensureChessWorker();
-    if (worker) {
-      try {
-        const reqId = ++this.chessWorkerReqSeq;
-        this.pendingChessWorkerReqId = reqId;
-        this.pendingChessAction = { reqId, kind: 'ai', stage: this.chessEngine.stage };
-        const msg: ChessWorkerRequestMessage = {
-          reqId,
-          mode: 'ai',
-          payload: this.chessEngine.exportWorkerPayload(),
-        };
-        worker.postMessage(msg);
-        return;
-      } catch {
-        this.pendingChessAction = null;
-        this.pendingChessWorkerReqId = null;
-        this.chessWorker = null;
-      }
-    }
-    const aiRes = this.chessEngine.stepAiMove();
-    this.applyCompletedChessAiResult(aiRes);
-  }
-
-  private applyCompletedChessHintResult(
-    res: ReturnType<WizardChessEngine['applyPrecomputedHintMove']>,
-    spentFree: boolean,
-    spentGold: number
-  ): void {
-    const we = this.chessEngine;
-    if (!we) return;
-    if (!res.ok || !res.move) {
-      if (spentFree) {
-        we.freeHintsLeft += 1;
-      } else if (spentGold > 0 && !this.sim.state.sandboxMode) {
-        this.sim.state.galleons += spentGold;
-        we.paidAssistsLeft += 1;
-      }
-      return;
-    }
-    const cm = this.getChessBoardMetrics();
-    const x0 = cm.boardX + (res.move.fromC + 0.5) * cm.cellPx;
-    const y0 = cm.boardY + (res.move.fromR + 0.5) * cm.cellPx;
-    const x1 = cm.boardX + (res.move.toC + 0.5) * cm.cellPx;
-    const y1 = cm.boardY + (res.move.toR + 0.5) * cm.cellPx;
-    this.spawnBurst(x0, y0, '#fde047', 14);
-    this.spawnBurst(x1, y1, '#34d399', 18);
-    this.sim.audio.playMatchPop(2);
-    this.persistModeSession('chess', true);
-    this.onParentRefresh();
-    this.showToast(`💡 Gợi ý: ${res.labelVi} — chạm ô đích sáng ngọc để đi quân!`, '💡');
-    this.renderDOM();
-  }
-
-  private applyCompletedChessTalismanResult(
-    res: ReturnType<WizardChessEngine['applyPhoenixTalismanWithMove']>
-  ): void {
-    const we = this.chessEngine;
-    if (!we) return;
-    if (!res.ok) {
-      this.sim.refundPhoenixTalismanAttempt('chess');
-      this.showToast(res.msg, '🔥');
-      return;
-    }
-    if (res.move) {
-      const movedPiece =
-        we.board[res.move.toR]?.[res.move.toC] ?? { color: 'w' as const, type: 'q' as const };
-      this.triggerChessMoveVfx(
-        res.move.fromR,
-        res.move.fromC,
-        res.move.toR,
-        res.move.toC,
-        movedPiece,
-        Boolean(res.move.captured || res.move.isEnPassant),
-        res.won
-      );
-    } else {
-      const chm = this.getChessBoardMetrics();
-      this.spawnWeasleyFireworks(
-        chm.boardX + chm.boardPx * 0.5,
-        chm.boardY + chm.boardPx * 0.5,
-        2
-      );
-    }
-    this.sim.audio.playPowerupBlast();
-    this.showToast(res.msg, '🔥');
-    this.onParentRefresh();
-    if (res.won) {
-      this.checkAndClaimVictory();
-    } else if (res.aiThinking) {
-      this.aiThinkTimer = 0.42;
-      this.persistModeSession('chess', true);
-      this.renderDOM();
-    } else {
-      this.persistModeSession('chess', true);
-      this.renderDOM();
-    }
-  }
-
-  private handleChessWorkerMessage(data: ChessWorkerResponseMessage): void {
-    if (!data || data.reqId !== this.pendingChessWorkerReqId) return;
-    const action = this.pendingChessAction;
-    this.pendingChessWorkerReqId = null;
-    this.pendingChessAction = null;
-
-    if (
-      !action ||
-      this.victoryClaimed ||
-      this.mode !== 'chess' ||
-      !this.chessEngine ||
-      this.chessEngine.stage !== action.stage
-    ) {
-      if (action?.kind === 'talisman') {
-        this.sim.refundPhoenixTalismanAttempt('chess');
-      }
-      return;
-    }
-
-    if (action.kind === 'hint') {
-      if (this.chessEngine.status !== 'playing' || this.chessEngine.turn !== 'w') {
-        if (action.spentFree) this.chessEngine.freeHintsLeft += 1;
-        else if (action.spentGold && action.spentGold > 0 && !this.sim.state.sandboxMode) {
-          this.sim.state.galleons += action.spentGold;
-          this.chessEngine.paidAssistsLeft += 1;
-        }
-        return;
-      }
-      const res = this.chessEngine.applyPrecomputedHintMove(data.move);
-      this.applyCompletedChessHintResult(res, Boolean(action.spentFree), action.spentGold ?? 0);
-      return;
-    }
-
-    if (action.kind === 'talisman') {
-      const res = this.chessEngine.applyPhoenixTalismanWithMove(data.move);
-      this.applyCompletedChessTalismanResult(res);
-      return;
-    }
-
-    if (this.chessEngine.status !== 'ai_thinking') return;
-    const aiRes = this.chessEngine.applyChosenAiMove(data.move);
-    this.applyCompletedChessAiResult(aiRes);
-  }
-
   private getActiveTurningPointReview(): TurningPointReview | null {
-    if (this.mode === 'caro' && this.caroEngine) {
-      return this.caroEngine.getTurningPointReview();
+    if (this.mode === 'caro' && this.minesEngine) {
+      return this.minesEngine.getTurningPointReview();
     }
-    if (this.mode === 'chess' && this.chessEngine) {
-      return this.chessEngine.getTurningPointReview();
+    if (this.mode === 'chess' && this.fishEngine) {
+      return this.fishEngine.getTurningPointReview();
     }
     if (this.mode === 'blocks' && this.onetEngine) {
       return this.onetEngine.getTurningPointReview();
@@ -1689,7 +1517,7 @@ export class PuzzleArcadeModalController {
       <div class="pa-review-card">
         <div class="pa-review-head">
           ${
-            rev.highlightCells.length > 0 && !won // HPVN: on the win card «Soi bàn» sits in the button row
+            rev.highlightCells.length > 0 && !won && rev.mode !== 'caro' // Minesweeper already reveals all mines on the visible board
               ? `<button id="btnPaToggleReviewInspect" type="button" class="pa-mini-pill ${this.inspectingTurningPoint ? 'active' : ''}">${
                   this.inspectingTurningPoint ? 'Ẩn' : 'Soi bàn'
                 }</button>`
@@ -1714,8 +1542,8 @@ export class PuzzleArcadeModalController {
     }
     const pa = this.sim.state.puzzleArcade;
     if (this.mode === 'sudoku') return this.sudokuEngine?.stage ?? pa.sudokuStage ?? 1;
-    if (this.mode === 'caro') return this.caroEngine?.stage ?? pa.caroStage ?? 1;
-    if (this.mode === 'chess') return this.chessEngine?.stage ?? pa.chessStage ?? 1;
+    if (this.mode === 'caro') return this.minesEngine?.stage ?? pa.caroStage ?? 1;
+    if (this.mode === 'chess') return this.fishEngine?.stage ?? pa.chessStage ?? 1;
     if (this.mode === 'jigsaw') return this.jigsawEngine?.stage ?? pa.jigsawStage ?? 1;
     return this.onetEngine?.stage ?? pa.blockStage ?? 1;
   }
@@ -1773,18 +1601,18 @@ export class PuzzleArcadeModalController {
     }
 
     if (mode === 'caro') {
-      if (!this.caroEngine || this.caroEngine.stage !== pa.caroStage) return;
-      if (this.caroEngine.status === 'won' || (this.mode === 'caro' && this.victoryClaimed)) {
-        if (pa.caroSession) {
-          pa.caroSession = null;
+      if (!this.minesEngine || this.minesEngine.stage !== pa.caroStage) return;
+      if (this.minesEngine.status === 'won' || (this.mode === 'caro' && this.victoryClaimed)) {
+        if (pa.minesSession) {
+          pa.minesSession = null;
           if (saveToDisk) this.sim.saveToStorage();
         }
         return;
       }
-      pa.caroSession = this.caroEngine.exportSession(
+      pa.minesSession = this.minesEngine.exportSession(
         extra ?? {
-          companionCharge: pa.caroSession?.companionCharge ?? 0,
-          snackPieUsed: pa.caroSession?.snackPieUsed ?? false,
+          companionCharge: pa.minesSession?.companionCharge ?? 0,
+          snackPieUsed: pa.minesSession?.snackPieUsed ?? false,
         }
       );
       if (saveToDisk) this.sim.saveToStorage();
@@ -1792,18 +1620,19 @@ export class PuzzleArcadeModalController {
     }
 
     if (mode === 'chess') {
-      if (!this.chessEngine || this.chessEngine.stage !== pa.chessStage) return;
-      if (this.chessEngine.status === 'won' || (this.mode === 'chess' && this.victoryClaimed)) {
-        if (pa.chessSession) {
-          pa.chessSession = null;
+      if (!this.fishEngine || this.fishEngine.stage !== pa.chessStage) return;
+      if (this.fishEngine.status === 'won' || (this.mode === 'chess' && this.victoryClaimed)) {
+        if (pa.fishingSession) {
+          pa.fishingSession = null;
           if (saveToDisk) this.sim.saveToStorage();
         }
         return;
       }
-      pa.chessSession = this.chessEngine.exportSession(
+      this.fishAutoSaveAccumSec = 0;
+      pa.fishingSession = this.fishEngine.exportSession(
         extra ?? {
-          companionCharge: pa.chessSession?.companionCharge ?? 0,
-          snackPieUsed: pa.chessSession?.snackPieUsed ?? false,
+          companionCharge: pa.fishingSession?.companionCharge ?? 0,
+          snackPieUsed: pa.fishingSession?.snackPieUsed ?? false,
         }
       );
       if (saveToDisk) this.sim.saveToStorage();
@@ -1848,12 +1677,14 @@ export class PuzzleArcadeModalController {
 
   private flushArcadeAndModalBeforeHide(): void {
     if (
-      (this.caroWinRevealTimer > 0 ||
+      (this.minesWinRevealTimer > 0 ||
+        this.fishWinRevealTimer > 0 ||
         this.onetWinRevealTimer > 0 ||
         this.jigsawWinRevealTimer > 0) &&
       !this.victoryClaimed
     ) {
-      this.caroWinRevealTimer = 0;
+      this.minesWinRevealTimer = 0;
+      this.fishWinRevealTimer = 0;
       this.onetWinRevealTimer = 0;
       this.jigsawWinRevealTimer = 0;
       this.checkAndClaimVictory();
@@ -1872,7 +1703,6 @@ export class PuzzleArcadeModalController {
     this.victoryClaimed = false;
     this.victorySummary = null;
     this.rescueVictoryOutcome = null;
-    this.aiThinkTimer = 0;
 
     const rescueStage =
       this.rescueContext && this.rescueContext.kind === mode ? this.rescueContext.stage : null;
@@ -1918,28 +1748,30 @@ export class PuzzleArcadeModalController {
       const stage = rescueStage ?? pa.caroStage ?? 1;
       if (
         forceRestart ||
-        !this.caroEngine ||
-        this.caroEngine.stage !== stage ||
-        this.caroEngine.status === 'won'
+        !this.minesEngine ||
+        this.minesEngine.stage !== stage ||
+        this.minesEngine.status === 'won' ||
+        this.minesEngine.status === 'lost'
       ) {
-        if (forceRestart && !rescueStage && pa.caroSession) {
-          pa.caroSession = null;
+        if ((forceRestart || pa.minesSession?.status === 'lost') && !rescueStage && pa.minesSession) {
+          pa.minesSession = null;
           this.sim.saveToStorage();
         }
-        const nextEngine = new CaroGameEngine(stage);
+        const nextEngine = new MinesweeperEngine(stage);
         let restored = false;
         if (
           !forceRestart &&
           !rescueStage &&
-          pa.caroSession &&
-          pa.caroSession.stage === stage
+          pa.minesSession &&
+          pa.minesSession.stage === stage &&
+          pa.minesSession.status !== 'lost'
         ) {
-          restored = nextEngine.restoreSession(pa.caroSession);
+          restored = nextEngine.restoreSession(pa.minesSession);
         }
-        this.caroEngine = nextEngine;
-        if (restored && pa.caroSession) {
-          this.companionCharge = Math.max(0, Math.round(pa.caroSession.companionCharge ?? 0));
-          this.snackPieUsedThisAttempt = Boolean(pa.caroSession.snackPieUsed);
+        this.minesEngine = nextEngine;
+        if (restored && pa.minesSession) {
+          this.companionCharge = Math.max(0, Math.round(pa.minesSession.companionCharge ?? 0));
+          this.snackPieUsedThisAttempt = Boolean(pa.minesSession.snackPieUsed);
           this.lossStreakResetForStage = false;
         } else {
           this.resetStageSynergySession();
@@ -1947,40 +1779,39 @@ export class PuzzleArcadeModalController {
             this.persistModeSession('caro', true);
           }
         }
-      } else if (!rescueStage && pa.caroSession?.stage === stage) {
-        this.companionCharge = Math.max(0, Math.round(pa.caroSession.companionCharge ?? 0));
-        this.snackPieUsedThisAttempt = Boolean(pa.caroSession.snackPieUsed);
-      }
-      if (this.caroEngine.status === 'ai_thinking') {
-        this.aiThinkTimer = 0.25;
+      } else if (!rescueStage && pa.minesSession?.stage === stage) {
+        this.companionCharge = Math.max(0, Math.round(pa.minesSession.companionCharge ?? 0));
+        this.snackPieUsedThisAttempt = Boolean(pa.minesSession.snackPieUsed);
       }
     } else if (mode === 'chess') {
       const stage = rescueStage ?? pa.chessStage ?? 1;
       if (
         forceRestart ||
-        !this.chessEngine ||
-        this.chessEngine.stage !== stage ||
-        this.chessEngine.status === 'won'
+        !this.fishEngine ||
+        this.fishEngine.stage !== stage ||
+        this.fishEngine.status === 'won' ||
+        this.fishEngine.status === 'lost'
       ) {
-        const savedChess =
-          !forceRestart && !rescueStage && pa.chessSession?.stage === stage
-            ? pa.chessSession
+        const savedFish =
+          !forceRestart &&
+          !rescueStage &&
+          pa.fishingSession?.stage === stage &&
+          pa.fishingSession.status !== 'lost'
+            ? pa.fishingSession
             : null;
-        if (forceRestart && !rescueStage && pa.chessSession) {
-          pa.chessSession = null;
+        if ((forceRestart || pa.fishingSession?.status === 'lost') && !rescueStage && pa.fishingSession) {
+          pa.fishingSession = null;
           this.sim.saveToStorage();
         }
-        const preferredSubMode = savedChess ? savedChess.subMode : this.chessForceSubMode;
-        const nextEngine = new WizardChessEngine(stage, preferredSubMode);
+        const nextEngine = new FishShooterEngine(stage);
         let restored = false;
-        if (savedChess) {
-          restored = nextEngine.restoreSession(savedChess);
+        if (savedFish) {
+          restored = nextEngine.restoreSession(savedFish);
         }
-        this.chessEngine = nextEngine;
-        if (restored && savedChess) {
-          this.chessForceSubMode = nextEngine.subMode;
-          this.companionCharge = Math.max(0, Math.round(savedChess.companionCharge ?? 0));
-          this.snackPieUsedThisAttempt = Boolean(savedChess.snackPieUsed);
+        this.fishEngine = nextEngine;
+        if (restored && savedFish) {
+          this.companionCharge = Math.max(0, Math.round(savedFish.companionCharge ?? 0));
+          this.snackPieUsedThisAttempt = Boolean(savedFish.snackPieUsed);
           this.lossStreakResetForStage = false;
         } else {
           this.resetStageSynergySession();
@@ -1988,12 +1819,9 @@ export class PuzzleArcadeModalController {
             this.persistModeSession('chess', true);
           }
         }
-      } else if (!rescueStage && pa.chessSession?.stage === stage) {
-        this.companionCharge = Math.max(0, Math.round(pa.chessSession.companionCharge ?? 0));
-        this.snackPieUsedThisAttempt = Boolean(pa.chessSession.snackPieUsed);
-      }
-      if (this.chessEngine.status === 'ai_thinking') {
-        this.aiThinkTimer = 0.25;
+      } else if (!rescueStage && pa.fishingSession?.stage === stage) {
+        this.companionCharge = Math.max(0, Math.round(pa.fishingSession.companionCharge ?? 0));
+        this.snackPieUsedThisAttempt = Boolean(pa.fishingSession.snackPieUsed);
       }
     } else if (mode === 'jigsaw') {
       const stage = rescueStage ?? pa.jigsawStage ?? 1;
@@ -2020,6 +1848,8 @@ export class PuzzleArcadeModalController {
         this.jigsawEngine = nextEngine;
         this.jigsawBakeCache = null;
         this.jigsawTrayPage = 0;
+        this.jigsawTrayScrollLeft = 0;
+        this.jigsawFilterScrollLeft = 0;
         this.jigsawTrayCollapsed = false;
         if (restored && pa.jigsawSession) {
           this.companionCharge = Math.max(0, Math.round(pa.jigsawSession.companionCharge ?? 0));
@@ -2118,7 +1948,7 @@ export class PuzzleArcadeModalController {
           if (!this.gpuFx) {
             this.gpuFx = new MinigameGpuFxBatcher(dlg);
           }
-          const boardEl = dlg.querySelector('#puzzleArcadeCanvas') as HTMLElement | null;
+          const boardEl = dlg.querySelector('#paBoardCanvas') as HTMLElement | null;
           const rect = boardEl?.getBoundingClientRect();
           const cx = rect ? rect.left + rect.width * 0.5 : (window.innerWidth || 800) * 0.5;
           const cy = rect ? rect.top + rect.height * 0.5 : (window.innerHeight || 600) * 0.5;
@@ -2142,8 +1972,8 @@ export class PuzzleArcadeModalController {
     if (this.victoryClaimed) return;
     const isWon =
       (this.mode === 'sudoku' && this.sudokuEngine?.status === 'won') ||
-      (this.mode === 'caro' && this.caroEngine?.status === 'won') ||
-      (this.mode === 'chess' && this.chessEngine?.status === 'won') ||
+      (this.mode === 'caro' && this.minesEngine?.status === 'won') ||
+      (this.mode === 'chess' && this.fishEngine?.status === 'won') ||
       (this.mode === 'blocks' && this.onetEngine?.status === 'won') ||
       (this.mode === 'jigsaw' && this.jigsawEngine?.status === 'won');
     if (!isWon) return;
@@ -2183,31 +2013,27 @@ export class PuzzleArcadeModalController {
       this.spawnCelebrationConfetti();
       this.onParentRefresh();
       this.renderDOM();
-    } else if (this.mode === 'caro' && this.caroEngine?.status === 'won') {
+    } else if (this.mode === 'caro' && this.minesEngine?.status === 'won') {
       this.victoryClaimed = true;
-      this.sim.state.puzzleArcade.caroSession = null;
+      this.sim.state.puzzleArcade.minesSession = null;
       this.clearActiveModalResumeMarker();
-      const humanMoves = Math.max(
-        1,
-        this.caroEngine.moveHistory.filter((m) => m.stone === 1).length
-      );
-      this.victorySummary = this.sim.completePuzzleArcadeVictory('caro', this.caroEngine.reward, {
-        sessionScore: Math.max(1100, 2800 - this.caroEngine.moveHistory.length * 24),
-        efficiency: humanMoves,
+      this.victorySummary = this.sim.completePuzzleArcadeVictory('caro', this.minesEngine.reward, {
+        sessionScore: Math.max(
+          1200,
+          2600 + this.minesEngine.totalMines * 25 - this.minesEngine.movesCount * 4
+        ),
+        efficiency: Math.max(1, this.minesEngine.movesCount),
       });
       this.spawnCelebrationConfetti();
       this.onParentRefresh();
       this.renderDOM();
-    } else if (this.mode === 'chess' && this.chessEngine?.status === 'won') {
+    } else if (this.mode === 'chess' && this.fishEngine?.status === 'won') {
       this.victoryClaimed = true;
-      this.sim.state.puzzleArcade.chessSession = null;
+      this.sim.state.puzzleArcade.fishingSession = null;
       this.clearActiveModalResumeMarker();
-      this.victorySummary = this.sim.completePuzzleArcadeVictory('chess', this.chessEngine.reward, {
-        sessionScore: Math.max(
-          1300,
-          3000 - this.chessEngine.moveCount * 30 + this.chessEngine.capturedByWhite.length * 80
-        ),
-        efficiency: Math.max(1, this.chessEngine.moveCount),
+      this.victorySummary = this.sim.completePuzzleArcadeVictory('chess', this.fishEngine.reward, {
+        sessionScore: Math.max(1200, this.fishEngine.score),
+        efficiency: Math.max(1, this.fishEngine.maxCombo),
       });
       this.spawnCelebrationConfetti();
       this.onParentRefresh();
@@ -2291,55 +2117,6 @@ export class PuzzleArcadeModalController {
     }
   }
 
-  private triggerChessMoveVfx(
-    fromR: number,
-    fromC: number,
-    toR: number,
-    toC: number,
-    movedPiece: ChessPiece,
-    didCapture: boolean,
-    isTerminalMate: boolean
-  ): void {
-    const cm = this.getChessBoardMetrics();
-    const x0 = cm.boardX + (fromC + 0.5) * cm.cellPx;
-    const y0 = cm.boardY + (fromR + 0.5) * cm.cellPx;
-    const x1 = cm.boardX + (toC + 0.5) * cm.cellPx;
-    const y1 = cm.boardY + (toR + 0.5) * cm.cellPx;
-    const isWhite = movedPiece.color === 'w';
-
-    this.chessMoveAnim = {
-      fromR,
-      fromC,
-      toR,
-      toC,
-      piece: { ...movedPiece },
-      age: 0,
-      duration: 0.24,
-    };
-
-    if (didCapture || isTerminalMate) {
-      this.chessSpellBeams.push({
-        x0,
-        y0: y0 - 8,
-        x1,
-        y1: y1 - 6,
-        isWhiteCaster: isWhite,
-        age: 0,
-        duration: 0.34,
-      });
-      this.spawnStoneShatter(x1, y1 - 4, isWhite);
-      const reducedMotion =
-        typeof window !== 'undefined' &&
-        Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
-      if (!reducedMotion) {
-        this.chessShakeTimer = isTerminalMate ? 0.28 : 0.18;
-        this.chessShakeAmp = isTerminalMate ? 4.2 : 2.6;
-      }
-    } else {
-      this.spawnBurst(x1, y1, isWhite ? '#fde047' : '#34d399', 12);
-    }
-  }
-
   private spawnWeasleyFireworks(centerX = 224, centerY = 198, bursts = 3): void {
     const palettes: ReadonlyArray<ReadonlyArray<string>> = [
       ['#fde047', '#f97316', '#ef4444', '#fffbeb'],
@@ -2400,7 +2177,7 @@ export class PuzzleArcadeModalController {
       dlg.dataset.paActiveMode = this.mode;
     }
     modalInner?.classList.toggle('pa-great-hall-mode', this.mode === 'chess');
-    modalInner?.classList.remove('pa-potions-sudoku-mode');
+    modalInner?.classList.toggle('pa-potions-sudoku-mode', this.mode === 'sudoku');
     modalInner?.classList.toggle('pa-marauder-caro-mode', this.mode === 'caro');
 
     const modalTitle = this.root.querySelector('#puzzleArcadeDialogTitle') as HTMLElement | null;
@@ -2411,13 +2188,13 @@ export class PuzzleArcadeModalController {
 
     if (this.mode === 'chess') {
         modalTitle.innerHTML =
-          '<img src="/game/trang-trai-hang-soc/paintings/chess/wk.webp?v=stone" alt="" style="width:28px;height:32px;object-fit:contain;vertical-align:-8px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Cờ Phù Thủy';
+          '<img src="/game/trang-trai-hang-soc/paintings/plimpy_icon.webp" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Bắn Cá Hồ Đen';
       } else if (this.mode === 'sudoku') {
         modalTitle.innerHTML =
           '<img src="/game/trang-trai-hang-soc/sprites/m3_piece_scroll.webp" alt="" style="width:26px;height:26px;object-fit:contain;vertical-align:-6px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Số Học Huyền Bí';
       } else if (this.mode === 'caro') {
         modalTitle.innerHTML =
-          '<img src="/game/trang-trai-hang-soc/paintings/caro/phoenix_seal.webp" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Ngũ Ấn Đạo Tặc';
+          '<img src="/game/trang-trai-hang-soc/paintings/caro/phoenix_seal.webp" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Dò Mìn Phép Thuật';
       } else if (this.mode === 'jigsaw') {
         modalTitle.innerHTML =
           '<img src="/game/trang-trai-hang-soc/sprites/ui_icon_jigsaw.webp" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />Tranh Ghép Phép Thuật';
@@ -2446,6 +2223,7 @@ export class PuzzleArcadeModalController {
     let stageStats = '';
     let stageAlert: string | undefined;
     let stageAction = '';
+    let canActiveTalisman = false;
     const rescueBtn = (can: boolean): string =>
       can ? `<button id="btnPaRescuePhoenixTalisman" type="button" class="pa-tool-btn talisman hs-lv-act">Bùa ×${talismanDisp}</button>` : '';
     const timeIcon = lvIcon('res_time_sand');
@@ -2512,6 +2290,7 @@ export class PuzzleArcadeModalController {
         (se.status === 'playing' || se.status === 'lost') &&
         !talismanLocked &&
         (st.sandboxMode || talismanQty > 0);
+      canActiveTalisman = canTalisman;
       const hintCostLbl = st.sandboxMode
         ? '∞'
         : se.freeHintsLeft > 0
@@ -2545,44 +2324,31 @@ export class PuzzleArcadeModalController {
       } else if (se.fullBoardMismatch) {
         stageAlert = `Kín 81/81 nhưng chưa đúng · ${se.mistakesCount}/${se.maxMistakes}`;
       }
-    } else if (this.mode === 'caro' && this.caroEngine) {
-      const ce = this.caroEngine;
-      stageSub = escapeHtml(ce.opponent.name);
+    } else if (this.mode === 'caro' && this.minesEngine) {
+      const me = this.minesEngine;
+      stageSub = `${me.rows}×${me.cols} · Khiên ${st.sandboxMode ? '∞' : me.shieldsLeft}`;
       stageStats =
-        (ce.runeSealCount > 0 ? lvStat('Ấn khoá', `<strong>${ce.runeSealCount}</strong>`, lvIcon('ui_lock')) : '') +
-        lvStat('Số nước', `<strong id="paCaroMoves">${ce.moveHistory.length} nước</strong>`);
-      const canCaroUndo =
-        ce.moveHistory.length > ce.initialHistoryLen &&
-        ce.status !== 'ai_thinking' &&
-        this.caroWinRevealTimer <= 0 &&
-        (st.sandboxMode || ce.freeUndosLeft + ce.paidUndosLeft > 0);
-      const canCaroHint =
-        ce.status === 'playing' && (st.sandboxMode || ce.freeHintsLeft + ce.paidHintsLeft > 0);
-      const talismanLocked = ce.talismanUsed || usedTodayInMode;
+        lvStat('Mìn còn', `<strong id="paMinesLeft">${me.remainingMinesCount}</strong>`, lvIcon('m3_sp_bomb')) +
+        lvStat('Đã mở', `<strong id="paMinesProgress">${me.revealedSafeCount}/${me.safeCellCount}</strong>`, lvIcon('m3_icon_star'));
+      const canMinesHint =
+        me.status === 'playing' && (st.sandboxMode || me.freeHintsLeft + me.paidHintsLeft > 0);
+      const talismanLocked = me.talismanUsed || usedTodayInMode;
       const canTalisman =
-        (ce.status === 'playing' || ce.status === 'lost' || ce.status === 'draw') &&
+        (me.status === 'playing' || me.status === 'lost') &&
         !talismanLocked &&
         (st.sandboxMode || talismanQty > 0);
-      const undoLbl = st.sandboxMode
-        ? '∞'
-        : ce.freeUndosLeft > 0
-          ? `${ce.freeUndosLeft}`
-          : ce.paidUndosLeft > 0
-            ? `${ce.undoGoldCost} Sickle`
-            : '0';
+      canActiveTalisman = canTalisman;
       const hintLbl = st.sandboxMode
         ? '∞'
-        : ce.freeHintsLeft > 0
-          ? `${ce.freeHintsLeft}`
-          : ce.paidHintsLeft > 0
-            ? `${ce.hintGoldCost} Sickle`
+        : me.freeHintsLeft > 0
+          ? `${me.freeHintsLeft}`
+          : me.paidHintsLeft > 0
+            ? `${me.hintGoldCost} Sickle`
             : '0';
       controlsHtml = `
-        <button id="btnPaCaroUndo" type="button" class="pa-tool-btn" ${!canCaroUndo ? 'disabled' : ''}>
-          ↩️ Lùi <span class="pa-cost-pill">${undoLbl}</span>
-        </button>
-        <button id="btnPaCaroHint" type="button" class="pa-tool-btn gold" ${!canCaroHint ? 'disabled' : ''}>
-          💡 Gợi Ý <span class="pa-cost-pill">${hintLbl}</span>
+        <button id="btnPaMinesFlag" type="button" class="pa-tool-btn ${me.flagMode ? 'active' : ''}" aria-pressed="${me.flagMode}" ${me.status !== 'playing' ? 'disabled' : ''} title="Bật/tắt Ấn Sáp Phượng Hoàng cắm cờ phong ấn bẫy (F)"><span class="pa-ico"><img class="hs-ico" src="/game/trang-trai-hang-soc/paintings/caro/phoenix_seal.webp" alt="" aria-hidden="true" draggable="false"></span>Cắm Cờ${me.flagMode ? ' ✓' : ''}</button>
+        <button id="btnPaMinesHint" type="button" class="pa-tool-btn gold" ${!canMinesHint ? 'disabled' : ''} title="Dò và mở an toàn 1 ô trên Bản Đồ Đạo Tặc (H)">
+          🪄 Dò An Toàn <span class="pa-cost-pill">${hintLbl}</span>
         </button>
         <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="${talismanTooltip}">
           🔥 Bùa <span class="pa-cost-pill">${talismanLocked ? '✓ 1/1' : `×${talismanDisp}`}</span>
@@ -2591,53 +2357,37 @@ export class PuzzleArcadeModalController {
           🔄 Ván Mới
         </button>
       `;
-      if (ce.status === 'lost' || ce.status === 'draw') {
-        const caroRev = ce.getTurningPointReview();
-        stageAlert = ce.status === 'lost' ? 'Thua' : 'Hòa cờ';
+      if (me.status === 'lost') {
+        const minesRev = me.getTurningPointReview();
+        stageAlert = 'Chạm mìn nổ';
         stageAction = rescueBtn(canTalisman);
-        if (caroRev) statusBannerHtml += `<div class="pa-alert-strip">${this.renderTurningPointCardHtml(caroRev)}</div>`;
+        if (minesRev) statusBannerHtml += `<div class="pa-alert-strip">${this.renderTurningPointCardHtml(minesRev)}</div>`;
       }
-    } else if (this.mode === 'chess' && this.chessEngine) {
-      const we = this.chessEngine;
-      const isTactics = we.subMode === 'tactics';
-      stageSub = escapeHtml(we.opponentName);
-      stageStats = lvStat('Lượt', `<strong id="paChessTurn" class="${we.status !== 'ai_thinking' && we.isInCheck('w') ? 'pa-err-inline' : ''}">${chessTurnVi(we)}</strong>`);
-      const canChessUndo =
-        we.moveCount > 0 &&
-        we.status !== 'ai_thinking' &&
-        (st.sandboxMode || we.freeUndosLeft + we.paidUndosLeft > 0);
-      const canChessAssist =
-        we.status === 'playing' && (st.sandboxMode || we.freeHintsLeft + we.paidAssistsLeft > 0);
-      const talismanLocked = we.talismanUsed || usedTodayInMode;
+    } else if (this.mode === 'chess' && this.fishEngine) {
+      const fe = this.fishEngine;
+      stageSub = `<span id="paFishSub">Đũa ×${fe.cannonTier} · Combo ×${Math.max(1, fe.combo)}</span>`;
+      stageStats =
+        lvStat('Thời gian', `<strong id="paFishTimer" class="${!st.sandboxMode && fe.isTimeCritical ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : fe.formatRemainingTime()}</strong>`, timeIcon) +
+        lvStat('Điểm', `<strong id="paFishScore">${fe.score.toLocaleString('vi-VN')}/${fe.targetScore.toLocaleString('vi-VN')}</strong>`, lvIcon('m3_icon_star')) +
+        lvStat('Đạn ngọc', `<strong id="paFishAmmo" class="${!st.sandboxMode && fe.ammo <= 5 ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : fe.ammo}</strong>`, lvIcon('m3_gem_sapphire'));
+      const canFishSkill =
+        fe.status === 'playing' && (st.sandboxMode || fe.freeSkillsLeft + fe.paidSkillsLeft > 0);
+      const talismanLocked = fe.talismanUsed || usedTodayInMode;
       const canTalisman =
-        (we.status === 'playing' || we.status === 'lost' || we.status === 'draw') &&
+        (fe.status === 'playing' || fe.status === 'lost') &&
         !talismanLocked &&
         (st.sandboxMode || talismanQty > 0);
-      const undoLbl = st.sandboxMode
+      canActiveTalisman = canTalisman;
+      const skillLbl = st.sandboxMode
         ? '∞'
-        : we.freeUndosLeft > 0
-          ? `${we.freeUndosLeft}`
-          : we.paidUndosLeft > 0
-            ? `${we.undoGoldCost} Sickle`
-            : '0';
-      const hintLbl = st.sandboxMode
-        ? '∞'
-        : we.freeHintsLeft > 0
-          ? `${we.freeHintsLeft}`
-          : we.paidAssistsLeft > 0
-            ? `${we.assistGoldCost} Sickle`
+        : fe.freeSkillsLeft > 0
+          ? `${fe.freeSkillsLeft}`
+          : fe.paidSkillsLeft > 0
+            ? `${fe.skillGoldCost} Sickle`
             : '0';
       controlsHtml = `
-        <div class="pa-submode-switch" role="group" aria-label="Kiểu chơi Cờ Phù Thủy">
-          <button id="btnPaChessTactics" type="button" class="pa-mini-pill ${isTactics ? 'active' : ''}" ${we.subModeLocked && !isTactics ? 'disabled' : ''}>${we.subModeLocked && !isTactics ? '🔒 ' : '⚡ '}Thế Cờ</button>
-          <button id="btnPaChessMatch" type="button" class="pa-mini-pill ${!isTactics ? 'active' : ''}" ${we.subModeLocked && isTactics ? 'disabled' : ''}>${we.subModeLocked && isTactics ? '🔒 ' : '👑 '}8×8</button>
-        </div>
-        <button id="btnPaChessUndo" type="button" class="pa-tool-btn" ${!canChessUndo ? 'disabled' : ''}>
-          ↩️ Lùi <span class="pa-cost-pill">${undoLbl}</span>
-        </button>
-        <button id="btnPaChessAssist" type="button" class="pa-tool-btn gold" ${!canChessAssist ? 'disabled' : ''}>
-          💡 Gợi Ý <span class="pa-cost-pill">${hintLbl}</span>
-        </button>
+        <button id="btnPaFishPower" type="button" class="pa-tool-btn ${fe.cannonTier > 1 ? 'active' : ''}" ${fe.status !== 'playing' ? 'disabled' : ''} title="Đổi bậc Đũa Phép ×1 / ×2 / ×3 (C)"><span class="pa-ico"><img class="hs-ico" src="/game/trang-trai-hang-soc/sprites/ui_icon_hammer_wand.webp" alt="" aria-hidden="true" draggable="false"></span>Đũa Phép <span class="pa-cost-pill">×${fe.cannonTier}</span></button>
+        <button id="btnPaFishSkill" type="button" class="pa-tool-btn gold" ${!canFishSkill ? 'disabled' : ''} title="Băng Phong Glacius đóng băng toàn Hồ Đen (H)"><span class="pa-ico"><img class="hs-ico" src="/game/trang-trai-hang-soc/sprites/m3_obs_ice.webp" alt="" aria-hidden="true" draggable="false"></span>Băng Phong <span class="pa-cost-pill">${skillLbl}</span></button>
         <button id="btnPaPhoenixTalisman" type="button" class="pa-tool-btn talisman" ${!canTalisman ? 'disabled' : ''} title="${talismanTooltip}">
           🔥 Bùa <span class="pa-cost-pill">${talismanLocked ? '✓ 1/1' : `×${talismanDisp}`}</span>
         </button>
@@ -2645,11 +2395,11 @@ export class PuzzleArcadeModalController {
           🔄 Ván Mới
         </button>
       `;
-      if (we.status === 'lost' || we.status === 'draw') {
-        const chessRev = we.getTurningPointReview();
-        stageAlert = we.status === 'lost' ? 'Bị chiếu bí' : 'Hòa cờ';
+      if (fe.status === 'lost') {
+        const fishRev = fe.getTurningPointReview();
+        stageAlert = `Hết giờ · ${fe.score.toLocaleString('vi-VN')}/${fe.targetScore.toLocaleString('vi-VN')} điểm`;
         stageAction = rescueBtn(canTalisman);
-        if (chessRev) statusBannerHtml += `<div class="pa-alert-strip">${this.renderTurningPointCardHtml(chessRev)}</div>`;
+        if (fishRev) statusBannerHtml += `<div class="pa-alert-strip">${this.renderTurningPointCardHtml(fishRev)}</div>`;
       }
     } else if (this.mode === 'blocks' && this.onetEngine) {
       const oe = this.onetEngine;
@@ -2669,6 +2419,7 @@ export class PuzzleArcadeModalController {
         (oe.status === 'playing' || oe.status === 'lost') &&
         !talismanLocked &&
         (st.sandboxMode || talismanQty > 0);
+      canActiveTalisman = canTalisman;
       const hintCostLbl = st.sandboxMode
         ? '∞'
         : oe.freeHintsLeft > 0
@@ -2714,6 +2465,7 @@ export class PuzzleArcadeModalController {
         (je.status === 'playing' || je.status === 'lost') &&
         !talismanLocked &&
         (st.sandboxMode || talismanQty > 0);
+      canActiveTalisman = canTalisman;
       const hintCostLbl = st.sandboxMode
         ? '∞'
         : je.freeHintsLeft > 0
@@ -2856,13 +2608,23 @@ export class PuzzleArcadeModalController {
       (this.mode === 'sudoku' && this.sudokuEngine?.status === 'lost') ||
       (this.mode === 'blocks' && this.onetEngine?.status === 'lost') ||
       (this.mode === 'jigsaw' && this.jigsawEngine?.status === 'lost') ||
-      (this.mode === 'caro' &&
-        (this.caroEngine?.status === 'lost' || this.caroEngine?.status === 'draw')) ||
-      (this.mode === 'chess' &&
-        (this.chessEngine?.status === 'lost' || this.chessEngine?.status === 'draw'));
+      (this.mode === 'caro' && this.minesEngine?.status === 'lost') ||
+      (this.mode === 'chess' && this.fishEngine?.status === 'lost');
     if (isFailedNow && !this.lossStreakResetForStage && !this.rescueContext) {
       this.lossStreakResetForStage = true;
       this.sim.resetExamWinStreak();
+    }
+    if (isFailedNow && !this.victorySummary && !this.rescueVictoryOutcome && !inspectReturnBarHtml) {
+      inspectReturnBarHtml = `
+        <div class="pa-inspect-return-bar pa-loss-return-bar" role="region" aria-label="Kết thúc lượt chơi">
+          <span>${escapeHtml(stageAlert ?? 'Chưa qua màn')} · Màn ${activeStageNum}</span>
+          <div class="pa-inspect-return-actions">
+            ${canActiveTalisman ? `<button id="btnPaLossTalisman" type="button" class="brass-btn">Bùa ×${talismanDisp}</button>` : ''}
+            <button id="btnPaLossRetry" type="button" class="brass-btn gold-cta">Chơi Lại</button>
+            <button id="btnPaLossHome" type="button" class="brass-btn">Về vườn</button>
+          </div>
+        </div>
+      `;
     }
 
     const pieQty = this.sim.getFarmItemCount('cinnamon_apple_pie');
@@ -2887,6 +2649,10 @@ export class PuzzleArcadeModalController {
       (this.root.querySelector('#puzzleArcadeDialog') as HTMLElement | null)?.dataset?.mgLayout === 'portrait' ||
       globalThis.matchMedia?.('(min-width: 980px)').matches ||
       globalThis.matchMedia?.('(max-height: 450px) and (orientation: landscape)').matches;
+
+    if (this.mode === 'jigsaw') {
+      this.captureJigsawTrayScrollState();
+    }
 
     box.innerHTML = `
       <div class="pa-layout-shell" data-pa-active-mode="${this.mode}">
@@ -2919,19 +2685,19 @@ export class PuzzleArcadeModalController {
                 <strong id="paRankText">${isScoredMode ? `#${compactSickle(activeModeRank)}` : '4 Môn'}</strong>
               </button>
               <form method="dialog" class="pa-inline-close-form">
-                <button type="submit" class="brass-btn pa-inline-close-btn" title="Đóng (Esc)" aria-label="Đóng">✕</button>
+                <button type="submit" value="close" class="brass-btn pa-inline-close-btn" title="Về Trang Trại (Esc)" aria-label="Về Trang Trại"><img src="/game/trang-trai-hang-soc/sprites/burrow_house_canon.webp" alt="" class="m3-res-icon pa-close-home-ico" aria-hidden="true" /><span class="pa-close-home-lbl">Về vườn</span></button>
               </form>
             </div>
 
             <div class="pa-mode-tabs" role="tablist"${globalThis.matchMedia?.('(min-width: 980px)').matches ? ' aria-orientation="vertical"' : ''} aria-label="Chọn môn khảo thí phép thuật Hogwarts" ${this.rescueContext ? 'style="opacity:0.65;pointer-events:none;"' : ''}>
-              <button type="button" role="tab" aria-selected="${this.mode === 'caro'}" data-pa-mode="caro" class="pa-mode-tab ${this.mode === 'caro' ? 'active' : ''}" title="Ngũ Ấn Đạo Tặc">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🗺️ Ngũ Ấn Đạo Tặc</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🗺️</span> Ngũ Ấn</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('caro')}</span>${trialBadgeFor('caro')}</span>
+              <button type="button" role="tab" aria-selected="${this.mode === 'caro'}" data-pa-mode="caro" class="pa-mode-tab ${this.mode === 'caro' ? 'active' : ''}" title="Dò Mìn Phép Thuật">
+                <span class="pa-tab-name"><span class="pa-tab-name-full">Dò Mìn Phép Thuật</span><span class="pa-tab-name-short"><span class="pa-tab-ico"></span> Dò Mìn</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('caro')}</span>${trialBadgeFor('caro')}</span>
               </button>
               <button type="button" role="tab" aria-selected="${this.mode === 'sudoku'}" data-pa-mode="sudoku" class="pa-mode-tab ${this.mode === 'sudoku' ? 'active' : ''}" title="Số Học Huyền Bí">
                 <span class="pa-tab-name"><span class="pa-tab-name-full">🔢 Số Học Huyền Bí</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🔢</span> Số Học</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('sudoku')}</span>${trialBadgeFor('sudoku')}</span>
               </button>
-              <button type="button" role="tab" aria-selected="${this.mode === 'chess'}" data-pa-mode="chess" class="pa-mode-tab ${this.mode === 'chess' ? 'active' : ''}" title="Cờ Phù Thủy">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🏰 Cờ Phù Thủy</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🏰</span> Cờ</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('chess')}</span>${trialBadgeFor('chess')}</span>
+              <button type="button" role="tab" aria-selected="${this.mode === 'chess'}" data-pa-mode="chess" class="pa-mode-tab ${this.mode === 'chess' ? 'active' : ''}" title="Bắn Cá Hồ Đen">
+                <span class="pa-tab-name"><span class="pa-tab-name-full">Bắn Cá Hồ Đen</span><span class="pa-tab-name-short"><span class="pa-tab-ico"></span> Bắn Cá</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('chess')}</span>${trialBadgeFor('chess')}</span>
               </button>
               <button type="button" role="tab" aria-selected="${this.mode === 'blocks'}" data-pa-mode="blocks" class="pa-mode-tab ${this.mode === 'blocks' ? 'active' : ''}" title="Sinh Vật Huyền Bí">
                 <span class="pa-tab-name"><span class="pa-tab-name-full">🦄 Sinh Vật Huyền Bí</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🦄</span> Sinh Vật</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('blocks')}</span>${trialBadgeFor('blocks')}</span>
@@ -2960,7 +2726,7 @@ export class PuzzleArcadeModalController {
         <div class="pa-stage-viewport ${this.mode === 'jigsaw' ? 'pa-jigsaw-stage-viewport' : ''}">
           <div class="mg-stage-pan-area">
             <div class="pa-canvas-shell" data-pa-board-mode="${this.mode}">
-              <canvas id="paBoardCanvas" width="${this.getVirtualCanvasSize().w}" height="${this.getVirtualCanvasSize().h}" aria-label="Bàn chơi Sảnh Bàn Cờ &amp; Cổ Ngữ Phép Thuật"></canvas>
+              <canvas id="paBoardCanvas" width="${this.getVirtualCanvasSize().w}" height="${this.getVirtualCanvasSize().h}" aria-label="Bàn chơi Đại Sảnh Khảo Thí Phép Thuật"></canvas>
               ${inspectReturnBarHtml}
             </div>
           </div>
@@ -3024,44 +2790,78 @@ export class PuzzleArcadeModalController {
                 : '0';
         }
       }
-    } else if (this.mode === 'caro' && this.caroEngine) {
-      const prog = box.querySelector('#paCaroMoves');
-      if (prog) {
-        prog.textContent = `${this.caroEngine.moveHistory.length} nước`;
+    } else if (this.mode === 'caro' && this.minesEngine) {
+      const me = this.minesEngine;
+      const leftEl = box.querySelector('#paMinesLeft');
+      if (leftEl) {
+        leftEl.textContent = String(me.remainingMinesCount);
       }
-      const undoBtn = box.querySelector('#btnPaCaroUndo') as HTMLButtonElement | null;
-      if (undoBtn) {
-        undoBtn.disabled =
-          this.caroEngine.moveHistory.length <= this.caroEngine.initialHistoryLen ||
-          this.caroEngine.status === 'ai_thinking' ||
-          (!st.sandboxMode && this.caroEngine.freeUndosLeft + this.caroEngine.paidUndosLeft <= 0);
+      const progEl = box.querySelector('#paMinesProgress');
+      if (progEl) {
+        progEl.textContent = `${me.revealedSafeCount}/${me.safeCellCount}`;
       }
-      const hintBtn = box.querySelector('#btnPaCaroHint') as HTMLButtonElement | null;
+      const flagBtn = box.querySelector('#btnPaMinesFlag') as HTMLButtonElement | null;
+      if (flagBtn) {
+        flagBtn.disabled = me.status !== 'playing';
+        flagBtn.classList.toggle('active', me.flagMode);
+        flagBtn.setAttribute('aria-pressed', String(me.flagMode));
+      }
+      const hintBtn = box.querySelector('#btnPaMinesHint') as HTMLButtonElement | null;
       if (hintBtn) {
         hintBtn.disabled =
-          this.caroEngine.status !== 'playing' ||
-          (!st.sandboxMode && this.caroEngine.freeHintsLeft + this.caroEngine.paidHintsLeft <= 0);
+          me.status !== 'playing' || (!st.sandboxMode && me.freeHintsLeft + me.paidHintsLeft <= 0);
+        const pill = hintBtn.querySelector('.pa-cost-pill');
+        if (pill) {
+          pill.textContent = st.sandboxMode
+            ? '∞'
+            : me.freeHintsLeft > 0
+              ? String(me.freeHintsLeft)
+              : me.paidHintsLeft > 0
+                ? `${me.hintGoldCost} Sickle`
+                : '0';
+        }
       }
-    } else if (this.mode === 'chess' && this.chessEngine) {
-      const turnEl = box.querySelector('#paChessTurn');
-      if (turnEl) {
-        turnEl.textContent = chessTurnVi(this.chessEngine);
-        turnEl.classList.toggle('pa-err-inline', this.chessEngine.status !== 'ai_thinking' && this.chessEngine.isInCheck('w'));
+    } else if (this.mode === 'chess' && this.fishEngine) {
+      const fe = this.fishEngine;
+      const subEl = box.querySelector('#paFishSub');
+      if (subEl) {
+        subEl.textContent = `Đũa ×${fe.cannonTier} · Combo ×${Math.max(1, fe.combo)}`;
       }
-      const undoBtn = box.querySelector('#btnPaChessUndo') as HTMLButtonElement | null;
-      if (undoBtn) {
-        undoBtn.disabled =
-          this.chessEngine.moveCount === 0 ||
-          this.chessEngine.status === 'ai_thinking' ||
-          (!st.sandboxMode &&
-            this.chessEngine.freeUndosLeft + this.chessEngine.paidUndosLeft <= 0);
+      const timerEl = box.querySelector('#paFishTimer');
+      if (timerEl) {
+        timerEl.textContent = st.sandboxMode ? '∞' : fe.formatRemainingTime();
+        timerEl.classList.toggle('pa-err-inline', !st.sandboxMode && fe.isTimeCritical);
       }
-      const assistBtn = box.querySelector('#btnPaChessAssist') as HTMLButtonElement | null;
-      if (assistBtn) {
-        assistBtn.disabled =
-          this.chessEngine.status !== 'playing' ||
-          (!st.sandboxMode &&
-            this.chessEngine.freeHintsLeft + this.chessEngine.paidAssistsLeft <= 0);
+      const scoreEl = box.querySelector('#paFishScore');
+      if (scoreEl) {
+        scoreEl.textContent = `${fe.score.toLocaleString('vi-VN')}/${fe.targetScore.toLocaleString('vi-VN')}`;
+      }
+      const ammoEl = box.querySelector('#paFishAmmo');
+      if (ammoEl) {
+        ammoEl.textContent = st.sandboxMode ? '∞' : String(fe.ammo);
+        ammoEl.classList.toggle('pa-err-inline', !st.sandboxMode && fe.ammo <= 5);
+      }
+      const powerBtn = box.querySelector('#btnPaFishPower') as HTMLButtonElement | null;
+      if (powerBtn) {
+        powerBtn.disabled = fe.status !== 'playing';
+        powerBtn.classList.toggle('active', fe.cannonTier > 1);
+        const pill = powerBtn.querySelector('.pa-cost-pill');
+        if (pill) pill.textContent = `×${fe.cannonTier}`;
+      }
+      const skillBtn = box.querySelector('#btnPaFishSkill') as HTMLButtonElement | null;
+      if (skillBtn) {
+        skillBtn.disabled =
+          fe.status !== 'playing' || (!st.sandboxMode && fe.freeSkillsLeft + fe.paidSkillsLeft <= 0);
+        const pill = skillBtn.querySelector('.pa-cost-pill');
+        if (pill) {
+          pill.textContent = st.sandboxMode
+            ? '∞'
+            : fe.freeSkillsLeft > 0
+              ? String(fe.freeSkillsLeft)
+              : fe.paidSkillsLeft > 0
+                ? `${fe.skillGoldCost} Sickle`
+                : '0';
+        }
       }
     } else if (this.mode === 'blocks' && this.onetEngine) {
       const oe = this.onetEngine;
@@ -3218,186 +3018,104 @@ export class PuzzleArcadeModalController {
       this.triggerSudokuHintAction();
     });
 
-    // Caro controls
-    box.querySelector('#btnPaCaroUndo')?.addEventListener('click', () => {
-      const ce = this.caroEngine;
-      if (!ce || ce.moveHistory.length <= ce.initialHistoryLen) return;
-      if (!this.sim.state.sandboxMode && ce.freeUndosLeft <= 0 && ce.paidUndosLeft <= 0) {
-        this.showToast('Màn này đã dùng hết lượt Xoay Thời Gian!', '⏳');
-        return;
-      }
-      if (ce.freeUndosLeft > 0) {
-        ce.freeUndosLeft -= 1;
-      } else {
-        const pay = this.sim.spendPuzzleHelperGold(ce.undoGoldCost);
-        if (!pay.ok) {
-          this.showToast(pay.msg, '🪙');
-          return;
-        }
-        if (!this.sim.state.sandboxMode) {
-          ce.paidUndosLeft = Math.max(0, ce.paidUndosLeft - 1);
-        }
-      }
-      if (ce.undoTurnPair()) {
-        this.aiThinkTimer = 0;
-        this.inspectingTurningPoint = false;
-        this.persistModeSession('caro', true);
-        this.sim.audio.playClick();
-        this.renderDOM();
-      }
-    });
-
-    box.querySelector('#btnPaCaroHint')?.addEventListener('click', () => {
-      const ce = this.caroEngine;
-      if (!ce || ce.status !== 'playing') return;
-      if (!this.sim.state.sandboxMode && ce.freeHintsLeft <= 0 && ce.paidHintsLeft <= 0) {
-        this.showToast('Màn này đã dùng hết lượt Bản Đồ Chỉ Nước Đinh!', '🗺️');
-        return;
-      }
-      if (ce.freeHintsLeft > 0) {
-        ce.freeHintsLeft -= 1;
-      } else {
-        const pay = this.sim.spendPuzzleHelperGold(ce.hintGoldCost);
-        if (!pay.ok) {
-          this.showToast(pay.msg, '🪙');
-          return;
-        }
-        if (!this.sim.state.sandboxMode) {
-          ce.paidHintsLeft = Math.max(0, ce.paidHintsLeft - 1);
-        }
-      }
-      const hint = ce.useBestMoveHint();
-      if (hint) {
-        this.persistModeSession('caro', true);
-        const cm = this.getCaroBoardMetrics();
-        const cx = cm.originX + hint.c * cm.stepPx;
-        const cy = cm.originY + hint.r * cm.stepPx;
-        this.spawnBurst(cx, cy, '#34d399', 16);
-        this.sim.audio.playMatchPop(2);
-        this.renderDOM();
-      }
-    });
-
-    // Wizard's Chess controls
-    box.querySelector('#btnPaChessTactics')?.addEventListener('click', () => {
-      if (this.chessEngine?.subMode === 'tactics') return;
-      if (this.chessEngine?.subModeLocked) {
-        this.showToast('Từ Màn 11, thể thức mỗi màn là cố định', '🏰');
-        return;
-      }
-      this.chessForceSubMode = 'tactics';
-      this.resetInteractionState();
-      this.ensureEngineForMode('chess', true);
+    // Minesweeper ("Dò Mìn Phép Thuật") controls
+    box.querySelector('#btnPaMinesFlag')?.addEventListener('click', () => {
+      const me = this.minesEngine;
+      if (!me || me.status !== 'playing') return;
+      me.flagMode = !me.flagMode;
+      this.persistModeSession('caro', true);
+      this.sim.audio.playClick();
       this.renderDOM();
     });
 
-    box.querySelector('#btnPaChessMatch')?.addEventListener('click', () => {
-      if (this.chessEngine?.subMode === 'match') return;
-      if (this.chessEngine?.subModeLocked) {
-        this.showToast('Từ Màn 11, thể thức mỗi màn là cố định', '🏰');
+    box.querySelector('#btnPaMinesHint')?.addEventListener('click', () => {
+      const me = this.minesEngine;
+      if (!me || me.status !== 'playing') return;
+      if (!this.sim.state.sandboxMode && me.freeHintsLeft <= 0 && me.paidHintsLeft <= 0) {
+        this.showToast('Màn này đã dùng hết lượt Dò An Toàn!', '💡');
         return;
       }
-      this.chessForceSubMode = 'match';
-      this.resetInteractionState();
-      this.ensureEngineForMode('chess', true);
-      this.renderDOM();
-    });
-
-    box.querySelector('#btnPaChessUndo')?.addEventListener('click', () => {
-      const we = this.chessEngine;
-      if (!we || we.moveCount === 0) return;
-      if (!this.sim.state.sandboxMode && we.freeUndosLeft <= 0 && we.paidUndosLeft <= 0) {
-        this.showToast('Màn này đã dùng hết lượt Đi Lại!', '↩️');
-        return;
-      }
-      if (we.freeUndosLeft > 0) {
-        we.freeUndosLeft -= 1;
+      if (me.freeHintsLeft > 0) {
+        me.freeHintsLeft -= 1;
       } else {
-        const pay = this.sim.spendPuzzleHelperGold(we.undoGoldCost);
+        const pay = this.sim.spendPuzzleHelperGold(me.hintGoldCost);
         if (!pay.ok) {
           this.showToast(pay.msg, '🪙');
           return;
         }
         if (!this.sim.state.sandboxMode) {
-          we.paidUndosLeft = Math.max(0, we.paidUndosLeft - 1);
+          me.paidHintsLeft = Math.max(0, me.paidHintsLeft - 1);
         }
       }
-      if (we.undoTurnPair()) {
-        this.refundPendingChessActionIfAny();
-        this.aiThinkTimer = 0;
-        this.inspectingTurningPoint = false;
-        this.persistModeSession('chess', true);
-        this.sim.audio.playClick();
-        this.renderDOM();
-      }
-    });
-
-    box.querySelector('#btnPaChessAssist')?.addEventListener('click', () => {
-      const we = this.chessEngine;
-      if (!we || we.status !== 'playing' || we.turn !== 'w') return;
-
-      // Nếu đã có gợi ý đang sáng trên bàn cờ hiện tại, chỉ nháy lại hiệu ứng mà không trừ thêm lượt/vàng
-      if (we.hintMove) {
-        const cm = this.getChessBoardMetrics();
-        we.selected = { r: we.hintMove.fromR, c: we.hintMove.fromC };
-        const x0 = cm.boardX + (we.hintMove.fromC + 0.5) * cm.cellPx;
-        const y0 = cm.boardY + (we.hintMove.fromR + 0.5) * cm.cellPx;
-        const x1 = cm.boardX + (we.hintMove.toC + 0.5) * cm.cellPx;
-        const y1 = cm.boardY + (we.hintMove.toR + 0.5) * cm.cellPx;
-        this.spawnBurst(x0, y0, '#fde047', 12);
-        this.spawnBurst(x1, y1, '#34d399', 16);
+      const res = me.useSafeRadarHint();
+      if (res.ok) {
+        this.bumpCompanionCharge();
+        const m = this.computeMinesBoardMetrics(me);
+        for (const p of res.revealedCells.slice(0, 10)) {
+          const dc = m.transposed ? p.r : p.c;
+          const dr = m.transposed ? p.c : p.r;
+          const cx = m.originX + (dc + 0.5) * m.cellSize;
+          const cy = m.originY + (dr + 0.5) * m.cellSize;
+          this.spawnBurst(cx, cy, '#34d399', 9);
+        }
         this.sim.audio.playMatchPop(2);
-        this.showToast('💡 Quân cờ và ô đích gợi ý đang phát sáng trên bàn cờ!', '💡');
-        this.renderDOM();
-        return;
+        this.onParentRefresh();
+        if (res.won) {
+          this.minesWinRevealTimer = 0.42;
+          this.updateLiveCountersOnly();
+        } else {
+          this.persistModeSession('caro', true);
+          this.renderDOM();
+        }
       }
+    });
 
-      if (this.pendingChessWorkerReqId !== null) return;
-      if (!this.sim.state.sandboxMode && we.freeHintsLeft <= 0 && we.paidAssistsLeft <= 0) {
-        this.showToast('Màn này đã dùng hết lượt Gợi Ý nước đi!', '💡');
+    // Fish Shooter ("Bắn Cá Hồ Đen") controls
+    box.querySelector('#btnPaFishPower')?.addEventListener('click', () => {
+      const fe = this.fishEngine;
+      if (!fe || fe.status !== 'playing') return;
+      fe.cycleCannonTier();
+      this.persistModeSession('chess', false);
+      this.sim.audio.playClick();
+      this.updateLiveCountersOnly();
+      this.forceImmediateRedraw = true;
+    });
+
+    box.querySelector('#btnPaFishSkill')?.addEventListener('click', () => {
+      const fe = this.fishEngine;
+      if (!fe || fe.status !== 'playing') return;
+      if (!this.sim.state.sandboxMode && fe.freeSkillsLeft <= 0 && fe.paidSkillsLeft <= 0) {
+        this.showToast('Màn này đã dùng hết lượt Băng Phong!', '💡');
         return;
       }
-      let spentFree = false;
-      let spentGold = 0;
-      if (we.freeHintsLeft > 0) {
-        we.freeHintsLeft -= 1;
-        spentFree = true;
+      if (fe.freeSkillsLeft > 0) {
+        fe.freeSkillsLeft -= 1;
       } else {
-        const pay = this.sim.spendPuzzleHelperGold(we.assistGoldCost);
+        const pay = this.sim.spendPuzzleHelperGold(fe.skillGoldCost);
         if (!pay.ok) {
           this.showToast(pay.msg, '🪙');
           return;
         }
-        spentGold = we.assistGoldCost;
         if (!this.sim.state.sandboxMode) {
-          we.paidAssistsLeft = Math.max(0, we.paidAssistsLeft - 1);
+          fe.paidSkillsLeft = Math.max(0, fe.paidSkillsLeft - 1);
         }
       }
-      const worker = this.ensureChessWorker();
-      if (worker) {
-        try {
-          const reqId = ++this.chessWorkerReqSeq;
-          this.pendingChessWorkerReqId = reqId;
-          this.pendingChessAction = {
-            reqId,
-            kind: 'hint',
-            stage: we.stage,
-            spentFree,
-            spentGold,
-          };
-          worker.postMessage({
-            reqId,
-            mode: 'best_white',
-            payload: we.exportWorkerPayload(),
-          } satisfies ChessWorkerRequestMessage);
-          return;
-        } catch {
-          this.pendingChessWorkerReqId = null;
-          this.pendingChessAction = null;
+      const res = fe.useFrostShockwaveSkill();
+      if (res.ok) {
+        this.bumpCompanionCharge();
+        const virt = this.getVirtualCanvasSize();
+        this.spawnBurst(virt.w * 0.5, virt.h * 0.45, '#67e8f9', 26);
+        this.sim.audio.playPowerupBlast();
+        this.showToast('🌟 Băng Phong Hồ Đen: làm chậm toàn đàn cá & +8 Đạn Ngọc!', '✨');
+        this.onParentRefresh();
+        if (res.won) {
+          this.fishWinRevealTimer = 0.42;
+          this.updateLiveCountersOnly();
+        } else {
+          this.persistModeSession('chess', true);
+          this.renderDOM();
         }
       }
-      const res = we.useBestMoveHint();
-      this.applyCompletedChessHintResult(res, spentFree, spentGold);
     });
 
     box.querySelector('#btnPaNextStage')?.addEventListener('click', () => {
@@ -3411,12 +3129,20 @@ export class PuzzleArcadeModalController {
       dlg?.close();
     });
 
-    box.querySelector('#btnPaRestart')?.addEventListener('click', () => {
+    box.querySelector('#btnPaLossHome')?.addEventListener('click', () => {
+      this.sim.audio.playClick();
+      const dlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
+      dlg?.close();
+    });
+
+    const handleRestartStage = () => {
       this.resetInteractionState();
       this.ensureEngineForMode(this.mode, true);
       this.sim.audio.playClick();
       this.renderDOM();
-    });
+    };
+    box.querySelector('#btnPaRestart')?.addEventListener('click', handleRestartStage);
+    box.querySelector('#btnPaLossRetry')?.addEventListener('click', handleRestartStage);
 
     // Magical Creatures Onet Connect controls
     box.querySelector('#btnPaOnetHint')?.addEventListener('click', () => {
@@ -3517,9 +3243,16 @@ export class PuzzleArcadeModalController {
       const moved = this.jigsawEngine.tidyLooseSinglePieces();
       this.sim.audio.playClick();
       if (moved > 0) {
+        const wasCollapsed = this.jigsawTrayCollapsed;
+        if (wasCollapsed && this.jigsawEngine.getBoardClustersSortedByZ(true).length === 0) {
+          this.jigsawTrayCollapsed = false;
+        }
         this.jigsawActiveBoardPiece = null;
         this.persistModeSession('jigsaw', true);
         this.renderJigsawTrayDockDOM();
+        if (wasCollapsed !== this.jigsawTrayCollapsed) {
+          this.syncJigsawStageAfterTrayResize();
+        }
         this.forceImmediateRedraw = true;
         this.showToast(`🧹 Đã thu gọn ${moved} mảnh đơn lẻ về khay mảnh!`, '🧹');
       } else {
@@ -3580,9 +3313,9 @@ export class PuzzleArcadeModalController {
         this.mode === 'sudoku'
           ? this.sudokuEngine?.talismanUsed
           : this.mode === 'caro'
-            ? this.caroEngine?.talismanUsed
+            ? this.minesEngine?.talismanUsed
             : this.mode === 'chess'
-              ? this.chessEngine?.talismanUsed
+              ? this.fishEngine?.talismanUsed
               : this.mode === 'jigsaw'
                 ? this.jigsawEngine?.talismanUsed
                 : this.onetEngine?.talismanUsed;
@@ -3621,63 +3354,44 @@ export class PuzzleArcadeModalController {
           this.persistSudokuSession(true);
           this.renderDOM();
         }
-      } else if (this.mode === 'caro' && this.caroEngine) {
-        const res = this.caroEngine.applyPhoenixTalisman();
+      } else if (this.mode === 'caro' && this.minesEngine) {
+        const res = this.minesEngine.applyPhoenixTalisman();
         if (!res.ok) {
           this.sim.refundPhoenixTalismanAttempt(this.mode);
           this.showToast(res.msg, '🔥');
           return;
         }
-        this.caroWinRevealTimer = 0;
-        this.aiThinkTimer = 0;
-        const cm = this.getCaroBoardMetrics();
-        this.spawnWeasleyFireworks(
-          cm.originX + 6 * cm.stepPx,
-          cm.originY + 6 * cm.stepPx,
-          2
-        );
+        const virt = this.getVirtualCanvasSize();
+        this.spawnWeasleyFireworks(virt.w * 0.5, virt.h * 0.5, 2);
         this.sim.audio.playPowerupBlast();
         this.showToast(res.msg, '🔥');
-        this.persistModeSession('caro', true);
         this.onParentRefresh();
-        this.renderDOM();
-      } else if (this.mode === 'chess' && this.chessEngine) {
-        const we = this.chessEngine;
-        if (this.pendingChessWorkerReqId !== null) {
+        if (res.won) {
+          this.minesWinRevealTimer = 0.42;
+          this.renderDOM();
+        } else {
+          this.persistModeSession('caro', true);
+          this.renderDOM();
+        }
+      } else if (this.mode === 'chess' && this.fishEngine) {
+        const res = this.fishEngine.applyPhoenixTalisman();
+        if (!res.ok) {
           this.sim.refundPhoenixTalismanAttempt(this.mode);
+          this.showToast(res.msg, '🔥');
           return;
         }
-        if (we.status === 'lost' || we.status === 'draw') {
-          we.undoTurnPair();
+        const virt = this.getVirtualCanvasSize();
+        this.spawnWeasleyFireworks(virt.w * 0.5, virt.h * 0.45, 3);
+        this.sim.audio.playPowerupBlast();
+        this.showToast(res.msg, '🔥');
+        this.onParentRefresh();
+        if (res.won) {
+          this.fishWinRevealTimer = 0.42;
+          this.renderDOM();
+        } else {
+          this.persistModeSession('chess', true);
+          this.renderDOM();
         }
-        if (we.talismanUsed || we.status !== 'playing' || we.turn !== 'w') {
-          const fallbackRes = we.applyPhoenixTalisman();
-          this.applyCompletedChessTalismanResult(fallbackRes);
-          return;
-        }
-        const worker = this.ensureChessWorker();
-        if (worker) {
-          try {
-            const reqId = ++this.chessWorkerReqSeq;
-            this.pendingChessWorkerReqId = reqId;
-            this.pendingChessAction = {
-              reqId,
-              kind: 'talisman',
-              stage: we.stage,
-            };
-            worker.postMessage({
-              reqId,
-              mode: 'best_white',
-              payload: we.exportWorkerPayload(),
-            } satisfies ChessWorkerRequestMessage);
-            return;
-          } catch {
-            this.pendingChessWorkerReqId = null;
-            this.pendingChessAction = null;
-          }
-        }
-        const res = we.applyPhoenixTalisman();
-        this.applyCompletedChessTalismanResult(res);
       } else if (this.mode === 'blocks' && this.onetEngine) {
         const res = this.onetEngine.applyPhoenixTalisman();
         if (!res.ok) {
@@ -3723,6 +3437,7 @@ export class PuzzleArcadeModalController {
     box
       .querySelector('#btnPaRescuePhoenixTalisman')
       ?.addEventListener('click', handlePhoenixTalisman);
+    box.querySelector('#btnPaLossTalisman')?.addEventListener('click', handlePhoenixTalisman);
 
     box.querySelector('#btnPaSnackApplePie')?.addEventListener('click', () => {
       if (this.victoryClaimed || this.snackPieUsedThisAttempt) return;
@@ -3739,12 +3454,10 @@ export class PuzzleArcadeModalController {
           this.sudokuEngine.status = 'playing';
         }
         this.sudokuEngine.freeHintsLeft += 1;
-      } else if (this.mode === 'caro' && this.caroEngine) {
-        this.caroEngine.freeUndosLeft += 1;
-        this.caroEngine.freeHintsLeft += 1;
-      } else if (this.mode === 'chess' && this.chessEngine) {
-        this.chessEngine.freeUndosLeft += 1;
-        this.chessEngine.freeHintsLeft += 1;
+      } else if (this.mode === 'caro' && this.minesEngine) {
+        this.minesEngine.applyApplePieBoost();
+      } else if (this.mode === 'chess' && this.fishEngine) {
+        this.fishEngine.applyApplePieBoost();
       } else if (this.mode === 'blocks' && this.onetEngine) {
         this.onetEngine.reviveWithExtraLives(2, 35);
         this.onetEngine.freeHintsLeft += 1;
@@ -3759,7 +3472,11 @@ export class PuzzleArcadeModalController {
           ? '🥧 Bánh Táo Quế Bà Molly: +35s giờ, +2 ❤️ Đổi Bàn & +1 🔍 Dò Cặp!'
           : this.mode === 'jigsaw'
             ? '🥧 Bánh Táo Quế Bà Molly: cộng thêm giờ, khớp mảnh tranh & +1 💡 Gợi Ý!'
-            : '🥧 Bánh Táo Quế Bà Molly: hồi phục lượt trợ giúp & +1 Gợi Ý!',
+            : this.mode === 'caro'
+              ? '🥧 Bánh Táo Quế Bà Molly: +1 Khiên bảo vệ & +1 🪄 Dò An Toàn!'
+              : this.mode === 'chess'
+                ? '🥧 Bánh Táo Quế Bà Molly: +25s giờ, +20 Đạn Ngọc & +1 🌟 Băng Phong!'
+                : '🥧 Bánh Táo Quế Bà Molly: hồi phục lượt trợ giúp & +1 Gợi Ý!',
         '🥧'
       );
       if (jigsawWonFromPie) {
@@ -3863,7 +3580,14 @@ export class PuzzleArcadeModalController {
       canvasShellEl: shell,
       canvasEl: cvs,
       getBoardAspectRatio: (availW, availH) => {
-        if (this.mode === 'blocks' || this.mode === 'jigsaw') return 0;
+        if (
+          this.mode === 'caro' ||
+          this.mode === 'chess' ||
+          this.mode === 'blocks' ||
+          this.mode === 'jigsaw'
+        ) {
+          return 0;
+        }
         if (this.mode === 'sudoku') {
           const sm = this.getSudokuLayoutMetrics(availW, availH);
           return sm.virtW / sm.virtH;
@@ -3898,22 +3622,8 @@ export class PuzzleArcadeModalController {
           }
           return true;
         }
-        if (this.mode !== 'chess') {
-          return true;
-        }
-        if (!this.chessEngine || this.chessEngine.status !== 'playing') return true;
-        const { vx, vy } = clientToVirtual(clientX, clientY);
-        const cm = this.getChessBoardMetrics();
-        if (
-          vx >= cm.boardX &&
-          vx <= cm.boardX + cm.boardPx &&
-          vy >= cm.boardY &&
-          vy <= cm.boardY + cm.boardPx
-        ) {
-          const c = Math.min(7, Math.max(0, Math.floor((vx - cm.boardX) / cm.cellPx)));
-          const r = Math.min(7, Math.max(0, Math.floor((vy - cm.boardY) / cm.cellPx)));
-          const p = this.chessEngine.board[r]?.[c];
-          if (p && p.color === 'w') return false;
+        if (this.mode === 'chess' && this.fishEngine?.status === 'playing') {
+          return false;
         }
         return true;
       },
@@ -3930,7 +3640,25 @@ export class PuzzleArcadeModalController {
 
     let pendingTouchTap = false;
 
+    cvs.addEventListener('contextmenu', (ev) => {
+      if (this.mode === 'caro' && this.minesEngine?.status === 'playing') {
+        ev.preventDefault();
+        const pos = toVirtual(ev as unknown as PointerEvent);
+        const cell = this.getMinesCellAt(pos.vx, pos.vy);
+        if (cell) {
+          this.handleMinesFlagAt(cell.r, cell.c);
+        }
+      }
+    });
+
     cvs.addEventListener('pointerdown', (ev) => {
+      if (ev.button === 2 && this.mode === 'caro' && this.minesEngine?.status === 'playing') {
+        ev.preventDefault();
+        const pos = toVirtual(ev);
+        const cell = this.getMinesCellAt(pos.vx, pos.vy);
+        if (cell) this.handleMinesFlagAt(cell.r, cell.c);
+        return;
+      }
       if (ev.button !== 0 && ev.pointerType === 'mouse') return;
       if (this.victoryClaimed) return;
       if (ev.pointerType === 'touch' && sharedMinigameViewport.isPinchOrCooldownActive()) {
@@ -3942,14 +3670,23 @@ export class PuzzleArcadeModalController {
       this.pointerDownPos = pos;
       this.pointerCurrPos = pos;
       this.hasDragged = false;
-      try {
-        cvs.setPointerCapture(ev.pointerId);
-      } catch {
-        // Ignore synthetic pointer events
+      this.minesLongPressTriggered = false;
+      this.cancelMinesLongPress();
+      if (this.mode === 'jigsaw') {
+        try {
+          cvs.setPointerCapture(ev.pointerId);
+        } catch {
+          // Ignore synthetic pointer events
+        }
       }
 
       if (ev.pointerType === 'touch') {
         this.handlePointerHover(pos.vx, pos.vy);
+        if (this.mode === 'chess' && this.fishEngine && this.fishEngine.status === 'playing') {
+          pendingTouchTap = false;
+          this.handlePointerDown(pos.vx, pos.vy);
+          return;
+        }
         if (this.mode === 'jigsaw' && this.jigsawEngine && this.jigsawEngine.status === 'playing') {
           const m = this.computeJigsawBoardMetrics(this.jigsawEngine);
           const { nx, ny } = this.virtualToJigsawNorm(pos.vx, pos.vy, m);
@@ -3961,24 +3698,22 @@ export class PuzzleArcadeModalController {
             return;
           }
         }
-        if (this.mode === 'chess' && this.chessEngine) {
-          const cm = this.getChessBoardMetrics();
-          if (
-            pos.vx >= cm.boardX &&
-            pos.vx <= cm.boardX + cm.boardPx &&
-            pos.vy >= cm.boardY &&
-            pos.vy <= cm.boardY + cm.boardPx
-          ) {
-            const c = Math.min(7, Math.max(0, Math.floor((pos.vx - cm.boardX) / cm.cellPx)));
-            const r = Math.min(7, Math.max(0, Math.floor((pos.vy - cm.boardY) / cm.cellPx)));
-            const p = this.chessEngine.board[r]?.[c];
-            if (p && p.color === 'w') {
-              pendingTouchTap = false;
-              this.chessDragFrom = { r, c };
-              this.handleChessSquareAction(r, c);
-              return;
-            }
-            this.chessDragFrom = null;
+        if (this.mode === 'caro' && this.minesEngine && this.minesEngine.status === 'playing') {
+          const holdCell = this.getMinesCellAt(pos.vx, pos.vy);
+          if (holdCell) {
+            this.minesLongPressTimer = setTimeout(() => {
+              this.minesLongPressTimer = null;
+              if (!this.hasDragged && this.mode === 'caro' && this.minesEngine?.status === 'playing') {
+                this.minesLongPressTriggered = true;
+                pendingTouchTap = false;
+                this.handleMinesFlagAt(holdCell.r, holdCell.c);
+                try {
+                  globalThis.navigator?.vibrate?.(14);
+                } catch {
+                  // Ignore unsupported vibrate
+                }
+              }
+            }, 310);
           }
         }
         pendingTouchTap = true;
@@ -3987,15 +3722,28 @@ export class PuzzleArcadeModalController {
 
       pendingTouchTap = false;
       this.handlePointerDown(pos.vx, pos.vy);
+      if (this.mode === 'chess' && ev.pointerType === 'mouse' && (ev.buttons & 1) === 0) {
+        this.activePointerId = null;
+        this.pointerDownPos = null;
+      }
     });
 
     cvs.addEventListener('pointermove', (ev) => {
       this.forceImmediateRedraw = true;
       const pos = toVirtual(ev);
       this.pointerCurrPos = pos;
+      if (
+        this.activePointerId === ev.pointerId &&
+        ev.pointerType === 'mouse' &&
+        (ev.buttons & 1) === 0
+      ) {
+        this.activePointerId = null;
+        this.pointerDownPos = null;
+      }
       if (this.activePointerId === ev.pointerId && this.pointerDownPos) {
         if (Math.hypot(pos.vx - this.pointerDownPos.vx, pos.vy - this.pointerDownPos.vy) > 6) {
           this.hasDragged = true;
+          this.cancelMinesLongPress();
         }
         this.handlePointerDrag(pos.vx, pos.vy);
       } else {
@@ -4005,10 +3753,10 @@ export class PuzzleArcadeModalController {
 
     const finishPointer = (ev: PointerEvent) => {
       if (this.activePointerId !== ev.pointerId) return;
+      this.cancelMinesLongPress();
       this.forceImmediateRedraw = true;
       if (ev.type === 'pointercancel') {
         pendingTouchTap = false;
-        this.chessDragFrom = null;
         this.jigsawDragBoardPiece = null;
         this.activePointerId = null;
         this.pointerDownPos = null;
@@ -4016,7 +3764,10 @@ export class PuzzleArcadeModalController {
       }
       const pos = toVirtual(ev);
       this.pointerCurrPos = pos;
-      if (pendingTouchTap) {
+      if (this.minesLongPressTriggered) {
+        this.minesLongPressTriggered = false;
+        pendingTouchTap = false;
+      } else if (pendingTouchTap) {
         pendingTouchTap = false;
         if (!this.hasDragged && !sharedMinigameViewport.isPinchOrCooldownActive()) {
           this.handlePointerDown(pos.vx, pos.vy);
@@ -4031,13 +3782,17 @@ export class PuzzleArcadeModalController {
     cvs.addEventListener('pointerup', finishPointer);
     cvs.addEventListener('pointercancel', finishPointer);
     cvs.addEventListener('pointerleave', () => {
+      this.cancelMinesLongPress();
+      if (this.mode !== 'jigsaw') {
+        this.activePointerId = null;
+        this.pointerDownPos = null;
+      }
       this.forceImmediateRedraw = true;
       this.hoveredTileUid = null;
       this.sudokuHoverCell = null;
       this.sudokuHoverPadDigit = null;
       this.sudokuHoverAction = null;
-      this.caroHoverCell = null;
-      this.chessHoverSquare = null;
+      this.minesHoverCell = null;
       this.onetHoverCell = null;
     });
 
@@ -4199,51 +3954,149 @@ export class PuzzleArcadeModalController {
     }
   }
 
-  private getCaroIntersectionAt(vx: number, vy: number): { r: number; c: number } | null {
-    const cm = this.getCaroBoardMetrics();
-    const c = Math.round((vx - cm.originX) / cm.stepPx);
-    const r = Math.round((vy - cm.originY) / cm.stepPx);
-    if (r < 0 || r >= CARO_BOARD_SIZE || c < 0 || c >= CARO_BOARD_SIZE) return null;
-    const ix = cm.originX + c * cm.stepPx;
-    const iy = cm.originY + r * cm.stepPx;
-    if (Math.hypot(vx - ix, vy - iy) > cm.stepPx * 0.54) return null;
+  private getMinesCellAt(vx: number, vy: number): { r: number; c: number } | null {
+    const me = this.minesEngine;
+    if (!me) return null;
+    const m = this.computeMinesBoardMetrics(me);
+    if (
+      vx < m.originX ||
+      vx >= m.originX + m.boardW ||
+      vy < m.originY ||
+      vy >= m.originY + m.boardH
+    ) {
+      return null;
+    }
+    const dc = Math.min(m.dispCols - 1, Math.max(0, Math.floor((vx - m.originX) / m.cellSize)));
+    const dr = Math.min(m.dispRows - 1, Math.max(0, Math.floor((vy - m.originY) / m.cellSize)));
+    const r = m.transposed ? dc : dr;
+    const c = m.transposed ? dr : dc;
     return { r, c };
   }
 
-  private handleChessSquareAction(r: number, c: number): void {
-    if (!this.chessEngine || this.chessEngine.status !== 'playing') return;
-    const res = this.chessEngine.clickSquare(r, c);
-    if (!res.moved) {
-      this.persistModeSession('chess', false);
+  private handleMinesFlagAt(r: number, c: number): void {
+    const me = this.minesEngine;
+    if (!me || me.status !== 'playing') return;
+    const res = me.toggleFlag(r, c);
+    if (!res.changed) return;
+    const m = this.computeMinesBoardMetrics(me);
+    const dc = m.transposed ? r : c;
+    const dr = m.transposed ? c : r;
+    const cx = m.originX + (dc + 0.5) * m.cellSize;
+    const cy = m.originY + (dr + 0.5) * m.cellSize;
+    this.spawnBurst(cx, cy, res.flagged ? '#ef4444' : '#fde047', 10);
+    this.sim.audio.playClick();
+    this.persistModeSession('caro', true);
+    this.updateLiveCountersOnly();
+  }
+
+  private handleMinesCellTap(r: number, c: number): void {
+    const me = this.minesEngine;
+    if (!me || me.status !== 'playing') return;
+    const res = me.tapCell(r, c);
+    if (res.action === 'noop' || res.action === 'blocked_flag') {
       this.sim.audio.playClick();
       return;
     }
-    this.bumpCompanionCharge();
-    const lm = this.chessEngine.lastMove;
-    const movedPiece =
-      (lm ? this.chessEngine.board[lm.toR]?.[lm.toC] : null) ?? { color: 'w', type: 'p' };
-    if (lm) {
-      this.triggerChessMoveVfx(lm.fromR, lm.fromC, lm.toR, lm.toC, movedPiece, res.captured, res.won);
+    const m = this.computeMinesBoardMetrics(me);
+    if (res.action === 'flagged') {
+      const targets = res.revealedCells.length > 0 ? res.revealedCells : [{ r, c }];
+      for (const pt of targets.slice(0, 8)) {
+        const dc = m.transposed ? pt.r : pt.c;
+        const dr = m.transposed ? pt.c : pt.r;
+        this.spawnBurst(
+          m.originX + (dc + 0.5) * m.cellSize,
+          m.originY + (dr + 0.5) * m.cellSize,
+          '#ef4444',
+          10
+        );
+      }
+      this.sim.audio.playClick();
+      this.persistModeSession('caro', true);
+      this.updateLiveCountersOnly();
+      return;
     }
-    this.sim.audio.playChessClack(res.captured);
-    if (res.captured || res.promoted) {
+    this.bumpCompanionCharge();
+    if (res.shieldSaved && res.defusedCell) {
+      const dc = m.transposed ? res.defusedCell.r : res.defusedCell.c;
+      const dr = m.transposed ? res.defusedCell.c : res.defusedCell.r;
+      this.spawnBurst(m.originX + (dc + 0.5) * m.cellSize, m.originY + (dr + 0.5) * m.cellSize, '#34d399', 18);
+      this.sim.audio.playPowerupBlast();
+      this.showToast(`Khiên Bảo Vệ đỡ giúp 1 mìn! Còn ${me.shieldsLeft} khiên`, '✨');
+      this.persistModeSession('caro', true);
+      this.renderDOM();
+      return;
+    }
+    if (res.lost) {
+      const dc = m.transposed ? r : c;
+      const dr = m.transposed ? c : r;
+      this.spawnBurst(m.originX + (dc + 0.5) * m.cellSize, m.originY + (dr + 0.5) * m.cellSize, '#ef4444', 26);
+      this.sim.audio.playCheekyAlert();
+      this.persistModeSession('caro', true);
+      this.renderDOM();
+      return;
+    }
+    for (const p of res.revealedCells.slice(0, 12)) {
+      const dc = m.transposed ? p.r : p.c;
+      const dr = m.transposed ? p.c : p.r;
+      this.spawnBurst(m.originX + (dc + 0.5) * m.cellSize, m.originY + (dr + 0.5) * m.cellSize, '#fde047', 6);
+    }
+    this.sim.audio.playMatchPop(res.revealedCells.length > 4 ? 3 : 1);
+    if (res.won) {
       this.hitStopTimer = 0.035;
       this.sim.audio.playPowerupBlast();
+      this.spawnWeasleyFireworks(m.originX + m.boardW * 0.5, m.originY + m.boardH * 0.45, 3);
+      this.minesFireworkTimer = 0.24;
+      this.minesWinRevealTimer = 0.48;
+      this.updateLiveCountersOnly();
     } else {
-      this.sim.audio.playMatchPop(1);
+      this.persistModeSession('caro', true);
+      this.updateLiveCountersOnly();
     }
-    if (res.won) {
-      this.checkAndClaimVictory();
-    } else if (res.aiThinking) {
-      this.aiThinkTimer = 0.42;
-      this.persistModeSession('chess', true);
+  }
+
+  private canvasToFishArena(vx: number, vy: number): { ax: number; ay: number } {
+    const virt = this.getVirtualCanvasSize();
+    const vp = this.getFishViewportMetrics(virt.w, virt.h);
+    return {
+      ax: (vx - vp.offsetX) / Math.max(0.01, vp.scale),
+      ay: (vy - vp.offsetY) / Math.max(0.01, vp.scale),
+    };
+  }
+
+  private fireFishShooterAtCanvas(
+    vxOrAx: number,
+    vyOrAy: number,
+    alreadyArena = false,
+    fromAutoFireHold = false
+  ): void {
+    const fe = this.fishEngine;
+    if (!fe || fe.status !== 'playing') return;
+    const { ax, ay } = alreadyArena
+      ? { ax: vxOrAx, ay: vyOrAy }
+      : this.canvasToFishArena(vxOrAx, vyOrAy);
+
+    // Tapping right on the turret base cycles cannon tier once (never on 60fps auto-fire hold)
+    if (!alreadyArena && !fromAutoFireHold && Math.hypot(ax - fe.turretX, ay - fe.turretY) <= 44) {
+      fe.cycleCannonTier();
+      this.activePointerId = null;
+      this.pointerDownPos = null;
+      this.sim.audio.playClick();
       this.updateLiveCountersOnly();
-    } else if (res.draw) {
-      this.persistModeSession('chess', true);
-      this.renderDOM();
-    } else {
-      this.persistModeSession('chess', true);
+      return;
+    }
+
+    const res = fe.fireShot(ax, ay, Boolean(this.sim.state.sandboxMode));
+    if (res.fired) {
+      this.bumpCompanionCharge();
+      const virt = this.getVirtualCanvasSize();
+      const vp = this.getFishViewportMetrics(virt.w, virt.h);
+      const muzzleX = vp.offsetX + (fe.turretX + Math.cos(fe.aimAngle) * 32) * vp.scale;
+      const muzzleY = vp.offsetY + (fe.turretY + Math.sin(fe.aimAngle) * 32) * vp.scale;
+      this.spawnBurst(muzzleX, muzzleY, res.tier === 3 ? '#fbbf24' : '#38bdf8', 7);
+      this.sim.audio.playClick();
       this.updateLiveCountersOnly();
+    } else if (res.reason === 'no_ammo') {
+      this.sim.audio.playClick();
     }
   }
 
@@ -4317,56 +4170,17 @@ export class PuzzleArcadeModalController {
       return;
     }
 
-    if (this.mode === 'caro' && this.caroEngine) {
-      if (this.caroEngine.status !== 'playing' || this.caroWinRevealTimer > 0) return;
-      const cell = this.getCaroIntersectionAt(vx, vy);
+    if (this.mode === 'caro' && this.minesEngine) {
+      if (this.minesEngine.status !== 'playing' || this.minesWinRevealTimer > 0) return;
+      const cell = this.getMinesCellAt(vx, vy);
       if (!cell) return;
-      const res = this.caroEngine.playHumanMove(cell.r, cell.c);
-      if (!res.ok) {
-        this.sim.audio.playClick();
-        return;
-      }
-      this.bumpCompanionCharge();
-      this.caroLastMoveAnim = { r: cell.r, c: cell.c, age: 0, duration: 0.24 };
-      const cm = this.getCaroBoardMetrics();
-      const ix = cm.originX + cell.c * cm.stepPx;
-      const iy = cm.originY + cell.r * cm.stepPx;
-      this.spawnBurst(ix, iy, '#fde047', 16);
-      this.sim.audio.playChessClack(res.won);
-      if (res.won) {
-        this.hitStopTimer = 0.035;
-        this.sim.audio.playPowerupBlast();
-        this.spawnWeasleyFireworks(ix, iy, 4);
-        this.caroFireworkTimer = 0.22;
-        this.caroWinRevealTimer = 0.72;
-        this.updateLiveCountersOnly();
-      } else {
-        this.persistModeSession('caro', true);
-        this.sim.audio.playMatchPop(1);
-        if (res.aiThinking) {
-          this.aiThinkTimer = 0.28;
-          this.updateLiveCountersOnly();
-        } else if (res.draw) {
-          this.renderDOM();
-        }
-      }
+      this.handleMinesCellTap(cell.r, cell.c);
       return;
     }
 
-    if (this.mode === 'chess' && this.chessEngine) {
-      const cm = this.getChessBoardMetrics();
-      if (
-        vx >= cm.boardX &&
-        vx <= cm.boardX + cm.boardPx &&
-        vy >= cm.boardY &&
-        vy <= cm.boardY + cm.boardPx
-      ) {
-        const c = Math.min(7, Math.max(0, Math.floor((vx - cm.boardX) / cm.cellPx)));
-        const r = Math.min(7, Math.max(0, Math.floor((vy - cm.boardY) / cm.cellPx)));
-        const p = this.chessEngine.board[r]?.[c];
-        this.chessDragFrom = p && p.color === 'w' ? { r, c } : null;
-        this.handleChessSquareAction(r, c);
-      }
+    if (this.mode === 'chess' && this.fishEngine) {
+      if (this.fishEngine.status !== 'playing' || this.fishWinRevealTimer > 0) return;
+      this.fireFishShooterAtCanvas(vx, vy, false);
       return;
     }
 
@@ -4443,42 +4257,19 @@ export class PuzzleArcadeModalController {
       return;
     }
 
-    if (this.mode === 'chess' && this.chessEngine) {
-      const cm = this.getChessBoardMetrics();
-      if (
-        vx >= cm.boardX &&
-        vx <= cm.boardX + cm.boardPx &&
-        vy >= cm.boardY &&
-        vy <= cm.boardY + cm.boardPx
-      ) {
-        const c = Math.min(7, Math.max(0, Math.floor((vx - cm.boardX) / cm.cellPx)));
-        const r = Math.min(7, Math.max(0, Math.floor((vy - cm.boardY) / cm.cellPx)));
-        this.chessHoverSquare = { r, c };
-      } else {
-        this.chessHoverSquare = null;
-      }
+    if (this.mode === 'chess' && this.fishEngine && this.fishEngine.status === 'playing') {
+      const { ax, ay } = this.canvasToFishArena(vx, vy);
+      this.fishEngine.aimAt(ax, ay);
       return;
     }
   }
 
   private handlePointerHover(vx: number, vy: number): void {
-    if (this.mode === 'chess' && this.chessEngine) {
-      const cm = this.getChessBoardMetrics();
-      if (
-        vx >= cm.boardX &&
-        vx <= cm.boardX + cm.boardPx &&
-        vy >= cm.boardY &&
-        vy <= cm.boardY + cm.boardPx
-      ) {
-        const c = Math.min(7, Math.max(0, Math.floor((vx - cm.boardX) / cm.cellPx)));
-        const r = Math.min(7, Math.max(0, Math.floor((vy - cm.boardY) / cm.cellPx)));
-        this.chessHoverSquare = { r, c };
-      } else {
-        this.chessHoverSquare = null;
-      }
+    if (this.mode === 'chess' && this.fishEngine && this.fishEngine.status === 'playing') {
+      const { ax, ay } = this.canvasToFishArena(vx, vy);
+      this.fishEngine.aimAt(ax, ay);
       return;
     }
-    this.chessHoverSquare = null;
 
     if (this.mode === 'sudoku' && this.sudokuEngine) {
       const sm = this.getSudokuLayoutMetrics();
@@ -4517,13 +4308,11 @@ export class PuzzleArcadeModalController {
     this.sudokuHoverPadDigit = null;
     this.sudokuHoverAction = null;
 
-    if (this.mode === 'caro' && this.caroEngine && this.caroEngine.status === 'playing') {
-      const cell = this.getCaroIntersectionAt(vx, vy);
-      this.caroHoverCell =
-        cell && this.caroEngine.grid[cell.r]?.[cell.c] === 0 ? cell : null;
+    if (this.mode === 'caro' && this.minesEngine && this.minesEngine.status === 'playing') {
+      this.minesHoverCell = this.getMinesCellAt(vx, vy);
       return;
     }
-    this.caroHoverCell = null;
+    this.minesHoverCell = null;
 
     if (this.mode === 'blocks' && this.onetEngine && this.onetEngine.status === 'playing') {
       const m = this.computeOnetBoardMetrics(this.onetEngine);
@@ -4566,30 +4355,6 @@ export class PuzzleArcadeModalController {
         );
       }
       this.finalizeJigsawBoardClusterDrop(draggedPiece);
-      return;
-    }
-
-    if (this.mode === 'chess' && this.chessEngine) {
-      const from = this.chessDragFrom;
-      this.chessDragFrom = null;
-      const cm = this.getChessBoardMetrics();
-      if (
-        from &&
-        this.hasDragged &&
-        this.chessEngine.selected &&
-        this.chessEngine.selected.r === from.r &&
-        this.chessEngine.selected.c === from.c &&
-        vx >= cm.boardX &&
-        vx <= cm.boardX + cm.boardPx &&
-        vy >= cm.boardY &&
-        vy <= cm.boardY + cm.boardPx
-      ) {
-        const c2 = Math.min(7, Math.max(0, Math.floor((vx - cm.boardX) / cm.cellPx)));
-        const r2 = Math.min(7, Math.max(0, Math.floor((vy - cm.boardY) / cm.cellPx)));
-        if (r2 !== from.r || c2 !== from.c) {
-          this.handleChessSquareAction(r2, c2);
-        }
-      }
       return;
     }
   }
@@ -4829,19 +4594,16 @@ export class PuzzleArcadeModalController {
       this.jigsawDragBoardPiece !== null ||
       this.jigsawTrayDragState !== null ||
       this.jigsawWinRevealTimer > 0 ||
-      this.caroLastMoveAnim !== null ||
-      this.caroWinRevealTimer > 0 ||
-      this.chessMoveAnim !== null ||
-      this.chessSpellBeams.length > 0 ||
-      this.chessShakeTimer > 0 ||
+      this.minesWinRevealTimer > 0 ||
+      this.fishWinRevealTimer > 0 ||
+      this.fishShakeTimer > 0 ||
+      (this.mode === 'chess' && this.fishEngine?.status === 'playing') ||
       this.onetWinRevealTimer > 0 ||
       this.onetBlockedFlash !== null ||
       this.onetBeams.length > 0 ||
       this.onetSlideAnims.size > 0 ||
       this.particles.length > 0 ||
-      this.flyingTiles.length > 0 ||
-      this.caroEngine?.status === 'ai_thinking' ||
-      this.chessEngine?.status === 'ai_thinking'
+      this.flyingTiles.length > 0
     );
   }
 
@@ -4977,81 +4739,88 @@ export class PuzzleArcadeModalController {
             }
           }
         }
-      } else if (this.mode === 'caro' && this.caroWinRevealTimer > 0) {
-        this.caroWinRevealTimer -= dt;
-        this.caroFireworkTimer -= dt;
-        if (this.caroFireworkTimer <= 0) {
-          this.caroFireworkTimer = 0.24;
-          const cm = this.getCaroBoardMetrics();
-          this.spawnWeasleyFireworks(
-            cm.frameX + cm.framePx * 0.5,
-            cm.frameY + cm.framePx * 0.45,
-            2
-          );
+      } else if (this.mode === 'caro' && this.minesWinRevealTimer > 0) {
+        this.minesWinRevealTimer -= dt;
+        this.minesFireworkTimer -= dt;
+        if (this.minesFireworkTimer <= 0) {
+          this.minesFireworkTimer = 0.24;
+          const virt = this.getVirtualCanvasSize();
+          this.spawnWeasleyFireworks(virt.w * 0.5, virt.h * 0.45, 2);
         }
-        if (this.caroWinRevealTimer <= 0) {
-          this.caroWinRevealTimer = 0;
+        if (this.minesWinRevealTimer <= 0) {
+          this.minesWinRevealTimer = 0;
           this.checkAndClaimVictory();
         }
-      } else if (
-        this.mode === 'caro' &&
-        this.caroEngine &&
-        this.caroEngine.status === 'ai_thinking'
-      ) {
-        this.aiThinkTimer -= dt;
-        if (this.aiThinkTimer <= 0) {
-          const aiRes = this.caroEngine.stepAiMove();
-          if (aiRes) {
-            this.persistModeSession('caro', true);
-            this.caroLastMoveAnim = { r: aiRes.r, c: aiRes.c, age: 0, duration: 0.24 };
-            const cm = this.getCaroBoardMetrics();
-            const ix = cm.originX + aiRes.c * cm.stepPx;
-            const iy = cm.originY + aiRes.r * cm.stepPx;
-            this.spawnBurst(ix, iy, '#34d399', 15);
-            this.sim.audio.playChessClack(Boolean(aiRes.aiWon));
-            if (aiRes.aiWon || aiRes.draw) {
+      } else if (this.mode === 'chess') {
+        if (this.fishWinRevealTimer > 0) {
+          this.fishWinRevealTimer -= dt;
+          if (this.fishWinRevealTimer <= 0) {
+            this.fishWinRevealTimer = 0;
+            this.checkAndClaimVictory();
+          }
+        } else if (this.fishEngine && this.fishEngine.status === 'playing') {
+          const isPageHidden = typeof document !== 'undefined' && document.hidden;
+          const openDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
+          if (!isPageHidden && openDlg?.open) {
+            if (this.activePointerId !== null && this.fishEngine.fireCooldown <= 0) {
+              this.fireFishShooterAtCanvas(this.pointerCurrPos.vx, this.pointerCurrPos.vy, false, true);
+            }
+            const tick = this.fishEngine.tick(dt, Boolean(this.sim.state.sandboxMode));
+            const virt = this.getVirtualCanvasSize();
+            const vp = this.getFishViewportMetrics(virt.w, virt.h);
+            if (tick.wallBounces?.length) {
+              for (const wb of tick.wallBounces) {
+                this.spawnBurst(vp.offsetX + wb.x * vp.scale, vp.offsetY + wb.y * vp.scale, '#67e8f9', 5);
+              }
+            }
+            for (const ev of tick.caughtEvents) {
+              const cx = vp.offsetX + ev.x * vp.scale;
+              const cy = vp.offsetY + ev.y * vp.scale;
+              this.spawnBurst(cx, cy, ev.isExplosion ? '#fb923c' : '#fde047', ev.isExplosion ? 20 : 11);
+              if (ev.isExplosion) {
+                this.sim.audio.playPowerupBlast();
+                const reducedMotion =
+                  typeof window !== 'undefined' &&
+                  Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+                if (!reducedMotion) {
+                  this.fishShakeTimer = 0.2;
+                  this.fishShakeAmp = 3.2;
+                }
+              } else {
+                this.sim.audio.playMatchPop(Math.min(6, Math.max(1, this.fishEngine.combo)));
+              }
+            }
+            if (tick.won) {
+              this.hitStopTimer = 0.035;
+              this.sim.audio.playPowerupBlast();
+              this.spawnWeasleyFireworks(virt.w * 0.5, virt.h * 0.45, 3);
+              this.fishWinRevealTimer = 0.48;
+              this.updateLiveCountersOnly();
+            } else if (tick.timedOut) {
+              this.fishAutoSaveAccumSec = 0;
+              this.persistModeSession('chess', true);
+              this.sim.audio.playCheekyAlert();
               this.renderDOM();
             } else {
-              this.updateLiveCountersOnly();
+              if (tick.wholeSecondChanged || tick.caughtEvents.length > 0) {
+                this.updateLiveCountersOnly();
+              }
+              if (!this.rescueContext) {
+                this.fishAutoSaveAccumSec += dt;
+                if (this.fishAutoSaveAccumSec >= 5) {
+                  this.fishAutoSaveAccumSec = 0;
+                  this.persistModeSession('chess', true);
+                  this.persistActiveModalResumeMarker();
+                }
+              }
             }
           }
         }
-      } else if (
-        this.mode === 'chess' &&
-        this.chessEngine &&
-        this.chessEngine.status === 'ai_thinking'
-      ) {
-        this.aiThinkTimer -= dt;
-        if (this.aiThinkTimer <= 0) {
-          this.dispatchChessAiTurn();
-        }
       }
     }
 
-    if (this.caroLastMoveAnim) {
-      this.caroLastMoveAnim.age += dt;
-      if (this.caroLastMoveAnim.age >= this.caroLastMoveAnim.duration) {
-        this.caroLastMoveAnim = null;
-      }
-    }
-
-    if (this.chessMoveAnim) {
-      this.chessMoveAnim.age += dt;
-      if (this.chessMoveAnim.age >= this.chessMoveAnim.duration) {
-        this.chessMoveAnim = null;
-      }
-    }
-
-    for (let i = this.chessSpellBeams.length - 1; i >= 0; i--) {
-      const b = this.chessSpellBeams[i];
-      b.age += dt;
-      if (b.age >= b.duration) {
-        this.chessSpellBeams.splice(i, 1);
-      }
-    }
-
-    if (this.chessShakeTimer > 0) {
-      this.chessShakeTimer = Math.max(0, this.chessShakeTimer - dt);
+    if (this.fishShakeTimer > 0) {
+      this.fishShakeTimer = Math.max(0, this.fishShakeTimer - dt);
     }
 
     if (this.onetBlockedFlash) {
@@ -5135,8 +4904,9 @@ export class PuzzleArcadeModalController {
       1,
       Math.min(maxDprZoom, sharedMinigameViewport.getState(this.mode).zoom)
     );
-    const maxCanvasDim = isTouch ? 1560 : 1920;
-    const dpr = Math.min(maxCanvasDim / Math.max(1, cssW, cssH), baseDpr * viewZoom);
+    const effectiveBaseDpr = this.mode === 'chess' ? Math.min(1.5, baseDpr) : baseDpr;
+    const maxCanvasDim = this.mode === 'chess' ? 1360 : isTouch ? 1560 : 1920;
+    const dpr = Math.min(maxCanvasDim / Math.max(1, cssW, cssH), effectiveBaseDpr * viewZoom);
     const targetW = Math.round(cssW * dpr);
     const targetH = Math.round(cssH * dpr);
     if (cvs.width !== targetW || cvs.height !== targetH) {
@@ -5150,13 +4920,13 @@ export class PuzzleArcadeModalController {
     const virt = this.getVirtualCanvasSize();
     ctx.save();
     ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    ctx.imageSmoothingQuality = this.mode === 'chess' ? 'medium' : 'high';
     ctx.scale(targetW / virt.w, targetH / virt.h);
 
-    if (this.mode === 'chess' && this.chessShakeTimer > 0) {
+    if (this.mode === 'chess' && this.fishShakeTimer > 0) {
       const now = performance.now();
-      const decay = Math.min(1, this.chessShakeTimer / 0.18);
-      const amp = this.chessShakeAmp * decay;
+      const decay = Math.min(1, this.fishShakeTimer / 0.2);
+      const amp = this.fishShakeAmp * decay;
       ctx.translate(Math.sin(now * 0.095) * amp, Math.cos(now * 0.125) * amp * 0.72);
     }
 
@@ -5165,11 +4935,11 @@ export class PuzzleArcadeModalController {
     }
 
     if (this.mode === 'chess') {
-      this.drawGreatHallChessBackdrop(ctx, virt.w, virt.h);
+      this.drawFishShooterBackdrop(ctx, virt.w, virt.h);
     } else if (this.mode === 'sudoku') {
       this.drawClassicSudokuBackdrop(ctx, virt.w, virt.h);
     } else if (this.mode === 'caro') {
-      this.drawMarauderCaroBackdrop(ctx, virt.w, virt.h);
+      this.drawHogwartsMinesBackdrop(ctx, virt.w, virt.h);
     } else if (this.mode === 'jigsaw') {
       this.drawParlorTabletopBackdrop(ctx, virt.w, virt.h);
     } else {
@@ -5178,11 +4948,10 @@ export class PuzzleArcadeModalController {
 
     if (this.mode === 'sudoku' && this.sudokuEngine) {
       this.drawSudokuScene(ctx, this.sudokuEngine);
-    } else if (this.mode === 'caro' && this.caroEngine) {
-      this.drawCaroScene(ctx, this.caroEngine);
-    } else if (this.mode === 'chess' && this.chessEngine) {
-      this.drawWizardChessScene(ctx, this.chessEngine);
-      this.drawChessSpellBeams(ctx);
+    } else if (this.mode === 'caro' && this.minesEngine) {
+      this.drawMinesweeperScene(ctx, this.minesEngine);
+    } else if (this.mode === 'chess' && this.fishEngine) {
+      this.drawFishShooterScene(ctx, this.fishEngine);
     } else if (this.mode === 'blocks' && this.onetEngine) {
       this.drawCreatureOnetScene(ctx, this.onetEngine);
     } else if (this.mode === 'jigsaw' && this.jigsawEngine) {
@@ -5204,9 +4973,7 @@ export class PuzzleArcadeModalController {
   ): void {
     ctx.save();
     const isYule = this.isYuleSkinActive();
-    const img = isYule && this.yuleGreatHallBgImage?.complete && this.yuleGreatHallBgImage.naturalWidth > 0
-      ? this.yuleGreatHallBgImage
-      : this.unicornLakeBgImage;
+    const img = this.unicornLakeBgImage;
     if (img && img.complete && img.naturalWidth > 0) {
       const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
       const dw = img.naturalWidth * scale;
@@ -6030,20 +5797,13 @@ export class PuzzleArcadeModalController {
   ): void {
     ctx.clearRect(0, 0, virtW, virtH);
     if (this.isYuleSkinActive()) {
-      const yBg = this.yuleCaroBgImage;
-      if (yBg && yBg.complete && yBg.naturalWidth > 0) {
-        ctx.save();
-        const scale = Math.max(virtW / yBg.naturalWidth, virtH / yBg.naturalHeight);
-        const dw = yBg.naturalWidth * scale;
-        const dh = yBg.naturalHeight * scale;
-        ctx.drawImage(yBg, (virtW - dw) * 0.5, (virtH - dh) * 0.5, dw, dh);
-        const scrim = ctx.createLinearGradient(0, 0, 0, virtH);
-        scrim.addColorStop(0, 'rgba(6, 40, 26, 0.34)');
-        scrim.addColorStop(1, 'rgba(28, 12, 16, 0.42)');
-        ctx.fillStyle = scrim;
-        ctx.fillRect(0, 0, virtW, virtH);
-        ctx.restore();
-      }
+      ctx.save();
+      const scrim = ctx.createLinearGradient(0, 0, 0, virtH);
+      scrim.addColorStop(0, 'rgba(6, 40, 26, 0.24)');
+      scrim.addColorStop(1, 'rgba(28, 12, 16, 0.3)');
+      ctx.fillStyle = scrim;
+      ctx.fillRect(0, 0, virtW, virtH);
+      ctx.restore();
     }
   }
 
@@ -6482,13 +6242,6 @@ export class PuzzleArcadeModalController {
       }
       ctx.fill();
 
-      // Top ivory specular gloss
-      if (!done) {
-        drawRoundedRect(ctx, bx + 2, by + 1.5, btnW - 4, 14, 7);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-        ctx.fill();
-      }
-
       ctx.lineWidth = isKeyActive ? 2.1 : 1.4;
       ctx.strokeStyle = done
         ? 'rgba(229, 169, 60, 0.24)'
@@ -6502,6 +6255,13 @@ export class PuzzleArcadeModalController {
       }
       ctx.stroke();
       ctx.setLineDash([]);
+
+      // Top ivory specular gloss (drawn AFTER stroking the outer key so the gloss itself is unbordered)
+      if (!done) {
+        drawRoundedRect(ctx, bx + 2, by + 1.5, btnW - 4, 14, 7);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.fill();
+      }
 
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -6549,1352 +6309,1567 @@ export class PuzzleArcadeModalController {
   }
 
   // --------------------------------------------------------------------------
-  // RENDERER 5: PHÒNG SINH HOẠT CHUNG & BẢN ĐỒ ĐẠO TẶC — CỜ CARO 13x13
+  // RENDERER 5: DÒ MÌN PHÉP THUẬT — BẢN ĐỒ ĐẠO TẶC & PHÁ BẪY HOGWARTS (777 MÀN)
   // --------------------------------------------------------------------------
 
-  private drawMarauderCaroBackdrop(
+  private drawHogwartsMinesBackdrop(
     ctx: CanvasRenderingContext2D,
     virtW = PA_VIRTUAL_W,
     virtH = PA_VIRTUAL_H
   ): void {
     ctx.save();
     const isYule = this.isYuleSkinActive();
-    const bg =
-      isYule && this.yuleCaroBgImage?.complete && this.yuleCaroBgImage.naturalWidth > 0
-        ? this.yuleCaroBgImage
-        : this.marauderCaroBgImage;
-    if (bg && bg.complete && bg.naturalWidth > 0) {
-      const sw = bg.naturalWidth;
-      const sh = bg.naturalHeight;
-      ctx.drawImage(
-        bg,
-        sw * 0.02,
-        sh * 0.05,
-        sw * 0.96,
-        sh * 0.92,
-        0,
-        0,
-        virtW,
-        virtH
+    const bgImg =
+      this.hogwartsMinesBgImage &&
+      this.hogwartsMinesBgImage.complete &&
+      this.hogwartsMinesBgImage.naturalWidth > 0
+        ? this.hogwartsMinesBgImage
+        : isYule && this.yuleCaroBgImage?.complete && this.yuleCaroBgImage.naturalWidth > 0
+          ? this.yuleCaroBgImage
+          : this.parlorBgImage;
+    if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
+      const scale = Math.max(virtW / bgImg.naturalWidth, virtH / bgImg.naturalHeight);
+      const dw = bgImg.naturalWidth * scale;
+      const dh = bgImg.naturalHeight * scale;
+      ctx.drawImage(bgImg, (virtW - dw) * 0.5, (virtH - dh) * 0.5, dw, dh);
+      const glaze = ctx.createRadialGradient(
+        virtW * 0.5,
+        virtH * 0.52,
+        Math.min(virtW, virtH) * 0.18,
+        virtW * 0.5,
+        virtH * 0.52,
+        Math.max(virtW, virtH) * 0.72
       );
-      const scrim = ctx.createLinearGradient(0, 0, virtW, virtH);
       if (isYule) {
-        scrim.addColorStop(0, 'rgba(6, 44, 28, 0.28)');
-        scrim.addColorStop(0.5, 'rgba(30, 14, 14, 0.18)');
-        scrim.addColorStop(1, 'rgba(18, 8, 12, 0.34)');
+        glaze.addColorStop(0, 'rgba(12, 30, 22, 0.14)');
+        glaze.addColorStop(1, 'rgba(16, 10, 12, 0.42)');
       } else {
-        scrim.addColorStop(0, 'rgba(54, 14, 12, 0.24)');
-        scrim.addColorStop(0.5, 'rgba(38, 16, 10, 0.16)');
-        scrim.addColorStop(1, 'rgba(28, 12, 8, 0.32)');
+        glaze.addColorStop(0, 'rgba(28, 16, 9, 0.12)');
+        glaze.addColorStop(1, 'rgba(15, 9, 5, 0.4)');
       }
-      ctx.fillStyle = scrim;
+      ctx.fillStyle = glaze;
       ctx.fillRect(0, 0, virtW, virtH);
     } else {
-      const warmGrad = ctx.createLinearGradient(0, 0, virtW, virtH);
-      warmGrad.addColorStop(0, isYule ? '#14532d' : '#5c1916');
-      warmGrad.addColorStop(0.5, isYule ? '#4c1118' : '#451a0e');
-      warmGrad.addColorStop(1, isYule ? '#092418' : '#291008');
-      ctx.fillStyle = warmGrad;
+      const studyBg = ctx.createLinearGradient(0, 0, 0, virtH);
+      studyBg.addColorStop(0, '#2a1810');
+      studyBg.addColorStop(0.5, '#1e120c');
+      studyBg.addColorStop(1, '#120a06');
+      ctx.fillStyle = studyBg;
       ctx.fillRect(0, 0, virtW, virtH);
     }
 
-    // Animated Gryffindor hearth firelight pulse & rising golden embers on left rim
-    const now = performance.now() * 0.001;
-    const flicker = 0.85 + 0.15 * Math.sin(now * 5.2);
-    const hearth = ctx.createRadialGradient(8, 280, 10, 20, 280, 185);
-    hearth.addColorStop(0, `rgba(254, 240, 138, ${(0.28 * flicker).toFixed(3)})`);
-    hearth.addColorStop(0.5, `rgba(249, 115, 22, ${(0.14 * flicker).toFixed(3)})`);
-    hearth.addColorStop(1, 'rgba(185, 28, 28, 0)');
-    ctx.fillStyle = hearth;
-    ctx.fillRect(0, 0, 220, virtH);
-
-    for (let i = 0; i < 6; i++) {
-      const prog = (now * 0.28 + i * 0.17) % 1;
-      const ex = 10 + Math.sin(now * 2.3 + i * 1.4) * 5;
-      const ey = 395 - prog * 330;
-      const alpha = Math.sin(prog * Math.PI) * 0.75;
-      ctx.fillStyle = `rgba(253, 224, 71, ${alpha.toFixed(3)})`;
+    // Floating Hogwarts candlelight motes around the study edges
+    const nowSec = performance.now() * 0.001;
+    for (let i = 0; i < 10; i++) {
+      const sideX = i % 2 === 0 ? 0.06 + (i * 0.021) : 0.94 - (i * 0.019);
+      const mx = virtW * sideX + Math.sin(nowSec * 1.1 + i * 1.7) * 9;
+      const my = virtH * (0.14 + ((i * 19) % 72) / 100) + Math.cos(nowSec * 0.9 + i) * 7;
+      const alpha = 0.25 + 0.22 * Math.sin(nowSec * 2.4 + i * 1.3);
       ctx.beginPath();
-      ctx.arc(ex, ey, 2.2, 0, Math.PI * 2);
+      ctx.arc(mx, my, 2.2 + (i % 2) * 1.1, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(253, 224, 71, ${alpha.toFixed(2)})`;
       ctx.fill();
     }
 
-    drawRoundedRect(ctx, 5, 5, virtW - 10, virtH - 10, 14);
+    drawRoundedRect(ctx, 6, 6, virtW - 12, virtH - 12, 14);
     ctx.lineWidth = 1.4;
-    ctx.strokeStyle = 'rgba(253, 230, 138, 0.36)';
+    ctx.strokeStyle = isYule ? 'rgba(251, 191, 36, 0.5)' : 'rgba(244, 198, 104, 0.36)';
     ctx.stroke();
     ctx.restore();
   }
 
-  private drawMarauderFootprintStep(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    angle: number,
-    isRightFoot: boolean,
-    alpha: number
-  ): void {
-    if (alpha <= 0.02) return;
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(angle);
-    ctx.translate(0, isRightFoot ? 2.4 : -2.4);
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#4a1d12';
-    // Sole
-    ctx.beginPath();
-    ctx.ellipse(1.6, 0, 2.9, 1.65, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Heel
-    ctx.beginPath();
-    ctx.ellipse(-2.3, 0, 1.5, 1.35, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  private drawCaroScene(ctx: CanvasRenderingContext2D, engine: CaroGameEngine): void {
-    const now = performance.now() * 0.001;
-    const cm = this.getCaroBoardMetrics();
-    const fX = cm.frameX;
-    const fY = cm.frameY;
-    const fPx = cm.framePx;
-    const oX = cm.originX;
-    const oY = cm.originY;
-    const sPx = cm.stepPx;
-    const stScale = cm.stoneScale;
-
-    // 1. Mahogany Gryffindor Table Backing + Unfolded Antique Marauder's Map Parchment!
-    const isYuleCaro = this.isYuleSkinActive();
-    ctx.save();
-    const rimOut = Math.min(4, fX);
-    drawRoundedRect(
-      ctx,
-      fX - rimOut,
-      fY - rimOut,
-      fPx + rimOut * 2,
-      fPx + rimOut * 2,
-      15
-    );
-    const rimGrad = ctx.createLinearGradient(
-      0,
-      fY - rimOut,
-      0,
-      fY + fPx + rimOut
-    );
-    if (isYuleCaro) {
-      rimGrad.addColorStop(0, '#14532d');
-      rimGrad.addColorStop(0.5, '#7f1d1d');
-      rimGrad.addColorStop(1, '#062417');
-    } else {
-      rimGrad.addColorStop(0, '#6b1d1b');
-      rimGrad.addColorStop(0.5, '#471512');
-      rimGrad.addColorStop(1, '#2b0b09');
-    }
-    ctx.fillStyle = rimGrad;
-    ctx.shadowColor = 'rgba(20, 6, 3, 0.62)';
-    ctx.shadowBlur = 16;
-    ctx.shadowOffsetY = 6;
-    ctx.fill();
-    ctx.lineWidth = 2.2;
-    ctx.strokeStyle = isYuleCaro ? '#fbbf24' : '#f4c668';
-    ctx.stroke();
-    ctx.shadowColor = 'transparent';
-
-    // Unfolded Tri-Panel Marauder's Map Vellum Parchment
-    const mapInset = fX <= 3 ? 2.5 : 4;
-    const mapX = fX + mapInset;
-    const mapY = fY + mapInset;
-    const mapPx = fPx - mapInset * 2;
-    drawRoundedRect(ctx, mapX, mapY, mapPx, mapPx, 11);
-    const parchGrad = ctx.createRadialGradient(
-      mapX + mapPx * 0.5,
-      mapY + mapPx * 0.5,
-      24,
-      mapX + mapPx * 0.5,
-      mapY + mapPx * 0.5,
-      mapPx * 0.75
-    );
-    if (isYuleCaro) {
-      parchGrad.addColorStop(0, '#fdfbf7');
-      parchGrad.addColorStop(0.58, '#eef6f0');
-      parchGrad.addColorStop(1, '#dcebe1');
-    } else {
-      parchGrad.addColorStop(0, '#fff9e6');
-      parchGrad.addColorStop(0.58, '#f5e1b5');
-      parchGrad.addColorStop(1, '#dfc086');
-    }
-    ctx.fillStyle = parchGrad;
-    ctx.fill();
-    ctx.lineWidth = 1.6;
-    ctx.strokeStyle = isYuleCaro ? '#14532d' : '#854d27';
-    ctx.stroke();
-
-    // Clip inside Marauder's Map parchment for fold creases, Hogwarts castle corridors & animated footprints!
-    ctx.save();
-    drawRoundedRect(ctx, mapX + 1, mapY + 1, mapPx - 2, mapPx - 2, 10);
-    ctx.clip();
-
-    // Authentic tri-fold Marauder's Map paper creases
-    for (const fx of [mapX + mapPx * 0.333, mapX + mapPx * 0.666]) {
-      ctx.strokeStyle = 'rgba(120, 63, 22, 0.16)';
-      ctx.lineWidth = 1.8;
-      ctx.beginPath();
-      ctx.moveTo(fx, mapY);
-      ctx.lineTo(fx, mapY + mapPx);
-      ctx.stroke();
-      ctx.strokeStyle = 'rgba(255, 252, 240, 0.42)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(fx + 1.5, mapY);
-      ctx.lineTo(fx + 1.5, mapY + mapPx);
-      ctx.stroke();
-    }
-    ctx.strokeStyle = 'rgba(120, 63, 22, 0.12)';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(mapX, mapY + mapPx * 0.5);
-    ctx.lineTo(mapX + mapPx, mapY + mapPx * 0.5);
-    ctx.stroke();
-
-    // Watermarked Hogwarts Castle Turrets, Secret Passages & Compass Rose in Sepia Marauder Ink
-    const centerMapX = oX + 6 * sPx;
-    const centerMapY = oY + 6 * sPx;
-    ctx.strokeStyle = 'rgba(110, 46, 24, 0.11)';
-    ctx.lineWidth = 1.2;
-    for (const rCompass of [46, 76, 132]) {
-      ctx.beginPath();
-      ctx.arc(centerMapX, centerMapY, rCompass, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    // 4 Corner Hogwarts Tower Turrets watermarked on the parchment
-    for (const [tx, ty] of [
-      [oX + 1.5 * sPx, oY + 1.5 * sPx],
-      [oX + 10.5 * sPx, oY + 1.5 * sPx],
-      [oX + 1.5 * sPx, oY + 10.5 * sPx],
-      [oX + 10.5 * sPx, oY + 10.5 * sPx],
-    ]) {
-      ctx.beginPath();
-      ctx.arc(tx, ty, 22, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.strokeRect(tx - 14, ty - 14, 28, 28);
-    }
-
-    // Miniature Crimson Marauder Banner at Top Margin of Map
-    const mbW = 248;
-    const mbX = centerMapX - mbW * 0.5;
-    const mbY = mapY + 2.5;
-    drawRoundedRect(ctx, mbX, mbY, mbW, 13, 6.5);
-    ctx.fillStyle = isYuleCaro ? 'rgba(20, 83, 45, 0.92)' : 'rgba(153, 27, 27, 0.88)';
-    ctx.fill();
-    ctx.strokeStyle = '#fde68a';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.fillStyle = '#fffbeb';
-    ctx.font = '800 8.2px "Be Vietnam Pro", system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(
-      isYuleCaro ? '🎄 BẢN ĐỒ ĐẠO TẶC ĐÊM GIÁNG SINH • HOGWARTS' : '🗺️ BẢN ĐỒ ĐẠO TẶC • THÀNH TRÌ HOGWARTS',
-      centerMapX,
-      mbY + 6.8
-    );
-
-    // Animated Disappearing/Appearing Marauder Inked Footprints patrolling the corridors!
-    const p1 = (now * 0.85) % 10;
-    for (let s = 0; s < 10; s++) {
-      const dist = (p1 - s + 10) % 10;
-      const fade = dist < 4.2 ? Math.sin((1 - dist / 4.2) * Math.PI * 0.5) * 0.68 : 0;
-      const fx = oX + 28 + s * 36;
-      const fy = Math.min(mapY + mapPx - 5, oY + 12 * sPx + 11.5);
-      this.drawMarauderFootprintStep(ctx, fx, fy, 0, s % 2 === 0, fade);
-    }
-    const label1X = oX + 28 + Math.floor(p1) * 36;
-    ctx.fillStyle = 'rgba(110, 32, 18, 0.65)';
-    ctx.font = '700 8.5px "Be Vietnam Pro", sans-serif';
-    ctx.fillText(
-      'Harry Potter',
-      Math.min(oX + 398, Math.max(oX + 36, label1X)),
-      Math.min(mapY + mapPx - 9, oY + 12 * sPx + 5)
-    );
-
-    const p2 = (now * 0.72 + 3.5) % 9;
-    for (let s = 0; s < 9; s++) {
-      const dist = (p2 - s + 9) % 9;
-      const fade = dist < 3.8 ? Math.sin((1 - dist / 3.8) * Math.PI * 0.5) * 0.62 : 0;
-      const fx = mapX + 8;
-      const fy = oY + 11 * sPx - s * sPx;
-      this.drawMarauderFootprintStep(ctx, fx, fy, -Math.PI * 0.5, s % 2 === 0, fade);
-    }
-
-    const p3 = (now * 0.78 + 6.1) % 9;
-    for (let s = 0; s < 9; s++) {
-      const dist = (p3 - s + 9) % 9;
-      const fade = dist < 3.8 ? Math.sin((1 - dist / 3.8) * Math.PI * 0.5) * 0.62 : 0;
-      const fx = mapX + mapPx - 8;
-      const fy = oY + 1 * sPx + s * sPx;
-      this.drawMarauderFootprintStep(ctx, fx, fy, Math.PI * 0.5, s % 2 === 0, fade);
-    }
-
-    ctx.restore(); // end parchment clip
-
-    this.drawBrassCornerBrackets(
-      ctx,
-      fX - Math.min(2, rimOut),
-      fY - Math.min(2, rimOut),
-      fPx + Math.min(2, rimOut) * 2,
-      fPx + Math.min(2, rimOut) * 2,
-      16
-    );
-
-    // 2. 13x13 Sepia-Crimson Marauder Ink Intersection Grid
-    const endPx = (CARO_BOARD_SIZE - 1) * sPx;
-    ctx.strokeStyle = 'rgba(92, 38, 16, 0.66)';
-    ctx.lineWidth = 1.25;
-    for (let i = 0; i < CARO_BOARD_SIZE; i++) {
-      const gx = oX + i * sPx;
-      ctx.beginPath();
-      ctx.moveTo(gx, oY);
-      ctx.lineTo(gx, oY + endPx);
-      ctx.stroke();
-
-      const gy = oY + i * sPx;
-      ctx.beginPath();
-      ctx.moveTo(oX, gy);
-      ctx.lineTo(oX + endPx, gy);
-      ctx.stroke();
-    }
-    ctx.lineWidth = 1.8;
-    ctx.strokeStyle = '#6b2714';
-    ctx.strokeRect(oX, oY, endPx, endPx);
-
-    // 5 golden inlaid Marauder compass stars at hoshi intersections
-    for (const [hr, hc] of [
-      [3, 3],
-      [3, 9],
-      [6, 6],
-      [9, 3],
-      [9, 9],
-    ]) {
-      const sx = oX + hc * sPx;
-      const sy = oY + hr * sPx;
-      this.drawFourPointStar(ctx, sx, sy, hr === 6 && hc === 6 ? 7 : 5.2, 2);
-      ctx.fillStyle = '#7f1d1d';
-      ctx.fill();
-      this.drawFourPointStar(ctx, sx, sy, hr === 6 && hc === 6 ? 4.4 : 3.2, 1.2);
-      ctx.fillStyle = '#fde68a';
-      ctx.fill();
-    }
-
-    // 3. Hover preview Phoenix Seal & Marauder Hint Ring
-    if (
-      this.caroHoverCell &&
-      engine.status === 'playing' &&
-      this.caroWinRevealTimer <= 0 &&
-      engine.grid[this.caroHoverCell.r]?.[this.caroHoverCell.c] === 0
-    ) {
-      const hx = oX + this.caroHoverCell.c * sPx;
-      const hy = oY + this.caroHoverCell.r * sPx;
-      ctx.save();
-      ctx.globalAlpha = 0.52;
-      this.drawCaroStone(ctx, hx, hy, 1, false, stScale);
-      ctx.restore();
-    }
-
-    if (engine.hintCell && engine.grid[engine.hintCell.r]?.[engine.hintCell.c] === 0) {
-      const hx = oX + engine.hintCell.c * sPx;
-      const hy = oY + engine.hintCell.r * sPx;
-      const pulse = 1 + 0.14 * Math.sin(now * 8);
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(hx, hy, 17.5 * stScale * pulse, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(250, 204, 21, 0.36)';
-      ctx.fill();
-      ctx.lineWidth = 2.6;
-      ctx.strokeStyle = '#b91c1c';
-      ctx.stroke();
-      this.drawFourPointStar(ctx, hx, hy, 6.2 * pulse, 2 * pulse);
-      ctx.fillStyle = '#fffbeb';
-      ctx.fill();
-      ctx.restore();
-    }
-
-    // 4. Placed 2.5D Order of the Phoenix vs Death Eater Dark Mark Medallions
-    const last = engine.lastMove;
-    for (let r = 0; r < CARO_BOARD_SIZE; r++) {
-      for (let c = 0; c < CARO_BOARD_SIZE; c++) {
-        const st = engine.grid[r][c];
-        if (st === 0) continue;
-        const ix = oX + c * sPx;
-        const iy = oY + r * sPx;
-        const isLast = Boolean(last && last.r === r && last.c === c);
-        let popScale = stScale;
-        if (
-          this.caroLastMoveAnim &&
-          this.caroLastMoveAnim.r === r &&
-          this.caroLastMoveAnim.c === c
-        ) {
-          const t = Math.min(1, this.caroLastMoveAnim.age / this.caroLastMoveAnim.duration);
-          popScale = stScale * (0.72 + Math.sin(t * Math.PI * 0.78) * 0.38);
-        }
-        this.drawCaroStone(ctx, ix, iy, st, isLast, popScale);
-      }
-    }
-
-    // 5. Blazing Priori Incantatem Colliding Wand Spell Beam on 5-in-a-row!
-    if (engine.winningLine && engine.winningLine.length >= 2) {
-      const first = engine.winningLine[0];
-      const end = engine.winningLine[engine.winningLine.length - 1];
-      const x1 = oX + first.c * sPx;
-      const y1 = oY + first.r * sPx;
-      const x2 = oX + end.c * sPx;
-      const y2 = oY + end.r * sPx;
-      const isPhoenixWin = engine.status === 'won';
-      const dx = x2 - x1;
-      const dy = y2 - y1;
-      const len = Math.max(1, Math.hypot(dx, dy));
-      const nx = -dy / len;
-      const ny = dx / len;
-
-      ctx.save();
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-
-      // Outer Priori Incantatem plasma glow
-      ctx.lineWidth = 13;
-      ctx.strokeStyle = isPhoenixWin
-        ? 'rgba(239, 68, 68, 0.58)'
-        : 'rgba(16, 185, 129, 0.58)';
-      ctx.shadowColor = isPhoenixWin ? '#facc15' : '#34d399';
-      ctx.shadowBlur = 22;
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-
-      // Twin-core crackling spell arcs oscillating along the 5-in-a-row beam
-      for (const sign of [-1, 1]) {
-        ctx.lineWidth = 2.6;
-        ctx.strokeStyle = isPhoenixWin ? '#fde047' : '#6ee7b7';
-        ctx.beginPath();
-        const segs = 10;
-        for (let s = 0; s <= segs; s++) {
-          const u = s / segs;
-          const jitter =
-            s === 0 || s === segs
-              ? 0
-              : Math.sin(now * 24 + s * 2.1 * sign) * 5.2 * sign;
-          const px = x1 + dx * u + nx * jitter;
-          const py = y1 + dy * u + ny * jitter;
-          if (s === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
-        }
-        ctx.stroke();
-      }
-
-      // White-hot Priori Incantatem core line
-      ctx.lineWidth = 4.2;
-      ctx.strokeStyle = '#fffbeb';
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-
-      // Central Priori Incantatem Golden/Emerald Energy Nexus Sphere
-      const mx = (x1 + x2) * 0.5;
-      const my = (y1 + y2) * 0.5;
-      const nexusR = 14 + 3 * Math.sin(now * 14);
-      const nexusGrad = ctx.createRadialGradient(mx, my, 2, mx, my, nexusR);
-      nexusGrad.addColorStop(0, '#ffffff');
-      nexusGrad.addColorStop(0.45, isPhoenixWin ? '#fde047' : '#34d399');
-      nexusGrad.addColorStop(1, 'rgba(250, 204, 21, 0)');
-      ctx.fillStyle = nexusGrad;
-      ctx.beginPath();
-      ctx.arc(mx, my, nexusR, 0, Math.PI * 2);
-      ctx.fill();
-
-      for (const pt of engine.winningLine) {
-        const px = oX + pt.c * sPx;
-        const py = oY + pt.r * sPx;
-        this.drawFourPointStar(ctx, px, py, 7.2, 2.4);
-        ctx.fillStyle = '#fffbeb';
-        ctx.fill();
-      }
-      ctx.restore();
-    }
-
-    // 5b. Gương Chiếu Hậu Pháp Thuật (Turning-Point Move Review) Overlay
-    const caroReview = engine.getTurningPointReview();
-    if (
-      caroReview &&
-      (this.inspectingTurningPoint || engine.status === 'lost' || engine.status === 'draw')
-    ) {
-      const pulse = 1 + 0.08 * Math.sin(now * 6.5);
-      for (const hc of caroReview.highlightCells) {
-        const hx = oX + hc.c * sPx;
-        const hy = oY + hc.r * sPx;
-        const isBest = hc.role === 'best';
-        const ringCol = isBest ? '#10b981' : '#f59e0b';
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(hx, hy, 18.5 * stScale * pulse, 0, Math.PI * 2);
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = ringCol;
-        ctx.shadowColor = isBest ? '#6ee7b7' : '#fde047';
-        ctx.shadowBlur = 12;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-
-        const lbl = isBest ? '✨ Nước Chuẩn' : '⚡ Đã Đi';
-        ctx.font = '800 9.2px "Be Vietnam Pro", system-ui, sans-serif';
-        const tw = Math.ceil(ctx.measureText(lbl).width) + 10;
-        const bx = Math.max(12, Math.min(fX + fPx - tw - 4, hx - tw * 0.5));
-        const by = Math.max(8, hy - 29);
-        drawRoundedRect(ctx, bx, by, tw, 15, 7);
-        ctx.fillStyle = isBest ? '#065f46' : '#78350f';
-        ctx.fill();
-        ctx.lineWidth = 1.2;
-        ctx.strokeStyle = '#fde68a';
-        ctx.stroke();
-        ctx.fillStyle = '#fffbeb';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(lbl, bx + tw * 0.5, by + 7.8);
-        ctx.restore();
-      }
-    }
-    ctx.restore();
-  }
-
-  private drawCaroStone(
+  private drawMinesFlagGlyph(
     ctx: CanvasRenderingContext2D,
     cx: number,
     cy: number,
-    stone: CaroStone,
-    isLast: boolean,
-    scale = 1
+    sz: number
   ): void {
-    if (stone === 0) return;
-    const drawSz = 36 * scale;
-    const rad = 16.3 * scale;
+    const isYule = this.isYuleSkinActive();
+    const sealImg =
+      this.getPaintingTokenImage(isYule ? 'caro-yule/phoenix_seal' : 'caro/phoenix_seal') ??
+      this.getPaintingTokenImage('caro/phoenix_seal');
 
     ctx.save();
-    // Warm parchment contact shadow
+    // Golden Protego runic aura ring
     ctx.beginPath();
-    ctx.arc(cx + 0.6, cy + 2.4, rad * 0.96, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(38, 16, 6, 0.42)';
-    ctx.fill();
+    ctx.arc(cx, cy, sz * 0.42, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(250, 204, 21, 0.72)';
+    ctx.lineWidth = Math.max(1.2, sz * 0.045);
+    ctx.stroke();
 
-    if (stone === 3) {
-      // Impassable Ancient Wax Rune Seal (Ấn Chì Cổ Ngữ Hắc Ám — Stage >= 90)
-      const waxGrad = ctx.createRadialGradient(cx - 3.2, cy - 3.8, 1.5, cx, cy, rad);
-      waxGrad.addColorStop(0, '#64748b');
-      waxGrad.addColorStop(0.45, '#334155');
-      waxGrad.addColorStop(1, '#0f172a');
+    if (sealImg) {
+      const sSz = sz * 0.82;
+      ctx.drawImage(sealImg, cx - sSz * 0.5, cy - sSz * 0.5, sSz, sSz);
+    } else {
+      // Fallback Order of the Phoenix crimson-gold wax seal
+      const waxGrad = ctx.createRadialGradient(cx - sz * 0.08, cy - sz * 0.08, sz * 0.05, cx, cy, sz * 0.36);
+      waxGrad.addColorStop(0, '#ef4444');
+      waxGrad.addColorStop(0.7, '#991b1b');
+      waxGrad.addColorStop(1, '#450a0a');
       ctx.beginPath();
-      ctx.arc(cx, cy, rad - 0.6, 0, Math.PI * 2);
+      ctx.arc(cx, cy, sz * 0.35, 0, Math.PI * 2);
       ctx.fillStyle = waxGrad;
       ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#d97706';
+      ctx.strokeStyle = '#fde047';
+      ctx.lineWidth = Math.max(1.5, sz * 0.06);
       ctx.stroke();
-
-      ctx.beginPath();
-      ctx.arc(cx, cy, rad * 0.68, 0, Math.PI * 2);
-      ctx.lineWidth = 1.1;
-      ctx.strokeStyle = 'rgba(253, 224, 71, 0.62)';
-      ctx.stroke();
-
-      ctx.fillStyle = '#fde68a';
-      ctx.font = `900 ${Math.round(14.5 * scale)}px "Be Vietnam Pro", sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('ᛉ', cx, cy + 0.6);
-      ctx.restore();
-      return;
-    }
-
-    const sealImg = this.getCaroSealImage(stone);
-    if (sealImg) {
-      ctx.drawImage(sealImg, cx - drawSz * 0.5, cy - drawSz * 0.5 - 0.4, drawSz, drawSz);
-    } else {
-      // Instant vector fallback while PNG finishes async decode
-      const dome = ctx.createRadialGradient(cx - 3.5, cy - 4, 1.5, cx, cy, rad);
-      if (stone === 1) {
-        dome.addColorStop(0, '#fde047');
-        dome.addColorStop(0.45, '#ef4444');
-        dome.addColorStop(1, '#7f1d1d');
-      } else {
-        dome.addColorStop(0, '#6ee7b7');
-        dome.addColorStop(0.45, '#065f46');
-        dome.addColorStop(1, '#022c22');
-      }
-      ctx.beginPath();
-      ctx.arc(cx, cy, rad - 0.8, 0, Math.PI * 2);
-      ctx.fillStyle = dome;
+      ctx.fillStyle = '#fef08a';
+      this.drawFourPointStar(ctx, cx, cy, sz * 0.2, sz * 0.07);
       ctx.fill();
-      ctx.lineWidth = 1.6;
-      ctx.strokeStyle = stone === 1 ? '#fde68a' : '#a7f3d0';
-      ctx.stroke();
-    }
-
-    // Pulsing spell ring on latest played seal
-    if (isLast) {
-      const pulse = 1 + 0.08 * Math.sin(performance.now() * 0.01);
-      ctx.beginPath();
-      ctx.arc(cx, cy - 0.4, (rad + 1.6) * pulse, 0, Math.PI * 2);
-      ctx.lineWidth = 2.2;
-      ctx.strokeStyle = stone === 1 ? '#fde047' : '#34d399';
-      ctx.stroke();
     }
     ctx.restore();
   }
 
-  // --------------------------------------------------------------------------
-  // RENDERER 6: CỜ PHÙ THỦY ĐẠI SẢNH ĐƯỜNG HOGWARTS 8x8 (HARRY POTTER CHIBI 2.5D)
-  // --------------------------------------------------------------------------
-
-  private drawGreatHallChessBackdrop(
-    ctx: CanvasRenderingContext2D,
-    virtW = PA_VIRTUAL_W,
-    virtH = PA_VIRTUAL_H
-  ): void {
-    ctx.save();
-    const isYule = this.isYuleSkinActive();
-    const bg =
-      isYule && this.yuleGreatHallBgImage?.complete && this.yuleGreatHallBgImage.naturalWidth > 0
-        ? this.yuleGreatHallBgImage
-        : this.greatHallBgImage;
-    if (bg && bg.complete && bg.naturalWidth > 0) {
-      const sw = bg.naturalWidth;
-      const sh = bg.naturalHeight;
-      ctx.drawImage(
-        bg,
-        sw * 0.03,
-        sh * 0.04,
-        sw * 0.94,
-        sh * 0.92,
-        0,
-        0,
-        virtW,
-        virtH
-      );
-      const scrim = ctx.createLinearGradient(0, 0, virtW, virtH);
-      if (isYule) {
-        scrim.addColorStop(0, 'rgba(6, 40, 26, 0.32)');
-        scrim.addColorStop(0.5, 'rgba(12, 24, 38, 0.24)');
-        scrim.addColorStop(1, 'rgba(38, 12, 16, 0.36)');
-      } else {
-        scrim.addColorStop(0, 'rgba(38, 16, 12, 0.34)');
-        scrim.addColorStop(0.5, 'rgba(20, 14, 24, 0.24)');
-        scrim.addColorStop(1, 'rgba(10, 26, 22, 0.38)');
-      }
-      ctx.fillStyle = scrim;
-      ctx.fillRect(0, 0, virtW, virtH);
-    } else {
-      const hallGrad = ctx.createLinearGradient(0, 0, virtW, virtH);
-      hallGrad.addColorStop(0, isYule ? '#0b3824' : '#3b1518');
-      hallGrad.addColorStop(0.5, isYule ? '#12293a' : '#1e1b2e');
-      hallGrad.addColorStop(1, isYule ? '#4c1118' : '#0f2924');
-      ctx.fillStyle = hallGrad;
-      ctx.fillRect(0, 0, virtW, virtH);
-    }
-
-    // Subtle animated Great Hall floating candles & enchanted ceiling starlight along outer rim
-    const now = performance.now() * 0.001;
-    const candleAnchors: ReadonlyArray<[number, number, number]> = [
-      [8, 64, 0.0],
-      [9, 198, 1.3],
-      [8, 354, 2.4],
-      [virtW - 7, 78, 2.7],
-      [virtW - 8, 248, 0.5],
-      [virtW - 7, 418, 1.6],
-    ];
-    for (const [bx, by, phase] of candleAnchors) {
-      const cy = by + Math.sin(now * 1.9 + phase) * 3.5;
-      const glow = ctx.createRadialGradient(bx, cy - 5, 1, bx, cy - 5, 11);
-      glow.addColorStop(0, 'rgba(254, 240, 138, 0.78)');
-      glow.addColorStop(0.5, 'rgba(245, 158, 11, 0.28)');
-      glow.addColorStop(1, 'rgba(245, 158, 11, 0)');
-      ctx.fillStyle = glow;
-      ctx.beginPath();
-      ctx.arc(bx, cy - 5, 11, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Tiny ivory floating taper candle
-      ctx.fillStyle = '#fffbeb';
-      ctx.fillRect(bx - 1.4, cy - 2, 2.8, 9);
-      ctx.fillStyle = '#fde047';
-      ctx.beginPath();
-      ctx.ellipse(bx, cy - 4.4, 1.5, 2.6, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Gilded Hogwarts Great Hall inner border
-    drawRoundedRect(ctx, 5, 5, virtW - 10, virtH - 10, 14);
-    ctx.lineWidth = 1.4;
-    ctx.strokeStyle = 'rgba(253, 230, 138, 0.38)';
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  private drawChessSpellBeams(ctx: CanvasRenderingContext2D): void {
-    if (this.chessSpellBeams.length === 0) return;
-    ctx.save();
-    for (const beam of this.chessSpellBeams) {
-      const t = Math.min(1, beam.age / beam.duration);
-      const alpha = Math.max(0, 1 - t * t);
-      const outerCol = beam.isWhiteCaster ? '#d97706' : '#059669';
-      const midCol = beam.isWhiteCaster ? '#fbbf24' : '#6ee7b7';
-      const coreCol = beam.isWhiteCaster ? '#fffbeb' : '#f8fafc';
-
-      const dx = beam.x1 - beam.x0;
-      const dy = beam.y1 - beam.y0;
-      const len = Math.max(1, Math.hypot(dx, dy));
-      const nx = -dy / len;
-      const ny = dx / len;
-
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-
-      // Curved Quadratic Bezier Arcane Spell Ribbons + Comet Head
-      const midX = (beam.x0 + beam.x1) * 0.5;
-      const midY = (beam.y0 + beam.y1) * 0.5;
-      const arcBow = Math.min(44, len * 0.24) * (beam.isWhiteCaster ? -1 : 1);
-      const ctrlX = midX + nx * arcBow;
-      const ctrlY = midY + ny * arcBow - 12;
-
-      ctx.beginPath();
-      ctx.moveTo(beam.x0, beam.y0);
-      ctx.quadraticCurveTo(ctrlX, ctrlY, beam.x1, beam.y1);
-      ctx.strokeStyle = outerCol;
-      ctx.lineWidth = 9.5 * (1 - t * 0.45);
-      ctx.stroke();
-
-      ctx.strokeStyle = midCol;
-      ctx.lineWidth = 5.2 * (1 - t * 0.4);
-      ctx.stroke();
-
-      ctx.strokeStyle = coreCol;
-      ctx.lineWidth = 2.3;
-      ctx.stroke();
-
-      // Secondary counter-bowing harmonic spell thread
-      const counterCtrlX = midX - nx * arcBow * 0.45;
-      const counterCtrlY = midY - ny * arcBow * 0.45 - 6;
-      ctx.beginPath();
-      ctx.moveTo(beam.x0, beam.y0);
-      ctx.quadraticCurveTo(counterCtrlX, counterCtrlY, beam.x1, beam.y1);
-      ctx.strokeStyle = midCol;
-      ctx.lineWidth = 1.8 * (1 - t * 0.5);
-      ctx.stroke();
-
-      // Traveling Bezier spell comet head
-      const headT = Math.min(1, t * 1.45);
-      const invH = 1 - headT;
-      const hx = invH * invH * beam.x0 + 2 * invH * headT * ctrlX + headT * headT * beam.x1;
-      const hy = invH * invH * beam.y0 + 2 * invH * headT * ctrlY + headT * headT * beam.y1;
-      this.drawFourPointStar(ctx, hx, hy, 10 * (1 - t * 0.35), 3.4 * (1 - t * 0.35));
-      ctx.fillStyle = coreCol;
-      ctx.fill();
-
-      // Expanding arcane impact shockwave at captured target square
-      const ringR = 8 + t * 28;
-      ctx.beginPath();
-      ctx.arc(beam.x1, beam.y1, ringR, 0, Math.PI * 2);
-      ctx.lineWidth = 2.8 * (1 - t);
-      ctx.strokeStyle = midCol;
-      ctx.stroke();
-
-      this.drawFourPointStar(ctx, beam.x1, beam.y1, 13 * (1 - t * 0.5), 4 * (1 - t * 0.5));
-      ctx.fillStyle = coreCol;
-      ctx.fill();
-      ctx.restore();
-    }
-    ctx.restore();
-  }
-
-  private drawWizardChessScene(ctx: CanvasRenderingContext2D, engine: WizardChessEngine): void {
-    const now = performance.now();
-    const cm = this.getChessBoardMetrics();
-    const bX = cm.boardX;
-    const bY = cm.boardY;
-    const cPx = cm.cellPx;
-    const bPx = cm.boardPx;
-    const pieceScale = cPx / 48;
-    const rimPad = Math.max(3, bX - 2);
-
-    // 1. Grand Hogwarts Great Hall Carved Stone & Split House Heraldry Frame
-    ctx.save();
-    drawRoundedRect(
-      ctx,
-      bX - rimPad,
-      bY - rimPad,
-      bPx + rimPad * 2,
-      bPx + rimPad * 2,
-      rimPad <= 6 ? 10 : 14
-    );
-    const frameGrad = ctx.createLinearGradient(
-      0,
-      bY - rimPad,
-      0,
-      bY + bPx + rimPad
-    );
-    frameGrad.addColorStop(0, '#16302b'); // Slytherin obsidian-emerald top
-    frameGrad.addColorStop(0.48, '#291d18');
-    frameGrad.addColorStop(0.52, '#3d1816');
-    frameGrad.addColorStop(1, '#4c1118'); // Gryffindor deep burgundy-oak bottom
-    ctx.fillStyle = frameGrad;
-    ctx.shadowColor = 'rgba(8, 5, 4, 0.72)';
-    ctx.shadowBlur = 14;
-    ctx.shadowOffsetY = 4;
-    ctx.fill();
-    ctx.lineWidth = 2.2;
-    ctx.strokeStyle = '#f4c668';
-    ctx.stroke();
-    ctx.shadowColor = 'transparent';
-
-    if (rimPad >= 8) {
-      // Subtle inlaid house heraldic trim strips (top Slytherin emerald, bottom Gryffindor scarlet)
-      ctx.save();
-      ctx.strokeStyle = 'rgba(52, 211, 153, 0.42)';
-      ctx.lineWidth = 1.8;
-      ctx.beginPath();
-      ctx.moveTo(bX + 12, bY - 8);
-      ctx.lineTo(bX + bPx - 12, bY - 8);
-      ctx.stroke();
-
-      ctx.strokeStyle = 'rgba(251, 191, 36, 0.58)';
-      ctx.beginPath();
-      ctx.moveTo(bX + 12, bY + bPx + 8);
-      ctx.lineTo(bX + bPx - 12, bY + bPx + 8);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    this.drawBrassCornerBrackets(
-      ctx,
-      bX - Math.max(2, rimPad - 1),
-      bY - Math.max(2, rimPad - 1),
-      bPx + Math.max(2, rimPad - 1) * 2,
-      bPx + Math.max(2, rimPad - 1) * 2,
-      rimPad <= 6 ? 10 : 13
-    );
-
-    const sel = engine.selected;
-    const legalMoves = sel ? engine.getLegalMovesFrom(sel.r, sel.c) : [];
-    const legalMap = new Map<string, { capture: boolean }>();
-    for (const mv of legalMoves) {
-      legalMap.set(`${mv.toR},${mv.toC}`, {
-        capture: Boolean(mv.captured || mv.isEnPassant),
-      });
-    }
-
-    const whiteInCheck = engine.isInCheck('w');
-    const blackInCheck = engine.isInCheck('b');
-    const whiteKing = whiteInCheck ? engine.findKing('w') : null;
-    const blackKing = blackInCheck ? engine.findKing('b') : null;
-
-    // 2. 8x8 Great Hall Sunlit Alabaster-Gold & Slytherin Emerald-Slate (or Yule Snow-Frost & Evergreen) Marble Squares
-    const isYuleChess = this.isYuleSkinActive();
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const sx = bX + c * cPx;
-        const sy = bY + r * cPx;
-        const isLight = (r + c) % 2 === 0;
-
-        const sqGrad = ctx.createLinearGradient(sx, sy, sx + cPx, sy + cPx);
-        if (isYuleChess) {
-          if (isLight) {
-            sqGrad.addColorStop(0, '#f8fcff');
-            sqGrad.addColorStop(1, '#dbeafe');
-          } else {
-            sqGrad.addColorStop(0, '#14532d');
-            sqGrad.addColorStop(1, '#06321d');
-          }
-        } else if (isLight) {
-          sqGrad.addColorStop(0, '#fffaf0');
-          sqGrad.addColorStop(1, '#ebd4a6');
-        } else {
-          sqGrad.addColorStop(0, '#2e5d54');
-          sqGrad.addColorStop(1, '#1b3b35');
-        }
-        ctx.fillStyle = sqGrad;
-        ctx.fillRect(sx, sy, cPx, cPx);
-
-        // Crisp stone bevel on every square
-        ctx.strokeStyle = isLight ? 'rgba(255, 255, 255, 0.55)' : 'rgba(253, 230, 138, 0.16)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(sx + 0.5, sy + 0.5, cPx - 1, cPx - 1);
-
-        // Last played move golden enchantment wash
-        const isLast =
-          engine.lastMove &&
-          ((engine.lastMove.fromR === r && engine.lastMove.fromC === c) ||
-            (engine.lastMove.toR === r && engine.lastMove.toC === c));
-        if (isLast) {
-          ctx.fillStyle = 'rgba(250, 204, 21, 0.34)';
-          ctx.fillRect(sx, sy, cPx, cPx);
-          ctx.strokeStyle = 'rgba(245, 158, 11, 0.65)';
-          ctx.lineWidth = 1.4;
-          ctx.strokeRect(sx + 1, sy + 1, cPx - 2, cPx - 2);
-        }
-
-        // Pointer hover highlight
-        if (this.chessHoverSquare && this.chessHoverSquare.r === r && this.chessHoverSquare.c === c) {
-          ctx.fillStyle = 'rgba(254, 249, 195, 0.22)';
-          ctx.fillRect(sx, sy, cPx, cPx);
-        }
-
-        // Selected Gryffindor square aura + rotating golden runic ring
-        if (sel && sel.r === r && sel.c === c) {
-          const selGrad = ctx.createRadialGradient(
-            sx + cPx * 0.5,
-            sy + cPx * 0.5,
-            3,
-            sx + cPx * 0.5,
-            sy + cPx * 0.5,
-            cPx * 0.65
-          );
-          selGrad.addColorStop(0, 'rgba(254, 240, 138, 0.55)');
-          selGrad.addColorStop(1, 'rgba(220, 38, 38, 0.24)');
-          ctx.fillStyle = selGrad;
-          ctx.fillRect(sx, sy, cPx, cPx);
-          ctx.lineWidth = 2.3;
-          ctx.strokeStyle = '#fde047';
-          ctx.strokeRect(sx + 1.5, sy + 1.5, cPx - 3, cPx - 3);
-        }
-
-        // Pulsing crimson check warning under Dumbledore or Voldemort
-        if (
-          (whiteKing && whiteKing.r === r && whiteKing.c === c) ||
-          (blackKing && blackKing.r === r && blackKing.c === c)
-        ) {
-          const pulse = 0.68 + Math.sin(now * 0.008) * 0.2;
-          const kGrad = ctx.createRadialGradient(
-            sx + cPx * 0.5,
-            sy + cPx * 0.5,
-            4,
-            sx + cPx * 0.5,
-            sy + cPx * 0.5,
-            cPx * 0.58
-          );
-          kGrad.addColorStop(0, `rgba(225, 29, 72, ${pulse.toFixed(2)})`);
-          kGrad.addColorStop(1, 'rgba(225, 29, 72, 0.16)');
-          ctx.fillStyle = kGrad;
-          ctx.fillRect(sx, sy, cPx, cPx);
-        }
-
-        // Hint highlight on origin and destination squares (💡 Gợi Ý)
-        if (engine.hintMove && engine.status === 'playing') {
-          const isHintFrom = engine.hintMove.fromR === r && engine.hintMove.fromC === c;
-          const isHintTo = engine.hintMove.toR === r && engine.hintMove.toC === c;
-          if (isHintFrom || isHintTo) {
-            const hPulse = 0.78 + 0.22 * Math.sin(now * 0.008);
-            ctx.save();
-            ctx.fillStyle = isHintTo
-              ? `rgba(16, 185, 129, ${(0.34 * hPulse).toFixed(2)})`
-              : `rgba(250, 204, 21, ${(0.28 * hPulse).toFixed(2)})`;
-            ctx.fillRect(sx, sy, cPx, cPx);
-            ctx.lineWidth = 2.6;
-            ctx.strokeStyle = isHintTo ? '#34d399' : '#fde047';
-            ctx.strokeRect(sx + 2, sy + 2, cPx - 4, cPx - 4);
-            ctx.restore();
-          }
-        }
-
-        // Legal move markers (Snitch star for empty square, arcane spell-lock ring for captures)
-        const leg = legalMap.get(`${r},${c}`);
-        if (leg) {
-          const cx = sx + cPx * 0.5;
-          const cy = sy + cPx * 0.5;
-          if (leg.capture) {
-            ctx.fillStyle = 'rgba(225, 29, 72, 0.22)';
-            ctx.fillRect(sx, sy, cPx, cPx);
-            ctx.beginPath();
-            ctx.arc(cx, cy + 4, cPx * 0.4, 0, Math.PI * 2);
-            ctx.lineWidth = 2.8;
-            ctx.strokeStyle = '#fb7185';
-            ctx.stroke();
-            // Corner spell-lock brackets
-            ctx.strokeStyle = '#fde047';
-            ctx.lineWidth = 2;
-            const b = 8;
-            ctx.beginPath();
-            ctx.moveTo(sx + 3, sy + 3 + b);
-            ctx.lineTo(sx + 3, sy + 3);
-            ctx.lineTo(sx + 3 + b, sy + 3);
-            ctx.moveTo(sx + cPx - 3 - b, sy + 3);
-            ctx.lineTo(sx + cPx - 3, sy + 3);
-            ctx.lineTo(sx + cPx - 3, sy + 3 + b);
-            ctx.moveTo(sx + 3, sy + cPx - 3 - b);
-            ctx.lineTo(sx + 3, sy + cPx - 3);
-            ctx.lineTo(sx + 3 + b, sy + cPx - 3);
-            ctx.moveTo(sx + cPx - 3 - b, sy + cPx - 3);
-            ctx.lineTo(sx + cPx - 3, sy + cPx - 3);
-            ctx.lineTo(sx + cPx - 3, sy + cPx - 3 - b);
-            ctx.stroke();
-          } else {
-            const starPulse = 1 + Math.sin(now * 0.006 + r + c) * 0.12;
-            ctx.beginPath();
-            ctx.arc(cx, cy, 8.2 * starPulse, 0, Math.PI * 2);
-            ctx.fillStyle = isLight ? 'rgba(217, 119, 6, 0.24)' : 'rgba(253, 224, 71, 0.26)';
-            ctx.fill();
-            this.drawFourPointStar(ctx, cx, cy, 6.6 * starPulse, 2.3 * starPulse);
-            ctx.fillStyle = isLight ? '#b45309' : '#fde047';
-            ctx.fill();
-          }
-        }
-
-        // Mobile slim-bezel algebraic coordinates inside rank 1 / file a corners
-        if (cm.coordsInsideSquares) {
-          ctx.font = '800 9.5px "Be Vietnam Pro", system-ui, sans-serif';
-          ctx.fillStyle = isLight ? 'rgba(120, 53, 15, 0.82)' : 'rgba(253, 230, 138, 0.88)';
-          if (c === 0) {
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'top';
-            ctx.fillText(String(8 - r), sx + 3.5, sy + 2.5);
-          }
-          if (r === 7) {
-            ctx.textAlign = 'right';
-            ctx.textBaseline = 'bottom';
-            ctx.fillText(String.fromCharCode(97 + c), sx + cPx - 3.5, sy + cPx - 2);
-          }
-        }
-      }
-    }
-
-    // Inner brass fillet & engraved algebraic coordinates a..h / 8..1
-    ctx.strokeStyle = '#f4c668';
-    ctx.lineWidth = 1.6;
-    ctx.strokeRect(bX, bY, bPx, bPx);
-
-    if (!cm.coordsInsideSquares) {
-      ctx.font = '800 9px "Be Vietnam Pro", system-ui, sans-serif';
-      ctx.fillStyle = '#fde68a';
-      for (let i = 0; i < 8; i++) {
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(
-          String.fromCharCode(97 + i),
-          bX + (i + 0.5) * cPx,
-          bY + bPx + 5.5
-        );
-        ctx.fillText(
-          String(8 - i),
-          bX - 5.5,
-          bY + (i + 0.5) * cPx
-        );
-      }
-    }
-
-    const activeDragPiece =
-      this.chessDragFrom &&
-      this.hasDragged &&
-      this.pointerCurrPos &&
-      sel &&
-      sel.r === this.chessDragFrom.r &&
-      sel.c === this.chessDragFrom.c
-        ? engine.board[this.chessDragFrom.r]?.[this.chessDragFrom.c] ?? null
-        : null;
-
-    // 3. 2.5D Chibi Harry Potter Figurines (drawn rank 0 -> 7 for natural 2.5D tabletop overlap!)
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        if (this.chessMoveAnim && this.chessMoveAnim.toR === r && this.chessMoveAnim.toC === c) {
-          continue;
-        }
-        const piece = engine.board[r][c];
-        if (!piece) continue;
-        const cx = bX + (c + 0.5) * cPx;
-        const cy = bY + (r + 0.5) * cPx;
-        const isSelectedPiece = Boolean(sel && sel.r === r && sel.c === c);
-        const isBeingDragged = Boolean(
-          activeDragPiece && this.chessDragFrom?.r === r && this.chessDragFrom?.c === c
-        );
-
-        if (isBeingDragged) {
-          ctx.save();
-          ctx.globalAlpha = 0.34;
-          this.drawWizardChessPiece(ctx, cx, cy, piece, pieceScale, false);
-          ctx.restore();
-        } else {
-          this.drawWizardChessPiece(ctx, cx, cy, piece, pieceScale, isSelectedPiece);
-        }
-
-        // Crisp floating duel badge above enemy figurines that can be captured right now
-        const leg = legalMap.get(`${r},${c}`);
-        if (leg?.capture) {
-          ctx.save();
-          const bx = cx + 18.5;
-          const by = cy - 18.5;
-          ctx.beginPath();
-          ctx.arc(bx, by, 8.2, 0, Math.PI * 2);
-          ctx.fillStyle = '#be123c';
-          ctx.fill();
-          ctx.lineWidth = 1.4;
-          ctx.strokeStyle = '#fde047';
-          ctx.stroke();
-          this.drawFourPointStar(ctx, bx, by, 5, 1.8);
-          ctx.fillStyle = '#fffbeb';
-          ctx.fill();
-          ctx.restore();
-        }
-      }
-    }
-
-    // Smooth parabolic levitation glide for the moving figurine
-    if (this.chessMoveAnim) {
-      const anim = this.chessMoveAnim;
-      const t = Math.min(1, anim.age / anim.duration);
-      const ease = 1 - Math.pow(1 - t, 3);
-      const x0 = bX + (anim.fromC + 0.5) * cPx;
-      const y0 = bY + (anim.fromR + 0.5) * cPx;
-      const x1 = bX + (anim.toC + 0.5) * cPx;
-      const y1 = bY + (anim.toR + 0.5) * cPx;
-      const gx = x0 + (x1 - x0) * ease;
-      const gy = y0 + (y1 - y0) * ease - Math.sin(Math.PI * ease) * 16;
-      this.drawWizardChessPiece(ctx, gx, gy, anim.piece, pieceScale * 1.06, true);
-    }
-
-    // Dragged Gryffindor figurine levitating under cursor
-    if (activeDragPiece && this.pointerCurrPos) {
-      this.drawWizardChessPiece(
-        ctx,
-        this.pointerCurrPos.vx,
-        this.pointerCurrPos.vy - 7,
-        activeDragPiece,
-        pieceScale * 1.08,
-        true
-      );
-    }
-
-    // 3a. Magical Hint Guide Arrow & Target Badge (when player clicked 💡 Gợi Ý)
-    if (engine.hintMove && engine.status === 'playing' && !this.chessMoveAnim) {
-      const hm = engine.hintMove;
-      const hx0 = bX + (hm.fromC + 0.5) * cPx;
-      const hy0 = bY + (hm.fromR + 0.5) * cPx;
-      const hx1 = bX + (hm.toC + 0.5) * cPx;
-      const hy1 = bY + (hm.toR + 0.5) * cPx;
-      const dx = hx1 - hx0;
-      const dy = hy1 - hy0;
-      const dist = Math.hypot(dx, dy);
-      if (dist > 4) {
-        const ux = dx / dist;
-        const uy = dy / dist;
-        const startX = hx0 + ux * 12;
-        const startY = hy0 + uy * 12;
-        const endX = hx1 - ux * 11;
-        const endY = hy1 - uy * 11;
-        const arrowPulse = 0.8 + 0.2 * Math.sin(now * 0.009);
-
-        ctx.save();
-        ctx.globalAlpha = arrowPulse;
-        ctx.shadowColor = '#10b981';
-        ctx.shadowBlur = 10;
-        ctx.strokeStyle = '#34d399';
-        ctx.lineWidth = 4.2;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(endX, endY);
-        ctx.stroke();
-
-        // Inner golden core line
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = '#fef08a';
-        ctx.lineWidth = 1.8;
-        ctx.beginPath();
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(endX, endY);
-        ctx.stroke();
-
-        // Arrowhead pointing to destination square
-        const headLen = 10.5;
-        const angle = Math.atan2(dy, dx);
-        ctx.fillStyle = '#34d399';
-        ctx.strokeStyle = '#fef08a';
-        ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        ctx.moveTo(hx1 - ux * 4, hy1 - uy * 4);
-        ctx.lineTo(
-          hx1 - ux * 4 - headLen * Math.cos(angle - Math.PI / 6),
-          hy1 - uy * 4 - headLen * Math.sin(angle - Math.PI / 6)
-        );
-        ctx.lineTo(
-          hx1 - ux * 4 - headLen * Math.cos(angle + Math.PI / 6),
-          hy1 - uy * 4 - headLen * Math.sin(angle + Math.PI / 6)
-        );
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-      }
-    }
-
-    // 3b. Gương Chiếu Hậu Pháp Thuật (Turning-Point Move Review) Overlay on Chessboard
-    const chessReview = engine.getTurningPointReview();
-    if (
-      chessReview &&
-      (this.inspectingTurningPoint || engine.status === 'lost' || engine.status === 'draw')
-    ) {
-      const pulse = 0.85 + 0.15 * Math.sin(now * 0.007);
-      for (const hc of chessReview.highlightCells) {
-        const sx = bX + hc.c * cPx;
-        const sy = bY + hc.r * cPx;
-        const isBest = hc.role === 'best';
-        ctx.save();
-        ctx.strokeStyle = isBest ? '#10b981' : '#f59e0b';
-        ctx.lineWidth = 3 * pulse;
-        ctx.shadowColor = isBest ? '#6ee7b7' : '#fde047';
-        ctx.shadowBlur = 10;
-        ctx.strokeRect(sx + 2.5, sy + 2.5, cPx - 5, cPx - 5);
-        ctx.shadowBlur = 0;
-
-        const lbl = isBest ? '✨ Chuẩn' : '⚡ Đã Đi';
-        ctx.font = '800 8.8px "Be Vietnam Pro", system-ui, sans-serif';
-        const tw = Math.ceil(ctx.measureText(lbl).width) + 8;
-        const bx = sx + (cPx - tw) * 0.5;
-        const by = sy + 2;
-        drawRoundedRect(ctx, bx, by, tw, 13.5, 6);
-        ctx.fillStyle = isBest ? '#065f46' : '#78350f';
-        ctx.fill();
-        ctx.strokeStyle = '#fde68a';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.fillStyle = '#fffbeb';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(lbl, bx + tw * 0.5, by + 7);
-        ctx.restore();
-      }
-    }
-    ctx.restore();
-  }
-
-  private drawCapturedChessRow(
-    ctx: CanvasRenderingContext2D,
-    startX: number,
-    centerY: number,
-    maxW: number,
-    captured: ReadonlyArray<ChessPieceType>,
-    pieceColor: 'w' | 'b'
-  ): void {
-    if (captured.length === 0) {
-      ctx.save();
-      ctx.fillStyle = '#8c5e37';
-      ctx.font = '600 10px "Be Vietnam Pro", system-ui, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('Chưa có quân nào bị hạ', startX, centerY);
-      ctx.restore();
-      return;
-    }
-    const step = Math.min(21, maxW / Math.max(1, captured.length));
-    captured.forEach((t, idx) => {
-      this.drawWizardChessPiece(
-        ctx,
-        startX + 7 + idx * step,
-        centerY + 1,
-        { color: pieceColor, type: t },
-        0.46,
-        false
-      );
-    });
-  }
-
-  /**
-   * Renders a unified 2.5D Hogwarts Wizard's Chess Armored Stone Figurine from `/game/trang-trai-hang-soc/paintings/chess/{wk..bp}.webp`
-   * (Identical sculpt across both sides: Ivory-Gold vs Obsidian-Silver/Emerald) with animated levitation aura
-   * and an instant matching-silhouette pedestal+glyph fallback while sprites decode.
-   */
-  private drawWizardChessPiece(
+  private drawMarauderHallowsWatermark(
     ctx: CanvasRenderingContext2D,
     cx: number,
     cy: number,
-    piece: ChessPiece,
-    scale = 1,
-    isSelected = false
+    r: number
   ): void {
-    const isWhite = piece.color === 'w';
+    ctx.save();
+    ctx.strokeStyle = 'rgba(120, 53, 15, 0.17)';
+    ctx.lineWidth = Math.max(1, r * 0.14);
+    ctx.lineJoin = 'round';
+    // Cloak triangle
+    const h = r * 1.55;
+    const halfW = r * 0.92;
+    const topY = cy - h * 0.54;
+    const botY = cy + h * 0.46;
+    ctx.beginPath();
+    ctx.moveTo(cx, topY);
+    ctx.lineTo(cx + halfW, botY);
+    ctx.lineTo(cx - halfW, botY);
+    ctx.closePath();
+    ctx.stroke();
+    // Resurrection Stone circle
+    const inR = r * 0.44;
+    ctx.beginPath();
+    ctx.arc(cx, botY - inR, inR, 0, Math.PI * 2);
+    ctx.stroke();
+    // Elder Wand line
+    ctx.beginPath();
+    ctx.moveTo(cx, topY);
+    ctx.lineTo(cx, botY);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private drawMinesweeperScene(
+    ctx: CanvasRenderingContext2D,
+    engine: MinesweeperEngine
+  ): void {
+    const m = this.computeMinesBoardMetrics(engine);
     const now = performance.now();
-    const bob = isSelected ? 3.2 + Math.sin(now * 0.0075) * 1.8 : 0;
-    const pieceKey = `${piece.color}${piece.type}`;
-    let spr: HTMLImageElement | undefined;
-    if (this.isYuleSkinActive()) {
-      this.ensureYuleArcadeAssetsLoaded();
-      const ySpr = this.yuleChessPieceImages.get(pieceKey);
-      if (ySpr && ySpr.complete && ySpr.naturalWidth > 0) {
-        spr = ySpr;
+    const nowSec = now * 0.001;
+    const isYule = this.isYuleSkinActive();
+
+    // 1. Hogwarts Gothic Mahogany & Marauder Brass Frame
+    ctx.save();
+    drawRoundedRect(ctx, m.frameX - 4, m.frameY - 4, m.frameW + 8, m.frameH + 8, 14);
+    const frameGrad = ctx.createLinearGradient(0, m.frameY, 0, m.frameY + m.frameH);
+    if (isYule) {
+      frameGrad.addColorStop(0, '#14532d');
+      frameGrad.addColorStop(0.5, '#0c3b22');
+      frameGrad.addColorStop(1, '#051f13');
+    } else {
+      frameGrad.addColorStop(0, '#4a2412');
+      frameGrad.addColorStop(0.5, '#2f1509');
+      frameGrad.addColorStop(1, '#190a04');
+    }
+    ctx.fillStyle = frameGrad;
+    ctx.shadowColor = 'rgba(8, 4, 2, 0.68)';
+    ctx.shadowBlur = 16;
+    ctx.shadowOffsetY = 5;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+
+    const isFlagging = engine.flagMode && engine.status === 'playing';
+    ctx.lineWidth = isFlagging ? 2.6 : 2.1;
+    ctx.strokeStyle = isFlagging ? '#ef4444' : '#f4c668';
+    ctx.stroke();
+
+    // Inner filigree brass hairline
+    drawRoundedRect(ctx, m.frameX, m.frameY, m.frameW, m.frameH, 11);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = isFlagging ? 'rgba(254, 202, 202, 0.5)' : 'rgba(244, 198, 104, 0.42)';
+    ctx.stroke();
+
+    // Subtle animated Marauder's Map ink footsteps strolling along the top & bottom brass trim
+    if (m.frameW >= 180) {
+      const stepCount = 5;
+      for (let s = 0; s < stepCount; s++) {
+        const phase = (nowSec * 0.55 + s * 0.22) % 1;
+        const alpha = Math.sin(phase * Math.PI) * 0.52;
+        if (alpha > 0.05) {
+          const fx = m.originX + 18 + phase * Math.max(40, m.boardW - 36);
+          const fy = m.frameY + (s % 2 === 0 ? 2.4 : 4.2);
+          ctx.save();
+          ctx.fillStyle = `rgba(253, 230, 138, ${alpha.toFixed(2)})`;
+          ctx.beginPath();
+          ctx.ellipse(fx, fy, 2.4, 1.2, 0.12, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(fx - 3.3, fy, 1.0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
       }
     }
-    if (!spr) {
-      spr = this.chessPieceImages.get(pieceKey);
+
+    // Recessed Hogwarts dungeon slate & parchment bed
+    drawRoundedRect(ctx, m.originX - 2, m.originY - 2, m.boardW + 4, m.boardH + 4, 7);
+    ctx.fillStyle = isYule ? '#071f14' : '#1b0e07';
+    ctx.fill();
+
+    this.drawBrassCornerBrackets(
+      ctx,
+      m.frameX - 3,
+      m.frameY - 3,
+      m.frameW + 6,
+      m.frameH + 6,
+      14
+    );
+
+    // Hogwarts Spell-Ink Number Palette
+    const NUMBER_COLORS: Record<number, string> = {
+      1: '#1d4ed8', // Ravenclaw Sapphire
+      2: '#047857', // Slytherin Emerald
+      3: '#b91c1c', // Gryffindor Scarlet
+      4: '#6d28d9', // Wizengamot Amethyst
+      5: '#9a3412', // Dragonfire Rust
+      6: '#0f766e', // Black Lake Teal
+      7: '#312e81', // Astronomy Midnight
+      8: '#854d0e', // Gringotts Gold
+    };
+
+    const darkMarkImg =
+      this.getPaintingTokenImage(isYule ? 'caro-yule/dark_mark_seal' : 'caro/dark_mark_seal') ??
+      this.getPaintingTokenImage('caro/dark_mark_seal') ??
+      this.getSpriteImage('m3_sp_bomb');
+    const horcruxShieldImg =
+      this.getPaintingTokenImage('candy-hogwarts/candy-horcrux') ??
+      this.getSpriteImage('m3_sp_bomb');
+    const snitchImg = this.getSpriteImage('m3_sp_snitch') ?? this.getSpriteImage('ui_lock');
+    const pad = Math.max(1, Math.round(m.cellSize * 0.04));
+
+    for (let r = 0; r < engine.rows; r++) {
+      for (let c = 0; c < engine.cols; c++) {
+        const cell = engine.grid[r][c];
+        const dc = m.transposed ? r : c;
+        const dr = m.transposed ? c : r;
+        const cx = m.originX + dc * m.cellSize;
+        const cy = m.originY + dr * m.cellSize;
+        const innerX = cx + pad;
+        const innerY = cy + pad;
+        const innerSz = m.cellSize - pad * 2;
+        const midX = cx + m.cellSize * 0.5;
+        const midY = cy + m.cellSize * 0.5;
+        const isHovered =
+          engine.status === 'playing' &&
+          this.minesHoverCell?.r === r &&
+          this.minesHoverCell?.c === c;
+        const isHint =
+          engine.lastHintCell?.r === r && engine.lastHintCell?.c === c;
+        const isExploded =
+          engine.explodedCell?.r === r && engine.explodedCell?.c === c;
+
+        if (cell.revealed) {
+          if (cell.hasMine) {
+            drawRoundedRect(ctx, innerX, innerY, innerSz, innerSz, 5);
+            const curseGrad = ctx.createRadialGradient(midX, midY, innerSz * 0.08, midX, midY, innerSz * 0.65);
+            if (isExploded) {
+              curseGrad.addColorStop(0, '#ef4444');
+              curseGrad.addColorStop(0.55, '#991b1b');
+              curseGrad.addColorStop(1, '#2b0909');
+            } else {
+              curseGrad.addColorStop(0, '#134e4a');
+              curseGrad.addColorStop(1, '#091e1a');
+            }
+            ctx.fillStyle = curseGrad;
+            ctx.fill();
+            ctx.strokeStyle = isExploded ? '#fde047' : '#34d399';
+            ctx.lineWidth = isExploded ? 1.8 : 1.2;
+            ctx.stroke();
+
+            if (darkMarkImg) {
+              const bSz = innerSz * 0.82;
+              ctx.drawImage(darkMarkImg, midX - bSz * 0.5, midY - bSz * 0.5, bSz, bSz);
+            } else {
+              ctx.beginPath();
+              ctx.arc(midX, midY, innerSz * 0.28, 0, Math.PI * 2);
+              ctx.fillStyle = '#10b981';
+              ctx.fill();
+            }
+          } else {
+            // Open Marauder's Map parchment cell
+            drawRoundedRect(ctx, innerX, innerY, innerSz, innerSz, 4);
+            ctx.fillStyle = (r + c) % 2 === 0 ? '#fbf4e2' : '#f3e5c8';
+            ctx.fill();
+            ctx.strokeStyle = isHint ? '#10b981' : 'rgba(146, 98, 49, 0.34)';
+            ctx.lineWidth = isHint ? 2 : 0.9;
+            ctx.stroke();
+
+            if (cell.adjacentMines > 0) {
+              const numColor = NUMBER_COLORS[cell.adjacentMines] ?? '#1e293b';
+              if (cell.adjacentMines >= 3 && innerSz >= 24) {
+                ctx.beginPath();
+                ctx.arc(midX, midY, innerSz * 0.36, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(180, 83, 9, 0.18)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+              }
+              ctx.fillStyle = numColor;
+              ctx.font = `800 ${Math.max(11, Math.round(innerSz * 0.56))}px "Be Vietnam Pro", system-ui, sans-serif`;
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(String(cell.adjacentMines), midX, midY + 1);
+            }
+          }
+          continue;
+        }
+
+        // Unrevealed Sealed Marauder's Parchment & Ancient Rune Slab
+        drawRoundedRect(ctx, innerX, innerY, innerSz, innerSz, 5);
+        const tileGrad = ctx.createLinearGradient(innerX, innerY, innerX, innerY + innerSz);
+        if (cell.defused) {
+          tileGrad.addColorStop(0, '#a7f3d0');
+          tileGrad.addColorStop(1, '#10b981');
+        } else if (isHovered) {
+          tileGrad.addColorStop(0, '#fef9c3');
+          tileGrad.addColorStop(1, '#eab308');
+        } else if ((r + c) % 2 === 0) {
+          tileGrad.addColorStop(0, '#f3dfba');
+          tileGrad.addColorStop(1, '#cfa972');
+        } else {
+          tileGrad.addColorStop(0, '#ead2a7');
+          tileGrad.addColorStop(1, '#c39b63');
+        }
+        ctx.fillStyle = tileGrad;
+        ctx.fill();
+
+        ctx.strokeStyle = cell.defused
+          ? '#065f46'
+          : isHovered
+            ? '#fde047'
+            : 'rgba(255, 251, 235, 0.76)';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        if (!cell.defused && !cell.flagged && !(engine.status === 'lost' && cell.hasMine) && engine.status !== 'won') {
+          if (innerSz >= 24) {
+            this.drawMarauderHallowsWatermark(ctx, midX, midY + 1, innerSz * 0.24);
+          }
+        }
+
+        if (cell.defused) {
+          if (horcruxShieldImg) {
+            const bSz = innerSz * 0.72;
+            ctx.drawImage(horcruxShieldImg, midX - bSz * 0.5, midY - bSz * 0.5, bSz, bSz);
+          }
+          ctx.fillStyle = '#064e3b';
+          fillCheck(
+            ctx,
+            innerX + innerSz - Math.max(5, innerSz * 0.22),
+            innerY + innerSz - Math.max(5, innerSz * 0.22),
+            Math.max(7, innerSz * 0.3)
+          );
+        } else if (engine.status === 'lost' && cell.hasMine && !cell.flagged) {
+          drawRoundedRect(ctx, innerX + 1, innerY + 1, innerSz - 2, innerSz - 2, 4);
+          ctx.fillStyle = 'rgba(6, 78, 59, 0.58)';
+          ctx.fill();
+          if (darkMarkImg) {
+            const bSz = innerSz * 0.78;
+            ctx.save();
+            ctx.globalAlpha = 0.92;
+            ctx.drawImage(darkMarkImg, midX - bSz * 0.5, midY - bSz * 0.5, bSz, bSz);
+            ctx.restore();
+          } else {
+            ctx.beginPath();
+            ctx.arc(midX, midY, innerSz * 0.24, 0, Math.PI * 2);
+            ctx.fillStyle = '#10b981';
+            ctx.fill();
+          }
+        } else if (cell.flagged) {
+          this.drawMinesFlagGlyph(ctx, midX, midY, innerSz);
+          if (engine.status === 'lost' && !cell.hasMine) {
+            ctx.strokeStyle = '#dc2626';
+            ctx.lineWidth = Math.max(2, innerSz * 0.08);
+            ctx.beginPath();
+            ctx.moveTo(innerX + innerSz * 0.2, innerY + innerSz * 0.2);
+            ctx.lineTo(innerX + innerSz * 0.8, innerY + innerSz * 0.8);
+            ctx.moveTo(innerX + innerSz * 0.8, innerY + innerSz * 0.2);
+            ctx.lineTo(innerX + innerSz * 0.2, innerY + innerSz * 0.8);
+            ctx.stroke();
+          }
+        } else if (engine.status === 'won' && cell.hasMine) {
+          if (snitchImg) {
+            const sSz = innerSz * 0.76;
+            ctx.drawImage(snitchImg, midX - sSz * 0.5, midY - sSz * 0.5, sSz, sSz);
+          } else {
+            this.drawMinesFlagGlyph(ctx, midX, midY, innerSz);
+          }
+        }
+      }
     }
+
+    // Top Marauder's Map / Order of the Phoenix Crest Ribbon
+    const badgeW = Math.min(m.frameW - 4, isFlagging ? 228 : 234);
+    const ribbonText =
+      badgeW < 205
+        ? isFlagging
+          ? 'PHONG ẤN • CẮM CỜ'
+          : 'BẢN ĐỒ ĐẠO TẶC'
+        : isFlagging
+          ? 'PHONG ẤN PHƯỢNG HOÀNG • CẮM CỜ'
+          : 'BẢN ĐỒ ĐẠO TẶC • PHÁ BẪY HẮC ÁM';
+    const badgeH = 18;
+    const bx = m.originX + (m.boardW - badgeW) * 0.5;
+    const by = Math.max(2, m.frameY - 25);
+    drawRoundedRect(ctx, bx, by, badgeW, badgeH, 9);
+    ctx.fillStyle = isFlagging
+      ? '#991b1b'
+      : isYule
+        ? 'rgba(8, 42, 26, 0.94)'
+        : 'rgba(42, 22, 11, 0.92)';
+    ctx.fill();
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = isFlagging ? '#fde047' : '#f4c668';
+    ctx.stroke();
+    ctx.fillStyle = isFlagging ? '#fffbeb' : '#fde68a';
+    ctx.font = '800 10px "Be Vietnam Pro", system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(ribbonText, bx + badgeW * 0.5, by + badgeH * 0.5, Math.max(80, badgeW - 14));
+
+    if (engine.lastHintCell && engine.status === 'playing') {
+      const pulse = 0.75 + 0.25 * Math.sin(now * 0.008);
+      const hc = engine.lastHintCell;
+      const dc = m.transposed ? hc.r : hc.c;
+      const dr = m.transposed ? hc.c : hc.r;
+      ctx.strokeStyle = `rgba(52, 211, 153, ${pulse.toFixed(2)})`;
+      ctx.lineWidth = 2.6;
+      drawRoundedRect(
+        ctx,
+        m.originX + dc * m.cellSize + 1,
+        m.originY + dr * m.cellSize + 1,
+        m.cellSize - 2,
+        m.cellSize - 2,
+        5
+      );
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  // --------------------------------------------------------------------------
+  // RENDERER 6: BẮN CÁ HỒ ĐEN — THỢ SĂN HỒ ĐEN HOGWARTS (777 MÀN)
+  // --------------------------------------------------------------------------
+
+  private drawFishShooterBackdrop(
+    ctx: CanvasRenderingContext2D,
+    virtW: number,
+    virtH: number
+  ): void {
+    ctx.save();
+    const img =
+      this.blackLakeUnderwaterBgImage &&
+      this.blackLakeUnderwaterBgImage.complete &&
+      this.blackLakeUnderwaterBgImage.naturalWidth > 0
+        ? this.blackLakeUnderwaterBgImage
+        : this.lakeBgImage && this.lakeBgImage.complete && this.lakeBgImage.naturalWidth > 0
+          ? this.lakeBgImage
+          : this.unicornLakeBgImage;
+    const imgReady = Boolean(img && img.complete && img.naturalWidth > 0);
+    const cacheKey = `${virtW}x${virtH}:${imgReady ? img!.src : 'grad'}`;
+    let drewCached = false;
+    if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
+      if (!this.cachedFishBgCanvas || this.cachedFishBgKey !== cacheKey) {
+        const off = this.cachedFishBgCanvas ?? document.createElement('canvas');
+        off.width = Math.max(1, virtW);
+        off.height = Math.max(1, virtH);
+        const octx = off.getContext('2d');
+        if (octx) {
+          octx.imageSmoothingEnabled = true;
+          octx.imageSmoothingQuality = 'high';
+          if (imgReady && img) {
+            const scale = Math.max(virtW / img.naturalWidth, virtH / img.naturalHeight);
+            const dw = img.naturalWidth * scale;
+            const dh = img.naturalHeight * scale;
+            octx.drawImage(img, (virtW - dw) * 0.5, (virtH - dh) * 0.5, dw, dh);
+            const deepTint = octx.createLinearGradient(0, 0, 0, virtH);
+            deepTint.addColorStop(0, 'rgba(4, 42, 54, 0.24)');
+            deepTint.addColorStop(0.6, 'rgba(4, 32, 46, 0.28)');
+            deepTint.addColorStop(1, 'rgba(3, 16, 28, 0.48)');
+            octx.fillStyle = deepTint;
+            octx.fillRect(0, 0, virtW, virtH);
+          } else {
+            const lakeGrad = octx.createLinearGradient(0, 0, 0, virtH);
+            lakeGrad.addColorStop(0, '#064e3b');
+            lakeGrad.addColorStop(0.5, '#083344');
+            lakeGrad.addColorStop(1, '#021724');
+            octx.fillStyle = lakeGrad;
+            octx.fillRect(0, 0, virtW, virtH);
+          }
+          this.cachedFishBgCanvas = off;
+          this.cachedFishBgKey = cacheKey;
+        }
+      }
+      if (this.cachedFishBgCanvas && this.cachedFishBgKey === cacheKey) {
+        ctx.drawImage(this.cachedFishBgCanvas, 0, 0, virtW, virtH);
+        drewCached = true;
+      }
+    }
+    if (!drewCached) {
+      if (imgReady && img) {
+        const scale = Math.max(virtW / img.naturalWidth, virtH / img.naturalHeight);
+        const dw = img.naturalWidth * scale;
+        const dh = img.naturalHeight * scale;
+        ctx.drawImage(img, (virtW - dw) * 0.5, (virtH - dh) * 0.5, dw, dh);
+        const deepTint = ctx.createLinearGradient(0, 0, 0, virtH);
+        deepTint.addColorStop(0, 'rgba(4, 42, 54, 0.24)');
+        deepTint.addColorStop(0.6, 'rgba(4, 32, 46, 0.28)');
+        deepTint.addColorStop(1, 'rgba(3, 16, 28, 0.48)');
+        ctx.fillStyle = deepTint;
+        ctx.fillRect(0, 0, virtW, virtH);
+      } else {
+        const lakeGrad = ctx.createLinearGradient(0, 0, 0, virtH);
+        lakeGrad.addColorStop(0, '#064e3b');
+        lakeGrad.addColorStop(0.5, '#083344');
+        lakeGrad.addColorStop(1, '#021724');
+        ctx.fillStyle = lakeGrad;
+        ctx.fillRect(0, 0, virtW, virtH);
+      }
+    }
+
+    const now = performance.now() * 0.001;
+
+    // Shimmering Scottish Black Lake emerald-moonlight shafts
+    for (let i = 0; i < 4; i++) {
+      const sway = Math.sin(now * 0.65 + i * 1.55) * 26;
+      const topX = virtW * (0.16 + i * 0.22) + sway;
+      const grad = ctx.createLinearGradient(topX, 0, topX + 34, virtH * 0.84);
+      grad.addColorStop(0, 'rgba(110, 231, 183, 0.12)');
+      grad.addColorStop(0.5, 'rgba(56, 189, 248, 0.06)');
+      grad.addColorStop(1, 'rgba(56, 189, 248, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(topX - 22, 0);
+      ctx.lineTo(topX + 22, 0);
+      ctx.lineTo(topX + 74, virtH * 0.85);
+      ctx.lineTo(topX - 64, virtH * 0.85);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Swaying foreground Cỏ Mang Cá (Gillyweed) fronds on left & right lakebed corners
+    const kelpAnchors = [0.04, 0.085, 0.915, 0.96];
+    for (let k = 0; k < kelpAnchors.length; k++) {
+      const kx = virtW * kelpAnchors[k];
+      const kh = virtH * (k === 0 || k === 3 ? 0.34 : 0.26);
+      const sway = Math.sin(now * 1.35 + k * 1.2) * 14;
+      ctx.beginPath();
+      ctx.moveTo(kx, virtH);
+      ctx.quadraticCurveTo(kx + sway * 0.6, virtH - kh * 0.55, kx + sway, virtH - kh);
+      ctx.strokeStyle = 'rgba(16, 185, 129, 0.28)';
+      ctx.lineWidth = 4.5;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+    }
+
+    // Rising Bubble-Head Charm (Bùa Đầu Bong Bóng) magical bubbles
+    for (let i = 0; i < 12; i++) {
+      const prog = (now * (0.11 + (i % 4) * 0.032) + i * 0.19) % 1;
+      const bx = virtW * (0.07 + ((i * 83) % 86) / 100) + Math.sin(now * 1.9 + i) * 7;
+      const by = virtH - prog * (virtH + 20);
+      const rad = 2.4 + (i % 3) * 1.4;
+      ctx.beginPath();
+      ctx.arc(bx, by, rad, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(167, 243, 208, 0.36)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(224, 242, 254, 0.14)';
+      ctx.fill();
+    }
+
+    if (this.fishEngine && this.fishEngine.freezeTimer > 0) {
+      ctx.fillStyle = 'rgba(125, 211, 252, 0.18)';
+      ctx.fillRect(0, 0, virtW, virtH);
+      // Drifting Glacius frost stars
+      ctx.fillStyle = 'rgba(224, 242, 254, 0.55)';
+      for (let f = 0; f < 8; f++) {
+        const fx = virtW * (0.12 + f * 0.11) + Math.sin(now * 1.4 + f) * 12;
+        const fy = virtH * (0.18 + ((f * 29) % 64) / 100);
+        this.drawFourPointStar(ctx, fx, fy, 5, 1.8);
+        ctx.fill();
+      }
+    }
+
+    ctx.restore();
+  }
+
+  private drawFishEntity(
+    ctx: CanvasRenderingContext2D,
+    fish: SwimmingFish,
+    cx: number,
+    cy: number,
+    unitScale: number,
+    frozen: boolean,
+    nowSec: number
+  ): void {
+    const def = FISH_SPECIES_CATALOG[fish.species];
+    const r = Math.max(10, fish.radius * unitScale);
+    const wag = Math.sin(fish.tailPhase) * 0.32;
 
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.scale(scale, scale);
 
-    // 1. Ambient ground shadow + reflection rim so both Ivory-Gold and Obsidian-Emerald pop on every square
-    if (isSelected) {
+    // Underwater Black Lake shadow
+    ctx.beginPath();
+    ctx.ellipse(0, r * 0.74, r * 0.84, r * 0.26, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(2, 14, 22, 0.36)';
+    ctx.fill();
+
+    ctx.save();
+    ctx.scale(fish.species === 'puffer_bomb' ? 1 : fish.dir, 1);
+
+    const atlas =
+      this.blackLakeCreaturesAtlas &&
+      this.blackLakeCreaturesAtlas.complete &&
+      this.blackLakeCreaturesAtlas.naturalWidth >= 1024
+        ? this.blackLakeCreaturesAtlas
+        : null;
+
+    if (atlas) {
+      // Painterly 2.5D Harry Potter Black Lake Creature Atlas (4×2 of 256×256)
+      let cellCol = 0;
+      let cellRow = 0;
+      let sizeMult = 2.55;
+      switch (fish.species) {
+        case 'minnow': // Cá Plimpy Lam
+          cellCol = 0;
+          cellRow = 0;
+          sizeMult = 2.5;
+          break;
+        case 'clown': // Quỷ Nước Grindylow
+          cellCol = 1;
+          cellRow = 0;
+          sizeMult = 2.6;
+          break;
+        case 'emerald_koi': // Thủy Xà Slytherin
+          cellCol = 2;
+          cellRow = 0;
+          sizeMult = 2.68;
+          break;
+        case 'moon_jelly': // Linh Quang Hộ Mệnh
+          cellCol = 3;
+          cellRow = 0;
+          sizeMult = 2.62;
+          break;
+        case 'puffer_bomb': // Thủy Lôi Pháo Hoa Weasley
+          cellCol = 0;
+          cellRow = 1;
+          sizeMult = 2.55;
+          break;
+        case 'golden_ray': // Snitch Thủy Hoàng Kim
+          cellCol = 1;
+          cellRow = 1;
+          sizeMult = 2.68;
+          break;
+        case 'leviathan_carp': // Mực Khổng Lồ Hồ Đen (Boss)
+          cellCol = 2;
+          cellRow = 1;
+          sizeMult = 2.95;
+          break;
+      }
+
+      // Magical species-specific Hogwarts underwater aura behind sprite
+      if (fish.species === 'leviathan_carp') {
+        ctx.save();
+        ctx.rotate(nowSec * 0.75);
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 1.24, 0, Math.PI * 2);
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = 'rgba(250, 204, 21, 0.76)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      } else if (fish.species === 'puffer_bomb') {
+        const pulse = 1 + Math.sin(nowSec * 7.5 + fish.uid) * 0.07;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 1.12 * pulse, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(251, 146, 60, 0.68)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } else if (fish.species === 'golden_ray') {
+        for (let s = 1; s <= 3; s++) {
+          ctx.beginPath();
+          ctx.arc(
+            -r * (0.65 + s * 0.28),
+            Math.sin(nowSec * 7 + s) * r * 0.14,
+            Math.max(1.4, r * (0.09 - s * 0.02)),
+            0,
+            Math.PI * 2
+          );
+          ctx.fillStyle = 'rgba(253, 224, 71, 0.68)';
+          ctx.fill();
+        }
+      } else if (fish.species === 'moon_jelly') {
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 1.05, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(186, 230, 253, 0.14)';
+        ctx.fill();
+      }
+
+      const swimTilt =
+        fish.species === 'puffer_bomb'
+          ? Math.sin(nowSec * 3.5 + fish.uid) * 0.06
+          : Math.sin(fish.tailPhase) * 0.085;
+      const squash = 1 + Math.sin(fish.tailPhase * 1.35) * 0.032;
       ctx.save();
+      ctx.rotate(swimTilt);
+      ctx.scale(squash, 2 - squash);
+      const dSz = r * sizeMult;
+      ctx.drawImage(
+        atlas,
+        cellCol * 256,
+        cellRow * 256,
+        256,
+        256,
+        -dSz * 0.5,
+        -dSz * 0.5,
+        dSz,
+        dSz
+      );
+      ctx.restore();
+
+      if (fish.hitFlash > 0) {
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 1.02, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(254, 249, 195, 0.36)';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    } else if (fish.species === 'leviathan_carp') {
+      // BOSS: MỰC KHỔNG LỒ HỒ ĐEN (Giant Squid of Hogwarts)
+      ctx.save();
+      ctx.rotate(nowSec * 0.75);
       ctx.beginPath();
-      ctx.ellipse(0, 14.5, 19, 7.6, 0, 0, Math.PI * 2);
-      ctx.fillStyle = isWhite ? 'rgba(250, 204, 21, 0.38)' : 'rgba(52, 211, 153, 0.38)';
+      ctx.arc(0, 0, r * 1.18, 0, Math.PI * 2);
+      ctx.setLineDash([5, 5]);
+      ctx.strokeStyle = 'rgba(250, 204, 21, 0.72)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+
+      // 7 sweeping undulating tentacles with golden suction dots
+      for (let t = -3; t <= 3; t++) {
+        const baseY = t * r * 0.17;
+        const wave1 = Math.sin(fish.tailPhase + t * 0.65) * r * 0.24;
+        const wave2 = Math.cos(fish.tailPhase * 0.9 + t * 0.8) * r * 0.28;
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.32, baseY);
+        ctx.bezierCurveTo(
+          -r * 0.85,
+          baseY + wave1,
+          -r * 1.32,
+          baseY - wave2,
+          -r * 1.68,
+          baseY + wave1 * 0.75
+        );
+        ctx.strokeStyle = t % 2 === 0 ? '#be123c' : '#881337';
+        ctx.lineWidth = Math.max(2.2, r * (0.14 - Math.abs(t) * 0.015));
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // Golden suction ring spot
+        ctx.beginPath();
+        ctx.arc(-r * 0.92, baseY + wave1 * 0.45, Math.max(1.4, r * 0.048), 0, Math.PI * 2);
+        ctx.fillStyle = '#fde047';
+        ctx.fill();
+      }
+
+      // Spearhead royal squid mantle & lateral fins
+      ctx.beginPath();
+      ctx.moveTo(r * 1.18, 0);
+      ctx.quadraticCurveTo(r * 0.55, -r * 0.92, -r * 0.35, -r * 0.58);
+      ctx.lineTo(-r * 0.52, 0);
+      ctx.lineTo(-r * 0.35, r * 0.58);
+      ctx.quadraticCurveTo(r * 0.55, r * 0.92, r * 1.18, 0);
+      ctx.closePath();
+      const sqGrad = ctx.createRadialGradient(r * 0.25, -r * 0.18, r * 0.1, 0, 0, r * 1.18);
+      sqGrad.addColorStop(0, fish.hitFlash > 0 ? '#ffffff' : '#fda4af');
+      sqGrad.addColorStop(0.52, fish.hitFlash > 0 ? '#fde047' : '#be123c');
+      sqGrad.addColorStop(1, '#4c0519');
+      ctx.fillStyle = sqGrad;
+      ctx.fill();
+      ctx.lineWidth = 1.8;
+      ctx.strokeStyle = '#facc15';
+      ctx.stroke();
+
+      // Golden Hogwarts brow crown mark
+      ctx.fillStyle = '#fde047';
+      this.drawFourPointStar(ctx, r * 0.72, 0, r * 0.18, r * 0.07);
+      ctx.fill();
+
+      // Fierce glowing amber squid eye
+      ctx.beginPath();
+      ctx.arc(r * 0.28, -r * 0.2, Math.max(3.5, r * 0.2), 0, Math.PI * 2);
+      ctx.fillStyle = '#fde047';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(r * 0.31, -r * 0.2, Math.max(1.4, r * 0.06), Math.max(2.6, r * 0.15), 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#0f172a';
+      ctx.fill();
+    } else if (fish.species === 'golden_ray') {
+      // SNITCH THỦY HOÀNG KIM (Winged Golden Snitch Relic)
+      const flutter = Math.sin(fish.tailPhase * 2.1);
+      // Trailing golden stardust wake
+      for (let s = 1; s <= 3; s++) {
+        ctx.beginPath();
+        ctx.arc(-r * (0.55 + s * 0.28), Math.sin(nowSec * 7 + s) * r * 0.14, Math.max(1.4, r * (0.09 - s * 0.02)), 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(253, 224, 71, 0.65)';
+        ctx.fill();
+      }
+
+      // Twin feathered silver-gold Snitch wings
+      for (const side of [-1, 1]) {
+        ctx.save();
+        ctx.scale(1, side);
+        ctx.rotate(flutter * 0.34);
+        ctx.beginPath();
+        ctx.moveTo(0, -r * 0.22);
+        ctx.quadraticCurveTo(-r * 0.55, -r * 1.38, -r * 1.35, -r * 0.98);
+        ctx.quadraticCurveTo(-r * 0.85, -r * 0.42, -r * 0.18, -r * 0.12);
+        ctx.closePath();
+        const wGrad = ctx.createLinearGradient(0, -r * 0.2, -r * 1.25, -r * 1.1);
+        wGrad.addColorStop(0, '#fef08a');
+        wGrad.addColorStop(0.6, '#f8fafc');
+        wGrad.addColorStop(1, '#cbd5e1');
+        ctx.fillStyle = wGrad;
+        ctx.fill();
+        ctx.strokeStyle = '#ca8a04';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Engraved 24k Golden Snitch sphere
+      const coreR = r * 0.54;
+      const gGrad = ctx.createRadialGradient(coreR * 0.28, -coreR * 0.28, coreR * 0.1, 0, 0, coreR);
+      gGrad.addColorStop(0, fish.hitFlash > 0 ? '#ffffff' : '#fef9c3');
+      gGrad.addColorStop(0.55, '#facc15');
+      gGrad.addColorStop(1, '#a16207');
+      ctx.beginPath();
+      ctx.arc(r * 0.12, 0, coreR, 0, Math.PI * 2);
+      ctx.fillStyle = gGrad;
       ctx.fill();
       ctx.lineWidth = 1.6;
-      ctx.setLineDash([4, 3]);
-      ctx.lineDashOffset = -now * 0.02;
-      ctx.strokeStyle = isWhite ? '#fde047' : '#a7f3d0';
+      ctx.strokeStyle = '#fef08a';
       ctx.stroke();
-      ctx.restore();
-    } else {
+
+      // Engraved Snitch seam rings
       ctx.beginPath();
-      ctx.ellipse(0, 14.8, 16.4, 6.2, 0, 0, Math.PI * 2);
-      ctx.fillStyle = isWhite ? 'rgba(254, 243, 199, 0.2)' : 'rgba(167, 243, 208, 0.28)';
+      ctx.arc(r * 0.12, 0, coreR * 0.68, -0.9, 0.9);
+      ctx.strokeStyle = 'rgba(120, 53, 15, 0.65)';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    } else if (fish.species === 'puffer_bomb') {
+      // THỦY LÔI PHÁO HOA WEASLEY (Weasleys' Wizard Wheezes Orb — 'W')
+      const pulse = 1 + Math.sin(nowSec * 8 + fish.uid) * 0.06;
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 1.12 * pulse, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(251, 146, 60, 0.65)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Brass studs around the cauldron-mine
+      for (let i = 0; i < 8; i++) {
+        const ang = (Math.PI / 4) * i + nowSec * 0.8;
+        ctx.beginPath();
+        ctx.arc(Math.cos(ang) * r * 0.88, Math.sin(ang) * r * 0.88, Math.max(2, r * 0.12), 0, Math.PI * 2);
+        ctx.fillStyle = '#facc15';
+        ctx.fill();
+      }
+
+      // Royal purple & molten orange Weasley firework sphere
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.84, 0, Math.PI * 2);
+      const wOrb = ctx.createRadialGradient(-r * 0.22, -r * 0.24, r * 0.08, 0, 0, r * 0.86);
+      wOrb.addColorStop(0, fish.hitFlash > 0 ? '#ffffff' : '#e879f9');
+      wOrb.addColorStop(0.55, fish.hitFlash > 0 ? '#fde047' : '#7e22ce');
+      wOrb.addColorStop(1, '#3b0764');
+      ctx.fillStyle = wOrb;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#facc15';
+      ctx.stroke();
+
+      // Fizzing fuse spark on top
+      ctx.fillStyle = '#fde047';
+      this.drawFourPointStar(ctx, 0, -r * 0.96, r * 0.26 * pulse, r * 0.09);
+      ctx.fill();
+
+      // Iconic Golden 'W' (Weasley) crest
+      ctx.fillStyle = '#fde047';
+      ctx.font = `800 ${Math.max(10, Math.round(r * 0.72))}px "Be Vietnam Pro", system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('W', 0, 1);
+    } else if (fish.species === 'moon_jelly') {
+      // LINH QUANG HỘ MỆNH (Expecto Patronum Silvery Spirit Wisp)
+      const pulse = 1 + Math.sin(nowSec * 4.2 + fish.uid) * 0.09;
+      for (let t = -2; t <= 2; t++) {
+        const ty = t * r * 0.18;
+        const wispWave = Math.sin(fish.tailPhase + t * 0.8) * r * 0.26;
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.1, ty);
+        ctx.quadraticCurveTo(-r * 0.72, ty + wispWave, -r * 1.32, ty - wispWave * 0.6);
+        ctx.strokeStyle = t % 2 === 0 ? 'rgba(224, 242, 254, 0.85)' : 'rgba(125, 211, 252, 0.68)';
+        ctx.lineWidth = Math.max(1.6, r * 0.1);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+
+      // Translucent Patronus dome
+      ctx.beginPath();
+      ctx.ellipse(r * 0.12, 0, r * 0.78 * pulse, r * 0.68 * pulse, 0, -Math.PI * 0.55, Math.PI * 0.55);
+      ctx.quadraticCurveTo(-r * 0.35, 0, r * 0.12, -r * 0.68 * pulse);
+      ctx.closePath();
+      const patGrad = ctx.createRadialGradient(r * 0.22, -r * 0.12, r * 0.08, 0, 0, r * 0.9);
+      patGrad.addColorStop(0, '#ffffff');
+      patGrad.addColorStop(0.55, 'rgba(125, 211, 252, 0.88)');
+      patGrad.addColorStop(1, 'rgba(99, 102, 241, 0.55)');
+      ctx.fillStyle = patGrad;
+      ctx.fill();
+      ctx.strokeStyle = '#e0f2fe';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Orbiting Patronus star-spark
+      ctx.fillStyle = '#ffffff';
+      this.drawFourPointStar(ctx, r * 0.35, 0, r * 0.22, r * 0.07);
+      ctx.fill();
+    } else if (fish.species === 'emerald_koi') {
+      // THỦY XÀ SLYTHERIN (Slytherin Horned Water Serpent)
+      // Sinuous segmented emerald-silver body
+      for (let seg = 4; seg >= 0; seg--) {
+        const sx = -seg * r * 0.32;
+        const sy = Math.sin(fish.tailPhase - seg * 0.7) * r * 0.22;
+        const sr = r * (0.46 - seg * 0.055);
+        ctx.beginPath();
+        ctx.arc(sx, sy, Math.max(3, sr), 0, Math.PI * 2);
+        ctx.fillStyle = seg % 2 === 0 ? '#059669' : '#10b981';
+        ctx.fill();
+        ctx.strokeStyle = '#a7f3d0';
+        ctx.lineWidth = 1.1;
+        ctx.stroke();
+      }
+
+      // Serpent head + silver horns + forked scarlet tongue
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(r * 0.88, r * 0.05);
+      ctx.lineTo(r * 1.18, r * 0.02 + wag * r * 0.2);
+      ctx.lineTo(r * 1.28, -r * 0.06 + wag * r * 0.2);
+      ctx.moveTo(r * 1.18, r * 0.02 + wag * r * 0.2);
+      ctx.lineTo(r * 1.28, r * 0.1 + wag * r * 0.2);
+      ctx.stroke();
+
+      // Silver Slytherin horns
+      ctx.beginPath();
+      ctx.moveTo(r * 0.22, -r * 0.28);
+      ctx.quadraticCurveTo(-r * 0.1, -r * 0.78, -r * 0.42, -r * 0.62);
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = Math.max(2, r * 0.1);
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.ellipse(r * 0.36, 0, r * 0.62, r * 0.44, 0, 0, Math.PI * 2);
+      const serpGrad = ctx.createRadialGradient(r * 0.45, -r * 0.12, r * 0.08, r * 0.3, 0, r * 0.65);
+      serpGrad.addColorStop(0, fish.hitFlash > 0 ? '#ffffff' : '#6ee7b7');
+      serpGrad.addColorStop(0.6, '#047857');
+      serpGrad.addColorStop(1, '#022c22');
+      ctx.fillStyle = serpGrad;
+      ctx.fill();
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+
+      // Glowing silver-gold serpent eye
+      ctx.beginPath();
+      ctx.arc(r * 0.56, -r * 0.12, Math.max(2.4, r * 0.14), 0, Math.PI * 2);
+      ctx.fillStyle = '#fde047';
+      ctx.fill();
+      ctx.fillStyle = '#022c22';
+      ctx.fillRect(r * 0.55, -r * 0.22, 1.6, r * 0.2);
+    } else if (fish.species === 'clown') {
+      // QUỶ NƯỚC GRINDYLOW (Black Lake Horned Water Demon)
+      // 4 writhing grasping tentacles
+      for (let t = -1.5; t <= 1.5; t += 1) {
+        const ty = t * r * 0.22;
+        const tw = Math.sin(fish.tailPhase * 1.2 + t) * r * 0.26;
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.2, ty);
+        ctx.quadraticCurveTo(-r * 0.78, ty + tw, -r * 1.28, ty - tw * 0.5);
+        ctx.strokeStyle = '#4d7c0f';
+        ctx.lineWidth = Math.max(1.8, r * 0.11);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+
+      // Twin dark curved Grindylow horns
+      ctx.strokeStyle = '#1a2e05';
+      ctx.lineWidth = Math.max(2, r * 0.11);
+      ctx.beginPath();
+      ctx.moveTo(r * 0.18, -r * 0.36);
+      ctx.quadraticCurveTo(-r * 0.08, -r * 0.92, -r * 0.34, -r * 0.78);
+      ctx.moveTo(r * 0.36, -r * 0.28);
+      ctx.quadraticCurveTo(r * 0.16, -r * 0.82, -r * 0.08, -r * 0.74);
+      ctx.stroke();
+
+      // Bulbous pale-green Grindylow head-torso
+      ctx.beginPath();
+      ctx.ellipse(r * 0.2, 0, r * 0.76, r * 0.58, 0, 0, Math.PI * 2);
+      const grGrad = ctx.createRadialGradient(r * 0.32, -r * 0.16, r * 0.08, r * 0.15, 0, r * 0.8);
+      grGrad.addColorStop(0, fish.hitFlash > 0 ? '#ffffff' : '#d9f99d');
+      grGrad.addColorStop(0.6, fish.hitFlash > 0 ? '#fde047' : '#65a30d');
+      grGrad.addColorStop(1, '#365314');
+      ctx.fillStyle = grGrad;
+      ctx.fill();
+      ctx.strokeStyle = '#1a2e05';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Fierce glowing yellow Grindylow eye
+      ctx.beginPath();
+      ctx.arc(r * 0.52, -r * 0.12, Math.max(2.6, r * 0.18), 0, Math.PI * 2);
+      ctx.fillStyle = '#fde047';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(r * 0.56, -r * 0.12, Math.max(1.2, r * 0.08), 0, Math.PI * 2);
+      ctx.fillStyle = '#1a2e05';
+      ctx.fill();
+    } else {
+      // CÁ PLIMPY LAM (Magical Plimpy of the Black Lake — round body + 2 kicking webbed legs!)
+      for (const leg of [-1, 1]) {
+        const kick = Math.sin(fish.tailPhase * 1.3 + leg) * r * 0.25;
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = Math.max(1.8, r * 0.11);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.55, leg * r * 0.24);
+        ctx.lineTo(-r * 1.05, leg * r * 0.36 + kick);
+        ctx.lineTo(-r * 1.28, leg * r * 0.22 + kick);
+        ctx.stroke();
+      }
+
+      // Glowing dorsal spell-lure antenna
+      ctx.strokeStyle = '#7dd3fc';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(r * 0.1, -r * 0.62);
+      ctx.quadraticCurveTo(r * 0.45, -r * 1.05, r * 0.68, -r * 0.78);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(r * 0.68, -r * 0.78, Math.max(2, r * 0.13), 0, Math.PI * 2);
+      ctx.fillStyle = '#fde047';
+      ctx.fill();
+
+      // Plump spherical Plimpy body
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r * 0.88, r * 0.74, 0, 0, Math.PI * 2);
+      const plGrad = ctx.createRadialGradient(r * 0.22, -r * 0.18, r * 0.08, 0, 0, r * 0.92);
+      plGrad.addColorStop(0, fish.hitFlash > 0 ? '#ffffff' : def.bellyColor);
+      plGrad.addColorStop(0.58, fish.hitFlash > 0 ? '#fde047' : def.bodyColor);
+      plGrad.addColorStop(1, '#0c4a6e');
+      ctx.fillStyle = plGrad;
+      ctx.fill();
+      ctx.strokeStyle = frozen ? '#bae6fd' : '#082f49';
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+
+      // Big expressive Plimpy eye
+      ctx.beginPath();
+      ctx.arc(r * 0.44, -r * 0.14, Math.max(2.5, r * 0.19), 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(r * 0.48, -r * 0.14, Math.max(1.3, r * 0.1), 0, Math.PI * 2);
+      ctx.fillStyle = '#0f172a';
       ctx.fill();
     }
 
-    ctx.beginPath();
-    ctx.ellipse(0.6, 15.6, 15.2, 5.6, 0, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(14, 8, 4, 0.48)';
-    ctx.fill();
+    ctx.restore(); // end flip scale
 
-    ctx.translate(0, -bob);
-
-    if (spr && spr.complete && spr.naturalWidth > 0) {
-      const drawW = 47;
-      const drawH = 53.4;
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(spr, -drawW * 0.5, 21.5 - drawH, drawW, drawH);
-      ctx.restore();
-      return;
+    // Frost shimmer crystal ring when Glacius is active
+    if (frozen) {
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 1.06, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(186, 230, 253, 0.88)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
     }
 
-    // Lightweight instant fallback while PNG finishes decoding on first frame (identical sculpt glyph, color-only diff)
-    const meta = HP_CHESS_PIECE_META[pieceKey];
-    ctx.beginPath();
-    ctx.ellipse(0, 12.5, 14, 5, 0, 0, Math.PI * 2);
-    ctx.fillStyle = isWhite ? '#f5ead4' : '#111827';
+    // Mini HP bar above multi-HP damaged creature or Giant Squid boss
+    if ((fish.maxHp > 1 && fish.hp < fish.maxHp) || fish.species === 'leviathan_carp') {
+      const barW = Math.max(24, r * 1.45);
+      const barH = 4.5;
+      const bx = -barW * 0.5;
+      const topExtentMult =
+        fish.species === 'leviathan_carp'
+          ? 1.42
+          : fish.species === 'golden_ray' || fish.species === 'emerald_koi'
+            ? 1.34
+            : fish.species === 'moon_jelly' || fish.species === 'clown'
+              ? 1.28
+              : 1.24;
+      const by = -r * topExtentMult - 7;
+      const hpRatio = Math.max(0, Math.min(1, fish.hp / Math.max(1, fish.maxHp)));
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+      ctx.fillRect(bx - 1, by - 1, barW + 2, barH + 2);
+      ctx.fillStyle =
+        hpRatio < 0.35 ? '#fb7185' : fish.species === 'leviathan_carp' ? '#facc15' : '#34d399';
+      ctx.fillRect(bx, by, barW * hpRatio, barH);
+    }
+
+    ctx.restore();
+  }
+
+  private drawFishShooterScene(
+    ctx: CanvasRenderingContext2D,
+    engine: FishShooterEngine
+  ): void {
+    const virt = this.getVirtualCanvasSize();
+    const vp = this.getFishViewportMetrics(virt.w, virt.h);
+    const now = performance.now();
+    const nowSec = now * 0.001;
+    const isSandbox = Boolean(this.sim.state.sandboxMode);
+    const toX = (ax: number) => vp.offsetX + ax * vp.scale;
+    const toY = (ay: number) => vp.offsetY + ay * vp.scale;
+
+    // 0A. Top Dedicated Countdown Timer Bar right above the lake frame
+    ctx.save();
+    drawRoundedRect(ctx, vp.timerBarX, vp.timerBarY, vp.timerBarW, vp.timerBarH, 8);
+    const tBg = ctx.createLinearGradient(0, vp.timerBarY, 0, vp.timerBarY + vp.timerBarH);
+    tBg.addColorStop(0, 'rgba(7, 30, 46, 0.95)');
+    tBg.addColorStop(1, 'rgba(4, 18, 30, 0.98)');
+    ctx.fillStyle = tBg;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.32)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 1.5;
     ctx.fill();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = isWhite ? '#d97706' : '#6ee7b7';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle =
+      !isSandbox && engine.isTimeCritical
+        ? 'rgba(239, 68, 68, 0.92)'
+        : engine.timeFlashTimer > 0
+          ? 'rgba(52, 211, 153, 0.92)'
+          : 'rgba(103, 232, 249, 0.62)';
     ctx.stroke();
 
+    // Crisp vector stopwatch icon (no emoji)
+    const swX = vp.timerBarX + 14;
+    const swY = vp.timerBarY + vp.timerBarH * 0.5 + 0.5;
+    const swColor =
+      !isSandbox && engine.isTimeCritical
+        ? '#fca5a5'
+        : engine.timeFlashTimer > 0
+          ? '#6ee7b7'
+          : '#67e8f9';
+    ctx.strokeStyle = swColor;
+    ctx.lineWidth = 1.4;
     ctx.beginPath();
-    ctx.arc(0, -1, 11.5, 0, Math.PI * 2);
-    ctx.fillStyle = isWhite ? '#fffdf7' : '#1e293b';
-    ctx.fill();
+    ctx.arc(swX, swY, 5.2, 0, Math.PI * 2);
+    ctx.moveTo(swX - 2, swY - 6.8);
+    ctx.lineTo(swX + 2, swY - 6.8);
+    ctx.moveTo(swX, swY - 5.2);
+    ctx.lineTo(swX, swY);
+    ctx.lineTo(swX + 2.8, swY + 1.4);
     ctx.stroke();
 
-    ctx.fillStyle = isWhite ? '#92400e' : '#ecfdf5';
-    ctx.font = '900 15px "Apple Symbols", sans-serif';
+    const timeText = isSandbox
+      ? '∞'
+      : `${engine.formatRemainingTime()}${engine.timeFlashTimer > 0 && engine.lastBonusSecAdded > 0 ? ` (+${engine.lastBonusSecAdded}s)` : ''}`;
+    const rightText = vp.timerBarW >= 340 ? '+giây khi thu phục' : '+s/thu';
+    ctx.font = '800 11px "Be Vietnam Pro", system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    const timeTextStartX = vp.timerBarX + 24;
+    const leftW = 24 + Math.ceil(ctx.measureText(timeText).width) + 10;
+    const rightW = Math.ceil(ctx.measureText(rightText).width) + 14;
+
+    ctx.fillStyle =
+      !isSandbox && engine.isTimeCritical
+        ? 0.5 + 0.5 * Math.sin(now * 0.014) > 0.45
+          ? '#fecaca'
+          : '#f87171'
+        : engine.timeFlashTimer > 0
+          ? '#6ee7b7'
+          : '#fef3c7';
+    ctx.textAlign = 'left';
+    ctx.fillText(timeText, timeTextStartX, vp.timerBarY + vp.timerBarH * 0.5);
+
+    ctx.fillStyle = 'rgba(186, 230, 253, 0.9)';
+    ctx.font = '700 10px "Be Vietnam Pro", system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(rightText, vp.timerBarX + vp.timerBarW - 8, vp.timerBarY + vp.timerBarH * 0.5);
+
+    const trackX = vp.timerBarX + leftW;
+    const trackW = Math.max(40, vp.timerBarW - leftW - rightW);
+    const trackH = 7;
+    const trackY = vp.timerBarY + (vp.timerBarH - trackH) * 0.5;
+    drawRoundedRect(ctx, trackX, trackY, trackW, trackH, 3.5);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.52)';
+    ctx.fill();
+
+    const tRatio = isSandbox ? 1 : engine.timeProgressRatio;
+    if (tRatio > 0.005) {
+      const fillW = Math.max(4, Math.min(trackW, trackW * tRatio));
+      drawRoundedRect(ctx, trackX, trackY, fillW, trackH, 3.5);
+      const tFill = ctx.createLinearGradient(trackX, trackY, trackX + fillW, trackY);
+      if (!isSandbox && engine.isTimeCritical) {
+        tFill.addColorStop(0, '#fca5a5');
+        tFill.addColorStop(1, '#dc2626');
+      } else if (engine.timeFlashTimer > 0) {
+        tFill.addColorStop(0, '#6ee7b7');
+        tFill.addColorStop(1, '#10b981');
+      } else if (tRatio <= 0.45) {
+        tFill.addColorStop(0, '#fde047');
+        tFill.addColorStop(1, '#f59e0b');
+      } else {
+        tFill.addColorStop(0, '#38bdf8');
+        tFill.addColorStop(1, '#22c55e');
+      }
+      ctx.fillStyle = tFill;
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // 0B. Hogwarts Runic Ward Boundary Frame (shows exact spell-ricochet wall limits)
+    ctx.save();
+    const wardX = toX(10);
+    const wardY = toY(12);
+    const wardW = (FISH_ARENA_W - 20) * vp.scale;
+    const wardH = (FISH_ARENA_H - 30) * vp.scale;
+    drawRoundedRect(ctx, wardX, wardY, wardW, wardH, 12);
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle =
+      engine.freezeTimer > 0
+        ? 'rgba(186, 230, 253, 0.65)'
+        : 'rgba(244, 198, 104, 0.36)';
+    ctx.stroke();
+    this.drawBrassCornerBrackets(ctx, wardX, wardY, wardW, wardH, 12);
+    ctx.restore();
+
+    // 1. Swimming Black Lake Magical Creatures
+    const frozen = engine.freezeTimer > 0;
+    for (const fish of engine.fishList) {
+      this.drawFishEntity(ctx, fish, toX(fish.x), toY(fish.y), vp.unitScale, frozen, nowSec);
+    }
+
+    // 2. Expanding Hogwarts Runic Binding Circles (Incarcerous) & Weasley Firework Blasts
+    for (const net of engine.nets) {
+      const t = Math.min(1, net.age / net.duration);
+      const alpha = Math.max(0, 1 - t);
+      const nx = toX(net.x);
+      const ny = toY(net.y);
+      const rad = net.radius * (0.45 + t * 0.65) * vp.unitScale;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.arc(nx, ny, rad, 0, Math.PI * 2);
+      ctx.fillStyle = net.isExplosion
+        ? 'rgba(249, 115, 22, 0.28)'
+        : net.tier === 3
+          ? 'rgba(250, 204, 21, 0.24)'
+          : net.tier === 2
+            ? 'rgba(192, 132, 252, 0.22)'
+            : 'rgba(251, 113, 133, 0.22)';
+      ctx.fill();
+      ctx.lineWidth = net.isExplosion ? 3.2 : 2.2;
+      ctx.strokeStyle = net.isExplosion
+        ? '#fde047'
+        : net.tier === 3
+          ? '#fde047'
+          : net.tier === 2
+            ? '#e879f9'
+            : '#fda4af';
+      ctx.stroke();
+
+      if (net.isExplosion) {
+        // Weasley Wildfire Whiz-Bang firework rays & stars
+        for (let i = 0; i < 8; i++) {
+          const ang = (Math.PI / 4) * i + t * 0.8;
+          ctx.beginPath();
+          ctx.moveTo(nx + Math.cos(ang) * rad * 0.25, ny + Math.sin(ang) * rad * 0.25);
+          ctx.lineTo(nx + Math.cos(ang) * rad * 0.96, ny + Math.sin(ang) * rad * 0.96);
+          ctx.strokeStyle = i % 2 === 0 ? '#fde047' : '#e879f9';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      } else {
+        // Rotating Hogwarts 6-point Arcane Hexagram & inner rune circle
+        ctx.beginPath();
+        ctx.arc(nx, ny, rad * 0.68, 0, Math.PI * 2);
+        ctx.lineWidth = 1.1;
+        ctx.stroke();
+
+        for (let tri = 0; tri < 2; tri++) {
+          ctx.beginPath();
+          for (let v = 0; v < 3; v++) {
+            const ang = t * 1.4 + tri * (Math.PI / 3) + v * ((Math.PI * 2) / 3);
+            const vx = nx + Math.cos(ang) * rad * 0.68;
+            const vy = ny + Math.sin(ang) * rad * 0.68;
+            if (v === 0) ctx.moveTo(vx, vy);
+            else ctx.lineTo(vx, vy);
+          }
+          ctx.closePath();
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+
+    // 3. Flying Wand Spell-Bolts (Stupefy / Protego / Expecto Patronum)
+    for (const b of engine.bolts) {
+      const bx = toX(b.x);
+      const by = toY(b.y);
+      const rad = (5 + b.tier * 2) * vp.unitScale;
+      const ang = Math.atan2(b.vy, b.vx);
+      const coreColor = b.tier === 3 ? '#fde047' : b.tier === 2 ? '#c084fc' : '#fb7185';
+      ctx.save();
+      ctx.translate(bx, by);
+      ctx.rotate(ang);
+
+      // Luminous spell comet trail
+      const tailLen = rad * (2.9 + b.tier * 0.55);
+      const tailGrad = ctx.createLinearGradient(-tailLen, 0, rad * 0.5, 0);
+      tailGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+      tailGrad.addColorStop(1, coreColor);
+      ctx.fillStyle = tailGrad;
+      ctx.beginPath();
+      ctx.moveTo(-tailLen, 0);
+      ctx.lineTo(0, -rad * 0.58);
+      ctx.lineTo(0, rad * 0.58);
+      ctx.closePath();
+      ctx.fill();
+
+      // Blazing spell core
+      const orbGrad = ctx.createRadialGradient(0, 0, 1, 0, 0, rad * 1.4);
+      orbGrad.addColorStop(0, '#ffffff');
+      orbGrad.addColorStop(0.55, coreColor);
+      orbGrad.addColorStop(1, 'rgba(253, 224, 71, 0)');
+      ctx.fillStyle = orbGrad;
+      ctx.beginPath();
+      ctx.arc(0, 0, rad * 1.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 4-point wand spark star at tip
+      ctx.fillStyle = '#ffffff';
+      this.drawFourPointStar(ctx, rad * 0.2, 0, rad * 0.95, rad * 0.32);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // 4. Top Black Lake Score & Target Arcane Gauge Bar (drawn ABOVE creatures & bolts so text is never occluded)
+    ctx.save();
+    const hudW = Math.min(vp.arenaPxW - 24, 440);
+    const hudX = vp.offsetX + (vp.arenaPxW - hudW) * 0.5;
+    const hudY = vp.offsetY + 6;
+    const hudH = 22;
+    drawRoundedRect(ctx, hudX, hudY, hudW, hudH, 11);
+    ctx.fillStyle = 'rgba(6, 28, 36, 0.92)';
+    ctx.fill();
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = 'rgba(244, 198, 104, 0.78)';
+    ctx.stroke();
+
+    const ratio = Math.max(0, Math.min(1, engine.score / Math.max(1, engine.targetScore)));
+    if (ratio > 0.01) {
+      drawRoundedRect(ctx, hudX + 3, hudY + 3, Math.max(8, (hudW - 6) * ratio), hudH - 6, 8);
+      const barGrad = ctx.createLinearGradient(hudX, hudY, hudX + hudW, hudY);
+      barGrad.addColorStop(0, '#059669');
+      barGrad.addColorStop(0.55, '#14b8a6');
+      barGrad.addColorStop(1, '#facc15');
+      ctx.fillStyle = barGrad;
+      ctx.fill();
+    }
+
+    ctx.fillStyle = '#fffbeb';
+    ctx.font = '800 11px "Be Vietnam Pro", system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(meta?.glyph ?? '♚', 0, -0.5);
+    const sep = hudW < 360 ? ' • ' : '  •  ';
+    const scoreLbl = `${engine.score.toLocaleString('vi-VN')} / ${engine.targetScore.toLocaleString('vi-VN')} điểm${
+      engine.combo >= 2 ? `${sep}COMBO ×${engine.combo}` : ''
+    }${engine.freezeTimer > 0 ? `${sep}GLACIUS ${Math.ceil(engine.freezeTimer)}s` : ''}`;
+    ctx.fillText(scoreLbl, hudX + hudW * 0.5, hudY + hudH * 0.5, Math.max(120, hudW - 18));
+    ctx.restore();
+
+    // 5. Arcane Spell Aim Line & Runic Reticle (when playing)
+    const tx = toX(engine.turretX);
+    const ty = toY(engine.turretY);
+    const ax = toX(engine.aimX);
+    const ay = toY(engine.aimY);
+    if (engine.status === 'playing') {
+      ctx.save();
+      ctx.setLineDash([4, 6]);
+      ctx.strokeStyle = 'rgba(253, 224, 71, 0.44)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.lineTo(ax, ay);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.beginPath();
+      ctx.arc(ax, ay, 11, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(253, 224, 71, 0.82)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = '#fde047';
+      this.drawFourPointStar(ctx, ax, ay, 5.5, 1.8);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // 6. Bottom-Center Hogwarts Elder Wand Arcane Pedestal (Đài Đũa Phép Cơm Nguội)
+    ctx.save();
+    const baseR = Math.max(22, 26 * vp.unitScale);
+    const screenAngle = Math.atan2(ay - ty, ax - tx);
+    const wandGemColor =
+      engine.cannonTier === 3 ? '#fde047' : engine.cannonTier === 2 ? '#e879f9' : '#fb7185';
+
+    // Rotating Hogwarts runic aura ring on the lakebed plinth
+    ctx.save();
+    ctx.translate(tx, ty + 2);
+    ctx.rotate(nowSec * 0.55);
+    ctx.beginPath();
+    ctx.arc(0, 0, baseR * 1.34, Math.PI * 1.05, Math.PI * 1.95);
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = 'rgba(250, 204, 21, 0.65)';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // Carved Hogwarts Gothic Brass & Obsidian Dais
+    ctx.beginPath();
+    ctx.arc(tx, ty + 8, baseR * 1.24, Math.PI, 0);
+    ctx.closePath();
+    const pedGrad = ctx.createLinearGradient(tx - baseR, ty - baseR, tx + baseR, ty + 14);
+    pedGrad.addColorStop(0, '#facc15');
+    pedGrad.addColorStop(0.45, '#78350f');
+    pedGrad.addColorStop(1, '#1c1917');
+    ctx.fillStyle = pedGrad;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#fef08a';
+    ctx.stroke();
+
+    // Rotating Elder Wand (Đũa Phép Cơm Nguội with sculpted berry knots & spell-crystal tip)
+    ctx.save();
+    ctx.translate(tx, ty);
+    ctx.rotate(screenAngle + Math.PI * 0.5);
+    const recoilOffset = engine.cannonRecoil * 7;
+    ctx.translate(0, recoilOffset);
+
+    const wandLen = baseR * 1.95;
+    const wandAtlas =
+      this.blackLakeCreaturesAtlas &&
+      this.blackLakeCreaturesAtlas.complete &&
+      this.blackLakeCreaturesAtlas.naturalWidth >= 1024
+        ? this.blackLakeCreaturesAtlas
+        : null;
+
+    if (wandAtlas) {
+      const wBox = wandLen * 1.62;
+      ctx.drawImage(wandAtlas, 3 * 256, 1 * 256, 256, 256, -wBox * 0.5, -wandLen * 1.24, wBox, wBox);
+    } else {
+      // Tapered carved elder-wood shaft fallback
+      const shaftGrad = ctx.createLinearGradient(-baseR * 0.18, 0, baseR * 0.18, 0);
+      shaftGrad.addColorStop(0, '#78350f');
+      shaftGrad.addColorStop(0.5, '#d97706');
+      shaftGrad.addColorStop(1, '#3f1d0b');
+      ctx.fillStyle = shaftGrad;
+      ctx.beginPath();
+      ctx.moveTo(-baseR * 0.19, baseR * 0.25);
+      ctx.lineTo(-baseR * 0.07, -wandLen);
+      ctx.lineTo(baseR * 0.07, -wandLen);
+      ctx.lineTo(baseR * 0.19, baseR * 0.25);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#fde68a';
+      ctx.lineWidth = 1.1;
+      ctx.stroke();
+
+      for (const ky of [0.05, -0.38, -0.82, -1.26]) {
+        const kr = baseR * (ky > -0.5 ? 0.19 : 0.15);
+        ctx.beginPath();
+        ctx.arc(0, baseR * ky, kr, 0, Math.PI * 2);
+        ctx.fillStyle = '#92400e';
+        ctx.fill();
+        ctx.strokeStyle = '#facc15';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
+    }
+
+    // Blazing spell-tip aura at wand tip (color-coded by wand tier ×1/×2/×3)
+    const tipGlow = ctx.createRadialGradient(0, -wandLen, 1, 0, -wandLen, baseR * 0.52);
+    tipGlow.addColorStop(0, wandAtlas ? 'rgba(255, 255, 255, 0.55)' : '#ffffff');
+    tipGlow.addColorStop(0.45, wandGemColor);
+    tipGlow.addColorStop(1, 'rgba(253, 224, 71, 0)');
+    ctx.fillStyle = tipGlow;
+    ctx.beginPath();
+    ctx.arc(0, -wandLen, baseR * 0.52, 0, Math.PI * 2);
+    ctx.fill();
+    if (!wandAtlas) {
+      ctx.fillStyle = '#ffffff';
+      this.drawFourPointStar(ctx, 0, -wandLen, baseR * 0.28, baseR * 0.09);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Tier badge on the Hogwarts wand pedestal
+    const badgeW = 68;
+    const badgeH = 18;
+    drawRoundedRect(ctx, tx - badgeW * 0.5, ty + 6, badgeW, badgeH, 9);
+    ctx.fillStyle = '#1c1917';
+    ctx.fill();
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = '#fde047';
+    ctx.stroke();
+    ctx.fillStyle = '#fef08a';
+    ctx.font = '800 10px "Be Vietnam Pro", system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`ĐÀI ĐŨA ×${engine.cannonTier}`, tx, ty + 15);
+    ctx.restore();
+
+    // 7. Floating "+Points" Catch Popups
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const pop of engine.popups) {
+      const alpha = Math.max(0, 1 - pop.age / pop.duration);
+      ctx.globalAlpha = alpha;
+      ctx.font = '800 13px "Be Vietnam Pro", system-ui, sans-serif';
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.lineWidth = 3;
+      ctx.strokeText(pop.text, toX(pop.x), toY(pop.y));
+      ctx.fillStyle = pop.color;
+      ctx.fillText(pop.text, toX(pop.x), toY(pop.y));
+    }
     ctx.restore();
   }
 
@@ -8299,12 +8274,47 @@ export class PuzzleArcadeModalController {
     }
   }
 
-  private renderJigsawTrayDockDOM(): void {
-    const dock = this.root.querySelector('#paJigsawTrayDock') as HTMLElement | null;
-    const je = this.jigsawEngine;
-    if (!dock || !je || this.mode !== 'jigsaw') return;
+  private syncJigsawStageAfterTrayResize(): void {
+    const apply = () => {
+      const panArea = this.root.querySelector(
+        '#puzzleArcadeDialogContent .mg-stage-pan-area'
+      ) as HTMLElement | null;
+      if (panArea && panArea.clientWidth > 24 && panArea.clientHeight > 24) {
+        this.observedStageCssW = panArea.clientWidth;
+        this.observedStageCssH = panArea.clientHeight;
+        this.observedCanvasCssW = panArea.clientWidth;
+        this.observedCanvasCssH = panArea.clientHeight;
+      }
+      const liveStrip = this.root.querySelector('#paJigsawTrayStrip') as HTMLElement | null;
+      if (liveStrip && !this.jigsawTrayCollapsed && liveStrip.clientWidth > 0) {
+        const maxScroll = Math.max(0, liveStrip.scrollWidth - liveStrip.clientWidth);
+        liveStrip.scrollLeft = Math.min(this.jigsawTrayScrollLeft, maxScroll);
+        this.jigsawTrayScrollLeft = liveStrip.scrollLeft;
+      }
+      this.forceImmediateRedraw = true;
+      this.drawFrame();
+    };
+    apply();
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(apply);
+    }
+  }
 
-    const filters: Array<{ id: JigsawTrayFilter; label: string }> = [
+  private captureJigsawTrayScrollState(): void {
+    const dock = this.root.querySelector('#paJigsawTrayDock') as HTMLElement | null;
+    if (!dock) return;
+    const strip = dock.querySelector('#paJigsawTrayStrip') as HTMLElement | null;
+    if (strip && !strip.hidden && (strip.clientWidth > 0 || strip.scrollLeft > 0)) {
+      this.jigsawTrayScrollLeft = strip.scrollLeft;
+    }
+    const filterScroll = dock.querySelector('.pa-jigsaw-filter-scroll') as HTMLElement | null;
+    if (filterScroll && (filterScroll.clientWidth > 0 || filterScroll.scrollLeft > 0)) {
+      this.jigsawFilterScrollLeft = filterScroll.scrollLeft;
+    }
+  }
+
+  private initJigsawTrayDockDOM(dock: HTMLElement): void {
+    const filters: ReadonlyArray<{ id: JigsawTrayFilter; label: string }> = [
       { id: 'all', label: '🧩 Tất Cả' },
       { id: 'edges', label: '🔲 Viền' },
       { id: 'q0', label: '↖ <span class="pa-jig-word">Góc </span>I' },
@@ -8313,92 +8323,125 @@ export class PuzzleArcadeModalController {
       { id: 'q3', label: '↘ <span class="pa-jig-word">Góc </span>IV' },
     ];
 
-    const filtered = je.getFilteredTrayPieces();
-    const pageSize = 24;
-    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-    if (this.jigsawTrayPage >= totalPages) {
-      this.jigsawTrayPage = totalPages - 1;
-    }
-    if (this.jigsawTrayPage < 0) {
-      this.jigsawTrayPage = 0;
-    }
-    const pageStart = this.jigsawTrayPage * pageSize;
-    const pageSlice = filtered.slice(pageStart, pageStart + pageSize);
-
     const filterBtnsHtml = filters
-      .map((f) => {
-        const cnt = je.getTrayCountForFilter(f.id);
-        const active = je.trayFilter === f.id;
-        return `<button type="button" class="pa-jigsaw-filter-chip ${active ? 'active' : ''}" data-jigsaw-filter="${f.id}" aria-pressed="${active}">${f.label} <span>· ${cnt}</span></button>`; // HPVN: «Góc I · 4»
-      })
+      .map(
+        (f) =>
+          `<button type="button" class="pa-jigsaw-filter-chip" data-jigsaw-filter="${f.id}" aria-pressed="false">${f.label} <span data-jigsaw-filter-count="${f.id}">· 0</span></button>`
+      )
       .join('');
 
-    const totalTrayCount = je.getTrayCountForFilter('all');
-    const pagerHtml =
-      !this.jigsawTrayCollapsed && totalPages > 1
-        ? `<div class="pa-jigsaw-pager" role="group" aria-label="Trang khay mảnh">
-            <button type="button" id="btnPaJigsawTrayPrev" class="pa-jigsaw-page-btn" ${this.jigsawTrayPage <= 0 ? 'disabled' : ''} aria-label="Trang mảnh trước">◀</button>
-            <span class="pa-jigsaw-page-lbl">${this.jigsawTrayPage + 1}/${totalPages}</span>
-            <button type="button" id="btnPaJigsawTrayNext" class="pa-jigsaw-page-btn" ${this.jigsawTrayPage >= totalPages - 1 ? 'disabled' : ''} aria-label="Trang mảnh sau">▶</button>
-          </div>`
-        : '';
-
-    const trayToggleHtml = `<button type="button" id="btnPaJigsawToggleTray" class="pa-jigsaw-tray-toggle-btn ${this.jigsawTrayCollapsed ? 'active' : ''}" aria-expanded="${!this.jigsawTrayCollapsed}" aria-controls="paJigsawTrayStrip" title="${this.jigsawTrayCollapsed ? 'Mở lại khay mảnh ghép' : 'Thu gọn khay mảnh để phóng to tối đa khung tranh'}">${
-      this.jigsawTrayCollapsed ? `▴ Mở Khay (${totalTrayCount})` : '▾ Thu Khay'
-    }</button>`;
-
-    const piecesHtml =
-      pageSlice.length > 0
-        ? pageSlice
-            .map((pIdx) => {
-              const r = Math.floor(pIdx / je.cols) + 1;
-              const c = (pIdx % je.cols) + 1;
-              const isSel = je.selectedTrayPieceIdx === pIdx;
-              const tag = je.isCornerPiece(pIdx) ? 'Mảnh Góc' : je.isEdgePiece(pIdx) ? 'Mảnh Viền' : 'Mảnh Trong';
-              return `<button type="button" class="pa-jigsaw-piece-btn ${isSel ? 'selected' : ''}" data-jigsaw-piece="${pIdx}" aria-pressed="${isSel}" title="${tag} (Hàng ${r}, Cột ${c}) — Kéo lên bảng hoặc chạm chọn rồi chạm bảng"><canvas class="pa-jigsaw-thumb-cvs" width="56" height="56" data-jigsaw-cvs="${pIdx}"></canvas></button>`;
-            })
-            .join('')
-        : `<div class="pa-jigsaw-tray-empty">${
-            je.lockedCount >= je.totalPieces
-              ? '🎉 Toàn bộ mảnh ghép đã hoàn thiện!'
-              : '✨ Không còn mảnh nào trong bộ lọc này — chuyển sang 🧩 Tất Cả hoặc ghép tiếp các mảnh trên bàn!'
-          }</div>`;
-
-    dock.dataset.trayCollapsed = String(this.jigsawTrayCollapsed);
     dock.innerHTML = `
       <div class="pa-jigsaw-filter-bar">
         <div class="pa-jigsaw-filter-scroll" role="group" aria-label="Lọc mảnh ghép">${filterBtnsHtml}</div>
         <div class="pa-jigsaw-bar-actions">
-          ${pagerHtml}
-          ${trayToggleHtml}
+          <div class="pa-jigsaw-pager" role="group" aria-label="Trang khay mảnh" hidden style="display:none;">
+            <button type="button" id="btnPaJigsawTrayPrev" class="pa-jigsaw-page-btn" aria-label="Trang mảnh trước">◀</button>
+            <span class="pa-jigsaw-page-lbl">1/1</span>
+            <button type="button" id="btnPaJigsawTrayNext" class="pa-jigsaw-page-btn" aria-label="Trang mảnh sau">▶</button>
+          </div>
+          <button type="button" id="btnPaJigsawScatterTray" class="pa-jigsaw-tray-toggle-btn pa-jigsaw-scatter-btn" title="Trải ngẫu nhiên mảnh ghép trong khay ra mặt bàn và thu gọn khay (S)">🔀 Trải Bàn</button>
+          <button type="button" id="btnPaJigsawToggleTray" class="pa-jigsaw-tray-toggle-btn" aria-expanded="true" aria-controls="paJigsawTrayStrip">▾ Thu Khay</button>
         </div>
       </div>
-      <div id="paJigsawTrayStrip" class="pa-jigsaw-tray-strip" role="list" aria-label="Danh sách mảnh ghép trong khay" ${this.jigsawTrayCollapsed ? 'hidden' : ''}>
-        ${piecesHtml}
-      </div>
+      <div id="paJigsawTrayStrip" class="pa-jigsaw-tray-strip" role="list" aria-label="Danh sách mảnh ghép trong khay"></div>
     `;
 
+    const strip = dock.querySelector('#paJigsawTrayStrip') as HTMLElement | null;
+    const filterScroll = dock.querySelector('.pa-jigsaw-filter-scroll') as HTMLElement | null;
+
+    filterScroll?.addEventListener(
+      'scroll',
+      () => {
+        if (filterScroll.clientWidth > 0) {
+          this.jigsawFilterScrollLeft = filterScroll.scrollLeft;
+        }
+      },
+      { passive: true }
+    );
+
+    if (strip) {
+      strip.addEventListener(
+        'scroll',
+        () => {
+          if (!strip.hidden && strip.clientWidth > 0) {
+            this.jigsawTrayScrollLeft = strip.scrollLeft;
+          }
+        },
+        { passive: true }
+      );
+
+      strip.addEventListener(
+        'wheel',
+        (ev) => {
+          if (strip.hidden) return;
+          if (Math.abs(ev.deltaY) > Math.abs(ev.deltaX) && strip.scrollWidth > strip.clientWidth) {
+            strip.scrollLeft += ev.deltaY;
+            this.jigsawTrayScrollLeft = strip.scrollLeft;
+            ev.preventDefault();
+          }
+        },
+        { passive: false }
+      );
+
+      let bgDrag: { pointerId: number; startX: number; startScrollLeft: number } | null = null;
+      strip.addEventListener('pointerdown', (ev) => {
+        if (ev.target !== strip || ev.pointerType !== 'mouse' || ev.button !== 0) return;
+        bgDrag = {
+          pointerId: ev.pointerId,
+          startX: ev.clientX,
+          startScrollLeft: strip.scrollLeft,
+        };
+        try {
+          strip.setPointerCapture(ev.pointerId);
+        } catch {
+          // Ignore synthetic pointer capture errors
+        }
+      });
+      strip.addEventListener('pointermove', (ev) => {
+        if (!bgDrag || bgDrag.pointerId !== ev.pointerId) return;
+        const maxScroll = Math.max(0, strip.scrollWidth - strip.clientWidth);
+        const nextLeft = Math.max(0, bgDrag.startScrollLeft - (ev.clientX - bgDrag.startX));
+        strip.scrollLeft = strip.clientWidth > 0 ? Math.min(nextLeft, maxScroll) : nextLeft;
+        this.jigsawTrayScrollLeft = strip.scrollLeft;
+      });
+      const endBgDrag = (ev: PointerEvent) => {
+        if (bgDrag && bgDrag.pointerId === ev.pointerId) {
+          bgDrag = null;
+        }
+      };
+      strip.addEventListener('pointerup', endBgDrag);
+      strip.addEventListener('pointercancel', endBgDrag);
+    }
+
+    dock.querySelector('#btnPaJigsawScatterTray')?.addEventListener('click', () => {
+      if (!this.jigsawEngine || this.jigsawEngine.status !== 'playing') return;
+      const res = this.jigsawEngine.scatterTrayPiecesOntoBoard();
+      if (res.scatteredCount > 0) {
+        this.jigsawTrayCollapsed = true;
+        this.jigsawActiveBoardPiece = null;
+        this.sim.audio.playChessClack(false);
+        this.persistModeSession('jigsaw', true);
+        this.renderJigsawTrayDockDOM(false);
+        this.syncJigsawStageAfterTrayResize();
+        this.showToast(
+          `🔀 Đã trải ${res.scatteredCount} mảnh ra mặt bàn — kéo ghép trực tiếp trên bàn!`,
+          '🔀'
+        );
+      } else if (res.remainingInTray > 0) {
+        this.jigsawTrayCollapsed = true;
+        this.sim.audio.playClick();
+        this.renderJigsawTrayDockDOM();
+        this.syncJigsawStageAfterTrayResize();
+        this.showToast('Mặt bàn đang có tối đa mảnh rời — hãy ghép bớt rồi trải tiếp!', '🔀');
+      }
+    });
+
     dock.querySelector('#btnPaJigsawToggleTray')?.addEventListener('click', () => {
+      this.captureJigsawTrayScrollState();
       this.jigsawTrayCollapsed = !this.jigsawTrayCollapsed;
       this.sim.audio.playClick();
       this.renderJigsawTrayDockDOM();
-      const syncBoardAfterTrayToggle = () => {
-        const panArea = this.root.querySelector(
-          '#puzzleArcadeDialogContent .mg-stage-pan-area'
-        ) as HTMLElement | null;
-        if (panArea && panArea.clientWidth > 24 && panArea.clientHeight > 24) {
-          this.observedStageCssW = panArea.clientWidth;
-          this.observedStageCssH = panArea.clientHeight;
-          this.observedCanvasCssW = panArea.clientWidth;
-          this.observedCanvasCssH = panArea.clientHeight;
-        }
-        this.forceImmediateRedraw = true;
-        this.drawFrame();
-      };
-      syncBoardAfterTrayToggle();
-      if (typeof requestAnimationFrame === 'function') {
-        requestAnimationFrame(syncBoardAfterTrayToggle);
-      }
+      this.syncJigsawStageAfterTrayResize();
     });
 
     dock.querySelectorAll<HTMLButtonElement>('[data-jigsaw-filter]').forEach((btn) => {
@@ -8407,160 +8450,401 @@ export class PuzzleArcadeModalController {
         if (!f || !this.jigsawEngine) return;
         this.jigsawEngine.trayFilter = f;
         this.jigsawTrayPage = 0;
+        this.jigsawTrayScrollLeft = 0;
         this.jigsawTrayCollapsed = false;
         this.persistModeSession('jigsaw', false);
         this.sim.audio.playClick();
-        this.renderJigsawTrayDockDOM();
+        this.renderJigsawTrayDockDOM(false);
       });
     });
 
     dock.querySelector('#btnPaJigsawTrayPrev')?.addEventListener('click', () => {
       if (this.jigsawTrayPage > 0) {
         this.jigsawTrayPage -= 1;
+        this.jigsawTrayScrollLeft = 0;
         this.sim.audio.playClick();
-        this.renderJigsawTrayDockDOM();
+        this.renderJigsawTrayDockDOM(false);
       }
     });
+
     dock.querySelector('#btnPaJigsawTrayNext')?.addEventListener('click', () => {
-      if (this.jigsawTrayPage < totalPages - 1) {
+      const jeNow = this.jigsawEngine;
+      if (!jeNow) return;
+      const totalPagesNow = Math.max(1, Math.ceil(jeNow.getFilteredTrayPieces().length / 24));
+      if (this.jigsawTrayPage < totalPagesNow - 1) {
         this.jigsawTrayPage += 1;
+        this.jigsawTrayScrollLeft = 0;
         this.sim.audio.playClick();
-        this.renderJigsawTrayDockDOM();
+        this.renderJigsawTrayDockDOM(false);
       }
     });
+  }
 
-    dock.querySelectorAll<HTMLButtonElement>('[data-jigsaw-piece]').forEach((btn) => {
-      const pIdx = Number(btn.dataset.jigsawPiece);
-      if (!Number.isInteger(pIdx)) return;
+  private createJigsawTrayPieceButton(pIdx: number, strip: HTMLElement): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pa-jigsaw-piece-btn';
+    btn.dataset.jigsawPiece = String(pIdx);
+    btn.setAttribute('aria-pressed', 'false');
 
-      btn.addEventListener('keydown', (ke) => {
-        if (ke.key === 'Enter' || ke.key === ' ') {
-          ke.preventDefault();
-          if (!this.jigsawEngine || this.jigsawEngine.status !== 'playing') return;
-          if (this.jigsawEngine.selectedTrayPieceIdx === pIdx) {
-            // Chạm lần 2 bằng bàn phím: đưa mảnh lên giữa bảng để di chuyển bằng phím mũi tên
-            if (this.jigsawEngine.spawnTrayPieceOntoBoard(pIdx, 0.5, 0.5)) {
-              this.jigsawActiveBoardPiece = pIdx;
-              this.sim.audio.playClick();
-              this.forceImmediateRedraw = true;
-              this.renderJigsawTrayDockDOM();
-            }
-          } else {
-            this.jigsawEngine.selectedTrayPieceIdx = pIdx;
+    const cvs = document.createElement('canvas');
+    cvs.className = 'pa-jigsaw-thumb-cvs';
+    cvs.width = 56;
+    cvs.height = 56;
+    cvs.dataset.jigsawCvs = String(pIdx);
+    btn.appendChild(cvs);
+
+    btn.addEventListener('keydown', (ke) => {
+      if (ke.key === 'Enter' || ke.key === ' ') {
+        ke.preventDefault();
+        if (!this.jigsawEngine || this.jigsawEngine.status !== 'playing') return;
+        if (this.jigsawEngine.selectedTrayPieceIdx === pIdx) {
+          // Chạm lần 2 bằng bàn phím: đưa mảnh lên giữa bảng để di chuyển bằng phím mũi tên
+          if (this.jigsawEngine.spawnTrayPieceOntoBoard(pIdx, 0.5, 0.5)) {
+            this.jigsawActiveBoardPiece = pIdx;
             this.sim.audio.playClick();
+            this.forceImmediateRedraw = true;
             this.renderJigsawTrayDockDOM();
           }
+        } else {
+          this.jigsawEngine.selectedTrayPieceIdx = pIdx;
+          this.sim.audio.playClick();
+          this.renderJigsawTrayDockDOM();
         }
-      });
+      }
+    });
 
-      btn.addEventListener('pointerdown', (ev) => {
-        if (ev.button !== 0 && ev.pointerType === 'mouse') return;
-        if (!this.jigsawEngine || this.jigsawEngine.status !== 'playing' || this.victoryClaimed) {
-          return;
-        }
-        this.cleanupJigsawTrayDrag();
-        this.jigsawTrayDragState = {
-          pointerId: ev.pointerId,
-          pieceIdx: pIdx,
-          startX: ev.clientX,
-          startY: ev.clientY,
-          currX: ev.clientX,
-          currY: ev.clientY,
-          pointerType: ev.pointerType,
-          dragging: false,
-          ghostEl: null,
-        };
-        try {
-          btn.setPointerCapture(ev.pointerId);
-        } catch {
-          // Ignore synthetic pointer capture errors
-        }
-      });
+    btn.addEventListener('pointerdown', (ev) => {
+      if (ev.button !== 0 && ev.pointerType === 'mouse') return;
+      if (!this.jigsawEngine || this.jigsawEngine.status !== 'playing' || this.victoryClaimed) {
+        return;
+      }
+      this.cleanupJigsawTrayDrag();
+      this.jigsawTrayDragState = {
+        pointerId: ev.pointerId,
+        pieceIdx: pIdx,
+        startX: ev.clientX,
+        startY: ev.clientY,
+        currX: ev.clientX,
+        currY: ev.clientY,
+        startScrollLeft: strip.scrollLeft,
+        pointerType: ev.pointerType,
+        gesture: 'undecided',
+        dragging: false,
+        ghostEl: null,
+      };
+    });
 
-      btn.addEventListener('pointermove', (ev) => {
-        const stDrag = this.jigsawTrayDragState;
-        if (!stDrag || stDrag.pointerId !== ev.pointerId || stDrag.pieceIdx !== pIdx) return;
-        stDrag.currX = ev.clientX;
-        stDrag.currY = ev.clientY;
-        const dist = Math.hypot(ev.clientX - stDrag.startX, ev.clientY - stDrag.startY);
-        if (!stDrag.dragging && dist > 8) {
+    btn.addEventListener('pointermove', (ev) => {
+      const stDrag = this.jigsawTrayDragState;
+      if (!stDrag || stDrag.pointerId !== ev.pointerId || stDrag.pieceIdx !== pIdx) return;
+      stDrag.currX = ev.clientX;
+      stDrag.currY = ev.clientY;
+      const dx = ev.clientX - stDrag.startX;
+      const dy = ev.clientY - stDrag.startY;
+      const dist = Math.hypot(dx, dy);
+
+      if (stDrag.gesture === 'undecided' && dist > 7) {
+        const isHorizontalTrayScroll =
+          stDrag.pointerType === 'touch'
+            ? Math.abs(dx) > Math.abs(dy) * 1.15
+            : Math.abs(dx) > Math.abs(dy) * 1.8 && dy > -10;
+
+        if (isHorizontalTrayScroll) {
+          stDrag.gesture = 'scroll';
+          if (stDrag.pointerType !== 'touch') {
+            try {
+              btn.setPointerCapture(ev.pointerId);
+            } catch {
+              // Ignore synthetic pointer capture errors
+            }
+          }
+        } else {
+          stDrag.gesture = 'lift';
           stDrag.dragging = true;
+          try {
+            btn.setPointerCapture(ev.pointerId);
+          } catch {
+            // Ignore synthetic pointer capture errors
+          }
           const ghost = document.createElement('canvas');
           ghost.width = 76;
           ghost.height = 76;
           ghost.className = 'pa-jigsaw-drag-ghost';
           this.paintSingleJigsawPieceCanvas(ghost, pIdx);
-          document.body.appendChild(ghost);
+          const hostDlg = this.root.querySelector('#puzzleArcadeDialog') ?? document.body;
+          hostDlg.appendChild(ghost);
           stDrag.ghostEl = ghost;
         }
-        if (stDrag.dragging && stDrag.ghostEl) {
-          const liftY = stDrag.pointerType === 'touch' ? 24 : 0;
-          stDrag.ghostEl.style.left = `${Math.round(ev.clientX - 38)}px`;
-          stDrag.ghostEl.style.top = `${Math.round(ev.clientY - 38 - liftY)}px`;
+      }
+
+      if (stDrag.gesture === 'scroll' && stDrag.pointerType !== 'touch') {
+        const maxScroll = Math.max(0, strip.scrollWidth - strip.clientWidth);
+        const nextLeft = Math.max(0, stDrag.startScrollLeft - dx);
+        strip.scrollLeft = strip.clientWidth > 0 ? Math.min(nextLeft, maxScroll) : nextLeft;
+        this.jigsawTrayScrollLeft = strip.scrollLeft;
+        return;
+      }
+
+      if (stDrag.gesture === 'lift' && stDrag.dragging && stDrag.ghostEl) {
+        const liftY = stDrag.pointerType === 'touch' ? 24 : 0;
+        stDrag.ghostEl.style.left = `${Math.round(ev.clientX - 38)}px`;
+        stDrag.ghostEl.style.top = `${Math.round(ev.clientY - 38 - liftY)}px`;
+      }
+    });
+
+    const finishTrayPointer = (ev: PointerEvent) => {
+      const stDrag = this.jigsawTrayDragState;
+      if (!stDrag || stDrag.pointerId !== ev.pointerId || stDrag.pieceIdx !== pIdx) return;
+      const gesture = stDrag.gesture;
+      const wasDragging = stDrag.dragging;
+      const pointerType = stDrag.pointerType;
+      this.cleanupJigsawTrayDrag();
+
+      if (gesture === 'scroll') {
+        if (!strip.hidden && strip.clientWidth > 0) {
+          this.jigsawTrayScrollLeft = strip.scrollLeft;
+        }
+        return;
+      }
+
+      if (ev.type === 'pointercancel' || !this.jigsawEngine || this.jigsawEngine.status !== 'playing') {
+        return;
+      }
+
+      if (!wasDragging) {
+        // Thao tác 1 chạm không cần kéo (WCAG / Modern Web Guidance single-pointer alternative)
+        this.jigsawEngine.selectedTrayPieceIdx =
+          this.jigsawEngine.selectedTrayPieceIdx === pIdx ? null : pIdx;
+        this.sim.audio.playClick();
+        this.renderJigsawTrayDockDOM();
+        return;
+      }
+
+      const cvs = this.canvas;
+      const panArea = this.root.querySelector(
+        '#puzzleArcadeDialogContent .mg-stage-pan-area'
+      ) as HTMLElement | null;
+      if (!cvs || !panArea) return;
+
+      const liftY = pointerType === 'touch' ? 24 : 0;
+      const dropClientX = ev.clientX;
+      const dropClientY = ev.clientY - liftY;
+      const panRect = panArea.getBoundingClientRect();
+      if (
+        dropClientX < panRect.left ||
+        dropClientX > panRect.right ||
+        dropClientY < panRect.top ||
+        dropClientY > panRect.bottom
+      ) {
+        this.sim.audio.playClick();
+        return;
+      }
+
+      const cRect = cvs.getBoundingClientRect();
+      const virt = this.getVirtualCanvasSize();
+      const netRot = sharedMinigameViewport.getNetQuarterTurns('jigsaw');
+      const { lu, lv } = clientToLocalNormalized(dropClientX, dropClientY, cRect, netRot);
+      const vx = lu * virt.w;
+      const vy = lv * virt.h;
+      const m = this.computeJigsawBoardMetrics(this.jigsawEngine);
+      const { nx, ny } = this.virtualToJigsawNorm(vx, vy, m);
+
+      if (this.jigsawEngine.spawnTrayPieceOntoBoard(pIdx, nx, ny)) {
+        this.jigsawActiveBoardPiece = pIdx;
+        this.finalizeJigsawBoardClusterDrop(pIdx);
+        this.renderJigsawTrayDockDOM();
+      }
+    };
+
+    btn.addEventListener('pointerup', finishTrayPointer);
+    btn.addEventListener('pointercancel', finishTrayPointer);
+    return btn;
+  }
+
+  private renderJigsawTrayDockDOM(preserveScroll = true): void {
+    const dock = this.root.querySelector('#paJigsawTrayDock') as HTMLElement | null;
+    const je = this.jigsawEngine;
+    if (!dock || !je || this.mode !== 'jigsaw') return;
+
+    const existingStrip = dock.querySelector('#paJigsawTrayStrip') as HTMLElement | null;
+    if (existingStrip) {
+      if (preserveScroll) {
+        this.captureJigsawTrayScrollState();
+      } else {
+        this.jigsawTrayScrollLeft = 0;
+      }
+    } else {
+      this.initJigsawTrayDockDOM(dock);
+    }
+
+    const strip = dock.querySelector('#paJigsawTrayStrip') as HTMLElement | null;
+    if (!strip) return;
+
+    const filterIds: ReadonlyArray<JigsawTrayFilter> = ['all', 'edges', 'q0', 'q1', 'q2', 'q3'];
+    const filtered = je.getFilteredTrayPieces();
+    const pageSize = 24;
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    const prevPage = this.jigsawTrayPage;
+    if (this.jigsawTrayPage >= totalPages) {
+      this.jigsawTrayPage = totalPages - 1;
+    }
+    if (this.jigsawTrayPage < 0) {
+      this.jigsawTrayPage = 0;
+    }
+    const pageSteppedBack = prevPage > this.jigsawTrayPage;
+    const pageStart = this.jigsawTrayPage * pageSize;
+    const pageSlice = filtered.slice(pageStart, pageStart + pageSize);
+
+    for (const fId of filterIds) {
+      const chipBtn = dock.querySelector(`[data-jigsaw-filter="${fId}"]`) as HTMLButtonElement | null;
+      if (!chipBtn) continue;
+      const active = je.trayFilter === fId;
+      chipBtn.classList.toggle('active', active);
+      chipBtn.setAttribute('aria-pressed', String(active));
+      const countEl = chipBtn.querySelector(`[data-jigsaw-filter-count="${fId}"]`) as HTMLElement | null;
+      if (countEl) {
+        countEl.textContent = `· ${je.getTrayCountForFilter(fId)}`;
+      }
+    }
+
+    const totalTrayCount = je.getTrayCountForFilter('all');
+    const pagerEl = dock.querySelector('.pa-jigsaw-pager') as HTMLElement | null;
+    if (pagerEl) {
+      const showPager = !this.jigsawTrayCollapsed && totalPages > 1;
+      pagerEl.hidden = !showPager;
+      pagerEl.style.display = showPager ? 'inline-flex' : 'none';
+      const prevBtn = dock.querySelector('#btnPaJigsawTrayPrev') as HTMLButtonElement | null;
+      const nextBtn = dock.querySelector('#btnPaJigsawTrayNext') as HTMLButtonElement | null;
+      const pageLbl = dock.querySelector('.pa-jigsaw-page-lbl') as HTMLElement | null;
+      if (prevBtn) prevBtn.disabled = this.jigsawTrayPage <= 0;
+      if (nextBtn) nextBtn.disabled = this.jigsawTrayPage >= totalPages - 1;
+      if (pageLbl) pageLbl.textContent = `${this.jigsawTrayPage + 1}/${totalPages}`;
+    }
+
+    const scatterBtn = dock.querySelector('#btnPaJigsawScatterTray') as HTMLButtonElement | null;
+    if (scatterBtn) {
+      scatterBtn.disabled = je.status !== 'playing' || totalTrayCount <= 0;
+    }
+
+    const toggleBtn = dock.querySelector('#btnPaJigsawToggleTray') as HTMLButtonElement | null;
+    if (toggleBtn) {
+      toggleBtn.classList.toggle('active', this.jigsawTrayCollapsed);
+      toggleBtn.setAttribute('aria-expanded', String(!this.jigsawTrayCollapsed));
+      toggleBtn.title = this.jigsawTrayCollapsed
+        ? 'Mở lại khay mảnh ghép'
+        : 'Thu gọn khay mảnh để phóng to tối đa khung tranh';
+      toggleBtn.textContent = this.jigsawTrayCollapsed
+        ? `▴ Mở Khay (${totalTrayCount})`
+        : '▾ Thu Khay';
+    }
+
+    dock.dataset.trayCollapsed = String(this.jigsawTrayCollapsed);
+    strip.hidden = this.jigsawTrayCollapsed;
+
+    const existingBtns = new Map<number, HTMLButtonElement>();
+    strip.querySelectorAll<HTMLButtonElement>('[data-jigsaw-piece]').forEach((btn) => {
+      const pIdx = Number(btn.dataset.jigsawPiece);
+      if (Number.isInteger(pIdx)) {
+        existingBtns.set(pIdx, btn);
+      } else {
+        btn.remove();
+      }
+    });
+
+    if (pageSlice.length === 0) {
+      existingBtns.forEach((btn) => btn.remove());
+      let emptyEl = strip.querySelector('.pa-jigsaw-tray-empty') as HTMLElement | null;
+      if (!emptyEl) {
+        emptyEl = document.createElement('div');
+        emptyEl.className = 'pa-jigsaw-tray-empty';
+        strip.appendChild(emptyEl);
+      }
+      emptyEl.textContent =
+        je.lockedCount >= je.totalPieces
+          ? '🎉 Toàn bộ mảnh ghép đã hoàn thiện!'
+          : '✨ Không còn mảnh nào trong bộ lọc này — chuyển sang 🧩 Tất Cả hoặc ghép tiếp các mảnh trên bàn!';
+    } else {
+      strip.querySelector('.pa-jigsaw-tray-empty')?.remove();
+      const targetSet = new Set<number>(pageSlice);
+      existingBtns.forEach((btn, pIdx) => {
+        if (!targetSet.has(pIdx)) {
+          btn.remove();
+          existingBtns.delete(pIdx);
         }
       });
 
-      const finishTrayPointer = (ev: PointerEvent) => {
-        const stDrag = this.jigsawTrayDragState;
-        if (!stDrag || stDrag.pointerId !== ev.pointerId || stDrag.pieceIdx !== pIdx) return;
-        const wasDragging = stDrag.dragging;
-        const pointerType = stDrag.pointerType;
-        this.cleanupJigsawTrayDrag();
+      const createdCanvases: Array<{ cvs: HTMLCanvasElement; pIdx: number }> = [];
+      for (let i = 0; i < pageSlice.length; i++) {
+        const pIdx = pageSlice[i];
+        const r = Math.floor(pIdx / je.cols) + 1;
+        const c = (pIdx % je.cols) + 1;
+        const isSel = je.selectedTrayPieceIdx === pIdx;
+        const tag = je.isCornerPiece(pIdx)
+          ? 'Mảnh Góc'
+          : je.isEdgePiece(pIdx)
+            ? 'Mảnh Viền'
+            : 'Mảnh Trong';
 
-        if (ev.type === 'pointercancel' || !this.jigsawEngine || this.jigsawEngine.status !== 'playing') {
-          return;
+        let btn = existingBtns.get(pIdx);
+        if (!btn) {
+          btn = this.createJigsawTrayPieceButton(pIdx, strip);
+          const cvs = btn.querySelector('canvas[data-jigsaw-cvs]') as HTMLCanvasElement | null;
+          if (cvs) {
+            createdCanvases.push({ cvs, pIdx });
+          }
         }
+        btn.classList.toggle('selected', isSel);
+        btn.setAttribute('aria-pressed', String(isSel));
+        btn.title = `${tag} (Hàng ${r}, Cột ${c}) — Kéo lên bảng hoặc chạm chọn rồi chạm bảng`;
 
-        if (!wasDragging) {
-          // Thao tác 1 chạm không cần kéo (WCAG / Modern Web Guidance single-pointer alternative)
-          this.jigsawEngine.selectedTrayPieceIdx =
-            this.jigsawEngine.selectedTrayPieceIdx === pIdx ? null : pIdx;
-          this.sim.audio.playClick();
-          this.renderJigsawTrayDockDOM();
-          return;
+        const currentAtPos = strip.children[i] ?? null;
+        if (currentAtPos !== btn) {
+          strip.insertBefore(btn, currentAtPos);
         }
+      }
 
-        const cvs = this.canvas;
-        const panArea = this.root.querySelector(
-          '#puzzleArcadeDialogContent .mg-stage-pan-area'
-        ) as HTMLElement | null;
-        if (!cvs || !panArea) return;
+      for (const item of createdCanvases) {
+        this.paintSingleJigsawPieceCanvas(item.cvs, item.pIdx);
+      }
+    }
 
-        const liftY = pointerType === 'touch' ? 24 : 0;
-        const dropClientX = ev.clientX;
-        const dropClientY = ev.clientY - liftY;
-        const panRect = panArea.getBoundingClientRect();
-        if (
-          dropClientX < panRect.left ||
-          dropClientX > panRect.right ||
-          dropClientY < panRect.top ||
-          dropClientY > panRect.bottom
-        ) {
-          this.sim.audio.playClick();
-          return;
-        }
+    const filterScroll = dock.querySelector('.pa-jigsaw-filter-scroll') as HTMLElement | null;
+    if (filterScroll) {
+      const maxFilterScroll =
+        filterScroll.clientWidth > 0
+          ? Math.max(0, filterScroll.scrollWidth - filterScroll.clientWidth)
+          : Math.max(0, this.jigsawFilterScrollLeft);
+      filterScroll.scrollLeft = Math.max(0, Math.min(this.jigsawFilterScrollLeft, maxFilterScroll));
+      this.jigsawFilterScrollLeft = filterScroll.scrollLeft;
+    }
 
-        const cRect = cvs.getBoundingClientRect();
-        const virt = this.getVirtualCanvasSize();
-        const netRot = sharedMinigameViewport.getNetQuarterTurns('jigsaw');
-        const { lu, lv } = clientToLocalNormalized(dropClientX, dropClientY, cRect, netRot);
-        const vx = lu * virt.w;
-        const vy = lv * virt.h;
-        const m = this.computeJigsawBoardMetrics(this.jigsawEngine);
-        const { nx, ny } = this.virtualToJigsawNorm(vx, vy, m);
+    if (!this.jigsawTrayCollapsed) {
+      const desiredScroll = pageSteppedBack
+        ? Math.max(this.jigsawTrayScrollLeft, strip.scrollWidth)
+        : this.jigsawTrayScrollLeft;
+      const maxTrayScroll =
+        strip.clientWidth > 0
+          ? Math.max(0, strip.scrollWidth - strip.clientWidth)
+          : Math.max(0, desiredScroll);
+      strip.scrollLeft = Math.max(0, Math.min(desiredScroll, maxTrayScroll));
+      this.jigsawTrayScrollLeft = strip.scrollLeft;
 
-        if (this.jigsawEngine.spawnTrayPieceOntoBoard(pIdx, nx, ny)) {
-          this.jigsawActiveBoardPiece = pIdx;
-          this.finalizeJigsawBoardClusterDrop(pIdx);
-          this.renderJigsawTrayDockDOM();
-        }
-      };
-
-      btn.addEventListener('pointerup', finishTrayPointer);
-      btn.addEventListener('pointercancel', finishTrayPointer);
-    });
-
-    this.paintVisibleJigsawTrayThumbnails();
+      if (
+        this.jigsawTrayScrollLeft > 0 &&
+        strip.clientWidth === 0 &&
+        typeof requestAnimationFrame === 'function'
+      ) {
+        requestAnimationFrame(() => {
+          const liveStrip = this.root.querySelector('#paJigsawTrayStrip') as HTMLElement | null;
+          if (liveStrip && !liveStrip.hidden && liveStrip.clientWidth > 0) {
+            const maxS = Math.max(0, liveStrip.scrollWidth - liveStrip.clientWidth);
+            liveStrip.scrollLeft = Math.min(this.jigsawTrayScrollLeft, maxS);
+            this.jigsawTrayScrollLeft = liveStrip.scrollLeft;
+          }
+        });
+      }
+    }
   }
 
   private paintVisibleJigsawTrayThumbnails(): void {

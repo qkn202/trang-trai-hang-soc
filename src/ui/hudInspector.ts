@@ -14,8 +14,10 @@ import {
   getCropMasteryTierInfo,
   getFarmItemIconSrc,
   getFarmItemMeta,
+  getSoilTierInfo,
   getWorkshopMaxQueueSlots,
   getWorkshopStarSpeedMultiplier,
+  GOURMET_FEED_QTY,
   PASTURE_ANIMALS,
 } from '../data/catalog';
 import {
@@ -151,7 +153,8 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         : hud.inspectSelection.kind === 'staff'
           ? `s:${hud.inspectSelection.id}`
           : `z:${hud.inspectSelection.zoneId}`;
-    if (selKey !== hud.lastInspectedKey) {
+    const sameTarget = selKey === hud.lastInspectedKey;
+    if (!sameTarget) {
       hud.lastInspectedKey = selKey;
     }
     hud.inspectorCollapsed = false;
@@ -184,12 +187,16 @@ export function inspectorRenderInspector(hud: GameHUD): void {
       let cropLeftText = '';
       let cropGrowPct = 0;
       if (item.isFarmlandPlot && !isBuilding) {
+        const effSoilTier = hud.sim.getPlotEffectiveSoilTier(b);
+        const compostOwned = Math.max(0, Math.floor(hud.sim.state.herbalCompost ?? 0));
+        const soilUpgInfo = hud.sim.getPlotSoilUpgradeCostInfo(b.uid);
+        const soilCanAfford = soilUpgInfo?.canAfford ? 1 : 0;
         if (!b.cropId) {
           const soilEntry = hud.sim.state.plotSoilState?.[`${b.gx},${b.gy}`];
           const seedSig = Object.keys(FARM_CROPS)
             .map((cid) => hud.sim.getSeedCount(cid as FarmCropId))
             .join('.');
-          cropSig = `empty:${hud.seedFilterMode}:${soilEntry?.lastFamily ?? ''}:${b.harvestCycleCount ?? 0}:${seedSig}`;
+          cropSig = `empty:${hud.seedFilterMode}:${hud.activeSeedCropId ?? ''}:${soilEntry?.lastFamily ?? ''}:${b.harvestCycleCount ?? 0}:${effSoilTier}:${b.cropCompostBoost ? 1 : 0}:${compostOwned}:${soilCanAfford}:${seedSig}`;
         } else {
           const cropDef = FARM_CROPS[b.cropId];
           const readyAt = b.cropReadyAt ?? now;
@@ -202,7 +209,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
             ? 100
             : Math.max(6, Math.min(98, Math.round(((now - plantedAt) / Math.max(1000, readyAt - plantedAt)) * 100)));
           cropLeftText = `${isRipe ? 'Chín' : formatDurationCountdownVi(cropLeftSec)}${b.cropRotatedBonus ? ' · ×2' : ''}`;
-          cropSig = `${cropDef.id}:${isRipe ? 1 : 0}:${b.cropWateredBoost ? 1 : 0}:${b.cropRotatedBonus ? 1 : 0}:${hud.sim.state.morningDewPhials ?? 0}`;
+          cropSig = `${cropDef.id}:${isRipe ? 1 : 0}:${b.cropWateredBoost ? 1 : 0}:${b.cropRotatedBonus ? 1 : 0}:${effSoilTier}:${b.cropCompostBoost ? 1 : 0}:${compostOwned}:${soilCanAfford}:${hud.sim.state.morningDewPhials ?? 0}`;
         }
       }
 
@@ -222,10 +229,17 @@ export function inspectorRenderInspector(hud: GameHUD): void {
             ? 100
             : Math.max(6, Math.min(98, Math.round(((now - stockedAt) / Math.max(1000, readyAt - stockedAt)) * 100)));
           const prodMeta = animalDef.goodId ? getFarmItemMeta(animalDef.goodId) : null;
+          const gourmetMult = b.pastureGourmetBoost ? 2 : 1;
+          const sickleBonus = b.pastureGourmetBoost ? 1.5 : 1;
+          const estSickle = Math.round(animalDef.sellValue * sickleBonus);
+          const estYield = animalDef.yieldQty * gourmetMult;
+          const estCompost = b.pastureGourmetBoost ? 2 : 1;
           pastureLeftText = isReady
-            ? `🧺 +${animalDef.sellValue} Sickle${prodMeta ? ` +${animalDef.yieldQty} ${prodMeta.name}` : ''}`
-            : `⏱️ ${formatDurationCountdownVi(leftSec)}`;
-          pastureSig = `${b.pastureAnimalId}:${isReady ? 1 : 0}:${b.pastureFedBoost ? 1 : 0}:${hud.sim.state.morningDewPhials ?? 0}`;
+            ? `🧺 +${estSickle} Sickle${prodMeta ? ` +${estYield} ${prodMeta.name}` : ''} +${estCompost} 🌿`
+            : `⏱️ ${formatDurationCountdownVi(leftSec)}${b.pastureGourmetBoost ? ' · 🌽 ×2' : ''}`;
+          const compostOwned = Math.max(0, Math.floor(hud.sim.state.herbalCompost ?? 0));
+          const gourmetCropKey = hud.sim.getAvailableGourmetFeedCrop() ?? 'none';
+          pastureSig = `${b.pastureAnimalId}:${isReady ? 1 : 0}:${b.pastureFedBoost ? 1 : 0}:${b.pastureGourmetBoost ? 1 : 0}:${compostOwned}:${gourmetCropKey}:${hud.sim.state.morningDewPhials ?? 0}`;
         }
       }
 
@@ -370,6 +384,56 @@ export function inspectorRenderInspector(hud: GameHUD): void {
       const farmlandHtml =
         item.isFarmlandPlot && !isBuilding
           ? (() => {
+              const soilTier = hud.sim.getPlotEffectiveSoilTier(b);
+              const soilMeta = getSoilTierInfo(soilTier);
+              const soilUpg = hud.sim.getPlotSoilUpgradeCostInfo(b.uid);
+              const compostCount = Math.max(0, Math.floor(hud.sim.state.herbalCompost ?? 0));
+              const canCompostPlot = !b.cropCompostBoost && (Boolean(hud.sim.state.sandboxMode) || compostCount >= 1);
+              const soilBannerHtml = `
+                <div class="soil-tier-banner">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
+                    <strong>🌱 Bậc ${soilMeta.labelRom} · ${escapeHtml(soilMeta.nameVi)}</strong>
+                    <span class="hs-stat-pill" title="Phân Ủ Thảo Dược hiện có trong kho">🌿 ×${hud.sim.state.sandboxMode ? '∞' : compostCount}</span>
+                  </div>
+                  <div class="hs-stat-pills">
+                    <span class="hs-stat-pill" title="Sản lượng cộng thêm mỗi vụ">🌱 +${soilMeta.yieldBonus}</span>
+                    <span class="hs-stat-pill" title="Hệ số thưởng Sickle và XP khi thu hoạch">🪙 ×${soilMeta.harvestGoldXpMult.toFixed(2)}</span>
+                    ${
+                      soilMeta.rejuvenateOnRotate
+                        ? `<span class="hs-stat-pill" title="Luân canh khác họ giúp hồi sức đất">🍀 Hồi đất</span>`
+                        : ''
+                    }
+                    ${
+                      b.cropCompostBoost
+                        ? `<span class="hs-stat-pill is-active" title="Đã bón Phân Ủ Thảo Dược: cộng 2 nông sản vụ này">🌿 +2</span>`
+                        : ''
+                    }
+                  </div>
+                  <div class="soil-tier-actions">
+                    ${
+                      soilUpg?.nextTier && soilUpg.nextMeta
+                        ? `<button type="button" class="brass-btn ${soilUpg.canAfford ? 'gold-cta' : ''}" data-insp-upgrade-soil="1" title="${
+                            !soilUpg.unlockedByLevel
+                              ? `Mở khoá Đất Bậc ${soilUpg.nextMeta.labelRom} tại Cấp ${soilUpg.nextMeta.unlockLevel}`
+                              : `Nâng cấp lên Đất Bậc ${soilUpg.nextMeta.labelRom}`
+                          }" ${!soilUpg.unlockedByLevel ? 'disabled' : ''}>${
+                            !soilUpg.unlockedByLevel
+                              ? `🔒 Bậc ${soilUpg.nextMeta.labelRom} (Cấp ${soilUpg.nextMeta.unlockLevel})`
+                              : hud.sim.state.sandboxMode
+                                ? `Bậc ${soilUpg.nextMeta.labelRom} · 0 Sickle`
+                                : `Nâng Bậc ${soilUpg.nextMeta.labelRom} · ${soilUpg.compostCost}🌿 · 🪙${soilUpg.effectiveSickleCost.toLocaleString('vi-VN')}`
+                          }</button>`
+                        : `<span class="hs-stat-pill is-active" title="Đất canh tác đã đạt cấp tối đa Bậc V">⭐ Bậc V</span>`
+                    }
+                    ${
+                      b.cropCompostBoost
+                        ? `<span class="hs-stat-pill is-active" title="Thửa đất đã bón Phân Ủ vụ này">🌿 Đã bón</span>`
+                        : `<button type="button" class="brass-btn" data-insp-compost-plot="1" title="Bón 1 Phân Ủ Thảo Dược: cộng 2 nông sản và xoá mỏi đất" ${!canCompostPlot ? 'disabled' : ''}>🌿 Bón đất (+2)</button>`
+                    }
+                  </div>
+                </div>
+              `;
+
               if (!b.cropId) {
                 const soilEntry = hud.sim.state.plotSoilState?.[`${b.gx},${b.gy}`];
                 const fatigueStep = Math.max(b.harvestCycleCount ?? 0, soilEntry?.fatigueStep ?? 0);
@@ -416,13 +480,14 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                       crop.growSec
                     );
                     const growLabel = `${formatDurationCompactVi(strat.growSec)}${
-                      strat.isRotatedBonus ? ' · ×2' : ''
+                      strat.isRotatedBonus ? ' · 🍀 ×2' : ''
                     }`;
+                    const selectedCrop = hud.activeSeedCropId === crop.id;
                     return `
-                      <div class="seed-card-slot ${lockedCrop ? 'locked' : ''} ${!lockedCrop && seedCount <= 0 ? 'out-of-seeds' : ''}">
+                      <div class="seed-card-slot ${lockedCrop ? 'locked' : ''} ${selectedCrop ? 'selected' : ''} ${!lockedCrop && seedCount <= 0 ? 'out-of-seeds' : ''}">
                         <button
                           type="button"
-                          class="seed-card seed-tray-card ${lockedCrop ? 'locked' : ''} ${!lockedCrop && seedCount <= 0 ? 'out-of-seeds' : ''}"
+                          class="seed-card seed-tray-card ${lockedCrop ? 'locked' : ''} ${selectedCrop ? 'selected' : ''} ${!lockedCrop && seedCount <= 0 ? 'out-of-seeds' : ''}"
                           data-plant-crop="${crop.id}"
                           ${lockedCrop ? 'disabled' : ''}
                         >
@@ -453,6 +518,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                   : '';
                 return `
                   <div class="ws-inspector-board">
+                    ${soilBannerHtml}
                     <div class="ws-board-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
                       <span>Chọn hạt</span>
                       <button id="btnInspOpenSeedQuiz" type="button" class="brass-btn sq-tray-quiz-cta">
@@ -480,7 +546,11 @@ export function inspectorRenderInspector(hud: GameHUD): void {
               const isRipe = cropLeftSec <= 0;
               const masteryInfo = getCropMasteryTierInfo(masteryCount);
               const dewPhials = Math.max(0, hud.sim.state.morningDewPhials ?? 0);
-              const effectiveYield = cropDef.yieldQty * (b.cropRotatedBonus ? 2 : 1);
+              const effectiveYield =
+                cropDef.yieldQty * (b.cropRotatedBonus ? 2 : 1) +
+                soilMeta.yieldBonus +
+                (b.cropRotatedBonus ? soilMeta.extraRotateYield : 0) +
+                (b.cropCompostBoost ? 2 : 0);
               const growPct = isRipe
                 ? 100
                 : Math.max(
@@ -489,6 +559,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                   );
               return `
                 <div class="ws-inspector-board">
+                  ${soilBannerHtml}
                   <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
                     <img src="${getFarmItemIconSrc(cropDef.id)}" alt="${escapeHtml(cropDef.name)}" style="width:40px;height:40px;object-fit:contain;" />
                     <div style="flex:1;min-width:0;">
@@ -721,6 +792,12 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                     )
                   );
               const prodMeta = animalDef.goodId ? getFarmItemMeta(animalDef.goodId) : null;
+              const gourmetCropId = hud.sim.getAvailableGourmetFeedCrop();
+              const gourmetCropMeta = gourmetCropId ? FARM_CROPS[gourmetCropId] : null;
+              const compostCount = Math.max(0, Math.floor(hud.sim.state.herbalCompost ?? 0));
+              const gourmetYieldMult = b.pastureGourmetBoost ? 2 : 1;
+              const gourmetSickle = Math.round(animalDef.sellValue * (b.pastureGourmetBoost ? 1.5 : 1));
+              const gourmetCompostYield = b.pastureGourmetBoost ? 2 : 1;
               return `
                 <div class="ws-inspector-board">
                   <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
@@ -730,9 +807,12 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                       <div style="font-size:12px;font-weight:700;opacity:0.86;" data-insp-live="pasture-timer">
                         ${
                           isReady
-                            ? `🧺 +${animalDef.sellValue} Sickle${prodMeta ? ` +${animalDef.yieldQty} ${escapeHtml(prodMeta.name)}` : ''}`
-                            : `⏱️ ${formatDurationCountdownVi(leftSec)}`
+                            ? `🧺 +${gourmetSickle} Sickle${prodMeta ? ` +${animalDef.yieldQty * gourmetYieldMult} ${escapeHtml(prodMeta.name)}` : ''} +${gourmetCompostYield} 🌿`
+                            : `⏱️ ${formatDurationCountdownVi(leftSec)}${b.pastureGourmetBoost ? ' · 🌽 ×2' : ''}`
                         }
+                      </div>
+                      <div class="hs-stat-pills">
+                        <span class="hs-stat-pill" title="Thu hoạch nhận thêm Phân Ủ Thảo Dược">🌿 +${gourmetCompostYield} (Kho: ×${hud.sim.state.sandboxMode ? '∞' : compostCount})</span>
                       </div>
                     </div>
                   </div>
@@ -744,16 +824,25 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                       isReady
                         ? `
                           <button id="btnInspHarvestPasture" type="button" class="owl-green-send-btn" style="flex:1;padding:8px 12px;font-size:13px;">
-                            🧺 Thu (+${animalDef.sellValue} Sickle)
+                            🧺 Thu (+${gourmetSickle} Sickle · +${gourmetCompostYield}🌿)
                           </button>
                         `
-                        : !b.pastureFedBoost
-                          ? `
-                            <button id="btnInspFeedPasture" type="button" class="brass-btn gold-cta" style="flex:1;">
-                              🌾 Cho ăn (-35%)
-                            </button>
-                          `
-                          : `<div style="flex:1;font-size:12px;font-weight:700;text-align:center;opacity:0.88;padding:6px 4px;">🌾 Đã cho ăn</div>`
+                        : `
+                          ${
+                            !b.pastureFedBoost
+                              ? `
+                                <button id="btnInspFeedPasture" type="button" class="brass-btn gold-cta" style="flex:1;" title="Cho thú ăn cỏ giúp rút ngắn 35% thời gian chờ">
+                                  🌾 Cho ăn (-35%)
+                                </button>
+                              `
+                              : `<span class="hs-stat-pill is-active" style="flex:1;justify-content:center;" title="Đã cho thú ăn cỏ thường">🌾 Đã cho ăn</span>`
+                          }
+                          ${
+                            b.pastureGourmetBoost
+                              ? `<span class="hs-stat-pill is-active" style="flex:1;justify-content:center;" title="Đã cho ăn khẩu phần thượng hạng: nhân đôi sản vật và nhận 2 Phân Ủ">🌿 Đã ăn (×2 · +2🌿)</span>`
+                              : `<button id="btnInspFeedPastureGourmet" type="button" class="brass-btn ${gourmetCropMeta || hud.sim.state.sandboxMode ? 'gold-cta' : ''}" style="flex:1;" title="Cho ăn ${hud.sim.state.sandboxMode ? 0 : GOURMET_FEED_QTY} nông sản để nhân đôi sản vật và nhận 2 Phân Ủ">${gourmetCropMeta ? gourmetCropMeta.emoji : '🌽'} Thượng hạng (×2 · +2🌿)</button>`
+                          }
+                        `
                     }
                     <button id="btnInspClearPasture" type="button" class="brass-btn" title="Đổi thú">
                       🔄 Đổi
@@ -792,6 +881,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
       );
       hud.syncHudFocusVisibility();
       const inspThumbSrc = getCatalogCardImageSrc(item);
+      const prevPanelScrollTop = sameTarget ? panel.scrollTop : 0;
       panel.innerHTML = `
         <div class="inspector-header-bar">
           <div class="hs-insp-head-main">
@@ -1062,6 +1152,9 @@ export function inspectorRenderInspector(hud: GameHUD): void {
             : ''
         }
       `;
+      if (prevPanelScrollTop > 0) {
+        panel.scrollTop = prevPanelScrollTop;
+      }
 
       const priceInput = panel.querySelector('#inpBuildingPrice') as HTMLInputElement | null;
       if (priceInput) {
@@ -1143,7 +1236,9 @@ export function inspectorRenderInspector(hud: GameHUD): void {
           }
           hud.showToast(res.msg, res.ok ? '🌱' : '🪙');
           if (res.ok) {
-            hud.activeSeedCropId = null;
+            const hasMore =
+              Boolean(hud.sim.state.sandboxMode) || hud.sim.getSeedCount(cid) > 0;
+            hud.activeSeedCropId = hasMore ? cid : null;
             hud.seedTrayOpen = false;
             hud.inspectSelection = null;
             hud.refreshAll();
@@ -1161,9 +1256,11 @@ export function inspectorRenderInspector(hud: GameHUD): void {
           const res = hud.sim.buyCropSeedWithGold(cid, 1);
           hud.showToast(res.msg, res.ok ? '🌱' : '🪙');
           if (res.ok) {
+            hud.activeSeedCropId = cid;
             inspectorRenderInspector(hud);
             hud.renderSeedTray();
             hud.refreshHeader();
+            hud.refreshFloatingBanner();
           }
         });
       });
@@ -1195,6 +1292,28 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         const res = hud.sim.feedAnimalPasture(b.uid);
         hud.showToast(res.msg, res.ok ? '🌾' : '⏳');
         inspectorRenderInspector(hud);
+      });
+      panel.querySelector('#btnInspFeedPastureGourmet')?.addEventListener('click', () => {
+        const res = hud.sim.feedAnimalPastureGourmet(b.uid);
+        hud.showToast(res.msg, res.ok ? '🌽' : '🧺');
+        inspectorRenderInspector(hud);
+        hud.refreshHeader();
+      });
+      panel.querySelectorAll<HTMLButtonElement>('[data-insp-upgrade-soil]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const res = hud.sim.upgradePlotSoilTier(b.uid);
+          hud.showToast(res.msg, res.ok ? '🌱' : '🪙');
+          inspectorRenderInspector(hud);
+          hud.refreshHeader();
+        });
+      });
+      panel.querySelectorAll<HTMLButtonElement>('[data-insp-compost-plot]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const res = hud.sim.fertilizeCropPlotWithCompost(b.uid);
+          hud.showToast(res.msg, res.ok ? '🌿' : '🧺');
+          inspectorRenderInspector(hud);
+          hud.refreshHeader();
+        });
       });
       panel.querySelector('#btnInspHarvestPasture')?.addEventListener('click', () => {
         const res = hud.sim.harvestAnimalPasture(b.uid);

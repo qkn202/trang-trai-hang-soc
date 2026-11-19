@@ -305,7 +305,7 @@ export class GameHUD {
   public lastInspectedKey = '';
   public displayedSickle = -1;
   public galleonRollRaf = 0;
-  public activeWorkshopTab: 'barn' | 'brew' | 'cargo' | 'synergy' = 'barn';
+  public activeWorkshopTab: 'barn' | 'market' | 'brew' | 'cargo' | 'synergy' = 'barn';
   public activeQuestTab: 'orders' | 'quests' = 'orders';
   public activeAlbumTab: 'profile' | 'cup' | 'leaderboard' = 'cup';
   public hasShownHouseCupIntro = false;
@@ -683,7 +683,7 @@ export class GameHUD {
 
   public syncHudFocusVisibility(): void { return headerSyncHudFocusVisibility(this); }
 
-  public openWorkshopDialog(tab?: 'barn' | 'brew' | 'cargo' | 'synergy'): void { return farmUiOpenWorkshopDialog(this, tab); }
+  public openWorkshopDialog(tab?: 'barn' | 'market' | 'brew' | 'cargo' | 'synergy'): void { return farmUiOpenWorkshopDialog(this, tab); }
 
   public openSuitcaseDialog(
     tab?: 'care' | 'morph' | 'expedition',
@@ -703,7 +703,9 @@ export class GameHUD {
             const selB = this.sim.state.buildings.find((x) => x.uid === pendingPlotUid);
             if (selB && getCatalogItem(selB.itemId)?.isFarmlandPlot && !selB.cropId) {
               const res = this.sim.plantCropOnPlot(selB.uid, cropId);
-              this.activeSeedCropId = null;
+              const hasMore =
+                Boolean(this.sim.state.sandboxMode) || this.sim.getSeedCount(cropId) > 0;
+              this.activeSeedCropId = res.ok && hasMore ? cropId : null;
               this.seedTrayOpen = false;
               this.pendingSowPlotUid = null;
               this.inspectSelection = null;
@@ -712,7 +714,9 @@ export class GameHUD {
               return;
             }
           }
-          this.activeSeedCropId = this.sim.getSeedCount(cropId) > 0 ? cropId : null;
+          const canSow =
+            Boolean(this.sim.state.sandboxMode) || this.sim.getSeedCount(cropId) > 0;
+          this.activeSeedCropId = canSow ? cropId : null;
           this.seedTrayOpen = false;
           this.pendingSowPlotUid = null;
           this.inspectSelection = null;

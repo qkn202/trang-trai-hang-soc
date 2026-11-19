@@ -56,7 +56,7 @@
 #puzzleArcadeDialog .pa-modal-inner.pa-great-hall-mode {
   background:
     linear-gradient(180deg, var(--great-hall-scrim-top) 0%, var(--great-hall-scrim-bot) 100%),
-    url('/game/trang-trai-hang-soc/paintings/great_hall_chess_bg.webp') center center / cover no-repeat;
+    url('/game/trang-trai-hang-soc/paintings/black_lake_underwater_bg.webp') center center / cover no-repeat;
 }
 
 #puzzleArcadeDialog .pa-modal-inner.pa-potions-sudoku-mode {
@@ -68,7 +68,7 @@
 #puzzleArcadeDialog .pa-modal-inner.pa-marauder-caro-mode {
   background:
     linear-gradient(180deg, var(--marauder-caro-scrim-top) 0%, var(--marauder-caro-scrim-bot) 100%),
-    url('/game/trang-trai-hang-soc/paintings/marauder_caro_bg.webp') center center / cover no-repeat;
+    url('/game/trang-trai-hang-soc/paintings/hogwarts_mines_bg.webp') center center / cover no-repeat;
 }
 
 #puzzleArcadeDialog .modal-header {
@@ -363,8 +363,6 @@
   cursor: pointer;
 }
 
-.pa-canvas-shell[data-pa-board-mode='caro'],
-.pa-canvas-shell[data-pa-board-mode='chess'],
 .pa-canvas-shell[data-pa-board-mode='match3'] {
   width: min(100%, 100vh);
   width: min(100%, 100dvh);
@@ -380,12 +378,12 @@
   overflow: visible;
 }
 
-.pa-canvas-shell[data-pa-board-mode='caro'] #paBoardCanvas,
-.pa-canvas-shell[data-pa-board-mode='chess'] #paBoardCanvas,
 .pa-canvas-shell[data-pa-board-mode='match3'] #match3Canvas {
   aspect-ratio: 1 / 1;
 }
 
+.pa-canvas-shell[data-pa-board-mode='caro'],
+.pa-canvas-shell[data-pa-board-mode='chess'],
 .pa-canvas-shell[data-pa-board-mode='blocks'],
 .pa-canvas-shell[data-pa-board-mode='jigsaw'] {
   width: 100%;
@@ -555,6 +553,10 @@
   flex-shrink: 0;
 }
 
+.pa-jigsaw-pager[hidden] {
+  display: none;
+}
+
 .pa-jigsaw-page-btn {
   display: inline-flex;
   align-items: center;
@@ -577,7 +579,8 @@
   box-shadow: 0 1.5px 0 var(--farm-wood-darkest);
 }
 
-.pa-jigsaw-page-btn:disabled {
+.pa-jigsaw-page-btn:disabled,
+.pa-jigsaw-tray-toggle-btn:disabled {
   opacity: 0.42;
   cursor: not-allowed;
 }
@@ -600,6 +603,7 @@
   overflow-x: auto;
   overflow-y: clip;
   overscroll-behavior-x: contain;
+  scroll-behavior: auto;
   padding: 1px 2px 3px;
   scrollbar-width: thin;
   scrollbar-color: var(--hud-scrollbar-thumb-brass) var(--hud-scrollbar-track-wood);
@@ -640,7 +644,7 @@
     var(--farm-wood-well) 100%
   );
   cursor: grab;
-  touch-action: none;
+  touch-action: pan-x;
   -webkit-user-select: none;
   user-select: none;
   box-shadow:
@@ -706,12 +710,30 @@
   will-change: left, top;
 }
 
+@media (max-width: 560px) {
+  .pa-jigsaw-filter-bar {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .pa-jigsaw-filter-scroll {
+    flex: 1 1 100%;
+    order: 2;
+  }
+
+  .pa-jigsaw-bar-actions {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+    order: 1;
+  }
+}
+
 @media (pointer: coarse) {
   .pa-jigsaw-filter-chip,
   .pa-jigsaw-tray-toggle-btn,
   .pa-jigsaw-page-btn {
-    min-inline-size: 44px;
-    min-block-size: 44px;
+    min-inline-size: 34px;
+    min-block-size: 32px;
   }
 
   .pa-jigsaw-piece-btn {

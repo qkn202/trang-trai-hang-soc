@@ -8,6 +8,19 @@ export interface HpvnIdentity { uid: string; displayName: string; house: string;
 // The page that frames this game: HPVN, on this host or on GAME_ORIGIN, whose CSP lets only the site frame it.
 const parent = (() => { try { return new URL(document.referrer).origin; } catch { return ''; } })();
 
+const LOCAL_STANDALONE_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+const VALID_STANDALONE_HOUSES = new Set(['gryffindor', 'slytherin', 'ravenclaw', 'hufflepuff', 'none']);
+
+export let isStandaloneLocal = false;
+
+function isLocalStandaloneAllowed(): boolean {
+  if (typeof window === 'undefined' || typeof document === 'undefined' || typeof location === 'undefined') {
+    return false;
+  }
+  if (import.meta.env.MODE === 'test') return false;
+  return Boolean(import.meta.env.DEV) || LOCAL_STANDALONE_HOSTS.has(String(location.hostname || '').toLowerCase());
+}
+
 function readIdentity(): HpvnIdentity | null {
   try {
     const params = new URLSearchParams(location.hash.slice(1));
@@ -16,6 +29,25 @@ function readIdentity(): HpvnIdentity | null {
       && typeof data.uid === 'string' && typeof data.nonce === 'string' && data.nonce === params.get('hpvn-ticket')
       && Math.abs(Date.now() - data.issuedAt) < 10 * 60 * 1000) return data;
   } catch { /* standalone */ }
+  if (isLocalStandaloneAllowed()) {
+    isStandaloneLocal = true;
+    let house = 'gryffindor';
+    let displayName = 'Phù Thủy Local';
+    try {
+      const sp = new URLSearchParams(location.search);
+      const rawHouse = String(sp.get('house') || '').trim().toLowerCase();
+      if (VALID_STANDALONE_HOUSES.has(rawHouse)) house = rawHouse;
+      const rawName = String(sp.get('name') || '').trim();
+      if (rawName) displayName = rawName;
+    } catch { /* fallback defaults */ }
+    return {
+      uid: 'local-dev-wizard',
+      displayName,
+      house,
+      nonce: 'local-dev-nonce',
+      issuedAt: Date.now(),
+    };
+  }
   return null;
 }
 
@@ -23,7 +55,7 @@ export const identity = readIdentity();
 const pending = new Map<string, { resolve: (value: any) => void; reject: (error: Error & { code?: string }) => void; timer: number }>();
 const newId = () => crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-if (identity) {
+if (identity && !isStandaloneLocal) {
   // Khu Vườn Hagrid webapp rule: GameEmbedShell already clears status-bar & side insets, while iOS standalone
   // web apps also pass env(safe-area-inset-*) into the iframe. Zeroing --host-inset-* prevents double insets.
   for (const side of ['top', 'right', 'bottom', 'left'] as const) {
@@ -39,8 +71,49 @@ if (identity) {
   });
 }
 
+function buildLocalCupStub() {
+  const houseMap: Record<string, string> = {
+    gryffindor: 'Gryffindor',
+    slytherin: 'Slytherin',
+    ravenclaw: 'Ravenclaw',
+    hufflepuff: 'Hufflepuff',
+  };
+  const house = houseMap[String(identity?.house || '').toLowerCase()] ?? null;
+  return {
+    weekKey: 'Local',
+    houses: { Gryffindor: 320, Ravenclaw: 310, Hufflepuff: 300, Slytherin: 290 },
+    house,
+    memberTodayPoints: 0,
+    memberDailyCap: 60,
+    memberBank: 0,
+    memberTier: 1,
+    perTier: 300,
+  };
+}
+
 export function request<T = unknown>(action: string, data: object = {}): Promise<T> {
   if (!identity) return Promise.reject(new Error('Cần mở game từ HPVN.'));
+  if (isStandaloneLocal) {
+    if (action === 'nav') return Promise.resolve({ dock: 0, inset: 0 } as T);
+    if (action === 'farm-share') return Promise.resolve({} as T);
+    if (action === 'farm') {
+      switch ((data as { op?: string }).op) {
+        case 'load':
+          return Promise.resolve({ save: null, inbox: [], cup: buildLocalCupStub() } as T);
+        case 'save':
+          return Promise.resolve({ inbox: [] } as T);
+        case 'cup':
+          return Promise.resolve(buildLocalCupStub() as T);
+        case 'wallet':
+          return Promise.resolve({ enabled: false } as T);
+        case 'board':
+          return Promise.resolve({ entries: [] } as T);
+        default:
+          return Promise.reject(new Error('Tính năng trực tuyến này cần mở trên cổng HPVN.'));
+      }
+    }
+    return Promise.reject(new Error('Tính năng trực tuyến này cần mở trên cổng HPVN.'));
+  }
   const id = newId();
   return new Promise<T>((resolve, reject) => {
     const timer = window.setTimeout(() => { pending.delete(id); reject(new Error('Kết nối HPVN hết thời gian chờ.')); }, 30000);

@@ -70,16 +70,16 @@ export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMet
   },
   caro: {
     id: 'caro',
-    icon: '🗺️',
-    spriteIcon: '/game/trang-trai-hang-soc/paintings/caro/phoenix_seal.webp',
-    shortVi: 'Ngũ Ấn Đạo Tặc',
-    tabVi: 'Ngũ Ấn',
-    titleVi: 'Ngũ Ấn Đạo Tặc',
-    cupTitleVi: 'Cúp Chiến Lược Ngũ Ấn Đạo Tặc (777 Màn)',
-    subtitleVi: 'Xếp hạng theo Màn Đỉnh, Điểm Trận Pháp & Nước Thắng Nhanh Nhất',
+    icon: '🧨',
+    spriteIcon: '/game/trang-trai-hang-soc/sprites/m3_sp_bomb.webp',
+    shortVi: 'Dò Mìn Phép Thuật',
+    tabVi: 'Dò Mìn',
+    titleVi: 'Dò Mìn Phép Thuật',
+    cupTitleVi: 'Cúp Bậc Thầy Dò Mìn Phép Thuật (777 Màn)',
+    subtitleVi: 'Xếp hạng theo Màn Đỉnh vượt qua & Tốc Độ Mở Bãi Đá Cổ',
     primaryColVi: 'Màn Đỉnh',
-    secondaryColVi: 'Điểm Trận Pháp',
-    detailColVi: 'Thắng & Tối Ưu',
+    secondaryColVi: 'Điểm Dò Mìn',
+    detailColVi: 'Thắng & Chuẩn Xác',
   },
   sudoku: {
     id: 'sudoku',
@@ -96,16 +96,16 @@ export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMet
   },
   chess: {
     id: 'chess',
-    icon: '🏰',
-    spriteIcon: '/game/trang-trai-hang-soc/paintings/chess/wk.webp?v=stone',
-    shortVi: 'Cờ Phù Thủy',
-    tabVi: 'Cờ Phù Thủy',
-    titleVi: 'Cờ Phù Thủy',
-    cupTitleVi: 'Cúp Đại Kiện Tướng Cờ Phù Thủy (777 Màn)',
-    subtitleVi: 'Xếp hạng theo Màn Đỉnh, Điểm Kiện Tướng & Tốc Độ Chiếu Bí',
+    icon: '🎯',
+    spriteIcon: '/game/trang-trai-hang-soc/sprites/m3_boost_cannon.webp',
+    shortVi: 'Bắn Cá Hồ Đen',
+    tabVi: 'Bắn Cá',
+    titleVi: 'Bắn Cá Hồ Đen',
+    cupTitleVi: 'Cúp Thiện Xạ Bắn Cá Hồ Đen (777 Màn)',
+    subtitleVi: 'Xếp hạng theo Màn Đỉnh vượt qua, Điểm Săn Cá & Đỉnh Combo',
     primaryColVi: 'Màn Đỉnh',
-    secondaryColVi: 'Điểm Kiện Tướng',
-    detailColVi: 'Thắng & Chiếu Bí',
+    secondaryColVi: 'Điểm Săn Cá',
+    detailColVi: 'Thắng & Đỉnh Combo',
   },
   blocks: {
     id: 'blocks',
@@ -533,11 +533,11 @@ function formatDetailDisplayVi(
     return `📦 ${box5} từ Hộp 5 • 🔥×${bestStreak}`;
   }
   if (gameId === 'caro') {
-    const eff = efficiency && efficiency > 0 ? ` • ⚡${efficiency} nước` : '';
+    const eff = efficiency && efficiency > 0 ? ` • ⚡${efficiency}s` : '';
     return `${totalWins} thắng • 🔥×${bestStreak}${eff}`;
   }
   if (gameId === 'chess') {
-    const eff = efficiency && efficiency > 0 ? ` • ♟️${efficiency} nước` : '';
+    const eff = efficiency && efficiency > 0 ? ` • ⚡Combo ×${efficiency}` : '';
     return `${totalWins} thắng • 🔥×${bestStreak}${eff}`;
   }
   if (gameId === 'sudoku') {

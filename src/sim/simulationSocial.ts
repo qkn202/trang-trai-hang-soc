@@ -33,6 +33,7 @@ import {
 import {
   ActiveSynergyResult,
   CRAFT_RECIPES,
+  CRAFTED_TO_BARN_EQUIV,
   CraftRecipeDef,
   createCargoCrates,
   createInitialSupplyState,
@@ -223,6 +224,7 @@ import {
   VALLEY_VILLAGER_PROFILES,
 } from './simulationData';
 import { identity } from '../hpvn/bridge';
+import { questsCheckAndDepartCargoTrain } from './simulationQuests';
 import type { ParkSimulation } from './simulation';
 
 function normalizeSocialFriendCode(code?: string): string {
@@ -1327,6 +1329,40 @@ export function socialTickNeighborSocialBackground(sim: ParkSimulation, now = Da
       }
     }
 
+    // 2b. Hàng xóm đóng hộ kiện hàng Tàu Tốc Hành sau ~5 giây
+    for (const crate of sim.state.supply.cargoCrates) {
+      if (
+        !crate.fulfilled &&
+        crate.helpRequestedAt &&
+        now - crate.helpRequestedAt >= 5000 &&
+        social.neighbors.length > 0
+      ) {
+        const pickIdx = Math.abs(Math.floor(crate.helpRequestedAt / 1000)) % social.neighbors.length;
+        const helper = social.neighbors[pickIdx];
+        const bId = crate.farmItemId ?? CRAFTED_TO_BARN_EQUIV[crate.goodId];
+        const meta = getFarmItemMeta(bId);
+        const halfXp = Math.max(8, Math.round(crate.rewardXp * 0.5));
+        crate.fulfilled = true;
+        crate.helpedByNeighborName = helper.name;
+        crate.helpedByNeighborEmoji = helper.avatarEmoji;
+        sim.addXp(halfXp);
+        sim.audio.playOwlHoot(0.04);
+        socialPushSocialActivity(
+          sim,
+          helper.avatarEmoji,
+          `${helper.name} đã đóng hộ kiện Tàu #${sim.state.supply.cargoTrainIndex} (${crate.qtyRequired} ${meta.emoji} ${meta.name}) giúp bạn!`,
+          now
+        );
+        sim.onToast?.(
+          `🚂 ${helper.avatarEmoji} ${helper.name} vừa đóng hộ kiện ${crate.qtyRequired} ${meta.emoji} ${meta.name} trên Tàu Tốc Hành!`,
+          '📦'
+        );
+        questsCheckAndDepartCargoTrain(sim);
+        changed = true;
+        break;
+      }
+    }
+
     // 3. Thỉnh thoảng bạn bè ghé thăm vườn nhà để lại Dấu Ấn Đèn Lồng Cú (tối đa 5 lần/ngày, không reset trước ngày mới)
     const totalHomeLanternsToday =
       Math.max(0, social.dailyHomeLanternsClaimedCount ?? 0) + social.homeLanternMarks.length;
@@ -1352,6 +1388,76 @@ export function socialTickNeighborSocialBackground(sim: ParkSimulation, now = Da
       sim.saveToStorage();
       sim.onUiChange?.();
     }
+}
+
+export function socialRequestCargoCrateHelp(
+  sim: ParkSimulation,
+  crateId: string
+): { ok: boolean; msg: string } {
+  if (sim.isVisitingNeighbor) {
+    return { ok: false, msg: 'Hãy quay về trang trại nhà để gửi nhờ đóng kiện Tàu Tốc Hành!' };
+  }
+  const crates = sim.state.supply.cargoCrates;
+  const crate = crates.find((c) => c.id === crateId);
+  if (!crate) {
+    return { ok: false, msg: 'Không tìm thấy kiện hàng trên Tàu Tốc Hành!' };
+  }
+  if (crate.fulfilled) {
+    return { ok: false, msg: 'Kiện hàng này đã được chất xong lên tàu rồi!' };
+  }
+  const alreadyHelpedOrRequested = crates.some((c) =>
+    Boolean(c.helpRequestedAt || c.helpedByNeighborName)
+  );
+  if (alreadyHelpedOrRequested) {
+    return {
+      ok: false,
+      msg: 'Mỗi chuyến Tàu Tốc Hành chỉ được nhờ đóng hộ tối đa 1 kiện hàng!',
+    };
+  }
+
+  const social = socialEnsureNeighborSocial(sim);
+  const now = Date.now();
+  const bId = crate.farmItemId ?? CRAFTED_TO_BARN_EQUIV[crate.goodId];
+  const meta = getFarmItemMeta(bId);
+
+  if (social.neighbors.length > 0) {
+    crate.helpRequestedAt = now;
+    sim.audio.playOwlHoot(0.04);
+    const msg = `🦉 Đã treo cờ nhờ hàng xóm đóng hộ kiện ${crate.qtyRequired} ${meta.emoji} ${meta.name} lên Tàu Tốc Hành!`;
+    socialPushSocialActivity(sim, '🚂', msg, now);
+    sim.onToast?.(msg, '🤝');
+    sim.saveToStorage();
+    sim.onUiChange?.();
+    return { ok: true, msg };
+  }
+
+  const dayKey = getVietnamCalendarKey(now);
+  if (sim.state.supply.dailyNpcCargoHelpDayKey === dayKey) {
+    return {
+      ok: false,
+      msg: 'Bác Hagrid đã đóng hộ 1 kiện hôm nay rồi! Hãy mở Cổng Floo & Hàng Xóm (Cấp 10+) để kết bạn nhờ đóng tiếp nhé.',
+    };
+  }
+
+  sim.state.supply.dailyNpcCargoHelpDayKey = dayKey;
+  crate.helpRequestedAt = now;
+  crate.fulfilled = true;
+  crate.helpedByNeighborName = 'Bác Hagrid';
+  crate.helpedByNeighborEmoji = '🧔';
+  const halfXp = Math.max(8, Math.round(crate.rewardXp * 0.5));
+  sim.addXp(halfXp);
+  sim.audio.playOwlHoot(0.045);
+  const departure = questsCheckAndDepartCargoTrain(sim);
+  const msg = departure.departed && departure.msg
+    ? departure.msg
+    : `🧔 Bác Hagrid đã ghé ga đóng giúp kiện ${crate.qtyRequired} ${meta.emoji} ${meta.name} (+${halfXp} ⭐)!`;
+  socialPushSocialActivity(sim, '🧔', msg, now);
+  if (!departure.departed) {
+    sim.onToast?.(msg, '🚂');
+  }
+  sim.saveToStorage();
+  sim.onUiChange?.();
+  return { ok: true, msg };
 }
 
 // =========================================================================

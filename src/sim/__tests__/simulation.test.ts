@@ -129,16 +129,16 @@ describe('ParkSimulation & Progression Tests', () => {
       expect(t7.kind).toBe('match3'); // Quay lại đầu chu kỳ
 
       expect(t1.icon).toBe('🍬');
-      expect(t2.icon).toBe('🗺️');
+      expect(t2.icon).toBe('🧨');
       expect(t3.icon).toBe('🔢');
-      expect(t4.icon).toBe('🏰');
+      expect(t4.icon).toBe('🎯');
       expect(t5.icon).toBe('🦄');
       expect(t6.icon).toBe('🧩');
 
       expect(t1.shortVi).toBe('Bùa Gặt Honeydukes');
-      expect(t2.shortVi).toBe('Ngũ Ấn Đạo Tặc');
+      expect(t2.shortVi).toBe('Dò Mìn Phép Thuật');
       expect(t3.shortVi).toBe('Số Học Huyền Bí');
-      expect(t4.shortVi).toBe('Cờ Phù Thủy');
+      expect(t4.shortVi).toBe('Bắn Cá Hồ Đen');
       expect(t5.shortVi).toBe('Sinh Vật Huyền Bí');
       expect(t6.shortVi).toBe('Tranh Ghép Phép Thuật');
     });

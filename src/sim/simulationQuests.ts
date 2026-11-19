@@ -34,6 +34,7 @@ import {
 import {
   ActiveSynergyResult,
   CRAFT_RECIPES,
+  CRAFTED_TO_BARN_EQUIV,
   CraftRecipeDef,
   createCargoCrates,
   createInitialSupplyState,
@@ -78,6 +79,7 @@ import {
   CraftedGoodId,
   CreatureMorphVariant,
   EscapedCreatureEntity,
+  ExpressCargoCrate,
   FarmBarnState,
   FarmCropId,
   FarmGoodId,
@@ -212,6 +214,7 @@ import {
   starIncomeMultiplier,
   VALLEY_VILLAGER_PROFILES,
 } from './simulationData';
+import { farmGetOwlOrderSpotlightBonus } from './simulationFarm';
 import type { ParkSimulation } from './simulation';
 
 export function questsTryDropWizardCard(sim: ParkSimulation, _gx: number, _gy: number, _baseChance = 0.08): void {
@@ -1019,9 +1022,17 @@ export function questsFulfillFarmOwlOrder(sim: ParkSimulation, orderId: string):
       (r) => r.orderId !== order.id
     );
 
+    const spotlightBonus = farmGetOwlOrderSpotlightBonus(sim, order);
+
     sim.state.galleons += order.rewardSickle;
     sim.state.finance.shopRevenue += order.rewardSickle;
     sim.state.stats.butterbeerServed += 1;
+    if (spotlightBonus.hasSpotlight) {
+      sim.state.herbalCompost = Math.min(
+        99999,
+        Math.max(0, Math.floor(sim.state.herbalCompost ?? 0)) + spotlightBonus.bonusCompost
+      );
+    }
     if (order.rewardMugglePlug) {
       barn.goods.muggle_plug_kit = (barn.goods.muggle_plug_kit ?? 0) + order.rewardMugglePlug;
     }
@@ -1049,8 +1060,11 @@ export function questsFulfillFarmOwlOrder(sim: ParkSimulation, orderId: string):
       }
     }
 
-    questsAddXp(sim, order.rewardXp);
-    questsAddHarvestFeastPoints(sim, order.isFeastMarquee ? 30 : 22);
+    questsAddXp(sim, order.rewardXp + spotlightBonus.bonusXp);
+    questsAddHarvestFeastPoints(
+      sim,
+      (order.isFeastMarquee ? 30 : 22) + spotlightBonus.bonusFeastPoints
+    );
     questsRecordQuestProgress(sim, 'serve_butterbeer', undefined, 1);
     questsRecordQuestProgress(sim, 'harvest_galleons', undefined, order.rewardSickle);
 
@@ -1066,7 +1080,10 @@ export function questsFulfillFarmOwlOrder(sim: ParkSimulation, orderId: string):
     sim.onRewardFly?.('galleons', order.rewardSickle, 14.5, 19.5);
     const plugTag = order.rewardMugglePlug ? ` +${order.rewardMugglePlug} 🔌 Phích Cắm` : '';
     const sandTag = sandBonus > 0 ? ` +${sandBonus} ⏳ Cát` : '';
-    const msg = `🦉 Cú ${order.owlName} giao đơn cho ${order.senderName}! Nhận +${order.rewardSickle} Sickle${sandTag}${talismanTag}${boosterTag}${plugTag}!`;
+    const fairTag = spotlightBonus.hasSpotlight
+      ? ` +${spotlightBonus.bonusCompost} 🌿 Phân Ủ (🎪 Tiêu Điểm)`
+      : '';
+    const msg = `🦉 Cú ${order.owlName} giao đơn cho ${order.senderName}! Nhận +${order.rewardSickle} Sickle${fairTag}${sandTag}${talismanTag}${boosterTag}${plugTag}!`;
     sim.onToast?.(msg, '🦉');
     sim.advanceTutorialStep('build_and_owl_order');
     sim.checkAndToastAchievements?.();
@@ -1252,16 +1269,86 @@ export function questsUseCraftedGood(sim: ParkSimulation, goodId: CraftedGoodId)
     return { ok: true, msg };
 }
 
+export interface CargoCrateStockInfo {
+  barnItemId: FarmItemId;
+  haveBarn: number;
+  haveBrew: number;
+  allowBrewEquiv: boolean;
+  canFulfill: boolean;
+  preferSource: 'barn' | 'brew';
+}
+
+export function questsGetCargoCrateStockInfo(
+  sim: ParkSimulation,
+  crate: ExpressCargoCrate
+): CargoCrateStockInfo {
+  const barnItemId: FarmItemId = crate.farmItemId ?? CRAFTED_TO_BARN_EQUIV[crate.goodId];
+  const haveBarn = sim.getFarmItemCount(barnItemId);
+  const haveBrew = sim.state.supply.goods[crate.goodId] ?? 0;
+  const allowBrewEquiv = !crate.farmItemId || crate.id.endsWith('_2');
+  const canFulfill =
+    !crate.fulfilled &&
+    (Boolean(sim.state.sandboxMode) ||
+      haveBarn >= crate.qtyRequired ||
+      (allowBrewEquiv && haveBrew >= crate.qtyRequired));
+  const preferSource: 'barn' | 'brew' =
+    haveBarn >= crate.qtyRequired || !allowBrewEquiv ? 'barn' : 'brew';
+  return {
+    barnItemId,
+    haveBarn,
+    haveBrew,
+    allowBrewEquiv,
+    canFulfill,
+    preferSource,
+  };
+}
+
+export function questsCheckAndDepartCargoTrain(sim: ParkSimulation): {
+  departed: boolean;
+  msg?: string;
+} {
+  const allDone = sim.state.supply.cargoCrates.every((c) => c.fulfilled);
+  if (!allDone) return { departed: false };
+  const bonusG = Math.max(1, Math.round((240 + sim.state.level * 40) / 5));
+  const bonusXp = Math.round(160 + sim.state.level * 25);
+  sim.state.galleons += bonusG;
+  sim.state.timeSand += 2;
+  questsAddXp(sim, bonusXp);
+  sim.state.stats.cargoTrainsSent = (sim.state.stats.cargoTrainsSent ?? 0) + 1;
+  sim.state.supply.cargoTrainIndex += 1;
+  sim.state.supply.cargoCrates = createCargoCrates(
+    sim.state.level,
+    sim.state.supply.cargoTrainIndex
+  );
+  sim.audio.playTrainWhistle();
+  sim.launchFireworksShow(6);
+  const msg = `🚂 Tuuu!! Tàu Hàng Tốc Hành xuất bến! Thưởng trọn chuyến +${bonusG} Sickle, +${bonusXp} XP & +2⏳ Cát Thời Gian!`;
+  sim.onToast?.(msg, '🚂');
+  return { departed: true, msg };
+}
+
 export function questsFulfillCargoCrate(sim: ParkSimulation, crateId: string): { ok: boolean; msg: string } {
     const crate = sim.state.supply.cargoCrates.find((c) => c.id === crateId);
     if (!crate || crate.fulfilled) {
       return { ok: false, msg: 'Kiện hàng này đã đóng xong rồi!' };
     }
-    if (!sim.state.sandboxMode && (sim.state.supply.goods[crate.goodId] ?? 0) < crate.qtyRequired) {
-      return { ok: false, msg: 'Chưa đủ thành phẩm yêu cầu trong kho Xưởng!' };
+    const info = questsGetCargoCrateStockInfo(sim, crate);
+    if (!info.canFulfill) {
+      const meta = getFarmItemMeta(info.barnItemId);
+      return {
+        ok: false,
+        msg: `Kho Đỏ còn thiếu ${meta.emoji} ${meta.name} (${info.haveBarn}/${crate.qtyRequired}) — hãy thu hoạch/nấu thêm hoặc nhờ bạn bè đóng hộ!`,
+      };
     }
     if (!sim.state.sandboxMode) {
-      sim.state.supply.goods[crate.goodId] -= crate.qtyRequired;
+      if (info.preferSource === 'barn') {
+        sim.consumeFarmItemFromBarn(info.barnItemId, crate.qtyRequired);
+      } else {
+        sim.state.supply.goods[crate.goodId] = Math.max(
+          0,
+          (sim.state.supply.goods[crate.goodId] ?? 0) - crate.qtyRequired
+        );
+      }
     }
     crate.fulfilled = true;
     sim.state.galleons += crate.rewardSickle;
@@ -1271,26 +1358,11 @@ export function questsFulfillCargoCrate(sim: ParkSimulation, crateId: string): {
     questsRecordQuestProgress(sim, 'harvest_galleons', undefined, crate.rewardSickle);
     sim.audio.playHarvestBubble();
 
-    const allDone = sim.state.supply.cargoCrates.every((c) => c.fulfilled);
-    if (allDone) {
-      const bonusG = Math.max(1, Math.round((240 + sim.state.level * 40) / 5));
-      const bonusXp = Math.round(160 + sim.state.level * 25);
-      sim.state.galleons += bonusG;
-      sim.state.timeSand += 2;
-      questsAddXp(sim, bonusXp);
-      sim.state.stats.cargoTrainsSent = (sim.state.stats.cargoTrainsSent ?? 0) + 1;
-      sim.state.supply.cargoTrainIndex += 1;
-      sim.state.supply.cargoCrates = createCargoCrates(
-        sim.state.level,
-        sim.state.supply.cargoTrainIndex
-      );
-      sim.audio.playTrainWhistle();
-      sim.launchFireworksShow(6);
-      const msg = `🚂 Tuuu!! Tàu Hàng Tốc Hành xuất bến! Thưởng trọn chuyến +${bonusG} Sickle, +${bonusXp} XP & +2⏳ Cát Thời Gian!`;
-      sim.onToast?.(msg, '🚂');
+    const departure = questsCheckAndDepartCargoTrain(sim);
+    if (departure.departed && departure.msg) {
       sim.saveToStorage();
       sim.onUiChange?.();
-      return { ok: true, msg };
+      return { ok: true, msg: departure.msg };
     }
 
     sim.saveToStorage();

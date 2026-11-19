@@ -40,6 +40,29 @@ import {
   TILE_W,
 } from './isometric';
 import { SpriteRegistry } from './spriteLoader';
+import type { SkeletalEntityPose } from '../render/spine/spineAdapter';
+import {
+  ensureSharedVillagerSpineRuntime,
+  SPINE_QUAD_STRIDE,
+  SpinePoseEvaluator,
+} from '../render/spine/spineSkeletonRuntime';
+
+const canvasSpineEval = new SpinePoseEvaluator();
+const canvasSpinePose: SkeletalEntityPose = {
+  villagerId: 'molly',
+  wx: 0,
+  wy: 0,
+  drawW: 0,
+  drawH: 0,
+  spriteId: 0,
+  walkPhase: 0,
+  isWalking: false,
+  facingLeft: false,
+  alpha: 1,
+  greetWave: 0,
+  tendingLean: 0,
+  phaseSeed: 0,
+};
 import { computeWaterShoreLoops, WaterLoop } from './waterOutlines';
 import { JuiceFX } from './juiceFx';
 import {
@@ -448,11 +471,13 @@ export function entitiesDrawValleyVillager(self: IsometricRenderer,
     const baseH = (v.id === 'hagrid' ? 62 : 52) * zoom;
     const drawW = baseH * (sp.width / sp.height);
     const isWalking = !self.reducedMotion && v.state === 'walking';
+    const greetReact = !self.reducedMotion ? Math.min(1, Math.max(0, v.greetReactTimer ?? 0) / 0.6) : 0;
+    const greetHop = greetReact > 0 ? Math.abs(Math.sin(self.tick * 0.28 + v.gx)) * 4.5 * greetReact * zoom : 0;
     const hop = self.reducedMotion
       ? 0
       : isWalking
         ? Math.abs(Math.sin(v.walkPhase * 2.1)) * 2.8 * zoom
-        : Math.sin(self.tick * 0.05 + v.gx * 1.7) * 0.7 * zoom;
+        : Math.sin(self.tick * 0.05 + v.gx * 1.7) * 0.7 * zoom + greetHop;
     // AAA 2.5D Procedural Puppet Breathing & Stride Tilt
     const breathPhase = self.tick * 0.065 + v.gx * 1.3 + v.gy * 0.9;
     const puppetScaleX = self.reducedMotion
@@ -487,10 +512,57 @@ export function entitiesDrawValleyVillager(self: IsometricRenderer,
     if (v.facingLeft) {
       ctx.scale(-1, 1);
     }
-    if (strideLean !== 0 || puppetScaleX !== 1 || puppetScaleY !== 1) {
-      ctx.transform(puppetScaleX, 0, strideLean, puppetScaleY, 0, 0);
+
+    const spineBundle = ensureSharedVillagerSpineRuntime();
+    let drewSpine = false;
+    if (spineBundle.ready && spineBundle.skeleton && spineBundle.atlasImage) {
+      canvasSpinePose.villagerId = v.id;
+      canvasSpinePose.wx = 0;
+      canvasSpinePose.wy = 0;
+      canvasSpinePose.drawW = drawW;
+      canvasSpinePose.drawH = baseH;
+      canvasSpinePose.walkPhase = v.walkPhase;
+      canvasSpinePose.isWalking = isWalking;
+      canvasSpinePose.facingLeft = false;
+      canvasSpinePose.alpha = 1;
+      canvasSpinePose.greetWave = greetReact;
+      canvasSpinePose.tendingLean =
+        !self.reducedMotion && !isWalking && (v.tendingSpotTimer ?? 0) > 0 ? 1 : 0;
+      canvasSpinePose.phaseSeed = v.gx * 1.3;
+
+      const timeSec = self.reducedMotion ? 0 : self.tick / 60;
+      const quadCount = canvasSpineEval.evaluate(spineBundle.skeleton, canvasSpinePose, timeSec);
+      if (quadCount > 0) {
+        const atlasImg = spineBundle.atlasImage;
+        const quads = canvasSpineEval.quads;
+        const rects = canvasSpineEval.quadPixelRects;
+        for (let q = 0; q < quadCount; q++) {
+          const qb = q * SPINE_QUAD_STRIDE;
+          const rb = q * 4;
+          const rw = rects[rb + 2];
+          const rh = rects[rb + 3];
+          if (rw <= 0 || rh <= 0) continue;
+          const x0 = quads[qb];
+          const y0 = quads[qb + 1];
+          const x1 = quads[qb + 2];
+          const y1 = quads[qb + 3];
+          const x3 = quads[qb + 6];
+          const y3 = quads[qb + 7];
+          ctx.save();
+          ctx.transform((x1 - x0) / rw, (y1 - y0) / rw, (x3 - x0) / rh, (y3 - y0) / rh, x0, y0);
+          ctx.drawImage(atlasImg, rects[rb], rects[rb + 1], rw, rh, 0, 0, rw, rh);
+          ctx.restore();
+        }
+        drewSpine = true;
+      }
     }
-    ctx.drawImage(sp, -drawW * 0.5, -baseH, drawW, baseH);
+
+    if (!drewSpine) {
+      if (strideLean !== 0 || puppetScaleX !== 1 || puppetScaleY !== 1) {
+        ctx.transform(puppetScaleX, 0, strideLean, puppetScaleY, 0, 0);
+      }
+      ctx.drawImage(sp, -drawW * 0.5, -baseH, drawW, baseH);
+    }
 
     // Enchanted Self-Floating Umbrella Canopy when raining in the valley!
     if (v.moodBubble === '☔') {

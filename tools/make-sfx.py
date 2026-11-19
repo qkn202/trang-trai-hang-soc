@@ -246,6 +246,97 @@ def synth_wand_spell(rng: np.random.Generator) -> np.ndarray:
     return (whoosh + shimmer) * 0.74
 
 
+def synth_coin_chime(rng: np.random.Generator) -> np.ndarray:
+    """Crisp silver Sickle coin clinks + soft leather pouch thud."""
+    n = int(0.58 * SR)
+    out = np.zeros(n)
+    t = np.arange(n) / SR
+    out += np.sin(2 * math.pi * 190.0 * t) * env_ad(n, 0.002, 0.045) * 0.24
+    out += bandpass_1pole(rng.normal(0, 1, n), 600, 2600) * env_ad(n, 0.001, 0.025) * 0.18
+    for delay_s, base_f, amp in [(0.012, 2480.0, 0.42), (0.068, 3710.0, 0.36), (0.128, 5240.0, 0.30)]:
+        i0 = int(delay_s * SR)
+        m = n - i0
+        tm = np.arange(m) / SR
+        out[i0:] += (
+            0.62 * np.sin(2 * math.pi * base_f * tm) * env_ad(m, 0.0008, 0.11)
+            + 0.32 * np.sin(2 * math.pi * (base_f * 1.49) * tm) * env_ad(m, 0.0006, 0.07)
+        ) * amp
+    return out * 0.80
+
+
+def synth_hearth_crackle(rng: np.random.Generator) -> np.ndarray:
+    """Warm cozy cottage hearth fire crackle + soft ember glow."""
+    n = int(0.85 * SR)
+    bed = bandpass_1pole(rng.normal(0, 1, n), 140, 620) * env_ad(n, 0.08, 0.52) * 0.24
+    out = bed.copy()
+    for delay_s, fc, amp in [
+        (0.05, 1850, 0.44),
+        (0.16, 2640, 0.36),
+        (0.29, 1420, 0.40),
+        (0.45, 3180, 0.32),
+        (0.61, 2120, 0.28),
+    ]:
+        i0 = int(delay_s * SR)
+        m = min(int(0.045 * SR), n - i0)
+        snap = bandpass_1pole(rng.normal(0, 1, m), fc * 0.65, fc * 1.6) * env_ad(m, 0.0005, 0.009) * amp
+        out[i0 : i0 + m] += snap
+    return out * 0.78
+
+
+def _synth_formant_syllable(f0_start: float, f0_end: float, dur_s: float, f1: float, f2: float) -> np.ndarray:
+    m = int(dur_s * SR)
+    tm = np.arange(m) / SR
+    f0 = f0_start + (f0_end - f0_start) * np.clip(tm / max(0.01, dur_s), 0.0, 1.0)
+    ph = 2 * math.pi * np.cumsum(f0) / SR
+    # Harmonic buzz shaped by two gentle vocal formants (no harsh aliasing)
+    sig = np.zeros(m)
+    for k in range(1, 10):
+        fq = f0 * k
+        w1 = np.exp(-0.5 * ((fq - f1) / (f1 * 0.28)) ** 2)
+        w2 = np.exp(-0.5 * ((fq - f2) / (f2 * 0.24)) ** 2) * 0.65
+        amp = (w1 + w2) / (k ** 0.7)
+        sig += amp * np.sin(k * ph)
+    fade = min(int(0.018 * SR), m // 4)
+    env = env_ad(m, 0.018, dur_s * 0.55)
+    if fade > 0:
+        env[-fade:] *= np.linspace(1.0, 0.0, fade)
+    return sig * env
+
+
+def synth_villager_hello_warm(_rng: np.random.Generator) -> np.ndarray:
+    """Friendly non-verbal 3-syllable rising greeting hum (Molly/Hermione/Luna/Ginny)."""
+    n = int(0.68 * SR)
+    out = np.zeros(n)
+    syllables = [
+        (0.0, 392.0, 415.0, 0.14, 520.0, 1450.0, 0.36),
+        (0.13, 493.88, 523.25, 0.14, 580.0, 1650.0, 0.40),
+        (0.27, 587.33, 622.25, 0.34, 480.0, 1820.0, 0.44),
+    ]
+    for d_s, f_a, f_b, dur_s, fm1, fm2, amp in syllables:
+        i0 = int(d_s * SR)
+        seg = _synth_formant_syllable(f_a, f_b, dur_s, fm1, fm2) * amp
+        end = min(n, i0 + len(seg))
+        out[i0:end] += seg[: end - i0]
+    return out * 0.80
+
+
+def synth_villager_hello_jolly(_rng: np.random.Generator) -> np.ndarray:
+    """Warm jovial baritone 3-syllable greeting chuckle (Arthur/Hagrid/Ron)."""
+    n = int(0.74 * SR)
+    out = np.zeros(n)
+    syllables = [
+        (0.0, 220.0, 238.0, 0.16, 420.0, 980.0, 0.40),
+        (0.15, 293.66, 277.18, 0.16, 480.0, 1120.0, 0.38),
+        (0.31, 329.63, 349.23, 0.36, 460.0, 1240.0, 0.44),
+    ]
+    for d_s, f_a, f_b, dur_s, fm1, fm2, amp in syllables:
+        i0 = int(d_s * SR)
+        seg = _synth_formant_syllable(f_a, f_b, dur_s, fm1, fm2) * amp
+        end = min(n, i0 + len(seg))
+        out[i0:end] += seg[: end - i0]
+    return out * 0.80
+
+
 def main() -> None:
     rng = np.random.default_rng(7772026)
     # Fixed offsets matching SFX_ATLAS_CUES in src/engine/audio.ts
@@ -262,9 +353,13 @@ def main() -> None:
         ("fanfare_win", 8.1, synth_fanfare_win(rng)),
         ("powerup_blast", 9.9, synth_powerup_blast(rng)),
         ("wand_spell", 10.8, synth_wand_spell(rng)),
+        ("coin_chime", 11.6, synth_coin_chime(rng)),
+        ("hearth_crackle", 12.4, synth_hearth_crackle(rng)),
+        ("villager_hello_warm", 13.5, synth_villager_hello_warm(rng)),
+        ("villager_hello_jolly", 14.4, synth_villager_hello_jolly(rng)),
     ]
 
-    total_sec = 11.6
+    total_sec = 15.6
     total_samples = int(total_sec * SR)
     left = np.zeros(total_samples, dtype=np.float64)
     right = np.zeros(total_samples, dtype=np.float64)

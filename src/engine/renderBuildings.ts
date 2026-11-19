@@ -637,6 +637,28 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
         );
       }
 
+      // Warm chimney hearth smoke / cauldron steam puffs when workshop is actively baking/brewing
+      if (!self.reducedMotion && !fadeInCutaway && wsKin.smokeIntensity > 0) {
+        const smokeT = now * 0.00055 + b.gx * 0.7 + b.gy * 0.4;
+        ctx.save();
+        for (let p = 0; p < 3; p++) {
+          const life = (smokeT + p / 3) % 1;
+          const sxSmoke =
+            centerX + drawW * 0.14 + Math.sin(now * 0.0018 + p * 2.1 + b.gx) * (4 + life * 9) * cam.zoom;
+          const sySmoke = bottomY - drawH * 0.80 - life * 32 * cam.zoom;
+          const rad = (4 + life * 7) * cam.zoom;
+          const alpha = Math.sin(life * Math.PI) * 0.36 * wsKin.smokeIntensity;
+          if (alpha > 0.02) {
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = '#fff5e4';
+            ctx.beginPath();
+            ctx.arc(sxSmoke, sySmoke, rad, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+      }
+
       const hasFloatingBubble =
         now >= b.constructEndsAt &&
         (b.storedSickle > 0 ||

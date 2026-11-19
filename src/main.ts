@@ -1,5 +1,8 @@
 import './styles/fonts.css';
 import './styles/main.css';
+import './styles/puzzleArcade.css';
+import './styles/hudAndMatch3.css';
+import './styles/minigameHalls.css';
 import { getCatalogItem } from './data/catalog';
 import { getLevelInfo } from './data/levels';
 import { TUTORIAL_STEPS } from './data/quests';
@@ -44,7 +47,7 @@ import {
   RadialQuickActionId,
 } from './ui/platformAndA11y';
 import { ProductionTelemetryCollector } from './ui/productionShip';
-import { flushFarmSave, identity, loadFarm, placeShellNav, queueFarmSave, setInboxListener, setSaveStatusListener } from './hpvn/bridge';
+import { flushFarmSave, identity, isStandaloneLocal, loadFarm, placeShellNav, queueFarmSave, setInboxListener, setSaveStatusListener } from './hpvn/bridge';
 import { applyFarmInbox } from './hpvn/inbox';
 import { installCanvasEmojiFilter, installEmojiFilter } from './hpvn/emoji';
 import { installTabCentering } from './hpvn/toolIcons';
@@ -78,7 +81,9 @@ async function bootstrap(): Promise<void> {
   // HPVN: the farm lives on the HPVN server; without it nothing starts (a fresh farm must never overwrite a saved one).
   if (!identity) throw Object.assign(new Error('Hãy mở Trang Trại Hang Sóc từ Phòng Sinh Hoạt Chung trên HPVN.'), { hpvn: true });
   const farmJson = await loadFarm();
-  setFarmStore({ read: () => farmJson, write: queueFarmSave });
+  if (!isStandaloneLocal) {
+    setFarmStore({ read: () => farmJson, write: queueFarmSave });
+  }
 
   const audio = new MagicalAudio();
   const sprites = new SpriteRegistry();
@@ -100,7 +105,7 @@ async function bootstrap(): Promise<void> {
   });
   const hud = new GameHUD(app, sim, cam, canvas, sprites);
   const hudTopLeft = app.querySelector('.ts-hud-topleft');
-  if (hudTopLeft) placeShellNav(hudTopLeft);
+  if (hudTopLeft && !isStandaloneLocal) placeShellNav(hudTopLeft);
 
   accessibility.init(sim);
   setSaveStatusListener((status) => {
@@ -114,12 +119,15 @@ async function bootstrap(): Promise<void> {
     if (!applied.length) return;
     const bought = applied.reduce((sum, entry) => sum + (entry.kind === 'sickles' ? entry.sickle ?? 0 : 0), 0);
     if (bought) hud.showToast(`Gringotts đã chuyển ${bought.toLocaleString('vi-VN')} Sickle vào trang trại!`, '🏦');
+    const cups = applied.filter((entry) => entry.kind === 'cup');
+    const cupSickles = cups.reduce((s, e) => s + (Number.isSafeInteger(e.sickle) && e.sickle! > 0 ? e.sickle! : 0), 0);
+    const cupSand = cups.reduce((s, e) => s + (Number.isSafeInteger(e.sand) && e.sand! > 0 && Number.isSafeInteger(e.sickle) && e.sickle! > 0 ? e.sand! : 0), 0);
+    sim.creditVerifiedInboxGrant(bought + cupSickles, cupSand);
     const helps = applied.filter((entry) => entry.kind === 'help');
     for (const entry of helps) hud.flooHelpersToday.push({ uid: entry.uid ?? '', name: entry.name ?? '', avatarUrl: entry.avatarUrl, at: entry.at });
     if (helps.length) hud.showToast(`${helps[0].name}${helps.length > 1 ? ` +${helps.length - 1} bạn` : ''} chăm giúp · cây chín sớm 15 phút`, '🤝');
     for (const entry of applied) if (entry.kind === 'fire-out') hud.showToast(`${entry.name} đã dập lửa giúp trang trại!`, '🧯');
     // several Cúp Đợt rewards at once read as one toast: «Cúp Đợt 3, 4, 5 · +900 Sickle · +60 XP · +3 Cát»
-    const cups = applied.filter((entry) => entry.kind === 'cup');
     for (const entry of cups) if (Number.isSafeInteger(entry.xp) && entry.xp! > 0) sim.addXp(entry.xp!);
     if (cups.length) {
       // the same checks as the wallet (applyFarmInbox) and sim.addXp above: only what was credited is counted
@@ -362,6 +370,8 @@ async function bootstrap(): Promise<void> {
     }
   } else if (dlgParam === 'barn') {
     hud.openWorkshopDialog('barn');
+  } else if (dlgParam === 'market') {
+    hud.openWorkshopDialog('market');
   } else if (dlgParam === 'seeds') {
     const sFilter = params.get('sfilter');
     if (sFilter === 'flowers' || sFilter === 'crops' || sFilter === 'all') {
@@ -387,7 +397,7 @@ async function bootstrap(): Promise<void> {
     hud.openWorkshopDialog('brew');
   } else if (dlgParam === 'workshop') {
     const tabParam =
-      (params.get('tab') as 'barn' | 'brew' | 'cargo' | 'synergy' | null) ?? 'barn';
+      (params.get('tab') as 'barn' | 'market' | 'brew' | 'cargo' | 'synergy' | null) ?? 'barn';
     hud.openWorkshopDialog(tabParam);
   } else if (dlgParam === 'suitcase') {
     const tabParam = (params.get('tab') as 'care' | 'morph' | 'expedition' | null) ?? 'care';
@@ -406,15 +416,28 @@ async function bootstrap(): Promise<void> {
   } else if (
     dlgParam === 'puzzle' ||
     dlgParam === 'caro' ||
+    dlgParam === 'mines' ||
+    dlgParam === 'minesweeper' ||
+    dlgParam === 'domin' ||
     dlgParam === 'sudoku' ||
     dlgParam === 'chess' ||
+    dlgParam === 'fishing' ||
+    dlgParam === 'fish' ||
+    dlgParam === 'banca' ||
     dlgParam === 'blocks' ||
     dlgParam === 'jigsaw' ||
     dlgParam === 'pikachu' ||
     dlgParam === 'onet'
   ) {
     const rawPmode = dlgParam === 'puzzle' ? params.get('pmode') : dlgParam;
-    const pmode = rawPmode === 'pikachu' || rawPmode === 'onet' ? 'blocks' : rawPmode;
+    const pmode =
+      rawPmode === 'pikachu' || rawPmode === 'onet'
+        ? 'blocks'
+        : rawPmode === 'mines' || rawPmode === 'minesweeper' || rawPmode === 'domin'
+          ? 'caro'
+          : rawPmode === 'fishing' || rawPmode === 'fish' || rawPmode === 'banca'
+            ? 'chess'
+            : rawPmode;
     const validMode: PuzzleArcadeMode | undefined =
       pmode === 'caro' ||
       pmode === 'sudoku' ||
@@ -432,15 +455,27 @@ async function bootstrap(): Promise<void> {
     hud.openHouseCupIntroDialog();
   } else if (dlgParam === 'leaderboard') {
     const rawGame = params.get('lbgame');
+    const mappedGame =
+      rawGame === 'pikachu' || rawGame === 'onet'
+        ? 'blocks'
+        : rawGame === '2048' || rawGame === '9x9'
+          ? 'sudoku'
+          : rawGame === 'ghep-tranh'
+            ? 'jigsaw'
+            : rawGame === 'mines' || rawGame === 'domin' || rawGame === 'minesweeper'
+              ? 'caro'
+              : rawGame === 'fish' || rawGame === 'fishing' || rawGame === 'banca'
+                ? 'chess'
+                : rawGame;
     const validGame: LeaderboardGameId | undefined =
-      rawGame === 'match3' ||
-      rawGame === 'caro' ||
-      rawGame === 'sudoku' ||
-      rawGame === 'chess' ||
-      rawGame === 'blocks' ||
-      rawGame === 'jigsaw' ||
-      rawGame === 'seedquiz'
-        ? rawGame
+      mappedGame === 'match3' ||
+      mappedGame === 'caro' ||
+      mappedGame === 'sudoku' ||
+      mappedGame === 'chess' ||
+      mappedGame === 'blocks' ||
+      mappedGame === 'jigsaw' ||
+      mappedGame === 'seedquiz'
+        ? mappedGame
         : undefined;
     const rawScope = params.get('lbscope');
     const validScope: LeaderboardScope | undefined =
@@ -459,31 +494,36 @@ async function bootstrap(): Promise<void> {
           if (
             parsedResume.dialog === 'puzzleArcade' &&
             parsedResume.mode === 'sudoku' &&
-            pa.sudokuSession?.stage === pa.sudokuStage
+            pa.sudokuSession?.stage === pa.sudokuStage &&
+            pa.sudokuSession.status !== 'lost'
           ) {
             hud.openPuzzleArcadeDialog('sudoku');
           } else if (
             parsedResume.dialog === 'puzzleArcade' &&
             parsedResume.mode === 'caro' &&
-            pa.caroSession?.stage === pa.caroStage
+            pa.minesSession?.stage === pa.caroStage &&
+            pa.minesSession.status !== 'lost'
           ) {
             hud.openPuzzleArcadeDialog('caro');
           } else if (
             parsedResume.dialog === 'puzzleArcade' &&
             parsedResume.mode === 'chess' &&
-            pa.chessSession?.stage === pa.chessStage
+            pa.fishingSession?.stage === pa.chessStage &&
+            pa.fishingSession.status !== 'lost'
           ) {
             hud.openPuzzleArcadeDialog('chess');
           } else if (
             parsedResume.dialog === 'puzzleArcade' &&
             parsedResume.mode === 'blocks' &&
-            pa.onetSession?.stage === pa.blockStage
+            pa.onetSession?.stage === pa.blockStage &&
+            pa.onetSession.status !== 'lost'
           ) {
             hud.openPuzzleArcadeDialog('blocks');
           } else if (
             parsedResume.dialog === 'puzzleArcade' &&
             parsedResume.mode === 'jigsaw' &&
-            pa.jigsawSession?.stage === pa.jigsawStage
+            pa.jigsawSession?.stage === pa.jigsawStage &&
+            pa.jigsawSession.status !== 'lost'
           ) {
             hud.openPuzzleArcadeDialog('jigsaw');
           } else if (
@@ -493,9 +533,11 @@ async function bootstrap(): Promise<void> {
             hud.openMatch3Dialog();
           } else {
             delete sim.state.activeMinigameResume;
+            sim.saveToStorage();
           }
         } else {
           delete sim.state.activeMinigameResume;
+          sim.saveToStorage();
         }
       }
     } catch {
@@ -719,6 +761,7 @@ async function bootstrap(): Promise<void> {
   if (
     !dlgParam &&
     !tourOrVisitParam &&
+    !params.get('tutorial') &&
     !sim.isVisitingNeighbor &&
     !sim.isHeadmasterPreview &&
     !sim.state.activeMinigameResume &&
@@ -2003,6 +2046,8 @@ async function bootstrap(): Promise<void> {
     if (e.target !== canvas) return;
     const prevPendingSowPlotUid = hud.pendingSowPlotUid;
     const prevPendingStockPastureUid = hud.pendingStockPastureUid;
+    const prevActiveSeedCropId = hud.activeSeedCropId;
+    const prevActivePastureAnimalId = hud.activePastureAnimalId;
     hud.closeHudPopovers();
     if (hud.hasOpenFloatingTray()) {
       hud.hideOpenFloatingTrays();
@@ -2015,6 +2060,18 @@ async function bootstrap(): Promise<void> {
         hud.refreshAll();
         return;
       }
+      if (
+        prevActiveSeedCropId &&
+        (sim.state.sandboxMode || sim.getSeedCount(prevActiveSeedCropId) > 0)
+      ) {
+        hud.activeSeedCropId = prevActiveSeedCropId;
+      }
+      if (prevActivePastureAnimalId) {
+        hud.activePastureAnimalId = prevActivePastureAnimalId;
+      }
+      hud.renderSeedTray();
+      hud.renderPastureTray();
+      hud.refreshFloatingBanner();
     }
     const rect = canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
@@ -2838,15 +2895,60 @@ async function bootstrap(): Promise<void> {
     if (runSoundscapeNow) {
       const period = sim.getRealTimePeriod();
       const curWeather = sim.getCurrentWeather();
-      const stationWorld = worldIso(3, 17, cam.viewRot ?? 0);
+      const rot = cam.viewRot ?? 0;
+      const stationWorld = worldIso(3, 17, rot);
       const nearStation = Math.hypot(cam.x - stationWorld.wx, cam.y - stationWorld.wy) < 420;
+      const focusGrid = screenToGrid(
+        window.innerWidth * 0.5,
+        window.innerHeight * 0.5,
+        cam,
+        window.innerWidth,
+        window.innerHeight
+      );
+      const cgx = Math.max(0, Math.min(GRID_SIZE - 1, Math.round(focusGrid.fgx)));
+      const cgy = Math.max(0, Math.min(GRID_SIZE - 1, Math.round(focusGrid.fgy)));
+      let waterDistPx = Number.POSITIVE_INFINITY;
+      for (let dy = -5; dy <= 5; dy++) {
+        const row = sim.grid[cgy + dy];
+        if (!row) continue;
+        for (let dx = -5; dx <= 5; dx++) {
+          const cell = row[cgx + dx];
+          if (!cell || cell.terrain !== 'water') continue;
+          const wIso = worldIso(cgx + dx + 0.5, cgy + dy + 0.5, rot);
+          const d = Math.hypot(cam.x - wIso.wx, cam.y - wIso.wy);
+          if (d < waterDistPx) waterDistPx = d;
+        }
+      }
+      let activeWorkshopDistPx = Number.POSITIVE_INFINITY;
+      let pastureDistPx = Number.POSITIVE_INFINITY;
+      const nowSoundMs = Date.now();
+      const hasSupplyBrew = Boolean(
+        sim.state.supply.activeBrew && sim.state.supply.activeBrew.endsAt > nowSoundMs
+      );
+      for (let i = 0; i < sim.state.buildings.length; i++) {
+        const b = sim.state.buildings[i];
+        if (nowSoundMs < b.constructEndsAt) continue;
+        const bItem = getCatalogItem(b.itemId);
+        if (!bItem) continue;
+        const isActiveWs =
+          Boolean(b.workshopQueue && b.workshopQueue.length > 0 && b.workshopQueue[0].endsAt > nowSoundMs) ||
+          Boolean(bItem.isWorkshopBrewery && hasSupplyBrew);
+        const isStockedPasture = Boolean(bItem.isAnimalPasturePlot && b.pastureAnimalId);
+        if (!isActiveWs && !isStockedPasture) continue;
+        const bIso = worldIso(b.gx + 0.5, b.gy + 0.5, rot);
+        const dist = Math.hypot(cam.x - bIso.wx, cam.y - bIso.wy);
+        if (isActiveWs && dist < activeWorkshopDistPx) activeWorkshopDistPx = dist;
+        if (isStockedPasture && dist < pastureDistPx) pastureDistPx = dist;
+      }
       audio.updateSoundscape(
         soundscapeDt,
         period === 'night' || period === 'dusk',
         cam.zoom,
         nearStation,
         curWeather.kind,
-        sim.getActiveFestival() !== 'none'
+        sim.getActiveFestival() !== 'none',
+        period,
+        { waterDistPx, activeWorkshopDistPx, pastureDistPx }
       );
     }
 

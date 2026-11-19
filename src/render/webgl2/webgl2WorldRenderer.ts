@@ -1118,6 +1118,14 @@ out vec4 fragColor;
 void main() {
   float d = length(vLocal);
   if (d > 1.0) discard;
+  if (vColor.x < -0.5) {
+    // Cozy rising chimney smoke / potion steam puff (vColor = [-1.0, alpha, warmth])
+    vec3 smokeCol = mix(vec3(0.92, 0.90, 0.88), vec3(1.0, 0.89, 0.74), vColor.z);
+    float puff = pow(1.0 - d, 1.85) * vColor.y;
+    vec3 outSmoke = uIsSnow > 0.5 ? smokeCol : smokeCol * 0.30;
+    fragColor = vec4(outSmoke, puff);
+    return;
+  }
   if (uIsSnow > 0.5) {
     // vColor = [spinPhase, styleSeed, alpha]
     // Directional 3D drop-shadow (never a concentric ring!) so pure white flakes stand out naturally on white snow

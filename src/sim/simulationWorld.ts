@@ -114,6 +114,7 @@ import {
   QuestDef,
   QuestObjectiveType,
   RibbonUnveilCelebration,
+  SoilFertilityTier,
   StaffEntity,
   SuitcaseExpeditionId,
   TileCell,
@@ -548,6 +549,32 @@ export function worldMoveBuilding(sim: ParkSimulation,
     const check = worldCanPlaceItem(sim, item, newGx, newGy, newRot, uid);
     if (!check.ok) return check;
 
+    const oldCoordKey = `${b.gx},${b.gy}`;
+    if (item.isFarmlandPlot) {
+      const oldSoilEntry = sim.state.plotSoilState?.[oldCoordKey];
+      const preservedTier = Math.max(
+        1,
+        Math.min(5, Math.max(b.soilTier ?? 1, oldSoilEntry?.soilTier ?? 1))
+      ) as SoilFertilityTier;
+      b.soilTier = preservedTier > 1 ? preservedTier : b.soilTier;
+      if (oldSoilEntry?.soilTier) {
+        delete oldSoilEntry.soilTier;
+      }
+      if (preservedTier > 1) {
+        const nextKey = `${newGx},${newGy}`;
+        const nextEntry = sim.state.plotSoilState?.[nextKey];
+        sim.state.plotSoilState = {
+          ...(sim.state.plotSoilState ?? {}),
+          [nextKey]: {
+            lastFamily: nextEntry?.lastFamily ?? oldSoilEntry?.lastFamily ?? 'grain',
+            fatigueStep: nextEntry?.fatigueStep ?? 0,
+            soilTier: preservedTier,
+            updatedAt: Date.now(),
+          },
+        };
+      }
+    }
+
     b.gx = newGx;
     b.gy = newGy;
     b.rotation = newRot;
@@ -733,7 +760,7 @@ export function worldCanPlaceItem(sim: ParkSimulation,
           if (!sim.state.sandboxMode && (sim.state.match3?.stars ?? 0) < starCost) {
             return {
               ok: false,
-              reason: `Cần ${starCost} 🌟 Sao Phép Thuật (Vượt Bùa Gặt Honeydukes, Ngũ Ấn Đạo Tặc, Số Học Huyền Bí, Cờ Phù Thủy hoặc Sinh Vật Huyền Bí để nhận Sao!)`,
+              reason: `Cần ${starCost} 🌟 Sao Phép Thuật (Vượt Bùa Gặt Honeydukes, Dò Mìn Phép Thuật, Số Học Huyền Bí, Bắn Cá Hồ Đen, Sinh Vật Huyền Bí hoặc Tranh Ghép Phép Thuật để nhận Sao!)`,
             };
           }
         } else if (!sim.state.sandboxMode && sim.state.galleons < item.cost) {
