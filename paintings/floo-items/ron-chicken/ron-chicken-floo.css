@@ -1,0 +1,110 @@
+/* ==========================================================================
+   Mạng Floo HPVN — Khung Bong Bóng Độc Quyền Cho User ID `sun190` (Thời Hạn 7 Ngày)
+   Chủ đề: Chibi Ron Ăn Đùi Gà — Nền Cam Đào & Viền Sticker Kem-Nâu
+   Mã khung (data-store-frame): "ron-chicken"
+   Thiết kế đã chốt:
+     - Nền & Viền: Cam Đào Tóc Ron (#fdf2ee -> #f6ddd5 -> #edc8be), viền đôi Nâu Sô-cô-la & Kem Hồng
+     - Góc trên (::before): Không gắn huy hiệu (giữ bố cục thoáng gọn)
+     - Góc dưới đối xứng (::after — 58x58px): Chibi Ron ăn đùi gà viền sticker kem-nâu (ron-sticker)
+   Đường dẫn ảnh trên repo hpvn-archive.net:
+     public/images/floo-items/ron-chicken/ -> /images/floo-items/ron-chicken/*
+   ========================================================================== */
+
+.shout-message-row[data-store-frame="ron-chicken"] {
+  --sf-oklab: ;
+  --sf-edge: #6e4238;
+  --sf-shadow:
+    0 0 0 1.5px #6e4238,
+    0 0 0 4px #fff7f4,
+    0 0 0 5.5px #45261f,
+    0 5px 16px rgba(143, 45, 34, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  --sf-paper:
+    radial-gradient(circle at 82% 20%, rgba(255, 255, 255, 0.75) 0 1.8px, transparent 3px),
+    radial-gradient(90% 80% at 22% 14%, rgba(255, 245, 240, 0.72), rgba(255, 245, 240, 0) 65%),
+    linear-gradient(180deg var(--sf-oklab), #fdf2ee 0%, #f6ddd5 58%, #edc8be 100%);
+}
+
+@supports (background: linear-gradient(in oklab, white, black)) {
+  .shout-message-row[data-store-frame="ron-chicken"] {
+    --sf-oklab: in oklab;
+  }
+}
+
+@media (forced-colors: active) {
+  .shout-message-row[data-store-frame="ron-chicken"]
+    .shout-message-bubble:not(:has(.shout-image-album.is-stack)) {
+    border: 2px solid CanvasText !important;
+    background: Canvas !important;
+    color: CanvasText !important;
+  }
+}
+
+.shout-message-row[data-store-frame="ron-chicken"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack)) {
+  color: #3a211b;
+  min-width: 88px;
+  padding: 12px 54px 12px 18px;
+}
+
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="ron-chicken"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack)) {
+  padding: 12px 18px 12px 54px;
+}
+
+.shout-message-row[data-store-frame="ron-chicken"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack))
+  .shout-message-author {
+  color: #8f2d22 !important;
+  text-shadow: 0 1px 0 rgba(255, 248, 246, 0.85);
+}
+
+.shout-message-row[data-store-frame="ron-chicken"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack))
+  .shout-message-meta-time {
+  color: #694138;
+}
+
+.shout-message-row[data-store-frame="ron-chicken"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack))
+  .shout-rich-text
+  a {
+  color: #7f1d1d;
+  text-decoration-thickness: 1.5px;
+}
+
+.shout-message-row[data-store-frame="ron-chicken"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack))
+  .shout-quote-preview {
+  background: rgba(166, 68, 50, 0.09);
+  border-left-color: #c96a57;
+  color: #45261f;
+}
+
+/* Charm Chibi Ron Ăn Đùi Gà Viền Sticker Kem-Nâu (::after — 58x58px) */
+.shout-message-row[data-store-frame="ron-chicken"]
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack))::after {
+  content: "";
+  z-index: 3;
+  pointer-events: none;
+  position: absolute;
+  width: 58px;
+  height: 58px;
+  bottom: -9px;
+  right: -13px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  background-image: url("/images/floo-items/ron-chicken/ron-sticker.png");
+  background-image: image-set(
+    url("/images/floo-items/ron-chicken/ron-sticker.webp") type("image/webp") 1x,
+    url("/images/floo-items/ron-chicken/ron-sticker-2x.webp") type("image/webp") 2x,
+    url("/images/floo-items/ron-chicken/ron-sticker.png") type("image/png") 1x
+  );
+}
+
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="ron-chicken"]
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack))::after {
+  right: auto;
+  left: -13px;
+}
