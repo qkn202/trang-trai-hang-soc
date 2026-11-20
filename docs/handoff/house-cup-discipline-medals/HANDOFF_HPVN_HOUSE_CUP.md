@@ -69,11 +69,11 @@ Trên document tuần `weekDoc` (ví dụ `gameHouseCupWeeks/{weekKey}`):
 }
 ```
 
-Khi thành viên thuộc Nhà `house` thắng thêm `deltaStages` ở môn `disc`:
-- Cộng `deltaPts = deltaStages * POINTS_PER_STAGE` vào:
-  - `weekDoc.disciplines[disc][house]` (không trần ngày!)
-  - `memberCup.todayPoints` (thống kê hôm nay của thành viên)
-  - `memberCup.bank` (tích lũy nhận quà **Cúp Đợt** mỗi `300 đ`)
+Khi thành viên thuộc Nhà `house` vượt mới từ `prevCleared` lên `nextCleared` ở môn `disc`:
+- Tính `{ deltaStages, weightedScore } = computeWeeklyStageDeltaScore(prevCleared, nextCleared)` theo hệ số độ khó màn ở **Mục 6** (`Màn 1–15: 20 đ`, `16–40: 25 đ`, `41–80: 30 đ`, `81+: 35 đ/màn`):
+  - Cộng `deltaStages` vào `memberCup.weeklyClearedByDiscipline[disc]` và `weightedScore` vào `memberCup.weeklyWeightedScoreByDiscipline[disc]` (reset về `0` mỗi tuần `weekKey` mới).
+  - Cộng `weightedScore` vào `memberCup.todayPoints` (thống kê hôm nay) và `memberCup.bank` (tích lũy nhận quà **Cúp Đợt** mỗi `300 đ`).
+  - Tổng hợp `weekDoc.disciplines[disc][house]` từ xếp hạng tuần theo `scoreDisciplineFromWeeklyPlayers` ở **Mục 6** (ngưỡng `>= 5` màn mới/tuần, bậc điểm `100 / 80 / 65 / 50 / 35 / 20`, không trần ngày!).
 
 Hàm quy đổi sang `houses` (tổng điểm Cúp Tuần):
 
@@ -187,12 +187,29 @@ function getWeeklyAlliances(weekKey) {
 
 ---
 
-## 6. Tính Điểm Nhà Theo Thứ Hạng BXH Cá Nhân (Ngưỡng ≥ 5 Màn Là Có Điểm)
+## 6. Tính Điểm Nhà Theo Thứ Hạng Tuần Có Hệ Số Độ Khó Màn (Cách A — Ngưỡng ≥ 5 Màn Mới/Tuần)
 
-Để **mọi thành viên chỉ cần vượt qua từ 5 màn trở lên đều chắc chắn có điểm cho Nhà**, đồng thời **xếp thứ hạng cá nhân trên BXH càng cao điểm góp càng nhiều** (vẫn giữ động lực đua top không giới hạn, nhưng 2 người đứng #1 và #2 chỉ tối đa `100 + 80 = 180 đ` nên 1 tập thể đông thành viên đạt ≥ 5 màn vẫn đua vượt được!):
+Áp dụng **Cách A** để vừa đảm bảo **mọi người đầu tuần bắt đầu từ `0`** (không ai ngồi yên từ tuần trước vẫn ăn điểm), vừa đảm bảo **người đang ở Màn 60 (màn khó) không bị thiệt so với người đang ở Màn 5 (màn dễ)**, đồng thời **chỉ cần vượt từ 5 màn mới trong tuần là chắc chắn ghi điểm cho Nhà**:
 
+### 6.1. Hệ số điểm mỗi màn vượt mới trong tuần (`STAGE_SCORE_BANDS`)
+| Khung Màn | Điểm tuần / màn | Ví dụ công bằng |
+|---|---|---|
+| **Màn 1–15** | **`20 đ / màn`** (`1,0×`) | Người ở Màn 5 vượt 7 màn (`5 → 12`) = **`140 đ tuần`** |
+| **Màn 16–40** | **`25 đ / màn`** (`1,25×`) | Vượt qua ranh giới `14 → 17` = `20 + 25 + 25 = 70 đ` |
+| **Màn 41–80** | **`30 đ / màn`** (`1,5×`) | Người ở Màn 60 vượt 5 màn (`60 → 65`) = **`150 đ tuần`** *(xếp trên người vượt 7 màn dễ!)* |
+| **Màn 81+** | **`35 đ / màn`** (`1,75×`) | Người ở Màn 90 vượt 5 màn (`90 → 95`) = **`175 đ tuần`** |
+
+### 6.2. Công thức đầy đủ phía server (`op: 'save'` & tổng hợp tuần)
 ```js
 const MIN_STAGES_FOR_HOUSE_POINTS = 5;
+
+const STAGE_SCORE_BANDS = [
+  { maxStage: 15, pointsPerStage: 20, labelVi: 'Màn 1–15' },
+  { maxStage: 40, pointsPerStage: 25, labelVi: 'Màn 16–40' },
+  { maxStage: 80, pointsPerStage: 30, labelVi: 'Màn 41–80' },
+  { maxStage: null, pointsPerStage: 35, labelVi: 'Màn 81+' },
+];
+
 // Tối ưu cho quy mô 15–20 người chơi thường xuyên/tuần (6 nấc sắc nét, Hạng 11+ đạt >= 5 màn nhận +20 đ)
 const RANK_POINT_TIERS = [
   { maxRank: 1, points: 100, labelVi: 'Hạng 1' },
@@ -203,8 +220,41 @@ const RANK_POINT_TIERS = [
   { maxRank: null, points: 20, labelVi: 'Hạng 11+' },
 ];
 
-function computeRankHousePoints(rank, clearedStages) {
-  if ((Number(clearedStages) || 0) < MIN_STAGES_FOR_HOUSE_POINTS || rank < 1) return 0;
+function getStageDifficultyPoints(stageNumber, bands = STAGE_SCORE_BANDS) {
+  const s = Math.floor(Number(stageNumber) || 0);
+  if (s < 1) return 0;
+  for (const band of bands) {
+    if (band.maxStage === null || s <= band.maxStage) return band.pointsPerStage;
+  }
+  return 20;
+}
+
+/** Tính chính xác số màn vượt mới & tổng điểm tuần có trọng số độ khó giữa prevCleared -> nextCleared (chặn tối đa 10 màn/lần save). */
+function computeWeeklyStageDeltaScore(prevCleared, nextCleared, maxDeltaPerSave = 10, bands = STAGE_SCORE_BANDS) {
+  const prev = Math.max(0, Math.floor(Number(prevCleared) || 0));
+  const next = Math.max(0, Math.floor(Number(nextCleared) || 0));
+  if (next <= prev) return { deltaStages: 0, weightedScore: 0 };
+  const deltaStages = Math.min(maxDeltaPerSave, next - prev);
+  let weightedScore = 0;
+  for (let s = prev + 1; s <= prev + deltaStages; s++) {
+    weightedScore += getStageDifficultyPoints(s, bands);
+  }
+  return { deltaStages, weightedScore };
+}
+
+// Trong op === 'save' (reset về 0 mỗi tuần weekKey mới):
+// for (const disc of CUP_DISCIPLINES) {
+//   const { deltaStages, weightedScore } = computeWeeklyStageDeltaScore(prevCleared[disc], nextCleared[disc]);
+//   if (deltaStages > 0) {
+//     memberCup.weeklyClearedByDiscipline[disc] += deltaStages;
+//     memberCup.weeklyWeightedScoreByDiscipline[disc] += weightedScore;
+//     memberCup.todayPoints += weightedScore;
+//     memberCup.bank += weightedScore; // thưởng Cúp Đợt mỗi 300 đ
+//   }
+// }
+
+function computeRankHousePoints(rank, weeklyCleared) {
+  if ((Number(weeklyCleared) || 0) < MIN_STAGES_FOR_HOUSE_POINTS || rank < 1) return 0;
   for (const tier of RANK_POINT_TIERS) {
     if (tier.maxRank === null || rank <= tier.maxRank) return tier.points;
   }
@@ -212,15 +262,26 @@ function computeRankHousePoints(rank, clearedStages) {
 }
 
 /**
- * Với mỗi bộ môn (đã sắp xếp danh sách người chơi theo điểm/số màn vượt trong tuần giảm dần):
- * - Mỗi người chơi có `clearedStages >= 5` đóng góp điểm theo bậc thứ hạng vào `disciplines[disc][house]`.
- * - Cuối cùng quy đổi bảng `disciplines` qua `computeBracketHouses` (hoặc cộng thẳng tổng điểm Nhà & 2 Liên Minh).
+ * Với mỗi bộ môn trong tuần `weekKey`:
+ * 1. Lọc người chơi có `weeklyCleared >= 5` và sắp xếp theo `weeklyWeightedScore` giảm dần (hòa thì ưu tiên `weeklyCleared` cao hơn).
+ * 2. Cộng điểm đóng góp theo thứ hạng (`100 / 80 / 65 / 50 / 35 / 20`) vào `disciplines[disc][house]`.
+ * 3. Quy đổi bảng 6 môn `disciplines` qua `computeBracketHouses` (`100 / 75 / 50 / 25`) ra điểm Cúp Nhà & 2 Liên Minh.
  */
-function scoreDisciplineFromRankedPlayers(rankedEntries) {
+function scoreDisciplineFromWeeklyPlayers(entries) {
+  const eligible = entries
+    .filter((e) => (Number(e.weeklyCleared) || 0) >= MIN_STAGES_FOR_HOUSE_POINTS)
+    .sort((a, b) => (b.weeklyWeightedScore - a.weeklyWeightedScore) || (b.weeklyCleared - a.weeklyCleared));
+
   const byHouse = { Gryffindor: 0, Slytherin: 0, Ravenclaw: 0, Hufflepuff: 0 };
-  rankedEntries.forEach((entry, idx) => {
-    const rank = idx + 1;
-    const pts = computeRankHousePoints(rank, entry.clearedStages);
+  let activeRank = 0;
+  let prevScore = -1;
+  eligible.forEach((entry, idx) => {
+    const sc = Math.max(0, Math.floor(Number(entry.weeklyWeightedScore) || 0));
+    if (sc !== prevScore) {
+      activeRank = idx + 1;
+      prevScore = sc;
+    }
+    const pts = computeRankHousePoints(activeRank, entry.weeklyCleared);
     if (pts > 0 && byHouse[entry.house] !== undefined) {
       byHouse[entry.house] += pts;
     }
@@ -229,7 +290,7 @@ function scoreDisciplineFromRankedPlayers(rankedEntries) {
 }
 ```
 
-- Server có thể tuỳ chỉnh `minStagesForPoints` (mặc định `5`, có thể hạ riêng Sudoku xuống `3` nếu ít người chơi) và `rankTiers` trong payload `cup` trả về — client (`src/hpvn/houseCup.ts`, `src/ui/leaderboardModal.ts`, `src/ui/hudQuestsAndSettings.ts`) tự động đọc và hiển thị đúng thang điểm mới trên cả **Pop-up Cúp 4 Nhà**, **Tab Cúp Nhà** lẫn từng dòng trong **Bảng Xếp Hạng** (`+100 đ Nhà`, `+80 đ Nhà`, ..., `+20 đ Nhà`, hoặc `X/5 màn ghi điểm Nhà`).
+- Server có thể tuỳ chỉnh `minStagesForPoints` (mặc định `5`), `rankTiers`, và `stageScoreBands` trong payload `op: 'cup'` trả về — client (`src/hpvn/houseCup.ts`, `src/ui/leaderboardModal.ts`, `src/ui/hudQuestsAndSettings.ts`) tự động đọc và hiển thị đúng thang điểm + bảng khung độ khó màn trên **Pop-up Thể lệ Cúp 4 Nhà**, **Tab Cúp Nhà** và **Bảng Xếp Hạng**.
 
 ---
 

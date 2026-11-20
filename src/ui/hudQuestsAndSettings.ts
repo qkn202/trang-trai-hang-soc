@@ -11,6 +11,7 @@ import {
   houseCupFirstPlaceCounts,
   houseCupMinStagesForPoints,
   houseCupRankTiers,
+  houseCupStageScoreBands,
   HouseCupDisciplineId,
   houseWeekPoints,
 } from '../hpvn/houseCup';
@@ -511,16 +512,25 @@ function buildHouseCupAlliancesHtml(
 function buildHouseCupRankTiersHtml(): string {
   const minStages = houseCupMinStagesForPoints();
   const tiers = houseCupRankTiers();
+  const bands = houseCupStageScoreBands();
   const chipsHtml = tiers
     .map(
       (t) =>
         `<span class="hs-cup-rank-chip"><span>${escapeHtml(t.labelVi)}</span><strong>+${t.points} đ</strong></span>`
     )
     .join('');
+  const bandsHtml = bands
+    .map(
+      (b) =>
+        `<span class="hs-cup-rank-chip"><span>${escapeHtml(b.labelVi)}</span><strong>${b.pointsPerStage} đ/màn</strong></span>`
+    )
+    .join('');
   return `
     <div class="hs-cup-rank-box">
-      <div class="hs-cup-kicker">Điểm Nhà theo hạng BXH (vượt từ ${minStages} màn là có điểm)</div>
+      <div class="hs-cup-kicker">Điểm Nhà theo hạng tuần (vượt từ ${minStages} màn mới/tuần là có điểm)</div>
       <div class="hs-cup-rank-chips">${chipsHtml}</div>
+      <div class="hs-cup-stage-note">Điểm mỗi màn vượt mới trong tuần (tuần mới reset về 0, màn càng cao điểm càng lớn):</div>
+      <div class="hs-cup-rank-chips">${bandsHtml}</div>
     </div>`;
 }
 
@@ -636,19 +646,22 @@ export function questsUiRenderHouseCupIntroDialog(hud: GameHUD): void {
       ? `${todayLabel} · Cúp Đợt ${tierNum}: ${bank.toLocaleString('vi-VN')}/${perTier.toLocaleString('vi-VN')} đ`
       : 'Đang tải bảng điểm tuần từ máy chủ HPVN…';
 
+  const stageBandsSummary = houseCupStageScoreBands()
+    .map((b) => `${escapeHtml(b.labelVi)}: <strong>${b.pointsPerStage} đ</strong>`)
+    .join(' · ');
   const alliancePrizeRuleHtml = buildAllianceWeeklyRewardRuleHtml(cup);
   const rulesPointsHtml = isMedalMode
     ? `
           ${alliancePrizeRuleHtml}
           <li><strong>2 Liên Minh xoay vòng mỗi tuần:</strong> 4 Nhà được ghép thành <strong>2 Liên Minh (2 vs 2)</strong> cộng tổng điểm Cúp và tự động đổi cặp Liên Minh mới vào mỗi Thứ Hai.</li>
-          <li><strong>Vượt từ ${minStages} màn là có điểm Nhà:</strong> Chỉ cần vượt qua từ <strong>${minStages} màn</strong> trở lên trên BXH là chắc chắn ghi điểm cho Nhà (tối thiểu <strong>+${floorRankPts} đ</strong>); xếp thứ hạng càng cao điểm càng nhiều (Hạng 1 nhận <strong>+${topRankPts} đ</strong>).</li>
+          <li><strong>Xếp hạng tuần công bằng theo độ khó màn (ngưỡng ${minStages} màn mới/tuần):</strong> Tuần mới mọi người bắt đầu từ <strong>0 đ</strong>; mỗi màn vượt mới tính theo khung độ khó (${stageBandsSummary}). Chỉ cần vượt từ <strong>${minStages} màn mới</strong> trong tuần là chắc chắn ghi điểm cho Nhà (tối thiểu <strong>+${floorRankPts} đ</strong>, Hạng 1 nhận <strong>+${topRankPts} đ</strong>).</li>
           <li><strong>Đua Huy Chương Từng Môn (không trần):</strong> Cày điểm <strong>không giới hạn</strong> ở từng đấu trường (${activeDiscNames}); mỗi môn quy đổi độc lập: Hạng 1 <strong>+${medalPts[0]} đ</strong> · Hạng 2 <strong>+${medalPts[1]} đ</strong> · Hạng 3 <strong>+${medalPts[2]} đ</strong> · Hạng 4 <strong>+${medalPts[3]} đ</strong>.</li>
           <li><strong>Thưởng Cúp Đợt tự động:</strong> Mỗi khi tích đủ <strong>${perTier.toLocaleString('vi-VN')} đ</strong> cá nhân, máy chủ HPVN trao ngay quà <strong>Sickle</strong>, <strong>XP</strong> và <strong>Cát Thời Gian</strong> thẳng vào trang trại.</li>
         `
     : `
           ${alliancePrizeRuleHtml}
           <li><strong>2 Liên Minh xoay vòng mỗi tuần:</strong> 4 Nhà được ghép thành <strong>2 Liên Minh (2 vs 2)</strong> cộng tổng điểm tuần và tự động đổi cặp Liên Minh mới mỗi Thứ Hai.</li>
-          <li><strong>Vượt từ ${minStages} màn là có điểm Nhà:</strong> Chỉ cần vượt qua từ <strong>${minStages} màn</strong> trên BXH (<strong>Bùa Gặt</strong>, <strong>Số Học</strong>, <strong>Sinh Vật</strong>, <strong>Tranh Ghép</strong>) là có điểm cho Nhà (tối thiểu <strong>+${floorRankPts} đ</strong>), xếp thứ hạng càng cao điểm càng nhiều (lên tới <strong>+${topRankPts} đ</strong> cho Hạng 1).</li>
+          <li><strong>Xếp hạng tuần công bằng theo độ khó màn (ngưỡng ${minStages} màn mới/tuần):</strong> Tuần mới mọi người bắt đầu từ <strong>0 đ</strong>; mỗi màn vượt mới (${activeDiscNames}) tính theo khung độ khó (${stageBandsSummary}). Chỉ cần vượt từ <strong>${minStages} màn mới</strong> trong tuần là có điểm cho Nhà (tối thiểu <strong>+${floorRankPts} đ</strong>, Hạng 1 nhận <strong>+${topRankPts} đ</strong>).</li>
           <li><strong>Thưởng Cúp Đợt tự động:</strong> Mỗi khi tích đủ <strong>${perTier.toLocaleString('vi-VN')} đ</strong>, máy chủ HPVN trao ngay quà <strong>Sickle</strong>, <strong>XP</strong> và <strong>Cát Thời Gian</strong> thẳng vào trang trại.</li>
           <li><strong>Đua Cúp hàng tuần:</strong> Điểm của toàn bộ học sinh cùng Nhà trên HPVN được cộng dồn suốt tuần lễ. Xem lại bất cứ lúc nào tại <strong>Hồ Sơ &amp; BXH → Cúp Nhà</strong>.</li>
         `;

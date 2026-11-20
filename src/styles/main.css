@@ -9141,6 +9141,7 @@ body:has(#managePopoverMenu:not(.hidden)) .ts-corner-right {
 .hs-cup-rank-chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .hs-cup-rank-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border-radius: var(--hs-radius-s); border: var(--hs-line) solid rgba(176, 125, 67, 0.32); background: var(--hs-paper); color: var(--hs-ink-soft); font-size: var(--hs-text-11); font-variant-numeric: tabular-nums; }
 .hs-cup-rank-chip > strong { color: var(--hs-ink); font-weight: var(--hs-weight-title); }
+.hs-cup-stage-note { font-size: var(--hs-text-11); color: var(--hs-ink-soft); margin-top: 2px; line-height: 1.35; }
 .hs-lb-house-pts { color: var(--farm-green-text); font-weight: var(--hs-weight-label); font-size: var(--hs-text-11); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .hs-lb-block > .hs-lb-house-pts { display: block; margin-top: 2px; padding: 1px 5px; border-radius: var(--radius-pill); background: rgba(255, 250, 238, 0.85); color: var(--farm-green-text); font-size: 10px; }
 .hs-lb-house-need { color: var(--hs-ink-soft); font-size: var(--hs-text-11); white-space: nowrap; }

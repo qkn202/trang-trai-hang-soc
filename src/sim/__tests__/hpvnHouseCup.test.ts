@@ -5,6 +5,8 @@ import {
   computeDisciplineBracketTotals,
   computeHousePointsForLeaderboardRank,
   computeHousePointsFromLeaderboardEntries,
+  computeStageDifficultyPoints,
+  computeWeeklyStageProgressScore,
   getIsoWeekSerial,
   getWeeklyHouseAlliances,
   HOUSE_CUP_MIN_STAGES_FOR_POINTS,
@@ -13,7 +15,9 @@ import {
   houseCupAllianceStandings,
   houseCupDisciplineSummaries,
   houseCupFirstPlaceCounts,
+  houseCupStageScoreBands,
   houseWeekPoints,
+  rankAndScoreDisciplineFromWeeklyPlayers,
 } from '../../hpvn/houseCup';
 import { MagicalAudio } from '../../engine/audio';
 import { ParkSimulation } from '../simulation';
@@ -351,4 +355,73 @@ it('awards rank-tiered House points to any player clearing >= 5 stages (higher r
   expect(agg.houses.Gryffindor).toBe(65 + 50 + 35 + 35 + 20 + 20 + 20 + 20); // 265 > 180!
   expect(agg.houses.Hufflepuff).toBe(0);
   expect(agg.qualifiedCounts).toEqual({ Gryffindor: 8, Ravenclaw: 2, Slytherin: 0, Hufflepuff: 0 });
+});
+
+it('Cách A: weights weekly stage clears by difficulty bands so Stage 60 players compete fairly against Stage 5 players', () => {
+  // Exact difficulty band values: 1-15 -> 20, 16-40 -> 25, 41-80 -> 30, 81+ -> 35
+  expect(computeStageDifficultyPoints(1)).toBe(20);
+  expect(computeStageDifficultyPoints(15)).toBe(20);
+  expect(computeStageDifficultyPoints(16)).toBe(25);
+  expect(computeStageDifficultyPoints(40)).toBe(25);
+  expect(computeStageDifficultyPoints(41)).toBe(30);
+  expect(computeStageDifficultyPoints(60)).toBe(30);
+  expect(computeStageDifficultyPoints(80)).toBe(30);
+  expect(computeStageDifficultyPoints(81)).toBe(35);
+  expect(computeStageDifficultyPoints(500)).toBe(35);
+
+  // Crossing band boundary 14 -> 17: stage 15 (20) + stage 16 (25) + stage 17 (25) = 70
+  expect(computeWeeklyStageProgressScore(14, 17)).toEqual({ deltaStages: 3, weightedScore: 70 });
+
+  // Anti-spike clamp: max 10 stages counted per save request
+  expect(computeWeeklyStageProgressScore(0, 25, 10)).toEqual({ deltaStages: 10, weightedScore: 200 });
+
+  // Worked example: Player A at Stage 60 clears 5 stages (60 -> 65) = 5 * 30 = 150 weekly pts
+  const playerA = computeWeeklyStageProgressScore(60, 65);
+  expect(playerA).toEqual({ deltaStages: 5, weightedScore: 150 });
+
+  // Player B at Stage 5 clears 7 stages (5 -> 12) = 7 * 20 = 140 weekly pts (< 150)
+  const playerB7 = computeWeeklyStageProgressScore(5, 12);
+  expect(playerB7).toEqual({ deltaStages: 7, weightedScore: 140 });
+
+  // Player C at Stage 5 clears 8 stages (5 -> 13) = 8 * 20 = 160 weekly pts (> 150)
+  const playerC8 = computeWeeklyStageProgressScore(5, 13);
+  expect(playerC8).toEqual({ deltaStages: 8, weightedScore: 160 });
+
+  // Player D at Stage 60 clears only 4 stages (60 -> 64) = 120 pts, but < 5 stages -> 0 House points!
+  const playerD4 = computeWeeklyStageProgressScore(60, 64);
+  expect(playerD4).toEqual({ deltaStages: 4, weightedScore: 120 });
+
+  const scored = rankAndScoreDisciplineFromWeeklyPlayers([
+    { house: 'Ravenclaw', weeklyCleared: playerA.deltaStages, weeklyWeightedScore: playerA.weightedScore },
+    { house: 'Gryffindor', weeklyCleared: playerB7.deltaStages, weeklyWeightedScore: playerB7.weightedScore },
+    { house: 'Hufflepuff', weeklyCleared: playerC8.deltaStages, weeklyWeightedScore: playerC8.weightedScore },
+    { house: 'Slytherin', weeklyCleared: playerD4.deltaStages, weeklyWeightedScore: playerD4.weightedScore },
+  ]);
+
+  // Ranking: #1 Hufflepuff (160 -> +100), #2 Ravenclaw (150 -> +80), #3 Gryffindor (140 -> +65), Slytherin disqualified (< 5)
+  expect(scored.ranked.map((r) => [r.house, r.rank, r.contributionPoints])).toEqual([
+    ['Hufflepuff', 1, 100],
+    ['Ravenclaw', 2, 80],
+    ['Gryffindor', 3, 65],
+  ]);
+  expect(scored.houses).toEqual({ Hufflepuff: 100, Ravenclaw: 80, Gryffindor: 65, Slytherin: 0 });
+  expect(scored.qualifiedCounts).toEqual({ Hufflepuff: 1, Ravenclaw: 1, Gryffindor: 1, Slytherin: 0 });
+
+  // Server custom stageScoreBands override via applyHouseCup
+  applyHouseCup({
+    weekKey: '2026-W48',
+    stageScoreBands: [
+      { maxStage: 20, pointsPerStage: 10, labelVi: 'Màn 1–20' },
+      { maxStage: null, pointsPerStage: 20, labelVi: 'Màn 21+' },
+    ],
+    memberTodayPoints: 0,
+    memberDailyCap: 0,
+    memberBank: 0,
+    memberTier: 1,
+    perTier: 300,
+  });
+  expect(houseCupStageScoreBands()).toEqual([
+    { maxStage: 20, pointsPerStage: 10, labelVi: 'Màn 1–20' },
+    { maxStage: null, pointsPerStage: 20, labelVi: 'Màn 21+' },
+  ]);
 });

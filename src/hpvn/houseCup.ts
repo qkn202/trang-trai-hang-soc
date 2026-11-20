@@ -38,6 +38,23 @@ export interface HouseCupRankPointTier {
   labelVi: string;
 }
 
+export interface HouseCupStageScoreBand {
+  maxStage: number | null; // null = màn cao nhất trở lên (VD 81+)
+  pointsPerStage: number;
+  labelVi: string;
+}
+
+/**
+ * Cách A — Hệ số điểm mỗi màn vượt mới trong tuần theo độ khó màn:
+ * Tuần mới mọi người đều bắt đầu từ 0; màn càng cao điểm/màn càng lớn để người đang ở Màn 60 không bị thiệt so với Màn 5.
+ */
+export const HOUSE_CUP_DEFAULT_STAGE_SCORE_BANDS: readonly HouseCupStageScoreBand[] = [
+  { maxStage: 15, pointsPerStage: 20, labelVi: 'Màn 1–15' },
+  { maxStage: 40, pointsPerStage: 25, labelVi: 'Màn 16–40' },
+  { maxStage: 80, pointsPerStage: 30, labelVi: 'Màn 41–80' },
+  { maxStage: null, pointsPerStage: 35, labelVi: 'Màn 81+' },
+];
+
 export const HOUSE_CUP_DEFAULT_RANK_TIERS: readonly HouseCupRankPointTier[] = [
   { maxRank: 1, points: 100, labelVi: 'Hạng 1' },
   { maxRank: 2, points: 80, labelVi: 'Hạng 2' },
@@ -46,6 +63,108 @@ export const HOUSE_CUP_DEFAULT_RANK_TIERS: readonly HouseCupRankPointTier[] = [
   { maxRank: 10, points: 35, labelVi: 'Top 10' },
   { maxRank: null, points: 20, labelVi: 'Hạng 11+' },
 ];
+
+/** Trả về điểm tuần nhận được khi vượt mới chính xác màn `stageNumber` (1-based) theo hệ số độ khó. */
+export function computeStageDifficultyPoints(
+  stageNumber: number,
+  bands: readonly HouseCupStageScoreBand[] = HOUSE_CUP_DEFAULT_STAGE_SCORE_BANDS
+): number {
+  const s = Math.floor(Number(stageNumber) || 0);
+  if (s < 1) return 0;
+  for (const band of bands) {
+    if (band.maxStage === null || s <= band.maxStage) {
+      return Math.max(0, Math.floor(band.pointsPerStage));
+    }
+  }
+  return bands.length > 0 ? Math.max(0, Math.floor(bands[bands.length - 1].pointsPerStage)) : 20;
+}
+
+/**
+ * Tính số màn vượt mới (`deltaStages`) và tổng điểm tuần có trọng số độ khó (`weightedScore`)
+ * khi người chơi đi từ `prevCleared` lên `nextCleared` (có chặn anti-spike `maxDeltaPerSave`).
+ */
+export function computeWeeklyStageProgressScore(
+  prevCleared: number,
+  nextCleared: number,
+  maxDeltaPerSave = 10,
+  bands: readonly HouseCupStageScoreBand[] = HOUSE_CUP_DEFAULT_STAGE_SCORE_BANDS
+): { deltaStages: number; weightedScore: number } {
+  const prev = Math.max(0, Math.floor(Number(prevCleared) || 0));
+  const next = Math.max(0, Math.floor(Number(nextCleared) || 0));
+  if (next <= prev) return { deltaStages: 0, weightedScore: 0 };
+  const cap = Number.isFinite(maxDeltaPerSave)
+    ? Math.max(0, Math.floor(maxDeltaPerSave))
+    : next - prev;
+  const deltaStages = Math.min(cap, next - prev);
+  let weightedScore = 0;
+  for (let s = prev + 1; s <= prev + deltaStages; s++) {
+    weightedScore += computeStageDifficultyPoints(s, bands);
+  }
+  return { deltaStages, weightedScore };
+}
+
+/**
+ * Cách A — Xếp hạng người chơi trong 1 môn dựa trên tổng điểm tuần có trọng số độ khó (`weeklyWeightedScore`):
+ * - Đầu tuần ai cũng về 0; chỉ người vượt ít nhất `minStages` (mặc định 5) màn mới trong tuần mới ghi điểm cho Nhà.
+ * - Hạng cao hơn nhận điểm đóng góp cho Nhà lớn hơn (`100 / 80 / 65 / 50 / 35 / 20`).
+ */
+export function rankAndScoreDisciplineFromWeeklyPlayers<
+  T extends { house: HouseName; weeklyCleared: number; weeklyWeightedScore: number }
+>(
+  entries: ReadonlyArray<T>,
+  minStages = HOUSE_CUP_MIN_STAGES_FOR_POINTS,
+  tiers: readonly HouseCupRankPointTier[] = HOUSE_CUP_DEFAULT_RANK_TIERS
+): {
+  houses: Record<HouseName, number>;
+  qualifiedCounts: Record<HouseName, number>;
+  ranked: Array<T & { rank: number; contributionPoints: number }>;
+} {
+  const safeMin = Math.max(1, Math.floor(Number(minStages) || HOUSE_CUP_MIN_STAGES_FOR_POINTS));
+  const eligible = entries
+    .filter((e) => HOUSE_SET.has(e.house) && Math.floor(Number(e.weeklyCleared) || 0) >= safeMin)
+    .sort(
+      (a, b) =>
+        (Number(b.weeklyWeightedScore) || 0) - (Number(a.weeklyWeightedScore) || 0) ||
+        (Number(b.weeklyCleared) || 0) - (Number(a.weeklyCleared) || 0)
+    );
+
+  const houses: Record<HouseName, number> = {
+    Gryffindor: 0,
+    Slytherin: 0,
+    Ravenclaw: 0,
+    Hufflepuff: 0,
+  };
+  const qualifiedCounts: Record<HouseName, number> = {
+    Gryffindor: 0,
+    Slytherin: 0,
+    Ravenclaw: 0,
+    Hufflepuff: 0,
+  };
+  const ranked: Array<T & { rank: number; contributionPoints: number }> = [];
+
+  let activeRank = 0;
+  let prevScore = -1;
+  for (let i = 0; i < eligible.length; i++) {
+    const entry = eligible[i];
+    const score = Math.max(0, Math.floor(Number(entry.weeklyWeightedScore) || 0));
+    if (score !== prevScore) {
+      activeRank = i + 1;
+      prevScore = score;
+    }
+    const pts = computeHousePointsForLeaderboardRank(
+      activeRank,
+      entry.weeklyCleared,
+      safeMin,
+      tiers
+    );
+    if (pts > 0) {
+      houses[entry.house] += pts;
+      qualifiedCounts[entry.house] += 1;
+    }
+    ranked.push({ ...entry, rank: activeRank, contributionPoints: pts });
+  }
+  return { houses, qualifiedCounts, ranked };
+}
 
 /**
  * Tính điểm đóng góp cho Nhà từ thứ hạng cá nhân trên BXH & số màn đã vượt qua:
@@ -176,6 +295,7 @@ export interface HouseCupView {
   medalPoints?: readonly [number, number, number, number];
   minStagesForPoints?: number;
   rankTiers?: readonly HouseCupRankPointTier[];
+  stageScoreBands?: readonly HouseCupStageScoreBand[];
   alliances?: readonly [HouseCupAllianceSpec, HouseCupAllianceSpec];
   allianceReward?: HouseCupAllianceRewardInfo;
   houses?: Record<HouseName, number>; // this week, every member of the house (or medal bracket totals)
@@ -385,6 +505,11 @@ export const houseCupMinStagesForPoints = (): number =>
 /** Bảng điểm thưởng Nhà theo thứ hạng cá nhân trên BXH. */
 export const houseCupRankTiers = (): readonly HouseCupRankPointTier[] =>
   view?.rankTiers && view.rankTiers.length > 0 ? view.rankTiers : HOUSE_CUP_DEFAULT_RANK_TIERS;
+/** Bảng hệ số điểm tuần cho từng khung độ khó màn (Cách A). */
+export const houseCupStageScoreBands = (): readonly HouseCupStageScoreBand[] =>
+  view?.stageScoreBands && view.stageScoreBands.length > 0
+    ? view.stageScoreBands
+    : HOUSE_CUP_DEFAULT_STAGE_SCORE_BANDS;
 /** Thông tin quỹ thưởng tuần (17:00 Thứ Sáu) cho Liên Minh đứng Hạng 1 Cúp Nhà. */
 export const houseCupAllianceReward = (): HouseCupAllianceRewardInfo => ({
   enabled: true,
@@ -554,6 +679,28 @@ export function applyHouseCup(raw: unknown): void {
     }
   }
 
+  let nextStageScoreBands = view?.stageScoreBands ?? HOUSE_CUP_DEFAULT_STAGE_SCORE_BANDS;
+  if (Array.isArray(r.stageScoreBands) && r.stageScoreBands.length > 0) {
+    const parsedBands: HouseCupStageScoreBand[] = [];
+    for (const rawBand of r.stageScoreBands) {
+      if (!rawBand || typeof rawBand !== 'object') continue;
+      const b = rawBand as Record<string, unknown>;
+      const ptsPer = n(b.pointsPerStage);
+      if (ptsPer <= 0) continue;
+      const maxS = b.maxStage === null || b.maxStage === undefined ? null : Math.max(1, n(b.maxStage));
+      const lbl =
+        typeof b.labelVi === 'string' && b.labelVi.trim()
+          ? b.labelVi.trim()
+          : maxS === null
+            ? 'Màn cao'
+            : `Tới Màn ${maxS}`;
+      parsedBands.push({ maxStage: maxS, pointsPerStage: ptsPer, labelVi: lbl });
+    }
+    if (parsedBands.length > 0) {
+      nextStageScoreBands = parsedBands;
+    }
+  }
+
   let nextAllianceReward: HouseCupAllianceRewardInfo | undefined = view?.allianceReward;
   if (r.allianceReward && typeof r.allianceReward === 'object') {
     const ar = r.allianceReward as Record<string, unknown>;
@@ -648,6 +795,7 @@ export function applyHouseCup(raw: unknown): void {
     medalPoints,
     minStagesForPoints: nextMinStages,
     rankTiers: nextRankTiers,
+    stageScoreBands: nextStageScoreBands,
     ...(nextAlliances ? { alliances: nextAlliances } : { alliances: undefined }),
     ...(nextAllianceReward ? { allianceReward: nextAllianceReward } : {}),
     ...(resolvedHouses ? { houses: resolvedHouses } : {}),
