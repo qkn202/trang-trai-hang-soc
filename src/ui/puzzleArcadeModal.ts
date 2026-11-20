@@ -2058,6 +2058,7 @@ export class PuzzleArcadeModalController {
           efficiency: this.sudokuEngine.mistakesCount,
           proofOfPlay: this.sealValidProofOfPlay('sudoku', sudokuScore),
           completedStage: this.sudokuEngine.stage,
+          skipPlayCount: this.lossStreakResetForStage,
         }
       );
       this.spawnCelebrationConfetti();
@@ -2075,6 +2076,7 @@ export class PuzzleArcadeModalController {
         ),
         efficiency: Math.max(1, this.minesEngine.movesCount),
         completedStage: this.minesEngine.stage,
+        skipPlayCount: this.lossStreakResetForStage,
       });
       this.spawnCelebrationConfetti();
       this.onParentRefresh();
@@ -2088,6 +2090,7 @@ export class PuzzleArcadeModalController {
         sessionScore: Math.max(1200, this.fishEngine.score),
         efficiency: Math.max(1, this.fishEngine.maxCombo),
         completedStage: this.fishEngine.stage,
+        skipPlayCount: this.lossStreakResetForStage,
       });
       this.spawnCelebrationConfetti();
       this.onParentRefresh();
@@ -2106,6 +2109,7 @@ export class PuzzleArcadeModalController {
           efficiency: Math.max(1, this.onetEngine.maxCombo),
           proofOfPlay: this.sealValidProofOfPlay('blocks', onetScore),
           completedStage: this.onetEngine.stage,
+          skipPlayCount: this.lossStreakResetForStage,
         }
       );
       this.spawnCelebrationConfetti();
@@ -2126,6 +2130,7 @@ export class PuzzleArcadeModalController {
           efficiency: Math.max(1, this.jigsawEngine.maxCombo),
           proofOfPlay: this.sealValidProofOfPlay('jigsaw', jigsawScore),
           completedStage: this.jigsawEngine.stage,
+          skipPlayCount: this.lossStreakResetForStage,
         }
       );
       this.spawnCelebrationConfetti();
@@ -2696,6 +2701,7 @@ export class PuzzleArcadeModalController {
     if (isFailedNow && !this.lossStreakResetForStage && !this.rescueContext) {
       this.lossStreakResetForStage = true;
       this.sim.resetExamWinStreak();
+      this.sim.recordMinigamePlay(this.mode);
     }
     if (isFailedNow && !this.victorySummary && !this.rescueVictoryOutcome && !inspectReturnBarHtml) {
       inspectReturnBarHtml = `

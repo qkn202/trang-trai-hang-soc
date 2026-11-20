@@ -220,3 +220,11 @@ return await db.runTransaction(async (tx) => {
 ## 5. Khuyến nghị vận hành ACP
 - Khi có cảnh báo `sickle_spike` trong `gameAuditLogs`, admin xem lại lịch sử rồi mới quyết định mở lại `reverseFlagged = false` hoặc giữ khóa.
 - Bất cứ lúc nào muốn điều chỉnh tỷ lệ hoặc tạm đóng chiều đổi ngược mà không cần deploy lại game, admin chỉ cần sửa `reverseEnabled`, `reverseSicklePerGalleon`, `reversePacks`, `reverseDailyCapGalleons`, `reverseWeeklyCapGalleons` trong ACP.
+
+---
+
+## 6. Liên kết với Quỹ Thưởng 200.000 Galleons Liên Minh #1 Cúp Nhà (17:00 Thứ Sáu)
+- Song song với Quầy Gringotts 2 chiều, máy chủ HPVN phát thưởng định kỳ **`200.000 Galleons`** vào **17:00 Thứ Sáu hàng tuần (UTC+7)**, chia đều thẳng vào ví `users/{uid}.galleons` cho tất cả thành viên thuộc **Liên Minh đứng Hạng 1 Cúp Nhà** đã chơi ít nhất **5 ván** của **1 mini game bất kỳ** trong chu kỳ tuần.
+- **Đợt chia thưởng ngay lập tức cho kỳ hiện tại:** Phát liền **`200.000 Galleons`** cho **Liên Minh Lửa & Trí (`Ravenclaw` + `Gryffindor`)** theo hàm 1 lần `payoutCurrentRavGryAllianceNow` (có `dryRun: true` xem trước danh sách + khóa idempotent `cycleKey` chống cron 17:00 cùng ngày phát đúp).
+- Khoản thưởng này cộng trực tiếp vào `users/{uid}.galleons` (không cộng Sickle vào `save`), nên hoàn toàn độc lập với bộ phát hiện `sickle_spike` của Quầy Gringotts.
+- Chi tiết cron `0 17 * * 5`, hàm chia thưởng liền cho `Ravenclaw + Gryffindor`, lọc `>= 5` ván và payload `allianceReward` xem tại `docs/handoff/house-cup-discipline-medals/HANDOFF_HPVN_HOUSE_CUP.md` (Mục 7 & Mục 9).

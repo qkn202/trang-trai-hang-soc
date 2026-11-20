@@ -1536,6 +1536,7 @@ export interface GameState {
     anomalyCount: number;
     lastFlags?: string[];
   };
+  minigamePlays?: Partial<Record<'match3' | 'caro' | 'sudoku' | 'chess' | 'blocks' | 'jigsaw', number>>;
   lastSavedAt: number;
 }
 

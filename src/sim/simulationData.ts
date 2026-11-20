@@ -2700,6 +2700,21 @@ export function migrateLoadedState(parsed: GameState): GameState {
       };
     })(),
     staffPatrolZones: parsed.staffPatrolZones ?? {},
+    minigamePlays: (() => {
+      const raw = parsed.minigamePlays;
+      const rec = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+      const paRev = Math.round(clampFinite(parsed.puzzleArcade?.arcadeDisciplineRev, 0, 99, 0));
+      const clean = (k: 'match3' | 'caro' | 'sudoku' | 'chess' | 'blocks' | 'jigsaw', floor: number) =>
+        Math.max(floor, Math.round(clampFinite(rec[k], 0, 9_999_999, 0)));
+      return {
+        match3: clean('match3', Math.round(clampFinite(parsed.match3?.levelsWon ?? parsed.match3?.maxClearedLevel, 0, 999_999, 0))),
+        caro: paRev >= CURRENT_ARCADE_DISCIPLINE_REV ? clean('caro', Math.round(clampFinite(parsed.puzzleArcade?.caroCleared, 0, 999_999, 0))) : 0,
+        sudoku: clean('sudoku', Math.round(clampFinite(parsed.puzzleArcade?.sudokuCleared, 0, 999_999, 0))),
+        chess: paRev >= CURRENT_ARCADE_DISCIPLINE_REV ? clean('chess', Math.round(clampFinite(parsed.puzzleArcade?.chessCleared, 0, 999_999, 0))) : 0,
+        blocks: clean('blocks', Math.round(clampFinite(parsed.puzzleArcade?.blockCleared, 0, 999_999, 0))),
+        jigsaw: clean('jigsaw', Math.round(clampFinite(parsed.puzzleArcade?.jigsawCleared, 0, 999_999, 0))),
+      };
+    })(),
     lastProphetHeadline: safeHeadline,
     finance: {
       ...def.finance,

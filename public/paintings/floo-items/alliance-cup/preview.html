@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Xem Trước Khung Floo Chốt — Liên Minh Nhà Thắng Cúp Tuần (alliance-cup)</title>
+  <link rel="stylesheet" href="./alliance-cup-floo.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: #120c08;
+      color: #fef3c7;
+    }
+
+    .demo-shell {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+
+    .demo-header {
+      margin-bottom: 14px;
+    }
+
+    .demo-header h1 {
+      font-size: 18px;
+      margin: 0 0 4px;
+      color: #fde047;
+    }
+
+    .demo-header p {
+      margin: 0;
+      font-size: 13px;
+      color: #e2e8f0;
+    }
+
+    .floo-mock-feed {
+      background: #160f09;
+      border: 1px solid rgba(197, 166, 107, 0.45);
+      border-radius: 14px;
+      padding: 26px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    .shout-message-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      position: relative;
+    }
+
+    .shout-message-row.is-self {
+      justify-content: flex-end;
+    }
+
+    .shout-house-seal {
+      width: 28px;
+      height: 28px;
+      flex: 0 0 28px;
+      border-radius: 8px;
+      border: 1px solid rgba(250, 204, 21, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 24px;
+      background: #3b2306;
+      font-size: 15px;
+    }
+
+    .shout-message-content {
+      max-width: 84%;
+      min-width: 0;
+    }
+
+    .shout-message-row[data-store-frame] .shout-message-bubble {
+      position: relative;
+      box-sizing: border-box;
+      width: fit-content;
+      max-width: 100%;
+      background: var(--sf-paper);
+      box-shadow: var(--sf-shadow);
+      border: 1px solid var(--sf-edge) !important;
+      border-radius: 12px 12px 12px 4px;
+      font-size: 14px;
+      line-height: 1.46;
+    }
+
+    .shout-message-row.is-self:not(.is-self-shared-direction) .shout-message-bubble {
+      border-radius: 12px 12px 4px 12px;
+      margin-left: auto;
+    }
+
+    /* Trỏ ảnh về thư mục cục bộ khi mở preview.html trực tiếp */
+    .shout-message-row[data-store-frame="alliance-cup"] .shout-message-bubble::after {
+      background-image: url("./cup-winged.png") !important;
+      background-image: image-set(
+        url("./cup-winged.webp") type("image/webp") 1x,
+        url("./cup-winged-2x.webp") type("image/webp") 2x,
+        url("./cup-winged.png") type("image/png") 1x
+      ) !important;
+    }
+
+    .shout-meta-line {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 3px;
+      font-size: 12.5px;
+    }
+
+    .shout-message-author {
+      font-weight: 700;
+    }
+
+    .shout-quote-preview {
+      margin: 4px 0 6px;
+      padding: 5px 9px;
+      border-left: 3px solid var(--sf-quote-border, #facc15);
+      border-radius: 4px;
+      font-size: 12.5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-shell">
+    <div class="demo-header">
+      <h1>🏆 Bản Chốt Khung Floo — Liên Minh Nhà Thắng Cúp Tuần (<code>alliance-cup</code>)</h1>
+      <p>Mẫu F (Gấm Hoàng Gia 4 Sắc): Nền nhung dệt chéo 4 Nhà • Viền 4 màu tách rõ lồng chỉ vàng kim • Đại Cúp Cánh Phượng ngay chính giữa viền trên</p>
+    </div>
+
+    <div class="floo-mock-feed">
+      <div class="shout-message-row is-other" data-store-frame="alliance-cup">
+        <div class="shout-house-seal" aria-hidden="true">🦁</div>
+        <div class="shout-message-content">
+          <div class="shout-message-bubble">
+            <div class="shout-meta-line">
+              <span class="shout-message-author">Quán Quân Cúp Tuần</span>
+              <span class="shout-message-meta-time">21:02</span>
+            </div>
+            <div class="shout-rich-text">
+              Chúc mừng hai Nhà thuộc Liên Minh Quán Quân tuần này bước lên bục vinh quang Đại Sảnh Đường Hogwarts!! 🏆✨
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="shout-message-row is-self" data-store-frame="alliance-cup">
+        <div class="shout-message-content">
+          <div class="shout-message-bubble">
+            <div class="shout-meta-line" style="justify-content: flex-end;">
+              <span class="shout-message-author">Quán Quân Cúp Tuần</span>
+              <span class="shout-message-meta-time">21:03</span>
+            </div>
+            <div class="shout-quote-preview">
+              <b>Cụ Dumbledore:</b> Vinh quang Cúp Liên Minh Tuần thuộc về hai Nhà xuất sắc nhất!
+            </div>
+            <div class="shout-rich-text">
+              Góc nhìn chính chủ (<code>.is-self</code>) — nền Gấm Hoàng Gia 4 Nhà &amp; viền 4 màu lồng chỉ vàng kim, Đại Cúp Cánh Phượng toạ ngay chính giữa viền trên!
+            </div>
+          </div>
+        </div>
+        <div class="shout-house-seal" aria-hidden="true">🦅</div>
+      </div>
+
+      <div class="shout-message-row is-other" data-store-frame="alliance-cup">
+        <div class="shout-house-seal" aria-hidden="true">🦡</div>
+        <div class="shout-message-content">
+          <div class="shout-message-bubble">
+            <div class="shout-meta-line">
+              <span class="shout-message-author">Học Sinh Nhà Thắng Cúp</span>
+              <span class="shout-message-meta-time">21:04</span>
+            </div>
+            <div class="shout-rich-text">Vô địch!! 🏆</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -26,6 +26,12 @@ export const HOUSE_CUP_DEFAULT_MEDAL_POINTS: readonly [number, number, number, n
 /** Chỉ cần vượt qua tối thiểu 5 màn là người chơi chắc chắn ghi điểm cho Nhà; hạng càng cao điểm càng nhiều. */
 export const HOUSE_CUP_MIN_STAGES_FOR_POINTS = 5;
 
+/** Quỹ thưởng tuần cho Liên Minh đứng Hạng 1 Cúp Nhà: chia đều mỗi 17:00 Thứ Sáu (giờ VN) cho thành viên chơi tối thiểu 5 ván của 1 mini game bất kỳ. */
+export const HOUSE_CUP_ALLIANCE_PRIZE_POOL = 200_000;
+export const HOUSE_CUP_ALLIANCE_MIN_GAMES = 5;
+export const HOUSE_CUP_PAYOUT_WEEKDAY_VN = 5; // 5 = Thứ Sáu (0=CN..6=T7)
+export const HOUSE_CUP_PAYOUT_HOUR_VN = 17;   // 17:00 Asia/Ho_Chi_Minh (UTC+7)
+
 export interface HouseCupRankPointTier {
   maxRank: number | null; // null = mọi thứ hạng còn lại miễn đạt >= minStagesForPoints
   points: number;
@@ -137,6 +143,32 @@ export interface HouseCupAllianceStanding {
   allyHouse: HouseName | null;
 }
 
+export interface HouseCupAllianceLastPayout {
+  cycleKey: string;
+  allianceNameVi: string;
+  houses: readonly [HouseName, HouseName];
+  poolAmount: number;
+  qualifiedCount: number;
+  perMemberAmount: number;
+  paidAt?: number;
+}
+
+export interface HouseCupAllianceRewardInfo {
+  enabled: boolean;
+  poolAmount: number;
+  minGamesAnyMinigame: number;
+  payoutWeekdayVn: number;
+  payoutHourVn: number;
+  cycleKey?: string;
+  nextPayoutAt?: number;
+  qualifiedCount?: number;
+  estimatedPerMember?: number;
+  memberBestPlays?: number;
+  memberBestDiscipline?: HouseCupDisciplineId | null;
+  memberQualified?: boolean;
+  lastPayout?: HouseCupAllianceLastPayout | null;
+}
+
 export interface HouseCupView {
   weekKey?: string;
   mode?: 'medals' | 'legacy';
@@ -145,6 +177,7 @@ export interface HouseCupView {
   minStagesForPoints?: number;
   rankTiers?: readonly HouseCupRankPointTier[];
   alliances?: readonly [HouseCupAllianceSpec, HouseCupAllianceSpec];
+  allianceReward?: HouseCupAllianceRewardInfo;
   houses?: Record<HouseName, number>; // this week, every member of the house (or medal bracket totals)
   disciplines?: Partial<Record<HouseCupDisciplineId, Record<HouseName, number>>>; // unlimited raw weekly points per discipline
   house?: string | null; // the member's HPVN house (null: none, no points)
@@ -352,6 +385,15 @@ export const houseCupMinStagesForPoints = (): number =>
 /** Bảng điểm thưởng Nhà theo thứ hạng cá nhân trên BXH. */
 export const houseCupRankTiers = (): readonly HouseCupRankPointTier[] =>
   view?.rankTiers && view.rankTiers.length > 0 ? view.rankTiers : HOUSE_CUP_DEFAULT_RANK_TIERS;
+/** Thông tin quỹ thưởng tuần (17:00 Thứ Sáu) cho Liên Minh đứng Hạng 1 Cúp Nhà. */
+export const houseCupAllianceReward = (): HouseCupAllianceRewardInfo => ({
+  enabled: true,
+  poolAmount: HOUSE_CUP_ALLIANCE_PRIZE_POOL,
+  minGamesAnyMinigame: HOUSE_CUP_ALLIANCE_MIN_GAMES,
+  payoutWeekdayVn: HOUSE_CUP_PAYOUT_WEEKDAY_VN,
+  payoutHourVn: HOUSE_CUP_PAYOUT_HOUR_VN,
+  ...(view?.allianceReward ?? {}),
+});
 
 /** Ordered per-discipline medal standings when the server provides discipline totals, or empty array in legacy mode. */
 export function houseCupDisciplineSummaries(): HouseCupDisciplineSummary[] {
@@ -512,6 +554,92 @@ export function applyHouseCup(raw: unknown): void {
     }
   }
 
+  let nextAllianceReward: HouseCupAllianceRewardInfo | undefined = view?.allianceReward;
+  if (r.allianceReward && typeof r.allianceReward === 'object') {
+    const ar = r.allianceReward as Record<string, unknown>;
+    const rawPool = n(ar.poolAmount) || HOUSE_CUP_ALLIANCE_PRIZE_POOL;
+    const rawMinGames = Math.max(1, n(ar.minGamesAnyMinigame) || HOUSE_CUP_ALLIANCE_MIN_GAMES);
+    const rawWeekday =
+      typeof ar.payoutWeekdayVn === 'number' && Number.isFinite(ar.payoutWeekdayVn)
+        ? Math.max(0, Math.min(6, Math.floor(ar.payoutWeekdayVn)))
+        : HOUSE_CUP_PAYOUT_WEEKDAY_VN;
+    const rawHour =
+      typeof ar.payoutHourVn === 'number' && Number.isFinite(ar.payoutHourVn)
+        ? Math.max(0, Math.min(23, Math.floor(ar.payoutHourVn)))
+        : HOUSE_CUP_PAYOUT_HOUR_VN;
+    const bestDiscStr = typeof ar.memberBestDiscipline === 'string' ? ar.memberBestDiscipline : '';
+    const bestDisc = VALID_DISCIPLINES.has(bestDiscStr)
+      ? (bestDiscStr as HouseCupDisciplineId)
+      : null;
+    const bestPlays =
+      typeof ar.memberBestPlays === 'number' && Number.isFinite(ar.memberBestPlays)
+        ? n(ar.memberBestPlays)
+        : undefined;
+    const qualifiedCount =
+      typeof ar.qualifiedCount === 'number' && Number.isFinite(ar.qualifiedCount)
+        ? n(ar.qualifiedCount)
+        : undefined;
+    const estPerMember =
+      typeof ar.estimatedPerMember === 'number' && Number.isFinite(ar.estimatedPerMember)
+        ? n(ar.estimatedPerMember)
+        : qualifiedCount && qualifiedCount > 0
+          ? Math.floor(rawPool / qualifiedCount)
+          : undefined;
+    let lastPayout: HouseCupAllianceLastPayout | null | undefined = undefined;
+    if (ar.lastPayout && typeof ar.lastPayout === 'object') {
+      const lp = ar.lastPayout as Record<string, unknown>;
+      const lpHouses = Array.isArray(lp.houses) && lp.houses.length === 2
+        ? [String(lp.houses[0]), String(lp.houses[1])]
+        : null;
+      if (
+        lpHouses &&
+        HOUSE_SET.has(lpHouses[0]) &&
+        HOUSE_SET.has(lpHouses[1]) &&
+        typeof lp.cycleKey === 'string' &&
+        lp.cycleKey.trim()
+      ) {
+        const lpPool = n(lp.poolAmount) || rawPool;
+        const lpQ = n(lp.qualifiedCount);
+        lastPayout = {
+          cycleKey: lp.cycleKey.trim(),
+          allianceNameVi:
+            typeof lp.allianceNameVi === 'string' && lp.allianceNameVi.trim()
+              ? lp.allianceNameVi.trim()
+              : `Liên Minh ${lpHouses[0]} & ${lpHouses[1]}`,
+          houses: [lpHouses[0] as HouseName, lpHouses[1] as HouseName],
+          poolAmount: lpPool,
+          qualifiedCount: lpQ,
+          perMemberAmount: n(lp.perMemberAmount) || (lpQ > 0 ? Math.floor(lpPool / lpQ) : 0),
+          ...(typeof lp.paidAt === 'number' && Number.isFinite(lp.paidAt) ? { paidAt: lp.paidAt } : {}),
+        };
+      }
+    } else if (ar.lastPayout === null) {
+      lastPayout = null;
+    }
+
+    nextAllianceReward = {
+      enabled: ar.enabled !== false,
+      poolAmount: rawPool,
+      minGamesAnyMinigame: rawMinGames,
+      payoutWeekdayVn: rawWeekday,
+      payoutHourVn: rawHour,
+      ...(typeof ar.cycleKey === 'string' && ar.cycleKey.trim() ? { cycleKey: ar.cycleKey.trim() } : {}),
+      ...(typeof ar.nextPayoutAt === 'number' && Number.isFinite(ar.nextPayoutAt) && ar.nextPayoutAt > 0
+        ? { nextPayoutAt: ar.nextPayoutAt }
+        : {}),
+      ...(qualifiedCount !== undefined ? { qualifiedCount } : {}),
+      ...(estPerMember !== undefined ? { estimatedPerMember: estPerMember } : {}),
+      ...(bestPlays !== undefined ? { memberBestPlays: bestPlays } : {}),
+      ...(bestDisc !== null || ar.memberBestDiscipline === null ? { memberBestDiscipline: bestDisc } : {}),
+      ...(typeof ar.memberQualified === 'boolean'
+        ? { memberQualified: ar.memberQualified }
+        : bestPlays !== undefined
+          ? { memberQualified: bestPlays >= rawMinGames }
+          : {}),
+      ...(lastPayout !== undefined ? { lastPayout } : {}),
+    };
+  }
+
   view = {
     ...view,
     ...(typeof r.weekKey === 'string' ? { weekKey: r.weekKey } : {}),
@@ -521,6 +649,7 @@ export function applyHouseCup(raw: unknown): void {
     minStagesForPoints: nextMinStages,
     rankTiers: nextRankTiers,
     ...(nextAlliances ? { alliances: nextAlliances } : { alliances: undefined }),
+    ...(nextAllianceReward ? { allianceReward: nextAllianceReward } : {}),
     ...(resolvedHouses ? { houses: resolvedHouses } : {}),
     ...(nextDisciplines ? { disciplines: nextDisciplines } : { disciplines: undefined }),
     ...('house' in r ? { house: typeof r.house === 'string' ? r.house : null } : {}),

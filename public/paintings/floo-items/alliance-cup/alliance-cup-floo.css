@@ -1,0 +1,113 @@
+/* ==========================================================================
+   Mạng Floo HPVN — Khung Bong Bóng Liên Minh Nhà Thắng Cúp Tuần ("alliance-cup")
+   Thiết kế chốt (Mẫu F — Gấm Hoàng Gia 4 Sắc):
+     - Nền (padding-box): Gấm nhung dệt chéo 4 Nhà (Đỏ Gryffindor · Vàng Hufflepuff · Lục Slytherin · Lam Ravenclaw) ánh vàng nhẹ dưới Cúp
+     - Viền (border-box): 4 đoạn viền 4 màu Nhà tách rõ (Đỏ · Vàng · Lục · Lam) bọc khung ngoài tối & lồng chỉ vàng kim bên trong
+     - Góc trên: Không gắn huy hiệu góc phụ (đối xứng tuyệt đối quanh Cúp)
+     - Cúp Vô Địch (::after): Đại Cúp Cánh Phượng (cup-winged) 48x48px đặt ngay chính giữa viền trên
+   Đường dẫn ảnh trên repo hpvn-archive.net:
+     public/images/floo-items/alliance-cup/ -> /images/floo-items/alliance-cup/*
+   ========================================================================== */
+
+.shout-message-row[data-store-frame="alliance-cup"] {
+  --sf-oklab: ;
+  --sf-edge: transparent;
+  --sf-text: #fffbeb;
+  --sf-author: #fde047;
+  --sf-meta: #e2e8f0;
+  --sf-link: #fef08a;
+  --sf-quote-bg: rgba(15, 10, 20, 0.28);
+  --sf-quote-border: #fde047;
+  --sf-shadow:
+    0 0 0 1.5px #211404,
+    0 5px 18px rgba(250, 204, 21, 0.3),
+    inset 0 0 0 1.2px rgba(253, 224, 71, 0.68);
+  --sf-paper:
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.045) 0 2px, transparent 2px 6px) padding-box,
+    radial-gradient(60% 50% at 50% 0%, rgba(253, 224, 71, 0.22), rgba(253, 224, 71, 0) 68%) padding-box,
+    linear-gradient(125deg var(--sf-oklab), #7f1d1d 0%, #78350f 33%, #065f46 66%, #1e3a8a 100%) padding-box,
+    linear-gradient(125deg, #f87171 0 25%, #facc15 0 50%, #34d399 0 75%, #60a5fa 0 100%) border-box;
+}
+
+@supports (background: linear-gradient(in oklab, white, black)) {
+  .shout-message-row[data-store-frame="alliance-cup"] {
+    --sf-oklab: in oklab;
+  }
+}
+
+@media (forced-colors: active) {
+  .shout-message-row[data-store-frame="alliance-cup"]
+    .shout-message-bubble:not(:has(.shout-image-album.is-stack)) {
+    border: 2px solid CanvasText !important;
+    background: Canvas !important;
+    color: CanvasText !important;
+  }
+}
+
+.shout-message-row[data-store-frame="alliance-cup"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack)) {
+  color: var(--sf-text);
+  border: 3px solid transparent !important;
+  background: var(--sf-paper) !important;
+  box-shadow: var(--sf-shadow);
+  text-shadow: 0 1px 2px rgba(8, 4, 2, 0.72);
+  min-width: 146px;
+  margin-top: 22px;
+  padding: 21px 22px 12px 22px;
+}
+
+.shout-message-row[data-store-frame="alliance-cup"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack))
+  .shout-message-author {
+  color: var(--sf-author) !important;
+  text-shadow: 0 1px 2px rgba(10, 6, 2, 0.92);
+}
+
+.shout-message-row[data-store-frame="alliance-cup"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack))
+  .shout-message-meta-time {
+  color: var(--sf-meta);
+}
+
+.shout-message-row[data-store-frame="alliance-cup"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack))
+  .shout-rich-text
+  a {
+  color: var(--sf-link);
+}
+
+.shout-message-row[data-store-frame="alliance-cup"]
+  .shout-message-bubble:not(:has(.shout-image-album.is-stack))
+  .shout-quote-preview {
+  background: var(--sf-quote-bg);
+  border-left-color: var(--sf-quote-border);
+  color: var(--sf-text);
+}
+
+/* Đại Cúp Cánh Phượng đặt ngay chính giữa viền trên (::after — 48x48px) */
+.shout-message-row[data-store-frame="alliance-cup"]
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack))::after {
+  content: "";
+  z-index: 3;
+  pointer-events: none;
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  top: -2px;
+  bottom: auto;
+  left: 50%;
+  right: auto;
+  transform: translate(-50%, -58%);
+  filter:
+    drop-shadow(0 2px 5px rgba(12, 6, 2, 0.82))
+    drop-shadow(0 0 8px rgba(250, 204, 21, 0.48));
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  background-image: url("/images/floo-items/alliance-cup/cup-winged.png");
+  background-image: image-set(
+    url("/images/floo-items/alliance-cup/cup-winged.webp") type("image/webp") 1x,
+    url("/images/floo-items/alliance-cup/cup-winged-2x.webp") type("image/webp") 2x,
+    url("/images/floo-items/alliance-cup/cup-winged.png") type("image/png") 1x
+  );
+}

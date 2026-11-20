@@ -417,6 +417,8 @@ import {
   trialsGetCraftablePhoenixBarnGood,
   trialsCraftPhoenixTalismanFromBarn,
   trialsCompletePuzzleArcadeVictory,
+  trialsRecordMinigamePlay,
+  type MinigamePlayDisciplineId,
 } from './simulationTrials';
 
 import {
@@ -1409,6 +1411,10 @@ export class ParkSimulation {
 
   public craftPhoenixTalismanFromBarn(): { ok: boolean; msg: string } { return trialsCraftPhoenixTalismanFromBarn(this); }
 
+  public recordMinigamePlay(kind: MinigamePlayDisciplineId): number {
+    return trialsRecordMinigamePlay(this, kind, true, false);
+  }
+
   public completePuzzleArcadeVictory(
     mode: PuzzleArcadeMode,
     reward: PuzzleRewardSpec,
@@ -1417,6 +1423,7 @@ export class ParkSimulation {
       efficiency?: number;
       proofOfPlay?: ProofOfPlayEnvelope;
       completedStage?: number;
+      skipPlayCount?: boolean;
     }
   ): {
     starsEarned: number;

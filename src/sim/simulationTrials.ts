@@ -604,6 +604,44 @@ export function trialsGetAllPersonalLeaderboardSummaries(sim: ParkSimulation): P
     return buildAllPersonalRecordsSummary(sim.state, getAllCachedCloudLeaderboards());
 }
 
+export type MinigamePlayDisciplineId = 'match3' | 'caro' | 'sudoku' | 'chess' | 'blocks' | 'jigsaw';
+
+/** Ghi nhận 1 ván minigame hoàn tất (thắng hoặc thua tự nhiên) để máy chủ HPVN xét mốc tối thiểu 5 ván thưởng Liên Minh. */
+export function trialsRecordMinigamePlay(
+  sim: ParkSimulation,
+  kind: MinigamePlayDisciplineId,
+  saveNow = false,
+  alreadyIncrementedCleared = false
+): number {
+  const map = (sim.state.minigamePlays ??= {});
+  let prev = typeof map[kind] === 'number' && Number.isFinite(map[kind])
+    ? Math.max(0, Math.floor(map[kind]!))
+    : -1;
+  if (prev < 0) {
+    const m3 = sim.state.match3;
+    const pa = sim.state.puzzleArcade;
+    const clearedNow =
+      kind === 'match3'
+        ? Math.max(0, Math.floor(m3?.levelsWon ?? m3?.maxClearedLevel ?? 0))
+        : kind === 'caro'
+          ? Math.max(0, Math.floor(pa?.caroCleared ?? 0))
+          : kind === 'sudoku'
+            ? Math.max(0, Math.floor(pa?.sudokuCleared ?? 0))
+            : kind === 'chess'
+              ? Math.max(0, Math.floor(pa?.chessCleared ?? 0))
+              : kind === 'blocks'
+                ? Math.max(0, Math.floor(pa?.blockCleared ?? 0))
+                : Math.max(0, Math.floor(pa?.jigsawCleared ?? 0));
+    prev = Math.max(0, clearedNow - (alreadyIncrementedCleared ? 1 : 0));
+  }
+  const next = prev + 1;
+  map[kind] = next;
+  if (saveNow) {
+    sim.saveToStorage();
+  }
+  return next;
+}
+
 export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation, 
     bonusCoinsFromMoves = 0,
     sessionMetrics?: {
@@ -769,6 +807,7 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
     if (goldEarned > 0) sim.onRewardFly?.('galleons', goldEarned);
     if (sandEarned > 0) sim.onRewardFly?.('sand', sandEarned);
     sim.advanceTutorialStep('earn_magic_star');
+    trialsRecordMinigamePlay(sim, 'match3', false, true);
     sim.saveToStorage();
     sim.onUiChange?.();
 
@@ -1045,6 +1084,7 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
       efficiency?: number;
       proofOfPlay?: ProofOfPlayEnvelope;
       completedStage?: number;
+      skipPlayCount?: boolean;
     }
   ): {
     starsEarned: number;
@@ -1225,6 +1265,9 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
     if (goldEarned > 0) sim.onRewardFly?.('galleons', goldEarned);
     if (sandEarned > 0) sim.onRewardFly?.('sand', sandEarned);
     sim.advanceTutorialStep('earn_magic_star');
+    if (!sessionMetrics?.skipPlayCount) {
+      trialsRecordMinigamePlay(sim, mode, false, isFirstClear);
+    }
     sim.saveToStorage();
     sim.onUiChange?.();
 

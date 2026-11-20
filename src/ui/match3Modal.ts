@@ -1898,6 +1898,7 @@ export class Match3ModalController {
 
     box.querySelector('#btnM3GiveUpRetry')?.addEventListener('click', () => {
       if (!this.rescueContext) {
+        this.sim.recordMinigamePlay('match3');
         this.sim.loseMatch3Heart();
       }
       this.startFreshStage(
