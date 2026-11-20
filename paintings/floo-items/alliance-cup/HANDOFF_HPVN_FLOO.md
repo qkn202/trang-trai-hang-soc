@@ -7,11 +7,15 @@ Tài liệu này đóng gói trọn bộ tài nguyên đồ họa (`1x`/`2x` Web
 ## 1. Thông số thiết kế chốt & danh mục file bàn giao (trong thư mục `alliance-cup/`)
 
 - **Mã khung (`data-store-frame`)**: **`"alliance-cup"`**
-- **Thiết kế đã chốt**:
-  - **Màu nền**: **Tứ Viện Ngân Hà** — 4 góc bong bóng toả hào quang bảo ngọc của đủ 4 Nhà Hogwarts (**Đỏ Hồng Ngọc Gryffindor** × **Lam Ngọc Ravenclaw** × **Vàng Hổ Phách Hufflepuff** × **Lục Bảo Slytherin**) điểm sao tứ sắc trên nền đêm Đại Sảnh Đường, bọc viền đôi Vàng Vương Miện (`#facc15` / `#fde047`).
-  - **Cúp Vô Địch (`::after`)**: **Đại Cúp Cánh Phượng (`cup-winged`)** kích thước `48×48 px` đặt **ngay chính giữa đường viền trên** (`top: 0; left: 50%; transform: translate(-50%, -58%)`), kèm `margin-top: 20px` + `padding-top: 21px` + `min-width: 144px` để không bao giờ đè lên tên người gửi, giờ gửi hay dòng tin nhắn phía trên (kể cả khi nhắn 1 từ ngắn).
+- **Thiết kế đã chốt (Mẫu F — Gấm Hoàng Gia 4 Sắc)**:
+  - **Màu nền (`padding-box`)**: **Gấm Hoàng Gia 4 Sắc** — nền nhung dệt chéo chuyển sắc trầm sang trọng của đủ 4 Nhà Hogwarts (**Đỏ Gryffindor `#7f1d1d`** · **Vàng Hufflepuff `#78350f`** · **Lục Slytherin `#065f46`** · **Lam Ravenclaw `#1e3a8a`**) phủ gân gấm mảnh & ánh vàng nhẹ ngay dưới Cúp.
+  - **Viền (`border-box` — `3px solid transparent !important`)**: **4 đoạn viền 4 màu Nhà tách rõ** (`#f87171` Đỏ · `#facc15` Vàng · `#34d399` Lục · `#60a5fa` Lam) chạy quanh bo góc tự nhiên, bọc khung ngoài tối `#211404` và lồng đường **chỉ vàng kim bên trong** (`inset`).
+  - **Cúp Vô Địch (`::after`)**: **Đại Cúp Cánh Phượng (`cup-winged`)** kích thước `48×48 px` đặt **ngay chính giữa đường viền trên** (`top: -2px; left: 50%; transform: translate(-50%, -58%)`), kèm `margin-top: 22px` + `padding-top: 21px` + `min-width: 146px` để không bao giờ đè lên tên người gửi, giờ gửi hay dòng tin nhắn phía trên (kể cả khi nhắn 1 từ ngắn).
   - **Góc phụ (`::before`)**: Không gắn gì để Cúp Cánh Phượng ở giữa viền trên đối xứng hoàn hảo.
-- **Đối tượng & thời hạn nhận khung đề xuất**: Toàn bộ học sinh thuộc **2 Nhà trong Liên Minh Hạng 1 Cúp Tuần trước** (hoặc user đạt danh hiệu Quán Quân Cúp Tuần), hiệu lực trong **7 ngày của tuần kế tiếp** (tự động chuyển cho Liên Minh vô địch mới mỗi đầu tuần).
+- **Đối tượng & thời hạn trao thưởng (CHỐT)**:
+  - **Đối tượng nhận**: **Đúng danh sách `qualifiedUids`** — các thành viên thuộc **2 Nhà trong Liên Minh thắng Cúp Tuần** đã đạt điều kiện tuần đó (**`>= 5` ván** ở bất kỳ 1 mini-game nào trong chu kỳ, khớp 1-đối-1 với danh sách chia `200.000 Galleons` trong `docs/handoff/house-cup-discipline-medals/HANDOFF_HPVN_HOUSE_CUP.md`).
+  - **Thời hạn sử dụng**: **Đúng 7 ngày (`168 giờ`) tính từ `17:00 Thứ Sáu` (UTC+7)** đến **`17:00 Thứ Sáu` tuần kế tiếp**.
+  - **Cơ chế cấp**: Phát `chat-frame-lease` (`frameKey: "alliance-cup"`, `durationHours: 168`) ngay trong job tổng kết Cúp Tuần lúc `17:00 Thứ Sáu` để thành viên tự bật/tắt trong menu **Biến hình** (tự động hết hạn đúng `17:00 Thứ Sáu` tuần sau).
 
 Toàn bộ gói sạch gồm **6 file** nằm gọn trong thư mục này:
 
@@ -42,33 +46,34 @@ public/images/floo-items/alliance-cup/
 ### Bước 2 — Nhúng CSS khung bong bóng
 Dán nội dung file `alliance-cup-floo.css` (hoặc `@import`) vào file CSS diện mạo Mạng Floo / Shoutbox (ngay cạnh các rule `"burrow-candy-amber"`, `"ravenclaw-luna"`, `"ron-chicken"`).
 
-### Bước 3 — Cấp khung `"alliance-cup"` cho Liên Minh Nhà Thắng Cúp Tuần
-1. Thêm `"alliance-cup"` vào `Set` whitelist `storeFrame`.
-2. Chọn 1 trong 2 cách cấp quyền hiển thị:
-
-#### Phương án A — Cấp tự động theo 2 Nhà đương kim vô địch Cúp Liên Minh Tuần trong `decorateRow` *(Khuyên dùng — tự xoay vòng hàng tuần không cần phát lease lẻ)*
-Khi trang Floo đã có thông tin `reigningChampionHouses: Set<HouseId>` (2 Nhà thuộc Liên Minh thắng Cúp tuần liền trước) và `cache[uid]?.house`:
+### Bước 3 — Cấp khung `"alliance-cup"` trong job chốt Cúp Tuần lúc `17:00 Thứ Sáu` (thời hạn `7 ngày = 168 giờ`)
+1. Thêm `"alliance-cup"` vào `Set` whitelist `storeFrame` của Mạng Floo.
+2. Khai báo item diện mạo thưởng (không bán ở Hẻm Xéo):
+   - `id` / `canonicalPowerId`: `"alliance-cup"`
+   - `vietnameseName`: `"Quán Quân Cúp Liên Minh Tuần"`
+   - `ability`: `"chat-frame-lease"`
+   - `parameters`: `{ durationHours: 168, frameKey: "alliance-cup" }`
+   - `permanentOnPurchase`: `false`
+3. Ngay sau bước chia `200.000 Galleons` cho `qualifiedUids` trong job chốt sổ **`17:00 Thứ Sáu` (UTC+7)** (xem chi tiết tại `docs/handoff/house-cup-discipline-medals/HANDOFF_HPVN_HOUSE_CUP.md` §8), cấp lease `7 ngày` tính từ đúng mốc `17:00 Thứ Sáu` cho **đúng danh sách `qualifiedUids`** (không cấp cho thành viên 2 Nhà thắng chưa đạt `>= 5` ván):
 
 ```ts
-// Ưu tiên: khung cá nhân đang chọn ở Biến Hình -> khung riêng user -> khung Liên Minh Thắng Cúp Tuần
-const activeFrame =
-  resolveStoreFrameKey(cache[uid]?.appearance) ??
-  resolveExclusiveFrame(uid) ??
-  (cache[uid]?.house && reigningChampionHouses.has(cache[uid].house)
-    ? 'alliance-cup'
-    : undefined);
+// Tính chuẩn mốc 17:00 Thứ Sáu (UTC+7) của kỳ chốt sổ -> hết hạn đúng 17:00 Thứ Sáu tuần kế tiếp (7 ngày = 168h)
+const FRIDAY_17H_VN_MS = Date.parse(`${cycleKey}T17:00:00+07:00`);
+const EXPIRES_AT_MS = FRIDAY_17H_VN_MS + 7 * 24 * 60 * 60 * 1000;
+
+for (const uid of qualifiedUids) {
+  await grantFlooFrameLease({
+    uid,
+    frameKey: 'alliance-cup',
+    source: `house_cup_alliance_${cycleKey}`,
+    grantedAtMs: FRIDAY_17H_VN_MS,
+    expiresAtMs: EXPIRES_AT_MS,
+    durationHours: 168,
+  });
+}
 ```
 
-*(Hoặc nếu chỉ cấp cho Top thành viên đóng góp của Liên Minh thắng Cúp Tuần, thêm `uid` của họ vào danh sách thưởng tuần kèm `expiresAtMs` = Chủ Nhật `23:59:59+07:00` giống hệt cơ chế `sun190`!)*
-
-#### Phương án B — Cấp qua Lease `appearance-frame` có thời hạn `168 giờ (7 ngày)` trong job tổng kết Cúp Tuần
-- Khai báo item diện mạo ẩn (không bán ở Hẻm Xéo):
-  - `id` / `canonicalPowerId`: `"alliance-cup"`
-  - `vietnameseName`: `"Quán Quân Cúp Liên Minh Tuần"`
-  - `ability`: `"chat-frame-lease"`
-  - `parameters`: `{ durationHours: 168, frameKey: "alliance-cup" }`
-  - `permanentOnPurchase`: `false`
-- Trong cron/hàm chốt bảng xếp hạng Cúp Liên Minh mỗi cuối tuần, cấp lease `168 giờ` cho danh sách học sinh đạt giải để các bạn tự bật/tắt được trong menu **Biến hình**.
+*(Ghi chú: Nếu học sinh đồng thời giữ Hạng 1 ở 1 hoặc nhiều mini-game khác trong cùng tuần, cấp song song cả `"alliance-cup"` và `"champ-*"` để học sinh tự chọn đeo khung mình thích trong menu **Biến hình**).*
 
 ---
 
@@ -76,7 +81,7 @@ const activeFrame =
 
 Bạn có thể copy nguyên đoạn dưới đây gửi kèm thư mục `alliance-cup/`:
 
-> Nhờ bạn tích hợp giúp mình khung bong bóng vinh danh **Liên Minh Nhà Thắng Cúp Tuần (`alliance-cup`)** trên Mạng Floo (thiết kế chốt: **Nền Tứ Viện Ngân Hà 4 Nhà** + **Đại Cúp Cánh Phượng đặt ngay chính giữa viền trên**):
+> Nhờ bạn tích hợp giúp mình khung bong bóng vinh danh **Liên Minh Nhà Thắng Cúp Tuần (`alliance-cup`)** trên Mạng Floo (thiết kế chốt Mẫu F: **Nền Gấm Hoàng Gia 4 Nhà + Viền 4 màu tách rõ lồng chỉ vàng kim** + **Đại Cúp Cánh Phượng đặt ngay chính giữa viền trên**):
 > 1. Copy 3 file ảnh (`cup-winged.webp`, `cup-winged-2x.webp`, `cup-winged.png`) trong thư mục `alliance-cup/` vào `public/images/floo-items/alliance-cup/`.
 > 2. Dán file `alliance-cup-floo.css` vào stylesheet `data-store-frame` của Shoutbox/Floo.
-> 3. Thêm `"alliance-cup"` vào `Set` whitelist frame và gắn cho Liên Minh Nhà vô địch Cúp Tuần (hoặc phát lease `168h = 7 ngày` khi tổng kết tuần — chi tiết cả 2 phương án có sẵn trong `HANDOFF_HPVN_FLOO.md` kèm `preview.html` để mở xem trước). Cảm ơn bạn nhiều!
+> 3. Whitelist `"alliance-cup"` và gắn bước trao lease **`7 ngày (168h)` tính từ `17:00 Thứ Sáu` (UTC+7)** cho **đúng danh sách `qualifiedUids`** (thành viên 2 Nhà thắng đạt điều kiện `>= 5` ván tuần đó) ngay trong job chốt Cúp Tuần (chi tiết & code mẫu có sẵn trong `HANDOFF_HPVN_FLOO.md` và `HANDOFF_HPVN_HOUSE_CUP.md` §8). Cảm ơn bạn nhiều!

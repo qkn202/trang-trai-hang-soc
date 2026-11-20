@@ -38,7 +38,12 @@ public/images/floo-items/minigame-champions/
 ### Bước 2 — Nhúng stylesheet khung bong bóng
 Dán nội dung file `minigame-champions-floo.css` (hoặc `@import`) vào file CSS diện mạo Mạng Floo / Shoutbox (ngay cạnh `"alliance-cup"`).
 
-### Bước 3 — Whitelist 6 mã khung & gắn cho Đương Kim Hạng 1 từng Mini-Game
+### Bước 3 — Whitelist 6 mã khung & trao thưởng cho Người Giữ Hạng 1 Cuối Tuần (`7 ngày` tính từ `17:00 Thứ Sáu`)
+
+- **Đối tượng nhận (CHỐT)**: **Người giữ Hạng 1 cuối tuần** của từng bộ môn trong 6 mini-game (`match3`, `caro`, `sudoku`, `chess`, `blocks`, `jigsaw`) tại thời điểm chốt sổ tuần **`17:00 Thứ Sáu` (UTC+7)**.
+- **Thời hạn sử dụng (CHỐT)**: **Đúng 7 ngày (`168 giờ`) tính từ `17:00 Thứ Sáu` (UTC+7)** đến **`17:00 Thứ Sáu` tuần kế tiếp** (cùng mốc thời gian với khung Liên Minh `"alliance-cup"`).
+- **Trường hợp đoạt nhiều khung cùng tuần**: Nếu 1 học sinh giữ Hạng 1 ở nhiều bộ môn và/hoặc đồng thời nằm trong `qualifiedUids` Liên Minh thắng Cúp Tuần, cấp **đủ tất cả** các lease khung tương ứng để học sinh tự chọn đeo khung mình thích trong menu **Biến hình**.
+
 1. Thêm 6 mã vào `Set` whitelist `storeFrame`:
    ```ts
    const MINIGAME_CHAMPION_FRAMES = [
@@ -50,18 +55,22 @@ Dán nội dung file `minigame-champions-floo.css` (hoặc `@import`) vào file 
      'champ-jigsaw',
    ] as const;
    ```
-2. Ánh xạ `uid` đang giữ **Hạng 1** của mỗi bộ môn sang mã khung `champ-${discipline}` (hoặc phát lease `168 giờ = 7 ngày` khi tổng kết tuần):
+2. Khai báo 6 item diện mạo thưởng (`ability: "chat-frame-lease"`, `parameters: { durationHours: 168, frameKey }`, `permanentOnPurchase: false`, ẩn khỏi Hẻm Xéo) và phát lease trong cùng job chốt sổ **`17:00 Thứ Sáu` (UTC+7)** (xem tích hợp đầy đủ tại `docs/handoff/house-cup-discipline-medals/HANDOFF_HPVN_HOUSE_CUP.md` §8):
    ```ts
-   // Map uid -> mã khung Hạng 1 của bộ môn người đó đang dẫn đầu (top1ByDiscipline: Partial<Record<HouseCupDisciplineId, string>>)
-   function resolveMinigameTop1Frame(
-     uid: string | undefined,
-     top1ByDiscipline: Partial<Record<'match3' | 'caro' | 'sudoku' | 'chess' | 'blocks' | 'jigsaw', string>>,
-   ): string | undefined {
-     if (!uid) return undefined;
-     for (const [disc, champUid] of Object.entries(top1ByDiscipline)) {
-       if (champUid === uid) return `champ-${disc}`;
-     }
-     return undefined;
+   const FRIDAY_17H_VN_MS = Date.parse(`${cycleKey}T17:00:00+07:00`);
+   const EXPIRES_AT_MS = FRIDAY_17H_VN_MS + 7 * 24 * 60 * 60 * 1000;
+
+   // top1ByDiscipline: { match3?: uid, caro?: uid, sudoku?: uid, chess?: uid, blocks?: uid, jigsaw?: uid }
+   for (const [disc, uid] of Object.entries(top1ByDiscipline)) {
+     if (!uid) continue;
+     await grantFlooFrameLease({
+       uid,
+       frameKey: `champ-${disc}`,
+       source: `house_cup_top1_${disc}_${cycleKey}`,
+       grantedAtMs: FRIDAY_17H_VN_MS,
+       expiresAtMs: EXPIRES_AT_MS,
+       durationHours: 168,
+     });
    }
    ```
 
@@ -73,4 +82,4 @@ Dán nội dung file `minigame-champions-floo.css` (hoặc `@import`) vào file 
 > - Mỗi bộ môn có màu nền Bảo Ngọc riêng biệt và huy hiệu Hạng 1 (`54×54 px`) đặt ngay chính giữa viền trên (Số Học: Bánh xe Thần Số Học `1–9`; Bắn Cá: Mỹ nhân ngư Hồ Đen Harry Potter; Tranh Ghép: Huy chương vàng ghép tranh; Bùa Gặt: Hũ kẹo Honeydukes; Dò Mìn: Khối đá cổ ngữ cắm cờ; Sinh Vật: Niffler ôm Galleon số `1`).
 > 1. Copy 18 file ảnh trong `minigame-champions/` vào `public/images/floo-items/minigame-champions/`.
 > 2. Dán `minigame-champions-floo.css` vào stylesheet `data-store-frame` của Mạng Floo.
-> 3. Whitelist 6 mã `champ-*` và gắn cho user đang giữ Hạng 1 của từng bộ môn (code mẫu có sẵn trong `HANDOFF_HPVN_FLOO.md` kèm `preview.html` để mở xem trước). Cảm ơn bạn nhiều!
+> 3. Whitelist 6 mã `champ-*` và trao lease **`7 ngày (168h)` tính từ `17:00 Thứ Sáu` (UTC+7)** cho **người giữ Hạng 1 cuối tuần** của từng bộ môn ngay trong job chốt sổ Cúp Tuần (chi tiết & code mẫu có sẵn trong `HANDOFF_HPVN_FLOO.md` và `HANDOFF_HPVN_HOUSE_CUP.md` §8). Cảm ơn bạn nhiều!
