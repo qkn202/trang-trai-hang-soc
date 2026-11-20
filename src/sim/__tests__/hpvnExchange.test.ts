@@ -21,6 +21,7 @@ vi.mock('../../hpvn/bridge', async (importOriginal) => {
 });
 
 import {
+  ALLIANCE_FIRST_SEASON_START_MS,
   ALLIANCE_WEEKLY_MIN_GAMES,
   ALLIANCE_WEEKLY_PRIZE_POOL_GALLEONS,
   buildAllianceWeeklyRewardBannerHtml,
@@ -32,6 +33,7 @@ import {
   exchangeGalleons,
   FarmWallet,
   formatCountdownToFridayPayoutVi,
+  getAllianceWeeklyScheduleState,
   getFridayPayoutCycleKey,
   getNextFridayPayoutTimeMs,
   resetPendingReverseExchangeForTest,
@@ -162,31 +164,59 @@ describe('HPVN Gringotts Reverse Exchange (Cách 1 — 1.000.000 Sickle → 100.
   });
 });
 
-describe('Weekly Alliance #1 Galleons Reward (Friday 17:00 ICT — 200.000 Galleons split evenly)', () => {
-  it('computes the exact Friday 17:00 ICT payout timestamp and cycleKey across week boundaries', () => {
-    // 2026-11-20 is a Friday. 17:00 ICT = 10:00 UTC.
-    const fri1700Utc = Date.UTC(2026, 10, 20, 10, 0, 0, 0);
-    const nextFri1700Utc = Date.UTC(2026, 10, 27, 10, 0, 0, 0);
+describe('Weekly Alliance #1 Galleons Reward (Start Fri 17:00 → End next Fri 16:00 ICT — 200.000 Galleons)', () => {
+  it('tracks all 3 schedule phases: upcoming (before Fri 17:00 launch), active (Fri 17:00 → next Fri 16:00), and 1h break (Fri 16:00 → 17:00)', () => {
+    // First season launch: Fri 2026-11-20 17:00 ICT = 10:00 UTC
+    const fri20Start1700 = Date.UTC(2026, 10, 20, 10, 0, 0, 0);
+    // First season end: Fri 2026-11-27 16:00 ICT = 09:00 UTC
+    const fri27End1600 = Date.UTC(2026, 10, 27, 9, 0, 0, 0);
+    // Second season start: Fri 2026-11-27 17:00 ICT = 10:00 UTC
+    const fri27Start1700 = Date.UTC(2026, 10, 27, 10, 0, 0, 0);
+    // Second season end: Fri 2026-12-04 16:00 ICT = 09:00 UTC
+    const fri04End1600 = Date.UTC(2026, 11, 4, 9, 0, 0, 0);
 
-    // Thursday 2026-11-19 23:00 ICT (16:00 UTC) -> targets Friday 2026-11-20 17:00 ICT
-    const thuNight = Date.UTC(2026, 10, 19, 16, 0, 0, 0);
-    expect(getNextFridayPayoutTimeMs(thuNight)).toBe(fri1700Utc);
-    expect(getFridayPayoutCycleKey(thuNight)).toBe('2026-11-20');
-    expect(formatCountdownToFridayPayoutVi(fri1700Utc, thuNight)).toBe('Còn 18 giờ');
+    expect(ALLIANCE_FIRST_SEASON_START_MS).toBe(fri20Start1700);
 
-    // Friday 2026-11-20 16:59:00 ICT (09:59 UTC) -> still targets today's 17:00 ICT
-    const fri1659 = Date.UTC(2026, 10, 20, 9, 59, 0, 0);
-    expect(getNextFridayPayoutTimeMs(fri1659)).toBe(fri1700Utc);
-    expect(formatCountdownToFridayPayoutVi(fri1700Utc, fri1659)).toBe('Còn 1 phút');
+    // 1. Before launch: Fri 2026-11-20 12:30 ICT (05:30 UTC) -> countdown to START at 17:00 Fri 20/11
+    const fri20Noon = Date.UTC(2026, 10, 20, 5, 30, 0, 0);
+    const up = getAllianceWeeklyScheduleState(fri20Noon);
+    expect(up.phase).toBe('upcoming');
+    expect(up.targetAt).toBe(fri20Start1700);
+    expect(up.endsAt).toBe(fri27End1600);
+    expect(up.cycleKey).toBe('2026-11-27');
+    expect(up.labelVi).toBe('Bắt đầu 17:00 Thứ Sáu');
+    expect(formatCountdownToFridayPayoutVi(up.targetAt, fri20Noon)).toBe('Còn 4 giờ 30 phút');
 
-    // Exactly Friday 2026-11-20 17:00:00 ICT -> rolls over to Friday 2026-11-27 17:00 ICT
-    expect(getNextFridayPayoutTimeMs(fri1700Utc)).toBe(nextFri1700Utc);
-    expect(getFridayPayoutCycleKey(fri1700Utc)).toBe('2026-11-27');
+    // 2. Active right at 17:00 ICT Fri 20/11 -> countdown to END at 16:00 Fri 27/11 (6d 23h)
+    const activeStart = getAllianceWeeklyScheduleState(fri20Start1700);
+    expect(activeStart.phase).toBe('active');
+    expect(activeStart.targetAt).toBe(fri27End1600);
+    expect(activeStart.cycleKey).toBe('2026-11-27');
+    expect(activeStart.labelVi).toBe('Kết thúc 16:00 Thứ Sáu');
+    expect(formatCountdownToFridayPayoutVi(activeStart.targetAt, fri20Start1700)).toBe('Còn 6 ngày 23 giờ');
+    expect(getNextFridayPayoutTimeMs(fri20Start1700)).toBe(fri27End1600);
+    expect(getFridayPayoutCycleKey(fri20Start1700)).toBe('2026-11-27');
 
-    // Saturday 2026-11-21 10:00 ICT (03:00 UTC) -> weekend play counts toward next Friday 2026-11-27
+    // 3. Active mid-week: Sat 2026-11-21 10:00 ICT (03:00 UTC)
     const satMorning = Date.UTC(2026, 10, 21, 3, 0, 0, 0);
-    expect(getNextFridayPayoutTimeMs(satMorning)).toBe(nextFri1700Utc);
+    expect(getAllianceWeeklyScheduleState(satMorning).phase).toBe('active');
     expect(getFridayPayoutCycleKey(satMorning)).toBe('2026-11-27');
+
+    // 4. Break hour: Fri 2026-11-27 16:15 ICT (09:15 UTC) -> ended at 16:00, counts down 45m to 17:00 next week start
+    const fri27Break = Date.UTC(2026, 10, 27, 9, 15, 0, 0);
+    const brk = getAllianceWeeklyScheduleState(fri27Break);
+    expect(brk.phase).toBe('break');
+    expect(brk.targetAt).toBe(fri27Start1700);
+    expect(brk.endsAt).toBe(fri04End1600);
+    expect(brk.cycleKey).toBe('2026-12-04');
+    expect(brk.labelVi).toBe('Bắt đầu 17:00 Thứ Sáu');
+    expect(formatCountdownToFridayPayoutVi(brk.targetAt, fri27Break)).toBe('Còn 45 phút');
+
+    // 5. Next season active at 17:00 ICT Fri 27/11 -> ends Fri 04/12 16:00 ICT
+    const activeWeek2 = getAllianceWeeklyScheduleState(fri27Start1700);
+    expect(activeWeek2.phase).toBe('active');
+    expect(activeWeek2.endsAt).toBe(fri04End1600);
+    expect(activeWeek2.cycleKey).toBe('2026-12-04');
   });
 
   it('splits 200,000 Galleons evenly among all eligible members of the #1 Alliance', () => {
@@ -248,16 +278,18 @@ describe('Weekly Alliance #1 Galleons Reward (Friday 17:00 ICT — 200.000 Galle
         enabled: true,
         poolAmount: 200_000,
         minGamesAnyMinigame: 5,
+        startWeekdayVn: 5,
+        startHourVn: 17,
         payoutWeekdayVn: 5,
-        payoutHourVn: 17,
-        cycleKey: '2026-11-20',
+        payoutHourVn: 16,
+        cycleKey: '2026-11-27',
         qualifiedCount: 8,
         memberBestPlays: 6,
         memberBestDiscipline: 'caro',
         lastPayout: {
-          cycleKey: '2026-11-13',
-          allianceNameVi: 'Liên Minh Ánh Dương',
-          houses: ['Gryffindor', 'Hufflepuff'],
+          cycleKey: '2026-11-20-launch',
+          allianceNameVi: 'Liên Minh Lửa & Trí',
+          houses: ['Ravenclaw', 'Gryffindor'],
           poolAmount: 200_000,
           qualifiedCount: 10,
           perMemberAmount: 20_000,
@@ -273,22 +305,34 @@ describe('Weekly Alliance #1 Galleons Reward (Friday 17:00 ICT — 200.000 Galle
 
     const [leading, trailing] = houseCupAllianceStandings('Gryffindor');
     const playerAlliance = leading.isPlayerAlliance ? leading : trailing;
-    const bannerHtml = buildAllianceWeeklyRewardBannerHtml({
+    // Before Fri 20/11 17:00 ICT -> shows "Bắt đầu 17:00 Thứ Sáu"
+    const preLaunchBanner = buildAllianceWeeklyRewardBannerHtml({
       cup,
       leadingAlliance: leading,
       playerAlliance,
       noHouse: false,
-      nowMs: Date.UTC(2026, 10, 20, 4, 0, 0, 0), // Fri 11:00 ICT -> 6h left
+      nowMs: Date.UTC(2026, 10, 20, 4, 0, 0, 0), // Fri 11:00 ICT -> 6h until 17:00 start
     });
-    expect(bannerHtml).toContain('200.000 Galleons');
-    expect(bannerHtml).toContain('17:00 Thứ Sáu');
-    expect(bannerHtml).toContain('~25.000 Galleons/người');
-    expect(bannerHtml).toContain('6/5 ván · Dò Mìn');
-    expect(bannerHtml).toContain('2026-11-13');
+    expect(preLaunchBanner).toContain('200.000 Galleons');
+    expect(preLaunchBanner).toContain('Bắt đầu 17:00 Thứ Sáu · Còn 6 giờ');
+    expect(preLaunchBanner).toContain('~25.000 Galleons/người');
+    expect(preLaunchBanner).toContain('6/5 ván · Dò Mìn');
+    expect(preLaunchBanner).toContain('2026-11-20-launch');
+
+    // During active season: Wed 25/11 16:00 ICT -> shows "Kết thúc 16:00 Thứ Sáu · Còn 2 ngày 0 giờ"
+    const activeBanner = buildAllianceWeeklyRewardBannerHtml({
+      cup,
+      leadingAlliance: leading,
+      playerAlliance,
+      noHouse: false,
+      nowMs: Date.UTC(2026, 10, 25, 9, 0, 0, 0),
+    });
+    expect(activeBanner).toContain('Kết thúc 16:00 Thứ Sáu · Còn 2 ngày 0 giờ');
 
     const ruleHtml = buildAllianceWeeklyRewardRuleHtml(cup);
     expect(ruleHtml).toContain('200.000 Galleons');
     expect(ruleHtml).toContain('17:00 Thứ Sáu');
+    expect(ruleHtml).toContain('16:00 Thứ Sáu');
     expect(ruleHtml).toContain('5 ván');
   });
 

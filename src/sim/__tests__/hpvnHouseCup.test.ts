@@ -108,12 +108,9 @@ it('mounts #houseCupIntroDialog and renders House Cup startup popup with live st
   expect(contentBox.innerHTML).toContain('Hôm nay: 40/60 đ · Cúp Đợt 2: 140/300 đ');
   expect(contentBox.innerHTML).toContain('crest-ravenclaw.webp');
   expect(contentBox.innerHTML).toContain('510 đ');
-  expect(contentBox.innerHTML).toContain('Bùa Gặt');
-  expect(contentBox.innerHTML).toContain('Số Học');
-  expect(contentBox.innerHTML).toContain('Sinh Vật');
-  expect(contentBox.innerHTML).toContain('Tranh Ghép');
-  expect(contentBox.innerHTML).toContain('Sickle');
-  expect(contentBox.innerHTML).toContain('Cát Thời Gian');
+  expect(contentBox.innerHTML).toContain('200.000 Galleons');
+  expect(contentBox.innerHTML).not.toContain('hs-cup-intro-rules');
+  expect(contentBox.innerHTML).not.toContain('hs-cup-rank-box');
 
   // Clicking close closes the popup
   btnHandlers.get('#btnCupIntroClose')?.();
@@ -228,8 +225,8 @@ it('scores Discipline Medal Bracket independently per discipline so 1-game grind
   };
 
   questsUiOpenHouseCupIntroDialog(fakeHud as never);
-  expect(contentBox.innerHTML).toContain('Đua Huy Chương Từng Môn');
-  expect(contentBox.innerHTML).toContain('không giới hạn');
+  expect(contentBox.innerHTML).not.toContain('hs-cup-intro-rules');
+  expect(contentBox.innerHTML).not.toContain('hs-cup-rank-box');
   expect(contentBox.innerHTML).toContain('2 nhất môn');
   expect(contentBox.innerHTML).toContain('Dò Mìn');
   expect(contentBox.innerHTML).toContain('Bắn Cá');

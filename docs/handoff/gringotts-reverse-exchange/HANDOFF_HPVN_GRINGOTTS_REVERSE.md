@@ -223,8 +223,8 @@ return await db.runTransaction(async (tx) => {
 
 ---
 
-## 6. Liên kết với Quỹ Thưởng 200.000 Galleons Liên Minh #1 Cúp Nhà (17:00 Thứ Sáu)
-- Song song với Quầy Gringotts 2 chiều, máy chủ HPVN phát thưởng định kỳ **`200.000 Galleons`** vào **17:00 Thứ Sáu hàng tuần (UTC+7)**, chia đều thẳng vào ví `users/{uid}.galleons` cho tất cả thành viên thuộc **Liên Minh đứng Hạng 1 Cúp Nhà** đã chơi ít nhất **5 ván** của **1 mini game bất kỳ** trong chu kỳ tuần.
-- **Đợt chia thưởng ngay lập tức cho kỳ hiện tại:** Phát liền **`200.000 Galleons`** cho **Liên Minh Lửa & Trí (`Ravenclaw` + `Gryffindor`)** theo hàm 1 lần `payoutCurrentRavGryAllianceNow` (có `dryRun: true` xem trước danh sách + khóa idempotent `cycleKey` chống cron 17:00 cùng ngày phát đúp).
+## 6. Liên kết với Quỹ Thưởng 200.000 Galleons Liên Minh #1 Cúp Nhà (17:00 Thứ Sáu → 16:00 Thứ Sáu Tuần Sau)
+- Song song với Quầy Gringotts 2 chiều, máy chủ HPVN mở tính điểm mỗi **`17:00 Thứ Sáu`** và chốt thưởng vào **`16:00 Thứ Sáu tuần kế tiếp` (UTC+7, cron `0 16 * * 5`)**, chia đều quỹ **`200.000 Galleons`** thẳng vào ví `users/{uid}.galleons` cho tất cả thành viên thuộc **Liên Minh đứng Hạng 1 Cúp Nhà** đã chơi ít nhất **5 ván** của **1 mini game bất kỳ**.
+- **Đợt chia thưởng ngay lập tức cho kỳ hiện tại:** Phát liền **`200.000 Galleons`** cho **Liên Minh Lửa & Trí (`Ravenclaw` + `Gryffindor`)** theo hàm 1 lần `payoutCurrentRavGryAllianceNow` (khóa `'2026-11-20-launch'`, có `dryRun: true` xem trước danh sách).
 - Khoản thưởng này cộng trực tiếp vào `users/{uid}.galleons` (không cộng Sickle vào `save`), nên hoàn toàn độc lập với bộ phát hiện `sickle_spike` của Quầy Gringotts.
-- Chi tiết cron `0 17 * * 5`, hàm chia thưởng liền cho `Ravenclaw + Gryffindor`, lọc `>= 5` ván và payload `allianceReward` xem tại `docs/handoff/house-cup-discipline-medals/HANDOFF_HPVN_HOUSE_CUP.md` (Mục 7 & Mục 9).
+- Chi tiết cron `0 16 * * 5`, hàm chia thưởng liền cho `Ravenclaw + Gryffindor`, lọc `>= 5` ván và payload `allianceReward` xem tại `docs/handoff/house-cup-discipline-medals/HANDOFF_HPVN_HOUSE_CUP.md` (Mục 7 & Mục 9).

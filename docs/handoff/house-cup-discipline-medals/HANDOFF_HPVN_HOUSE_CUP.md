@@ -294,43 +294,59 @@ function scoreDisciplineFromWeeklyPlayers(entries) {
 
 ---
 
-## 7. Thưởng 200.000 Galleons Cho Liên Minh Đứng #1 Cúp Nhà Mỗi 17:00 Thứ Sáu
+## 7. Thưởng 200.000 Galleons Cho Liên Minh Đứng #1 Cúp Nhà (Bắt Đầu 17:00 Thứ Sáu → Kết Thúc 16:00 Thứ Sáu Tuần Sau)
 
 Bổ sung cơ chế phát thưởng **Galleons** tự động hàng tuần từ máy chủ HPVN vào thẳng ví thành viên (`users/{uid}.galleons`):
 
-- **Thời điểm chốt & trao thưởng:** **17:00 Thứ Sáu hàng tuần** theo giờ Việt Nam (`Asia/Ho_Chi_Minh`, `UTC+7` — cron `0 17 * * 5`).
+- **Lịch thi đấu & chốt sổ chuẩn (giờ Việt Nam, `Asia/Ho_Chi_Minh`, `UTC+7`):**
+  - **Bắt đầu tính điểm tuần mới:** **`17:00 Thứ Sáu`** (mùa giải đầu tiên khai màn lúc **`17:00 Thứ Sáu 20/11/2026`**).
+  - **Kết thúc tính điểm & Chốt thưởng:** **`16:00 Thứ Sáu tuần kế tiếp`** (cron **`0 16 * * 5`**, `timeZone: 'Asia/Ho_Chi_Minh'` — kỳ đầu tiên kết thúc lúc **`16:00 Thứ Sáu 27/11/2026`**).
+  - **Khung nghỉ tổng kết (`16:00 → 17:00 Thứ Sáu`, 1 tiếng):** Đã chốt sổ tuần cũ, trao thưởng `200.000 Galleons` + khung Floo & đổi cặp Liên Minh mới; không cộng điểm sang tuần kế tiếp cho tới đúng **`17:00 Thứ Sáu`**.
 - **Tổng quỹ thưởng:** **`200.000 Galleons`** (`ALLIANCE_WEEKLY_PRIZE_POOL_GALLEONS = 200_000`) **chia đều** cho toàn bộ thành viên đủ điều kiện thuộc **Liên Minh đứng Hạng 1 Cúp Nhà** (gồm cả 2 Nhà trong Liên Minh dẫn đầu):
   - `perMemberGalleons = Math.floor(200_000 / qualifiedUids.length)`
   - Ví dụ với 8–10 người chơi hợp lệ thuộc Liên Minh #1: mỗi người nhận **`20.000 – 25.000 Galleons`**.
 - **Điều kiện nhận thưởng bắt buộc cho từng thành viên:** Phải **chơi ít nhất 5 ván của 1 mini game bất kỳ** trong chu kỳ tuần đó (`Math.max(...Object.values(weeklyPlaysByDiscipline)) >= 5` trên 6 môn `match3`, `caro`, `sudoku`, `chess`, `blocks`, `jigsaw`). Không cộng dồn rải rác (ví dụ 2 ván Bùa Gặt + 3 ván Dò Mìn = chưa đạt; cần ít nhất 5 ván trong cùng 1 môn bất kỳ).
 
-### 7.1. Mã chu kỳ Thứ Sáu 17:00 (`cycleKey`) — Giữ trọn lượt chơi cuối tuần
-Để các ván chơi vào **tối Thứ Sáu, Thứ Bảy và Chủ Nhật** đều được tính vào kỳ chốt thưởng 17:00 Thứ Sáu kế tiếp (không bị "vùng chết cuối tuần"), dùng `cycleKey` là ngày Thứ Sáu sắp tới theo giờ Việt Nam (`YYYY-MM-DD`):
+### 7.1. Mã chu kỳ 17:00 Thứ Sáu → 16:00 Thứ Sáu Tuần Sau (`cycleKey`)
+Dùng `cycleKey` là **ngày Thứ Sáu kết thúc kỳ** theo giờ Việt Nam (`YYYY-MM-DD`, VD mùa khai màn `20/11 17:00 → 27/11 16:00` mang mã `'2026-11-27'`):
 
 ```js
 const VN_UTC_OFFSET_MS = 7 * 3_600_000;
 const DAY_MS = 86_400_000;
 const ALLIANCE_PRIZE_POOL = 200_000;
 const ALLIANCE_MIN_GAMES_ANY_MINIGAME = 5;
+const FIRST_SEASON_START_MS = Date.UTC(2026, 10, 20, 10, 0, 0, 0); // 2026-11-20 17:00:00+07:00
+const SEASON_DURATION_MS = 7 * DAY_MS - 1 * 3_600_000; // 6 ngày 23 giờ (Thứ Sáu 17:00 -> Thứ Sáu sau 16:00)
 
-function getNextFridayPayoutTimeMs(nowMs = Date.now(), weekdayVn = 5, hourVn = 17) {
-  const vnNowMs = nowMs + VN_UTC_OFFSET_MS;
-  const d = new Date(vnNowMs);
-  const daysAhead = (weekdayVn - d.getUTCDay() + 7) % 7;
-  let candidateVn = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + daysAhead, hourVn, 0, 0, 0);
-  if (candidateVn <= vnNowMs) candidateVn += 7 * DAY_MS;
-  return candidateVn - VN_UTC_OFFSET_MS;
+function formatVnDateKey(epochMs) {
+  const vn = new Date(epochMs + VN_UTC_OFFSET_MS);
+  return `${vn.getUTCFullYear()}-${String(vn.getUTCMonth() + 1).padStart(2, '0')}-${String(vn.getUTCDate()).padStart(2, '0')}`;
 }
 
-function getFridayPayoutCycleKey(nowMs = Date.now()) {
-  const nextAt = getNextFridayPayoutTimeMs(nowMs, 5, 17);
-  const vn = new Date(nextAt + VN_UTC_OFFSET_MS);
-  return `${vn.getUTCFullYear()}-${String(vn.getUTCMonth() + 1).padStart(2, '0')}-${String(vn.getUTCDate()).padStart(2, '0')}`;
+function getAllianceWeeklyScheduleState(nowMs = Date.now()) {
+  if (nowMs < FIRST_SEASON_START_MS) {
+    const startsAt = FIRST_SEASON_START_MS;
+    const endsAt = startsAt + SEASON_DURATION_MS;
+    return { phase: 'upcoming', startsAt, endsAt, cycleKey: formatVnDateKey(endsAt) };
+  }
+  const vnNowMs = nowMs + VN_UTC_OFFSET_MS;
+  const d = new Date(vnNowMs);
+  const daysSinceFri = (d.getUTCDay() - 5 + 7) % 7;
+  let startVnMs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - daysSinceFri, 17, 0, 0, 0);
+  if (startVnMs > vnNowMs) startVnMs -= 7 * DAY_MS;
+  const startsAt = startVnMs - VN_UTC_OFFSET_MS;
+  const endsAt = startsAt + SEASON_DURATION_MS;
+  if (nowMs < endsAt) {
+    return { phase: 'active', startsAt, endsAt, cycleKey: formatVnDateKey(endsAt) };
+  }
+  const nextStartsAt = startsAt + 7 * DAY_MS;
+  const nextEndsAt = nextStartsAt + SEASON_DURATION_MS;
+  return { phase: 'break', startsAt: nextStartsAt, endsAt: nextEndsAt, cycleKey: formatVnDateKey(nextEndsAt) };
 }
 ```
 
-### 7.2. Ghi nhận số ván chơi hàng tuần trong `op: 'save'`
-Client mới tự ghi bộ đếm tăng đơn điệu `saveObj.minigamePlays[disc]` sau mỗi ván thắng hoặc thua tự nhiên (không tính bấm thoát/chơi lại giữa chừng). Trong `op: 'save'`, server tính delta an toàn (tương thích cả client cũ qua `Math.max(plays, cleared)`):
+### 7.2. Ghi nhận số ván chơi & điểm tuần trong `op: 'save'`
+Chỉ cộng điểm Cúp Nhà & số ván tuần khi `schedule.phase === 'active'` (tức nằm trong khung `17:00 Thứ Sáu → 16:00 Thứ Sáu tuần kế tiếp`, bỏ qua khung nghỉ `16:00–17:00 Thứ Sáu` và khoảng thời gian trước khi mùa đầu mở lúc `17:00 20/11`):
 
 ```js
 function extractPlayedByDiscipline(saveObj) {
@@ -352,30 +368,33 @@ function extractPlayedByDiscipline(saveObj) {
 }
 
 // Trong op === 'save':
-const cycleKey = getFridayPayoutCycleKey(Date.now());
+const sched = getAllianceWeeklyScheduleState(Date.now());
 const nextPlayed = extractPlayedByDiscipline(nextSaveObj);
 const prevPlayed = memberCup.lastPlayedByDiscipline || nextPlayed;
-const weeklyPlays = memberCup.rewardCycleKey === cycleKey
-  ? { ...(memberCup.weeklyPlaysByDiscipline || {}) }
-  : { match3: 0, caro: 0, sudoku: 0, chess: 0, blocks: 0, jigsaw: 0 };
+if (sched.phase === 'active') {
+  const weeklyPlays = memberCup.rewardCycleKey === sched.cycleKey
+    ? { ...(memberCup.weeklyPlaysByDiscipline || {}) }
+    : { match3: 0, caro: 0, sudoku: 0, chess: 0, blocks: 0, jigsaw: 0 };
 
-for (const disc of CUP_DISCIPLINES) {
-  const delta = Math.max(0, Math.min(10, (nextPlayed[disc] || 0) - (prevPlayed[disc] || 0)));
-  weeklyPlays[disc] = (weeklyPlays[disc] || 0) + delta;
+  for (const disc of CUP_DISCIPLINES) {
+    const delta = Math.max(0, Math.min(10, (nextPlayed[disc] || 0) - (prevPlayed[disc] || 0)));
+    weeklyPlays[disc] = (weeklyPlays[disc] || 0) + delta;
+  }
+  memberCup.rewardCycleKey = sched.cycleKey;
+  memberCup.weeklyPlaysByDiscipline = weeklyPlays;
 }
-memberCup.rewardCycleKey = cycleKey;
-memberCup.weeklyPlaysByDiscipline = weeklyPlays;
 memberCup.lastPlayedByDiscipline = nextPlayed;
 ```
 
-### 7.3. Scheduled Function phát thưởng mỗi 17:00 Thứ Sáu (`0 17 * * 5`, `Asia/Ho_Chi_Minh`)
+### 7.3. Scheduled Function kết thúc & phát thưởng mỗi 16:00 Thứ Sáu (`0 16 * * 5`, `Asia/Ho_Chi_Minh`)
 
 ```js
-// Firebase Functions v2: onSchedule({ schedule: '0 17 * * 5', timeZone: 'Asia/Ho_Chi_Minh' }, ...)
+// Firebase Functions v2: onSchedule({ schedule: '0 16 * * 5', timeZone: 'Asia/Ho_Chi_Minh' }, ...)
 async function payoutHouseCupAllianceWeekly() {
   const nowMs = Date.now();
-  // Ở thời điểm 17:00:xx Thứ Sáu, lùi 5 phút để lấy đúng cycleKey của Thứ Sáu hôm nay
-  const cycleKey = getFridayPayoutCycleKey(nowMs - 5 * 60_000);
+  // Chạy từ kỳ chốt sổ đầu tiên (27/11/2026 16:00 ICT) trở đi; lùi 5 phút về 15:55 để lấy đúng cycleKey vừa kết thúc
+  if (nowMs < FIRST_SEASON_START_MS + SEASON_DURATION_MS - 60_000) return;
+  const { cycleKey } = getAllianceWeeklyScheduleState(nowMs - 5 * 60_000);
   const payoutRef = db.collection('houseCupAlliancePayouts').doc(cycleKey);
 
   // 1. Chống phát trùng (idempotent lock)
@@ -481,7 +500,7 @@ async function payoutHouseCupAllianceWeekly() {
 ```
 
 ### 7.4. Mở rộng payload `op: 'cup'` trả về cho Client
-Thêm object `allianceReward` vào phản hồi `op: 'cup'` để **Pop-up Cúp 4 Nhà**, **Tab Cúp Nhà** và **Quầy Gringotts** hiển thị đếm ngược tới 17:00 Thứ Sáu, số ván của thành viên (`X/5 ván`), ước tính Galleons/người và kết quả kỳ trước:
+Thêm object `allianceReward` vào phản hồi `op: 'cup'` để **Pop-up Cúp 4 Nhà**, **Tab Cúp Nhà** và **Quầy Gringotts** hiển thị chính xác trạng thái `Bắt đầu 17:00 Thứ Sáu` (khi đang trước 17:00 hoặc khung nghỉ `16:00–17:00`) hoặc `Kết thúc 16:00 Thứ Sáu` (khi đang trong kỳ đua), cùng số ván (`X/5 ván`), ước tính Galleons/người và kết quả kỳ trước:
 
 ```json
 {
@@ -489,23 +508,26 @@ Thêm object `allianceReward` vào phản hồi `op: 'cup'` để **Pop-up Cúp 
     "enabled": true,
     "poolAmount": 200000,
     "minGamesAnyMinigame": 5,
+    "startWeekdayVn": 5,
+    "startHourVn": 17,
     "payoutWeekdayVn": 5,
-    "payoutHourVn": 17,
-    "cycleKey": "2026-11-20",
-    "nextPayoutAt": 1795168800000,
+    "payoutHourVn": 16,
+    "cycleKey": "2026-11-27",
+    "seasonStartsAt": 1795168800000,
+    "nextPayoutAt": 1795770000000,
     "qualifiedCount": 8,
     "estimatedPerMember": 25000,
     "memberBestPlays": 5,
     "memberBestDiscipline": "match3",
     "memberQualified": true,
     "lastPayout": {
-      "cycleKey": "2026-11-13",
-      "allianceNameVi": "Liên Minh Ánh Dương",
-      "houses": ["Gryffindor", "Hufflepuff"],
+      "cycleKey": "2026-11-20-launch",
+      "allianceNameVi": "Liên Minh Lửa & Trí",
+      "houses": ["Ravenclaw", "Gryffindor"],
       "poolAmount": 200000,
       "qualifiedCount": 8,
       "perMemberAmount": 25000,
-      "paidAt": 1794564000000
+      "paidAt": 1795154400000
     }
   }
 }
@@ -513,19 +535,19 @@ Thêm object `allianceReward` vào phản hồi `op: 'cup'` để **Pop-up Cúp 
 
 ---
 
-## 8. Trao Thưởng Khung Bong Bóng Mạng Floo Cùng Lúc Chốt Sổ 17:00 Thứ Sáu (Hạn 7 Ngày = 168 Giờ)
+## 8. Trao Thưởng Khung Bong Bóng Mạng Floo Cùng Lúc Chốt Sổ 16:00 Thứ Sáu (Hạn 7 Ngày = 168 Giờ)
 
-Ngay trong cùng job chốt sổ Cúp Tuần lúc **`17:00 Thứ Sáu` (UTC+7 / giờ Việt Nam)** (`settleWeeklyAllianceReward`), ngoài việc chia quỹ `200.000 Galleons`, server phát thêm **7 khung bong bóng Mạng Floo** có thời hạn chuẩn **`7 ngày (168 giờ)`** tính từ đúng mốc `17:00 Thứ Sáu` (`cycleKey`) đến `17:00 Thứ Sáu` tuần kế tiếp:
+Ngay trong cùng job chốt sổ Cúp Tuần lúc **`16:00 Thứ Sáu` (UTC+7 / giờ Việt Nam)** (`payoutHouseCupAllianceWeekly`), ngoài việc chia quỹ `200.000 Galleons`, server phát thêm **7 khung bong bóng Mạng Floo** có thời hạn chuẩn **`7 ngày (168 giờ)`** tính từ đúng mốc chốt sổ **`16:00 Thứ Sáu`** (`cycleKey`) đến `16:00 Thứ Sáu` tuần kế tiếp:
 
 ### 8.1. Quy tắc trao thưởng chốt
 1. **Khung Liên Minh Nhà Thắng Cúp Tuần (`"alliance-cup"`)**:
    - **Tài nguyên & CSS**: `public/paintings/floo-items/alliance-cup/` (Mẫu F — Gấm Hoàng Gia 4 Sắc + viền 4 màu lồng chỉ vàng kim + Đại Cúp Cánh Phượng đặt ngay giữa viền trên).
    - **Đối tượng nhận**: **Đúng danh sách `qualifiedUids`** ở §7.3 (các thành viên thuộc 2 Nhà trong Liên Minh thắng Cúp Tuần đã đạt điều kiện **`>= 5` ván** ở bất kỳ 1 mini-game nào trong chu kỳ — không cấp cho thành viên 2 Nhà thắng chưa đạt `>= 5` ván).
-   - **Thời hạn**: **`7 ngày (168 giờ)` tính từ `17:00 Thứ Sáu` (UTC+7)**.
+   - **Thời hạn**: **`7 ngày (168 giờ)` tính từ `16:00 Thứ Sáu` (UTC+7)**.
 2. **6 Khung Quán Quân Hạng 1 Của 6 Mini-Game (`"champ-match3"`, `"champ-caro"`, `"champ-sudoku"`, `"champ-chess"`, `"champ-blocks"`, `"champ-jigsaw"`)**:
    - **Tài nguyên & CSS**: `public/paintings/floo-items/minigame-champions/`.
-   - **Đối tượng nhận**: **Người giữ Hạng 1 cuối tuần** của từng bộ môn (`match3`, `caro`, `sudoku`, `chess`, `blocks`, `jigsaw`) tại thời điểm chốt sổ **`17:00 Thứ Sáu` (UTC+7)**.
-   - **Thời hạn**: **`7 ngày (168 giờ)` tính từ `17:00 Thứ Sáu` (UTC+7)** (giống hệt khung Liên Minh).
+   - **Đối tượng nhận**: **Người giữ Hạng 1 cuối tuần** của từng bộ môn (`match3`, `caro`, `sudoku`, `chess`, `blocks`, `jigsaw`) tại thời điểm chốt sổ **`16:00 Thứ Sáu` (UTC+7)**.
+   - **Thời hạn**: **`7 ngày (168 giờ)` tính từ `16:00 Thứ Sáu` (UTC+7)** (giống hệt khung Liên Minh).
 3. **Trường hợp đoạt nhiều khung trong cùng 1 tuần**:
    - Nếu 1 học sinh vừa thuộc `qualifiedUids` Liên Minh thắng vừa giữ Hạng 1 ở 1 hoặc nhiều mini-game, server cấp **đủ tất cả các lease khung tương ứng** trong menu **Biến hình** (`chat-frame-lease`) để học sinh tự chọn đeo khung mình thích.
 
@@ -536,14 +558,14 @@ const FLOO_FRAME_DURATION_HOURS = 168; // 7 ngày
 const FLOO_FRAME_DURATION_MS = FLOO_FRAME_DURATION_HOURS * 60 * 60 * 1000;
 
 /**
- * Gọi ngay trong settleWeeklyAllianceReward() tại mốc 17:00 Thứ Sáu (UTC+7).
- * - cycleKey: 'YYYY-MM-DD' (Thứ Sáu chốt sổ, VD '2026-11-20')
+ * Gọi ngay trong payoutHouseCupAllianceWeekly() tại mốc chốt sổ 16:00 Thứ Sáu (UTC+7).
+ * - cycleKey: 'YYYY-MM-DD' (Thứ Sáu chốt sổ, VD '2026-11-27')
  * - qualifiedUids: đúng danh sách thành viên 2 Nhà thắng đạt >= 5 ván (§7.3)
  * - top1ByDiscipline: { match3?: uid, caro?: uid, sudoku?: uid, chess?: uid, blocks?: uid, jigsaw?: uid }
- *   (người giữ Hạng 1 cuối tuần của từng bộ môn tại thời điểm 17:00 Thứ Sáu)
+ *   (người giữ Hạng 1 cuối tuần của từng bộ môn tại thời điểm 16:00 Thứ Sáu)
  */
 async function grantWeeklyFlooFrames(db, { cycleKey, qualifiedUids, top1ByDiscipline }) {
-  const grantedAtMs = Date.parse(`${cycleKey}T17:00:00+07:00`);
+  const grantedAtMs = Date.parse(`${cycleKey}T16:00:00+07:00`) || Date.now();
   const expiresAtMs = grantedAtMs + FLOO_FRAME_DURATION_MS;
 
   const grants = [];
@@ -604,8 +626,8 @@ Dùng để **chia thưởng ngay lập tức** quỹ **`200.000 Galleons`** cho
 - **Điều kiện lọc từng thành viên (chạy ngay trước khi `weeklyPlaysByDiscipline` thu thập đủ cả tuần):**
   - Thuộc Nhà `Ravenclaw` hoặc `Gryffindor`.
   - Đã chơi ít nhất **`5` ván của 1 mini game bất kỳ** (`match3`, `caro`, `sudoku`, `chess`, `blocks`, `jigsaw`), ưu tiên lấy từ `cup.weeklyPlaysByDiscipline`; nếu thành viên chưa lưu sau khi bật patch §7.2 thì tự fallback đọc từ `save` JSON hiện có (`extractPlayedByDiscipline(saveObj)`, tức `Math.max(minigamePlays[d], cleared[d]) >= 5`).
-- **Chống phát trùng với cron 17:00 Thứ Sáu hôm nay:**
-  - Dùng đúng `cycleKey` của Thứ Sáu kỳ này (`'2026-11-20'`) cho doc khóa `houseCupAlliancePayouts/2026-11-20` → khi cron `0 17 * * 5` chạy lúc 17:00 cùng ngày sẽ thấy doc đã tồn tại và **tự bỏ qua không phát trùng**, sau đó tự động chạy tiếp kỳ mới vào **17:00 Thứ Sáu tuần kế tiếp (`2026-11-27`)**.
+- **Tách bạch hoàn toàn với mùa mới khai màn 17:00 Thứ Sáu (`2026-11-20 17:00` → `2026-11-27 16:00`):**
+  - Dùng khóa idempotent riêng `'2026-11-20-launch'` (`houseCupAlliancePayouts/2026-11-20-launch`) để phát ngay 1 lần cho Liên Minh `Ravenclaw + Gryffindor` hiện tại; kỳ đua tự động đầu tiên bắt đầu tính điểm lúc **`17:00 Thứ Sáu 20/11/2026`** và chốt thưởng lúc **`16:00 Thứ Sáu 27/11/2026`** (`cycleKey = '2026-11-27'`).
   - Luôn chạy với `DRY_RUN = true` trước để kiểm tra danh sách thành viên + số Galleons/người, sau đó đổi `DRY_RUN = false` để phát thưởng thật.
 
 ```js
@@ -617,7 +639,7 @@ Dùng để **chia thưởng ngay lập tức** quỹ **`200.000 Galleons`** cho
 async function payoutCurrentRavGryAllianceNow(
   db,
   {
-    cycleKey = getFridayPayoutCycleKey(Date.now()), // VD '2026-11-20' (trùng khóa cron hôm nay để không phát đúp)
+    cycleKey = '2026-11-20-launch', // khóa riêng cho đợt chia thưởng liền, không đụng kỳ đầu chốt lúc 16:00 ngày 27/11
     poolAmount = 200_000,
     minGames = 5,
     alsoGrantAllianceFrame = true,

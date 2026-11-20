@@ -26,11 +26,13 @@ export const HOUSE_CUP_DEFAULT_MEDAL_POINTS: readonly [number, number, number, n
 /** Chỉ cần vượt qua tối thiểu 5 màn là người chơi chắc chắn ghi điểm cho Nhà; hạng càng cao điểm càng nhiều. */
 export const HOUSE_CUP_MIN_STAGES_FOR_POINTS = 5;
 
-/** Quỹ thưởng tuần cho Liên Minh đứng Hạng 1 Cúp Nhà: chia đều mỗi 17:00 Thứ Sáu (giờ VN) cho thành viên chơi tối thiểu 5 ván của 1 mini game bất kỳ. */
+/** Quỹ thưởng tuần cho Liên Minh đứng Hạng 1 Cúp Nhà: bắt đầu tính điểm 17:00 Thứ Sáu, kết thúc & chốt thưởng 16:00 Thứ Sáu tuần sau (giờ VN). */
 export const HOUSE_CUP_ALLIANCE_PRIZE_POOL = 200_000;
 export const HOUSE_CUP_ALLIANCE_MIN_GAMES = 5;
-export const HOUSE_CUP_PAYOUT_WEEKDAY_VN = 5; // 5 = Thứ Sáu (0=CN..6=T7)
-export const HOUSE_CUP_PAYOUT_HOUR_VN = 17;   // 17:00 Asia/Ho_Chi_Minh (UTC+7)
+export const HOUSE_CUP_SEASON_START_WEEKDAY_VN = 5; // 5 = Thứ Sáu
+export const HOUSE_CUP_SEASON_START_HOUR_VN = 17;   // 17:00 Thứ Sáu: bắt đầu tính điểm tuần mới
+export const HOUSE_CUP_PAYOUT_WEEKDAY_VN = 5;       // 5 = Thứ Sáu (0=CN..6=T7)
+export const HOUSE_CUP_PAYOUT_HOUR_VN = 16;         // 16:00 Thứ Sáu tuần sau: kết thúc & chốt thưởng (UTC+7)
 
 export interface HouseCupRankPointTier {
   maxRank: number | null; // null = mọi thứ hạng còn lại miễn đạt >= minStagesForPoints
@@ -276,9 +278,12 @@ export interface HouseCupAllianceRewardInfo {
   enabled: boolean;
   poolAmount: number;
   minGamesAnyMinigame: number;
+  startWeekdayVn?: number;
+  startHourVn?: number;
   payoutWeekdayVn: number;
   payoutHourVn: number;
   cycleKey?: string;
+  seasonStartsAt?: number;
   nextPayoutAt?: number;
   qualifiedCount?: number;
   estimatedPerMember?: number;
@@ -510,11 +515,13 @@ export const houseCupStageScoreBands = (): readonly HouseCupStageScoreBand[] =>
   view?.stageScoreBands && view.stageScoreBands.length > 0
     ? view.stageScoreBands
     : HOUSE_CUP_DEFAULT_STAGE_SCORE_BANDS;
-/** Thông tin quỹ thưởng tuần (17:00 Thứ Sáu) cho Liên Minh đứng Hạng 1 Cúp Nhà. */
+/** Thông tin quỹ thưởng tuần (bắt đầu 17:00 Thứ Sáu → kết thúc 16:00 Thứ Sáu tuần sau) cho Liên Minh đứng Hạng 1 Cúp Nhà. */
 export const houseCupAllianceReward = (): HouseCupAllianceRewardInfo => ({
   enabled: true,
   poolAmount: HOUSE_CUP_ALLIANCE_PRIZE_POOL,
   minGamesAnyMinigame: HOUSE_CUP_ALLIANCE_MIN_GAMES,
+  startWeekdayVn: HOUSE_CUP_SEASON_START_WEEKDAY_VN,
+  startHourVn: HOUSE_CUP_SEASON_START_HOUR_VN,
   payoutWeekdayVn: HOUSE_CUP_PAYOUT_WEEKDAY_VN,
   payoutHourVn: HOUSE_CUP_PAYOUT_HOUR_VN,
   ...(view?.allianceReward ?? {}),
@@ -706,6 +713,14 @@ export function applyHouseCup(raw: unknown): void {
     const ar = r.allianceReward as Record<string, unknown>;
     const rawPool = n(ar.poolAmount) || HOUSE_CUP_ALLIANCE_PRIZE_POOL;
     const rawMinGames = Math.max(1, n(ar.minGamesAnyMinigame) || HOUSE_CUP_ALLIANCE_MIN_GAMES);
+    const rawStartWeekday =
+      typeof ar.startWeekdayVn === 'number' && Number.isFinite(ar.startWeekdayVn)
+        ? Math.max(0, Math.min(6, Math.floor(ar.startWeekdayVn)))
+        : HOUSE_CUP_SEASON_START_WEEKDAY_VN;
+    const rawStartHour =
+      typeof ar.startHourVn === 'number' && Number.isFinite(ar.startHourVn)
+        ? Math.max(0, Math.min(23, Math.floor(ar.startHourVn)))
+        : HOUSE_CUP_SEASON_START_HOUR_VN;
     const rawWeekday =
       typeof ar.payoutWeekdayVn === 'number' && Number.isFinite(ar.payoutWeekdayVn)
         ? Math.max(0, Math.min(6, Math.floor(ar.payoutWeekdayVn)))
@@ -768,9 +783,14 @@ export function applyHouseCup(raw: unknown): void {
       enabled: ar.enabled !== false,
       poolAmount: rawPool,
       minGamesAnyMinigame: rawMinGames,
+      startWeekdayVn: rawStartWeekday,
+      startHourVn: rawStartHour,
       payoutWeekdayVn: rawWeekday,
       payoutHourVn: rawHour,
       ...(typeof ar.cycleKey === 'string' && ar.cycleKey.trim() ? { cycleKey: ar.cycleKey.trim() } : {}),
+      ...(typeof ar.seasonStartsAt === 'number' && Number.isFinite(ar.seasonStartsAt) && ar.seasonStartsAt > 0
+        ? { seasonStartsAt: ar.seasonStartsAt }
+        : {}),
       ...(typeof ar.nextPayoutAt === 'number' && Number.isFinite(ar.nextPayoutAt) && ar.nextPayoutAt > 0
         ? { nextPayoutAt: ar.nextPayoutAt }
         : {}),
