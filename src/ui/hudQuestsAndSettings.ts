@@ -95,6 +95,10 @@ import {
   STORY_CUTSCENE_CHAPTERS,
 } from '../sim/simulation';
 import { VALLEY_VILLAGER_PROFILES, getLocalDateKey } from '../sim/simulationData';
+import {
+  ensureSeasonalFestivalState,
+  SEASONAL_FESTIVAL_DEFS,
+} from '../sim/socialFestivalsAndAlmanac';
 import { yuleTaskProgress } from '../sim/yuleEvent';
 import {
   FRIENDSHIP_CHEST_TOKEN_COST,
@@ -105,6 +109,7 @@ import {
   NEIGHBOR_PRESET_NOTES,
 } from '../sim/neighborSocial';
 import {
+  AlmanacChapterId,
   BuildingCategory,
   CatalogItem,
   CraftedGoodId,
@@ -150,6 +155,7 @@ import {
   InspectSelection,
   escapeHtml,
 } from "./hudShared";
+import { VILLAGER_AFFECTION_GIFT_META } from '../sim/villagerGiftsPetAndStroll';
 import type { GameHUD } from './hud';
 
 export function questsUiOpenHarvestFeastDialog(hud: GameHUD): void {
@@ -298,6 +304,67 @@ export function questsUiRenderHarvestFeastDialog(hud: GameHUD): void {
         </div>
       </div>
 
+      ${(() => {
+        const activeFestDef =
+          hud.sim.getActiveSeasonalFestivalDef() ?? SEASONAL_FESTIVAL_DEFS.lunar_tet;
+        const festProg = ensureSeasonalFestivalState(hud.sim.state);
+        const todayKey = getLocalDateKey();
+        const liXiClaimedToday = festProg.lastLiXiClaimDayKey === todayKey;
+        const isLiveFest = hud.sim.getActiveFestival() === activeFestDef.festival;
+        const festPills = (
+          [
+            ['lunar_tet', '🏮 Tết Việt'],
+            ['mid_autumn', '🥮 Trung Thu'],
+            ['halloween', '🎃 Halloween'],
+            ['christmas', '🎄 Giáng Sinh'],
+          ] as const
+        )
+          .map(([fid, label]) => {
+            const sel = activeFestDef.festival === fid;
+            return `<button type="button" data-feast-switch-fest="${fid}" class="brass-btn ${sel ? 'gold-cta' : ''}" style="font-size:12px;padding:3px 8px;">${label}</button>`;
+          })
+          .join('');
+        const tasksRows = activeFestDef.tasks
+          .map((t) => {
+            const done = festProg.claimedTaskIds.includes(t.id);
+            const cur = hud.sim.getSeasonalFestivalTaskProgress(t.id);
+            const canClaim = !done && (hud.sim.state.sandboxMode || cur >= t.target);
+            return `
+              <div class="quest-card-mini" style="margin-top:6px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                  <div>
+                    <div style="font-size:13px;font-weight:700;">${activeFestDef.icon} ${escapeHtml(t.titleVi)} (${Math.min(cur, t.target)}/${t.target})</div>
+                    <div style="font-size:12px;color:var(--ink-soft);">${escapeHtml(t.descVi)} · +${t.rewardSickle} Sickle${t.rewardStars ? ` · +${t.rewardStars} 🌟` : ''}</div>
+                  </div>
+                  ${
+                    done
+                      ? `<span style="font-size:12px;font-weight:700;color:var(--farm-green-text);">✓ Đã nhận</span>`
+                      : `<button type="button" data-claim-seasonal-task="${t.id}" ${canClaim ? '' : 'disabled'} class="brass-btn ${canClaim ? 'gold-cta' : ''}" style="font-size:12px;padding:4px 10px;">🎁 Nhận</button>`
+                  }
+                </div>
+              </div>
+            `;
+          })
+          .join('');
+        return `
+          <section class="quest-card-mini" style="margin-bottom:12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+              <div>
+                <div style="font-size:13px;font-weight:700;">${escapeHtml(activeFestDef.kickerVi)}</div>
+                <div style="font-size:12px;color:var(--ink-soft);">${escapeHtml(activeFestDef.buffSummaryVi)}</div>
+              </div>
+              ${
+                activeFestDef.hasDailyLiXi && isLiveFest
+                  ? `<button id="btnClaimTetLiXi" type="button" ${liXiClaimedToday ? 'disabled' : ''} class="brass-btn ${liXiClaimedToday ? '' : 'gold-cta'}" style="font-size:12px;padding:4px 10px;">${liXiClaimedToday ? '✓ Đã nhận Lộc Xuân' : '🏮 Nhận Lộc Xuân (+68 Sickle)'}</button>`
+                  : ''
+              }
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px;">${festPills}</div>
+            ${tasksRows}
+          </section>
+        `;
+      })()}
+
       <div class="feast-tier-list" role="list">
         ${tiersHtml}
       </div>
@@ -323,6 +390,31 @@ export function questsUiRenderHarvestFeastDialog(hud: GameHUD): void {
         hud.showToast(res.msg, res.ok ? '🎁' : '🍁');
         hud.refreshAll();
       });
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-feast-switch-fest]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const fid = btn.dataset.feastSwitchFest as FestivalType;
+        hud.sim.state.settings.activeFestival = fid;
+        hud.sim.saveToStorage();
+        hud.refreshAll();
+      });
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-claim-seasonal-task]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tid = btn.dataset.claimSeasonalTask ?? '';
+        if (!tid) return;
+        const res = hud.sim.claimSeasonalFestivalTask(tid);
+        hud.showToast(res.msg, res.ok ? '🏮' : '⏳');
+        hud.refreshAll();
+      });
+    });
+
+    box.querySelector('#btnClaimTetLiXi')?.addEventListener('click', () => {
+      const res = hud.sim.claimDailyTetLiXi();
+      hud.showToast(res.msg, res.ok ? '🏮' : '⏳');
+      hud.refreshAll();
     });
 }
 
@@ -650,7 +742,13 @@ export function questsUiRenderHouseCupIntroDialog(hud: GameHUD): void {
         }
       }
     }
-    if (last === 'sudoku' || last === 'blocks' || last === 'jigsaw') {
+    if (
+      last === 'caro' ||
+      last === 'sudoku' ||
+      last === 'chess' ||
+      last === 'blocks' ||
+      last === 'jigsaw'
+    ) {
       hud.openPuzzleArcadeDialog(last);
     } else {
       hud.openMatch3Dialog();
@@ -848,6 +946,10 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
               const f = ret.npcFriendship[v.id] ?? { villagerId: v.id, level: 1, xp: 0 };
               const nextXp = f.level * 60;
               const talkedToday = f.lastTalkedDayKey === todayKey;
+              const giftedToday = f.lastGiftedDayKey === todayKey;
+              const gMeta = VILLAGER_AFFECTION_GIFT_META[v.id];
+              const keepsakeClaimed = Boolean(f.claimedMilestones?.includes(5));
+              const canClaimKeepsake = !keepsakeClaimed && (f.level >= 5 || st.sandboxMode);
               return `
                 <div class="aaa-slot-card">
                   <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
@@ -867,12 +969,77 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
                         ? ''
                         : `<button type="button" data-npc-talk="${v.id}" data-choice="1" class="brass-btn" style="min-height:40px;font-size:12px;padding:0 10px;">Gợi chuyện (+25 XP)</button>`
                     }
+                    ${
+                      keepsakeClaimed
+                        ? `<span style="font-size:12px;font-weight:700;color:var(--farm-green-text);align-self:center;">✓ ${escapeHtml(gMeta.keepsakeNameVi)}</span>`
+                        : `<button type="button" data-npc-keepsake="${v.id}" ${canClaimKeepsake ? '' : 'disabled'} class="brass-btn ${canClaimKeepsake ? 'gold-cta' : ''}" style="min-height:40px;font-size:12px;padding:0 10px;" title="${escapeHtml(gMeta.keepsakeBonusVi)}">🎁 Kỷ vật Lv.5</button>`
+                    }
+                  </div>
+                  <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;">
+                    ${
+                      giftedToday && !st.sandboxMode
+                        ? `<span style="font-size:11px;font-weight:700;color:var(--farm-green-text);">✓ Hôm nay đã tặng quà thân thiết</span>`
+                        : gMeta.favoriteGifts
+                            .map((gid) => {
+                              const im = getFarmItemMeta(gid);
+                              const have = hud.sim.getFarmItemCount(gid);
+                              const canGift = st.sandboxMode || have >= 1;
+                              return `<button type="button" data-npc-gift="${v.id}" data-gift-item="${gid}" ${canGift ? '' : 'disabled'} class="brass-btn ${canGift ? 'gold-cta' : ''}" style="min-height:34px;font-size:11px;padding:2px 8px;">💝 Tặng ${escapeHtml(im.name)} (${st.sandboxMode ? '∞' : have})</button>`;
+                            })
+                            .join('')
+                    }
                   </div>
                 </div>
               `;
             }).join('')}
           </div>
         `;
+      } else if (hud.activeProfileSubTab === 'almanac') {
+        const alm = hud.sim.evaluateCollectionAlmanac();
+        const chaptersHtml = alm.chapters
+          .map((ch) => {
+            const pct = Math.min(100, Math.round((ch.discoveredCount / Math.max(1, ch.totalCount)) * 100));
+            const chips = ch.sampleEntries
+              .map(
+                (en) =>
+                  `<span class="owl-rew-pill ${en.unlocked ? 'xp' : ''}" style="opacity:${en.unlocked ? '1' : '0.45'};font-size:11px;">${en.icon} ${escapeHtml(en.nameVi)}</span>`
+              )
+              .join('');
+            return `
+              <div class="quest-card-mini" style="margin-bottom:8px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                  <div>
+                    <div style="font-size:13px;font-weight:700;">${ch.icon} ${escapeHtml(ch.titleVi)}</div>
+                    <div style="font-size:12px;color:var(--ink-soft);">${escapeHtml(ch.subtitleVi)} · ${escapeHtml(ch.rewardLabelVi)}</div>
+                  </div>
+                  ${
+                    ch.claimed
+                      ? `<span style="font-size:12px;font-weight:700;color:var(--farm-green-text);">✓ Đã nhận</span>`
+                      : `<button type="button" data-claim-almanac="${ch.id}" ${ch.canClaim ? '' : 'disabled'} class="brass-btn ${ch.canClaim ? 'gold-cta' : ''}" style="font-size:12px;padding:4px 10px;">🎁 Nhận chương</button>`
+                  }
+                </div>
+                <div class="quest-bar" style="margin:6px 0;"><div class="quest-bar-fill" style="width:${pct}%"></div></div>
+                <div style="display:flex;flex-wrap:wrap;gap:4px;">${chips}</div>
+              </div>
+            `;
+          })
+          .join('');
+        const grandHtml = `
+          <div class="quest-card-mini" style="margin-bottom:8px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+              <div>
+                <div style="font-size:13px;font-weight:700;">🏆 Đại Học Giả Bách Khoa Hang Sóc</div>
+                <div style="font-size:12px;color:var(--ink-soft);">Hoàn thành cả 4 Chương Bách Khoa · Thưởng +190 Sickle &amp; +2 🌟</div>
+              </div>
+              ${
+                alm.grandTrophyClaimed
+                  ? `<span style="font-size:12px;font-weight:700;color:var(--farm-green-text);">✓ Danh hiệu vĩnh viễn</span>`
+                  : `<button type="button" data-claim-almanac="grand_trophy" ${alm.allChaptersClaimed || st.sandboxMode ? '' : 'disabled'} class="brass-btn ${alm.allChaptersClaimed || st.sandboxMode ? 'gold-cta' : ''}" style="font-size:12px;padding:4px 10px;">🏆 Nhận Đại Cúp</button>`
+              }
+            </div>
+          </div>
+        `;
+        subBodyHtml = grandHtml + chaptersHtml;
       } else {
         subBodyHtml = `
           <div class="quest-card-mini">
@@ -914,7 +1081,7 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
           </div>
         </div>
         <div class="lb-scope-pills hs-profile-subtabs" role="tablist" aria-label="Chi tiết hồ sơ">
-          ${psubBtn('login7', 'Điểm danh', claimableLoginCount)}${psubBtn('achievements', 'Thành tựu', claimableAchCount)}${psubBtn('friendship', 'Dân làng')}
+          ${psubBtn('login7', 'Điểm danh', claimableLoginCount)}${psubBtn('achievements', 'Thành tựu', claimableAchCount)}${psubBtn('friendship', 'Dân làng')}${psubBtn('almanac', 'Bách khoa', hud.sim.evaluateCollectionAlmanac().claimableCount)}
         </div>
         ${subBodyHtml}
       `;
@@ -996,6 +1163,37 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
         const res = hud.sim.talkWithVillagerChoice(vid, choice);
         hud.showToast(res.msg, res.ok ? '💝' : '☕');
         questsUiRenderAlbumDialog(hud);
+      });
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-npc-gift]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const vid = btn.dataset.npcGift as (typeof VALLEY_VILLAGER_PROFILES)[number]['id'];
+        const itemId = btn.dataset.giftItem as FarmItemId;
+        const res = hud.sim.giftItemToVillager(vid, itemId);
+        hud.showToast(res.msg, res.ok ? '💝' : '🧺');
+        questsUiRenderAlbumDialog(hud);
+        hud.refreshHeader();
+      });
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-npc-keepsake]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const vid = btn.dataset.npcKeepsake as (typeof VALLEY_VILLAGER_PROFILES)[number]['id'];
+        const res = hud.sim.claimVillagerKeepsake(vid);
+        hud.showToast(res.msg, res.ok ? '🎁' : '🔒');
+        questsUiRenderAlbumDialog(hud);
+        hud.refreshHeader();
+      });
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-claim-almanac]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const cid = btn.dataset.claimAlmanac as AlmanacChapterId | 'grand_trophy';
+        const res = hud.sim.claimAlmanacChapterReward(cid);
+        hud.showToast(res.msg, res.ok ? '📚' : '🔒');
+        questsUiRenderAlbumDialog(hud);
+        hud.refreshHeader();
       });
     });
 
@@ -1116,7 +1314,10 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
                     : helpReq
                       ? `<span class="owl-help-tag waiting">🦉 Đang gọi...</span>`
                       : !ok
-                        ? `<button type="button" class="brass-btn owl-ask-help-btn" data-ask-owl-help="${reqIdx}" ${owlHelpLeft <= 0 ? 'disabled' : ''} title="Nhờ bạn">🤝 Nhờ (${owlHelpLeft})</button>`
+                        ? `<div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">
+                            <button type="button" class="brass-btn owl-ask-help-btn" data-jump-owl-item="${escapeHtml(req.itemId)}" title="Dẫn tới ruộng hoặc xưởng sản xuất món này">→ Tìm</button>
+                            <button type="button" class="brass-btn owl-ask-help-btn" data-ask-owl-help="${reqIdx}" ${owlHelpLeft <= 0 ? 'disabled' : ''} title="Nhờ bạn">🤝 Nhờ (${owlHelpLeft})</button>
+                          </div>`
                         : `<span class="owl-req-status">✓</span>`;
                   return `
                     <div class="owl-req-row ${ok ? 'ok' : 'lack'}">
@@ -1209,6 +1410,14 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
             hud.showToast(res.msg, '⚠️');
           }
           questsUiRenderQuestDialog(hud);
+        });
+      });
+
+      box.querySelectorAll<HTMLButtonElement>('[data-jump-owl-item]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const itemId = btn.dataset.jumpOwlItem as FarmItemId;
+          (hud.root.querySelector('#questDialog') as HTMLDialogElement | null)?.close();
+          hud.jumpToMissingFarmItem(itemId);
         });
       });
 
@@ -1548,7 +1757,7 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
       <div class="quest-card-mini">
         <h3 class="hs-section-title">Bầu trời &amp; Nhịp độ</h3>
         ${segRowHtml('Giờ', 'time', [['realtime', 'Tự động'], ['dawn', 'Bình minh'], ['day', 'Ngày'], ['dusk', 'Chiều'], ['night', 'Đêm']], st.settings.timeOverride, 3)}
-        ${segRowHtml('Lễ hội', 'fest', [['auto', 'Tự động'], ['halloween', 'Halloween'], ['christmas', 'Giáng Sinh'], ['quidditch_cup', 'Quidditch']], st.settings.activeFestival, 2)}
+        ${segRowHtml('Lễ hội', 'fest', [['auto', 'Tự động'], ['lunar_tet', 'Tết Việt'], ['mid_autumn', 'Trung Thu'], ['halloween', 'Halloween'], ['christmas', 'Giáng Sinh'], ['quidditch_cup', 'Quidditch']], st.settings.activeFestival, 3, 6)}
         ${segRowHtml('Thời tiết', 'weather', [['auto', 'Tự động'], ['clear', 'Nắng'], ['cloudy', 'Mây'], ['rain', 'Mưa'], ['storm', 'Giông'], ['snow', 'Tuyết'], ['fog', 'Sương']], st.settings.weatherOverride, 4, 7)}
       </div>
 

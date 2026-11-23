@@ -322,6 +322,9 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         prod.xp,
         Math.round(b.durability),
         b.isBrokenDown ? 1 : 0,
+        b.needsTreeRevival ? 1 : 0,
+        b.lastPlantedCropId ?? '',
+        (b.readyFruitCrops ?? []).length,
         b.creatureBondLevel ?? 1,
         b.creatureStage ?? '',
         Math.round(b.creatureHunger ?? 90),
@@ -516,14 +519,24 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                 const soilHintHtml = soilEntry?.lastFamily
                   ? `<div class="hs-insp-note">Luân canh ×2 · Khác họ <strong>${familyLabelMap[soilEntry.lastFamily] ?? soilEntry.lastFamily}</strong></div>`
                   : '';
+                const lastCropId =
+                  b.lastPlantedCropId ?? hud.sim.ensureFarmBarn().lastPlantedCropId;
+                const lastCropMeta = lastCropId ? FARM_CROPS[lastCropId] : null;
                 return `
                   <div class="ws-inspector-board">
                     ${soilBannerHtml}
                     <div class="ws-board-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
                       <span>Chọn hạt</span>
-                      <button id="btnInspOpenSeedQuiz" type="button" class="brass-btn sq-tray-quiz-cta">
-                        Đố nhận hạt
-                      </button>
+                      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                        ${
+                          lastCropMeta
+                            ? `<button id="btnInspReplantLast" type="button" class="brass-btn gold-cta" title="Gieo lại ${escapeHtml(lastCropMeta.name)}">🌱 Gieo lại ${escapeHtml(lastCropMeta.name)}</button>`
+                            : ''
+                        }
+                        <button id="btnInspOpenSeedQuiz" type="button" class="brass-btn sq-tray-quiz-cta">
+                          Đố nhận hạt
+                        </button>
+                      </div>
                     </div>
                     ${soilHintHtml}
                     <div class="seed-filter-bar" role="group" aria-label="Bộ lọc hạt giống" style="margin-bottom:6px;">${filterPills}</div>
@@ -897,6 +910,16 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         ${farmlandHtml}
         ${pastureHtml}
         ${workshopBoardHtml}
+        ${
+          item.id === 'burrow_apple_orchard' && !isBuilding
+            ? b.needsTreeRevival
+              ? `<div class="quest-card-mini" style="margin-bottom:6px;font-size:12px;">
+                  <div style="font-weight:700;margin-bottom:6px;">🍎 Cây táo cần hồi sinh sau 3 vụ (bón 1 🌿 Phân Ủ hoặc nhờ bạn bè chăm giúp)</div>
+                  <button id="btnInspReviveTree" type="button" class="owl-green-send-btn" style="width:100%;padding:6px 10px;font-size:12px;">🌿 Hồi sinh Vườn Táo (+2 🍎)</button>
+                </div>`
+              : `<div class="hs-insp-drop-meta">🍎 Mùa trái cây lâu năm: còn <strong>${Math.max(0, 3 - (b.orchardHarvestsUsed ?? 0))}/3</strong> vụ trước khi cần hồi sinh</div>`
+            : ''
+        }
 
         ${
           item.producesIngredient && !isBuilding
@@ -1221,6 +1244,29 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         hud.inspectSelection = null;
         hud.refreshAll();
         hud.openSeedQuizDialog(hud.activeSeedCropId ?? 'ottery_wheat', targetUid);
+      });
+      panel.querySelector('#btnInspReplantLast')?.addEventListener('click', () => {
+        const res = hud.sim.replantPlotLastCrop(b.uid);
+        if (res.needSeedAcquire && res.cropId) {
+          const targetUid = b.uid;
+          hud.inspectSelection = null;
+          hud.refreshAll();
+          hud.openSeedQuizDialog(res.cropId, targetUid);
+          return;
+        }
+        hud.showToast(res.msg, res.ok ? '🌱' : '🪙');
+        if (res.ok) {
+          hud.inspectSelection = null;
+          hud.refreshAll();
+        } else {
+          inspectorRenderInspector(hud);
+        }
+      });
+      panel.querySelector('#btnInspReviveTree')?.addEventListener('click', () => {
+        const res = hud.sim.reviveFruitTree(b.uid);
+        hud.showToast(res.msg, res.ok ? '🍎' : '🌿');
+        inspectorRenderInspector(hud);
+        hud.refreshHeader();
       });
       panel.querySelectorAll<HTMLButtonElement>('[data-plant-crop]').forEach((btn) => {
         btn.addEventListener('click', () => {

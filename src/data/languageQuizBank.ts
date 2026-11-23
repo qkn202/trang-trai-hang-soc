@@ -1,5 +1,16 @@
 import { QuizFormatKind, QuizLanguageId, QuizProficiencyTier } from '../types/game';
 
+export type QuizTopicId = 'farm' | 'daily' | 'travel' | 'study_tech' | 'health_hobby' | 'magic';
+
+export const QUIZ_TOPIC_LABELS_VI: Record<QuizTopicId, string> = {
+  farm: 'Nông trại & Bếp quê',
+  daily: 'Giao tiếp & Đời sống',
+  travel: 'Du lịch & Thành phố',
+  study_tech: 'Học tập & Công nghệ',
+  health_hobby: 'Sức khỏe & Giải trí',
+  magic: 'Phép thuật & Hogwarts',
+};
+
 export interface QuizLanguageMeta {
   id: QuizLanguageId;
   flag: string;
@@ -25,6 +36,7 @@ export interface CuratedQuizItem {
   lang: QuizLanguageId;
   tier: QuizProficiencyTier;
   levelBand: number; // 1..10 (maps to Park Levels 1..100: band 1 = Lv 1-10 ... band 10 = Lv 91-100)
+  topic?: QuizTopicId;
   format: 'grammar_cloze' | 'dialogue_reply' | 'sentence_builder';
   promptVi: string;
   /** Shown on board: sentence with ____ for cloze, speaker A line for dialogue, or hint for sentence_builder */
@@ -51,6 +63,7 @@ export interface QuizLexiconEntry {
   lang: QuizLanguageId;
   tier: QuizProficiencyTier;
   levelBand: number; // 1..10 (Lv 1..100)
+  topic?: QuizTopicId;
   word: string;
   phonetic: string;
   posVi: string;
@@ -154,6 +167,7 @@ export const QUIZ_FORMAT_LABELS: Record<'all' | QuizFormatKind, { icon: string; 
   dialogue_reply: { icon: '🫧', labelVi: 'Đập Bóng' },
   sentence_builder: { icon: '🧩', labelVi: 'Ghép Chữ' },
   match_pairs: { icon: '🃏', labelVi: 'Nối Tranh' },
+  listening_comprehension: { icon: '🔊', labelVi: 'Nghe Hiểu' },
 };
 
 export const CURRICULUM_CHAPTERS: CurriculumChapterMeta[] = [

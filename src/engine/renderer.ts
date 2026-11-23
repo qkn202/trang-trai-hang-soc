@@ -1110,6 +1110,8 @@ export class IsometricRenderer {
 
       // 6a-lantern. Owl Post Lantern Marks left by visiting neighbors on Home Farm!
       this.drawHomeOwlLanternMarks(sim, cam, viewW, viewH);
+      this.drawFieldMicroEventOverlay(sim, cam, viewW, viewH, now);
+      this.drawRoamingPetAndStrollOverlay(sim, cam, viewW, viewH, now);
 
       // 6a-tutorial. Bà Molly's soft sunlit spotlight diamond & bouncing pointer on target farm plot!
       this.drawTutorialWorldTarget(sim, cam, viewW, viewH);
@@ -1264,6 +1266,47 @@ export class IsometricRenderer {
       this.cachedUnlockedZonesSig = zonesSig;
     }
     const unlockedSet = this.cachedUnlockedZonesSet;
+
+    // 0-stars. Render 2★–5★ architectural evolution trims over WebGL2 buildings (skipping plots/decor)
+    if (cam.zoom >= 0.52) {
+      for (const b of sim.state.buildings) {
+        if (b.stars <= 1 || now < b.constructEndsAt || movingBuildingUid === b.uid) continue;
+        const it = getCatalogItem(b.itemId);
+        if (
+          !it ||
+          it.category === 'decor' ||
+          it.isFarmlandPlot ||
+          it.isAnimalPasturePlot ||
+          it.connectableGroup
+        ) {
+          continue;
+        }
+        const { bw, bh } = sim.getBuildingFootprint(it, b.rotation);
+        const elev = sim.grid[b.gy]?.[b.gx]?.elevation ?? 0;
+        const basePt = gridToScreen(
+          b.gx + bw * 0.5,
+          b.gy + bh * 0.5,
+          cam,
+          viewW,
+          viewH,
+          elev * ELEV_PX
+        );
+        if (basePt.sx < -120 || basePt.sx > viewW + 120 || basePt.sy < -120 || basePt.sy > viewH + 160) {
+          continue;
+        }
+        const approxW = Math.max(54, (bw + bh) * 28) * cam.zoom * (it.spriteScale ?? 1);
+        const approxH = approxW * 0.92;
+        buildingsDrawStarArchitecturalEvolution(
+          this,
+          b.stars,
+          basePt.sx,
+          basePt.sy + hh * Math.max(bw, bh) * 0.45,
+          approxW,
+          approxH,
+          cam.zoom
+        );
+      }
+    }
 
     // 0a. Active Heatmap Overlay & Synergy Links when inspected!
     if (sim.heatmapMode !== 'none') {
@@ -1569,7 +1612,11 @@ export class IsometricRenderer {
     // 4. Fireworks, Owl Post Parcel Event, Harvest Bloom & Ribbon Confetti
     this.drawSkyFireworks(sim, cam, viewW, viewH);
     if (!sim.isVisitingNeighbor) {
+      this.drawFieldMicroEventOverlay(sim, cam, viewW, viewH, now);
+      this.drawRoamingPetAndStrollOverlay(sim, cam, viewW, viewH, now);
       this.drawAndTickOwlPostEvent(sim, cam, viewW, viewH, now, isNightLike, suppressOwlClick);
+    } else if (sim.strollModeActive) {
+      this.drawRoamingPetAndStrollOverlay(sim, cam, viewW, viewH, now);
     }
     this.drawHarvestBloom(now, cam.zoom);
     this.juiceFx.applyTo(ctx, viewW, viewH);
@@ -1846,6 +1893,177 @@ export class IsometricRenderer {
     viewW: number,
     viewH: number
   ): void { return cropsDrawHomeOwlLanternMarks(this, sim, cam, viewW, viewH); }
+
+  private drawFieldMicroEventOverlay(
+    sim: ParkSimulation,
+    cam: Camera,
+    viewW: number,
+    viewH: number,
+    nowMs: number
+  ): void {
+    const ev = sim.fieldMicroEvent;
+    if (!ev || nowMs > ev.expiresAt || sim.isVisitingNeighbor) return;
+    const pt = gridToScreen(ev.gx, ev.gy, cam, viewW, viewH, 34);
+    if (pt.sx < -60 || pt.sx > viewW + 60 || pt.sy < -60 || pt.sy > viewH + 60) return;
+    const ctx = this.ctx;
+    const bob = this.reducedMotion ? 0 : Math.sin(this.tick * 0.11) * 4 * cam.zoom;
+    const sy = pt.sy + bob;
+    const r = Math.max(18, 22 * cam.zoom);
+    ctx.save();
+    this.drawRadialGlow(pt.sx, sy, r * 1.45, 'rgba(253, 224, 71, 0.55)');
+    ctx.fillStyle = 'rgba(42, 24, 14, 0.88)';
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.arc(pt.sx, sy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    const spriteKey =
+      ev.kind === 'honey_bees'
+        ? 'ui_icon_honey_jar'
+        : ev.kind === 'cheeky_gnome'
+          ? 'ui_icon_crop_burrow_potato'
+          : 'ui_icon_owl_orders';
+    const sp = this.sprites.get(spriteKey);
+    if (sp) {
+      const sz = r * 1.3;
+      ctx.drawImage(sp, pt.sx - sz * 0.5, sy - sz * 0.5, sz, sz);
+    }
+    const leftSec = Math.max(1, Math.ceil((ev.expiresAt - nowMs) / 1000));
+    ctx.font = '700 11px "Be Vietnam Pro", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.strokeStyle = '#1c130d';
+    ctx.lineWidth = 3;
+    const txt = `${ev.labelVi} (${leftSec}s)`;
+    ctx.strokeText(txt, pt.sx, sy + r + 12);
+    ctx.fillStyle = '#fef08a';
+    ctx.fillText(txt, pt.sx, sy + r + 12);
+    ctx.restore();
+
+    this.hotspots.push({
+      kind: 'field_micro_event',
+      id: ev.id,
+      sx: pt.sx,
+      sy,
+      radius: r + 8,
+    });
+  }
+
+  private drawRoamingPetAndStrollOverlay(
+    sim: ParkSimulation,
+    cam: Camera,
+    viewW: number,
+    viewH: number,
+    nowMs: number
+  ): void {
+    const ctx = this.ctx;
+
+    // 1. Active Roaming Pet Companion
+    if (sim.roamingPet && !sim.isVisitingNeighbor) {
+      const pet = sim.roamingPet;
+      const pt = gridToScreen(pet.gx, pet.gy, cam, viewW, viewH, 8);
+      if (pt.sx >= -60 && pt.sx <= viewW + 60 && pt.sy >= -60 && pt.sy <= viewH + 60) {
+        const hop = this.reducedMotion ? 0 : Math.abs(Math.sin(pet.walkPhase)) * 4 * cam.zoom;
+        const sp = this.sprites.get(pet.spriteKey) ?? this.sprites.get('beast_unicorn');
+        const sz = Math.max(30, 44 * cam.zoom);
+        ctx.save();
+        ctx.fillStyle = 'rgba(20, 30, 15, 0.28)';
+        ctx.beginPath();
+        ctx.ellipse(pt.sx, pt.sy + 4 * cam.zoom, sz * 0.34, sz * 0.16, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        const giftReady = nowMs - (sim.state.suitcase?.lastRoamingPetGiftAt ?? 0) >= 45_000;
+        if (giftReady) {
+          this.drawRadialGlow(pt.sx, pt.sy - sz * 0.45, sz * 0.55, 'rgba(253, 224, 71, 0.52)');
+        }
+        if (sp) {
+          ctx.translate(pt.sx, pt.sy - hop);
+          if (pet.facingLeft) ctx.scale(-1, 1);
+          ctx.drawImage(sp, -sz * 0.5, -sz * 0.85, sz, sz);
+        }
+        ctx.restore();
+
+        this.hotspots.push({
+          kind: 'roaming_pet',
+          id: pet.habitatUid,
+          sx: pt.sx,
+          sy: pt.sy - sz * 0.4,
+          radius: Math.max(20, sz * 0.48),
+        });
+      }
+    }
+
+    // 2. Player Stroll Avatar
+    if (sim.strollModeActive && sim.playerStrollAvatar) {
+      const av = sim.playerStrollAvatar;
+      const pt = gridToScreen(av.gx, av.gy, cam, viewW, viewH, 10);
+      if (pt.sx >= -80 && pt.sx <= viewW + 80 && pt.sy >= -80 && pt.sy <= viewH + 80) {
+        const stride = this.reducedMotion ? 0 : Math.abs(Math.sin(av.walkPhase)) * 3.5 * cam.zoom;
+        const sp = this.sprites.get('staff_wizard');
+        const sz = Math.max(38, 56 * cam.zoom);
+        ctx.save();
+        this.drawRadialGlow(pt.sx, pt.sy, sz * 0.6, 'rgba(254, 240, 138, 0.48)');
+        ctx.fillStyle = 'rgba(20, 20, 28, 0.34)';
+        ctx.beginPath();
+        ctx.ellipse(pt.sx, pt.sy + 4 * cam.zoom, sz * 0.3, sz * 0.14, 0, 0, Math.PI * 2);
+        ctx.fill();
+        if (sp) {
+          ctx.save();
+          ctx.translate(pt.sx, pt.sy - stride);
+          if (av.facingLeft) ctx.scale(-1, 1);
+          ctx.drawImage(sp, -sz * 0.5, -sz * 0.9, sz, sz);
+          ctx.restore();
+        }
+        ctx.font = `700 ${Math.max(10, Math.round(11 * cam.zoom))}px "Be Vietnam Pro", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = '#1c130d';
+        ctx.lineWidth = 3;
+        const label = av.waveTimer > 0 ? '✨ Lumos!' : 'Bạn';
+        ctx.strokeText(label, pt.sx, pt.sy - sz * 0.92);
+        ctx.fillStyle = '#fef08a';
+        ctx.fillText(label, pt.sx, pt.sy - sz * 0.92);
+        ctx.restore();
+      }
+    }
+
+    // 3. Home Visitor Mystery Gifts left by neighbors on home yard
+    if (!sim.isVisitingNeighbor) {
+      const gifts = sim.state.neighborSocial?.homeVisitorGifts ?? [];
+      for (const gift of gifts) {
+        const pt = gridToScreen(gift.gx, gift.gy, cam, viewW, viewH, 10);
+        if (pt.sx < -80 || pt.sx > viewW + 80 || pt.sy < -80 || pt.sy > viewH + 80) continue;
+        const pulse = this.reducedMotion ? 0 : Math.sin(nowMs * 0.0055 + gift.gx) * 3 * cam.zoom;
+        const gsz = Math.max(28, 38 * cam.zoom);
+        const gSprite = this.sprites.get('ui_gift_box');
+        ctx.save();
+        this.drawRadialGlow(pt.sx, pt.sy + pulse, gsz * 0.72, 'rgba(251, 191, 36, 0.48)');
+        if (gSprite) {
+          ctx.drawImage(gSprite, pt.sx - gsz * 0.5, pt.sy - gsz * 0.8 + pulse, gsz, gsz);
+        } else {
+          ctx.font = `700 ${Math.round(22 * cam.zoom)}px "Be Vietnam Pro", sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.fillText('🎁', pt.sx, pt.sy + pulse);
+        }
+        ctx.font = `700 ${Math.max(10, Math.round(10 * cam.zoom))}px "Be Vietnam Pro", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = '#1c130d';
+        ctx.lineWidth = 3;
+        const glbl = `🎁 ${gift.senderName}`;
+        ctx.strokeText(glbl, pt.sx, pt.sy - gsz * 0.86 + pulse);
+        ctx.fillStyle = '#fde68a';
+        ctx.fillText(glbl, pt.sx, pt.sy - gsz * 0.86 + pulse);
+        ctx.restore();
+        this.hotspots.push({
+          kind: 'home_visitor_gift',
+          id: gift.id,
+          sx: pt.sx,
+          sy: pt.sy - gsz * 0.35,
+          radius: Math.max(24, gsz * 0.65),
+        });
+      }
+    }
+  }
 
   private drawTutorialWorldTarget(
     sim: ParkSimulation,

@@ -305,11 +305,13 @@ export class GameHUD {
   public lastInspectedKey = '';
   public displayedSickle = -1;
   public galleonRollRaf = 0;
-  public activeWorkshopTab: 'barn' | 'market' | 'brew' | 'cargo' | 'synergy' = 'barn';
+  public activeWorkshopTab: 'barn' | 'stand' | 'market' | 'brew' | 'cargo' | 'synergy' = 'barn';
+  public selectedStandItemId: FarmItemId = 'ottery_wheat';
+  public selectedStandPriceTier: 'bargain' | 'fair' | 'premium' = 'fair';
   public activeQuestTab: 'orders' | 'quests' = 'orders';
   public activeAlbumTab: 'profile' | 'cup' | 'leaderboard' = 'cup';
   public hasShownHouseCupIntro = false;
-  public activeProfileSubTab: 'login7' | 'achievements' | 'friendship' = 'login7';
+  public activeProfileSubTab: 'login7' | 'achievements' | 'friendship' | 'almanac' = 'login7';
   public activeAchievementFilterCat: AchievementCategory | 'all' = 'all';
   public selectedOwlOrderId: string | null = null;
   public lastWsBrewId: string | null = null;
@@ -683,7 +685,39 @@ export class GameHUD {
 
   public syncHudFocusVisibility(): void { return headerSyncHudFocusVisibility(this); }
 
-  public openWorkshopDialog(tab?: 'barn' | 'market' | 'brew' | 'cargo' | 'synergy'): void { return farmUiOpenWorkshopDialog(this, tab); }
+  public openWorkshopDialog(tab?: 'barn' | 'stand' | 'market' | 'brew' | 'cargo' | 'synergy'): void { return farmUiOpenWorkshopDialog(this, tab); }
+
+  public jumpToMissingFarmItem(itemId: FarmItemId): void {
+    const loc = this.sim.locateItemSource(itemId);
+    this.showToast(loc.msg, loc.kind === 'workshop' ? '🔥' : loc.kind === 'pasture' ? '🐾' : '🌱');
+    if (typeof loc.gx === 'number' && typeof loc.gy === 'number') {
+      if (this.onFocusGridSmooth) {
+        this.onFocusGridSmooth(loc.gx, loc.gy, 1.05);
+      } else {
+        centerCameraOnGrid(this.cam, loc.gx, loc.gy);
+      }
+    }
+    if (loc.kind === 'plot' && loc.cropId) {
+      const plotB = loc.uid ? this.sim.state.buildings.find((x) => x.uid === loc.uid) : undefined;
+      if (plotB && !plotB.cropId) {
+        this.openSeedTray(loc.cropId, plotB.uid);
+      } else if (plotB) {
+        this.inspectSelection = { kind: 'building', uid: plotB.uid };
+        this.refreshAll();
+      }
+    } else if (loc.kind === 'pasture' && loc.uid) {
+      const pasB = this.sim.state.buildings.find((x) => x.uid === loc.uid);
+      if (pasB && !pasB.pastureAnimalId && loc.animalId) {
+        this.openPastureTray(loc.animalId, pasB.uid);
+      } else if (pasB) {
+        this.inspectSelection = { kind: 'building', uid: pasB.uid };
+        this.refreshAll();
+      }
+    } else if (loc.kind === 'workshop' && loc.uid) {
+      this.inspectSelection = { kind: 'building', uid: loc.uid };
+      this.refreshAll();
+    }
+  }
 
   public openSuitcaseDialog(
     tab?: 'care' | 'morph' | 'expedition',

@@ -36,7 +36,13 @@ export type SuitcaseExpeditionId =
   | 'moonlit_black_lake'
   | 'ancient_dragon_ridge';
 
-export type FestivalType = 'none' | 'halloween' | 'christmas' | 'quidditch_cup';
+export type FestivalType =
+  | 'none'
+  | 'halloween'
+  | 'christmas'
+  | 'quidditch_cup'
+  | 'lunar_tet'
+  | 'mid_autumn';
 
 export type TimeOverride = 'realtime' | 'dawn' | 'day' | 'dusk' | 'night';
 
@@ -208,6 +214,40 @@ export interface FarmBarnState {
   capacity: number;
   owlOrders: FarmOwlOrder[];
   ordersDelivered: number;
+  lastPlantedCropId?: FarmCropId;
+  farmHelperEndsAt?: number;
+  farmHelperFreeDayKey?: string;
+}
+
+export interface RoadsideStandSlot {
+  slotIndex: number;
+  itemId: FarmItemId | null;
+  qty: number;
+  unitPrice: number;
+  listedAt: number;
+  soldAt?: number;
+  buyerName?: string;
+  buyerEmoji?: string;
+}
+
+export interface RoadsideStandState {
+  slots: RoadsideStandSlot[];
+  dailyFriendBuysDayKey?: string;
+  dailyFriendBoughtIds?: string[];
+  totalRevenueClaimed?: number;
+}
+
+export type FieldMicroEventKind = 'honey_bees' | 'cheeky_gnome' | 'vip_owl';
+
+export interface FieldMicroEvent {
+  id: string;
+  kind: FieldMicroEventKind;
+  gx: number;
+  gy: number;
+  spawnedAt: number;
+  expiresAt: number;
+  labelVi: string;
+  emoji: string;
 }
 
 export type ConnectablePlotGroup =
@@ -226,7 +266,8 @@ export type QuizFormatKind =
   | 'grammar_cloze'
   | 'dialogue_reply'
   | 'sentence_builder'
-  | 'match_pairs';
+  | 'match_pairs'
+  | 'listening_comprehension';
 
 export interface LanguageReviewItem {
   qId: string;
@@ -258,6 +299,13 @@ export interface LanguageQuizState {
   activeLang: QuizLanguageId;
   autoSpeak: boolean;
   preferredFormat: 'all' | QuizFormatKind;
+  preferredTopic?: 'all' | 'farm' | 'daily' | 'travel' | 'study_tech' | 'health_hobby' | 'magic';
+  dailyStreakCount?: number;
+  bestDailyStreakCount?: number;
+  lastStudyDayKey?: string;
+  todayAnsweredCount?: number;
+  todayStudyDayKey?: string;
+  claimedStreakMilestones?: number[];
   profiles: Record<QuizLanguageId, LanguageProfileState>;
 }
 
@@ -424,6 +472,10 @@ export interface PlacedBuilding {
   pastureGourmetBoost?: boolean; // Đã cho ăn Bữa Thượng Hạng từ nông sản ruộng (×2 sản lượng & +2 Phân Ủ)
   workshopQueue?: WorkshopQueueSlot[];
   readyFarmGoods?: FarmGoodId[];
+  readyFruitCrops?: FarmCropId[];
+  lastPlantedCropId?: FarmCropId;
+  orchardHarvestsUsed?: number;
+  needsTreeRevival?: boolean;
   harvestCycleCount?: number; // Số lần đã thu hoạch / hoàn thành chu kỳ kinh tế (lần đầu = 1h, các lần sau nhân 2^n)
 }
 
@@ -723,6 +775,8 @@ export interface SuitcaseSanctuaryState {
   totalGrooms: number;
   totalExpeditions: number;
   totalMorphsHatched: number;
+  activeRoamingPetId?: string | null;
+  lastRoamingPetGiftAt?: number;
 }
 
 export type Match3BoosterId = 'reparo_hammer' | 'row_col_cannon' | 'alohomora_shuffle';
@@ -1316,6 +1370,7 @@ export interface LayoutPresetEntry {
     gy: number;
     rotation: 0 | 1 | 2 | 3;
   }>;
+  pathMap?: Record<string, PathType>;
 }
 
 export interface PlayerOwlCrateHelpRequest {
@@ -1344,6 +1399,25 @@ export interface MinigameRescueContext {
   stage: number;
 }
 
+export type PostcardFrameThemeId = 'classic_burrow' | 'starry_hogwarts' | 'festive_lantern';
+
+export interface CoopSupplyCrateState {
+  weekKey: string;
+  contributedPoints: number;
+  playerContributedToday: number;
+  lastContributeDayKey?: string;
+  claimedMilestones: number[];
+}
+
+export interface HomeVisitorMysteryGift {
+  id: string;
+  senderName: string;
+  senderEmoji: string;
+  gx: number;
+  gy: number;
+  createdAt: number;
+}
+
 export interface NeighborSocialState {
   playerFriendCode: string;
   playerDisplayName?: string;
@@ -1357,6 +1431,7 @@ export interface NeighborSocialState {
   dailyRescuesReceivedCount: number; // Max 5 rescues received/day
   dailyLikedNeighborIds: string[]; // 1 like/friend/day
   dailyMysteryClaimedIds: string[]; // 1 mystery basket/friend/day
+  dailyMysterySentIds?: string[]; // 1 mystery gift placed on friend's farm/day
   dailyOwlHelpRequestedCount: number; // Max 5 owl crate help calls/day
   dailyGardenHelpsCount?: number; // Max 5 garden helps/day across all friends
   dailyHomeLanternsClaimedCount?: number; // Max 5 home lantern helps received/claimed per day
@@ -1364,6 +1439,9 @@ export interface NeighborSocialState {
   flooShareRewardDay?: string; // HPVN: VN day the postcard gift was last paid
   dailyFlooShareClaimed?: boolean; // 1x/day gift from sharing/saving a Valley Postcard to Floo
   lastSeenHelperAt?: number; // Latest helper notification timestamp shown as toast
+  postcardTheme?: PostcardFrameThemeId;
+  coopSupplyCrate?: CoopSupplyCrateState;
+  homeVisitorGifts?: HomeVisitorMysteryGift[];
   neighbors: NeighborProfileState[];
   homeLanternMarks: HomeOwlLanternMark[];
   playerMinigameSos: PlayerMinigameSosState | null;
@@ -1390,6 +1468,20 @@ export interface NpcFriendshipEntry {
   level: number; // 1..10
   xp: number;
   lastTalkedDayKey?: string;
+  lastGiftedDayKey?: string;
+  claimedMilestones?: number[];
+}
+
+export interface SeasonalFestivalProgressState {
+  claimedTaskIds: string[];
+  lastLiXiClaimDayKey?: string;
+}
+
+export type AlmanacChapterId = 'crops' | 'artisan' | 'creatures' | 'keepsakes';
+
+export interface CollectionAlmanacState {
+  claimedChapters: AlmanacChapterId[];
+  claimedGrandTrophy?: boolean;
 }
 
 export type SaveSlotId = 'slot_1' | 'slot_2' | 'slot_3' | 'autosave';
@@ -1483,6 +1575,9 @@ export interface GameState {
   };
   retention?: RetentionNarrativeState;
   yuleEvent?: YuleEventState;
+  roadsideStand?: RoadsideStandState;
+  seasonalFestivalState?: SeasonalFestivalProgressState;
+  almanacState?: CollectionAlmanacState;
   staffPatrolZones: Record<string, ZoneId | 'all'>;
   lastProphetHeadline?: {
     title: string;

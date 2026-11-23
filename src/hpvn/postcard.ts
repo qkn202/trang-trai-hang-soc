@@ -30,6 +30,7 @@ export interface ValleyPostcardMeta {
   unlockedZonesCount?: number;
   weatherMode?: string;
   atmosphereMode?: string;
+  theme?: 'classic_burrow' | 'starry_hogwarts' | 'festive_lantern';
 }
 
 
@@ -105,24 +106,58 @@ export function renderValleyPostcardCanvas(
   const stars = Math.max(0, Math.floor(Number(meta.magicStars) || 0));
   const buildings = Math.max(0, Math.floor(Number(meta.buildingsCount) || 0));
   const zones = Math.max(1, Math.floor(Number(meta.unlockedZonesCount) || 1));
+  const theme = meta.theme || 'classic_burrow';
+  const palette =
+    theme === 'starry_hogwarts'
+      ? {
+          frameBg: '#121b33',
+          outerBorder: '#93c5fd',
+          innerBorder: 'rgba(224, 242, 254, 0.45)',
+          headerBg: '#1e293b',
+          headerText: '#e0f2fe',
+          headerTitle: '🌙 ĐÊM SAO HOGWARTS · BƯU THIẾP THUNG LŨNG',
+          parchmentBg: '#eff6ff',
+          parchmentBorder: '#60a5fa',
+        }
+      : theme === 'festive_lantern'
+        ? {
+            frameBg: '#451212',
+            outerBorder: '#fbbf24',
+            innerBorder: 'rgba(254, 243, 199, 0.48)',
+            headerBg: '#691919',
+            headerText: '#fef08a',
+            headerTitle: '🏮 ĐÈN LỒNG LỄ HỘI · BƯU THIẾP THUNG LŨNG',
+            parchmentBg: '#fefce8',
+            parchmentBorder: '#f59e0b',
+          }
+        : {
+            frameBg: '#2b1910',
+            outerBorder: '#d4a238',
+            innerBorder: 'rgba(248, 236, 200, 0.38)',
+            headerBg: '#3b2316',
+            headerText: '#f6df9e',
+            headerTitle: '🔥 MẠNG FLOO HPVN · BƯU THIẾP THUNG LŨNG',
+            parchmentBg: '#f6ebd2',
+            parchmentBorder: '#b9852c',
+          };
 
-  // Khung gỗ sồi sẫm + viền đồng thau đôi
-  ctx.fillStyle = '#2b1910';
+  // Khung gỗ sồi / đêm sao / lễ hội + viền đồng thau đôi
+  ctx.fillStyle = palette.frameBg;
   ctx.fillRect(0, 0, width, height);
-  ctx.strokeStyle = '#d4a238';
+  ctx.strokeStyle = palette.outerBorder;
   ctx.lineWidth = 4;
   ctx.strokeRect(6, 6, width - 12, height - 12);
-  ctx.strokeStyle = 'rgba(248, 236, 200, 0.38)';
+  ctx.strokeStyle = palette.innerBorder;
   ctx.lineWidth = 1.5;
   ctx.strokeRect(12, 12, width - 24, height - 24);
 
   // Dải tiêu đề trên cùng
-  ctx.fillStyle = '#3b2316';
+  ctx.fillStyle = palette.headerBg;
   ctx.fillRect(16, 16, width - 32, 30);
-  ctx.fillStyle = '#f6df9e';
+  ctx.fillStyle = palette.headerText;
   ctx.font = '700 13px "Be Vietnam Pro", system-ui, sans-serif';
   ctx.textBaseline = 'middle';
-  ctx.fillText('🔥 MẠNG FLOO HPVN · BƯU THIẾP THUNG LŨNG', 26, 31);
+  ctx.fillText(palette.headerTitle, 26, 31);
 
   const weatherBadgeMap: Record<string, string> = {
     clear: '☀️ Nắng ấm',
@@ -202,9 +237,9 @@ export function renderValleyPostcardCanvas(
   const py = 304;
   const pw = width - 36;
   const ph = 58;
-  ctx.fillStyle = '#f6ebd2';
+  ctx.fillStyle = palette.parchmentBg;
   ctx.fillRect(px, py, pw, ph);
-  ctx.strokeStyle = '#b9852c';
+  ctx.strokeStyle = palette.parchmentBorder;
   ctx.lineWidth = 1.5;
   ctx.strokeRect(px, py, pw, ph);
 

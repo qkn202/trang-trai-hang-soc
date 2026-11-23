@@ -1,5 +1,6 @@
 import { CuratedQuizItem, QuizLexiconEntry } from '../languageQuizBank';
 import { buildPackLexicon } from './packHelper';
+import { ZH_EXPANDED_CURATED, ZH_EXPANDED_LEXICON } from './zhExpanded';
 
 export const EXTRA_LEXICON: QuizLexiconEntry[] = [
   ...buildPackLexicon('zh', 1, 'beginner', [
@@ -102,6 +103,7 @@ export const EXTRA_LEXICON: QuizLexiconEntry[] = [
     ['miaoshou', '妙手', 'miàoshǒu', 'danh từ', 'nước cờ thần sầu / bàn tay khéo', '关键时刻的一记妙手瞬间扭转了战局。', 'Guānjiàn shíkè de yí jì miàoshǒu shùnjiān niǔzhuǎn le zhànjú.', 'Một nước cờ thần sầu vào thời khắc then chốt đã xoay chuyển cục diện.'],
     ['guangcai', '光彩夺目', 'guāngcǎi-duómù', 'thành ngữ', 'rực rỡ chói lọi', '镶嵌符文宝石的棋盘在烛光下光彩夺目。', 'Xiāngqiàn fúwén bǎoshí de qípán zài zhúguāng xià guāngcǎi-duómù.', 'Bàn cờ khảm ngọc cổ ngữ lấp lánh rực rỡ dưới ánh nến.'],
   ]),
+  ...ZH_EXPANDED_LEXICON,
 ];
 
 export const EXTRA_CURATED: CuratedQuizItem[] = [
@@ -183,4 +185,5 @@ export const EXTRA_CURATED: CuratedQuizItem[] = [
     grammarExplainVi: 'Diễn tả hành động đang diễn ra sinh động kèm cảm xúc hào hứng.',
     vocabNotes: [{ word: '祝贺', phonetic: 'zhùhè', posVi: 'động từ', meaningVi: 'chúc mừng' }],
   },
+  ...ZH_EXPANDED_CURATED,
 ];

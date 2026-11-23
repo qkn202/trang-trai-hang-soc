@@ -176,22 +176,29 @@ export interface ProximityAmbientInput {
   waterDistPx: number;
   activeWorkshopDistPx: number;
   pastureDistPx: number;
+  orchardDistPx?: number;
+  festiveDistPx?: number;
   ambienceBusGain: number;
   modalMuffled: boolean;
 }
 
 /**
  * Computes spatial + zoom ambient gain levels for River Ottery murmur,
- * active workshop hearth fire, and sunlit animal pasture ambience.
+ * active workshop hearth fire, sunlit animal pasture ambience, orchard birdsong & festive chimes.
  */
 export function computeProximityAmbientMix(input: ProximityAmbientInput): {
   riverGain: number;
   hearthGain: number;
   pastureGain: number;
+  orchardGain?: number;
+  festiveGain?: number;
 } {
+  const hasExtended = input.orchardDistPx !== undefined || input.festiveDistPx !== undefined;
   const bus = Math.max(0, Math.min(1, Number.isFinite(input.ambienceBusGain) ? input.ambienceBusGain : 0));
   if (bus <= 0.001) {
-    return { riverGain: 0, hearthGain: 0, pastureGain: 0 };
+    return hasExtended
+      ? { riverGain: 0, hearthGain: 0, pastureGain: 0, orchardGain: 0, festiveGain: 0 }
+      : { riverGain: 0, hearthGain: 0, pastureGain: 0 };
   }
   const safeZoom = Number.isFinite(input.camZoom) ? input.camZoom : 0.8;
   const zoomFactor =
@@ -202,10 +209,18 @@ export function computeProximityAmbientMix(input: ProximityAmbientInput): {
     const t = 1 - d / radius;
     return t * t;
   };
-  return {
+  const base = {
     riverGain: Number((falloff(input.waterDistPx) * zoomFactor * bus).toFixed(4)),
     hearthGain: Number((falloff(input.activeWorkshopDistPx) * zoomFactor * bus).toFixed(4)),
     pastureGain: Number((falloff(input.pastureDistPx) * zoomFactor * bus).toFixed(4)),
+  };
+  if (!hasExtended) {
+    return base;
+  }
+  return {
+    ...base,
+    orchardGain: Number((falloff(input.orchardDistPx ?? Number.POSITIVE_INFINITY) * zoomFactor * bus).toFixed(4)),
+    festiveGain: Number((falloff(input.festiveDistPx ?? Number.POSITIVE_INFINITY) * zoomFactor * bus).toFixed(4)),
   };
 }
 
@@ -833,6 +848,8 @@ export class MagicalAudio {
       waterDistPx: number;
       activeWorkshopDistPx: number;
       pastureDistPx: number;
+      orchardDistPx?: number;
+      festiveDistPx?: number;
     }
   ): void {
     this.ceiling.tick(dt);
@@ -912,16 +929,31 @@ export class MagicalAudio {
         waterDistPx: proximity.waterDistPx,
         activeWorkshopDistPx: proximity.activeWorkshopDistPx,
         pastureDistPx: proximity.pastureDistPx,
+        orchardDistPx: proximity.orchardDistPx,
+        festiveDistPx: proximity.festiveDistPx,
         ambienceBusGain: this.ceiling.getEffectiveBusGain('ambience'),
         modalMuffled: this.modalMuffled,
       });
       this.setRiverAmbienceIntensity(mix.riverGain);
-      if (mix.hearthGain > 0.08 || mix.pastureGain > 0.08) {
+      const orchG = mix.orchardGain ?? 0;
+      const festG = mix.festiveGain ?? 0;
+      if (
+        mix.hearthGain > 0.08 ||
+        mix.pastureGain > 0.08 ||
+        orchG > 0.08 ||
+        festG > 0.08
+      ) {
         this.proximityFoleyAcc += dt;
         if (this.proximityFoleyAcc >= 5.2) {
           this.proximityFoleyAcc = 0;
           if (mix.hearthGain >= mix.pastureGain && mix.hearthGain > 0.08) {
             this.playAtlasCue('hearth_crackle', mix.hearthGain * 0.22, 0.96 + Math.random() * 0.08, 0);
+          } else if (festG > 0.08) {
+            this.playTone(1318.51, 0.22, 'sine', festG * 0.022, 0, -0.1);
+            this.playTone(1567.98, 0.26, 'triangle', festG * 0.018, 0.14, 0.1);
+          } else if (!isNight && orchG > 0.08) {
+            this.playTone(1174.66, 0.14, 'sine', orchG * 0.02, 0, 0.15);
+            this.playTone(1479.98, 0.16, 'sine', orchG * 0.016, 0.11, -0.1);
           } else if (!isNight && mix.pastureGain > 0.08) {
             if (!this.playAtlasCue('place', mix.pastureGain * 0.14, 1.38, 0.12)) {
               this.playTone(783.99, 0.18, 'sine', mix.pastureGain * 0.025, 0, 0.12);

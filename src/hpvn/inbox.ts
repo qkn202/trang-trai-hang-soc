@@ -20,7 +20,12 @@ export function applyFarmInbox(state: GameState, entries: unknown, now = Date.no
       if (entry.kind === 'cup' && Number.isSafeInteger(entry.sand) && entry.sand! > 0) wallet.timeSand += entry.sand!;
     } else if (entry.kind === 'help') {
       for (const b of state.buildings) {
-        if (b.cropId && b.cropReadyAt && now < b.cropReadyAt) {
+        if (b.needsTreeRevival) {
+          b.needsTreeRevival = false;
+          b.orchardHarvestsUsed = 0;
+          b.readyFruitCrops = [...(b.readyFruitCrops ?? []), 'burrow_apple'];
+          b.readyBubbles = Math.max(1, b.readyBubbles);
+        } else if (b.cropId && b.cropReadyAt && now < b.cropReadyAt) {
           b.cropWateredBoost = true;
           b.cropReadyAt = Math.max(now + 30_000, b.cropReadyAt - HELP_MS);
         } else if (b.workshopQueue?.length && now < b.workshopQueue[0].endsAt) {

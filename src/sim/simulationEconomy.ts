@@ -250,6 +250,7 @@ import {
   farmClearAnimalFromPasture,
 } from './simulationFarm';
 import type { ParkSimulation } from './simulation';
+import { tickRoadsideStandBuyers } from './roadsideStandAndEvents';
 
 export function economyGetEffectivePrice(sim: ParkSimulation, b: PlacedBuilding, item: CatalogItem): number {
     const bounds = getItemPriceBounds(item);
@@ -591,9 +592,12 @@ export function economyGetBuildingProductionPerCycle(sim: ParkSimulation, b: Pla
     }
 
     const fest = sim.getActiveFestival();
+    const curWeather = sim.getCurrentWeather();
     if (fest === 'halloween' && item.id === 'halloween_arch') mult *= 2.0;
     if (fest === 'christmas') mult *= 1.25;
+    if (fest === 'lunar_tet') mult *= 1.2;
     if (fest === 'quidditch_cup' && item.id === 'burrow_feast_marquee') mult *= 2.0;
+    if (curWeather.kind === 'sunny' && item.id === 'burrow_apple_orchard') mult *= 1.1;
 
     if (sim.state.level >= 100) mult *= 1.5;
 
@@ -633,6 +637,7 @@ export function economyTickProductionToTimestamp(sim: ParkSimulation, now: numbe
     if (sim.isVisitingNeighbor) {
       return;
     }
+    tickRoadsideStandBuyers(sim, now, silent);
     // Check Workshop Brewing cauldron completion!
     const activeBrew = sim.state.supply?.activeBrew;
     if (activeBrew && now >= activeBrew.endsAt) {
@@ -749,6 +754,17 @@ export function economyTickProductionToTimestamp(sim: ParkSimulation, now: numbe
 
       // 4-Stage Farmland Plot lifecycle (Plant -> Sprout/Water -> Ripe -> Harvest!)
       if (item.isFarmlandPlot) {
+        if (
+          b.cropId &&
+          b.cropReadyAt &&
+          now < b.cropReadyAt &&
+          !b.cropWateredBoost &&
+          sim.getCurrentWeather(now).kind === 'rain'
+        ) {
+          const savedMs = Math.max(3000, Math.round((b.cropReadyAt - now) * 0.3));
+          b.cropReadyAt = Math.max(now + 1000, b.cropReadyAt - savedMs);
+          b.cropWateredBoost = true;
+        }
         if (b.cropId && b.cropReadyAt && now >= b.cropReadyAt) {
           const cMeta = FARM_CROPS[b.cropId];
           b.readyBubbles = Math.max(1, b.readyBubbles);
@@ -778,14 +794,16 @@ export function economyTickProductionToTimestamp(sim: ParkSimulation, now: numbe
         continue;
       }
 
-      if (b.isEscaped) {
+      if (b.isEscaped || b.needsTreeRevival) {
         b.lastTickAt = now;
         continue;
       }
 
       const maxCap = item.maxStorageCycles + (b.stars - 1) * 3;
       const elapsedSec = (now - b.lastTickAt) / 1000;
-      const festSpeed = sim.getActiveFestival() === 'quidditch_cup' ? 0.85 : 1.0;
+      const weatherStormSpeed = sim.getCurrentWeather(now).kind === 'storm' ? 0.85 : 1.0;
+      const festSpeed =
+        (sim.getActiveFestival() === 'quidditch_cup' ? 0.85 : 1.0) * weatherStormSpeed;
       const effectiveCycle = getBuildingEffectiveCycleSec(b, item) * festSpeed;
 
       if (elapsedSec >= effectiveCycle) {
@@ -811,6 +829,12 @@ export function economyTickProductionToTimestamp(sim: ParkSimulation, now: numbe
             const canAdd = Math.min(addCycles, Math.max(0, 3 - curGoods.length));
             if (canAdd > 0) {
               b.readyFarmGoods = [...curGoods, ...Array(canAdd).fill('floral_bouquet_gift')];
+            }
+          } else if (addCycles > 0 && item.id === 'burrow_apple_orchard') {
+            const curFruits = b.readyFruitCrops ?? [];
+            const canAdd = Math.min(addCycles, Math.max(0, 3 - curFruits.length));
+            if (canAdd > 0) {
+              b.readyFruitCrops = [...curFruits, ...Array(canAdd).fill('burrow_apple')];
             }
           }
         }

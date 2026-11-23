@@ -232,23 +232,23 @@ describe('Master Upgrade 10/10 Suite (Đợt 1, Đợt 2 & Đợt 3)', () => {
       expect(chessRev?.recommendedCoordVi.length).toBeGreaterThan(0);
     });
 
-    it('tải trọn 5 gói ngữ liệu mở rộng (EN/KO/ZH/ES/JA) đạt 549 mục gốc & 1.500+ biến thể câu hỏi', async () => {
+    it('tải trọn 5 gói ngữ liệu mở rộng (EN/KO/ZH/ES/JA) đạt 1.074 mục gốc & 4.500+ biến thể câu hỏi', async () => {
       const langs: QuizLanguageId[] = ['en', 'ko', 'zh', 'es', 'ja'];
       for (const lid of langs) {
         const ok = await loadLanguageQuizPack(lid);
         expect(ok).toBe(true);
         const stats = getLanguagePoolStats(lid);
-        expect(stats.lexiconCount).toBeGreaterThanOrEqual(79);
-        expect(stats.curatedCount).toBeGreaterThanOrEqual(10);
+        expect(stats.lexiconCount).toBeGreaterThanOrEqual(179);
+        expect(stats.curatedCount).toBeGreaterThanOrEqual(15);
       }
 
       const totalBase = QUIZ_LEXICON_BANK.length + CURATED_QUIZ_BANK.length;
-      expect(totalBase).toBe(549);
+      expect(totalBase).toBe(1074);
       const totalEstimated = langs.reduce(
         (sum, lid) => sum + getLanguagePoolStats(lid).totalQuestionsEstimate,
         0
       );
-      expect(totalEstimated).toBeGreaterThanOrEqual(1500);
+      expect(totalEstimated).toBeGreaterThanOrEqual(4500);
     });
   });
 

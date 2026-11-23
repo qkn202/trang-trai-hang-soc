@@ -69,8 +69,9 @@ describe('Dual-Theme Christmas Expansion (Harry Potter + Vietnam — Zero Human 
       expect(sim.plantCropOnPlot(plot.uid, cid).ok).toBe(true);
       plot.cropReadyAt = Date.now() - 1000;
       const before = sim.getFarmItemCount(cid);
+      const snowBonus = sim.getCurrentWeather().kind === 'snow' ? 1 : 0;
       expect(sim.harvestCropPlot(plot.uid).ok).toBe(true);
-      expect(sim.getFarmItemCount(cid)).toBe(before + FARM_CROPS[cid].yieldQty);
+      expect(sim.getFarmItemCount(cid)).toBe(before + FARM_CROPS[cid].yieldQty + snowBonus);
     }
 
     expect(

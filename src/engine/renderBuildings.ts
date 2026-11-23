@@ -800,15 +800,46 @@ export function buildingsDrawStarArchitecturalEvolution(self: IsometricRenderer,
     const ctx = self.ctx;
     ctx.save();
 
-    // 2★+: Twin golden filigree lanterns at front corners
+    // 2★+: Twin warm brass doorway lanterns with amber glow at front corners
     if (stars >= 2) {
-      self.drawRadialGlow(cx - drawW * 0.34, bottomY - drawH * 0.16, 9 * zoom, 'rgba(253, 224, 71, 0.65)');
-      self.drawRadialGlow(cx + drawW * 0.34, bottomY - drawH * 0.16, 9 * zoom, 'rgba(253, 224, 71, 0.65)');
+      const lxLeft = cx - drawW * 0.34;
+      const lxRight = cx + drawW * 0.34;
+      const ly = bottomY - drawH * 0.16;
+      self.drawRadialGlow(lxLeft, ly, 10 * zoom, 'rgba(253, 224, 71, 0.65)');
+      self.drawRadialGlow(lxRight, ly, 10 * zoom, 'rgba(253, 224, 71, 0.65)');
+      for (const lx of [lxLeft, lxRight]) {
+        ctx.fillStyle = '#92400e';
+        ctx.fillRect(lx - 2.6 * zoom, ly - 5 * zoom, 5.2 * zoom, 2 * zoom);
+        ctx.fillStyle = '#fef08a';
+        ctx.beginPath();
+        ctx.arc(lx, ly - 1.5 * zoom, 2.5 * zoom, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
-    // 3★+: Fluttering crimson-and-gold rooftop pennants!
+    // 3★+: Climbing floral ivy eaves garland + fluttering crimson-and-gold rooftop pennant!
     if (stars >= 3) {
-      const wave = Math.sin(self.tick * 0.1 + cx) * 3 * zoom;
+      const eaveY = bottomY - drawH * 0.42;
+      const spanX = drawW * 0.32;
+      ctx.strokeStyle = '#15803d';
+      ctx.lineWidth = Math.max(1.6, 2.2 * zoom);
+      ctx.beginPath();
+      ctx.moveTo(cx - spanX, eaveY - 2 * zoom);
+      ctx.quadraticCurveTo(cx, eaveY + 6 * zoom, cx + spanX, eaveY - 2 * zoom);
+      ctx.stroke();
+
+      const blossomColors = ['#fb7185', '#fde047', '#f9a8d4', '#fde047', '#fb7185'];
+      for (let bi = 0; bi < 5; bi++) {
+        const t = bi / 4;
+        const bx = cx - spanX + spanX * 2 * t;
+        const by = eaveY - 2 * zoom + Math.sin(t * Math.PI) * 5 * zoom;
+        ctx.fillStyle = blossomColors[bi];
+        ctx.beginPath();
+        ctx.arc(bx, by, 2.3 * zoom, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      const wave = self.reducedMotion ? 0 : Math.sin(self.tick * 0.1 + cx) * 3 * zoom;
       const topY = bottomY - drawH * 0.88;
       ctx.strokeStyle = '#fbbf24';
       ctx.lineWidth = 1.8 * zoom;
@@ -826,18 +857,49 @@ export function buildingsDrawStarArchitecturalEvolution(self: IsometricRenderer,
       ctx.fill();
     }
 
-    // 4★+: Arcane golden halo arch behind roof
+    // 4★+: Twin symmetrical gilded banners & warm brass cornice trim
     if (stars >= 4) {
-      ctx.strokeStyle = 'rgba(253, 224, 71, 0.52)';
+      const waveR = self.reducedMotion ? 0 : Math.cos(self.tick * 0.1 + cx) * 3 * zoom;
+      const topY = bottomY - drawH * 0.88;
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 1.8 * zoom;
+      ctx.beginPath();
+      ctx.moveTo(cx + drawW * 0.18, topY + 8 * zoom);
+      ctx.lineTo(cx + drawW * 0.18, topY - 10 * zoom);
+      ctx.stroke();
+
+      ctx.fillStyle = '#b45309';
+      ctx.beginPath();
+      ctx.moveTo(cx + drawW * 0.18, topY - 10 * zoom);
+      ctx.lineTo(cx + drawW * 0.18 + 11 * zoom + waveR, topY - 6 * zoom);
+      ctx.lineTo(cx + drawW * 0.18, topY - 2 * zoom);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = 'rgba(253, 224, 71, 0.56)';
       ctx.lineWidth = 2 * zoom;
       ctx.beginPath();
       ctx.arc(cx, bottomY - drawH * 0.52, drawW * 0.42, Math.PI * 1.1, Math.PI * 1.9);
       ctx.stroke();
     }
 
-    // 5★: Grand Master Golden Crown Crest + orbiting sparkles!
+    // 5★: Grand Master Golden Finial Crest + festive bunting & gentle starlight motes!
     if (stars >= 5) {
-      const orbAngle = self.tick * 0.05;
+      const apexY = bottomY - drawH * 0.94;
+      self.drawRadialGlow(cx, apexY, 11 * zoom, 'rgba(254, 240, 138, 0.85)');
+      ctx.fillStyle = '#fde047';
+      ctx.strokeStyle = '#92400e';
+      ctx.lineWidth = 1.4 * zoom;
+      ctx.beginPath();
+      ctx.moveTo(cx, apexY - 6 * zoom);
+      ctx.lineTo(cx + 4.5 * zoom, apexY);
+      ctx.lineTo(cx, apexY + 4.5 * zoom);
+      ctx.lineTo(cx - 4.5 * zoom, apexY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      const orbAngle = self.reducedMotion ? 0.6 : self.tick * 0.05;
       const ox = cx + Math.cos(orbAngle) * drawW * 0.38;
       const oy = bottomY - drawH * 0.62 + Math.sin(orbAngle) * 8 * zoom;
       self.drawRadialGlow(ox, oy, 8 * zoom, 'rgba(254, 240, 138, 0.9)');

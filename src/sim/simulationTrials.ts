@@ -800,7 +800,6 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
       streak: m3.winStreak,
       previousRankOverride: prevLbRank,
     });
-    void submitPlayerCloudLeaderboardEntry(sim.state, 'match3');
 
     sim.audio.playLevelUp();
     if (starsEarned > 0) sim.onRewardFly?.('stars', starsEarned);
@@ -809,6 +808,7 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
     sim.advanceTutorialStep('earn_magic_star');
     trialsRecordMinigamePlay(sim, 'match3', false, true);
     sim.saveToStorage();
+    void submitPlayerCloudLeaderboardEntry(sim.state, 'match3');
     sim.onUiChange?.();
 
     return {
@@ -1257,7 +1257,6 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
         streak: m3.winStreak,
         previousRankOverride: prevLbRank,
       });
-      void submitPlayerCloudLeaderboardEntry(sim.state, mode);
     }
 
     sim.audio.playLevelUp();
@@ -1269,6 +1268,9 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
       trialsRecordMinigamePlay(sim, mode, false, isFirstClear);
     }
     sim.saveToStorage();
+    if (isScoredMode) {
+      void submitPlayerCloudLeaderboardEntry(sim.state, mode);
+    }
     sim.onUiChange?.();
 
     return {

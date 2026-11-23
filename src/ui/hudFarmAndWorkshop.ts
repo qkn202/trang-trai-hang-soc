@@ -124,9 +124,15 @@ import {
   clearBuildToolModes,
   escapeHtml,
 } from "./hudShared";
+import {
+  computeRoadsideUnitPrice,
+  getRoadsideSaleWaitMs,
+  RoadsidePriceTier,
+} from '../sim/roadsideStandAndEvents';
+import { getVietnamCalendarKey } from '../sim/neighborSocial';
 import type { GameHUD } from './hud';
 
-export function farmUiOpenWorkshopDialog(hud: GameHUD, tab?: 'barn' | 'market' | 'brew' | 'cargo' | 'synergy'): void {
+export function farmUiOpenWorkshopDialog(hud: GameHUD, tab?: 'barn' | 'stand' | 'market' | 'brew' | 'cargo' | 'synergy'): void {
     if (tab) hud.activeWorkshopTab = tab;
     farmUiRenderWorkshopDialog(hud);
     const dlg = hud.root.querySelector('#workshopDialog') as HTMLDialogElement;
@@ -305,6 +311,11 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
                 : ''
             }
             <button id="btnSeedTrayPlantAll" type="button" class="brass-btn" title="Gieo hạt giống đã chọn vào tất cả ô đất trống">Gieo tất cả</button>
+            ${
+              hud.sim.ensureFarmBarn().lastPlantedCropId
+                ? `<button id="btnSeedTrayReplantLast" type="button" class="brass-btn" title="Gieo lại hạt giống vụ trước trên các ô đất trống">🌱 Gieo lại</button>`
+                : ''
+            }
             <button id="btnSeedTrayWaterAll" type="button" class="brass-btn" title="Tưới tất cả luống đang lớn chưa được tưới">Tưới tất cả</button>
             <button id="btnSeedTrayHarvestAll" type="button" class="brass-btn gold-cta" title="Gặt tất cả luống đã chín vàng">Gặt tất cả</button>
             <button id="btnSeedTrayBuyPlot" type="button" class="brass-btn" title="Đặt Thửa Đất (30 Sickle)">
@@ -375,6 +386,12 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
         hud.refreshAll();
       });
     }
+
+    tray.querySelector('#btnSeedTrayReplantLast')?.addEventListener('click', () => {
+      const res = hud.sim.batchReplantLastCrops();
+      hud.showToast(res.msg, res.ok ? '🌱' : '🪙');
+      hud.refreshAll();
+    });
 
     tray.querySelectorAll<HTMLButtonElement>('[data-seed-filter]').forEach((btn) => {
       btn.addEventListener('click', (ev) => {
@@ -814,11 +831,17 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
         hud.sim.getFarmItemCount(fair.spotlightCropId) >= 2 ||
         hud.sim.getFarmItemCount(fair.spotlightGoodId) >= 1);
     const marketBadge = marketReadyDeals + (canSellAnySpotlight ? 1 : 0);
+    const stand = hud.sim.ensureRoadsideStand();
+    const standSoldCount = stand.slots.filter((s) => Boolean(s.itemId && s.soldAt)).length;
+    const standListedCount = stand.slots.filter((s) => Boolean(s.itemId)).length;
 
     const tabsHtml = `
-      <div class="workshop-tabs" role="tablist" aria-label="Kho, Chợ Phiên &amp; Xưởng">
+      <div class="workshop-tabs" role="tablist" aria-label="Kho, Sạp Ngõ, Chợ Phiên &amp; Xưởng">
         <button type="button" role="tab" id="wsTabBarn" data-ws-tab="barn" data-active="${hud.activeWorkshopTab === 'barn'}" aria-selected="${hud.activeWorkshopTab === 'barn'}" class="brass-btn">
           <span class="nb-tab-ico">🏡</span> Kho <span class="nb-tab-badge">${barnUsed}/${barn.capacity}</span>
+        </button>
+        <button type="button" role="tab" id="wsTabStand" data-ws-tab="stand" data-active="${hud.activeWorkshopTab === 'stand'}" aria-selected="${hud.activeWorkshopTab === 'stand'}" class="brass-btn">
+          <span class="nb-tab-ico">🧺</span> <span class="hs-long">Sạp Ngõ</span><span class="hs-short">Sạp</span> <span class="nb-tab-badge">${standSoldCount > 0 ? `${standSoldCount} xong` : `${standListedCount}/6`}</span>
         </button>
         <button type="button" role="tab" id="wsTabMarket" data-ws-tab="market" data-active="${hud.activeWorkshopTab === 'market'}" aria-selected="${hud.activeWorkshopTab === 'market'}" class="brass-btn">
           <span class="nb-tab-ico">🎪</span> <span class="hs-long">Chợ Phiên</span><span class="hs-short">Chợ</span> <span class="nb-tab-badge">${marketBadge > 0 ? `${marketBadge} sẵn` : `${spotlightLotsLeft}/3`}</span>
@@ -919,6 +942,25 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
           </button>
         </div>
 
+        <div class="quest-card-mini" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <div style="flex:1 1 200px;min-width:0;font-size:12px;font-weight:700;">
+            <div>🧙 <strong>Phụ Tá Gia Tinh Bà Molly:</strong> ${
+              barn.farmHelperEndsAt && barn.farmHelperEndsAt > now
+                ? `<span style="color:#15803d;">Đang trực (${formatDurationCompactVi(Math.ceil((barn.farmHelperEndsAt - now) / 1000))})</span>`
+                : 'Tự động tưới luống mới &amp; gom thành phẩm xưởng vào Kho Đỏ'
+            }</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            ${
+              barn.farmHelperFreeDayKey !== getVietnamCalendarKey()
+                ? `<button type="button" class="brass-btn gold-cta" data-activate-helper="free_daily" style="padding:5px 10px;font-size:12px;">🎁 30p Miễn phí</button>`
+                : ''
+            }
+            <button type="button" class="brass-btn" data-activate-helper="feast_points" style="padding:5px 10px;font-size:12px;">🍁 2h (20 điểm)</button>
+            <button type="button" class="brass-btn" data-activate-helper="sickle" style="padding:5px 10px;font-size:12px;">🪙 2h (120 Sickle)</button>
+          </div>
+        </div>
+
         <div class="barn-talisman-forge">
           <div class="barn-talisman-forge-meta">
             <h3 class="barn-talisman-forge-title">
@@ -947,6 +989,113 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
         <h3 class="hs-section-title" style="margin:14px 0 6px;">Đặc sản (${Object.keys(FARM_GOODS).length})</h3>
         <div class="barn-stock-grid">
           ${renderStockCards(Object.keys(FARM_GOODS) as FarmItemId[])}
+        </div>
+      `;
+    } else if (hud.activeWorkshopTab === 'stand') {
+      const allItems: FarmItemId[] = [
+        ...(Object.keys(FARM_CROPS) as FarmItemId[]),
+        ...(Object.keys(FARM_GOODS) as FarmItemId[]),
+      ];
+      const availableItems = allItems.filter(
+        (id) => st.sandboxMode || hud.sim.getFarmItemCount(id) > 0
+      );
+      if (
+        availableItems.length > 0 &&
+        !availableItems.includes(hud.selectedStandItemId)
+      ) {
+        hud.selectedStandItemId = availableItems[0];
+      }
+      const selMeta = getFarmItemMeta(hud.selectedStandItemId);
+      const selHave = hud.sim.getFarmItemCount(hud.selectedStandItemId);
+      const selUnitPrice = computeRoadsideUnitPrice(
+        hud.selectedStandItemId,
+        hud.selectedStandPriceTier
+      );
+      const listQty = Math.max(1, Math.min(3, st.sandboxMode ? 2 : selHave));
+
+      bodyHtml = `
+        <div class="quest-card-mini">
+          <div class="hs-card-title">🧺 Sạp Hàng Đầu Ngõ Hang Sóc (6 Ô)</div>
+          <div style="font-size:12px;color:var(--ink-soft);margin:4px 0 8px;">
+            Bày nông sản hoặc đặc sản dư trong Kho để khách lữ hành Hogsmeade và hàng xóm ghé mua lấy Sickle!
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <select id="selStandItem" aria-label="Chọn nông sản bày sạp" style="flex:1;min-width:160px;min-height:38px;padding:4px 8px;border-radius:8px;border:1px solid var(--hs-brass);background:#fffdf7;color:var(--ink);font-weight:700;">
+              ${(availableItems.length > 0 ? availableItems : (['ottery_wheat'] as FarmItemId[]))
+                .map((id) => {
+                  const m = getFarmItemMeta(id);
+                  const c = hud.sim.getFarmItemCount(id);
+                  return `<option value="${id}" ${id === hud.selectedStandItemId ? 'selected' : ''}>${escapeHtml(m.name)} (×${st.sandboxMode ? '∞' : c})</option>`;
+                })
+                .join('')}
+            </select>
+            <div style="display:flex;gap:4px;">
+              ${(
+                [
+                  ['bargain', 'Giá hời (nhanh)'],
+                  ['fair', 'Chuẩn (+15%)'],
+                  ['premium', 'Cao (+35%)'],
+                ] as Array<[RoadsidePriceTier, string]>
+              )
+                .map(
+                  ([tier, label]) =>
+                    `<button type="button" data-stand-tier="${tier}" data-active="${hud.selectedStandPriceTier === tier}" aria-pressed="${hud.selectedStandPriceTier === tier}" class="brass-btn ${hud.selectedStandPriceTier === tier ? 'gold-cta' : ''}" style="padding:4px 8px;font-size:12px;">${label}</button>`
+                )
+                .join('')}
+            </div>
+          </div>
+          <div style="font-size:12px;font-weight:700;margin-top:6px;">
+            Lô mẫu: <strong>${listQty} × ${escapeHtml(selMeta.name)}</strong> → <strong>+${selUnitPrice * listQty} Sickle</strong>
+          </div>
+        </div>
+
+        <div class="market-deal-grid" style="margin-top:8px;">
+          ${stand.slots
+            .map((slot) => {
+              if (!slot.itemId) {
+                const canList = st.sandboxMode || selHave >= 1;
+                return `
+                  <div class="market-deal-card">
+                    <div class="hs-card-title">Ô Sạp #${slot.slotIndex + 1} · Trống</div>
+                    <div style="font-size:12px;color:var(--ink-soft);margin:4px 0;">Sẵn sàng bày ${listQty} ${escapeHtml(selMeta.name)}</div>
+                    <button type="button" data-stand-list="${slot.slotIndex}" ${!canList ? 'disabled' : ''} class="brass-btn ${canList ? 'gold-cta' : ''}" style="width:100%;">
+                      🧺 Bày bán (+${selUnitPrice * listQty} Sickle)
+                    </button>
+                  </div>
+                `;
+              }
+              const m = getFarmItemMeta(slot.itemId);
+              const totalPrice = slot.qty * slot.unitPrice;
+              if (slot.soldAt) {
+                return `
+                  <div class="market-deal-card">
+                    <div class="hs-card-title">${slot.buyerEmoji ?? '🍺'} ${escapeHtml(slot.buyerName ?? 'Khách lữ hành')} đã mua!</div>
+                    <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
+                      <img src="${m.iconSrc}" alt="${escapeHtml(m.name)}" style="width:32px;height:32px;object-fit:contain;" />
+                      <div style="font-size:13px;font-weight:700;">${slot.qty} × ${escapeHtml(m.name)}</div>
+                    </div>
+                    <button type="button" data-stand-claim="${slot.slotIndex}" class="owl-green-send-btn" style="width:100%;padding:6px 10px;font-size:12px;">
+                      🪙 Thu +${totalPrice} Sickle
+                    </button>
+                  </div>
+                `;
+              }
+              const waitMs = getRoadsideSaleWaitMs(slot.unitPrice, m.sellValue);
+              const leftSec = Math.max(1, Math.ceil((slot.listedAt + waitMs - now) / 1000));
+              return `
+                <div class="market-deal-card">
+                  <div class="hs-card-title">Ô Sạp #${slot.slotIndex + 1} · Đang rao</div>
+                  <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
+                    <img src="${m.iconSrc}" alt="${escapeHtml(m.name)}" style="width:32px;height:32px;object-fit:contain;" />
+                    <div>
+                      <div style="font-size:13px;font-weight:700;">${slot.qty} × ${escapeHtml(m.name)}</div>
+                      <div style="font-size:12px;color:var(--ink-soft);">Giá ${totalPrice} Sickle · khách ghé ~${formatDurationCompactVi(leftSec)}</div>
+                    </div>
+                  </div>
+                </div>
+              `;
+            })
+            .join('')}
         </div>
       `;
     } else if (hud.activeWorkshopTab === 'market') {
@@ -1250,6 +1399,7 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
                       : stock.canFulfill
                         ? `<button type="button" data-fulfill-crate="${escapeHtml(crate.id)}" class="brass-btn gold-cta" style="width:100%;">📦 Chất hàng</button>`
                         : `<div style="display:flex;flex-direction:column;gap:6px;">
+                            <button type="button" data-jump-cargo-item="${escapeHtml(stock.barnItemId)}" class="brass-btn gold-cta" style="width:100%;">→ Tìm / Sản xuất</button>
                             ${
                               crate.helpRequestedAt
                                 ? `<div style="font-size:12px;font-weight:700;color:var(--brand-strong);text-align:center;padding:4px 0;">🦉 Đang gọi...</div>`
@@ -1424,6 +1574,63 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
       btn.addEventListener('click', () => {
         hud.activeWorkshopTab = 'brew';
         farmUiRenderWorkshopDialog(hud);
+      });
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-jump-cargo-item]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const itemId = btn.dataset.jumpCargoItem as FarmItemId;
+        (hud.root.querySelector('#workshopDialog') as HTMLDialogElement | null)?.close();
+        hud.jumpToMissingFarmItem(itemId);
+      });
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-activate-helper]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const mode = btn.dataset.activateHelper as 'free_daily' | 'feast_points' | 'sickle';
+        const res = hud.sim.activateFarmHelper(mode);
+        hud.showToast(res.msg, res.ok ? '🧙' : '🪙');
+        farmUiRenderWorkshopDialog(hud);
+        hud.refreshHeader();
+      });
+    });
+
+    box.querySelector('#selStandItem')?.addEventListener('change', (ev) => {
+      hud.selectedStandItemId = (ev.currentTarget as HTMLSelectElement).value as FarmItemId;
+      farmUiRenderWorkshopDialog(hud);
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-stand-tier]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        hud.selectedStandPriceTier = btn.dataset.standTier as RoadsidePriceTier;
+        farmUiRenderWorkshopDialog(hud);
+      });
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-stand-list]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const slotIdx = Number(btn.dataset.standList);
+        const have = hud.sim.getFarmItemCount(hud.selectedStandItemId);
+        const qty = Math.max(1, Math.min(3, st.sandboxMode ? 2 : have));
+        const res = hud.sim.listOnRoadsideStand(
+          slotIdx,
+          hud.selectedStandItemId,
+          qty,
+          hud.selectedStandPriceTier
+        );
+        hud.showToast(res.msg, res.ok ? '🧺' : '⚠️');
+        farmUiRenderWorkshopDialog(hud);
+        hud.refreshHeader();
+      });
+    });
+
+    box.querySelectorAll<HTMLButtonElement>('[data-stand-claim]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const slotIdx = Number(btn.dataset.standClaim);
+        const res = hud.sim.claimRoadsideStandSlot(slotIdx);
+        hud.showToast(res.msg, res.ok ? '🪙' : '🧺');
+        farmUiRenderWorkshopDialog(hud);
+        hud.refreshHeader();
       });
     });
 }

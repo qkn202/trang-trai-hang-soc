@@ -5,6 +5,7 @@ import {
   QUIZ_LANGUAGES,
   QUIZ_LEXICON_BANK,
   QuizLexiconEntry,
+  QuizTopicId,
   QuizVocabNote,
 } from '../data/languageQuizBank';
 import {
@@ -31,7 +32,45 @@ export type QuizVisualGameKind =
   | 'word_flashcard'
   | 'bubble_pop'
   | 'word_tiles'
-  | 'pic_pairs';
+  | 'pic_pairs'
+  | 'audio_listening';
+
+export interface QuizStreakMilestoneDef {
+  days: 3 | 7 | 14 | 30;
+  labelVi: string;
+  rewardSickle: number;
+  rewardSand?: number;
+  rewardCompost?: number;
+  rewardStars?: number;
+}
+
+export const QUIZ_STREAK_MILESTONES: readonly QuizStreakMilestoneDef[] = [
+  { days: 3, labelVi: 'Chuỗi 3 Ngày Chăm Chỉ', rewardSickle: 45, rewardCompost: 1 },
+  { days: 7, labelVi: 'Chuỗi 7 Ngày Thông Thái', rewardSickle: 95, rewardSand: 1 },
+  { days: 14, labelVi: 'Chuỗi 14 Ngày Học Giả', rewardSickle: 145, rewardSand: 2 },
+  { days: 30, labelVi: 'Chuỗi 30 Ngày Đại Pháp Sư', rewardSickle: 190, rewardStars: 1 },
+];
+
+export const DAILY_QUIZ_STREAK_TARGET_ANSWERS = 3;
+
+export function formatQuizDayKey(nowMs = Date.now()): string {
+  const d = new Date(nowMs);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function isYesterdayDayKey(prevKey: string | undefined, todayKey: string): boolean {
+  if (!prevKey || !/^\d{4}-\d{2}-\d{2}$/.test(prevKey) || !/^\d{4}-\d{2}-\d{2}$/.test(todayKey)) {
+    return false;
+  }
+  const [py, pm, pd] = prevKey.split('-').map(Number);
+  const [ty, tm, td] = todayKey.split('-').map(Number);
+  const prevUtc = Date.UTC(py, pm - 1, pd);
+  const todayUtc = Date.UTC(ty, tm - 1, td);
+  return Math.round((todayUtc - prevUtc) / 86_400_000) === 1;
+}
 
 export interface ActiveQuizChallenge {
   qId: string;
@@ -165,6 +204,11 @@ export function createInitialLanguageQuizState(): LanguageQuizState {
     activeLang: 'en',
     autoSpeak: true,
     preferredFormat: 'all',
+    preferredTopic: 'all',
+    dailyStreakCount: 0,
+    bestDailyStreakCount: 0,
+    todayAnsweredCount: 0,
+    claimedStreakMilestones: [],
     profiles: {
       en: createDefaultLanguageProfile('beginner'),
       ko: createDefaultLanguageProfile('beginner'),
@@ -192,9 +236,25 @@ export function sanitizeLanguageQuizState(
     'dialogue_reply',
     'sentence_builder',
     'match_pairs',
+    'listening_comprehension',
   ];
   const preferredFormat = validFormats.includes(raw.preferredFormat as 'all' | QuizFormatKind)
     ? (raw.preferredFormat as 'all' | QuizFormatKind)
+    : 'all';
+
+  const validTopics: Array<NonNullable<LanguageQuizState['preferredTopic']>> = [
+    'all',
+    'farm',
+    'daily',
+    'travel',
+    'study_tech',
+    'health_hobby',
+    'magic',
+  ];
+  const preferredTopic = validTopics.includes(
+    raw.preferredTopic as NonNullable<LanguageQuizState['preferredTopic']>
+  )
+    ? (raw.preferredTopic as NonNullable<LanguageQuizState['preferredTopic']>)
     : 'all';
 
   const profiles = { ...base.profiles };
@@ -249,6 +309,18 @@ export function sanitizeLanguageQuizState(
     activeLang,
     autoSpeak: raw.autoSpeak !== false,
     preferredFormat,
+    preferredTopic,
+    dailyStreakCount: Math.max(0, Math.round(Number(raw.dailyStreakCount) || 0)),
+    bestDailyStreakCount: Math.max(0, Math.round(Number(raw.bestDailyStreakCount) || 0)),
+    lastStudyDayKey: typeof raw.lastStudyDayKey === 'string' ? raw.lastStudyDayKey.slice(0, 12) : undefined,
+    todayAnsweredCount: Math.max(0, Math.round(Number(raw.todayAnsweredCount) || 0)),
+    todayStudyDayKey: typeof raw.todayStudyDayKey === 'string' ? raw.todayStudyDayKey.slice(0, 12) : undefined,
+    claimedStreakMilestones: Array.isArray(raw.claimedStreakMilestones)
+      ? raw.claimedStreakMilestones
+          .filter((n): n is number => typeof n === 'number' && Number.isFinite(n))
+          .map((n) => Math.round(n))
+          .slice(0, 12)
+      : [],
     profiles,
   };
 }
@@ -338,7 +410,23 @@ const VISUAL_SPRITE_RULES: Array<{ pattern: RegExp; sprite: string }> = [
   { pattern: /kho|bảo quản|cất trữ|barn|store|보관|储存/i, sprite: '/game/trang-trai-hang-soc/sprites/burrow_house_canon.webp' },
   { pattern: /ruộng|đất|soil|earth|fertile|fértil|비옥|肥沃|畑|cày/i, sprite: '/game/trang-trai-hang-soc/sprites/crop_plot_sprouts.webp' },
   { pattern: /hoa|vườn|flower|garden|花|꽃|jardín/i, sprite: '/game/trang-trai-hang-soc/sprites/ui_icon_rose_bouquet.webp' },
-  { pattern: /sửa|rào|công cụ|repair|fence|dụng cụ|hammer/i, sprite: '/game/trang-trai-hang-soc/sprites/ui_icon_hammer_wand.webp' },
+  { pattern: /sửa|rào|công cụ|repair|fence|dụng cụ|hammer|đũa phép|thần chú|phép thuật|bùa|wand|spell|magic|sorcery|incantation|charm|마법|지팡이|주문|魔法|魔杖|咒语|杖|呪文|varita|hechizo|magia/i, sprite: '/game/trang-trai-hang-soc/sprites/ui_icon_hammer_wand.webp' },
+  { pattern: /chổi bay|quidditch|thể thao|chạy|bơi|marathon|tập luyện|stamina|swim|broom|빗자루|수영|마라톤|扫帚|游泳|马拉松|ほうき|水泳|escoba|natación|maratón/i, sprite: '/game/trang-trai-hang-soc/sprites/burrow_broomsticks_canon.webp' },
+  { pattern: /bản đồ|sân bay|du lịch|đường|thành phố|tàu điện|giao thông|ngã tư|map|airport|subway|itinerary|travel|intersection|지도|공항|지하철|여행|地图|机场|地铁|旅行|地図|空港|地下鉄|mapa|aeropuerto|metro|viaje/i, sprite: '/game/trang-trai-hang-soc/sprites/ui_icon_world_map.webp' },
+  { pattern: /hộ chiếu|hành lý|vali|khách sạn|đặt phòng|vé|passport|luggage|hotel|ticket|reservation|여권|짐|호텔|티켓|예약|护照|行李|酒店|机票|パスポート|荷物|ホテル|切符|pasaporte|equipaje|hotel|billete/i, sprite: '/game/trang-trai-hang-soc/sprites/ui_icon_suitcase.webp' },
+  { pattern: /máy tính|bàn phím|mật khẩu|công nghệ|mạng|thuật toán|mã hóa|tự động|ứng dụng|thông báo|keyboard|password|algorithm|encryption|application|notification|innovation|automation|키보드|비밀번호|알고리즘|혁신|键盘|密码|算法|创新|キーボード|パスワード|技術|teclado|contraseña|algoritmo|innovación/i, sprite: '/game/trang-trai-hang-soc/sprites/ui_icon_muggle_plug.webp' },
+  { pattern: /sách|thư viện|vở|bài tập|học bổng|tiên tri|học viện|sách phép|bài thuyết trình|book|library|notebook|homework|scholarship|prophecy|spellbook|presentation|도서관|공책|숙제|장학금|예언|图书馆|笔记本|作业|奖学金|预言|図書館|ノート|宿題|予言|biblioteca|cuaderno|beca|profecía/i, sprite: '/game/trang-trai-hang-soc/sprites/m3_piece_scroll.webp' },
+  { pattern: /bệnh viện|bác sĩ|sốt|đơn thuốc|miễn dịch|dinh dưỡng|phục hồi|thiền|hospital|fever|medicine|prescription|nutrition|immunity|meditation|rehabilitation|병원|열|약|처방|영양|면역|医院|发烧|药|处方|营养|免疫|病院|熱|薬|処方|栄養|hospital|fiebre|medicina|receta|nutrición/i, sprite: '/game/trang-trai-hang-soc/sprites/ui_icon_herb_elixir.webp' },
+  { pattern: /âm nhạc|giai điệu|đàn|buổi hòa nhạc|vũ đạo|music|guitar|concert|melody|choreography|기타|콘서트|멜로디|吉他|音乐会|旋律|ギター|コンサート|旋律|guitarra|concierto|melodía/i, sprite: '/game/trang-trai-hang-soc/sprites/ui_icon_pasture_bell.webp' },
+  { pattern: /máy ảnh|phim|đạo diễn|triển lãm|kiệt tác|camera|director|exhibition|masterpiece|카메라|감독|전시회|걸작|相机|导演|展览|杰作|カメラ|監督|展覧会|傑作|cámara|director|exposición|obra maestra/i, sprite: '/game/trang-trai-hang-soc/sprites/ui_icon_jigsaw.webp' },
+  { pattern: /cà phê|thực đơn|nhà hàng|đặt bàn|menu|coffee|restaurant|메뉴|식당|菜单|餐厅|メニュー|レストラン|menú|restaurante/i, sprite: '/game/trang-trai-hang-soc/sprites/ui_icon_vn_egg_coffee.webp' },
+  { pattern: /hóa đơn|giảm giá|quà lưu niệm|tiền tệ|mua sắm|receipt|discount|souvenir|currency|영수증|할인|기념품|환율|收据|折扣|纪念品|货币|レシート|割引|お土産|recibo|descuento|recuerdo|moneda/i, sprite: '/game/trang-trai-hang-soc/sprites/ui_icon_shop.webp' },
+  { pattern: /bạn bè|nụ cười|ôm|sinh nhật|đồng nghiệp|họp|cảm thông|hòa giải|hiệu trưởng|friend|smile|hug|birthday|colleague|meeting|empathy|reconcile|headmaster|친구|미소|생일|동료|회의|공감|교장|朋友|微笑|生日|同事|会议|共情|校長|友達|笑顔|誕生日|同僚|会議|amigo|sonrisa|cumpleaños|colega|reunión/i, sprite: '/game/trang-trai-hang-soc/sprites/ui_icon_staff.webp' },
+  { pattern: /lâu đài|ký túc xá|hogwarts|castle|dormitory|성|기숙사|城堡|宿舍|城|寮|castillo|dormitorio/i, sprite: '/game/trang-trai-hang-soc/sprites/crest-gryffindor.webp' },
+  { pattern: /biến hình|độn thổ|bay lơ lửng|thần hộ mệnh|đấu tay đôi|transfiguration|apparate|levitation|patronus|duel|변신|결투|수호령|变形|决斗|守护神|変身|決闘|守護霊|transformación|duelo|patrono/i, sprite: '/game/trang-trai-hang-soc/sprites/ui_icon_accio.webp' },
+  { pattern: /bùa hộ mệnh|giả kim|nhãn thông|amulet|alchemy|clairvoyance|부적|연금술|护身符|炼金术|お守り|錬金術|amuleto|alquimia/i, sprite: '/game/trang-trai-hang-soc/sprites/m3_gem_amethyst.webp' },
+  { pattern: /áo choàng|cloak|망토|斗篷|マント|capa/i, sprite: '/game/trang-trai-hang-soc/sprites/ui_icon_sweater_ready.webp' },
+  { pattern: /tin nhắn|phản hồi|hạn chót|message|feedback|deadline|메시지|피드백|마감|消息|反馈|截止|メッセージ|締切|mensaje|plazo/i, sprite: '/game/trang-trai-hang-soc/sprites/ui_icon_owl_orders.webp' },
 ];
 
 const FALLBACK_VISUAL_SPRITES: readonly string[] = [
@@ -480,20 +568,37 @@ function getDistractorLexiconEntries(
   levelBand: number,
   count = 3,
   excludeId?: string,
-  preferPosVi?: string
+  preferPosVi?: string,
+  preferTopic?: QuizTopicId
 ): QuizLexiconEntry[] {
   const targetShortVi = formatShortKidMeaningVi(excludeMeaningVi).toLowerCase();
   const targetWordLower = excludeWord.trim().toLowerCase();
   const targetLen = excludeWord.trim().length;
-  const sameLang = QUIZ_LEXICON_BANK.filter(
-    (e) =>
-      e.lang === lang &&
-      e.id !== excludeId &&
-      e.word.trim().toLowerCase() !== targetWordLower
+  const sameLang = shuffleArray(
+    QUIZ_LEXICON_BANK.filter(
+      (e) =>
+        e.lang === lang &&
+        e.id !== excludeId &&
+        e.word.trim().toLowerCase() !== targetWordLower
+    )
   );
+  const topicRank = (entry: QuizLexiconEntry): number => {
+    const t: QuizTopicId = entry.topic ?? 'farm';
+    if (preferTopic && preferTopic !== 'farm') {
+      if (t === preferTopic) return 0;
+      if (t !== 'farm') return 1;
+      return 2;
+    }
+    if (preferTopic === 'farm') {
+      return t === 'farm' ? 0 : 1;
+    }
+    return t !== 'farm' ? 0 : 1;
+  };
   const strictPool = sameLang
     .filter((e) => formatShortKidMeaningVi(e.meaningVi).toLowerCase() !== targetShortVi)
     .sort((a, b) => {
+      const topDiff = topicRank(a) - topicRank(b);
+      if (topDiff !== 0) return topDiff;
       const posDiffA = preferPosVi && a.posVi === preferPosVi ? 0 : preferPosVi ? 1 : 0;
       const posDiffB = preferPosVi && b.posVi === preferPosVi ? 0 : preferPosVi ? 1 : 0;
       if (posDiffA !== posDiffB) return posDiffA - posDiffB;
@@ -503,7 +608,7 @@ function getDistractorLexiconEntries(
       return Math.abs(a.word.trim().length - targetLen) - Math.abs(b.word.trim().length - targetLen);
     });
 
-  const picked = shuffleArray(strictPool.slice(0, Math.max(count + 3, 6))).slice(0, count);
+  const picked = shuffleArray(strictPool.slice(0, Math.max(count + 8, 12))).slice(0, count);
   if (picked.length < count) {
     const pickedIds = new Set(picked.map((p) => p.id));
     for (const fallback of shuffleArray(sameLang)) {
@@ -621,7 +726,8 @@ function buildFromCurated(item: CuratedQuizItem, isReview: boolean): ActiveQuizC
     item.levelBand,
     3,
     undefined,
-    primaryNote.posVi
+    primaryNote.posVi,
+    item.topic ?? 'farm'
   );
   const tagged = [
     {
@@ -675,7 +781,9 @@ function buildVocabContextChallenge(
     target.meaningVi,
     target.levelBand,
     3,
-    target.id
+    target.id,
+    undefined,
+    target.topic ?? 'farm'
   );
 
   const tagged = [
@@ -741,6 +849,21 @@ function buildVocabContextChallenge(
   };
 }
 
+function buildListeningComprehensionChallenge(
+  target: QuizLexiconEntry,
+  isReview: boolean
+): ActiveQuizChallenge {
+  const built = buildVocabContextChallenge(target, isReview);
+  return {
+    ...built,
+    qId: `listen:${target.id}`,
+    format: 'listening_comprehension',
+    visualGameKind: 'audio_listening',
+    promptVi: '🔊 Lắng nghe phát âm thần chú và chạm vào nghĩa đúng:',
+    stemText: '🔊 Nghe phát âm để chọn đáp án',
+  };
+}
+
 function buildLexiconWordChoiceChallenge(
   target: QuizLexiconEntry,
   format: 'grammar_cloze' | 'dialogue_reply',
@@ -754,7 +877,9 @@ function buildLexiconWordChoiceChallenge(
     target.meaningVi,
     target.levelBand,
     3,
-    target.id
+    target.id,
+    undefined,
+    target.topic ?? 'farm'
   );
 
   const tagged = [
@@ -916,7 +1041,8 @@ function buildMatchPairsChallenge(
     anchor.levelBand,
     peerCount,
     anchor.id,
-    anchor.posVi
+    anchor.posVi,
+    anchor.topic ?? 'farm'
   );
 
   const trio = [anchor, ...peers];
@@ -998,6 +1124,11 @@ function reconstructChallengeById(
     const entry = QUIZ_LEXICON_BANK.find((e) => e.id === lexId && e.lang === lang);
     return entry ? buildVocabContextChallenge(entry, isReview) : null;
   }
+  if (qId.startsWith('listen:')) {
+    const lexId = qId.slice('listen:'.length);
+    const entry = QUIZ_LEXICON_BANK.find((e) => e.id === lexId && e.lang === lang);
+    return entry ? buildListeningComprehensionChallenge(entry, isReview) : null;
+  }
   if (qId.startsWith('pairs:')) {
     const lexId = qId.slice('pairs:'.length);
     const entry = QUIZ_LEXICON_BANK.find((e) => e.id === lexId && e.lang === lang);
@@ -1027,6 +1158,7 @@ interface QuizChallengeCandidate {
   format: QuizFormatKind;
   levelBand: number;
   tier: QuizProficiencyTier;
+  topic: QuizTopicId;
   conceptKey: string;
   build: (isReview: boolean) => ActiveQuizChallenge;
 }
@@ -1040,6 +1172,24 @@ function buildCandidatesForFormat(
   const candidates: QuizChallengeCandidate[] = [];
   const usedConcepts = new Set<string>();
 
+  if (format === 'listening_comprehension') {
+    for (const entry of langLexicon) {
+      const conceptKey = normalizeQuizConceptKey(lang, entry.word);
+      if (usedConcepts.has(conceptKey)) continue;
+      usedConcepts.add(conceptKey);
+      candidates.push({
+        qId: `listen:${entry.id}`,
+        format,
+        levelBand: entry.levelBand,
+        tier: entry.tier,
+        topic: entry.topic ?? 'farm',
+        conceptKey,
+        build: (isReview) => buildListeningComprehensionChallenge(entry, isReview),
+      });
+    }
+    return candidates;
+  }
+
   if (format === 'vocab_context') {
     for (const entry of langLexicon) {
       const conceptKey = normalizeQuizConceptKey(lang, entry.word);
@@ -1050,6 +1200,7 @@ function buildCandidatesForFormat(
         format,
         levelBand: entry.levelBand,
         tier: entry.tier,
+        topic: entry.topic ?? 'farm',
         conceptKey,
         build: (isReview) => buildVocabContextChallenge(entry, isReview),
       });
@@ -1067,6 +1218,7 @@ function buildCandidatesForFormat(
         format,
         levelBand: entry.levelBand,
         tier: entry.tier,
+        topic: entry.topic ?? 'farm',
         conceptKey,
         build: (isReview) => buildMatchPairsChallenge(entry, isReview),
       });
@@ -1085,22 +1237,25 @@ function buildCandidatesForFormat(
       format,
       levelBand: item.levelBand,
       tier: item.tier,
+      topic: item.topic ?? 'farm',
       conceptKey,
       build: (isReview) => buildFromCurated(item, isReview),
     });
   }
 
-  // Expand with full lexicon bank so every format has 80..150+ unique words without repetition
+  // Expand with full lexicon bank so every format has 180..240+ unique words without repetition
   for (const entry of langLexicon) {
     const conceptKey = normalizeQuizConceptKey(lang, entry.word);
     if (usedConcepts.has(conceptKey)) continue;
     usedConcepts.add(conceptKey);
+    const topic: QuizTopicId = entry.topic ?? 'farm';
     if (format === 'grammar_cloze') {
       candidates.push({
         qId: `cloze:${entry.id}`,
         format,
         levelBand: entry.levelBand,
         tier: entry.tier,
+        topic,
         conceptKey,
         build: (isReview) => buildLexiconWordChoiceChallenge(entry, 'grammar_cloze', isReview),
       });
@@ -1110,6 +1265,7 @@ function buildCandidatesForFormat(
         format,
         levelBand: entry.levelBand,
         tier: entry.tier,
+        topic,
         conceptKey,
         build: (isReview) => buildLexiconWordChoiceChallenge(entry, 'dialogue_reply', isReview),
       });
@@ -1119,6 +1275,7 @@ function buildCandidatesForFormat(
         format,
         levelBand: entry.levelBand,
         tier: entry.tier,
+        topic,
         conceptKey,
         build: (isReview) => buildLexiconTilesChallenge(entry, isReview),
       });
@@ -1128,13 +1285,28 @@ function buildCandidatesForFormat(
   return candidates;
 }
 
+function resolveQidTopic(
+  qId: string,
+  lexById: Map<string, QuizLexiconEntry>,
+  curById: Map<string, CuratedQuizItem>
+): QuizTopicId | null {
+  for (const prefix of ['vocab:', 'listen:', 'pairs:', 'cloze:', 'bubble:', 'tiles:'] as const) {
+    if (qId.startsWith(prefix)) {
+      const entry = lexById.get(qId.slice(prefix.length));
+      return entry ? (entry.topic ?? 'farm') : null;
+    }
+  }
+  const cur = curById.get(qId);
+  return cur ? (cur.topic ?? 'farm') : null;
+}
+
 function resolveQidConceptKey(
   qId: string,
   lang: QuizLanguageId,
   lexById: Map<string, QuizLexiconEntry>,
   curById: Map<string, CuratedQuizItem>
 ): string | null {
-  for (const prefix of ['vocab:', 'pairs:', 'cloze:', 'bubble:', 'tiles:'] as const) {
+  for (const prefix of ['vocab:', 'listen:', 'pairs:', 'cloze:', 'bubble:', 'tiles:'] as const) {
     if (qId.startsWith(prefix)) {
       const entry = lexById.get(qId.slice(prefix.length));
       return entry ? normalizeQuizConceptKey(lang, entry.word) : null;
@@ -1206,17 +1378,47 @@ export function generateNextQuizChallenge(
             ]
         );
 
+  const prefTopic = quizState.preferredTopic ?? 'all';
   const candidatesByFormat = new Map<QuizFormatKind, QuizChallengeCandidate[]>();
   for (const fmt of orderedFormats) {
-    candidatesByFormat.set(fmt, buildCandidatesForFormat(lang, fmt, langLexicon, langCurated));
+    const rawList = buildCandidatesForFormat(lang, fmt, langLexicon, langCurated);
+    if (prefTopic !== 'all') {
+      const topicFiltered = rawList.filter((c) => c.topic === prefTopic);
+      candidatesByFormat.set(fmt, topicFiltered.length > 0 ? topicFiltered : rawList);
+    } else {
+      candidatesByFormat.set(fmt, rawList);
+    }
+  }
+
+  const recentTopics = new Set<QuizTopicId>();
+  for (const qId of profile.recentIds.slice(-3)) {
+    const t = resolveQidTopic(qId, lexById, curById);
+    if (t) recentTopics.add(t);
+  }
+  for (const qId of sessionTail) {
+    const t = resolveQidTopic(qId, lexById, curById);
+    if (t) recentTopics.add(t);
   }
 
   const pickBestFresh = (list: QuizChallengeCandidate[]): QuizChallengeCandidate => {
-    const scored = list.map((c) => ({
+    const expandedPool = list.filter((c) => c.topic !== 'farm');
+    const farmPool = list.filter((c) => c.topic === 'farm');
+    // Ưu tiên ~80% các chủ đề đời sống / du lịch / công nghệ / sức khỏe / phép thuật, ~20% từ nông trại cũ
+    const chosenPool =
+      expandedPool.length > 0 && farmPool.length > 0
+        ? Math.random() < 0.8
+          ? expandedPool
+          : farmPool
+        : expandedPool.length > 0
+          ? expandedPool
+          : list;
+
+    const scored = chosenPool.map((c) => ({
       c,
       score:
         Math.abs(c.levelBand - targetBand) * 2.2 +
         (c.tier === profile.tier ? 0 : 2.5) +
+        (recentTopics.has(c.topic) ? 0.9 : 0) +
         Math.random() * 1.35,
     }));
     scored.sort((a, b) => a.score - b.score);
@@ -1277,18 +1479,20 @@ export function generateNextQuizChallenge(
     0,
     profile.recentIds.length - Math.min(15, Math.floor(allCandidates.length / 2))
   );
+  const preferExpandedWrap = Math.random() < 0.8;
   const wrapScored = wrapPool.map((c) => {
     const recentIdx = recentIndexMap.get(c.qId) ?? -1;
     const srs = srsBoxes[c.qId];
     const isDue =
       reviewMap.has(c.qId) || Boolean(srs && srs.box < 5 && srs.dueAtTurn <= profile.totalAnswered);
     const dueBonus = isDue && recentIdx < minCooldownIdx ? -8 : 0;
+    const topicBias = preferExpandedWrap && c.topic !== 'farm' ? -3 : 0;
     const recencyScore = recentIdx < 0 ? -1000 + Math.random() * 6 : recentIdx * 10;
     const bandScore = Math.abs(c.levelBand - targetBand) * 0.6;
     return {
       c,
       isReview: Boolean(srs || reviewMap.has(c.qId)),
-      score: recencyScore + dueBonus + bandScore,
+      score: recencyScore + dueBonus + topicBias + bandScore,
     };
   });
   wrapScored.sort((a, b) => a.score - b.score);
@@ -1319,10 +1523,16 @@ export function recordQuizAttempt(
   quizState: LanguageQuizState,
   challenge: ActiveQuizChallenge,
   correct: boolean,
-  rewarded = true // HPVN: false = daily reward cap reached, the answer is practice only (no seeds / XP)
+  rewarded = true, // HPVN: false = daily reward cap reached, the answer is practice only (no seeds / XP)
+  customDayKey?: string
 ): QuizAttemptOutcome {
   const prof = quizState.profiles[challenge.lang];
   if (!prof.srsBoxes) prof.srsBoxes = {};
+  const todayKey = customDayKey ?? formatQuizDayKey();
+  if (quizState.todayStudyDayKey !== todayKey) {
+    quizState.todayStudyDayKey = todayKey;
+    quizState.todayAnsweredCount = 0;
+  }
   prof.totalAnswered += 1;
   prof.recentIds = [
     ...prof.recentIds.filter((id) => id !== challenge.qId),
@@ -1333,6 +1543,20 @@ export function recordQuizAttempt(
     prof.totalCorrect += 1;
     prof.streak += 1;
     prof.bestStreak = Math.max(prof.bestStreak, prof.streak);
+
+    quizState.todayAnsweredCount = (quizState.todayAnsweredCount ?? 0) + 1;
+    if (
+      quizState.todayAnsweredCount >= DAILY_QUIZ_STREAK_TARGET_ANSWERS &&
+      quizState.lastStudyDayKey !== todayKey
+    ) {
+      const consecutive = isYesterdayDayKey(quizState.lastStudyDayKey, todayKey);
+      quizState.dailyStreakCount = consecutive ? (quizState.dailyStreakCount ?? 0) + 1 : 1;
+      quizState.bestDailyStreakCount = Math.max(
+        quizState.bestDailyStreakCount ?? 0,
+        quizState.dailyStreakCount
+      );
+      quizState.lastStudyDayKey = todayKey;
+    }
 
     const gain = prof.streak >= 5 ? 4 : 3;
     prof.masteryScore = Math.min(100, prof.masteryScore + gain);
@@ -1364,6 +1588,7 @@ export function recordQuizAttempt(
       challenge.tier !== 'beginner' ||
       challenge.format === 'sentence_builder' ||
       challenge.format === 'match_pairs' ||
+      challenge.format === 'listening_comprehension' ||
       prof.streak >= 2 ||
       wasReviewCleared;
     const seedsAwarded = bonusSeed ? 2 : 1;

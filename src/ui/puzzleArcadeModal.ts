@@ -41,6 +41,7 @@ import {
   type ProofOfPlayGameId,
 } from '../sim/proofOfPlay';
 import { MinigameGpuFxBatcher } from '../render/fx/minigameGpuFx';
+import { isScoredLeaderboardGame } from '../sim/minigameLeaderboard';
 import { ParkSimulation } from '../sim/simulation';
 import {
   ActiveMinigameResumeRecord,
@@ -1963,9 +1964,13 @@ export class PuzzleArcadeModalController {
       const stg =
         this.mode === 'sudoku'
           ? (this.sudokuEngine?.stage ?? 1)
-          : this.mode === 'blocks'
-            ? (this.onetEngine?.stage ?? 1)
-            : (this.jigsawEngine?.stage ?? 1);
+          : this.mode === 'caro'
+            ? (this.minesEngine?.stage ?? 1)
+            : this.mode === 'chess'
+              ? (this.fishEngine?.stage ?? 1)
+              : this.mode === 'blocks'
+                ? (this.onetEngine?.stage ?? 1)
+                : (this.jigsawEngine?.stage ?? 1);
       this.popRecorders.set(this.mode, new ProofOfPlayRecorder(this.mode, stg));
     }
   }
@@ -1978,9 +1983,13 @@ export class PuzzleArcadeModalController {
       const stg =
         this.mode === 'sudoku'
           ? (this.sudokuEngine?.stage ?? 1)
-          : this.mode === 'blocks'
-            ? (this.onetEngine?.stage ?? 1)
-            : (this.jigsawEngine?.stage ?? 1);
+          : this.mode === 'caro'
+            ? (this.minesEngine?.stage ?? 1)
+            : this.mode === 'chess'
+              ? (this.fishEngine?.stage ?? 1)
+              : this.mode === 'blocks'
+                ? (this.onetEngine?.stage ?? 1)
+                : (this.jigsawEngine?.stage ?? 1);
       if (!rec || rec.stage !== stg) {
         rec = new ProofOfPlayRecorder(this.mode, stg);
         this.popRecorders.set(this.mode, rec);
@@ -2069,12 +2078,14 @@ export class PuzzleArcadeModalController {
       this.victoryClaimed = true;
       this.sim.state.puzzleArcade.minesSession = null;
       this.clearActiveModalResumeMarker();
+      const minesScore = Math.max(
+        1200,
+        2600 + this.minesEngine.totalMines * 25 - this.minesEngine.movesCount * 4
+      );
       this.victorySummary = this.sim.completePuzzleArcadeVictory('caro', this.minesEngine.reward, {
-        sessionScore: Math.max(
-          1200,
-          2600 + this.minesEngine.totalMines * 25 - this.minesEngine.movesCount * 4
-        ),
+        sessionScore: minesScore,
         efficiency: Math.max(1, this.minesEngine.movesCount),
+        proofOfPlay: this.sealValidProofOfPlay('caro', minesScore),
         completedStage: this.minesEngine.stage,
         skipPlayCount: this.lossStreakResetForStage,
       });
@@ -2086,9 +2097,11 @@ export class PuzzleArcadeModalController {
       this.victoryClaimed = true;
       this.sim.state.puzzleArcade.fishingSession = null;
       this.clearActiveModalResumeMarker();
+      const fishScore = Math.max(1200, this.fishEngine.score);
       this.victorySummary = this.sim.completePuzzleArcadeVictory('chess', this.fishEngine.reward, {
-        sessionScore: Math.max(1200, this.fishEngine.score),
+        sessionScore: fishScore,
         efficiency: Math.max(1, this.fishEngine.maxCombo),
+        proofOfPlay: this.sealValidProofOfPlay('chess', fishScore),
         completedStage: this.fishEngine.stage,
         skipPlayCount: this.lossStreakResetForStage,
       });
@@ -2277,8 +2290,7 @@ export class PuzzleArcadeModalController {
       : `Bùa Phượng Hoàng — Tối đa 1 lần/môn/ngày (Đã dùng ${talismanDaily.usedCount}/${talismanDaily.maxDaily} môn hôm nay)`;
     const reqTrial = this.sim.getRequiredLevelTrial();
     const curInfo = this.sim.getDisciplineStageInfo(this.mode);
-    const isScoredMode =
-      this.mode === 'sudoku' || this.mode === 'blocks' || this.mode === 'jigsaw';
+    const isScoredMode = isScoredLeaderboardGame(this.mode);
     const activeModeRank = isScoredMode ? this.sim.getPlayerMinigameRank(this.mode, 'valley') : 0;
 
     // the level bar (hpvn/levelBar.ts): stage number, one sub line, the figures; a loss sets `stageAlert` (+ the rescue action)

@@ -9,13 +9,16 @@ import {
   NeighborProfileState,
 } from '../types/game';
 import { isNpcNeighborProfile } from './neighborSocial';
+import { CURRENT_ARCADE_DISCIPLINE_REV } from './puzzleShared';
 import { MAX_MATCH3_STAGE } from '../data/match3Levels';
 import { flushFarmSave, identity, request } from '../hpvn/bridge';
 import { houseWeekPoints } from '../hpvn/houseCup';
 
 export const SCORED_LEADERBOARD_GAMES: ReadonlyArray<LeaderboardGameId> = [
   'match3',
+  'caro',
   'sudoku',
+  'chess',
   'blocks',
   'jigsaw',
 ];
@@ -24,10 +27,12 @@ export const ALL_LEADERBOARD_GAMES: ReadonlyArray<LeaderboardGameId> = SCORED_LE
 
 export function isScoredLeaderboardGame(
   gameId: string
-): gameId is 'match3' | 'sudoku' | 'blocks' | 'jigsaw' {
+): gameId is 'match3' | 'caro' | 'sudoku' | 'chess' | 'blocks' | 'jigsaw' {
   return (
     gameId === 'match3' ||
+    gameId === 'caro' ||
     gameId === 'sudoku' ||
+    gameId === 'chess' ||
     gameId === 'blocks' ||
     gameId === 'jigsaw'
   );
@@ -414,11 +419,26 @@ function deriveBaseRecordFromState(
     };
   }
 
-  const stageMap: Record<'sudoku' | 'blocks' | 'jigsaw', number> = {
+  const rev = Math.floor(Number(pa?.arcadeDisciplineRev) || 0);
+  const stageMap: Record<'caro' | 'sudoku' | 'chess' | 'blocks' | 'jigsaw', number> = {
+    caro:
+      rev >= CURRENT_ARCADE_DISCIPLINE_REV
+        ? Math.max(
+            0,
+            Math.min(MAX_PUZZLE_TOWER_STAGE, pa?.caroCleared ?? Math.max(0, (pa?.caroStage ?? 1) - 1))
+          )
+        : 0,
     sudoku: Math.max(
       0,
       Math.min(MAX_PUZZLE_TOWER_STAGE, pa?.sudokuCleared ?? Math.max(0, (pa?.sudokuStage ?? 1) - 1))
     ),
+    chess:
+      rev >= CURRENT_ARCADE_DISCIPLINE_REV
+        ? Math.max(
+            0,
+            Math.min(MAX_PUZZLE_TOWER_STAGE, pa?.chessCleared ?? Math.max(0, (pa?.chessStage ?? 1) - 1))
+          )
+        : 0,
     blocks: Math.max(
       0,
       Math.min(MAX_PUZZLE_TOWER_STAGE, pa?.blockCleared ?? Math.max(0, (pa?.blockStage ?? 1) - 1))
@@ -457,7 +477,20 @@ export function ensureMinigameLeaderboardState(state: GameState): MinigameLeader
     };
   }
 
+  const rev = Math.floor(Number(state.puzzleArcade?.arcadeDisciplineRev) || 0);
   for (const gid of SCORED_LEADERBOARD_GAMES) {
+    if ((gid === 'caro' || gid === 'chess') && rev < CURRENT_ARCADE_DISCIPLINE_REV) {
+      state.minigameLeaderboard.records[gid] = {
+        bestStage: 0,
+        highScore: 0,
+        bestSessionScore: 0,
+        totalWins: 0,
+        bestStreak: 0,
+        bestEfficiency: undefined,
+        updatedAt: 0,
+      };
+      continue;
+    }
     const base = deriveBaseRecordFromState(state, gid);
     const cur = state.minigameLeaderboard.records[gid];
     if (!cur) {
@@ -471,18 +504,16 @@ export function ensureMinigameLeaderboardState(state: GameState): MinigameLeader
     }
   }
 
-  // Các game không tính điểm (Caro, Cờ Phù Thủy, Học Viện Thần Chú) luôn giữ 0 điểm trên BXH
-  for (const unscoredGid of ['caro', 'chess', 'seedquiz'] as const) {
-    state.minigameLeaderboard.records[unscoredGid] = {
-      bestStage: 0,
-      highScore: 0,
-      bestSessionScore: 0,
-      totalWins: 0,
-      bestStreak: 0,
-      bestEfficiency: undefined,
-      updatedAt: 0,
-    };
-  }
+  // Chỉ giữ Học Viện Thần Chú (seedquiz) ngoài BXH & Cúp 4 Nhà; đủ 6 game mini (Bùa Gặt, Dò Mìn, Số Học, Bắn Cá, Sinh Vật, Tranh Ghép) đều tính điểm
+  state.minigameLeaderboard.records.seedquiz = {
+    bestStage: 0,
+    highScore: 0,
+    bestSessionScore: 0,
+    totalWins: 0,
+    bestStreak: 0,
+    bestEfficiency: undefined,
+    updatedAt: 0,
+  };
 
   return state.minigameLeaderboard;
 }
@@ -533,7 +564,7 @@ function formatDetailDisplayVi(
     return `📦 ${box5} từ Hộp 5 • 🔥×${bestStreak}`;
   }
   if (gameId === 'caro') {
-    const eff = efficiency && efficiency > 0 ? ` • ⚡${efficiency}s` : '';
+    const eff = efficiency && efficiency > 0 ? ` • ⚡${efficiency} lượt` : '';
     return `${totalWins} thắng • 🔥×${bestStreak}${eff}`;
   }
   if (gameId === 'chess') {
@@ -1183,7 +1214,7 @@ export function recordMinigameSessionResult(
   gameId: LeaderboardGameId,
   input: MinigameSessionMetricInput = {}
 ): LeaderboardRankChange {
-  // Chỉ tính điểm xếp hạng & Cúp 4 Nhà ở 3 game: Match-3, Sudoku và Pikachu (blocks)
+  // Đủ 6 game mini (Bùa Gặt, Dò Mìn, Số Học, Bắn Cá, Sinh Vật, Tranh Ghép) đều tính điểm BXH & Cúp 4 Nhà
   if (!isScoredLeaderboardGame(gameId)) {
     const playerHouse = getPlayerHogwartsHouse(state);
     return {
@@ -1232,8 +1263,8 @@ export function recordMinigameSessionResult(
 
   if (input.efficiency !== undefined && Number.isFinite(input.efficiency)) {
     const eff = Math.max(0, Math.round(input.efficiency));
-    if (gameId === 'sudoku') {
-      // Lower mistakes is better!
+    if (gameId === 'sudoku' || gameId === 'caro') {
+      // Lower mistakes (Sudoku) or fewer moves (Dò Mìn) is better!
       if (rec.bestEfficiency === undefined || eff < rec.bestEfficiency) {
         rec.bestEfficiency = eff;
       }
@@ -1243,14 +1274,18 @@ export function recordMinigameSessionResult(
     }
   }
 
-  // Recompute authoritative composite rating score for the 3 scored games (match3, sudoku, blocks)
+  // Recompute authoritative composite rating score for all 6 scored minigames
   // Cap effectiveWins relative to bestStage so spamming Stage 1 cannot farm infinite rating points!
   const effBonus =
     gameId === 'sudoku'
       ? rec.bestEfficiency !== undefined
         ? Math.max(0, (5 - rec.bestEfficiency) * 90)
         : 0
-      : Math.round((rec.bestEfficiency ?? 0) * 0.25);
+      : gameId === 'caro'
+        ? rec.bestEfficiency !== undefined
+          ? Math.max(0, Math.min(250, 260 - rec.bestEfficiency * 3))
+          : 0
+        : Math.round((rec.bestEfficiency ?? 0) * 0.25);
   const effectiveWins = Math.min(rec.totalWins, rec.bestStage * 2 + 10);
   const computedRating = Math.max(
     baseAfter.highScore,

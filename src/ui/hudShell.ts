@@ -359,6 +359,8 @@ export function shellMountDOM(hud: GameHUD): void {
             <button id="btnMenuRotateCam" type="button" class="brass-btn" title="Xoay góc nhìn bản đồ 90° (Phím Q / E)">Bắc</button>
             <button id="btnMenuCutaway" type="button" aria-pressed="false" class="brass-btn" title="Nhìn xuyên nhà cao (Phím V)">Xuyên</button>
             <button id="btnMenuGrid" type="button" aria-pressed="false" class="brass-btn" title="Bật/Tắt lưới ô">Lưới</button>
+            <button id="btnMenuLayoutEdit" type="button" aria-pressed="false" class="brass-btn" title="Chế độ quy hoạch toàn cảnh (Lưu/Hủy nháp &amp; 3 bản vẽ)">Quy hoạch</button>
+            <button id="btnMenuStrollMode" type="button" aria-pressed="false" class="brass-btn" title="Chế độ đi dạo nhập vai trong thung lũng">Đi dạo</button>
             <button id="btnManageToggleHudRollup" type="button" class="brass-btn" aria-pressed="false" title="Cuộn gọn thanh HUD quanh màn hình (Phím H)">Ẩn HUD</button>
             <!-- HPVN: the legal screen is gone, so no «Pháp Lý» button -->
             <button id="btnOpenZones" type="button" class="sr-only-hud" tabindex="-1" aria-hidden="true">Bản Đồ</button>
@@ -432,6 +434,19 @@ export function shellMountDOM(hud: GameHUD): void {
         <button id="btnSavePhotoPng" type="button" class="brass-btn gold-cta">🔥 Floo</button>
         <button id="btnSaveYulePostcard" type="button" class="brass-btn yule-postcard-btn" title="Gửi ảnh thiệp Giáng Sinh khung thông tuyết qua Mạng Floo">Khung Thiệp</button>
         <button id="btnExitPhoto" type="button" class="brass-btn" aria-label="Thoát chế độ chụp ảnh">✕</button>
+      </div>
+
+      <!-- BUILDER LAYOUT EDIT MODE FLOATING BAR -->
+      <div id="layoutEditBar" class="parchment-dark photo-mode-bar hidden" role="toolbar" aria-label="Chế độ quy hoạch toàn cảnh">
+        <span style="font-size:12px;font-weight:700;color:#fde68a;">🔨 Quy hoạch</span>
+        <button type="button" data-edit-preset="layout_1" class="brass-btn" style="padding:4px 8px;font-size:12px;">Bản 1</button>
+        <button type="button" data-edit-preset="layout_2" class="brass-btn" style="padding:4px 8px;font-size:12px;">Bản 2</button>
+        <button type="button" data-edit-preset="layout_3" class="brass-btn" style="padding:4px 8px;font-size:12px;">Bản 3</button>
+        <button id="btnEditSavePreset" type="button" class="brass-btn" style="padding:4px 8px;font-size:12px;" title="Lưu bố cục hiện tại vào ô bản vẽ đang chọn">Lưu bản</button>
+        <button id="btnEditStashAll" type="button" class="brass-btn" style="padding:4px 8px;font-size:12px;">📦 Cất TT</button>
+        <button id="btnEditRestoreAll" type="button" class="brass-btn" style="padding:4px 8px;font-size:12px;">🌸 Bày lại</button>
+        <button id="btnEditCommit" type="button" class="brass-btn gold-cta" style="padding:4px 10px;font-size:12px;">✓ Lưu</button>
+        <button id="btnEditCancel" type="button" class="brass-btn" style="padding:4px 8px;font-size:12px;" title="Hoàn nguyên về trước khi quy hoạch">✕ Hủy</button>
       </div>
 
       <!-- COMPACT RESTORE PILL WHEN HUD IS ROLLED UP -->
@@ -525,6 +540,7 @@ export function shellMountDOM(hud: GameHUD): void {
             <button id="btnMoveTool" type="button" aria-pressed="false" class="brass-btn" title="Di dời công trình (Phím M)">✋ Dời</button>
             <button id="btnBulldoze" type="button" aria-pressed="false" class="brass-btn" title="Xóa công trình hoặc đường (Phím X)">🧹 Xóa</button>
             <button id="btnRotate" type="button" class="brass-btn" title="Xoay công trình 90° (Phím R)">🔄 Xoay</button>
+            <button id="btnToggleLayoutEdit" type="button" aria-pressed="false" class="brass-btn" title="Bật/tắt Chế Độ Quy Hoạch Nháp (có Lưu / Hoàn nguyên &amp; 3 Bản vẽ)">🔨 Quy hoạch</button>
           </div>
           <span role="separator" aria-orientation="vertical" class="build-toolbar-sep"></span>
           <div role="group" aria-label="Hoàn tác và đóng" class="build-toolbar-group">
@@ -876,6 +892,76 @@ export function shellBindEvents(hud: GameHUD): void {
       hud.toggleWeatherPopover();
     });
 
+    const toggleLayoutEditFromUi = () => {
+      hud.closeHudPopovers();
+      if (hud.sim.isLayoutEditModeActive()) {
+        const res = hud.sim.commitLayoutEditMode();
+        clearBuildToolModes(hud);
+        hud.showToast(res.msg, '🔨');
+      } else {
+        const res = hud.sim.enterLayoutEditMode();
+        if (res.ok) {
+          hud.moveModeActive = true;
+          hud.moveKeepActiveAfterDrop = true;
+        }
+        hud.showToast(res.msg, res.ok ? '🔨' : '⚠️');
+      }
+      hud.refreshAll();
+    };
+    hud.root.querySelector('#btnToggleLayoutEdit')?.addEventListener('click', toggleLayoutEditFromUi);
+    hud.root.querySelector('#btnMenuLayoutEdit')?.addEventListener('click', toggleLayoutEditFromUi);
+
+    hud.root.querySelector('#btnMenuStrollMode')?.addEventListener('click', () => {
+      hud.closeHudPopovers();
+      clearBuildToolModes(hud);
+      const res = hud.sim.toggleStrollMode();
+      hud.showToast(res.msg, '🧙');
+      hud.refreshAll();
+    });
+
+    hud.root.querySelector('#btnEditCommit')?.addEventListener('click', () => {
+      const res = hud.sim.commitLayoutEditMode();
+      clearBuildToolModes(hud);
+      hud.showToast(res.msg, '🔨');
+      hud.refreshAll();
+    });
+    hud.root.querySelector('#btnEditCancel')?.addEventListener('click', () => {
+      const res = hud.sim.cancelLayoutEditMode();
+      clearBuildToolModes(hud);
+      hud.showToast(res.msg, '↩');
+      hud.refreshAll();
+    });
+    hud.root.querySelector('#btnEditStashAll')?.addEventListener('click', () => {
+      const res = hud.sim.stashAllDecorItems();
+      hud.showToast(res.msg, res.ok ? '📦' : '⚠️');
+      hud.refreshAll();
+    });
+    hud.root.querySelector('#btnEditRestoreAll')?.addEventListener('click', () => {
+      const res = hud.sim.restoreAllStashedDecor();
+      hud.showToast(res.msg, res.ok ? '🌸' : '⚠️');
+      hud.refreshAll();
+    });
+    hud.root.querySelectorAll<HTMLButtonElement>('[data-edit-preset]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const pid = btn.dataset.editPreset as 'layout_1' | 'layout_2' | 'layout_3';
+        hud.sim.activePresetSlot = pid;
+        if (hud.sim.state.layoutPresets?.[pid]) {
+          const res = hud.sim.applyLayoutPreset(pid);
+          hud.showToast(res.msg, res.ok ? '🔨' : '⚠️');
+        } else {
+          const entry = hud.sim.saveLayoutPreset(pid);
+          hud.showToast(`Đã lưu "${entry.label}" (${entry.placements.length} công trình)!`, '🔨');
+        }
+        hud.refreshAll();
+      });
+    });
+    hud.root.querySelector('#btnEditSavePreset')?.addEventListener('click', () => {
+      const slot = hud.sim.activePresetSlot || 'layout_1';
+      const entry = hud.sim.saveLayoutPreset(slot);
+      hud.showToast(`Đã cập nhật "${entry.label}" (${entry.placements.length} công trình)!`, '🔨');
+      hud.refreshAll();
+    });
+
     // Progressive roving-tabindex fallback for #secondaryMapToolsBar when native focusgroup is unsupported
     const buildToolbar = hud.root.querySelector('#secondaryMapToolsBar') as HTMLElement | null;
     if (
@@ -1213,6 +1299,10 @@ export function shellBindEvents(hud: GameHUD): void {
         rotateCamera90(hud.cam, 1);
         hud.refreshDock();
         hud.showToast(`Đã xoay góc nhìn bản đồ sang ${COMPASS_LABELS_VI[hud.cam.viewRot ?? 0]}!`, '🧭');
+      } else if (hud.sim.strollModeActive) {
+        const w = hud.sim.castStrollCareWave();
+        if (w.msg) hud.showToast(w.msg, '🪄');
+        hud.refreshAll();
       } else if (
         (hud.moveModeActive && hud.movingBuildingUid) ||
         (hud.selectedCatalogItem && !hud.buildSheetOpen && !hud.activeCategory)
@@ -1264,6 +1354,9 @@ export function shellBindEvents(hud: GameHUD): void {
         hud.refreshAll();
       } else if (hud.activePastureAnimalId || hud.pastureTrayOpen) {
         hud.closePastureTray();
+        hud.refreshAll();
+      } else if (hud.sim.strollModeActive) {
+        hud.sim.toggleStrollMode(false);
         hud.refreshAll();
       } else if (hud.sim.state.settings.cutawayMode) {
         hud.sim.state.settings.cutawayMode = false;

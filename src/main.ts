@@ -2276,6 +2276,9 @@ async function bootstrap(): Promise<void> {
     // 4. Normal click: check screen hotspots in priority order (front-to-back + pixel alpha hitmask)
     for (const kind of [
       'owl_post',
+      'field_micro_event',
+      'roaming_pet',
+      'home_visitor_gift',
       'visitor_gift',
       'neighbor_help',
       'home_lantern',
@@ -2331,6 +2334,37 @@ async function bootstrap(): Promise<void> {
           const pos = renderer.collectOwlPostParcel();
           if (pos) {
             sim.claimOwlPostDelivery(pos.gx, pos.gy);
+          }
+          hud.inspectSelection = null;
+          hud.refreshAll();
+          return;
+        }
+        if (best.kind === 'field_micro_event') {
+          const res = sim.claimFieldMicroEvent();
+          if (res.ok) {
+            renderer.notifyJuice('harvest', best.sx, best.sy);
+          }
+          hud.inspectSelection = null;
+          hud.refreshAll();
+          return;
+        }
+        if (best.kind === 'roaming_pet') {
+          const res = sim.petRoamingCompanion();
+          if (res.ok) {
+            renderer.notifyJuice('harvest', best.sx, best.sy);
+          } else {
+            hud.showToast(res.msg, '🐾');
+          }
+          hud.inspectSelection = null;
+          hud.refreshAll();
+          return;
+        }
+        if (best.kind === 'home_visitor_gift') {
+          const res = sim.claimHomeVisitorMysteryGift(best.id);
+          if (res.ok) {
+            renderer.notifyJuice('harvest', best.sx, best.sy);
+          } else {
+            hud.showToast(res.msg, '🎁');
           }
           hud.inspectSelection = null;
           hud.refreshAll();
@@ -2610,6 +2644,13 @@ async function bootstrap(): Promise<void> {
       return;
     }
 
+    if (sim.strollModeActive && !sim.isVisitingNeighbor) {
+      sim.setStrollDestination(gPos.fgx ?? gPos.gx, gPos.fgy ?? gPos.gy);
+      hud.inspectSelection = null;
+      hud.refreshAll();
+      return;
+    }
+
     hud.inspectSelection = null;
     hud.refreshAll();
   });
@@ -2830,21 +2871,50 @@ async function bootstrap(): Promise<void> {
     if (keysPressed.size > 0 && cachedAnyDialogOpen) {
       keysPressed.clear();
     }
-    if (keysPressed.has('w') || keysPressed.has('arrowup')) {
-      hud.rideCamUid = null;
-      cam.y -= panSpeed;
-    }
-    if (keysPressed.has('s') || keysPressed.has('arrowdown')) {
-      hud.rideCamUid = null;
-      cam.y += panSpeed;
-    }
-    if (keysPressed.has('a') || keysPressed.has('arrowleft')) {
-      hud.rideCamUid = null;
-      cam.x -= panSpeed;
-    }
-    if (keysPressed.has('d') || keysPressed.has('arrowright')) {
-      hud.rideCamUid = null;
-      cam.x += panSpeed;
+    if (sim.strollModeActive && sim.playerStrollAvatar && !sim.isVisitingNeighbor) {
+      let kDx = 0;
+      let kDy = 0;
+      if (keysPressed.has('w') || keysPressed.has('arrowup')) kDy -= 1;
+      if (keysPressed.has('s') || keysPressed.has('arrowdown')) kDy += 1;
+      if (keysPressed.has('a') || keysPressed.has('arrowleft')) kDx -= 1;
+      if (keysPressed.has('d') || keysPressed.has('arrowright')) kDx += 1;
+      if (kDx !== 0 || kDy !== 0) {
+        const avScreen = gridToScreen(
+          sim.playerStrollAvatar.gx,
+          sim.playerStrollAvatar.gy,
+          cam,
+          window.innerWidth,
+          window.innerHeight
+        );
+        const tgtGrid = screenToGrid(
+          avScreen.sx + kDx * 54 * cam.zoom,
+          avScreen.sy + kDy * 54 * cam.zoom,
+          cam,
+          window.innerWidth,
+          window.innerHeight
+        );
+        sim.setStrollDestination(tgtGrid.fgx, tgtGrid.fgy);
+      }
+      const avWorld = worldIso(sim.playerStrollAvatar.gx, sim.playerStrollAvatar.gy, cam.viewRot ?? 0);
+      cam.x += (avWorld.wx - cam.x) * Math.min(1, dt * 6.5);
+      cam.y += (avWorld.wy - 14 - cam.y) * Math.min(1, dt * 6.5);
+    } else {
+      if (keysPressed.has('w') || keysPressed.has('arrowup')) {
+        hud.rideCamUid = null;
+        cam.y -= panSpeed;
+      }
+      if (keysPressed.has('s') || keysPressed.has('arrowdown')) {
+        hud.rideCamUid = null;
+        cam.y += panSpeed;
+      }
+      if (keysPressed.has('a') || keysPressed.has('arrowleft')) {
+        hud.rideCamUid = null;
+        cam.x -= panSpeed;
+      }
+      if (keysPressed.has('d') || keysPressed.has('arrowright')) {
+        hud.rideCamUid = null;
+        cam.x += panSpeed;
+      }
     }
 
     let runSoundscapeNow = true;
@@ -2935,6 +3005,8 @@ async function bootstrap(): Promise<void> {
       }
       let activeWorkshopDistPx = Number.POSITIVE_INFINITY;
       let pastureDistPx = Number.POSITIVE_INFINITY;
+      let orchardDistPx = Number.POSITIVE_INFINITY;
+      let festiveDistPx = Number.POSITIVE_INFINITY;
       const nowSoundMs = Date.now();
       const hasSupplyBrew = Boolean(
         sim.state.supply.activeBrew && sim.state.supply.activeBrew.endsAt > nowSoundMs
@@ -2948,11 +3020,21 @@ async function bootstrap(): Promise<void> {
           Boolean(b.workshopQueue && b.workshopQueue.length > 0 && b.workshopQueue[0].endsAt > nowSoundMs) ||
           Boolean(bItem.isWorkshopBrewery && hasSupplyBrew);
         const isStockedPasture = Boolean(bItem.isAnimalPasturePlot && b.pastureAnimalId);
-        if (!isActiveWs && !isStockedPasture) continue;
+        const isOrchardGarden =
+          bItem.id === 'burrow_apple_orchard' ||
+          bItem.id === 'burrow_flower_garden' ||
+          Boolean(bItem.isFarmlandPlot && b.cropId);
+        const isFestiveDecor =
+          bItem.id.startsWith('yule_') ||
+          bItem.id === 'halloween_arch' ||
+          bItem.id === 'burrow_feast_marquee';
+        if (!isActiveWs && !isStockedPasture && !isOrchardGarden && !isFestiveDecor) continue;
         const bIso = worldIso(b.gx + 0.5, b.gy + 0.5, rot);
         const dist = Math.hypot(cam.x - bIso.wx, cam.y - bIso.wy);
         if (isActiveWs && dist < activeWorkshopDistPx) activeWorkshopDistPx = dist;
         if (isStockedPasture && dist < pastureDistPx) pastureDistPx = dist;
+        if (isOrchardGarden && dist < orchardDistPx) orchardDistPx = dist;
+        if (isFestiveDecor && dist < festiveDistPx) festiveDistPx = dist;
       }
       audio.updateSoundscape(
         soundscapeDt,
@@ -2962,7 +3044,7 @@ async function bootstrap(): Promise<void> {
         curWeather.kind,
         sim.getActiveFestival() !== 'none',
         period,
-        { waterDistPx, activeWorkshopDistPx, pastureDistPx }
+        { waterDistPx, activeWorkshopDistPx, pastureDistPx, orchardDistPx, festiveDistPx }
       );
     }
 

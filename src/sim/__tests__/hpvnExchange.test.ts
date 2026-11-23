@@ -5,6 +5,7 @@ const bridgeMocks = vi.hoisted(() => ({
   flushFarmSave: vi.fn().mockResolvedValue(undefined),
   deliverInbox: vi.fn(),
   isStandaloneLocal: false,
+  identity: null as { uid: string; displayName: string; house: string; nonce: string; issuedAt: number } | null,
 }));
 
 vi.mock('../../hpvn/bridge', async (importOriginal) => {
@@ -16,6 +17,9 @@ vi.mock('../../hpvn/bridge', async (importOriginal) => {
     deliverInbox: bridgeMocks.deliverInbox,
     get isStandaloneLocal() {
       return bridgeMocks.isStandaloneLocal;
+    },
+    get identity() {
+      return bridgeMocks.identity;
     },
   };
 });
@@ -352,5 +356,64 @@ describe('Weekly Alliance #1 Galleons Reward (Start Fri 17:00 → End next Fri 1
     // Rescued victory with skipPlayCount: true does not double-count the already recorded loss
     sim.completePuzzleArcadeVictory('caro', { stars: 1, gold: 50, xp: 20, sand: 0 }, { skipPlayCount: true });
     expect(sim.state.minigamePlays?.caro).toBe(2);
+  });
+
+  it('persists farm save BEFORE calling flushFarmSave() on victory across all 6 House Cup minigames', async () => {
+    const { setFarmStore } = await import('../simulationLifecycle');
+    let latestJson = '';
+    const flushedSnapshots: Array<Record<string, any>> = [];
+    bridgeMocks.identity = {
+      uid: 'test-wizard-cup',
+      displayName: 'Test Wizard',
+      house: 'gryffindor',
+      nonce: 'test-nonce',
+      issuedAt: Date.now(),
+    };
+    setFarmStore({
+      read: () => latestJson || null,
+      write: (json) => {
+        latestJson = json;
+      },
+    });
+    bridgeMocks.flushFarmSave.mockImplementation(async () => {
+      flushedSnapshots.push(latestJson ? JSON.parse(latestJson) : {});
+    });
+
+    try {
+      const sim = new ParkSimulation(new MagicalAudio());
+      flushedSnapshots.length = 0;
+
+      sim.completeMatch3LevelVictory(0);
+      expect(flushedSnapshots.length).toBeGreaterThanOrEqual(1);
+      const m3Snap = flushedSnapshots[flushedSnapshots.length - 1]!;
+      expect(m3Snap.match3.maxClearedLevel).toBe(1);
+      expect(m3Snap.minigameLeaderboard.records.match3.bestStage).toBe(1);
+      expect(m3Snap.minigamePlays.match3).toBe(1);
+
+      const fieldByMode = {
+        caro: 'caroCleared',
+        sudoku: 'sudokuCleared',
+        chess: 'chessCleared',
+        blocks: 'blockCleared',
+        jigsaw: 'jigsawCleared',
+      } as const;
+
+      for (const mode of ['caro', 'sudoku', 'chess', 'blocks', 'jigsaw'] as const) {
+        flushedSnapshots.length = 0;
+        sim.completePuzzleArcadeVictory(mode, { stars: 1, gold: 50, xp: 20, sand: 0 });
+        expect(flushedSnapshots.length, `${mode} must call flushFarmSave on victory`).toBeGreaterThanOrEqual(1);
+        const snap = flushedSnapshots[flushedSnapshots.length - 1]!;
+        expect(snap.puzzleArcade.arcadeDisciplineRev).toBe(2);
+        expect(snap.puzzleArcade[fieldByMode[mode]], `${mode} cleared must be written before flush`).toBe(1);
+        expect(snap.minigameLeaderboard.records[mode].bestStage, `${mode} leaderboard must be written before flush`).toBe(1);
+        expect(snap.minigamePlays[mode], `${mode} plays must be written before flush`).toBe(1);
+      }
+    } finally {
+      bridgeMocks.identity = null;
+      setFarmStore({
+        read: () => globalThis.localStorage?.getItem('hangsoc_valley_save_v1') ?? null,
+        write: (json) => globalThis.localStorage?.setItem('hangsoc_valley_save_v1', json),
+      });
+    }
   });
 });

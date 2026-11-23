@@ -81,7 +81,7 @@ export default defineConfig({
           }
           if (id.includes('/src/data/quizPacks/')) {
             if (id.includes('/packHelper')) return 'quiz-shared';
-            const m = id.match(/\/quizPacks\/([a-z]+)\./);
+            const m = id.match(/\/quizPacks\/([a-z]{2})(?:Expanded)?\./);
             if (m) return `quiz-${m[1]}`;
           }
           if (

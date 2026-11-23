@@ -1,5 +1,6 @@
 import { CuratedQuizItem, QuizLexiconEntry } from '../languageQuizBank';
 import { buildPackLexicon } from './packHelper';
+import { EN_EXPANDED_CURATED, EN_EXPANDED_LEXICON } from './enExpanded';
 
 export const EXTRA_LEXICON: QuizLexiconEntry[] = [
   ...buildPackLexicon('en', 1, 'beginner', [
@@ -146,6 +147,7 @@ export const EXTRA_LEXICON: QuizLexiconEntry[] = [
     ['herbology', 'herbology', '/hɜːrˈbɒlədʒi/', 'danh từ', 'thảo dược học phép thuật', 'Diligent herbology students tend moonlit blossoms every evening.', '/ˈdɪlɪdʒənt hɜːrˈbɒlədʒi ˈstuːdənts tɛnd ˈmuːnlɪt ˈblɒsəmz ˈɛvri ˈiːvnɪŋ/', 'Các học trò thảo dược học chăm chỉ chăm sóc hoa trăng mỗi tối.'],
     ['masterwork', 'masterwork', '/ˈmæstərwɜːrk/', 'danh từ', 'kiệt tác thủ công', 'The waterwheel mill stands as a masterwork of village carpentry.', '/ðə ˈwɔːtərwiːl mɪl stændz æz ə ˈmæstərwɜːrk əv ˈvɪlɪdʒ ˈkɑːrpəntri/', 'Cối xay guồng nước sừng sững như một kiệt tác mộc của làng.'],
   ]),
+  ...EN_EXPANDED_LEXICON,
 ];
 
 export const EXTRA_CURATED: CuratedQuizItem[] = [
@@ -305,4 +307,5 @@ export const EXTRA_CURATED: CuratedQuizItem[] = [
     grammarExplainVi: 'Trước danh từ "pasture" cần đại từ sở hữu "whose" (đồng cỏ của những sinh vật ấy), dùng được cho cả người và sinh vật.',
     vocabNotes: [{ word: 'overlook', phonetic: '/ˌoʊvərˈlʊk/', posVi: 'động từ', meaningVi: 'nhìn ra, hướng ra' }],
   },
+  ...EN_EXPANDED_CURATED,
 ];

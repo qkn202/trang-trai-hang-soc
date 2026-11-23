@@ -1,5 +1,11 @@
 import { shareFarmPhoto } from '../hpvn/bridge';
 import { avatarGlyph } from '../hpvn/emoji';
+import {
+  COOP_CRATE_MILESTONES,
+  MAX_DAILY_COOP_CONTRIBUTIONS,
+  POSTCARD_FRAME_THEME_META,
+} from '../sim/socialFestivalsAndAlmanac';
+import type { PostcardFrameThemeId } from '../types/game';
 // Tách tự động từ src/ui/hud.ts (P0 — tách god file theo domain).
 // Pattern delegation: hàm nhận `hud` để giữ nguyên state, không đổi hành vi.
 
@@ -218,6 +224,7 @@ function buildPlayerPostcardMeta(hud: GameHUD): ValleyPostcardMeta {
     unlockedZonesCount: hud.sim.state.unlockedZones.length,
     weatherMode: hud.sim.state.settings.weatherOverride || 'clear',
     atmosphereMode: hud.sim.state.settings.timeOverride || 'day',
+    theme: social.postcardTheme || 'classic_burrow',
   };
 }
 
@@ -934,6 +941,12 @@ export function socialUiRenderVisitorDockBar(hud: GameHUD): void {
         <button id="btnVisitorLocateGift" type="button" class="brass-btn" ${mysteryClaimedToday ? 'disabled' : ''} title="Tìm Giỏ Quà Bí Ẩn">
           ${mysteryClaimedToday ? '✓ Quà' : '🎁 Quà'}
         </button>
+        <button id="btnVisitorLeaveGift" type="button" class="brass-btn" ${(social.dailyMysterySentIds ?? []).includes(nb.id) ? 'disabled' : ''} title="Giấu Rương Quà Bất Ngờ tặng chủ vườn (+2 🍀)">
+          ${(social.dailyMysterySentIds ?? []).includes(nb.id) ? '✓ Đã tặng' : '🎁 Giấu quà'}
+        </button>
+        <button id="btnVisitorBuyStand" type="button" class="brass-btn" ${(hud.sim.homeStateWhileVisiting ?? hud.sim.state).roadsideStand?.dailyFriendBoughtIds?.includes(nb.id) ? 'disabled' : ''} title="Mua 1 giỏ nông sản ưu đãi từ Sạp Đầu Ngõ của bạn">
+          ${(hud.sim.homeStateWhileVisiting ?? hud.sim.state).roadsideStand?.dailyFriendBoughtIds?.includes(nb.id) ? '✓ Sạp' : '🧺 Sạp'}
+        </button>
         ${
           coOpPendingCount > 0
             ? `<button id="btnVisitorCoopBook" type="button" class="brass-btn gold-cta" title="Đóng Đơn Cú & Giải Cứu Màn Khó">📦 (${coOpPendingCount})</button>`
@@ -1102,6 +1115,16 @@ export function socialUiRenderVisitorDockBar(hud: GameHUD): void {
   bar.querySelector('#btnVisitorReturnHome')?.addEventListener('click', () => {
     socialUiExitVisitFromHud(hud);
   });
+  bar.querySelector('#btnVisitorBuyStand')?.addEventListener('click', () => {
+    const res = hud.sim.buyVisitedNeighborRoadsideOffer();
+    if (!res.ok) hud.showToast(res.msg, '🧺');
+    hud.refreshAll();
+  });
+  bar.querySelector('#btnVisitorLeaveGift')?.addEventListener('click', () => {
+    const res = hud.sim.leaveMysteryGiftForNeighbor();
+    if (!res.ok) hud.showToast(res.msg, '🎁');
+    hud.refreshAll();
+  });
 }
 
 export function socialUiRenderNeighborDialog(hud: GameHUD): void {
@@ -1171,6 +1194,14 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
 
   if (hud.activeNeighborTab === 'friends') {
     const quickAlertBanners: string[] = [];
+    if ((social.homeVisitorGifts?.length ?? 0) > 0) {
+      quickAlertBanners.push(`
+        <div class="nb-alert-banner ready">
+          <span>🎁 <strong>${social.homeVisitorGifts!.length} Rương Quà Bạn Bè</strong> tại sân</span>
+          <button id="btnNbClaimVisitorGift" type="button" class="brass-btn gold-cta nb-mini-cta">Mở quà</button>
+        </div>
+      `);
+    }
     if (social.homeLanternMarks.length > 0) {
       quickAlertBanners.push(`
         <div class="nb-alert-banner ready">
@@ -1449,6 +1480,14 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
   } else if (hud.activeNeighborTab === 'postcard') {
     const meta = buildPlayerPostcardMeta(hud);
     const previewMsg = formatFlooShareMessage(meta);
+    const activeTheme: PostcardFrameThemeId = social.postcardTheme || 'classic_burrow';
+    const themeBtnsHtml = (Object.keys(POSTCARD_FRAME_THEME_META) as PostcardFrameThemeId[])
+      .map((tid) => {
+        const tm = POSTCARD_FRAME_THEME_META[tid];
+        const isAct = tid === activeTheme;
+        return `<button type="button" data-postcard-theme="${tid}" data-active="${isAct}" aria-pressed="${isAct}" class="brass-btn ${isAct ? 'gold-cta' : ''}" style="font-size:12px;padding:4px 10px;">${tm.badgeVi} · ${escapeHtml(tm.labelVi)}</button>`;
+      })
+      .join('');
     bodyHtml = `
       <section class="nb-panel-card highlight floo-postcard-wrap">
         <div class="honor-gardens-header">
@@ -1456,6 +1495,9 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
           <span class="honor-daily-pill">
             ${!social.dailyFlooShareClaimed ? '+10 Sickle · +1 🍀' : '✓ Đã nhận hôm nay'}
           </span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;" role="group" aria-label="Chủ đề khung bưu thiếp">
+          ${themeBtnsHtml}
         </div>
         <div class="floo-postcard-stage">
           <canvas id="flooPostcardCanvas" width="640" height="380" class="floo-postcard-canvas"></canvas>
@@ -1510,6 +1552,47 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
               Mở rương (🍀 ${FRIENDSHIP_CHEST_TOKEN_COST})
             </button>
           </div>
+        </section>
+
+        <section class="nb-panel-card">
+          <h3 class="nb-section-title">Kiện Hàng Tương Trợ Chung (${hud.sim.ensureCoopSupplyCrate().contributedPoints}/500)</h3>
+          ${(() => {
+            const coop = hud.sim.ensureCoopSupplyCrate();
+            const coopPct = Math.min(100, Math.round((coop.contributedPoints / 500) * 100));
+            const contribCandidates: FarmItemId[] = [
+              'ottery_wheat',
+              'honey_carrot',
+              'garden_pumpkin',
+              'burrow_apple',
+              'cinnamon_apple_pie',
+              'farm_egg_wool',
+            ];
+            const contribBtns = contribCandidates
+              .map((iid) => {
+                const have = hud.sim.getFarmItemCount(iid);
+                const canSend =
+                  (hud.sim.state.sandboxMode || have >= 2) &&
+                  (hud.sim.state.sandboxMode || coop.playerContributedToday < MAX_DAILY_COOP_CONTRIBUTIONS);
+                const meta = getFarmItemMeta(iid);
+                return `<button type="button" data-coop-contrib="${iid}" ${canSend ? '' : 'disabled'} class="brass-btn ${canSend ? 'gold-cta' : ''}" style="font-size:12px;padding:4px 8px;">Góp 2 ${escapeHtml(meta.name)} (${hud.sim.state.sandboxMode ? '∞' : have})</button>`;
+              })
+              .join('');
+            const msBtns = COOP_CRATE_MILESTONES.map((ms) => {
+              const claimed = coop.claimedMilestones.includes(ms.step);
+              const canClaim = !claimed && (hud.sim.state.sandboxMode || coop.contributedPoints >= ms.target);
+              return `<button type="button" data-coop-milestone="${ms.step}" ${canClaim ? '' : 'disabled'} class="brass-btn ${canClaim ? 'gold-cta' : ''}" style="font-size:12px;padding:4px 8px;">${claimed ? `✓ Mốc ${ms.step}` : `🎁 Mốc ${ms.step} (${ms.target}đ)`}</button>`;
+            }).join('');
+            return `
+              <div class="quest-bar floo-lv-bar">
+                <div class="quest-bar-fill" style="width:${coopPct}%"></div>
+              </div>
+              <div style="font-size:12px;color:var(--ink-soft);margin:4px 0 6px;">
+                Đã góp hôm nay: ${coop.playerContributedToday}/${MAX_DAILY_COOP_CONTRIBUTIONS} lượt · Mỗi lượt +1 🍀 &amp; điểm mở 3 rương chung
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${msBtns}</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;">${contribBtns}</div>
+            `;
+          })()}
         </section>
 
         <section class="nb-panel-card">
@@ -1611,6 +1694,41 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
   box.querySelector('#btnPostcardShareFloo')?.addEventListener('click', () => {
     socialUiShareValleyToFloo(hud);
     socialUiRenderNeighborDialog(hud);
+  });
+
+  box.querySelectorAll<HTMLButtonElement>('[data-postcard-theme]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const th = btn.dataset.postcardTheme as PostcardFrameThemeId;
+      hud.sim.setPostcardFrameTheme(th);
+      socialUiRenderNeighborDialog(hud);
+    });
+  });
+
+  box.querySelector('#btnNbClaimVisitorGift')?.addEventListener('click', () => {
+    const res = hud.sim.claimHomeVisitorMysteryGift();
+    if (!res.ok) hud.showToast(res.msg, '🎁');
+    hud.refreshAll();
+    socialUiRenderNeighborDialog(hud);
+  });
+
+  box.querySelectorAll<HTMLButtonElement>('[data-coop-contrib]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const iid = btn.dataset.coopContrib as FarmItemId;
+      const res = hud.sim.contributeToCoopSupplyCrate(iid, 2);
+      hud.showToast(res.msg, res.ok ? '📦' : '🧺');
+      hud.refreshAll();
+      socialUiRenderNeighborDialog(hud);
+    });
+  });
+
+  box.querySelectorAll<HTMLButtonElement>('[data-coop-milestone]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const step = Number(btn.dataset.coopMilestone) as 1 | 2 | 3;
+      const res = hud.sim.claimCoopCrateMilestone(step);
+      hud.showToast(res.msg, res.ok ? '🎁' : '📦');
+      hud.refreshAll();
+      socialUiRenderNeighborDialog(hud);
+    });
   });
 
   const idForm = box.querySelector('#frmFlooIdentityName') as HTMLFormElement | null;

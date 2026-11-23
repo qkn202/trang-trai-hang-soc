@@ -275,9 +275,13 @@ export function lifecycleSyncPlayerPrimitivesToHomeState(sim: ParkSimulation): v
     h.match3 = sim.state.match3;
     h.puzzleArcade = sim.state.puzzleArcade;
     h.minigameLeaderboard = sim.state.minigameLeaderboard;
+    h.minigamePlays = sim.state.minigamePlays;
     h.lastPlayedMinigame = sim.state.lastPlayedMinigame;
     h.supply = sim.state.supply;
     h.suitcase = sim.state.suitcase;
+    h.roadsideStand = sim.state.roadsideStand;
+    h.seasonalFestivalState = sim.state.seasonalFestivalState;
+    h.almanacState = sim.state.almanacState;
     h.finance = sim.state.finance;
     h.stats = sim.state.stats;
     h.settings = {
@@ -681,6 +685,8 @@ export function lifecycleGetActiveFestival(sim: ParkSimulation, now = new Date()
     }
     const m = now.getMonth();
     const d = now.getDate();
+    if ((m === 0 && d >= 22) || (m === 1 && d <= 18)) return 'lunar_tet';
+    if (m === 8 && d >= 12 && d <= 28) return 'mid_autumn';
     if (m === 9 || (m === 10 && d <= 5)) return 'halloween';
     if ((m === 10 && d >= 15) || m === 11 || (m === 0 && d <= 5)) {
       if ((sim.state.settings.yuleThemeMode ?? 'auto') !== 'off') return 'christmas';
@@ -710,6 +716,8 @@ export function lifecycleIsWinterMainMapActive(sim: ParkSimulation): boolean {
     if (
       festOverride === 'halloween' ||
       festOverride === 'quidditch_cup' ||
+      festOverride === 'lunar_tet' ||
+      festOverride === 'mid_autumn' ||
       festOverride === 'none'
     ) {
       return false;
@@ -753,7 +761,7 @@ export function lifecycleDescribeWeatherSlot(sim: ParkSimulation,
         kind,
         icon: '🌈',
         labelVi: 'Cầu Vồng Sau Mưa',
-        buffVi: 'Kỳ Diệu +20% • Toàn công viên +15% Sickle thu hoạch!',
+        buffVi: 'Thu hoạch ruộng +15% Sickle & dễ rơi thêm Bình Sương Mai!',
         startsInSec,
         isRainbow: true,
       };
@@ -764,7 +772,7 @@ export function lifecycleDescribeWeatherSlot(sim: ParkSimulation,
           kind,
           icon: '🌧️',
           labelVi: 'Mưa Phép Thuật',
-          buffVi: 'Vườn Thảo Dược & Chuồng Thú +20% sản lượng',
+          buffVi: 'Tự động tưới mát luống cây đang mọc (−30% thời gian chờ)',
           startsInSec,
         };
       case 'storm':
@@ -772,7 +780,7 @@ export function lifecycleDescribeWeatherSlot(sim: ParkSimulation,
           kind,
           icon: '⛈️',
           labelVi: 'Giông Sấm Kỳ Bí',
-          buffVi: 'Tiệm Đũa & Xưởng Độc Dược +25% doanh thu',
+          buffVi: 'Tiếp năng lượng cho Xưởng & Vạc Phép chạy nhanh hơn 15%',
           startsInSec,
         };
       case 'snow':
@@ -780,7 +788,7 @@ export function lifecycleDescribeWeatherSlot(sim: ParkSimulation,
           kind,
           icon: '❄️',
           labelVi: 'Tuyết Rơi Hogsmeade',
-          buffVi: 'Tiệm Kẹo & Quán Ba Cây Chổi +20% vàng',
+          buffVi: 'Cây vụ đông & rau củ mùa lạnh thu hoạch +1 sản lượng',
           startsInSec,
         };
       case 'fog':
@@ -788,7 +796,7 @@ export function lifecycleDescribeWeatherSlot(sim: ParkSimulation,
           kind,
           icon: '🌫️',
           labelVi: 'Sương Sớm Hồ Đen',
-          buffVi: 'Hồ Đen huyền ảo • Sinh vật huyền bí vui vẻ hơn',
+          buffVi: 'Nấm phát sáng, thảo dược & hoa đêm thu hoạch +1 sản lượng',
           startsInSec,
         };
       case 'cloudy':
@@ -796,7 +804,7 @@ export function lifecycleDescribeWeatherSlot(sim: ParkSimulation,
           kind,
           icon: '⛅',
           labelVi: 'Mây Bồng Bềnh',
-          buffVi: 'Tiết trời dịu mát • Khách dạo chơi thư thả',
+          buffVi: 'Tiết trời dịu mát • Chăn thả đồng cỏ +10% XP',
           startsInSec,
         };
       default:
@@ -804,7 +812,7 @@ export function lifecycleDescribeWeatherSlot(sim: ParkSimulation,
           kind: 'sunny',
           icon: '☀️',
           labelVi: 'Nắng Ấm Đẹp Trời',
-          buffVi: 'Khách ghé thăm đông hơn • Quầy Bia Bơ đắt khách',
+          buffVi: 'Nắng ấm giúp Đồng cỏ & Vườn cây ăn quả +10% Sickle',
           startsInSec,
         };
     }

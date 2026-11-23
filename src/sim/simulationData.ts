@@ -92,6 +92,7 @@ import {
   createDefaultRetentionState,
   reconcileRetentionStateOnLoad,
 } from './retentionAndNarrative';
+import { sanitizeRoadsideStandState } from './roadsideStandAndEvents';
 import {
   BuildReductionResult,
   CatalogItem,
@@ -1921,6 +1922,19 @@ export function migrateLoadedState(parsed: GameState): GameState {
         Array.isArray(b.readyFarmGoods)
           ? b.readyFarmGoods.filter((g): g is FarmGoodId => typeof g === 'string' && g in FARM_GOODS).slice(0, 12)
           : undefined,
+      readyFruitCrops:
+        Array.isArray(b.readyFruitCrops)
+          ? b.readyFruitCrops.filter((c): c is FarmCropId => typeof c === 'string' && c in FARM_CROPS).slice(0, 8)
+          : undefined,
+      lastPlantedCropId:
+        item.isFarmlandPlot && typeof b.lastPlantedCropId === 'string' && b.lastPlantedCropId in FARM_CROPS
+          ? (b.lastPlantedCropId as FarmCropId)
+          : undefined,
+      orchardHarvestsUsed:
+        typeof b.orchardHarvestsUsed === 'number' && Number.isFinite(b.orchardHarvestsUsed)
+          ? Math.max(0, Math.min(10, Math.round(b.orchardHarvestsUsed)))
+          : undefined,
+      needsTreeRevival: b.needsTreeRevival ? true : undefined,
       harvestCycleCount:
         typeof b.harvestCycleCount === 'number' && Number.isFinite(b.harvestCycleCount)
           ? Math.max(-1, Math.min(50, Math.round(b.harvestCycleCount)))
@@ -2028,6 +2042,18 @@ export function migrateLoadedState(parsed: GameState): GameState {
       goods: safeGoods,
       seeds: safeSeeds,
       owlOrders: safeOwlOrders,
+      lastPlantedCropId:
+        typeof parsedBarn.lastPlantedCropId === 'string' && parsedBarn.lastPlantedCropId in FARM_CROPS
+          ? (parsedBarn.lastPlantedCropId as FarmCropId)
+          : undefined,
+      farmHelperEndsAt:
+        typeof parsedBarn.farmHelperEndsAt === 'number' && Number.isFinite(parsedBarn.farmHelperEndsAt)
+          ? Math.max(0, Math.round(parsedBarn.farmHelperEndsAt))
+          : undefined,
+      farmHelperFreeDayKey:
+        typeof parsedBarn.farmHelperFreeDayKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsedBarn.farmHelperFreeDayKey)
+          ? parsedBarn.farmHelperFreeDayKey
+          : undefined,
     };
   })();
 
@@ -2178,6 +2204,33 @@ export function migrateLoadedState(parsed: GameState): GameState {
     dailyQuests: sanitizeQuestList(parsed.dailyQuests, def.dailyQuests),
     collectedCards: parsed.collectedCards ?? {},
     farmBarn: safeBarn,
+    roadsideStand: parsed.roadsideStand ? sanitizeRoadsideStandState(parsed.roadsideStand) : undefined,
+    seasonalFestivalState:
+      parsed.seasonalFestivalState && typeof parsed.seasonalFestivalState === 'object'
+        ? {
+            claimedTaskIds: Array.isArray(parsed.seasonalFestivalState.claimedTaskIds)
+              ? parsed.seasonalFestivalState.claimedTaskIds
+                  .filter((x): x is string => typeof x === 'string')
+                  .slice(0, 80)
+              : [],
+            lastLiXiClaimDayKey:
+              typeof parsed.seasonalFestivalState.lastLiXiClaimDayKey === 'string'
+                ? parsed.seasonalFestivalState.lastLiXiClaimDayKey.slice(0, 12)
+                : undefined,
+          }
+        : undefined,
+    almanacState:
+      parsed.almanacState && typeof parsed.almanacState === 'object'
+        ? {
+            claimedChapters: Array.isArray(parsed.almanacState.claimedChapters)
+              ? parsed.almanacState.claimedChapters.filter(
+                  (x): x is 'crops' | 'artisan' | 'creatures' | 'keepsakes' =>
+                    x === 'crops' || x === 'artisan' || x === 'creatures' || x === 'keepsakes'
+                )
+              : [],
+            claimedGrandTrophy: Boolean(parsed.almanacState.claimedGrandTrophy),
+          }
+        : undefined,
     languageQuiz: sanitizeLanguageQuizState(parsed.languageQuiz),
     tutorial: (() => {
       const rawTut = parsed.tutorial;
@@ -2238,6 +2291,50 @@ export function migrateLoadedState(parsed: GameState): GameState {
           : [],
         dailyMysteryClaimedIds: Array.isArray(rawSoc.dailyMysteryClaimedIds)
           ? rawSoc.dailyMysteryClaimedIds.filter((x): x is string => typeof x === 'string').slice(0, 50)
+          : [],
+        dailyMysterySentIds: Array.isArray(rawSoc.dailyMysterySentIds)
+          ? rawSoc.dailyMysterySentIds.filter((x): x is string => typeof x === 'string').slice(0, 50)
+          : [],
+        postcardTheme:
+          rawSoc.postcardTheme === 'starry_hogwarts' ||
+          rawSoc.postcardTheme === 'festive_lantern' ||
+          rawSoc.postcardTheme === 'classic_burrow'
+            ? rawSoc.postcardTheme
+            : undefined,
+        coopSupplyCrate:
+          rawSoc.coopSupplyCrate && typeof rawSoc.coopSupplyCrate === 'object'
+            ? {
+                weekKey: sanitizePlainText(rawSoc.coopSupplyCrate.weekKey, 16) || '',
+                contributedPoints: Math.round(
+                  clampFinite(rawSoc.coopSupplyCrate.contributedPoints, 0, 99999, 0)
+                ),
+                playerContributedToday: Math.round(
+                  clampFinite(rawSoc.coopSupplyCrate.playerContributedToday, 0, 99, 0)
+                ),
+                lastContributeDayKey:
+                  typeof rawSoc.coopSupplyCrate.lastContributeDayKey === 'string'
+                    ? rawSoc.coopSupplyCrate.lastContributeDayKey.slice(0, 12)
+                    : undefined,
+                claimedMilestones: Array.isArray(rawSoc.coopSupplyCrate.claimedMilestones)
+                  ? rawSoc.coopSupplyCrate.claimedMilestones
+                      .filter((n): n is number => typeof n === 'number' && Number.isFinite(n))
+                      .map((n) => Math.round(n))
+                      .slice(0, 10)
+                  : [],
+              }
+            : undefined,
+        homeVisitorGifts: Array.isArray(rawSoc.homeVisitorGifts)
+          ? rawSoc.homeVisitorGifts
+              .filter((g) => Boolean(g && typeof g === 'object'))
+              .slice(0, 4)
+              .map((g) => ({
+                id: sanitizePlainText(g.id, 60) || `hvg_${Date.now()}`,
+                senderName: sanitizePlainText(g.senderName, 40) || 'Bạn HPVN',
+                senderEmoji: sanitizePlainText(g.senderEmoji, 8) || '🦉',
+                gx: clampFinite(g.gx, 4, GRID_SIZE - 5, 18),
+                gy: clampFinite(g.gy, 4, GRID_SIZE - 5, 24),
+                createdAt: Math.round(clampFinite(g.createdAt, 0, Number.MAX_SAFE_INTEGER, Date.now())),
+              }))
           : [],
         dailyOwlHelpRequestedCount: Math.round(
           clampFinite(rawSoc.dailyOwlHelpRequestedCount, 0, MAX_DAILY_OWL_HELP_REQUESTS, 0)

@@ -457,6 +457,7 @@ export function syncNeighborSocialDailyReset(
   social.dailyRescuesReceivedCount = 0;
   social.dailyLikedNeighborIds = [];
   social.dailyMysteryClaimedIds = [];
+  social.dailyMysterySentIds = [];
   social.dailyOwlHelpRequestedCount = 0;
   social.dailyGardenHelpsCount = 0;
   social.dailyHomeLanternsClaimedCount = 0;

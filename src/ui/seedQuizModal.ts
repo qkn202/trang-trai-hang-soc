@@ -9,14 +9,19 @@ import {
   loadLanguageQuizPack,
   QUIZ_LANGUAGES,
   QUIZ_LEXICON_BANK,
+  QUIZ_TOPIC_LABELS_VI,
   QuizLexiconEntry,
+  QuizTopicId,
 } from '../data/languageQuizBank';
 import {
   ActiveQuizChallenge,
+  DAILY_QUIZ_STREAK_TARGET_ANSWERS,
+  formatQuizDayKey,
   formatShortKidMeaningVi,
   generateNextQuizChallenge,
   getQuizVisualCardMeta,
   markQuizChallengeSkipped,
+  QUIZ_STREAK_MILESTONES,
   QuizAttemptOutcome,
   setProfileTier,
   speakQuizText,
@@ -44,11 +49,21 @@ function escapeHtml(val: unknown): string {
 const ALL_LANG_IDS: QuizLanguageId[] = ['en', 'ko', 'zh', 'es', 'ja'];
 const ALL_FORMAT_KEYS: Array<'all' | QuizFormatKind> = [
   'all',
+  'listening_comprehension',
   'grammar_cloze',
   'dialogue_reply',
   'sentence_builder',
   'match_pairs',
   'vocab_context',
+];
+const ALL_TOPIC_KEYS: Array<'all' | QuizTopicId> = [
+  'all',
+  'daily',
+  'travel',
+  'study_tech',
+  'health_hobby',
+  'magic',
+  'farm',
 ];
 
 export class SeedQuizModalController {
@@ -74,6 +89,7 @@ export class SeedQuizModalController {
   private matchedPairIds = new Set<string>();
   private flashWrongPairKey: string | null = null;
   private pairMistakes = 0;
+  private listeningHintRevealed = false;
   private activeSubView: 'practice' | 'codex' = 'practice';
   private codexQuery = '';
   private codexBoxFilter: 'all' | 'mastered' | 'learning' | 'unseen' = 'all';
@@ -313,6 +329,7 @@ export class SeedQuizModalController {
     this.matchedPairIds.clear();
     this.flashWrongPairKey = null;
     this.pairMistakes = 0;
+    this.listeningHintRevealed = false;
   }
 
   private loadNextQuestion(autoSpeakIfEnabled = true): void {
@@ -553,6 +570,7 @@ export class SeedQuizModalController {
 
     const formatNames: Record<'all' | QuizFormatKind, string> = {
       all: 'Đủ dạng',
+      listening_comprehension: 'Nghe hiểu',
       vocab_context: 'Nhìn tranh',
       dialogue_reply: 'Đập bóng',
       grammar_cloze: 'Điền từ',
@@ -563,6 +581,27 @@ export class SeedQuizModalController {
       (fk) =>
         `<option value="${fk}" ${quiz.preferredFormat === fk ? 'selected' : ''}>${escapeHtml(formatNames[fk])}</option>`
     ).join('');
+    const topicNames: Record<'all' | QuizTopicId, string> = {
+      all: 'Mọi chủ đề',
+      ...QUIZ_TOPIC_LABELS_VI,
+    };
+    const activeTopicKey: 'all' | QuizTopicId = quiz.preferredTopic ?? 'all';
+    const topicOptionsHtml = ALL_TOPIC_KEYS.map(
+      (tk) =>
+        `<option value="${tk}" ${activeTopicKey === tk ? 'selected' : ''}>${escapeHtml(topicNames[tk])}</option>`
+    ).join('');
+    const activeTopicLabel = topicNames[activeTopicKey] ?? 'Mọi chủ đề';
+    const todayKey = formatQuizDayKey();
+    const todayCount =
+      quiz.todayStudyDayKey === todayKey
+        ? Math.min(DAILY_QUIZ_STREAK_TARGET_ANSWERS, quiz.todayAnsweredCount ?? 0)
+        : 0;
+    const dailyStreak = quiz.dailyStreakCount ?? 0;
+    const bestDailyStreak = Math.max(dailyStreak, quiz.bestDailyStreakCount ?? 0);
+    const claimedMilestones = quiz.claimedStreakMilestones ?? [];
+    const nextClaimableStreak = QUIZ_STREAK_MILESTONES.find(
+      (m) => !claimedMilestones.includes(m.days) && (this.sim.state.sandboxMode || bestDailyStreak >= m.days)
+    );
     const activeCropLocked = !this.sim.state.sandboxMode && this.sim.state.level < crop.unlockLevel;
     const activeCropOptionLabel = activeCropLocked
       ? `Cấp ${crop.unlockLevel} · ${crop.name}`
@@ -633,6 +672,14 @@ export class SeedQuizModalController {
                         <span class="g-coin">S</span>
                         <strong>${isSandbox ? '∞' : compactSickle(galleons)}</strong>
                       </span>
+                      <span class="sq-sickle-chip" title="Chuỗi học thần chú hằng ngày (3 câu đúng/ngày)">
+                        <strong>Chuỗi ${dailyStreak} ngày (${todayCount}/${DAILY_QUIZ_STREAK_TARGET_ANSWERS})</strong>
+                      </span>
+                      ${
+                        nextClaimableStreak
+                          ? `<button id="btnSqClaimStreak" type="button" data-streak-days="${nextClaimableStreak.days}" class="brass-btn gold-cta sq-tool-pill">🎁 Mốc ${nextClaimableStreak.days}N</button>`
+                          : ''
+                      }
                     </div>
                     <div class="sq-tools-row">
                       <div class="sq-select-shell sq-format-select">
@@ -641,6 +688,13 @@ export class SeedQuizModalController {
                           <span class="sq-select-caret"></span>
                         </span>
                         <select id="selSqFormat" class="sq-select" aria-label="Chọn dạng câu hỏi">${formatOptionsHtml}</select>
+                      </div>
+                      <div class="sq-select-shell sq-format-select">
+                        <span class="sq-select-face" aria-hidden="true">
+                          <span class="sq-select-label">${escapeHtml(activeTopicLabel)}</span>
+                          <span class="sq-select-caret"></span>
+                        </span>
+                        <select id="selSqTopic" class="sq-select" aria-label="Chọn chủ đề từ vựng">${topicOptionsHtml}</select>
                       </div>
                       <button id="btnSqAutoSpeak" type="button" class="brass-btn sq-tool-pill" aria-pressed="${quiz.autoSpeak}">Tự đọc</button>
                       <button id="btnSqSpeakSlow" type="button" class="brass-btn sq-tool-pill" title="Nghe chậm">Chậm</button>
@@ -675,7 +729,7 @@ export class SeedQuizModalController {
     const boxes = profile.srsBoxes ?? {};
     let box = 0;
     let due = false;
-    for (const prefix of ['vocab:', 'pairs:', 'cloze:', 'bubble:', 'tiles:'] as const) {
+    for (const prefix of ['vocab:', 'listen:', 'pairs:', 'cloze:', 'bubble:', 'tiles:'] as const) {
       const rec = boxes[`${prefix}${entryId}`];
       if (!rec) continue;
       if (rec.box > box) box = rec.box;
@@ -839,15 +893,17 @@ export class SeedQuizModalController {
     const isAnswered = this.answeredOutcome !== null;
     const gameKind =
       ch.visualGameKind ??
-      (ch.format === 'vocab_context'
-        ? 'pic_flashcard'
-        : ch.format === 'dialogue_reply'
-          ? 'bubble_pop'
-          : ch.format === 'sentence_builder'
-            ? 'word_tiles'
-            : ch.format === 'match_pairs'
-              ? 'pic_pairs'
-              : 'word_flashcard');
+      (ch.format === 'listening_comprehension'
+        ? 'audio_listening'
+        : ch.format === 'vocab_context'
+          ? 'pic_flashcard'
+          : ch.format === 'dialogue_reply'
+            ? 'bubble_pop'
+            : ch.format === 'sentence_builder'
+              ? 'word_tiles'
+              : ch.format === 'match_pairs'
+                ? 'pic_pairs'
+                : 'word_flashcard');
 
     const heroSprite = ch.heroSpriteSrc ?? '/game/trang-trai-hang-soc/sprites/ui_icon_seed_sack.webp';
     const heroWord = ch.heroWord ?? ch.stemText;
@@ -855,7 +911,25 @@ export class SeedQuizModalController {
     const heroShortVi = ch.heroShortVi ?? formatShortKidMeaningVi(ch.translationVi);
 
     let heroBannerHtml = '';
-    if (gameKind === 'pic_flashcard') {
+    if (gameKind === 'audio_listening') {
+      const showScript = isAnswered || this.listeningHintRevealed;
+      heroBannerHtml = `
+        <div class="sq-prompt-row">
+          <div class="sq-prompt-copy">
+            <strong class="sq-prompt-word">${showScript ? escapeHtml(heroWord) : 'Nghe phát âm & chọn nghĩa đúng'}</strong>
+            ${showScript && heroPh ? `<span class="sq-prompt-ph">[${escapeHtml(heroPh)}]</span>` : ''}
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            ${
+              !showScript
+                ? `<button id="btnSqRevealListeningScript" type="button" class="brass-btn sq-tool-pill">Hiện chữ</button>`
+                : ''
+            }
+            <button id="btnSqHeroAudio" type="button" class="brass-btn gold-cta sq-audio-btn">Nghe</button>
+          </div>
+        </div>
+      `;
+    } else if (gameKind === 'pic_flashcard') {
       heroBannerHtml = `
         <div class="sq-prompt-row">
           <div class="sq-prompt-copy">
@@ -879,11 +953,17 @@ export class SeedQuizModalController {
     }
 
     let interactiveHtml = '';
-    if (gameKind === 'pic_flashcard' || gameKind === 'word_flashcard' || gameKind === 'bubble_pop') {
+    if (
+      gameKind === 'audio_listening' ||
+      gameKind === 'pic_flashcard' ||
+      gameKind === 'word_flashcard' ||
+      gameKind === 'bubble_pop'
+    ) {
       const choices = ch.choices ?? [];
       const phs = ch.choicePhonetics ?? [];
       const sprites = ch.choiceSprites ?? [];
       const subs = ch.choiceSubtitles ?? [];
+      const hideForeignOnChoices = gameKind === 'pic_flashcard' || gameKind === 'audio_listening';
       interactiveHtml = `
         <div class="sq-choice-grid">
           ${choices
@@ -907,7 +987,7 @@ export class SeedQuizModalController {
                   <div class="sq-kid-card-caption">
                     <span class="sq-choice-main">${escapeHtml(cText)}</span>
                     ${
-                      gameKind !== 'pic_flashcard' && phs[idx]
+                      !hideForeignOnChoices && phs[idx]
                         ? `<small class="sq-choice-ph">[${escapeHtml(phs[idx])}]</small>`
                         : isAnswered && subTxt
                           ? `<small class="sq-choice-ph">${escapeHtml(subTxt)}</small>`
@@ -1145,6 +1225,34 @@ export class SeedQuizModalController {
         quiz.preferredFormat = fk;
         this.loadNextQuestion(true);
       }
+    });
+
+    const selTopic = container.querySelector('#selSqTopic') as HTMLSelectElement | null;
+    selTopic?.addEventListener('change', () => {
+      const tk = selTopic.value as 'all' | QuizTopicId;
+      const quiz = this.sim.ensureLanguageQuiz();
+      if (ALL_TOPIC_KEYS.includes(tk) && (quiz.preferredTopic ?? 'all') !== tk) {
+        if (this.challenge && !this.answeredOutcome) {
+          markQuizChallengeSkipped(quiz, this.challenge);
+        }
+        quiz.preferredTopic = tk;
+        this.loadNextQuestion(true);
+      }
+    });
+
+    container.querySelector('#btnSqClaimStreak')?.addEventListener('click', (e) => {
+      const btn = e.currentTarget as HTMLButtonElement;
+      const days = Number(btn.dataset.streakDays) as 3 | 7 | 14 | 30;
+      const res = this.sim.claimQuizDailyStreakMilestone(days);
+      this.onToast(res.msg, res.ok ? '📖' : '⏳');
+      this.onRefreshHud();
+      this.render();
+    });
+
+    container.querySelector('#btnSqRevealListeningScript')?.addEventListener('click', () => {
+      this.listeningHintRevealed = true;
+      this.sim.audio.playClick();
+      this.render();
     });
 
     // Language switch (EN / KO / ZH / ES / JA)

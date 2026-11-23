@@ -1,5 +1,6 @@
 import { CuratedQuizItem, QuizLexiconEntry } from '../languageQuizBank';
 import { buildPackLexicon } from './packHelper';
+import { KO_EXPANDED_CURATED, KO_EXPANDED_LEXICON } from './koExpanded';
 
 export const EXTRA_LEXICON: QuizLexiconEntry[] = [
   ...buildPackLexicon('ko', 1, 'beginner', [
@@ -108,6 +109,7 @@ export const EXTRA_LEXICON: QuizLexiconEntry[] = [
     ['myosu', '묘수', 'myo-su', 'danh từ', 'nước cờ diệu kỳ, tuyệt chiêu', '위기의 순간에 찾아낸 묘수 한 수로 대국을 역전했다.', 'Wi-gi-ui sun-ga-ne cha-ja-naen myo-su han su-ro dae-gu-geul yeok-jeon-haet-da.', 'Một nước cờ diệu kỳ tìm ra lúc nguy cấp đã lật ngược ván đấu.'],
     ['pungnyu', '풍요롭다', 'pung-yo-rop-da', 'tính từ', 'trù phú, sung túc', '황금빛 밀밭이 익어 가며 온 골짜기가 풍요로워졌다.', 'Hwang-geum-bit mil-ba-chi i-geo ga-myeo on gol-jja-gi-ga pung-yo-ro-wo-jyeot-da.', 'Đồng lúa mì vàng chín rộ làm cả thung lũng trở nên trù phú.'],
   ]),
+  ...KO_EXPANDED_LEXICON,
 ];
 
 export const EXTRA_CURATED: CuratedQuizItem[] = [
@@ -208,4 +210,5 @@ export const EXTRA_CURATED: CuratedQuizItem[] = [
     grammarExplainVi: 'Dùng khi thực hiện hành động chính và kết hợp làm thêm một việc thuận tiện khác.',
     vocabNotes: [{ word: '편지', phonetic: 'pyeon-ji', posVi: 'danh từ', meaningVi: 'bức thư' }],
   },
+  ...KO_EXPANDED_CURATED,
 ];

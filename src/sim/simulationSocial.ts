@@ -1019,7 +1019,12 @@ export function socialClaimHomeLanternMark(sim: ParkSimulation, markIdOrBuilding
     let effectTag = '';
 
     if (b && item) {
-      if (item.isFarmlandPlot && b.cropId && b.cropReadyAt && now < b.cropReadyAt) {
+      if (b.needsTreeRevival && item.id === 'burrow_apple_orchard') {
+        b.needsTreeRevival = false;
+        b.orchardHarvestsUsed = 0;
+        sim.addFarmItemToBarn('burrow_apple', 2);
+        effectTag = ' • Hồi sinh Vườn Táo (+2 🍎)!';
+      } else if (item.isFarmlandPlot && b.cropId && b.cropReadyAt && now < b.cropReadyAt) {
         const left = b.cropReadyAt - now;
         b.cropReadyAt = Math.max(now + 1000, b.cropReadyAt - Math.max(8000, Math.round(left * 0.45)));
         b.cropWateredBoost = true;

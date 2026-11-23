@@ -1,7 +1,7 @@
 /**
  * Deterministic Proof-of-Play (PoP) Envelope & Pure Verifier
  * ----------------------------------------------------------
- * Chống bơm điểm / giả mạo gói tin Bảng Xếp Hạng trực tuyến (`match3`, `sudoku`, `blocks`, `jigsaw`)
+ * Chống bơm điểm / giả mạo gói tin Bảng Xếp Hạng trực tuyến (`match3`, `caro`, `sudoku`, `chess`, `blocks`, `jigsaw`)
  * với kích thước siêu gọn (< 1.2 KB JSON), không cần chạy lại toàn bộ vật lý nặng trên Cloudflare Worker.
  *
  * Cơ chế:
@@ -13,7 +13,7 @@
  *    theo tầng tháp (1..777), và khử phát lại (`nonce` anti-replay).
  */
 
-export type ProofOfPlayGameId = 'match3' | 'sudoku' | 'blocks' | 'jigsaw';
+export type ProofOfPlayGameId = 'match3' | 'caro' | 'sudoku' | 'chess' | 'blocks' | 'jigsaw';
 
 export interface ProofOfPlayEnvelope {
   v: 1;
@@ -63,7 +63,14 @@ export interface ProofOfPlayVerificationResult {
 
 const MAX_PACKED_STEPS = 128;
 const MAX_BUFFERED_RAW_MOVES = 4096;
-const POP_VALID_GAMES: ReadonlySet<string> = new Set(['match3', 'sudoku', 'blocks', 'jigsaw']);
+const POP_VALID_GAMES: ReadonlySet<string> = new Set([
+  'match3',
+  'caro',
+  'sudoku',
+  'chess',
+  'blocks',
+  'jigsaw',
+]);
 
 export function isProofOfPlayGameId(gameId: string): gameId is ProofOfPlayGameId {
   return POP_VALID_GAMES.has(gameId);
@@ -163,8 +170,12 @@ export function getMinMovesForStage(gameId: ProofOfPlayGameId, _stage: number): 
   switch (gameId) {
     case 'match3':
       return 1;
+    case 'caro':
+      return 2;
     case 'sudoku':
       return 3;
+    case 'chess':
+      return 2;
     case 'blocks':
       return 4;
     case 'jigsaw':
@@ -177,8 +188,12 @@ export function getMinHumanElapsedMs(gameId: ProofOfPlayGameId, moveCount: numbe
   switch (gameId) {
     case 'match3':
       return Math.max(850, Math.min(4500, safeMoves * 140));
+    case 'caro':
+      return Math.max(1200, Math.min(6000, safeMoves * 130));
     case 'sudoku':
       return Math.max(1800, Math.min(8000, safeMoves * 160));
+    case 'chess':
+      return Math.max(1200, Math.min(6000, safeMoves * 120));
     case 'blocks':
       return Math.max(1400, Math.min(7000, safeMoves * 130));
     case 'jigsaw':
@@ -197,8 +212,12 @@ export function getMaxPlausibleSessionScore(gameId: ProofOfPlayGameId, stage: nu
     case 'match3':
       // Boss & cascade stages can spike high across 1..7777, but never into tens of millions on a single stage
       return 320_000 + clampedStage * 1_600;
+    case 'caro':
+      return 85_000 + clampedStage * 600;
     case 'sudoku':
       return 45_000 + clampedStage * 350;
+    case 'chess':
+      return 260_000 + clampedStage * 1_200;
     case 'blocks':
       return 160_000 + clampedStage * 900;
     case 'jigsaw':

@@ -827,6 +827,10 @@ export function applyHouseCup(raw: unknown): void {
     memberTier: Math.max(1, n(r.memberTier)),
     perTier: n(r.perTier) || 300,
   };
+  // Khi phản hồi từ op: 'save' chỉ mang số liệu cá nhân (không kèm houses/disciplines), xoá cache 60s để lần mở Tab Cúp kế tiếp tải bảng tổng 4 Nhà mới nhất ngay.
+  if (!housesObj && !(r.disciplines && typeof r.disciplines === 'object')) {
+    fetchedAt = 0;
+  }
   listener();
 }
 

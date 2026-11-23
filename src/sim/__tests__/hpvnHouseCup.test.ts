@@ -127,7 +127,17 @@ it('mounts #houseCupIntroDialog and renders House Cup startup popup with live st
   sim.setLastPlayedMinigame('chess');
   questsUiRenderHouseCupIntroDialog(fakeHud as never);
   btnHandlers.get('#btnCupIntroPlay')?.();
-  expect(opened).toEqual(['sudoku', 'match3']);
+  expect(opened).toEqual(['sudoku', 'chess']);
+
+  sim.setLastPlayedMinigame('caro');
+  questsUiRenderHouseCupIntroDialog(fakeHud as never);
+  btnHandlers.get('#btnCupIntroPlay')?.();
+  expect(opened).toEqual(['sudoku', 'chess', 'caro']);
+
+  sim.setLastPlayedMinigame('seedquiz');
+  questsUiRenderHouseCupIntroDialog(fakeHud as never);
+  btnHandlers.get('#btnCupIntroPlay')?.();
+  expect(opened).toEqual(['sudoku', 'chess', 'caro', 'match3']);
 
   // House: null shows unsorted notice safely
   applyHouseCup({ house: null, memberTodayPoints: 0, memberDailyCap: 60, memberBank: 0, memberTier: 1, perTier: 300 });
@@ -421,4 +431,66 @@ it('Cách A: weights weekly stage clears by difficulty bands so Stage 60 players
     { maxStage: 20, pointsPerStage: 10, labelVi: 'Màn 1–20' },
     { maxStage: null, pointsPerStage: 20, labelVi: 'Màn 21+' },
   ]);
+});
+
+it('records leaderboard, Proof-of-Play, and saved cleared progress across all 6 House Cup minigames (including Minesweeper/caro & FishShooter/chess)', async () => {
+  const { setFarmStore } = await import('../simulationLifecycle');
+  const { ProofOfPlayRecorder, verifyProofOfPlayEnvelope } = await import('../proofOfPlay');
+  const { ensureMinigameLeaderboardState } = await import('../minigameLeaderboard');
+
+  let persistedRaw: string | null = null;
+  setFarmStore({
+    read: () => persistedRaw,
+    write: (json) => { persistedRaw = json; },
+  });
+
+  try {
+    const sim = new ParkSimulation(new MagicalAudio());
+    sim.completeMatch3LevelVictory(10, { sessionScore: 2200 });
+    sim.completePuzzleArcadeVictory('caro', { stars: 2, sand: 1, gold: 100, xp: 30 }, { sessionScore: 2500, efficiency: 18 });
+    sim.completePuzzleArcadeVictory('sudoku', { stars: 2, sand: 1, gold: 100, xp: 30 }, { sessionScore: 2600, efficiency: 0 });
+    sim.completePuzzleArcadeVictory('chess', { stars: 2, sand: 1, gold: 120, xp: 40 }, { sessionScore: 2900, efficiency: 6 });
+    sim.completePuzzleArcadeVictory('blocks', { stars: 2, sand: 1, gold: 100, xp: 30 }, { sessionScore: 2400, efficiency: 5 });
+    sim.completePuzzleArcadeVictory('jigsaw', { stars: 2, sand: 1, gold: 100, xp: 30 }, { sessionScore: 2700, efficiency: 4 });
+
+    expect(persistedRaw).not.toBeNull();
+    const saved = JSON.parse(persistedRaw!);
+    expect(saved.match3.maxClearedLevel).toBe(1);
+    expect(saved.puzzleArcade.arcadeDisciplineRev).toBe(2);
+    expect(saved.puzzleArcade.caroCleared).toBe(1);
+    expect(saved.puzzleArcade.sudokuCleared).toBe(1);
+    expect(saved.puzzleArcade.chessCleared).toBe(1);
+    expect(saved.puzzleArcade.blockCleared).toBe(1);
+    expect(saved.puzzleArcade.jigsawCleared).toBe(1);
+
+    for (const disc of ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw'] as const) {
+      expect(saved.minigamePlays[disc]).toBe(1);
+      expect(saved.minigameLeaderboard.records[disc].bestStage).toBe(1);
+      expect(saved.minigameLeaderboard.records[disc].highScore).toBeGreaterThan(0);
+    }
+
+    // Legacy pre-migration save (arcadeDisciplineRev < 2) must NOT leak old Caro/Chess stages into Dò Mìn / Bắn Cá
+    const legacyState = JSON.parse(persistedRaw!);
+    legacyState.puzzleArcade.arcadeDisciplineRev = 1;
+    legacyState.puzzleArcade.caroCleared = 25;
+    legacyState.puzzleArcade.chessCleared = 19;
+    ensureMinigameLeaderboardState(legacyState);
+    expect(legacyState.minigameLeaderboard.records.caro.bestStage).toBe(0);
+    expect(legacyState.minigameLeaderboard.records.chess.bestStage).toBe(0);
+
+    // ProofOfPlay accepts caro (Minesweeper) and chess (Fish Shooter)
+    for (const gid of ['caro', 'chess'] as const) {
+      const rec = new ProofOfPlayRecorder(gid, 1, 10_000);
+      rec.recordMove(101, 10_400);
+      rec.recordMove(102, 10_950);
+      rec.recordMove(103, 11_600);
+      const env = rec.seal(2800, 12_500);
+      expect(verifyProofOfPlayEnvelope(env, { expectedGameId: gid }).ok).toBe(true);
+    }
+  } finally {
+    setFarmStore({
+      read: () => globalThis.localStorage?.getItem('hangsoc_valley_save_v1') ?? null,
+      write: (json) => globalThis.localStorage?.setItem('hangsoc_valley_save_v1', json),
+    });
+  }
 });

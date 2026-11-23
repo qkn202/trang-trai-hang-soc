@@ -1,5 +1,6 @@
 import { CuratedQuizItem, QuizLexiconEntry } from '../languageQuizBank';
 import { buildPackLexicon } from './packHelper';
+import { ES_EXPANDED_CURATED, ES_EXPANDED_LEXICON } from './esExpanded';
 
 export const EXTRA_LEXICON: QuizLexiconEntry[] = [
   ...buildPackLexicon('es', 1, 'beginner', [
@@ -96,6 +97,7 @@ export const EXTRA_LEXICON: QuizLexiconEntry[] = [
     ['jugada', 'la jugada maestra', 'la hu-ga-da ma-es-tra', 'cụm danh từ', 'nước cờ tuyệt diệu', 'Con una jugada maestra aseguró la victoria en el gran salón.', 'Kon u-na hu-ga-da ma-es-tra a-se-gu-ro la bik-to-ria en el gran sa-lon.', 'Bằng một nước cờ tuyệt diệu, cô ấn định chiến thắng tại đại sảnh.'],
     ['esplendor', 'el esplendor', 'el es-plen-dor', 'danh từ', 'vẻ rực rỡ huy hoàng', 'Los jardines lucen en todo su esplendor durante mayo.', 'Los har-di-nes lu-sen en to-do su es-plen-dor du-ran-te ma-yo.', 'Những khu vườn khoe trọn vẻ rực rỡ suốt tháng Năm.'],
   ]),
+  ...ES_EXPANDED_LEXICON,
 ];
 
 export const EXTRA_CURATED: CuratedQuizItem[] = [
@@ -177,4 +179,5 @@ export const EXTRA_CURATED: CuratedQuizItem[] = [
     grammarExplainVi: '"Llevaré" (tôi sẽ mang theo) diễn tả lời hưởng ứng tự nhiên khi được mời dự tiệc.',
     vocabNotes: [{ word: 'por supuesto', phonetic: 'por su-pues-to', posVi: 'cụm từ', meaningVi: 'tất nhiên rồi' }],
   },
+  ...ES_EXPANDED_CURATED,
 ];

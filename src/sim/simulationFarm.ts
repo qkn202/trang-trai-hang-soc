@@ -589,10 +589,19 @@ export function farmPlantCropOnPlot(sim: ParkSimulation,
     );
     const effectiveGrowSec = strat.growSec;
     const growMs = sim.state.sandboxMode ? 4000 : effectiveGrowSec * 1000;
+    const curWeather = sim.getCurrentWeather(now);
+    const autoRainOrHelper =
+      curWeather.kind === 'rain' ||
+      Boolean(barn.farmHelperEndsAt && barn.farmHelperEndsAt > now);
+    const finalGrowMs = autoRainOrHelper
+      ? Math.max(1000, growMs - Math.max(3000, Math.round(growMs * 0.3)))
+      : growMs;
     b.cropId = cropId;
+    b.lastPlantedCropId = cropId;
+    barn.lastPlantedCropId = cropId;
     b.cropPlantedAt = now;
-    b.cropReadyAt = now + growMs;
-    b.cropWateredBoost = false;
+    b.cropReadyAt = now + finalGrowMs;
+    b.cropWateredBoost = autoRainOrHelper;
     b.cropRotatedBonus = strat.isRotatedBonus;
     b.readyBubbles = 0;
     b.storedSickle = 0;
@@ -601,6 +610,12 @@ export function farmPlantCropOnPlot(sim: ParkSimulation,
     sim.audio.playPlace();
     sim.onBuildingTactile?.(b.uid);
     const rotNote = strat.isRotatedBonus ? ' • 🍀 Luân Canh Vàng!' : '';
+    const rainNote =
+      curWeather.kind === 'rain'
+        ? ' • 🌧️ Mưa tưới −30%!'
+        : autoRainOrHelper
+          ? ' • 🧙 Phụ tá tưới −30%!'
+          : '';
     sim.spawnFloatingText(
       b.gx + item.width * 0.5,
       b.gy + item.height * 0.5,
@@ -614,7 +629,7 @@ export function farmPlantCropOnPlot(sim: ParkSimulation,
     }
     return {
       ok: true,
-      msg: `🌱 Đã gieo 1 hạt ${crop.emoji} ${crop.name} (Túi còn ${leftSeeds} hạt • ${formatDurationCompactVi(effectiveGrowSec)} chín${rotNote})!`,
+      msg: `🌱 Đã gieo 1 hạt ${crop.emoji} ${crop.name} (Túi còn ${leftSeeds} hạt • ${formatDurationCompactVi(Math.round(finalGrowMs / 1000))} chín${rotNote}${rainNote})!`,
     };
 }
 
@@ -672,11 +687,32 @@ export function farmHarvestCropPlot(sim: ParkSimulation, uid: string): { ok: boo
     const soilMeta = getSoilTierInfo(soilTier);
     const isGoldenRotation = Boolean(b.cropRotatedBonus);
     const wasCompost = Boolean(b.cropCompostBoost);
+    const curWeather = sim.getCurrentWeather(now);
+    const curFest = sim.getActiveFestival();
+    const isWinterBonusCrop =
+      curWeather.kind === 'snow' &&
+      (crop.id.startsWith('yule_') ||
+        crop.id.startsWith('vn_') ||
+        crop.id === 'crisp_cabbage' ||
+        crop.id === 'burrow_potato' ||
+        crop.id === 'honey_carrot');
+    const isFogBonusCrop =
+      curWeather.kind === 'fog' &&
+      (crop.id === 'glow_mushroom' ||
+        crop.id === 'moonlight_flower' ||
+        crop.id === 'baby_mandrake' ||
+        crop.id === 'dried_lavender' ||
+        crop.id === 'dew_blueberry');
+    const isFestCropBonus =
+      (curFest === 'mid_autumn' && Boolean(crop.isFlowerCrop)) ||
+      (curFest === 'halloween' && (crop.id === 'garden_pumpkin' || crop.id === 'glow_mushroom'));
+    const weatherYieldBonus = (isWinterBonusCrop || isFogBonusCrop ? 1 : 0) + (isFestCropBonus ? 1 : 0);
     const baseYield = crop.yieldQty + (b.stars >= 3 ? 1 : 0) + soilMeta.yieldBonus;
     const yieldQty =
       (isGoldenRotation ? baseYield * 2 : baseYield) +
       (wasCompost ? 2 : 0) +
-      (isGoldenRotation ? soilMeta.extraRotateYield : 0);
+      (isGoldenRotation ? soilMeta.extraRotateYield : 0) +
+      weatherYieldBonus;
     const added = sim.addFarmItemToBarn(crop.id, yieldQty);
     // HPVN: any overflow beyond remaining Kho space sells at normal sell value so partial-space harvests never lose items
     const overflowQty = Math.max(0, yieldQty - added);
@@ -690,10 +726,18 @@ export function farmHarvestCropPlot(sim: ParkSimulation, uid: string): { ok: boo
     };
     const masteryBefore = getCropMasteryTierInfo(prevMastery);
     const masteryAfter = getCropMasteryTierInfo(nextMastery);
-    const gold = Math.round(crop.sellValue * masteryBefore.valueMult * soilMeta.harvestGoldXpMult);
+    const weatherGoldMult =
+      (curWeather.isRainbow ? 1.15 : 1.0) * (curFest === 'lunar_tet' ? 1.15 : 1.0);
+    const gold = Math.round(
+      crop.sellValue * masteryBefore.valueMult * soilMeta.harvestGoldXpMult * weatherGoldMult
+    );
     const xp = Math.round(
       (crop.xp + (isGoldenRotation ? 4 : 0) + (wasCompost ? 8 : 0)) * soilMeta.harvestGoldXpMult
     );
+    if (curWeather.isRainbow && ((nextMastery + b.gx + b.gy) % 4 === 0)) {
+      sim.state.morningDewPhials = Math.min(99, (sim.state.morningDewPhials ?? 0) + 1);
+      sim.onToast?.('🌈 Cầu Vồng Sau Mưa kết tinh +1 🧪 Bình Sương Mai trên luống cây!', '🧪');
+    }
 
     // Persist soil rotation, permanent soil fertility tier & anti-bulldoze-exploit fatigue by tile coordinate!
     const soilKey = `${b.gx},${b.gy}`;
@@ -911,8 +955,11 @@ export function farmHarvestAnimalPasture(sim: ParkSimulation, uid: string): { ok
     // HPVN: any overflow beyond remaining Kho space sells at normal sell value so partial-space harvests never lose items
     const overflowQty = Math.max(0, yieldQty - added);
     const soldDirect = overflowQty > 0 ? getFarmItemMeta(animal.goodId).sellValue * overflowQty : 0;
-    const gold = wasGourmet ? Math.round(animal.sellValue * 1.5) : animal.sellValue;
-    const xp = wasGourmet ? Math.round(animal.xp * 1.5) : animal.xp;
+    const curWeatherP = sim.getCurrentWeather(now);
+    const pastureGoldMult = curWeatherP.kind === 'sunny' ? 1.1 : 1.0;
+    const pastureXpMult = curWeatherP.kind === 'cloudy' ? 1.1 : 1.0;
+    const gold = Math.round((wasGourmet ? animal.sellValue * 1.5 : animal.sellValue) * pastureGoldMult);
+    const xp = Math.round((wasGourmet ? animal.xp * 1.5 : animal.xp) * pastureXpMult);
     const compostGain = wasGourmet ? 2 : 1;
     sim.state.herbalCompost = Math.min(99999, Math.max(0, Math.floor(sim.state.herbalCompost ?? 0)) + compostGain);
 
@@ -1650,4 +1697,229 @@ export function farmRerollMarketFairDeals(sim: ParkSimulation): { ok: boolean; m
   sim.saveToStorage();
   sim.onUiChange?.();
   return { ok: true, msg };
+}
+
+export function farmReplantPlotLastCrop(
+  sim: ParkSimulation,
+  uid: string
+): { ok: boolean; needSeedAcquire?: boolean; cropId?: FarmCropId; msg: string } {
+  if (sim.isVisitingNeighbor) {
+    return { ok: false, msg: 'Chế độ Khách Tham Quan — không thể gieo lại trên ruộng bạn bè!' };
+  }
+  const b = sim.state.buildings.find((x) => x.uid === uid);
+  if (!b) return { ok: false, msg: 'Không tìm thấy thửa đất canh tác!' };
+  const barn = sim.ensureFarmBarn();
+  const targetCropId = b.lastPlantedCropId ?? barn.lastPlantedCropId;
+  if (!targetCropId || !(targetCropId in FARM_CROPS)) {
+    return { ok: false, msg: 'Chưa có vụ trước để gieo lại — hãy chọn một hạt giống nhé!' };
+  }
+  const res = farmPlantCropOnPlot(sim, uid, targetCropId);
+  return { ...res, cropId: targetCropId };
+}
+
+export function farmBatchReplantLastCrops(
+  sim: ParkSimulation
+): { ok: boolean; count: number; msg: string } {
+  if (sim.isVisitingNeighbor) {
+    return { ok: false, count: 0, msg: 'Không thể gieo hạt tại vườn bạn bè!' };
+  }
+  const barn = sim.ensureFarmBarn();
+  const now = Date.now();
+  const emptyPlots = sim.state.buildings.filter((b) => {
+    const it = getCatalogItem(b.itemId);
+    return Boolean(it?.isFarmlandPlot && !b.cropId && now >= b.constructEndsAt);
+  });
+  if (emptyPlots.length === 0) {
+    return { ok: false, count: 0, msg: 'Hiện không có ô đất trống nào để gieo lại!' };
+  }
+  sim.batchOperationActive = true;
+  let planted = 0;
+  try {
+    for (const plot of emptyPlots) {
+      const cid = plot.lastPlantedCropId ?? barn.lastPlantedCropId;
+      if (!cid || !(cid in FARM_CROPS)) continue;
+      if (farmPlantCropOnPlot(sim, plot.uid, cid).ok) {
+        planted++;
+      }
+    }
+  } finally {
+    sim.batchOperationActive = false;
+  }
+  if (planted > 0) {
+    sim.saveToStorage();
+    sim.onUiChange?.();
+    return {
+      ok: true,
+      count: planted,
+      msg: `🌱 Đã gieo lại vụ trước trên ${planted} thửa đất trống!`,
+    };
+  }
+  return {
+    ok: false,
+    count: 0,
+    msg: 'Chưa đủ hạt giống vụ trước trong túi — hãy mua thêm hoặc Đố nhận hạt 0 Sickle!',
+  };
+}
+
+export function farmReviveFruitTree(
+  sim: ParkSimulation,
+  uid: string,
+  friendHelperName?: string
+): { ok: boolean; msg: string } {
+  const b = sim.state.buildings.find((x) => x.uid === uid);
+  if (!b) return { ok: false, msg: 'Không tìm thấy vườn cây ăn quả!' };
+  const item = getCatalogItem(b.itemId);
+  if (!item || item.id !== 'burrow_apple_orchard') {
+    return { ok: false, msg: 'Công trình này không phải vườn cây ăn quả lâu năm!' };
+  }
+  if (!b.needsTreeRevival) {
+    return { ok: false, msg: 'Vườn cây đang xanh tốt và tiếp tục kết trái!' };
+  }
+  if (!friendHelperName) {
+    if (sim.isVisitingNeighbor) {
+      return sim.helpVisitedNeighborBuilding(uid);
+    }
+    const compostHave = Math.max(0, Math.floor(sim.state.herbalCompost ?? 0));
+    if (!sim.state.sandboxMode && compostHave < 1) {
+      return {
+        ok: false,
+        msg: 'Cần 1 🌿 Phân Ủ Thảo Dược (hoặc nhờ bạn bè sang thăm chăm giúp) để hồi sinh Vườn Táo!',
+      };
+    }
+    if (!sim.state.sandboxMode) {
+      sim.state.herbalCompost = Math.max(0, compostHave - 1);
+    }
+  }
+
+  b.needsTreeRevival = false;
+  b.orchardHarvestsUsed = 0;
+  b.lastTickAt = Date.now();
+  const added = sim.addFarmItemToBarn('burrow_apple', 2);
+  sim.addXp(12);
+  sim.addHarvestFeastPoints(8);
+  sim.audio.playSpell();
+  sim.spawnFloatingText(
+    b.gx + item.width * 0.5,
+    b.gy + item.height * 0.5,
+    `🍎 Hồi sinh cây! +${Math.max(2, added)} Táo +12 ⭐`,
+    '#86efac'
+  );
+  const msg = friendHelperName
+    ? `🌿 ${friendHelperName} đã hồi sinh Vườn Táo Hang Sóc — tặng ngay +2 🍎 Táo & 3 vụ mùa mới!`
+    : `🌿 Đã bón Phân Ủ hồi sinh Vườn Táo Hang Sóc (+${added} 🍎 Táo vào Kho & +12 ⭐)!`;
+  sim.onToast?.(msg, '🍎');
+  sim.saveToStorage();
+  sim.onUiChange?.();
+  return { ok: true, msg };
+}
+
+export interface LocatedItemSource {
+  kind: 'workshop' | 'plot' | 'pasture' | 'none';
+  uid?: string;
+  gx?: number;
+  gy?: number;
+  cropId?: FarmCropId;
+  animalId?: PastureAnimalId;
+  recipeId?: string;
+  msg: string;
+}
+
+export function farmLocateItemSource(
+  sim: ParkSimulation,
+  itemId: FarmItemId
+): LocatedItemSource {
+  const now = Date.now();
+  if (itemId in FARM_CROPS) {
+    const cid = itemId as FarmCropId;
+    const crop = FARM_CROPS[cid];
+    // Prefer an already ripe or growing plot of this crop, else an empty plot, else any farmland plot
+    const ripeOrGrowing = sim.state.buildings.find((b) => {
+      const it = getCatalogItem(b.itemId);
+      return Boolean(it?.isFarmlandPlot && b.cropId === cid && now >= b.constructEndsAt);
+    });
+    const emptyPlot = sim.state.buildings.find((b) => {
+      const it = getCatalogItem(b.itemId);
+      return Boolean(it?.isFarmlandPlot && !b.cropId && now >= b.constructEndsAt);
+    });
+    const anyPlot =
+      ripeOrGrowing ??
+      emptyPlot ??
+      sim.state.buildings.find((b) => Boolean(getCatalogItem(b.itemId)?.isFarmlandPlot));
+    if (anyPlot) {
+      return {
+        kind: 'plot',
+        uid: anyPlot.uid,
+        gx: anyPlot.gx + 1,
+        gy: anyPlot.gy + 1,
+        cropId: cid,
+        msg: emptyPlot
+          ? `🌱 Đã dẫn tới Thửa Đất trống để gieo ${crop.emoji} ${crop.name}!`
+          : `🌱 Đã dẫn tới luống ${crop.emoji} ${crop.name}!`,
+      };
+    }
+    return {
+      kind: 'none',
+      cropId: cid,
+      msg: `Hãy đặt thêm Thửa Đất Canh Tác để gieo ${crop.name}!`,
+    };
+  }
+
+  const gid = itemId as FarmGoodId;
+  const goodMeta = FARM_GOODS[gid];
+  // Check if produced by a pasture animal first
+  const matchingAnimal = (Object.keys(PASTURE_ANIMALS) as PastureAnimalId[]).find(
+    (aid) => PASTURE_ANIMALS[aid].goodId === gid
+  );
+  if (matchingAnimal) {
+    const pasture =
+      sim.state.buildings.find(
+        (b) =>
+          Boolean(getCatalogItem(b.itemId)?.isAnimalPasturePlot) &&
+          b.pastureAnimalId === matchingAnimal &&
+          now >= b.constructEndsAt
+      ) ??
+      sim.state.buildings.find(
+        (b) => Boolean(getCatalogItem(b.itemId)?.isAnimalPasturePlot) && now >= b.constructEndsAt
+      );
+    if (pasture) {
+      return {
+        kind: 'pasture',
+        uid: pasture.uid,
+        gx: pasture.gx + 1,
+        gy: pasture.gy + 1,
+        animalId: matchingAnimal,
+        msg: `🐾 Đã dẫn tới Đồng Cỏ sản xuất ${goodMeta?.name ?? gid}!`,
+      };
+    }
+  }
+
+  // Otherwise locate the matching Workshop building
+  const recipe = FARM_WORKSHOP_RECIPES.find((r) => r.goodId === gid);
+  if (recipe) {
+    const ws = sim.state.buildings.find((b) => {
+      const it = getCatalogItem(b.itemId);
+      return Boolean(it && it.workshopGroupId === recipe.workshopGroupId && now >= b.constructEndsAt);
+    });
+    if (ws) {
+      const wsItem = getCatalogItem(ws.itemId)!;
+      return {
+        kind: 'workshop',
+        uid: ws.uid,
+        gx: ws.gx + wsItem.width * 0.5,
+        gy: ws.gy + wsItem.height * 0.5,
+        recipeId: recipe.id,
+        msg: `🔥 Đã dẫn tới ${wsItem.name} để chế biến ${goodMeta?.name ?? gid}!`,
+      };
+    }
+    return {
+      kind: 'none',
+      recipeId: recipe.id,
+      msg: `Hãy xây xưởng phù hợp để chế biến ${goodMeta?.name ?? gid}!`,
+    };
+  }
+
+  return {
+    kind: 'none',
+    msg: `Hãy kiểm tra Kho Nông Sản hoặc Chợ Phiên để tìm ${goodMeta?.name ?? gid}!`,
+  };
 }

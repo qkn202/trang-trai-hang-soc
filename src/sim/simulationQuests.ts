@@ -271,10 +271,35 @@ export function questsHarvestBuildingBubble(sim: ParkSimulation, uid: string): b
     }
 
     const hasGoods = Boolean(b.readyFarmGoods && b.readyFarmGoods.length > 0);
-    if (b.storedSickle <= 0 && !hasGoods) return false;
+    const hasFruits = Boolean(b.readyFruitCrops && b.readyFruitCrops.length > 0);
+    if (b.storedSickle <= 0 && !hasGoods && !hasFruits) return false;
 
     const counts = new Map<FarmGoodId, number>();
+    const fruitCounts = new Map<FarmCropId, number>();
     const remainingGoods: FarmGoodId[] = [];
+    const remainingFruits: FarmCropId[] = [];
+    if (b.readyFruitCrops && b.readyFruitCrops.length > 0) {
+      for (const cid of b.readyFruitCrops) {
+        const added = sim.addFarmItemToBarn(cid, 1);
+        if (added > 0) {
+          fruitCounts.set(cid, (fruitCounts.get(cid) ?? 0) + added);
+        } else {
+          remainingFruits.push(cid);
+        }
+      }
+      b.readyFruitCrops = remainingFruits.length > 0 ? remainingFruits : undefined;
+      if (fruitCounts.size > 0 && item?.id === 'burrow_apple_orchard') {
+        const nextUsed = (b.orchardHarvestsUsed ?? 0) + 1;
+        b.orchardHarvestsUsed = nextUsed;
+        if (nextUsed >= 3) {
+          b.needsTreeRevival = true;
+          sim.onToast?.(
+            '🍎 Vườn Táo Hang Sóc đã cho đủ 3 vụ — hãy bón 1 🌿 Phân Ủ hoặc nhờ bạn bè chăm giúp để hồi sinh cây!',
+            '🍎'
+          );
+        }
+      }
+    }
     if (b.readyFarmGoods && b.readyFarmGoods.length > 0) {
       for (const gid of b.readyFarmGoods) {
         const added = sim.addFarmItemToBarn(gid, 1);
@@ -284,7 +309,7 @@ export function questsHarvestBuildingBubble(sim: ParkSimulation, uid: string): b
           remainingGoods.push(gid);
         }
       }
-      if (counts.size === 0 && b.storedSickle <= 0) {
+      if (counts.size === 0 && fruitCounts.size === 0 && b.storedSickle <= 0) {
         sim.onToast?.(
           '📦 Kho Nông Sản Đỏ đã đầy! Hãy giao Đơn Hàng Cú hoặc nâng cấp Kho trước khi thu hàng xưởng nhé.',
           '📦'
@@ -304,15 +329,19 @@ export function questsHarvestBuildingBubble(sim: ParkSimulation, uid: string): b
     const x = b.storedXp;
     b.storedSickle = 0;
     b.storedXp = 0;
-    b.readyBubbles = remainingGoods.length > 0 ? Math.min(8, remainingGoods.length) : 0;
+    const remTotal = remainingGoods.length + remainingFruits.length;
+    b.readyBubbles = remTotal > 0 ? Math.min(8, remTotal) : 0;
     b.harvestCycleCount = (b.harvestCycleCount ?? 0) + 1;
     b.lastTickAt = Date.now();
 
     let goodsLabel = '';
-    if (counts.size > 0) {
+    if (counts.size > 0 || fruitCounts.size > 0) {
       const parts: string[] = [];
       for (const [gid, qty] of counts.entries()) {
         parts.push(`+${qty} ${FARM_GOODS[gid].emoji}`);
+      }
+      for (const [cid, qty] of fruitCounts.entries()) {
+        parts.push(`+${qty} ${FARM_CROPS[cid].emoji}`);
       }
       if (parts.length > 0) {
         goodsLabel = `  ${parts.join(' ')}`;

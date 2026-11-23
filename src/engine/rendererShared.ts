@@ -352,6 +352,9 @@ export function resolveBuildingInWorldTimerInfo(
 export interface ScreenHotspot {
   kind:
     | 'owl_post'
+    | 'field_micro_event'
+    | 'roaming_pet'
+    | 'home_visitor_gift'
     | 'neighbor_help'
     | 'visitor_gift'
     | 'home_lantern'

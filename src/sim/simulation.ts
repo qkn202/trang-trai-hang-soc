@@ -84,6 +84,8 @@ import {
   FarmItemId,
   FarmOwlOrder,
   FestivalType,
+  FieldMicroEvent,
+  FieldMicroEventKind,
   FireworkBurst,
   FloatingEffect,
   FlooVisitDirectoryRow,
@@ -134,6 +136,9 @@ import {
   WeatherForecastSlot,
   WeatherKind,
   ZoneId,
+  AlmanacChapterId,
+  CoopSupplyCrateState,
+  PostcardFrameThemeId,
 } from '../types/game';
 import { buildSampleCoasterLoop, TrackWaypoint, traceCoasterCircuit } from './coaster';
 import {
@@ -186,6 +191,7 @@ import {
 import {
   ActiveQuizChallenge,
   createInitialLanguageQuizState,
+  QUIZ_STREAK_MILESTONES,
   QuizAttemptOutcome,
   recordQuizAttempt,
   sanitizeLanguageQuizState,
@@ -304,8 +310,55 @@ import {
   farmSellMarketSpotlightLot,
   farmFulfillMarketFairDeal,
   farmRerollMarketFairDeals,
+  farmReplantPlotLastCrop,
+  farmBatchReplantLastCrops,
+  farmReviveFruitTree,
+  farmLocateItemSource,
 } from './simulationFarm';
-import type { FarmBatchResult, PlotSoilUpgradeCostInfo } from './simulationFarm';
+import type { FarmBatchResult, LocatedItemSource, PlotSoilUpgradeCostInfo } from './simulationFarm';
+import {
+  castStrollCareWave,
+  claimVillagerKeepsake,
+  giftItemToVillager,
+  petRoamingCompanion,
+  RoamingPetRuntime,
+  setActiveRoamingPet,
+  setStrollDestination,
+  StrollAvatarRuntime,
+  togglePlayerStrollMode,
+  updateRoamingPetAndStroll,
+} from './villagerGiftsPetAndStroll';
+import {
+  AlmanacChapterSummary,
+  claimAlmanacChapterReward,
+  claimCoopCrateMilestone,
+  claimDailyTetLiXi,
+  claimHomeVisitorMysteryGift,
+  claimSeasonalFestivalTask,
+  contributeToCoopSupplyCrate,
+  ensureCoopSupplyCrate,
+  evaluateCollectionAlmanac,
+  getActiveSeasonalFestivalDef,
+  getSeasonalFestivalTaskProgress,
+  leaveMysteryGiftForNeighbor,
+  maybeSpawnHomeVisitorGift,
+  SeasonalFestivalDef,
+  setPostcardFrameTheme,
+} from './socialFestivalsAndAlmanac';
+import {
+  activateFarmHelper,
+  buyVisitedNeighborRoadsideOffer,
+  claimFieldMicroEvent,
+  claimRoadsideStandSlot,
+  ensureRoadsideStand,
+  getNeighborRoadsideOffer,
+  isFarmHelperActive,
+  listOnRoadsideStand,
+  RoadsidePriceTier,
+  spawnFieldMicroEvent,
+  tickFarmHelperAutoTend,
+  tickRoadsideStandBuyers,
+} from './roadsideStandAndEvents';
 import {
   buildTxnBeginStroke,
   buildTxnCommitStroke,
@@ -629,6 +682,21 @@ export class ParkSimulation {
   public economyBaseline: EconomyBaselineSnapshot | null = null;
   public pendingInboxSickles = 0;
   public pendingInboxSand = 0;
+  public fieldMicroEvent: FieldMicroEvent | null = null;
+  public nextMicroEventAt = Date.now() + 38_000;
+  private helperAndStandAcc = 0;
+  public layoutEditSnapshot: {
+    buildings: PlacedBuilding[];
+    tileOverrides: GameState['tileOverrides'];
+    stashedDecorInventory?: Record<string, number>;
+    stashedDecorStars?: Record<string, number[]>;
+    galleons: number;
+    prevShowGrid: boolean;
+  } | null = null;
+  public activePresetSlot: LayoutPresetId = 'layout_1';
+  public roamingPet: RoamingPetRuntime | null = null;
+  public strollModeActive = false;
+  public playerStrollAvatar: StrollAvatarRuntime | null = null;
 
   constructor(audio: MagicalAudio) {
     this.audio = audio;
@@ -1124,6 +1192,20 @@ export class ParkSimulation {
 
     if (!this.isVisitingNeighbor) {
       this.tickProductionToTimestamp(now);
+      this.helperAndStandAcc += clampedDt;
+      if (this.helperAndStandAcc >= 2.0) {
+        this.helperAndStandAcc = 0;
+        tickRoadsideStandBuyers(this, now, false);
+        tickFarmHelperAutoTend(this, now, false);
+        maybeSpawnHomeVisitorGift(this, now);
+      }
+      if (this.fieldMicroEvent && now > this.fieldMicroEvent.expiresAt) {
+        this.fieldMicroEvent = null;
+        this.nextMicroEventAt = now + 52_000;
+      } else if (!this.fieldMicroEvent && now >= this.nextMicroEventAt) {
+        spawnFieldMicroEvent(this, now);
+        this.nextMicroEventAt = now + 95_000;
+      }
     }
 
     this.autoSaveAcc += clampedDt;
@@ -1224,6 +1306,7 @@ export class ParkSimulation {
     }
 
     this.updateValleyVillagers(clampedDt, unlockedSet);
+    updateRoamingPetAndStroll(this, clampedDt);
 
     for (let i = this.effects.length - 1; i >= 0; i--) {
       this.effects[i].life += clampedDt;
@@ -1547,6 +1630,71 @@ export class ParkSimulation {
 
   public rerollMarketFairDeals(): { ok: boolean; msg: string } {
     return farmRerollMarketFairDeals(this);
+  }
+
+  public replantPlotLastCrop(uid: string): { ok: boolean; needSeedAcquire?: boolean; cropId?: FarmCropId; msg: string } {
+    return farmReplantPlotLastCrop(this, uid);
+  }
+
+  public batchReplantLastCrops(): { ok: boolean; count: number; msg: string } {
+    return farmBatchReplantLastCrops(this);
+  }
+
+  public reviveFruitTree(uid: string, friendHelperName?: string): { ok: boolean; msg: string } {
+    return farmReviveFruitTree(this, uid, friendHelperName);
+  }
+
+  public locateItemSource(itemId: FarmItemId): LocatedItemSource {
+    return farmLocateItemSource(this, itemId);
+  }
+
+  public ensureRoadsideStand() {
+    return ensureRoadsideStand(this.state);
+  }
+
+  public listOnRoadsideStand(
+    slotIndex: number,
+    itemId: FarmItemId,
+    qty: number,
+    tier: RoadsidePriceTier = 'fair',
+    nowMs = Date.now()
+  ): { ok: boolean; msg: string } {
+    return listOnRoadsideStand(this, slotIndex, itemId, qty, tier, nowMs);
+  }
+
+  public tickRoadsideStandBuyers(nowMs = Date.now(), silent = false): boolean {
+    return tickRoadsideStandBuyers(this, nowMs, silent);
+  }
+
+  public claimRoadsideStandSlot(slotIndex: number): { ok: boolean; msg: string; earnedSickle: number } {
+    return claimRoadsideStandSlot(this, slotIndex);
+  }
+
+  public getNeighborRoadsideOffer(neighbor: NeighborProfileState) {
+    return getNeighborRoadsideOffer(neighbor);
+  }
+
+  public buyVisitedNeighborRoadsideOffer(): { ok: boolean; msg: string } {
+    return buyVisitedNeighborRoadsideOffer(this);
+  }
+
+  public isFarmHelperActive(nowMs = Date.now()): boolean {
+    return isFarmHelperActive(this.state, nowMs);
+  }
+
+  public activateFarmHelper(
+    mode: 'free_daily' | 'feast_points' | 'sickle',
+    nowMs = Date.now()
+  ): { ok: boolean; msg: string; endsAt: number } {
+    return activateFarmHelper(this, mode, nowMs);
+  }
+
+  public spawnFieldMicroEvent(nowMs = Date.now(), forcedKind?: FieldMicroEventKind): FieldMicroEvent | null {
+    return spawnFieldMicroEvent(this, nowMs, forcedKind);
+  }
+
+  public claimFieldMicroEvent(nowMs = Date.now()): { ok: boolean; msg: string; earnedSickle: number } {
+    return claimFieldMicroEvent(this, nowMs);
   }
 
   public beginBuildStroke(): void { return buildTxnBeginStroke(this); }
@@ -2054,6 +2202,142 @@ export class ParkSimulation {
     };
   }
 
+  public giftItemToVillager(
+    villagerId: ValleyVillagerId,
+    itemId: FarmItemId
+  ): { ok: boolean; msg: string; isFavorite: boolean; newLevel: number; leveledUp: boolean } {
+    return giftItemToVillager(this, villagerId, itemId);
+  }
+
+  public claimVillagerKeepsake(villagerId: ValleyVillagerId): { ok: boolean; msg: string } {
+    return claimVillagerKeepsake(this, villagerId);
+  }
+
+  public setActiveRoamingPet(habitatUid: string | null): { ok: boolean; msg: string } {
+    return setActiveRoamingPet(this, habitatUid);
+  }
+
+  public petRoamingCompanion(nowMs = Date.now()): { ok: boolean; msg: string; earnedSickle: number } {
+    return petRoamingCompanion(this, nowMs);
+  }
+
+  public toggleStrollMode(force?: boolean): { ok: boolean; active: boolean; msg: string } {
+    return togglePlayerStrollMode(this, force);
+  }
+
+  public setStrollDestination(gx: number, gy: number): boolean {
+    return setStrollDestination(this, gx, gy);
+  }
+
+  public castStrollCareWave(): { tendedCount: number; msg: string } {
+    return castStrollCareWave(this);
+  }
+
+  public ensureCoopSupplyCrate(nowMs = Date.now()): CoopSupplyCrateState {
+    return ensureCoopSupplyCrate(this.homeStateWhileVisiting ?? this.state, nowMs);
+  }
+
+  public contributeToCoopSupplyCrate(
+    itemId: FarmItemId,
+    qty = 2
+  ): { ok: boolean; msg: string; addedPoints: number } {
+    return contributeToCoopSupplyCrate(this, itemId, qty);
+  }
+
+  public claimCoopCrateMilestone(step: 1 | 2 | 3): { ok: boolean; msg: string } {
+    return claimCoopCrateMilestone(this, step);
+  }
+
+  public setPostcardFrameTheme(theme: PostcardFrameThemeId): { ok: boolean; theme: PostcardFrameThemeId } {
+    return setPostcardFrameTheme(this, theme);
+  }
+
+  public leaveMysteryGiftForNeighbor(): { ok: boolean; msg: string } {
+    return leaveMysteryGiftForNeighbor(this);
+  }
+
+  public claimHomeVisitorMysteryGift(giftId?: string): { ok: boolean; msg: string; earnedSickle: number } {
+    return claimHomeVisitorMysteryGift(this, giftId);
+  }
+
+  public getActiveSeasonalFestivalDef(now = new Date()): SeasonalFestivalDef | null {
+    return getActiveSeasonalFestivalDef(this, now);
+  }
+
+  public getSeasonalFestivalTaskProgress(taskId: string): number {
+    return getSeasonalFestivalTaskProgress(this, taskId);
+  }
+
+  public claimSeasonalFestivalTask(taskId: string): { ok: boolean; msg: string } {
+    return claimSeasonalFestivalTask(this, taskId);
+  }
+
+  public claimDailyTetLiXi(nowMs = Date.now()): { ok: boolean; msg: string } {
+    return claimDailyTetLiXi(this, nowMs);
+  }
+
+  public evaluateCollectionAlmanac(): {
+    chapters: AlmanacChapterSummary[];
+    claimableCount: number;
+    allChaptersClaimed: boolean;
+    grandTrophyClaimed: boolean;
+  } {
+    return evaluateCollectionAlmanac(this);
+  }
+
+  public claimAlmanacChapterReward(
+    chapterId: AlmanacChapterId | 'grand_trophy'
+  ): { ok: boolean; msg: string } {
+    return claimAlmanacChapterReward(this, chapterId);
+  }
+
+  public claimQuizDailyStreakMilestone(days: 3 | 7 | 14 | 30): { ok: boolean; msg: string } {
+    if (this.isHeadmasterPreview || this.isVisitingHonorTour) {
+      return { ok: false, msg: 'Hãy về vườn nhà để nhận quà Chuỗi Học Hằng Ngày!' };
+    }
+    const targetState = this.homeStateWhileVisiting ?? this.state;
+    const quiz = this.ensureLanguageQuiz();
+    const def = QUIZ_STREAK_MILESTONES.find((m) => m.days === days);
+    if (!def) return { ok: false, msg: 'Mốc Chuỗi Học không hợp lệ!' };
+    if (!Array.isArray(quiz.claimedStreakMilestones)) {
+      quiz.claimedStreakMilestones = [];
+    }
+    if (quiz.claimedStreakMilestones.includes(days)) {
+      return { ok: false, msg: 'Bạn đã nhận phần thưởng mốc Chuỗi Học này rồi!' };
+    }
+    const bestStreak = Math.max(quiz.dailyStreakCount ?? 0, quiz.bestDailyStreakCount ?? 0);
+    if (!targetState.sandboxMode && bestStreak < days) {
+      return {
+        ok: false,
+        msg: `Cần duy trì Chuỗi Học ${days} ngày (hiện đạt ${bestStreak}/${days} ngày)!`,
+      };
+    }
+    quiz.claimedStreakMilestones.push(days);
+    targetState.galleons += def.rewardSickle;
+    const parts = [`+${def.rewardSickle} Sickle`];
+    if (def.rewardCompost) {
+      targetState.herbalCompost = (targetState.herbalCompost ?? 0) + def.rewardCompost;
+      parts.push(`+${def.rewardCompost} 🌿`);
+    }
+    if (def.rewardSand) {
+      targetState.timeSand += def.rewardSand;
+      parts.push(`+${def.rewardSand} ⏳`);
+    }
+    if (def.rewardStars) {
+      targetState.match3.stars += def.rewardStars;
+      targetState.match3.totalStarsEarned += def.rewardStars;
+      parts.push(`+${def.rewardStars} 🌟`);
+    }
+    this.onRewardFly?.('galleons', def.rewardSickle);
+    this.audio.playLevelUp();
+    this.saveToStorage();
+    this.onUiChange?.();
+    return {
+      ok: true,
+      msg: `📖 Đã nhận thưởng "${def.labelVi}": ${parts.join(' · ')}!`,
+    };
+  }
+
   public saveNamedProfileSlot(slotId: SaveSlotId): SaveSlotMetadata {
     const baseState = this.homeStateWhileVisiting ?? this.state;
     const meta = saveToNamedSlot(baseState, slotId);
@@ -2067,13 +2351,90 @@ export class ParkSimulation {
     return { ok: false, msg: 'Trang trại lưu trên máy chủ HPVN, không có hồ sơ khác.' };
   }
 
+  public isLayoutEditModeActive(): boolean {
+    return this.layoutEditSnapshot !== null;
+  }
+
+  public enterLayoutEditMode(): { ok: boolean; msg: string } {
+    if (this.isVisitingNeighbor || this.isHeadmasterPreview) {
+      return { ok: false, msg: 'Chỉ có thể mở Chế Độ Quy Hoạch tại Trang Trại Hang Sóc của bạn!' };
+    }
+    if (this.layoutEditSnapshot) {
+      return { ok: true, msg: 'Đang ở trong Chế Độ Quy Hoạch Toàn Cảnh!' };
+    }
+    this.layoutEditSnapshot = {
+      buildings: structuredClone(this.state.buildings),
+      tileOverrides: structuredClone(this.state.tileOverrides),
+      stashedDecorInventory: this.state.stashedDecorInventory
+        ? structuredClone(this.state.stashedDecorInventory)
+        : undefined,
+      stashedDecorStars: this.state.stashedDecorStars
+        ? structuredClone(this.state.stashedDecorStars)
+        : undefined,
+      galleons: this.state.galleons,
+      prevShowGrid: Boolean(this.state.settings.showGrid),
+    };
+    this.state.settings.showGrid = true;
+    this.audio.playClick();
+    this.onUiChange?.();
+    return {
+      ok: true,
+      msg: '🔨 Đã bật Chế Độ Quy Hoạch Toàn Cảnh — tự do dời nhà, cất trang trí rồi bấm Lưu hoặc Hủy!',
+    };
+  }
+
+  public commitLayoutEditMode(): { ok: boolean; msg: string } {
+    if (!this.layoutEditSnapshot) {
+      return { ok: false, msg: 'Hiện không ở trong Chế Độ Quy Hoạch!' };
+    }
+    const prevGrid = this.layoutEditSnapshot.prevShowGrid;
+    this.layoutEditSnapshot = null;
+    this.state.settings.showGrid = prevGrid;
+    this.rebuildGrid();
+    this.syncValleyVillagers();
+    this.audio.playBuildComplete();
+    this.saveToStorage();
+    this.onUiChange?.();
+    return { ok: true, msg: '✓ Đã lưu bố cục quy hoạch mới của Trang Trại Hang Sóc!' };
+  }
+
+  public cancelLayoutEditMode(): { ok: boolean; msg: string } {
+    if (!this.layoutEditSnapshot) {
+      return { ok: false, msg: 'Hiện không ở trong Chế Độ Quy Hoạch!' };
+    }
+    const snap = this.layoutEditSnapshot;
+    this.layoutEditSnapshot = null;
+    this.state.buildings = structuredClone(snap.buildings);
+    this.state.tileOverrides = structuredClone(snap.tileOverrides);
+    this.state.stashedDecorInventory = snap.stashedDecorInventory
+      ? structuredClone(snap.stashedDecorInventory)
+      : undefined;
+    this.state.stashedDecorStars = snap.stashedDecorStars
+      ? structuredClone(snap.stashedDecorStars)
+      : undefined;
+    this.state.galleons = snap.galleons;
+    this.state.settings.showGrid = snap.prevShowGrid;
+    this.rebuildGrid();
+    this.syncValleyVillagers();
+    this.audio.playClick();
+    this.saveToStorage();
+    this.onUiChange?.();
+    return { ok: true, msg: '↩ Đã hoàn nguyên về bố cục trước khi quy hoạch!' };
+  }
+
   public saveLayoutPreset(presetId: LayoutPresetId, customLabel?: string): LayoutPresetEntry {
     const targetState = this.homeStateWhileVisiting ?? this.state;
     const labels: Record<LayoutPresetId, string> = {
-      layout_1: 'Bố Cục Mùa Xuân',
+      layout_1: 'Bố Cục Mùa Thu',
       layout_2: 'Bố Cục Lễ Hội',
       layout_3: 'Bố Cục Tối Ưu Xưởng',
     };
+    const pathMap: NonNullable<LayoutPresetEntry['pathMap']> = {};
+    for (const [k, ov] of Object.entries(targetState.tileOverrides)) {
+      if (ov?.path && ov.path !== 'none') {
+        pathMap[k] = ov.path;
+      }
+    }
     const entry: LayoutPresetEntry = {
       id: presetId,
       label: customLabel?.trim() || labels[presetId],
@@ -2085,11 +2446,13 @@ export class ParkSimulation {
         gy: b.gy,
         rotation: b.rotation,
       })),
+      ...(Object.keys(pathMap).length > 0 ? { pathMap } : {}),
     };
     targetState.layoutPresets = {
       ...(targetState.layoutPresets ?? {}),
       [presetId]: entry,
     };
+    this.activePresetSlot = presetId;
     this.saveToStorage();
     this.onUiChange?.();
     return entry;
@@ -2196,6 +2559,36 @@ export class ParkSimulation {
       b.gy = target.gy;
       b.rotation = target.rotation;
     }
+
+    if (entry.pathMap) {
+      const occupiedFootprint = new Set<string>();
+      for (const b of this.state.buildings) {
+        const it = getCatalogItem(b.itemId);
+        if (!it || it.isBench) continue;
+        const { bw, bh } = this.getBuildingFootprint(it, b.rotation);
+        for (let dy = 0; dy < bh; dy++) {
+          for (let dx = 0; dx < bw; dx++) {
+            occupiedFootprint.add(`${b.gx + dx},${b.gy + dy}`);
+          }
+        }
+      }
+      for (const [k, ov] of Object.entries(this.state.tileOverrides)) {
+        if (ov?.path && ov.path !== 'none' && !entry.pathMap[k]) {
+          this.state.tileOverrides[k] = { ...ov, path: 'none' };
+        }
+      }
+      for (const [k, pathType] of Object.entries(entry.pathMap)) {
+        if (occupiedFootprint.has(k)) continue;
+        const [kx, ky] = k.split(',').map(Number);
+        const c = this.grid[ky]?.[kx];
+        if (!c || !unlockedSet.has(c.zoneId) || c.terrain === 'water') continue;
+        this.state.tileOverrides[k] = {
+          ...(this.state.tileOverrides[k] ?? {}),
+          path: pathType,
+        };
+      }
+    }
+    this.activePresetSlot = presetId;
 
     this.rebuildGrid();
     this.syncValleyVillagers();

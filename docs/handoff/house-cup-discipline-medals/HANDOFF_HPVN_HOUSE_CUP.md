@@ -800,6 +800,33 @@ async function payoutCurrentRavGryAllianceNow(
 }
 ```
 
+---
+
+## 9. Kiểm tra & đồng bộ đủ cả 6 game mini tính vào Cúp Nhà chung (Fix lỗi thiếu Dò Mìn `caro` & Bắn Cá `chess`)
+
+### 9.1. Nguyên nhân gốc đã sửa phía Client
+1. `src/sim/minigameLeaderboard.ts` trước đây vẫn giữ danh sách cũ chỉ 4 môn (`match3`, `sudoku`, `blocks`, `jigsaw`) từ trước khi thay Caro/Cờ Vua bằng **Dò Mìn Phép Thuật (`caro`)** & **Bắn Cá Hồ Đen (`chess`)**, thậm chí **tự xoá `minigameLeaderboard.records.caro` và `.chess` về `0`** trên mỗi lần nạp/lưu! Nay đã mở đủ cả **6 môn** (`['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw']`) cho BXH, Cúp Nhà và Proof-of-Play (vẫn giữ chốt an toàn chỉ đọc `caroCleared`/`chessCleared` khi `arcadeDisciplineRev >= 2`).
+2. `src/sim/simulationTrials.ts` trước đây gọi `submitPlayerCloudLeaderboardEntry()` (`flushFarmSave()`) **trước** `sim.saveToStorage()`, khiến bản lưu chứa màn vừa thắng chưa kịp đưa vào hàng đợi và bị trễ 5 giây (và bỏ qua hẳn với `caro` / `chess`). Nay đã đảo chuẩn: luôn gọi `sim.saveToStorage()` xong mới `flushFarmSave()` ngay lập tức cho **cả 6 môn**.
+3. `src/hpvn/houseCup.ts`: khi phản hồi `op: 'save'` chỉ trả số liệu thành viên (chưa kèm `houses`/`disciplines`), tự xóa cache 60 giây để lần mở Tab Cúp Nhà kế tiếp tải ngay bảng tổng 4 Nhà mới nhất.
+
+### 9.2. Checklist bắt buộc kiểm tra trên máy chủ HPVN (`functions/games/trang-trai-hang-soc-boards.js`)
+Nếu máy chủ HPVN vẫn còn danh sách 4 môn cũ từ bản ban đầu, **cần cập nhật cả `op: 'save'` (Cúp Nhà) lẫn `op: 'board'` (BXH) nhận đủ 6 mã bộ môn**:
+
+| Mã môn | Tên hiển thị | Field số màn trong `save` JSON | Field kỷ lục trong `save` JSON | Lưu ý bắt buộc |
+|---|---|---|---|---|
+| `match3` | Bùa Gặt Honeydukes | `save.match3.maxClearedLevel` | `save.minigameLeaderboard.records.match3` | Trần `7777` |
+| `caro` | Dò Mìn Phép Thuật | `save.puzzleArcade.caroCleared` | `save.minigameLeaderboard.records.caro` | Chỉ tính khi `save.puzzleArcade.arcadeDisciplineRev >= 2` |
+| `sudoku` | Số Học Huyền Bí | `save.puzzleArcade.sudokuCleared` | `save.minigameLeaderboard.records.sudoku` | Trần `777` |
+| `chess` | Bắn Cá Hồ Đen | `save.puzzleArcade.chessCleared` | `save.minigameLeaderboard.records.chess` | Chỉ tính khi `save.puzzleArcade.arcadeDisciplineRev >= 2` |
+| `blocks` | Sinh Vật Huyền Bí | **`save.puzzleArcade.blockCleared`** | `save.minigameLeaderboard.records.blocks` | Chú ý tên field số ít **`blockCleared`** (không phải `blocksCleared`) |
+| `jigsaw` | Tranh Ghép Phép Thuật | `save.puzzleArcade.jigsawCleared` | `save.minigameLeaderboard.records.jigsaw` | Trần `777` |
+
+```js
+// Đảm bảo danh sách whitelist cho CẢ op: 'board' và op: 'save' / op: 'cup' đều có đủ 6 môn:
+const SCORED_BOARD_GAMES = ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw'];
+```
+
+
 
 
 

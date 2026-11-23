@@ -353,6 +353,22 @@ export function creaturesCastAccioHarvestAll(sim: ParkSimulation): void {
       }
       let remainingGoods: FarmGoodId[] = [];
       let collectedAnyGood = false;
+      if (b.readyFruitCrops && b.readyFruitCrops.length > 0) {
+        const remFruits: FarmCropId[] = [];
+        for (const cid of b.readyFruitCrops) {
+          if (sim.addFarmItemToBarn(cid, 1) > 0) {
+            collectedAnyGood = true;
+          } else {
+            remFruits.push(cid);
+          }
+        }
+        b.readyFruitCrops = remFruits.length > 0 ? remFruits : undefined;
+        if (collectedAnyGood && it?.id === 'burrow_apple_orchard') {
+          const nextUsed = (b.orchardHarvestsUsed ?? 0) + 1;
+          b.orchardHarvestsUsed = nextUsed;
+          if (nextUsed >= 3) b.needsTreeRevival = true;
+        }
+      }
       if (b.readyFarmGoods && b.readyFarmGoods.length > 0) {
         for (const gid of b.readyFarmGoods) {
           if (sim.addFarmItemToBarn(gid, 1) > 0) {

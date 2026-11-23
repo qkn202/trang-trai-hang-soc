@@ -881,6 +881,15 @@ export function headerRefreshFloatingBanner(hud: GameHUD): void {
       return;
     }
 
+    if (hud.sim.strollModeActive && !hud.sim.isVisitingNeighbor) {
+      banner.classList.remove('hidden');
+      txt.textContent = '🧙 Đi dạo · Chạm đường hoặc WASD';
+      btnSec.textContent = '🪄 Chăm quanh';
+      btnSec.classList.remove('hidden');
+      btnExit.textContent = '✕';
+      return;
+    }
+
     if (hud.sim.state.settings.cutawayMode) {
       banner.classList.remove('hidden');
       txt.textContent = '👁️ Nhìn xuyên';
@@ -1066,7 +1075,13 @@ export function headerRefreshHeaderClock(hud: GameHUD): void {
     }
     const lblFest = hud.root.querySelector('#lblFestival') as HTMLElement | null;
     if (lblFest) {
-      if (fest === 'halloween') {
+      if (fest === 'lunar_tet') {
+        lblFest.classList.remove('hidden');
+        lblFest.textContent = '🏮 Tết Việt +15% 🪙';
+      } else if (fest === 'mid_autumn') {
+        lblFest.classList.remove('hidden');
+        lblFest.textContent = '🥮 Trung Thu +Hoa';
+      } else if (fest === 'halloween') {
         lblFest.classList.remove('hidden');
         lblFest.textContent = '🎃 +35% XP';
       } else if (fest === 'christmas') {
@@ -1577,6 +1592,32 @@ export function headerRefreshDock(hud: GameHUD): void {
       hud.root.querySelector('#btnMenuGrid') as HTMLElement | null,
       hud.sim.state.settings.showGrid
     );
+    const editActive = hud.sim.isLayoutEditModeActive();
+    syncToggle(
+      hud.root.querySelector('#btnToggleLayoutEdit') as HTMLElement | null,
+      editActive
+    );
+    syncToggle(
+      hud.root.querySelector('#btnMenuLayoutEdit') as HTMLElement | null,
+      editActive
+    );
+    syncToggle(
+      hud.root.querySelector('#btnMenuStrollMode') as HTMLElement | null,
+      hud.sim.strollModeActive
+    );
+    const editBar = hud.root.querySelector('#layoutEditBar') as HTMLElement | null;
+    if (editBar) {
+      editBar.classList.toggle('hidden', !editActive || hud.photoModeActive || hud.sim.isVisitingNeighbor);
+      editBar.querySelectorAll<HTMLButtonElement>('[data-edit-preset]').forEach((btn) => {
+        const pid = btn.dataset.editPreset as 'layout_1' | 'layout_2' | 'layout_3';
+        const isSel = hud.sim.activePresetSlot === pid;
+        const hasSaved = Boolean(hud.sim.state.layoutPresets?.[pid]);
+        btn.classList.toggle('gold-cta', isSel);
+        btn.setAttribute('aria-pressed', String(isSel));
+        const idx = pid === 'layout_1' ? 1 : pid === 'layout_2' ? 2 : 3;
+        btn.textContent = hasSaved ? `Bản ${idx} ✓` : `Bản ${idx}`;
+      });
+    }
     const undoBtn = hud.root.querySelector('#btnBuildUndo') as HTMLButtonElement | null;
     const redoBtn = hud.root.querySelector('#btnBuildRedo') as HTMLButtonElement | null;
     const undoDisabled =

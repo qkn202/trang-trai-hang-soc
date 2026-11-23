@@ -40,22 +40,22 @@ const mockLocalStorage = {
 };
 vi.stubGlobal('localStorage', mockLocalStorage);
 
-describe('Per-Mini-Game Leaderboards (4 Scored Games: Match-3, Sudoku, Pikachu & Jigsaw — Real Players Only)', () => {
+describe('Per-Mini-Game Leaderboards (All 6 Scored Games: Match-3, Minesweeper/Caro, Sudoku, FishShooter/Chess, Onet/Blocks & Jigsaw — Real Players Only)', () => {
   beforeEach(() => {
     storageMap.clear();
     clearCachedCloudLeaderboards();
   });
 
-  it('contains zero NPCs by default across the 4 scored mini-games (Match-3, Sudoku, Pikachu, Jigsaw)', () => {
+  it('contains zero NPCs by default across all 6 scored mini-games (Match-3, Caro/Mines, Sudoku, Chess/Fish, Blocks, Jigsaw)', () => {
     const sim = new ParkSimulation(new MagicalAudio());
-    expect(SCORED_LEADERBOARD_GAMES).toEqual(['match3', 'sudoku', 'blocks', 'jigsaw']);
-    expect(ALL_LEADERBOARD_GAMES).toEqual(['match3', 'sudoku', 'blocks', 'jigsaw']);
+    expect(SCORED_LEADERBOARD_GAMES).toEqual(['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw']);
+    expect(ALL_LEADERBOARD_GAMES).toEqual(['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw']);
     expect(isScoredLeaderboardGame('match3')).toBe(true);
+    expect(isScoredLeaderboardGame('caro')).toBe(true);
     expect(isScoredLeaderboardGame('sudoku')).toBe(true);
+    expect(isScoredLeaderboardGame('chess')).toBe(true);
     expect(isScoredLeaderboardGame('blocks')).toBe(true);
     expect(isScoredLeaderboardGame('jigsaw')).toBe(true);
-    expect(isScoredLeaderboardGame('caro')).toBe(false);
-    expect(isScoredLeaderboardGame('chess')).toBe(false);
     expect(isScoredLeaderboardGame('seedquiz')).toBe(false);
 
     for (const gid of ALL_LEADERBOARD_GAMES) {
@@ -72,7 +72,7 @@ describe('Per-Mini-Game Leaderboards (4 Scored Games: Match-3, Sudoku, Pikachu &
     }
   });
 
-  it('tracks independent victories on the 3 scored games (Match-3, Sudoku, Pikachu) while keeping Caro, Chess, and SeedQuiz unscored', () => {
+  it('tracks independent victories on all 6 scored games (including Minesweeper/caro & FishShooter/chess) while keeping SeedQuiz unscored', () => {
     const sim = new ParkSimulation(new MagicalAudio());
 
     // Seed real online players on Match-3 & Sudoku leaderboards
@@ -157,22 +157,26 @@ describe('Per-Mini-Game Leaderboards (4 Scored Games: Match-3, Sudoku, Pikachu &
     expect(lastSudokuRank).toBe(1);
     expect(sim.ensureMinigameLeaderboard().records.sudoku.bestEfficiency).toBe(0);
 
-    // Verify unscored games (Caro, Chess, SeedQuiz) do NOT award leaderboard points or House Cup points!
+    // Verify Dò Mìn (caro) & Bắn Cá (chess) now award full leaderboard & House Cup records, while SeedQuiz stays unscored!
     const caroWin = sim.completePuzzleArcadeVictory(
       'caro',
       { stars: 2, sand: 1, gold: 100, xp: 30 },
       { sessionScore: 2500, efficiency: 9 }
     );
-    expect(caroWin.leaderboardRankUp).toBeUndefined();
-    expect(sim.ensureMinigameLeaderboard().records.caro.highScore).toBe(0);
+    expect(caroWin.leaderboardRankUp).toBeDefined();
+    expect(caroWin.leaderboardRankUp!.gameId).toBe('caro');
+    expect(sim.ensureMinigameLeaderboard().records.caro.bestStage).toBe(1);
+    expect(sim.ensureMinigameLeaderboard().records.caro.highScore).toBeGreaterThan(0);
 
     const chessWin = sim.completePuzzleArcadeVictory(
       'chess',
       { stars: 2, sand: 1, gold: 120, xp: 40 },
       { sessionScore: 2850, efficiency: 6 }
     );
-    expect(chessWin.leaderboardRankUp).toBeUndefined();
-    expect(sim.ensureMinigameLeaderboard().records.chess.highScore).toBe(0);
+    expect(chessWin.leaderboardRankUp).toBeDefined();
+    expect(chessWin.leaderboardRankUp!.gameId).toBe('chess');
+    expect(sim.ensureMinigameLeaderboard().records.chess.bestStage).toBe(1);
+    expect(sim.ensureMinigameLeaderboard().records.chess.highScore).toBeGreaterThan(0);
 
     const quiz = sim.ensureLanguageQuiz();
     const ch = generateNextQuizChallenge(quiz, sim.state.level);
@@ -225,9 +229,9 @@ describe('Per-Mini-Game Leaderboards (4 Scored Games: Match-3, Sudoku, Pikachu &
     expect(valleySynced.entries.filter((e) => e.friendCode === 'HS-VKRM-88').length).toBe(1);
 
     const summaries = sim.getAllPersonalLeaderboardSummaries();
-    expect(summaries).toHaveLength(4);
+    expect(summaries).toHaveLength(6);
     const ids = summaries.map((s) => s.gameId);
-    expect(ids).toEqual(['match3', 'sudoku', 'blocks', 'jigsaw']);
+    expect(ids).toEqual(['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw']);
 
     // Verify cloud merge deduplicates player's own friendCode while adding external cloud players
     const ownCode = sim.ensureNeighborSocial().playerFriendCode;

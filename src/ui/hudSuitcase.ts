@@ -417,6 +417,9 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
                 <button id="btnScLocate" type="button" class="brass-btn">
                   📍 Tới chuồng
                 </button>
+                <button id="btnScToggleRoam" type="button" class="brass-btn ${sc.activeRoamingPetId === b.uid ? 'gold-cta' : ''}" style="grid-column:1 / -1;">
+                  ${sc.activeRoamingPetId === b.uid ? '🏡 Đang đi dạo ngoài sân (Bấm cho về chuồng)' : '🐾 Dắt thú cưng đi dạo ngoài sân'}
+                </button>
               </div>
             </div>
           </div>
@@ -713,6 +716,14 @@ export function suitcaseUiRenderSuitcaseDialog(hud: GameHUD): void {
           hud.inspectSelection = { kind: 'building', uid: b.uid };
           hud.renderInspector();
         }
+      });
+
+      box.querySelector('#btnScToggleRoam')?.addEventListener('click', () => {
+        const nextUid = sc.activeRoamingPetId === uid ? null : uid;
+        const res = hud.sim.setActiveRoamingPet(nextUid);
+        hud.showToast(res.msg, '🐾');
+        suitcaseUiRenderSuitcaseDialog(hud);
+        hud.refreshAll();
       });
     }
 
