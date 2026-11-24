@@ -36,6 +36,7 @@ import {
   rotatedTileDiamondToScreen,
   rotateGridPoint,
   rotateGridRect,
+  shouldFlipBuildingSprite,
   TILE_H,
   TILE_W,
 } from './isometric';
@@ -1202,12 +1203,12 @@ export function cropsDrawGhostPlacement(self: IsometricRenderer,
             ) ?? baseSprite)
           : baseSprite;
       const centerX = (pLeft.sx + pRight.sx) * 0.5;
-      const rotTotal = (rotation + (cam.viewRot ?? 0)) % 4;
-      const flipGhost = item.connectableGroup
-        ? false
-        : isNonSquare
-          ? (rotTotal & 1) === 1
-          : rotTotal === 1 || rotTotal === 2;
+      const flipGhost = shouldFlipBuildingSprite(
+        rotation,
+        cam.viewRot ?? 0,
+        isNonSquare,
+        Boolean(item.connectableGroup)
+      );
       ctx.globalAlpha = item.connectableGroup && check.ok ? 0.88 : 0.72;
       if (flipGhost) {
         ctx.save();

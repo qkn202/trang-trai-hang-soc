@@ -11,6 +11,7 @@ import {
   getCameraFocusGrid,
   rotateGridPoint,
   rotateGridRect,
+  shouldFlipBuildingSprite,
   TILE_H,
   TILE_W,
   worldIso,
@@ -980,12 +981,7 @@ export class WorldRenderSnapshotCollector {
       const drawH = drawW * (spHandle.height / spHandle.width);
       const wsKin = computeWorkshopKineticState(item, b, nowMs, reducedMotion, hasSupplyBrew);
 
-      const rotTotal = (b.rotation + viewRot) % 4;
-      const flipX = isConnectable
-        ? false
-        : isNonSquare
-          ? (rotTotal & 1) === 1
-          : rotTotal === 1 || rotTotal === 2;
+      const flipX = shouldFlipBuildingSprite(b.rotation, viewRot, isNonSquare, isConnectable);
 
       const isFoliage = Boolean(activeKey.startsWith('env_')) && activeKey !== 'env_mossy_rock';
       const isTallForCutaway = cutaway && !isConnectable && (bw >= 2 || bh >= 2 || drawH > 95);
@@ -1083,14 +1079,15 @@ export class WorldRenderSnapshotCollector {
       }
 
       // Attach spinning windmill sails / waterwheel rotor & active workshop crafting emblem
+      const rotorFlipSign = flipX ? -1 : 1;
       if (!underConstruction && item.id === 'burrow_windmill_canon') {
         const sailHandle = sprites.resolve('prop_windmill_sails');
         if (sailHandle && extraCountTotal < this.extras.length) {
           const ex = this.extras[extraCountTotal++];
           const sailSize = drawW * 0.78;
-          ex.wx = worldCx - drawW * 0.06;
+          ex.wx = worldCx - drawW * 0.06 * rotorFlipSign;
           ex.wy = worldBottomY + 4.0 - drawH * 0.67;
-          ex.drawW = sailSize;
+          ex.drawW = flipX ? -sailSize : sailSize;
           ex.drawH = sailSize;
           ex.spriteId = sailHandle.id;
           ex.swayAmp = 0;
@@ -1107,9 +1104,9 @@ export class WorldRenderSnapshotCollector {
         if (wheelHandle && extraCountTotal < this.extras.length) {
           const ex = this.extras[extraCountTotal++];
           const wheelSize = drawW * 0.44;
-          ex.wx = worldCx + drawW * 0.18;
+          ex.wx = worldCx + drawW * 0.18 * rotorFlipSign;
           ex.wy = worldBottomY + 4.0 - drawH * 0.34;
-          ex.drawW = wheelSize;
+          ex.drawW = flipX ? -wheelSize : wheelSize;
           ex.drawH = wheelSize;
           ex.spriteId = wheelHandle.id;
           ex.swayAmp = 0;
@@ -1598,12 +1595,7 @@ export class WorldRenderSnapshotCollector {
           const scaleMult = ghostItem.spriteScale ?? (isNonSquare ? 1.0 : 1.05);
           const drawW = (bw + bh) * (TILE_W * 0.5) * scaleMult;
           const drawH = drawW * (gHandle.height / gHandle.width);
-          const rotTotal = (gRot + viewRot) % 4;
-          const flipX = isConnectable
-            ? false
-            : isNonSquare
-              ? (rotTotal & 1) === 1
-              : rotTotal === 1 || rotTotal === 2;
+          const flipX = shouldFlipBuildingSprite(gRot, viewRot, isNonSquare, isConnectable);
           const canPlace = sim.canPlaceItem(
             ghostItem,
             gx,

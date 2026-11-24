@@ -36,6 +36,7 @@ import {
   rotatedTileDiamondToScreen,
   rotateGridPoint,
   rotateGridRect,
+  shouldFlipBuildingSprite,
   TILE_H,
   TILE_W,
 } from './isometric';
@@ -492,12 +493,12 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
         );
       }
 
-      const rotTotal = (b.rotation + (cam.viewRot ?? 0)) % 4;
-      const flipSprite = isConnectablePlot
-        ? false
-        : isNonSquare
-          ? (rotTotal & 1) === 1
-          : rotTotal === 1 || rotTotal === 2;
+      const flipSprite = shouldFlipBuildingSprite(
+        b.rotation,
+        cam.viewRot ?? 0,
+        isNonSquare,
+        isConnectablePlot
+      );
       const squash = self.getSquashScale(b.uid, now);
       const completion = self.getCompletionPop(b.uid, now);
 
@@ -620,7 +621,8 @@ export function buildingsDrawPlacedBuilding(self: IsometricRenderer,
           drawH,
           cam.zoom,
           isNight,
-          plotConnMask
+          plotConnMask,
+          flipSprite
         );
       }
       if (!item.isRuralFarmstead) {
@@ -926,11 +928,13 @@ export function buildingsDrawLiveBuildingAnimations(self: IsometricRenderer,
     drawH: number,
     zoom: number,
     isNight: boolean,
-    plotConnMask = 0
+    plotConnMask = 0,
+    flipX = false
   ): void {
     const ctx = self.ctx;
     const itemId = item.id;
     const nowMs = Date.now();
+    const flipSign = flipX ? -1 : 1;
     const wsKin = computeWorkshopKineticState(item, b, nowMs, self.reducedMotion);
 
     // 0a. Ceremonial Red-and-Gold Ribbon Unveiling Crown (`prop_ribbon_unveil`)!
@@ -958,13 +962,14 @@ export function buildingsDrawLiveBuildingAnimations(self: IsometricRenderer,
     if (itemId === 'burrow_windmill_canon') {
       const sailsSp = self.sprites.get('prop_windmill_sails');
       if (sailsSp) {
-        const hubX = cx - drawW * 0.06;
+        const hubX = cx - drawW * 0.06 * flipSign;
         const hubY = bottomY - drawH * 0.67;
         const sailSize = drawW * 0.78;
         const angle = self.reducedMotion ? 0.38 : self.tick * 0.022 + wsKin.extraRotorRad;
         ctx.save();
         ctx.translate(hubX, hubY);
-        // Foreshorten onto the SW-facing isometric windmill dome plane!
+        if (flipX) ctx.scale(-1, 1);
+        // Foreshorten onto the isometric windmill dome plane!
         ctx.transform(0.88, 0.22, -0.12, 0.96, 0, 0);
         ctx.rotate(angle);
         ctx.drawImage(sailsSp, -sailSize * 0.5, -sailSize * 0.5, sailSize, sailSize);
@@ -973,7 +978,7 @@ export function buildingsDrawLiveBuildingAnimations(self: IsometricRenderer,
         if (!self.reducedMotion) {
           for (let m = 0; m < 3; m++) {
             const mp = ((self.tick * 0.018 + m * 0.33 + b.gx * 0.1) % 1);
-            const mx = cx - drawW * 0.14 + Math.sin(mp * Math.PI * 2 + m) * 8 * zoom;
+            const mx = cx - drawW * 0.14 * flipSign + Math.sin(mp * Math.PI * 2 + m) * 8 * zoom;
             const my = bottomY - drawH * 0.32 + mp * 14 * zoom;
             ctx.fillStyle = `rgba(254, 249, 195, ${(1 - mp) * 0.65})`;
             ctx.beginPath();
@@ -988,13 +993,14 @@ export function buildingsDrawLiveBuildingAnimations(self: IsometricRenderer,
     if (itemId === 'burrow_reed_pond_mill') {
       const wheelSp = self.sprites.get('prop_waterwheel_rotor');
       if (wheelSp) {
-        const wheelX = cx + drawW * 0.21;
+        const wheelX = cx + drawW * 0.21 * flipSign;
         const wheelY = bottomY - drawH * 0.33;
         const wheelSize = drawW * 0.40;
         const angle = self.reducedMotion ? 0.2 : self.tick * 0.032 + wsKin.extraRotorRad;
         ctx.save();
         ctx.translate(wheelX, wheelY);
-        // Foreshorten onto the SE-facing stone millrace wall!
+        if (flipX) ctx.scale(-1, 1);
+        // Foreshorten onto the stone millrace wall!
         ctx.transform(0.80, -0.26, 0.12, 0.94, 0, 0);
         ctx.rotate(angle);
         ctx.drawImage(wheelSp, -wheelSize * 0.5, -wheelSize * 0.5, wheelSize, wheelSize);

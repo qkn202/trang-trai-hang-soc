@@ -3,11 +3,13 @@ import { GRID_SIZE } from '../../data/zones';
 import {
   Camera,
   centerCameraOnGrid,
+  getBuildingScreenDirection,
   gridToScreen,
   rotateCamera90,
   rotateGridPoint,
   rotateGridRect,
   screenToGrid,
+  shouldFlipBuildingSprite,
   unrotateGridPoint,
   worldIso,
 } from '../isometric';
@@ -131,6 +133,45 @@ describe('isometric.ts - Phép chiếu Isometric & Xoay 90°', () => {
 
       rotateCamera90(cam, 1);
       expect(cam.viewRot).toBe(0);
+    });
+  });
+
+  describe('getBuildingScreenDirection & shouldFlipBuildingSprite', () => {
+    it('giữ đúng hướng cửa công trình vuông khớp với con đường khi xoay camera Bắc <-> Tây và Bắc <-> Đông', () => {
+      // Nhà đặt ở hướng Bắc (viewRot=0) với b.rotation=0 -> cửa quay Tây Nam (+gy, flipX=false).
+      // Khi đổi view sang Tây (viewRot=3), cạnh +gy xoay sang Đông Nam (+rx) nên cửa PHẢI lật sang phải (flipX=true)
+      // để tiếp tục nhìn thẳng ra con đường cũ thay vì bị quay lệch 90°!
+      expect(getBuildingScreenDirection(0, 0)).toBe(0);
+      expect(shouldFlipBuildingSprite(0, 0, false, false)).toBe(false);
+
+      expect(getBuildingScreenDirection(0, 3)).toBe(1);
+      expect(shouldFlipBuildingSprite(0, 3, false, false)).toBe(true);
+
+      // Ngược lại, nhà đặt quay phải (b.rotation=1, cửa ở cạnh +gx) tại góc Bắc (viewRot=0, flipX=true):
+      // Khi đổi sang Đông (viewRot=1), cạnh +gx xoay sang Tây Nam (+ry) -> cửa phải unflip (flipX=false) để bám đường!
+      expect(getBuildingScreenDirection(1, 0)).toBe(1);
+      expect(shouldFlipBuildingSprite(1, 0, false, false)).toBe(true);
+
+      expect(getBuildingScreenDirection(1, 1)).toBe(0);
+      expect(shouldFlipBuildingSprite(1, 1, false, false)).toBe(false);
+
+      // Khi đổi sang Tây (viewRot=3), cạnh +gx nằm ở nửa phải (Đông Bắc, screenDir=2) -> giữ nửa phải (flipX=true)
+      expect(getBuildingScreenDirection(1, 3)).toBe(2);
+      expect(shouldFlipBuildingSprite(1, 3, false, false)).toBe(true);
+    });
+
+    it('khớp chiều ngang/dọc cho công trình chữ nhật và không lật ô đất ghép rào', () => {
+      expect(shouldFlipBuildingSprite(0, 0, true, false)).toBe(false);
+      expect(shouldFlipBuildingSprite(0, 3, true, false)).toBe(true);
+      expect(shouldFlipBuildingSprite(0, 1, true, false)).toBe(true);
+      expect(shouldFlipBuildingSprite(0, 2, true, false)).toBe(false);
+      expect(shouldFlipBuildingSprite(1, 3, true, false)).toBe(false);
+
+      for (const viewRot of [0, 1, 2, 3] as const) {
+        for (const bRot of [0, 1, 2, 3] as const) {
+          expect(shouldFlipBuildingSprite(bRot, viewRot, false, true)).toBe(false);
+        }
+      }
     });
   });
 });

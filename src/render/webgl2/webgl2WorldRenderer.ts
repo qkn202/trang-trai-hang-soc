@@ -12,6 +12,7 @@ import {
   ELEV_PX,
   gridToScreen,
   rotateGridRect,
+  shouldFlipBuildingSprite,
   TILE_H,
   TILE_W,
   worldIso,
@@ -1792,12 +1793,12 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
         ? boxW * (rawSp.height / rawSp.width)
         : Math.max(26, (item.connectableGroup ? 0.55 : 1.05) * footprintPx);
       const centerSy = syBottom - boxH * 0.45;
-      const rotTotal = (b.rotation + viewRot) % 4;
-      const flipX = Boolean(item.connectableGroup)
-        ? false
-        : item.width !== item.height
-          ? (rotTotal & 1) === 1
-          : rotTotal === 1 || rotTotal === 2;
+      const flipX = shouldFlipBuildingSprite(
+        b.rotation,
+        viewRot,
+        item.width !== item.height,
+        Boolean(item.connectableGroup)
+      );
 
       out.push({
         kind: 'building',

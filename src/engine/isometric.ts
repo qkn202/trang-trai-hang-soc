@@ -176,3 +176,33 @@ export function rotateCamera90(cam: Camera, delta: 1 | -1 = 1): void {
   cam.viewRot = (((cam.viewRot ?? 0) + delta + 4) % 4) as 0 | 1 | 2 | 3;
   centerCameraOnGrid(cam, focus.fgx, focus.fgy);
 }
+
+/**
+ * Hướng hiển thị tương đối trên màn hình (`0..3`) của công trình đặt ở hướng thế giới `buildingRotation`
+ * khi nhìn từ góc camera `viewRot` (`0=Bắc, 1=Đông, 2=Nam, 3=Tây`).
+ * - `0` = Tây Nam (dưới-trái màn hình, `+ry`, ảnh gốc `flipX = false`)
+ * - `1` = Đông Nam (dưới-phải màn hình, `+rx`, ảnh lật `flipX = true`)
+ * - `2` = Đông Bắc (trên-phải màn hình, `-ry`)
+ * - `3` = Tây Bắc (trên-trái màn hình, `-rx`)
+ */
+export function getBuildingScreenDirection(
+  buildingRotation: number,
+  viewRot: 0 | 1 | 2 | 3 = 0
+): 0 | 1 | 2 | 3 {
+  return ((((Math.floor(buildingRotation) || 0) - viewRot) % 4) + 4) % 4 as 0 | 1 | 2 | 3;
+}
+
+/**
+ * Quyết định có lật ngang sprite 2.5D của công trình hay không (dùng chung cho Canvas 2D, WebGL2,
+ * ghost preview và alpha hit-test để hướng cửa luôn bám khớp với đường/sân khi xoay góc nhìn).
+ */
+export function shouldFlipBuildingSprite(
+  buildingRotation: number,
+  viewRot: 0 | 1 | 2 | 3,
+  isNonSquare: boolean,
+  isConnectablePlot: boolean
+): boolean {
+  if (isConnectablePlot) return false;
+  const screenDir = getBuildingScreenDirection(buildingRotation, viewRot);
+  return isNonSquare ? (screenDir & 1) === 1 : screenDir === 1 || screenDir === 2;
+}
