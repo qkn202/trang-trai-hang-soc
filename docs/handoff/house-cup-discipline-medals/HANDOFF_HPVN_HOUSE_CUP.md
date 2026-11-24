@@ -826,6 +826,102 @@ Nếu máy chủ HPVN vẫn còn danh sách 4 môn cũ từ bản ban đầu, **
 const SCORED_BOARD_GAMES = ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw'];
 ```
 
+---
+
+## 10. Bảng Xếp Hạng Cá Nhân Từng Tuần (`op: 'board'`) Đồng Bộ 100% Với Cúp Nhà
+
+Thay thế hoàn toàn BXH cá nhân tổng tích luỹ theo level (`bestStage` / `Màn 790`) sang **BXH cá nhân từng tuần** dùng chung đúng 1 nguồn dữ liệu **Cách A** & cùng chu kỳ tuần **`weekKey`** (`17:00 Thứ Sáu → 16:00 Thứ Sáu tuần kế tiếp`, ICT) với **Cúp 4 Nhà** và **6 Khung Quán Quân Top 1 (§8)**:
+
+### 10.1. Thay đổi phía Client đã hoàn tất
+- `src/hpvn/houseCup.ts`: đồng bộ mã tuần chuẩn `getActiveHouseCupWeekKey()` / `getHouseCupWeeklyCycle()` (cả chu kỳ Thứ Sáu 17:00 → Thứ Sáu kế tiếp 16:00 dùng chung 1 `weekKey` = tuần ISO của Thứ Sáu chốt sổ `endsAt`, ưu tiên `weekKey` từ server `op: 'cup'`).
+- `src/sim/minigameLeaderboard.ts`:
+  - Lưu & tự reset tiến độ tuần `records[game].weekly = { weekKey, stagesCleared, weightedScore, wins, bestStreak, bestSessionScore, updatedAt }` mỗi khi sang tuần mới (vẫn giữ nguyên `bestStage` tích luỹ để hiển thị ở tab **Kỷ Lục** và tương thích save cũ).
+  - Xếp hạng cá nhân tuần theo **Điểm Tuần Cách A (`weeklyScore` / `ratingScore`) giảm dần**, hòa mới xét **Số Màn Vượt Mới Trong Tuần (`weeklyCleared` / `primaryValue`)**, tuyệt đối **không** xếp hạng theo level/màn tổng tích luỹ.
+  - Tính `cupContributionPoints` (`+100 / +80 / +65 / +50 / +35 / +20 đ Nhà`, yêu cầu `>= 5` màn tuần) bằng đúng công thức đồng hạng Olympic của `rankAndScoreDisciplineFromWeeklyPlayers`.
+  - Gọi `request('farm', { op: 'board', game, period: 'weekly', weekKey })` và tự động lọc bỏ dữ liệu tuần cũ (`entry.weekKey !== activeWeekKey`) hoặc phản hồi BXH tổng cũ (không có `period: 'weekly'`, `weekKey`, `weeklyScore`, `weeklyCleared`).
+- `src/ui/leaderboardModal.ts`: hiển thị thanh `BXH Tuần <weekKey>` + đếm ngược chốt sổ `16:00 T6` đồng bộ `Cúp Nhà`, bục Top 3 & danh sách hiển thị `Điểm Tuần (đ)`, `X màn tuần` và `+Y đ Nhà` (hoặc `X/5 màn ghi điểm Nhà`).
+
+### 10.2. Patch phía Máy chủ HPVN (`functions/games/trang-trai-hang-soc-boards.js` — `op: 'board'`)
+
+Khi nhận `op: 'board'` với `{ game, period: 'weekly', weekKey }`:
+1. Dùng đúng `activeWeekKey` của Cúp Nhà hiện tại (`getVietnamIsoWeekKey(sched.endsAt)` hoặc `weekKey` hiện hành của `gameHouseCupWeeks`).
+2. Đọc tiến độ tuần của từng thành viên từ `memberCup` (nếu `memberCup.weekKey === activeWeekKey`) — **cùng đúng 2 trường `weeklyClearedByDiscipline[game]` & `weeklyWeightedScoreByDiscipline[game]` đã dùng để tính Cúp Nhà ở §6.2** (ai chưa vượt màn nào trong tuần này có điểm tuần `0`).
+3. Sắp xếp giảm dần theo `weeklyScore` (`weeklyWeightedScore`), hòa thì `weeklyCleared`, hòa tiếp thì `weeklyWins`.
+4. **Người đứng đầu (`entries[0]` có `weeklyCleared >= 1`) lúc `16:00 Thứ Sáu`** chính là `top1ByDiscipline[game]` nhận khung Quán Quân 7 ngày ở §8!
+
+```js
+// Trong handler op === 'board' (functions/games/trang-trai-hang-soc-boards.js):
+async function handleWeeklyBoardOp(db, { game }) {
+  if (!SCORED_BOARD_GAMES.includes(game)) {
+    return { period: 'weekly', weekKey: '', entries: [] };
+  }
+  const sched = getAllianceWeeklyScheduleState(Date.now());
+  const activeWeekKey = getVietnamIsoWeekKey(sched.endsAt);
+
+  // Đọc danh sách thành viên có hoạt động trong tuần activeWeekKey (hoặc toàn bộ farmMembers đang có hồ sơ tuần này)
+  const snaps = await db
+    .collection('farmMembers')
+    .where('cup.weekKey', '==', activeWeekKey)
+    .get();
+
+  const entries = [];
+  snaps.forEach((doc) => {
+    const data = doc.data() || {};
+    if (data.sandboxTainted) return;
+    const cup = data.cup || {};
+    const weeklyCleared = Math.max(0, Math.floor(Number(cup.weeklyClearedByDiscipline?.[game]) || 0));
+    const weeklyScore = Math.max(0, Math.floor(Number(cup.weeklyWeightedScoreByDiscipline?.[game]) || 0));
+    const weeklyWins = Math.max(
+      weeklyCleared,
+      Math.floor(Number(cup.weeklyWinsByDiscipline?.[game] ?? cup.weeklyPlaysByDiscipline?.[game]) || 0)
+    );
+    if (weeklyCleared <= 0 && weeklyScore <= 0) return;
+
+    const bestStage = Math.max(0, Math.floor(Number(cup.lastClearedByDiscipline?.[game]) || 0));
+    const house = HOUSES.includes(data.house) ? data.house : 'Gryffindor';
+
+    entries.push({
+      userId: doc.id,
+      name: data.displayName || data.parkName || 'Phù Thủy',
+      parkName: data.parkName || 'Trang Trại Hang Sóc',
+      friendCode: data.friendCode || '',
+      avatarEmoji: '🧙',
+      ...(data.avatarUrl ? { avatarUrl: data.avatarUrl } : {}),
+      house,
+      weekKey: activeWeekKey,
+      weeklyCleared,
+      weeklyScore,
+      weeklyWins,
+      bestStage,
+      // Đặt primaryValue & ratingScore bằng chính số liệu tuần để đồng nhất 100%
+      primaryValue: weeklyCleared,
+      ratingScore: weeklyScore,
+      totalWins: weeklyWins,
+      bestStreak: Math.max(0, Math.floor(Number(cup.weeklyBestStreakByDiscipline?.[game]) || 0)),
+      detailLabelVi: `${weeklyCleared} màn tuần${bestStage > 0 ? ` • Màn ${bestStage}` : ''}`,
+      updatedAt: Number(cup.updatedAtMs) || Date.now(),
+    });
+  });
+
+  // Sắp xếp trùng khớp tuyệt đối với scoreDisciplineFromWeeklyPlayers (§6.2)
+  entries.sort(
+    (a, b) =>
+      b.weeklyScore - a.weeklyScore ||
+      b.weeklyCleared - a.weeklyCleared ||
+      b.weeklyWins - a.weeklyWins ||
+      a.updatedAt - b.updatedAt
+  );
+
+  return {
+    period: 'weekly',
+    weekKey: activeWeekKey,
+    cycleKey: sched.cycleKey,
+    entries: entries.slice(0, 100),
+  };
+}
+```
+
+
 
 
 
