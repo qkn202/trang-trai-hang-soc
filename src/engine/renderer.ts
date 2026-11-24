@@ -1,3 +1,4 @@
+import { drawAmbientWildlifeOverlay } from './ambientWildlife';
 import {
   FARM_CROPS,
   FARM_GOODS,
@@ -10,6 +11,7 @@ import { getZoneById, GRID_SIZE, ZONES } from '../data/zones';
 import { sampleCoasterTrainPositions } from '../sim/coaster';
 import { getGardenHelpMetaVi, getPresetNoteMeta } from '../sim/neighborSocial';
 import type { ParkSimulation } from '../sim/simulation';
+import { STROLL_ROBE_WARDROBE } from '../sim/villagerGiftsPetAndStroll';
 import { getBuildingGates } from '../sim/zooAndBackstage';
 import {
   CatalogItem,
@@ -1110,8 +1112,9 @@ export class IsometricRenderer {
 
       // 6a-lantern. Owl Post Lantern Marks left by visiting neighbors on Home Farm!
       this.drawHomeOwlLanternMarks(sim, cam, viewW, viewH);
+      this.drawLivingWorldAtmosphereOverlay(sim, cam, viewW, viewH, now, isNightLike);
       this.drawFieldMicroEventOverlay(sim, cam, viewW, viewH, now);
-      this.drawRoamingPetAndStrollOverlay(sim, cam, viewW, viewH, now);
+      this.drawRoamingPetAndStrollOverlay(sim, cam, viewW, viewH, now, isNightLike);
 
       // 6a-tutorial. Bà Molly's soft sunlit spotlight diamond & bouncing pointer on target farm plot!
       this.drawTutorialWorldTarget(sim, cam, viewW, viewH);
@@ -1611,12 +1614,13 @@ export class IsometricRenderer {
 
     // 4. Fireworks, Owl Post Parcel Event, Harvest Bloom & Ribbon Confetti
     this.drawSkyFireworks(sim, cam, viewW, viewH);
+    this.drawLivingWorldAtmosphereOverlay(sim, cam, viewW, viewH, now, isNightLike);
     if (!sim.isVisitingNeighbor) {
       this.drawFieldMicroEventOverlay(sim, cam, viewW, viewH, now);
-      this.drawRoamingPetAndStrollOverlay(sim, cam, viewW, viewH, now);
+      this.drawRoamingPetAndStrollOverlay(sim, cam, viewW, viewH, now, isNightLike);
       this.drawAndTickOwlPostEvent(sim, cam, viewW, viewH, now, isNightLike, suppressOwlClick);
     } else if (sim.strollModeActive) {
-      this.drawRoamingPetAndStrollOverlay(sim, cam, viewW, viewH, now);
+      this.drawRoamingPetAndStrollOverlay(sim, cam, viewW, viewH, now, isNightLike);
     }
     this.drawHarvestBloom(now, cam.zoom);
     this.juiceFx.applyTo(ctx, viewW, viewH);
@@ -1950,37 +1954,158 @@ export class IsometricRenderer {
     });
   }
 
+  /**
+   * 60fps Living World Atmosphere Overlay (runs in both WebGL2 & Canvas2D):
+   *  - Warm curling chimney smoke puffs & golden hearth ember motes on active workshops
+   *  - Gentle cozy "z" sleep motes drifting above stocked pastures at night
+   */
+  private drawLivingWorldAtmosphereOverlay(
+    sim: ParkSimulation,
+    cam: Camera,
+    viewW: number,
+    viewH: number,
+    nowMs: number,
+    isNight: boolean
+  ): void {
+    if (this.reducedMotion) return;
+    const ctx = this.ctx;
+    const hasSupplyBrew = Boolean(
+      sim.state.supply?.activeBrew && sim.state.supply.activeBrew.endsAt > nowMs
+    );
+    const tSec = nowMs * 0.001;
+    let drawnWorkshops = 0;
+    let drawnSleepPastures = 0;
+
+    for (let i = 0; i < sim.state.buildings.length; i++) {
+      const b = sim.state.buildings[i];
+      if (nowMs < b.constructEndsAt || b.awaitingUnveil || b.isBrokenDown) continue;
+      const item = getCatalogItem(b.itemId);
+      if (!item) continue;
+
+      const isActiveWs =
+        Boolean(b.workshopQueue && b.workshopQueue.length > 0 && b.workshopQueue[0].endsAt > nowMs) ||
+        Boolean(item.isWorkshopBrewery && hasSupplyBrew);
+
+      if (isActiveWs && drawnWorkshops < 10) {
+        const { bw, bh } = sim.getBuildingFootprint(item, b.rotation);
+        const elev = sim.grid[b.gy]?.[b.gx]?.elevation ?? 0;
+        const roofPt = gridToScreen(
+          b.gx + bw * 0.56,
+          b.gy + bh * 0.42,
+          cam,
+          viewW,
+          viewH,
+          elev * ELEV_PX + 42 + Math.max(bw, bh) * 14
+        );
+        if (roofPt.sx >= -70 && roofPt.sx <= viewW + 70 && roofPt.sy >= -70 && roofPt.sy <= viewH + 70) {
+          drawnWorkshops++;
+          ctx.save();
+          // 3 soft curling steam/smoke puffs rising gently from chimney
+          for (let p = 0; p < 3; p++) {
+            const phase = (tSec * 0.48 + p * 0.333 + (b.gx * 0.17 + b.gy * 0.11)) % 1;
+            const driftX = Math.sin(phase * Math.PI * 2 + b.gx) * 8 * cam.zoom + phase * 10 * cam.zoom;
+            const liftY = phase * 34 * cam.zoom;
+            const rad = (4.5 + phase * 9.5) * cam.zoom;
+            const alpha = Math.sin(phase * Math.PI) * (isNight ? 0.26 : 0.34);
+            ctx.fillStyle = isNight ? `rgba(254, 243, 199, ${alpha.toFixed(3)})` : `rgba(255, 250, 238, ${alpha.toFixed(3)})`;
+            ctx.beginPath();
+            ctx.arc(roofPt.sx + driftX, roofPt.sy - liftY, rad, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          // 2 warm hearth golden spark embers twinkling near the roof/oven
+          for (let e = 0; e < 2; e++) {
+            const ep = (tSec * 0.85 + e * 0.5 + b.gy * 0.23) % 1;
+            const ex = roofPt.sx + Math.cos(ep * 6.28 + e) * 11 * cam.zoom;
+            const ey = roofPt.sy - ep * 26 * cam.zoom;
+            const ea = Math.sin(ep * Math.PI) * 0.78;
+            ctx.fillStyle = `rgba(253, 224, 71, ${ea.toFixed(3)})`;
+            ctx.beginPath();
+            ctx.arc(ex, ey, Math.max(1.5, 2.3 * cam.zoom), 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+      } else if (isNight && item.isAnimalPasturePlot && b.pastureAnimalId && drawnSleepPastures < 8) {
+        const elev = sim.grid[b.gy]?.[b.gx]?.elevation ?? 0;
+        const pt = gridToScreen(b.gx + 1, b.gy + 1, cam, viewW, viewH, elev * ELEV_PX + 28);
+        if (pt.sx >= -50 && pt.sx <= viewW + 50 && pt.sy >= -50 && pt.sy <= viewH + 50) {
+          drawnSleepPastures++;
+          const zp = (tSec * 0.42 + b.gx * 0.31 + b.gy * 0.19) % 1;
+          const zx = pt.sx + Math.sin(zp * 4.2) * 5 * cam.zoom + zp * 6 * cam.zoom;
+          const zy = pt.sy - zp * 22 * cam.zoom;
+          const za = Math.sin(zp * Math.PI) * 0.75;
+          ctx.save();
+          ctx.globalAlpha = za;
+          ctx.font = `700 ${Math.max(10, Math.round((10 + zp * 3) * cam.zoom))}px "Be Vietnam Pro", sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#dbeafe';
+          ctx.strokeStyle = '#1e293b';
+          ctx.lineWidth = 2.5;
+          ctx.strokeText('z', zx, zy);
+          ctx.fillText('z', zx, zy);
+          ctx.restore();
+        }
+      }
+    }
+
+    drawAmbientWildlifeOverlay(ctx, sim, cam, viewW, viewH, nowMs, isNight);
+  }
+
   private drawRoamingPetAndStrollOverlay(
     sim: ParkSimulation,
     cam: Camera,
     viewW: number,
     viewH: number,
-    nowMs: number
+    nowMs: number,
+    isNight = false
   ): void {
     const ctx = this.ctx;
+    const tSec = nowMs * 0.001;
 
-    // 1. Active Roaming Pet Companion
+    // 1. Active Roaming Pet Companion (articulated squash-stretch + breathing + night zzz)
     if (sim.roamingPet && !sim.isVisitingNeighbor) {
       const pet = sim.roamingPet;
       const pt = gridToScreen(pet.gx, pet.gy, cam, viewW, viewH, 8);
       if (pt.sx >= -60 && pt.sx <= viewW + 60 && pt.sy >= -60 && pt.sy <= viewH + 60) {
-        const hop = this.reducedMotion ? 0 : Math.abs(Math.sin(pet.walkPhase)) * 4 * cam.zoom;
+        const hopSin = this.reducedMotion ? 0 : Math.abs(Math.sin(pet.walkPhase));
+        const hop = hopSin * 4.5 * cam.zoom;
+        const breathe = this.reducedMotion ? 0 : Math.sin(tSec * 3.1) * 0.025;
+        const sqX = 1 - hopSin * 0.05 + breathe;
+        const sqY = 1 + hopSin * 0.06 - breathe;
         const sp = this.sprites.get(pet.spriteKey) ?? this.sprites.get('beast_unicorn');
         const sz = Math.max(30, 44 * cam.zoom);
         ctx.save();
         ctx.fillStyle = 'rgba(20, 30, 15, 0.28)';
         ctx.beginPath();
-        ctx.ellipse(pt.sx, pt.sy + 4 * cam.zoom, sz * 0.34, sz * 0.16, 0, 0, Math.PI * 2);
+        ctx.ellipse(
+          pt.sx,
+          pt.sy + 4 * cam.zoom,
+          sz * (0.34 - hopSin * 0.05),
+          sz * (0.16 - hopSin * 0.02),
+          0,
+          0,
+          Math.PI * 2
+        );
         ctx.fill();
 
         const giftReady = nowMs - (sim.state.suitcase?.lastRoamingPetGiftAt ?? 0) >= 45_000;
         if (giftReady) {
-          this.drawRadialGlow(pt.sx, pt.sy - sz * 0.45, sz * 0.55, 'rgba(253, 224, 71, 0.52)');
+          this.drawRadialGlow(pt.sx, pt.sy - sz * 0.45, sz * 0.58, 'rgba(253, 224, 71, 0.52)');
         }
         if (sp) {
+          ctx.save();
           ctx.translate(pt.sx, pt.sy - hop);
-          if (pet.facingLeft) ctx.scale(-1, 1);
+          ctx.scale((pet.facingLeft ? -1 : 1) * sqX, sqY);
           ctx.drawImage(sp, -sz * 0.5, -sz * 0.85, sz, sz);
+          ctx.restore();
+        }
+        if (isNight && !sim.strollModeActive && !this.reducedMotion) {
+          const zp = (tSec * 0.5) % 1;
+          ctx.globalAlpha = Math.sin(zp * Math.PI) * 0.8;
+          ctx.font = `700 ${Math.max(10, Math.round(11 * cam.zoom))}px "Be Vietnam Pro", sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#e0f2fe';
+          ctx.fillText('z', pt.sx + 10 * cam.zoom, pt.sy - sz * 0.8 - zp * 14 * cam.zoom);
         }
         ctx.restore();
 
@@ -1994,16 +2119,61 @@ export class IsometricRenderer {
       }
     }
 
-    // 2. Player Stroll Avatar
+    // 2. Player Stroll Avatar (Custom Wardrobe + Articulated Stride + Ground Footstep Dust + Lumos Ring)
     if (sim.strollModeActive && sim.playerStrollAvatar) {
       const av = sim.playerStrollAvatar;
+      const robe =
+        STROLL_ROBE_WARDROBE[sim.state.settings.strollRobeId ?? 'burrow_classic'] ??
+        STROLL_ROBE_WARDROBE.burrow_classic;
+
+      // Ground-matched footstep dust/petal puff behind boots
+      if (!this.reducedMotion && (av.stepDustTimer ?? 0) > 0 && av.stepDustGx !== undefined && av.stepDustGy !== undefined) {
+        const dp = 1 - Math.min(1, (av.stepDustTimer ?? 0) / 0.42);
+        const dPt = gridToScreen(av.stepDustGx, av.stepDustGy, cam, viewW, viewH, 2);
+        const surf = av.lastFootstepSurface ?? 'grass';
+        const dustCol =
+          surf === 'stone'
+            ? `rgba(245, 240, 224, ${(1 - dp) * 0.55})`
+            : surf === 'wood'
+              ? `rgba(253, 230, 138, ${(1 - dp) * 0.5})`
+              : `rgba(187, 247, 208, ${(1 - dp) * 0.52})`;
+        ctx.save();
+        ctx.fillStyle = dustCol;
+        ctx.beginPath();
+        ctx.arc(dPt.sx - 4 * cam.zoom, dPt.sy - dp * 8 * cam.zoom, (3 + dp * 4.5) * cam.zoom, 0, Math.PI * 2);
+        ctx.arc(dPt.sx + 5 * cam.zoom, dPt.sy - dp * 6 * cam.zoom, (2.2 + dp * 3.5) * cam.zoom, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
       const pt = gridToScreen(av.gx, av.gy, cam, viewW, viewH, 10);
       if (pt.sx >= -80 && pt.sx <= viewW + 80 && pt.sy >= -80 && pt.sy <= viewH + 80) {
-        const stride = this.reducedMotion ? 0 : Math.abs(Math.sin(av.walkPhase)) * 3.5 * cam.zoom;
+        const moving = Boolean(av.isMoving);
+        const strideSin = this.reducedMotion || !moving ? 0 : Math.abs(Math.sin(av.walkPhase));
+        const stride = strideSin * 4 * cam.zoom;
+        const leanRad = this.reducedMotion || !moving ? 0 : Math.sin(av.walkPhase) * 0.055;
+        const breathe = this.reducedMotion ? 0 : Math.sin(tSec * 2.8) * 0.022;
+        const sqX = 1 - strideSin * 0.04 + breathe;
+        const sqY = 1 + strideSin * 0.05 - breathe;
         const sp = this.sprites.get('staff_wizard');
         const sz = Math.max(38, 56 * cam.zoom);
+
         ctx.save();
-        this.drawRadialGlow(pt.sx, pt.sy, sz * 0.6, 'rgba(254, 240, 138, 0.48)');
+        this.drawRadialGlow(pt.sx, pt.sy, sz * 0.62, robe.auraColor);
+
+        // Lumos expanding spell ring when casting Chăm quanh
+        if (av.waveTimer > 0 && !this.reducedMotion) {
+          const wp = 1 - Math.min(1, av.waveTimer / 1.4);
+          ctx.save();
+          ctx.globalAlpha = (1 - wp) * 0.72;
+          ctx.strokeStyle = robe.wandGlow;
+          ctx.lineWidth = Math.max(2, 4 * cam.zoom * (1 - wp));
+          ctx.beginPath();
+          ctx.ellipse(pt.sx, pt.sy + 2 * cam.zoom, (24 + wp * 78) * cam.zoom, (12 + wp * 38) * cam.zoom, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
         ctx.fillStyle = 'rgba(20, 20, 28, 0.34)';
         ctx.beginPath();
         ctx.ellipse(pt.sx, pt.sy + 4 * cam.zoom, sz * 0.3, sz * 0.14, 0, 0, Math.PI * 2);
@@ -2011,18 +2181,27 @@ export class IsometricRenderer {
         if (sp) {
           ctx.save();
           ctx.translate(pt.sx, pt.sy - stride);
-          if (av.facingLeft) ctx.scale(-1, 1);
+          ctx.rotate(leanRad);
+          ctx.scale((av.facingLeft ? -1 : 1) * sqX, sqY);
           ctx.drawImage(sp, -sz * 0.5, -sz * 0.9, sz, sz);
+          // Wardrobe scarf / cloak emblem accent across shoulder
+          ctx.fillStyle = robe.scarfPrimary;
+          ctx.beginPath();
+          ctx.roundRect(-sz * 0.17, -sz * 0.44, sz * 0.34, sz * 0.09, sz * 0.04);
+          ctx.fill();
+          ctx.fillStyle = robe.scarfAccent;
+          ctx.fillRect(-sz * 0.1, -sz * 0.44, sz * 0.06, sz * 0.09);
+          ctx.fillRect(sz * 0.04, -sz * 0.44, sz * 0.06, sz * 0.09);
           ctx.restore();
         }
         ctx.font = `700 ${Math.max(10, Math.round(11 * cam.zoom))}px "Be Vietnam Pro", sans-serif`;
         ctx.textAlign = 'center';
         ctx.strokeStyle = '#1c130d';
         ctx.lineWidth = 3;
-        const label = av.waveTimer > 0 ? '✨ Lumos!' : 'Bạn';
-        ctx.strokeText(label, pt.sx, pt.sy - sz * 0.92);
-        ctx.fillStyle = '#fef08a';
-        ctx.fillText(label, pt.sx, pt.sy - sz * 0.92);
+        const label = av.waveTimer > 0 ? '✨ Lumos!' : `Bạn · ${robe.labelVi}`;
+        ctx.strokeText(label, pt.sx, pt.sy - sz * 0.94);
+        ctx.fillStyle = robe.wandGlow;
+        ctx.fillText(label, pt.sx, pt.sy - sz * 0.94);
         ctx.restore();
       }
     }

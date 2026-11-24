@@ -251,3 +251,56 @@ export const HEATMAP_CYCLE: Array<{ mode: HeatmapMode; label: string }> = [
   { mode: 'biome', label: 'Sinh Thái' },
 ];
 
+export interface ModalScrollSnapshot {
+  boxTop: number;
+  parentTop: number;
+  dialogTop: number;
+  innerScrollTops: Array<{ selector: string; top: number }>;
+}
+
+const MODAL_INNER_SCROLL_SELECTORS = ['.aaa-codex-scroll', '.feast-tier-list', '.nb-log-list'];
+
+export function captureModalScrollSnapshot(box: HTMLElement | null): ModalScrollSnapshot {
+  if (!box) {
+    return { boxTop: 0, parentTop: 0, dialogTop: 0, innerScrollTops: [] };
+  }
+  const parent = box.parentElement;
+  const dlg = box.closest('dialog');
+  const innerScrollTops: Array<{ selector: string; top: number }> = [];
+  for (const selector of MODAL_INNER_SCROLL_SELECTORS) {
+    const child = box.querySelector(selector) as HTMLElement | null;
+    if (child && child.scrollTop > 0) {
+      innerScrollTops.push({ selector, top: child.scrollTop });
+    }
+  }
+  return {
+    boxTop: box.scrollTop,
+    parentTop: parent ? parent.scrollTop : 0,
+    dialogTop: dlg ? dlg.scrollTop : 0,
+    innerScrollTops,
+  };
+}
+
+export function restoreModalScrollSnapshot(
+  box: HTMLElement | null,
+  snap: ModalScrollSnapshot,
+  reset = false
+): void {
+  if (!box) return;
+  const parent = box.parentElement;
+  const dlg = box.closest('dialog');
+  if (reset) {
+    box.scrollTop = 0;
+    if (parent) parent.scrollTop = 0;
+    if (dlg) dlg.scrollTop = 0;
+    return;
+  }
+  if (snap.boxTop > 0) box.scrollTop = snap.boxTop;
+  if (parent && snap.parentTop > 0) parent.scrollTop = snap.parentTop;
+  if (dlg && snap.dialogTop > 0) dlg.scrollTop = snap.dialogTop;
+  for (const entry of snap.innerScrollTops) {
+    const child = box.querySelector(entry.selector) as HTMLElement | null;
+    if (child) child.scrollTop = entry.top;
+  }
+}
+

@@ -632,12 +632,19 @@ export function economyGetBuildingProductionPerCycle(sim: ParkSimulation, b: Pla
     };
 }
 
-export function economyTickProductionToTimestamp(sim: ParkSimulation, now: number, silent = false): void {
+export function economyTickProductionToTimestamp(
+  sim: ParkSimulation,
+  now: number,
+  silent = false,
+  skipRoadsideStand = false
+): void {
     sim.tickMatch3Hearts(now);
     if (sim.isVisitingNeighbor) {
       return;
     }
-    tickRoadsideStandBuyers(sim, now, silent);
+    if (!skipRoadsideStand) {
+      tickRoadsideStandBuyers(sim, now, silent);
+    }
     // Check Workshop Brewing cauldron completion!
     const activeBrew = sim.state.supply?.activeBrew;
     if (activeBrew && now >= activeBrew.endsAt) {

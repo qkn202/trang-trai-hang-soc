@@ -1,11 +1,16 @@
-import { shareFarmPhoto } from '../hpvn/bridge';
+import { flushFarmSave, shareFarmPhoto } from '../hpvn/bridge';
 import { avatarGlyph } from '../hpvn/emoji';
 import {
   COOP_CRATE_MILESTONES,
   MAX_DAILY_COOP_CONTRIBUTIONS,
   POSTCARD_FRAME_THEME_META,
+  setServerCoopCrateSnapshot,
 } from '../sim/socialFestivalsAndAlmanac';
-import type { PostcardFrameThemeId } from '../types/game';
+import {
+  markCachedNeighborStandSlotSold,
+  sanitizeRoadsideStandState,
+} from '../sim/roadsideStandAndEvents';
+import type { PostcardFrameThemeId, RoadsideStandState } from '../types/game';
 // Tách tự động từ src/ui/hud.ts (P0 — tách god file theo domain).
 // Pattern delegation: hàm nhận `hud` để giữ nguyên state, không đổi hành vi.
 
@@ -78,6 +83,7 @@ import {
   PHOENIX_FORGE_GOLD_COST,
 } from '../sim/simulation';
 import {
+  cacheNeighborSocialExtras,
   canHelpFlooVisitRow,
   detectFreshFlooHelpersToast,
   FLOO_VISIT_UNLOCK_LEVEL,
@@ -150,8 +156,10 @@ import {
   BUILD_HUD_CATEGORIES,
   HEATMAP_CYCLE,
   InspectSelection,
+  captureModalScrollSnapshot,
   clearBuildToolModes,
   escapeHtml,
+  restoreModalScrollSnapshot,
 } from './hudShared';
 import type { GameHUD } from './hud';
 
@@ -624,6 +632,30 @@ export function socialUiEnterFlooMemberVisitFromHud(
           if (Array.isArray(rawSave.unlockedZones) && rawSave.unlockedZones.length > 0) {
             synced[0].valleyUnlockedZones = rawSave.unlockedZones as ZoneId[];
           }
+          const rawStand =
+            rawSave.roadsideStand && typeof rawSave.roadsideStand === 'object'
+              ? sanitizeRoadsideStandState(rawSave.roadsideStand as Partial<RoadsideStandState>)
+              : undefined;
+          const rawNeighborSocial =
+            rawSave.neighborSocial && typeof rawSave.neighborSocial === 'object'
+              ? (rawSave.neighborSocial as Record<string, unknown>)
+              : null;
+          const rawCrate =
+            rawNeighborSocial?.coopSupplyCrate &&
+            typeof rawNeighborSocial.coopSupplyCrate === 'object'
+              ? (rawNeighborSocial.coopSupplyCrate as {
+                  weekKey?: unknown;
+                  contributedPoints?: unknown;
+                })
+              : null;
+          cacheNeighborSocialExtras(synced[0], {
+            roadsideStand: rawStand,
+            coopWeekKey: typeof rawCrate?.weekKey === 'string' ? rawCrate.weekKey : undefined,
+            coopPoints:
+              typeof rawCrate?.contributedPoints === 'number'
+                ? rawCrate.contributedPoints
+                : undefined,
+          });
         }
       }
     } catch {
@@ -944,9 +976,21 @@ export function socialUiRenderVisitorDockBar(hud: GameHUD): void {
         <button id="btnVisitorLeaveGift" type="button" class="brass-btn" ${(social.dailyMysterySentIds ?? []).includes(nb.id) ? 'disabled' : ''} title="Giấu Rương Quà Bất Ngờ tặng chủ vườn (+2 🍀)">
           ${(social.dailyMysterySentIds ?? []).includes(nb.id) ? '✓ Đã tặng' : '🎁 Giấu quà'}
         </button>
-        <button id="btnVisitorBuyStand" type="button" class="brass-btn" ${(hud.sim.homeStateWhileVisiting ?? hud.sim.state).roadsideStand?.dailyFriendBoughtIds?.includes(nb.id) ? 'disabled' : ''} title="Mua 1 giỏ nông sản ưu đãi từ Sạp Đầu Ngõ của bạn">
-          ${(hud.sim.homeStateWhileVisiting ?? hud.sim.state).roadsideStand?.dailyFriendBoughtIds?.includes(nb.id) ? '✓ Sạp' : '🧺 Sạp'}
-        </button>
+        ${(() => {
+          const standBought = Boolean(
+            (hud.sim.homeStateWhileVisiting ?? hud.sim.state).roadsideStand?.dailyFriendBoughtIds?.includes(
+              nb.id
+            )
+          );
+          const standOffer = hud.sim.getNeighborRoadsideOffer(nb);
+          const standMeta = getFarmItemMeta(standOffer.itemId);
+          const standTitle = standOffer.isRealFriendListing
+            ? `Sạp thật của ${nb.name}: ${standOffer.qty} ${standMeta.name} (${standOffer.totalSickle} Sickle)`
+            : `Mua ${standOffer.qty} ${standMeta.name} ưu đãi từ Sạp Đầu Ngõ (${standOffer.totalSickle} Sickle)`;
+          return `<button id="btnVisitorBuyStand" type="button" class="brass-btn ${!standBought && standOffer.isRealFriendListing ? 'gold-cta' : ''}" ${standBought ? 'disabled' : ''} title="${escapeHtml(standTitle)}">
+          ${standBought ? '✓ Sạp' : standOffer.isRealFriendListing ? `🧺 Sạp (${standOffer.qty})` : '🧺 Sạp'}
+        </button>`;
+        })()}
         ${
           coOpPendingCount > 0
             ? `<button id="btnVisitorCoopBook" type="button" class="brass-btn gold-cta" title="Đóng Đơn Cú & Giải Cứu Màn Khó">📦 (${coOpPendingCount})</button>`
@@ -1116,6 +1160,38 @@ export function socialUiRenderVisitorDockBar(hud: GameHUD): void {
     socialUiExitVisitFromHud(hud);
   });
   bar.querySelector('#btnVisitorBuyStand')?.addEventListener('click', () => {
+    const buyBtn = bar.querySelector('#btnVisitorBuyStand') as HTMLButtonElement | null;
+    const offer = hud.sim.getNeighborRoadsideOffer(nb);
+    if (nb.remoteUserId && offer.isRealFriendListing && typeof offer.slotIndex === 'number') {
+      const slotIdx = offer.slotIndex;
+      if (buyBtn) buyBtn.disabled = true;
+      const reqId = `stand_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      void onlineServices.authoritativeClient
+        .buyRoadsideStand({
+          hostUid: nb.remoteUserId,
+          slotIndex: slotIdx,
+          itemId: offer.itemId,
+          qty: offer.qty,
+          totalSickle: offer.totalSickle,
+          requestId: reqId,
+        })
+        .then((rpc) => {
+          if (rpc.status === 'refused') {
+            markCachedNeighborStandSlotSold(nb, slotIdx, 'Bạn HPVN');
+            hud.showToast(`🧺 ${rpc.msg}`, '🧺');
+            hud.refreshAll();
+            return;
+          }
+          const res = hud.sim.buyVisitedNeighborRoadsideOffer({
+            atomicServerVerified: rpc.status === 'ok',
+            expectedSlotIndex: slotIdx,
+          });
+          if (!res.ok) hud.showToast(res.msg, '🧺');
+          else if (rpc.status === 'ok') void flushFarmSave();
+          hud.refreshAll();
+        });
+      return;
+    }
     const res = hud.sim.buyVisitedNeighborRoadsideOffer();
     if (!res.ok) hud.showToast(res.msg, '🧺');
     hud.refreshAll();
@@ -1130,6 +1206,8 @@ export function socialUiRenderVisitorDockBar(hud: GameHUD): void {
 export function socialUiRenderNeighborDialog(hud: GameHUD): void {
   const box = hud.root.querySelector('#neighborDialogContent') as HTMLElement | null;
   if (!box) return;
+  const prevNbTab = box.dataset.activeNbTab ?? '';
+  const scrollSnap = captureModalScrollSnapshot(box);
 
   const social = hud.sim.ensureNeighborSocial();
   const visitingNb = hud.sim.getActiveVisitingNeighbor();
@@ -1555,10 +1633,10 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
         </section>
 
         <section class="nb-panel-card">
-          <h3 class="nb-section-title">Kiện Hàng Tương Trợ Chung (${hud.sim.ensureCoopSupplyCrate().contributedPoints}/500)</h3>
           ${(() => {
             const coop = hud.sim.ensureCoopSupplyCrate();
-            const coopPct = Math.min(100, Math.round((coop.contributedPoints / 500) * 100));
+            const coopSummary = hud.sim.getNeighborhoodCoopSummary();
+            const coopPct = Math.min(100, Math.round((coopSummary.totalPoints / 500) * 100));
             const contribCandidates: FarmItemId[] = [
               'ottery_wheat',
               'honey_carrot',
@@ -1579,16 +1657,35 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
               .join('');
             const msBtns = COOP_CRATE_MILESTONES.map((ms) => {
               const claimed = coop.claimedMilestones.includes(ms.step);
-              const canClaim = !claimed && (hud.sim.state.sandboxMode || coop.contributedPoints >= ms.target);
+              const canClaim = !claimed && (hud.sim.state.sandboxMode || coopSummary.totalPoints >= ms.target);
               return `<button type="button" data-coop-milestone="${ms.step}" ${canClaim ? '' : 'disabled'} class="brass-btn ${canClaim ? 'gold-cta' : ''}" style="font-size:12px;padding:4px 8px;">${claimed ? `✓ Mốc ${ms.step}` : `🎁 Mốc ${ms.step} (${ms.target}đ)`}</button>`;
             }).join('');
+            const syncedRosterHtml =
+              coopSummary.syncedContributors.length > 0
+                ? `<div class="hs-coop-roster">
+                    <span class="hs-coop-roster-label">${
+                      coopSummary.isServerAuthoritative
+                        ? `✨ Quỹ Liên Minh HPVN (+${coopSummary.syncedFriendPoints}đ):`
+                        : `🔥 Bạn Floo tuần này (+${coopSummary.syncedFriendPoints}đ):`
+                    }</span>
+                    ${coopSummary.syncedContributors
+                      .slice(0, 6)
+                      .map(
+                        (c) =>
+                          `<span class="hs-coop-chip">${escapeHtml(avatarGlyph(c.avatarEmoji || '🦉', c.displayName))} <span class="hs-raw">${escapeHtml(c.displayName)}</span> +${c.points}đ</span>`
+                      )
+                      .join('')}
+                  </div>`
+                : `<div class="hs-coop-roster is-empty">Ghé thăm vườn bạn qua Cổng Floo để cộng dồn điểm Kiện Hàng tuần này cùng xóm!</div>`;
             return `
+              <h3 class="nb-section-title">Kiện Hàng Tương Trợ Chung (${coopSummary.totalPoints}/500)</h3>
               <div class="quest-bar floo-lv-bar">
                 <div class="quest-bar-fill" style="width:${coopPct}%"></div>
               </div>
               <div style="font-size:12px;color:var(--ink-soft);margin:4px 0 6px;">
-                Đã góp hôm nay: ${coop.playerContributedToday}/${MAX_DAILY_COOP_CONTRIBUTIONS} lượt · Mỗi lượt +1 🍀 &amp; điểm mở 3 rương chung
+                Đã góp hôm nay: ${coop.playerContributedToday}/${MAX_DAILY_COOP_CONTRIBUTIONS} lượt · Vườn nhà ${coopSummary.localPoints}đ${coopSummary.syncedFriendPoints > 0 ? ` + Bạn Floo ${coopSummary.syncedFriendPoints}đ` : ''}
               </div>
+              ${syncedRosterHtml}
               <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${msBtns}</div>
               <div style="display:flex;flex-wrap:wrap;gap:6px;">${contribBtns}</div>
             `;
@@ -1664,6 +1761,8 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
     ${tabsHtml}
     ${bodyHtml}
   `;
+  box.dataset.activeNbTab = hud.activeNeighborTab;
+  restoreModalScrollSnapshot(box, scrollSnap, Boolean(prevNbTab && prevNbTab !== hud.activeNeighborTab));
 
   wireAvatarImgFallbacks(box);
 
@@ -1711,11 +1810,57 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
     socialUiRenderNeighborDialog(hud);
   });
 
+  if (hud.activeNeighborTab === 'chest') {
+    const coopWeekKey = hud.sim.ensureCoopSupplyCrate().weekKey;
+    const lastSyncAt = Number(box.dataset.coopSyncedAt ?? 0);
+    if (Date.now() - lastSyncAt > 30_000) {
+      box.dataset.coopSyncedAt = String(Date.now());
+      void onlineServices.authoritativeClient.fetchCoopCrate({ weekKey: coopWeekKey }).then((rpc) => {
+        if (rpc.status !== 'ok') return;
+        setServerCoopCrateSnapshot({
+          weekKey: rpc.weekKey,
+          totalPoints: rpc.totalPoints,
+          contributors: rpc.contributors,
+          syncedAt: Date.now(),
+        });
+        const dlg = hud.root.querySelector('#neighborDialog') as HTMLDialogElement | null;
+        if (dlg?.open && hud.activeNeighborTab === 'chest') {
+          socialUiRenderNeighborDialog(hud);
+        }
+      });
+    }
+  }
+
   box.querySelectorAll<HTMLButtonElement>('[data-coop-contrib]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const iid = btn.dataset.coopContrib as FarmItemId;
       const res = hud.sim.contributeToCoopSupplyCrate(iid, 2);
       hud.showToast(res.msg, res.ok ? '📦' : '🧺');
+      if (res.ok && res.addedPoints > 0) {
+        const weekKey = hud.sim.ensureCoopSupplyCrate().weekKey;
+        const reqId = `coop_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        void onlineServices.authoritativeClient
+          .contributeCoopCrate({
+            weekKey,
+            itemId: iid,
+            qty: 2,
+            points: res.addedPoints,
+            requestId: reqId,
+          })
+          .then((rpc) => {
+            if (rpc.status !== 'ok') return;
+            setServerCoopCrateSnapshot({
+              weekKey: rpc.weekKey,
+              totalPoints: rpc.totalPoints,
+              contributors: rpc.contributors,
+              syncedAt: Date.now(),
+            });
+            const dlg = hud.root.querySelector('#neighborDialog') as HTMLDialogElement | null;
+            if (dlg?.open && hud.activeNeighborTab === 'chest') {
+              socialUiRenderNeighborDialog(hud);
+            }
+          });
+      }
       hud.refreshAll();
       socialUiRenderNeighborDialog(hud);
     });

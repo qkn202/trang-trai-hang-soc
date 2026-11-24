@@ -886,6 +886,8 @@ export function headerRefreshFloatingBanner(hud: GameHUD): void {
       txt.textContent = '🧙 Đi dạo · Chạm đường hoặc WASD';
       btnSec.textContent = '🪄 Chăm quanh';
       btnSec.classList.remove('hidden');
+      btnSwap.textContent = '✨ Đổi áo';
+      btnSwap.classList.remove('hidden');
       btnExit.textContent = '✕';
       return;
     }

@@ -121,8 +121,10 @@ import {
   BUILD_HUD_CATEGORIES,
   HEATMAP_CYCLE,
   InspectSelection,
+  captureModalScrollSnapshot,
   clearBuildToolModes,
   escapeHtml,
+  restoreModalScrollSnapshot,
 } from "./hudShared";
 import {
   computeRoadsideUnitPrice,
@@ -808,9 +810,318 @@ export function farmUiUpdateWorkshopLiveTimers(hud: GameHUD): void {
     }
 }
 
+const workshopDelegatedHudMap = new WeakMap<HTMLElement, GameHUD>();
+
+function ensureWorkshopDelegatedEvents(box: HTMLElement, hud: GameHUD): void {
+  workshopDelegatedHudMap.set(box, hud);
+  if (box.dataset.wsDelegated === '1') return;
+  box.dataset.wsDelegated = '1';
+
+  box.addEventListener('change', (ev) => {
+    const activeHud = workshopDelegatedHudMap.get(box);
+    if (!activeHud) return;
+    const target = ev.target as HTMLElement | null;
+    if (target && target.id === 'selStandItem') {
+      activeHud.selectedStandItemId = (target as HTMLSelectElement).value as FarmItemId;
+      farmUiRenderWorkshopDialog(activeHud);
+    }
+  });
+
+  box.addEventListener('click', (ev) => {
+    const activeHud = workshopDelegatedHudMap.get(box);
+    if (!activeHud) return;
+    const rawTarget = ev.target as HTMLElement | null;
+    const btn = rawTarget?.closest('button') as HTMLButtonElement | null;
+    if (!btn || btn.disabled) return;
+    const st = activeHud.sim.state;
+
+    if (btn.dataset.pouchHint) {
+      activeHud.showToast(btn.dataset.pouchHint, btn.dataset.pouchIcon || '✨');
+      return;
+    }
+    if (btn.dataset.wsTab) {
+      activeHud.activeWorkshopTab = btn.dataset.wsTab as typeof activeHud.activeWorkshopTab;
+      farmUiRenderWorkshopDialog(activeHud);
+      const activeBtn = box.querySelector<HTMLButtonElement>(
+        `[data-ws-tab="${activeHud.activeWorkshopTab}"]`
+      );
+      activeBtn?.scrollIntoView?.({
+        block: 'nearest',
+        inline: 'nearest',
+        container: 'nearest',
+      } as ScrollIntoViewOptions);
+      return;
+    }
+    if (btn.dataset.sellSpotlight) {
+      const kind = btn.dataset.sellSpotlight === 'good' ? 'good' : 'crop';
+      const res = activeHud.sim.sellMarketSpotlightLot(kind);
+      if (!res.ok) activeHud.showToast(res.msg, '🎪');
+      farmUiRenderWorkshopDialog(activeHud);
+      activeHud.refreshHeader();
+      return;
+    }
+    if (btn.dataset.claimMarketDeal) {
+      const res = activeHud.sim.fulfillMarketFairDeal(btn.dataset.claimMarketDeal);
+      if (!res.ok) activeHud.showToast(res.msg, '🎪');
+      farmUiRenderWorkshopDialog(activeHud);
+      activeHud.refreshHeader();
+      return;
+    }
+    if (btn.id === 'btnRerollMarketFair') {
+      const res = activeHud.sim.rerollMarketFairDeals();
+      if (!res.ok) activeHud.showToast(res.msg, '🎪');
+      farmUiRenderWorkshopDialog(activeHud);
+      return;
+    }
+    if (btn.id === 'btnUpgradeFarmBarn') {
+      const res = activeHud.sim.upgradeFarmBarn();
+      activeHud.showToast(res.msg, res.ok ? '🏡' : '🔌');
+      farmUiRenderWorkshopDialog(activeHud);
+      activeHud.refreshHeader();
+      return;
+    }
+    if (btn.id === 'btnCraftPhoenixTalisman') {
+      const res = activeHud.sim.craftPhoenixTalismanFromBarn();
+      activeHud.showToast(res.msg, res.ok ? '🔥' : '🧺');
+      farmUiRenderWorkshopDialog(activeHud);
+      activeHud.refreshHeader();
+      return;
+    }
+    if (btn.dataset.sellFarmItem) {
+      const res = activeHud.sim.sellFarmItemFromBarn(btn.dataset.sellFarmItem as FarmItemId, 1);
+      if (!res.ok) activeHud.showToast(res.msg, '🧺');
+      farmUiRenderWorkshopDialog(activeHud);
+      activeHud.refreshHeader();
+      return;
+    }
+    if (btn.id === 'btnWsQuickHerb') {
+      const res = activeHud.sim.quickHarvestHerbs();
+      activeHud.showToast(res.msg, res.ok ? '🌿' : '⏳');
+      farmUiRenderWorkshopDialog(activeHud);
+      return;
+    }
+    if (btn.id === 'btnWsSpeedBrew') {
+      if (activeHud.sim.speedUpBrewing()) farmUiRenderWorkshopDialog(activeHud);
+      return;
+    }
+    if (btn.dataset.brewGood) {
+      const res = activeHud.sim.startBrewing(btn.dataset.brewGood as CraftedGoodId);
+      activeHud.showToast(res.msg, res.ok ? '🧪' : '⚠️');
+      farmUiRenderWorkshopDialog(activeHud);
+      return;
+    }
+    if (btn.dataset.useGood) {
+      const gid = btn.dataset.useGood as CraftedGoodId;
+      const res = activeHud.sim.useCraftedGood(gid);
+      if (!res.ok) {
+        activeHud.showToast(res.msg, '⚠️');
+      } else if (gid === 'dragon_firework') {
+        (activeHud.root.querySelector('#workshopDialog') as HTMLDialogElement)?.close();
+      } else {
+        farmUiRenderWorkshopDialog(activeHud);
+      }
+      return;
+    }
+    if (btn.dataset.fulfillCrate) {
+      const res = activeHud.sim.fulfillCargoCrate(btn.dataset.fulfillCrate);
+      activeHud.showToast(res.msg, res.ok ? '📦' : '⚠️');
+      farmUiRenderWorkshopDialog(activeHud);
+      activeHud.refreshHeader();
+      return;
+    }
+    if (btn.dataset.helpCargoCrate) {
+      const res = activeHud.sim.requestCargoCrateHelp(btn.dataset.helpCargoCrate);
+      activeHud.showToast(res.msg, res.ok ? '🤝' : '🚂');
+      farmUiRenderWorkshopDialog(activeHud);
+      activeHud.refreshHeader();
+      return;
+    }
+    if (btn.dataset.gotoBrew !== undefined) {
+      activeHud.activeWorkshopTab = 'brew';
+      farmUiRenderWorkshopDialog(activeHud);
+      return;
+    }
+    if (btn.dataset.jumpCargoItem) {
+      const itemId = btn.dataset.jumpCargoItem as FarmItemId;
+      (activeHud.root.querySelector('#workshopDialog') as HTMLDialogElement | null)?.close();
+      activeHud.jumpToMissingFarmItem(itemId);
+      return;
+    }
+    if (btn.dataset.activateHelper) {
+      const mode = btn.dataset.activateHelper as 'free_daily' | 'feast_points' | 'sickle';
+      const res = activeHud.sim.activateFarmHelper(mode);
+      activeHud.showToast(res.msg, res.ok ? '🧙' : '🪙');
+      farmUiRenderWorkshopDialog(activeHud);
+      activeHud.refreshHeader();
+      return;
+    }
+    if (btn.dataset.standTier) {
+      activeHud.selectedStandPriceTier = btn.dataset.standTier as RoadsidePriceTier;
+      farmUiRenderWorkshopDialog(activeHud);
+      return;
+    }
+    if (btn.dataset.standList) {
+      const slotIdx = Number(btn.dataset.standList);
+      const have = activeHud.sim.getFarmItemCount(activeHud.selectedStandItemId);
+      const qty = Math.max(1, Math.min(3, st.sandboxMode ? 2 : have));
+      const res = activeHud.sim.listOnRoadsideStand(
+        slotIdx,
+        activeHud.selectedStandItemId,
+        qty,
+        activeHud.selectedStandPriceTier
+      );
+      activeHud.showToast(res.msg, res.ok ? '🧺' : '⚠️');
+      farmUiRenderWorkshopDialog(activeHud);
+      activeHud.refreshHeader();
+      return;
+    }
+    if (btn.dataset.standClaim) {
+      const slotIdx = Number(btn.dataset.standClaim);
+      const res = activeHud.sim.claimRoadsideStandSlot(slotIdx);
+      activeHud.showToast(res.msg, res.ok ? '🪙' : '🧺');
+      farmUiRenderWorkshopDialog(activeHud);
+      activeHud.refreshHeader();
+    }
+  });
+}
+
+export function patchWorkshopBarnInPlace(box: HTMLElement, hud: GameHUD): boolean {
+  if (hud.activeWorkshopTab !== 'barn' || box.dataset.activeWsTab !== 'barn') return false;
+  if (!box.querySelector('[data-barn-root="1"]')) return false;
+
+  const st = hud.sim.state;
+  const now = Date.now();
+  const barn = hud.sim.ensureFarmBarn();
+  const barnUsed = hud.sim.getBarnTotalUsed();
+  const fair = hud.sim.ensureMarketFairState();
+  const compostCount = Math.max(0, Math.floor(st.herbalCompost ?? 0));
+  const spotlightLotsLeft = Math.max(0, 3 - fair.spotlightLotsSold);
+  const marketReadyDeals = fair.deals.filter(
+    (d) => !d.claimed && (st.sandboxMode || hud.sim.getFarmItemCount(d.inputItemId) >= d.inputQty)
+  ).length;
+  const canSellAnySpotlight =
+    spotlightLotsLeft > 0 &&
+    (st.sandboxMode ||
+      hud.sim.getFarmItemCount(fair.spotlightCropId) >= 2 ||
+      hud.sim.getFarmItemCount(fair.spotlightGoodId) >= 1);
+  const marketBadge = marketReadyDeals + (canSellAnySpotlight ? 1 : 0);
+  const stand = hud.sim.ensureRoadsideStand();
+  const standSoldCount = stand.slots.filter((s) => Boolean(s.itemId && s.soldAt)).length;
+  const standListedCount = stand.slots.filter((s) => Boolean(s.itemId)).length;
+  const cratesDone = st.supply.cargoCrates.filter((c) => c.fulfilled).length;
+  const activeSynCount = hud.sim.activeSynergies.activeIds.size;
+
+  const setText = (sel: string, val: string) => {
+    const el = box.querySelector(sel);
+    if (el && el.textContent !== val) el.textContent = val;
+  };
+
+  setText('#wsTabBarn .nb-tab-badge', `${barnUsed}/${barn.capacity}`);
+  setText('#wsTabStand .nb-tab-badge', standSoldCount > 0 ? `${standSoldCount} xong` : `${standListedCount}/6`);
+  setText('#wsTabMarket .nb-tab-badge', marketBadge > 0 ? `${marketBadge} sẵn` : `${spotlightLotsLeft}/3`);
+  setText('#wsTabCargo .nb-tab-badge', `${cratesDone}/3`);
+  setText('#wsTabSynergy .nb-tab-badge', `${activeSynCount}/12`);
+
+  const capPct = Math.min(100, Math.round((barnUsed / Math.max(1, barn.capacity)) * 100));
+  const upgInfo = hud.sim.getBarnUpgradeCostInfo();
+  const upgBtnLabel = st.sandboxMode
+    ? '+20 Ô (Miễn phí)'
+    : upgInfo.hasPlug
+      ? `+20 Ô (1 🔌 + ${upgInfo.baseGoldCost} Sickle)`
+      : `+20 Ô (${upgInfo.effectiveGoldCost} Sickle)`;
+  const plugStatusLabel = upgInfo.hasPlug
+    ? `🔌 ×${upgInfo.plugsInBarn}`
+    : `🔌 ×0 (bù +${upgInfo.plugShortageBuyout} Sickle)`;
+
+  setText('[data-barn-cap-label]', `🏡 Kho Đỏ (${barnUsed}/${barn.capacity})`);
+  setText('[data-barn-sub-meta]', `🦉 ${barn.ordersDelivered} · ${plugStatusLabel}`);
+  const barFill = box.querySelector('[data-barn-cap-bar]') as HTMLElement | null;
+  if (barFill) barFill.style.width = `${capPct}%`;
+  const upgBtn = box.querySelector('#btnUpgradeFarmBarn') as HTMLButtonElement | null;
+  if (upgBtn) {
+    upgBtn.disabled = !upgInfo.canAfford;
+    upgBtn.textContent = upgBtnLabel;
+    upgBtn.style.opacity = upgInfo.canAfford ? '' : '0.55';
+    upgBtn.style.cursor = upgInfo.canAfford ? '' : 'not-allowed';
+  }
+
+  const talCount = hud.sim.getPhoenixTalismanCount();
+  const talDaily = hud.sim.getPhoenixTalismanDailyStatus();
+  const craftGood = hud.sim.getCraftablePhoenixBarnGood();
+  const craftMeta = craftGood ? getFarmItemMeta(craftGood) : null;
+  const canForgeTalisman =
+    st.sandboxMode ||
+    (talCount < MAX_PHOENIX_TALISMANS && Boolean(craftGood) && st.galleons >= PHOENIX_FORGE_GOLD_COST);
+
+  const pouchQtyMap: Record<string, string> = {
+    dew: st.sandboxMode ? '∞' : `×${Math.max(0, Math.floor(st.morningDewPhials ?? 0))}`,
+    compost: st.sandboxMode ? '∞' : `×${compostCount}`,
+    sand: st.sandboxMode ? '∞' : `×${Math.max(0, Math.floor(st.timeSand ?? 0))}`,
+    plug: st.sandboxMode ? '∞' : `×${upgInfo.plugsInBarn}`,
+    talisman: st.sandboxMode ? '∞' : `${talCount}/${MAX_PHOENIX_TALISMANS}`,
+    tokens: `×${Math.max(0, Math.floor(hud.sim.ensureNeighborSocial().friendshipTokens ?? 0))}`,
+  };
+  for (const [pid, qtyText] of Object.entries(pouchQtyMap)) {
+    setText(`[data-pouch-id="${pid}"] [data-pouch-qty]`, qtyText);
+  }
+
+  const helperStatusEl = box.querySelector('[data-helper-status]') as HTMLElement | null;
+  if (helperStatusEl) {
+    if (barn.farmHelperEndsAt && barn.farmHelperEndsAt > now) {
+      helperStatusEl.innerHTML = `<span style="color:#15803d;">Đang trực (${formatDurationCompactVi(Math.ceil((barn.farmHelperEndsAt - now) / 1000))})</span>`;
+    } else {
+      helperStatusEl.textContent = 'Tự động tưới luống mới & gom thành phẩm xưởng vào Kho Đỏ';
+    }
+  }
+  const freeHelperBtn = box.querySelector('[data-activate-helper="free_daily"]') as HTMLButtonElement | null;
+  if (freeHelperBtn && barn.farmHelperFreeDayKey === getVietnamCalendarKey()) {
+    freeHelperBtn.remove();
+  }
+
+  setText(
+    '[data-talisman-title]',
+    `🔥 Bùa Phượng Hoàng (${st.sandboxMode ? '∞' : `${talCount}/${MAX_PHOENIX_TALISMANS}`})`
+  );
+  setText('[data-talisman-sub]', `Hôm nay: ${talDaily.usedCount}/${talDaily.maxDaily} môn`);
+  const forgeBtn = box.querySelector('#btnCraftPhoenixTalisman') as HTMLButtonElement | null;
+  if (forgeBtn) {
+    forgeBtn.disabled = !canForgeTalisman;
+    forgeBtn.textContent = `🔥 Rèn +1 (${craftMeta ? `1 ${craftMeta.name}` : '1 Đặc sản'} + ${PHOENIX_FORGE_GOLD_COST} Sickle)`;
+  }
+
+  box.querySelectorAll<HTMLElement>('[data-barn-card]').forEach((card) => {
+    const id = card.dataset.barnCard as FarmItemId;
+    const qty = hud.sim.getFarmItemCount(id);
+    const hasStock = qty > 0 || st.sandboxMode;
+    card.classList.toggle('in-stock', qty > 0);
+    card.classList.toggle('empty', qty <= 0);
+    const qtyEl = card.querySelector('[data-barn-qty]');
+    const nextQtyText = `×${st.sandboxMode ? '∞' : qty}`;
+    if (qtyEl && qtyEl.textContent !== nextQtyText) {
+      qtyEl.textContent = nextQtyText;
+      card.classList.remove('is-patched-pop');
+      void card.offsetWidth;
+      card.classList.add('is-patched-pop');
+    }
+    const sellBtn = card.querySelector<HTMLButtonElement>('[data-sell-farm-item]');
+    if (sellBtn) {
+      sellBtn.disabled = !hasStock;
+      sellBtn.classList.toggle('gold-cta', hasStock);
+    }
+  });
+
+  return true;
+}
+
 export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
     const box = hud.root.querySelector('#workshopDialogContent') as HTMLElement | null;
     if (!box) return;
+    ensureWorkshopDelegatedEvents(box, hud);
+    if (patchWorkshopBarnInPlace(box, hud)) {
+      return;
+    }
+    const prevTab = box.dataset.activeWsTab ?? '';
+    const scrollSnap = captureModalScrollSnapshot(box);
     const st = hud.sim.state;
     const now = Date.now();
     hud.lastWsBrewId = st.supply.activeBrew?.goodId ?? null;
@@ -881,10 +1192,10 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
             const qty = hud.sim.getFarmItemCount(id);
             const isSpotlight = hud.sim.isItemMarketSpotlight(id);
             return `
-              <div class="barn-stock-card ${qty > 0 ? 'in-stock' : 'empty'}">
+              <div class="barn-stock-card ${qty > 0 ? 'in-stock' : 'empty'}" data-barn-card="${id}">
                 <img src="${meta.iconSrc}" alt="${escapeHtml(meta.name)}" class="barn-stock-img" />
                 <div class="barn-stock-name">${escapeHtml(meta.name)} ${isSpotlight ? '<span class="owl-spotlight-tag">🎪 Tiêu điểm</span>' : ''}</div>
-                <div class="barn-stock-qty"><strong>×${st.sandboxMode ? '∞' : qty}</strong></div>
+                <div class="barn-stock-qty"><strong data-barn-qty>×${st.sandboxMode ? '∞' : qty}</strong></div>
                 <button
                   type="button"
                   class="brass-btn ${qty > 0 || st.sandboxMode ? 'gold-cta' : ''}"
@@ -909,13 +1220,61 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
           Boolean(craftGood) &&
           st.galleons >= PHOENIX_FORGE_GOLD_COST);
 
+      const dewCount = Math.max(0, Math.floor(st.morningDewPhials ?? 0));
+      const sandCount = Math.max(0, Math.floor(st.timeSand ?? 0));
+      const friendTokens = Math.max(0, Math.floor(hud.sim.ensureNeighborSocial().friendshipTokens ?? 0));
+      const utilityPouchChips: Array<{ id: string; icon: string; label: string; qty: string; hint: string }> = [
+        {
+          id: 'dew',
+          icon: '🧪',
+          label: 'Sương Mai',
+          qty: st.sandboxMode ? '∞' : `×${dewCount}`,
+          hint: '🧪 Bình Sương Mai giữ chuỗi & thu 2× mùa vụ — kiếm từ Hộp Mười Vụ, Hộp Quà Đồi Sương, Quà Dân Làng, Mốc Lễ Hội & Bách Khoa!',
+        },
+        {
+          id: 'compost',
+          icon: '🌿',
+          label: 'Phân Ủ',
+          qty: st.sandboxMode ? '∞' : `×${compostCount}`,
+          hint: '🌿 Phân Ủ Thảo Dược giảm 50% thời gian chín ruộng — kiếm từ Sạp Tiêu Điểm, Đơn Cú Tiêu Điểm, Hộp Mười Vụ & Kiện Hàng Chung!',
+        },
+        {
+          id: 'sand',
+          icon: '⏳',
+          label: 'Cát',
+          qty: st.sandboxMode ? '∞' : `×${sandCount}`,
+          hint: '⏳ Cát Xoay Thời Gian rút ngắn giờ chờ xưởng & xây dựng — kiếm từ Đại Tiệc, Chợ Phiên, Thành Tựu & Kiện Hàng Chung!',
+        },
+        {
+          id: 'plug',
+          icon: '🔌',
+          label: 'Phích Cắm',
+          qty: st.sandboxMode ? '∞' : `×${upgInfo.plugsInBarn}`,
+          hint: '🔌 Phích Cắm Muggle mở rộng sức chứa Kho Đỏ — kiếm từ Đơn Cú, Kỷ Vật Ông Arthur & Thương Vụ Chợ Phiên!',
+        },
+        {
+          id: 'talisman',
+          icon: '🔥',
+          label: 'Bùa',
+          qty: st.sandboxMode ? '∞' : `${talCount}/${MAX_PHOENIX_TALISMANS}`,
+          hint: '🔥 Bùa Phượng Hoàng vượt nhanh 1 màn khảo thí — rèn ngay tại Kho Đỏ, nhận từ Đơn Cú, Rương Tình Bạn & Điểm Danh 7 Ngày!',
+        },
+        {
+          id: 'tokens',
+          icon: '🍀',
+          label: 'Tình Bạn',
+          qty: `×${friendTokens}`,
+          hint: '🍀 Huy Hiệu Tình Bạn (gom 10 cái mở Rương Tình Bạn) — kiếm từ Thăm Bạn Cổng Floo, Thả Tim, Kiện Hàng Chung & Bưu Thiếp!',
+        },
+      ];
+
       bodyHtml = `
-        <div class="barn-header-card">
+        <div class="barn-header-card" data-barn-root="1">
           <div class="barn-head-row" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
             <div class="barn-head-text">
-              <div class="hs-card-title">🏡 Kho Đỏ (${barnUsed}/${barn.capacity})</div>
-              <div style="font-size:12px;font-weight:700;opacity:0.86;">
-                🦉 ${barn.ordersDelivered} · ${plugStatusLabel} · 🌿 Phân Ủ: ×${st.sandboxMode ? '∞' : compostCount}
+              <div class="hs-card-title" data-barn-cap-label>🏡 Kho Đỏ (${barnUsed}/${barn.capacity})</div>
+              <div data-barn-sub-meta style="font-size:12px;font-weight:700;opacity:0.86;">
+                🦉 ${barn.ordersDelivered} · ${plugStatusLabel}
               </div>
             </div>
             <button
@@ -929,7 +1288,33 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
             </button>
           </div>
           <div class="quest-bar" style="height:8px;margin-top:8px;">
-            <div class="quest-bar-fill" style="width:${capPct}%"></div>
+            <div class="quest-bar-fill" data-barn-cap-bar style="width:${capPct}%"></div>
+          </div>
+        </div>
+
+        <div class="hs-utility-pouch" role="group" aria-label="Túi Vật Tư Phép Thuật — bấm từng món xem cách kiếm">
+          <div class="hs-utility-pouch-head">
+            <span>✨ Túi Vật Tư Phép Thuật</span>
+            <span class="hs-utility-pouch-sub">Chạm từng món xem cách kiếm</span>
+          </div>
+          <div class="hs-utility-pouch-grid">
+            ${utilityPouchChips
+              .map(
+                (chip) => `
+                <button
+                  type="button"
+                  class="hs-pouch-chip"
+                  data-pouch-id="${chip.id}"
+                  data-pouch-hint="${escapeHtml(chip.hint)}"
+                  data-pouch-icon="${chip.icon}"
+                  title="${escapeHtml(chip.hint)}"
+                >
+                  <span class="hs-pouch-ico" aria-hidden="true">${chip.icon}</span>
+                  <span class="hs-pouch-name">${chip.label}</span>
+                  <strong class="hs-pouch-qty" data-pouch-qty>${chip.qty}</strong>
+                </button>`
+              )
+              .join('')}
           </div>
         </div>
 
@@ -944,11 +1329,11 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
 
         <div class="quest-card-mini" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
           <div style="flex:1 1 200px;min-width:0;font-size:12px;font-weight:700;">
-            <div>🧙 <strong>Phụ Tá Gia Tinh Bà Molly:</strong> ${
+            <div>🧙 <strong>Phụ Tá Gia Tinh Bà Molly:</strong> <span data-helper-status>${
               barn.farmHelperEndsAt && barn.farmHelperEndsAt > now
                 ? `<span style="color:#15803d;">Đang trực (${formatDurationCompactVi(Math.ceil((barn.farmHelperEndsAt - now) / 1000))})</span>`
                 : 'Tự động tưới luống mới &amp; gom thành phẩm xưởng vào Kho Đỏ'
-            }</div>
+            }</span></div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             ${
@@ -963,10 +1348,10 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
 
         <div class="barn-talisman-forge">
           <div class="barn-talisman-forge-meta">
-            <h3 class="barn-talisman-forge-title">
+            <h3 class="barn-talisman-forge-title" data-talisman-title>
               🔥 Bùa Phượng Hoàng (${st.sandboxMode ? '∞' : `${talCount}/${MAX_PHOENIX_TALISMANS}`})
             </h3>
-            <div class="barn-talisman-forge-sub" style="margin-top:2px;">
+            <div class="barn-talisman-forge-sub" data-talisman-sub style="margin-top:2px;">
               Hôm nay: ${talDaily.usedCount}/${talDaily.maxDaily} môn
             </div>
           </div>
@@ -1446,191 +1831,12 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
     }
 
     box.innerHTML = tabsHtml + bodyHtml;
+    box.dataset.activeWsTab = hud.activeWorkshopTab;
+    restoreModalScrollSnapshot(box, scrollSnap, Boolean(prevTab && prevTab !== hud.activeWorkshopTab));
     box.dataset.cargoSig = st.supply.cargoCrates
       .map(
         (c) =>
           `${c.id}:${c.fulfilled ? 1 : 0}:${c.helpRequestedAt ? 1 : 0}:${c.helpedByNeighborName ?? ''}`
       )
       .join('|');
-
-    box.querySelectorAll<HTMLButtonElement>('[data-ws-tab]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        hud.activeWorkshopTab = btn.dataset.wsTab as typeof hud.activeWorkshopTab;
-        farmUiRenderWorkshopDialog(hud);
-        const activeBtn = box.querySelector<HTMLButtonElement>(
-          `[data-ws-tab="${hud.activeWorkshopTab}"]`
-        );
-        activeBtn?.scrollIntoView?.({
-          block: 'nearest',
-          inline: 'nearest',
-          container: 'nearest',
-        } as ScrollIntoViewOptions);
-      });
-    });
-
-    box.querySelectorAll<HTMLButtonElement>('[data-sell-spotlight]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const kind = btn.dataset.sellSpotlight === 'good' ? 'good' : 'crop';
-        const res = hud.sim.sellMarketSpotlightLot(kind);
-        if (!res.ok) hud.showToast(res.msg, '🎪');
-        farmUiRenderWorkshopDialog(hud);
-        hud.refreshHeader();
-      });
-    });
-
-    box.querySelectorAll<HTMLButtonElement>('[data-claim-market-deal]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const res = hud.sim.fulfillMarketFairDeal(btn.dataset.claimMarketDeal!);
-        if (!res.ok) hud.showToast(res.msg, '🎪');
-        farmUiRenderWorkshopDialog(hud);
-        hud.refreshHeader();
-      });
-    });
-
-    box.querySelector('#btnRerollMarketFair')?.addEventListener('click', () => {
-      const res = hud.sim.rerollMarketFairDeals();
-      if (!res.ok) hud.showToast(res.msg, '🎪');
-      farmUiRenderWorkshopDialog(hud);
-    });
-
-    box.querySelector('#btnUpgradeFarmBarn')?.addEventListener('click', () => {
-      const res = hud.sim.upgradeFarmBarn();
-      hud.showToast(res.msg, res.ok ? '🏡' : '🔌');
-      farmUiRenderWorkshopDialog(hud);
-      hud.refreshHeader();
-    });
-
-    box.querySelector('#btnCraftPhoenixTalisman')?.addEventListener('click', () => {
-      const res = hud.sim.craftPhoenixTalismanFromBarn();
-      hud.showToast(res.msg, res.ok ? '🔥' : '🧺');
-      farmUiRenderWorkshopDialog(hud);
-      hud.refreshHeader();
-    });
-
-    box.querySelectorAll<HTMLButtonElement>('[data-sell-farm-item]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const res = hud.sim.sellFarmItemFromBarn(btn.dataset.sellFarmItem as FarmItemId, 1);
-        if (!res.ok) {
-          hud.showToast(res.msg, '🧺');
-        }
-        farmUiRenderWorkshopDialog(hud);
-        hud.refreshHeader();
-      });
-    });
-
-    box.querySelector('#btnWsQuickHerb')?.addEventListener('click', () => {
-      const res = hud.sim.quickHarvestHerbs();
-      hud.showToast(res.msg, res.ok ? '🌿' : '⏳');
-      farmUiRenderWorkshopDialog(hud);
-    });
-
-    box.querySelector('#btnWsSpeedBrew')?.addEventListener('click', () => {
-      if (hud.sim.speedUpBrewing()) {
-        farmUiRenderWorkshopDialog(hud);
-      }
-    });
-
-    box.querySelectorAll<HTMLButtonElement>('[data-brew-good]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const res = hud.sim.startBrewing(btn.dataset.brewGood as CraftedGoodId);
-        hud.showToast(res.msg, res.ok ? '🧪' : '⚠️');
-        farmUiRenderWorkshopDialog(hud);
-      });
-    });
-
-    box.querySelectorAll<HTMLButtonElement>('[data-use-good]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const gid = btn.dataset.useGood as CraftedGoodId;
-        const res = hud.sim.useCraftedGood(gid);
-        if (!res.ok) {
-          hud.showToast(res.msg, '⚠️');
-        } else if (gid === 'dragon_firework') {
-          (hud.root.querySelector('#workshopDialog') as HTMLDialogElement).close();
-        } else {
-          farmUiRenderWorkshopDialog(hud);
-        }
-      });
-    });
-
-    box.querySelectorAll<HTMLButtonElement>('[data-fulfill-crate]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const res = hud.sim.fulfillCargoCrate(btn.dataset.fulfillCrate!);
-        hud.showToast(res.msg, res.ok ? '📦' : '⚠️');
-        farmUiRenderWorkshopDialog(hud);
-        hud.refreshHeader();
-      });
-    });
-
-    box.querySelectorAll<HTMLButtonElement>('[data-help-cargo-crate]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const res = hud.sim.requestCargoCrateHelp(btn.dataset.helpCargoCrate!);
-        hud.showToast(res.msg, res.ok ? '🤝' : '🚂');
-        farmUiRenderWorkshopDialog(hud);
-        hud.refreshHeader();
-      });
-    });
-
-    box.querySelectorAll<HTMLButtonElement>('[data-goto-brew]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        hud.activeWorkshopTab = 'brew';
-        farmUiRenderWorkshopDialog(hud);
-      });
-    });
-
-    box.querySelectorAll<HTMLButtonElement>('[data-jump-cargo-item]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const itemId = btn.dataset.jumpCargoItem as FarmItemId;
-        (hud.root.querySelector('#workshopDialog') as HTMLDialogElement | null)?.close();
-        hud.jumpToMissingFarmItem(itemId);
-      });
-    });
-
-    box.querySelectorAll<HTMLButtonElement>('[data-activate-helper]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const mode = btn.dataset.activateHelper as 'free_daily' | 'feast_points' | 'sickle';
-        const res = hud.sim.activateFarmHelper(mode);
-        hud.showToast(res.msg, res.ok ? '🧙' : '🪙');
-        farmUiRenderWorkshopDialog(hud);
-        hud.refreshHeader();
-      });
-    });
-
-    box.querySelector('#selStandItem')?.addEventListener('change', (ev) => {
-      hud.selectedStandItemId = (ev.currentTarget as HTMLSelectElement).value as FarmItemId;
-      farmUiRenderWorkshopDialog(hud);
-    });
-
-    box.querySelectorAll<HTMLButtonElement>('[data-stand-tier]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        hud.selectedStandPriceTier = btn.dataset.standTier as RoadsidePriceTier;
-        farmUiRenderWorkshopDialog(hud);
-      });
-    });
-
-    box.querySelectorAll<HTMLButtonElement>('[data-stand-list]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const slotIdx = Number(btn.dataset.standList);
-        const have = hud.sim.getFarmItemCount(hud.selectedStandItemId);
-        const qty = Math.max(1, Math.min(3, st.sandboxMode ? 2 : have));
-        const res = hud.sim.listOnRoadsideStand(
-          slotIdx,
-          hud.selectedStandItemId,
-          qty,
-          hud.selectedStandPriceTier
-        );
-        hud.showToast(res.msg, res.ok ? '🧺' : '⚠️');
-        farmUiRenderWorkshopDialog(hud);
-        hud.refreshHeader();
-      });
-    });
-
-    box.querySelectorAll<HTMLButtonElement>('[data-stand-claim]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const slotIdx = Number(btn.dataset.standClaim);
-        const res = hud.sim.claimRoadsideStandSlot(slotIdx);
-        hud.showToast(res.msg, res.ok ? '🪙' : '🧺');
-        farmUiRenderWorkshopDialog(hud);
-        hud.refreshHeader();
-      });
-    });
 }

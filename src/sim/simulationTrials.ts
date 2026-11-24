@@ -794,6 +794,7 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
       Math.round(sessionMetrics?.sessionScore ?? 0)
     );
     const leaderboardRankUp = recordMinigameSessionResult(sim.state, 'match3', {
+      previousClearedStage: prevCleared,
       clearedStage: m3.maxClearedLevel,
       sessionScore: sessionPts,
       efficiency: sessionPts,
@@ -1251,6 +1252,7 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
         Math.round(sessionMetrics?.sessionScore ?? 0)
       );
       leaderboardRankUp = recordMinigameSessionResult(sim.state, mode, {
+        previousClearedStage: prevCleared,
         clearedStage: newCleared,
         sessionScore: sessionPts,
         efficiency: sessionMetrics?.efficiency,

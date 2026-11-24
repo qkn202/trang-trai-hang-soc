@@ -1,7 +1,10 @@
 import { FARM_CROPS, FARM_GOODS, getCatalogItem, getFarmItemMeta, PASTURE_ANIMALS } from '../data/catalog';
 import { WIZARD_CARDS } from '../data/cards';
 import { CRAFT_RECIPES } from '../data/synergiesAndSupply';
-import { getLocalCalendarResetKey as getLocalDateKey } from './neighborSocial';
+import {
+  getCachedNeighborCoopContributions,
+  getLocalCalendarResetKey as getLocalDateKey,
+} from './neighborSocial';
 import { ensureRetentionState } from './retentionAndNarrative';
 import { VILLAGER_AFFECTION_GIFT_META } from './villagerGiftsPetAndStroll';
 import type { ParkSimulation } from './simulation';
@@ -350,6 +353,102 @@ export function contributeToCoopSupplyCrate(
   };
 }
 
+export interface ServerCoopCrateSnapshot {
+  weekKey: string;
+  totalPoints: number;
+  contributors: Array<{
+    uid: string;
+    displayName: string;
+    avatarEmoji?: string;
+    points: number;
+  }>;
+  syncedAt: number;
+}
+
+let cachedServerCoopSnapshot: ServerCoopCrateSnapshot | null = null;
+
+export function setServerCoopCrateSnapshot(snap: ServerCoopCrateSnapshot | null): void {
+  cachedServerCoopSnapshot = snap;
+}
+
+export function getServerCoopCrateSnapshot(weekKey: string): ServerCoopCrateSnapshot | null {
+  if (!cachedServerCoopSnapshot || cachedServerCoopSnapshot.weekKey !== weekKey) {
+    return null;
+  }
+  return cachedServerCoopSnapshot;
+}
+
+export function clearServerCoopCrateSnapshot(): void {
+  cachedServerCoopSnapshot = null;
+}
+
+export interface NeighborhoodCoopSummary {
+  weekKey: string;
+  localPoints: number;
+  syncedFriendPoints: number;
+  totalPoints: number;
+  isServerAuthoritative: boolean;
+  syncedContributors: Array<{
+    neighborId: string;
+    displayName: string;
+    avatarEmoji?: string;
+    points: number;
+  }>;
+}
+
+export function getNeighborhoodCoopSummary(
+  sim: ParkSimulation,
+  nowMs = Date.now()
+): NeighborhoodCoopSummary {
+  const targetState = sim.homeStateWhileVisiting ?? sim.state;
+  const crate = ensureCoopSupplyCrate(targetState, nowMs);
+  const visitedContributors = getCachedNeighborCoopContributions(crate.weekKey);
+  const serverSnap = getServerCoopCrateSnapshot(crate.weekKey);
+
+  if (serverSnap) {
+    const mergedMap = new Map<
+      string,
+      { neighborId: string; displayName: string; avatarEmoji?: string; points: number }
+    >();
+    for (const c of serverSnap.contributors) {
+      mergedMap.set(c.uid, {
+        neighborId: c.uid,
+        displayName: c.displayName,
+        avatarEmoji: c.avatarEmoji,
+        points: c.points,
+      });
+    }
+    for (const v of visitedContributors) {
+      if (!mergedMap.has(v.neighborId)) {
+        mergedMap.set(v.neighborId, v);
+      }
+    }
+    const mergedContributors = [...mergedMap.values()].sort((a, b) => b.points - a.points);
+    const localPlusVisited =
+      crate.contributedPoints + visitedContributors.reduce((acc, c) => acc + c.points, 0);
+    const totalPoints = Math.max(localPlusVisited, serverSnap.totalPoints);
+    const syncedFriendPoints = Math.max(0, totalPoints - crate.contributedPoints);
+    return {
+      weekKey: crate.weekKey,
+      localPoints: crate.contributedPoints,
+      syncedFriendPoints,
+      totalPoints,
+      isServerAuthoritative: true,
+      syncedContributors: mergedContributors,
+    };
+  }
+
+  const syncedFriendPoints = visitedContributors.reduce((acc, c) => acc + c.points, 0);
+  return {
+    weekKey: crate.weekKey,
+    localPoints: crate.contributedPoints,
+    syncedFriendPoints,
+    totalPoints: crate.contributedPoints + syncedFriendPoints,
+    isServerAuthoritative: false,
+    syncedContributors: visitedContributors,
+  };
+}
+
 export function claimCoopCrateMilestone(
   sim: ParkSimulation,
   step: 1 | 2 | 3
@@ -360,15 +459,16 @@ export function claimCoopCrateMilestone(
   const targetState = sim.homeStateWhileVisiting ?? sim.state;
   const social = sim.ensureNeighborSocial();
   const crate = ensureCoopSupplyCrate(targetState);
+  const summary = getNeighborhoodCoopSummary(sim);
   const def = COOP_CRATE_MILESTONES.find((m) => m.step === step);
   if (!def) return { ok: false, msg: 'Mốc Kiện Hàng không hợp lệ!' };
   if (crate.claimedMilestones.includes(step)) {
     return { ok: false, msg: 'Bạn đã nhận thưởng mốc Kiện Hàng này trong tuần rồi!' };
   }
-  if (!targetState.sandboxMode && crate.contributedPoints < def.target) {
+  if (!targetState.sandboxMode && summary.totalPoints < def.target) {
     return {
       ok: false,
-      msg: `Cần đạt ${def.target} điểm đóng góp cộng đồng (hiện có ${crate.contributedPoints}/${def.target})!`,
+      msg: `Cần đạt ${def.target} điểm đóng góp cộng đồng (hiện có ${summary.totalPoints}/${def.target})!`,
     };
   }
   crate.claimedMilestones.push(step);

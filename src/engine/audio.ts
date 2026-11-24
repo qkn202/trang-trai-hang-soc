@@ -148,7 +148,15 @@ export type SfxAtlasCueId =
   | 'coin_chime'
   | 'hearth_crackle'
   | 'villager_hello_warm'
-  | 'villager_hello_jolly';
+  | 'villager_hello_jolly'
+  | 'orchard_birds'
+  | 'festive_chimes'
+  | 'step_grass'
+  | 'step_stone'
+  | 'step_wood'
+  | 'pet_chirp';
+
+export type FootstepSurface = 'grass' | 'stone' | 'wood';
 
 export const SFX_ATLAS_URL = '/game/trang-trai-hang-soc/audio/sfx_atlas.mp3';
 
@@ -169,6 +177,12 @@ export const SFX_ATLAS_CUES: Record<SfxAtlasCueId, { offset: number; duration: n
   hearth_crackle: { offset: 12.4, duration: 0.85 },
   villager_hello_warm: { offset: 13.5, duration: 0.68 },
   villager_hello_jolly: { offset: 14.4, duration: 0.74 },
+  orchard_birds: { offset: 15.4, duration: 0.9 },
+  festive_chimes: { offset: 16.45, duration: 0.95 },
+  step_grass: { offset: 17.55, duration: 0.28 },
+  step_stone: { offset: 17.95, duration: 0.26 },
+  step_wood: { offset: 18.35, duration: 0.3 },
+  pet_chirp: { offset: 18.8, duration: 0.55 },
 };
 
 export interface ProximityAmbientInput {
@@ -949,13 +963,17 @@ export class MagicalAudio {
           if (mix.hearthGain >= mix.pastureGain && mix.hearthGain > 0.08) {
             this.playAtlasCue('hearth_crackle', mix.hearthGain * 0.22, 0.96 + Math.random() * 0.08, 0);
           } else if (festG > 0.08) {
-            this.playTone(1318.51, 0.22, 'sine', festG * 0.022, 0, -0.1);
-            this.playTone(1567.98, 0.26, 'triangle', festG * 0.018, 0.14, 0.1);
+            if (!this.playAtlasCue('festive_chimes', festG * 0.2, 0.96 + Math.random() * 0.08, -0.08)) {
+              this.playTone(1318.51, 0.22, 'sine', festG * 0.022, 0, -0.1);
+              this.playTone(1567.98, 0.26, 'triangle', festG * 0.018, 0.14, 0.1);
+            }
           } else if (!isNight && orchG > 0.08) {
-            this.playTone(1174.66, 0.14, 'sine', orchG * 0.02, 0, 0.15);
-            this.playTone(1479.98, 0.16, 'sine', orchG * 0.016, 0.11, -0.1);
+            if (!this.playAtlasCue('orchard_birds', orchG * 0.22, 0.94 + Math.random() * 0.12, 0.12)) {
+              this.playTone(1174.66, 0.14, 'sine', orchG * 0.02, 0, 0.15);
+              this.playTone(1479.98, 0.16, 'sine', orchG * 0.016, 0.11, -0.1);
+            }
           } else if (!isNight && mix.pastureGain > 0.08) {
-            if (!this.playAtlasCue('place', mix.pastureGain * 0.14, 1.38, 0.12)) {
+            if (!this.playAtlasCue('pet_chirp', mix.pastureGain * 0.15, 0.95 + Math.random() * 0.12, 0.12)) {
               this.playTone(783.99, 0.18, 'sine', mix.pastureGain * 0.025, 0, 0.12);
             }
           }
@@ -987,6 +1005,32 @@ export class MagicalAudio {
     this.playTone(440, 0.45, 'triangle', vol, 0);
     this.playTone(554.37, 0.45, 'triangle', vol * 0.85, 0);
     this.playTone(659.25, 0.45, 'sine', vol * 0.65, 0);
+  }
+
+  /**
+   * Material-aware Stroll Mode footstep foley (grass / cobblestone / timber pier) with organic pitch jitter.
+   */
+  public playFootstep(surface: FootstepSurface = 'grass'): void {
+    if (!this.enabled) return;
+    const cue: SfxAtlasCueId =
+      surface === 'stone' ? 'step_stone' : surface === 'wood' ? 'step_wood' : 'step_grass';
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    const rate = 0.93 + Math.random() * 0.14;
+    const pan = (Math.random() - 0.5) * 0.12;
+    if (this.playAtlasCue(cue, 0.16 * sfxGain, rate, pan)) return;
+    const fallbackFreq = surface === 'stone' ? 250 : surface === 'wood' ? 145 : 120;
+    this.playTone(fallbackFreq * rate, 0.045, 'triangle', 0.018 * sfxGain, 0, pan);
+  }
+
+  /**
+   * Warm affectionate creature trill when petting the active roaming companion.
+   */
+  public playPetChirp(): void {
+    if (!this.enabled) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (this.playAtlasCue('pet_chirp', 0.28 * sfxGain, 0.96 + Math.random() * 0.1, 0)) return;
+    this.playTone(783.99, 0.12, 'sine', 0.042 * sfxGain, 0);
+    this.playTone(1174.66, 0.16, 'sine', 0.036 * sfxGain, 0.09);
   }
 
   public playHarvestBubble(): void {

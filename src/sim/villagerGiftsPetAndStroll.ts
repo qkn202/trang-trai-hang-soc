@@ -5,7 +5,104 @@ import { getVietnamCalendarKey } from './neighborSocial';
 import { ensureRetentionState } from './retentionAndNarrative';
 import type { ParkSimulation } from './simulation';
 import { VALLEY_VILLAGER_PROFILES } from './simulationData';
-import { FarmCropId, FarmItemId, ValleyVillagerId } from '../types/game';
+import { FarmCropId, FarmItemId, StrollRobeId, ValleyVillagerId } from '../types/game';
+
+export interface StrollRobeMeta {
+  id: StrollRobeId;
+  labelVi: string;
+  auraColor: string;
+  scarfPrimary: string;
+  scarfAccent: string;
+  wandGlow: string;
+}
+
+export const STROLL_ROBE_WARDROBE: Record<StrollRobeId, StrollRobeMeta> = {
+  burrow_classic: {
+    id: 'burrow_classic',
+    labelVi: 'Áo Len Hang Sóc',
+    auraColor: 'rgba(254, 240, 138, 0.45)',
+    scarfPrimary: '#b45309',
+    scarfAccent: '#fbbf24',
+    wandGlow: '#fef08a',
+  },
+  gryffindor_scarf: {
+    id: 'gryffindor_scarf',
+    labelVi: 'Khăn Gryffindor',
+    auraColor: 'rgba(248, 113, 113, 0.44)',
+    scarfPrimary: '#991b1b',
+    scarfAccent: '#facc15',
+    wandGlow: '#fde047',
+  },
+  ravenclaw_cloak: {
+    id: 'ravenclaw_cloak',
+    labelVi: 'Choàng Ravenclaw',
+    auraColor: 'rgba(96, 165, 250, 0.46)',
+    scarfPrimary: '#1e3a8a',
+    scarfAccent: '#cbd5e1',
+    wandGlow: '#bae6fd',
+  },
+  hufflepuff_knit: {
+    id: 'hufflepuff_knit',
+    labelVi: 'Len Hufflepuff',
+    auraColor: 'rgba(250, 204, 21, 0.48)',
+    scarfPrimary: '#ca8a04',
+    scarfAccent: '#292524',
+    wandGlow: '#fef08a',
+  },
+  slytherin_emerald: {
+    id: 'slytherin_emerald',
+    labelVi: 'Ngọc Slytherin',
+    auraColor: 'rgba(52, 211, 153, 0.46)',
+    scarfPrimary: '#065f46',
+    scarfAccent: '#d1d5db',
+    wandGlow: '#a7f3d0',
+  },
+  yule_winter_coat: {
+    id: 'yule_winter_coat',
+    labelVi: 'Áo Tuyết Yule',
+    auraColor: 'rgba(224, 242, 254, 0.52)',
+    scarfPrimary: '#dc2626',
+    scarfAccent: '#f8fafc',
+    wandGlow: '#e0f2fe',
+  },
+};
+
+export const STROLL_ROBE_ORDER: readonly StrollRobeId[] = [
+  'burrow_classic',
+  'gryffindor_scarf',
+  'ravenclaw_cloak',
+  'hufflepuff_knit',
+  'slytherin_emerald',
+  'yule_winter_coat',
+];
+
+export function setPlayerStrollRobe(
+  sim: ParkSimulation,
+  robeId: StrollRobeId
+): { ok: boolean; robe: StrollRobeMeta; msg: string } {
+  const meta = STROLL_ROBE_WARDROBE[robeId] ?? STROLL_ROBE_WARDROBE.burrow_classic;
+  sim.state.settings.strollRobeId = meta.id;
+  if (sim.homeStateWhileVisiting) {
+    sim.homeStateWhileVisiting.settings.strollRobeId = meta.id;
+  }
+  sim.audio.playSpell();
+  sim.saveToStorage();
+  sim.onUiChange?.();
+  return {
+    ok: true,
+    robe: meta,
+    msg: `✨ Đã thay trang phục đi dạo: ${meta.labelVi}!`,
+  };
+}
+
+export function cyclePlayerStrollRobe(
+  sim: ParkSimulation
+): { ok: boolean; robe: StrollRobeMeta; msg: string } {
+  const cur = sim.state.settings.strollRobeId ?? 'burrow_classic';
+  const idx = STROLL_ROBE_ORDER.indexOf(cur);
+  const next = STROLL_ROBE_ORDER[(idx + 1) % STROLL_ROBE_ORDER.length];
+  return setPlayerStrollRobe(sim, next);
+}
 
 export interface VillagerAffectionGiftMeta {
   villagerId: ValleyVillagerId;
@@ -267,6 +364,12 @@ export interface StrollAvatarRuntime {
   facingLeft: boolean;
   walkPhase: number;
   waveTimer: number;
+  isMoving?: boolean;
+  lastStepIndex?: number;
+  lastFootstepSurface?: 'grass' | 'stone' | 'wood';
+  stepDustTimer?: number;
+  stepDustGx?: number;
+  stepDustGy?: number;
 }
 
 export function setActiveRoamingPet(
@@ -322,7 +425,7 @@ export function petRoamingCompanion(
   const pet = sim.roamingPet;
   if (nowMs - lastAt < 45_000 && !sim.state.sandboxMode) {
     const waitSec = Math.ceil((45_000 - (nowMs - lastAt)) / 1000);
-    sim.audio.playClick();
+    sim.audio.playPetChirp?.();
     sim.spawnFloatingText(pet.gx, pet.gy, `💝 ${pet.nameVi}`, '#f9a8d4');
     return {
       ok: false,
@@ -343,6 +446,7 @@ export function petRoamingCompanion(
     sim.state.herbalCompost = Math.min(99999, Math.max(0, Math.floor(sim.state.herbalCompost ?? 0)) + 1);
     extra = ' & +1 🌿 Phân Ủ';
   }
+  sim.audio.playPetChirp?.();
   sim.audio.playHarvestBubble();
   sim.onRewardFly?.('galleons', sickle, pet.gx, pet.gy);
   sim.spawnFloatingText(pet.gx, pet.gy, `🐾 +${sickle} Sickle${extra}`, '#fde047');
@@ -479,6 +583,7 @@ export function updateRoamingPetAndStroll(sim: ParkSimulation, dt: number): void
   if (sim.strollModeActive && sim.playerStrollAvatar) {
     const av = sim.playerStrollAvatar;
     if (av.waveTimer > 0) av.waveTimer = Math.max(0, av.waveTimer - dt);
+    if ((av.stepDustTimer ?? 0) > 0) av.stepDustTimer = Math.max(0, (av.stepDustTimer ?? 0) - dt);
     const dx = av.targetGx - av.gx;
     const dy = av.targetGy - av.gy;
     const dist = Math.hypot(dx, dy);
@@ -492,11 +597,30 @@ export function updateRoamingPetAndStroll(sim: ParkSimulation, dt: number): void
         av.gx = nx;
         av.gy = ny;
         av.facingLeft = dx - dy < 0;
+        av.isMoving = true;
         av.walkPhase = (av.walkPhase + dt * 8.5) % (Math.PI * 20);
+        const stepIdx = Math.floor(av.walkPhase / Math.PI);
+        if (stepIdx !== av.lastStepIndex) {
+          av.lastStepIndex = stepIdx;
+          const surface: 'grass' | 'stone' | 'wood' =
+            c.path === 'wood_pier'
+              ? 'wood'
+              : c.path === 'cobble' || c.path === 'snow_brick' || c.path === 'queue_gold'
+                ? 'stone'
+                : 'grass';
+          av.lastFootstepSurface = surface;
+          av.stepDustTimer = 0.42;
+          av.stepDustGx = nx;
+          av.stepDustGy = ny;
+          sim.audio.playFootstep?.(surface);
+        }
       } else {
+        av.isMoving = false;
         av.targetGx = av.gx;
         av.targetGy = av.gy;
       }
+    } else {
+      av.isMoving = false;
     }
     // Auto-greet nearby villagers when strolling past them!
     if (!sim.isVisitingNeighbor) {

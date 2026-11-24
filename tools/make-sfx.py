@@ -337,6 +337,110 @@ def synth_villager_hello_jolly(_rng: np.random.Generator) -> np.ndarray:
     return out * 0.80
 
 
+def synth_orchard_birds(rng: np.random.Generator) -> np.ndarray:
+    """Realistic FM-modulated countryside birdsong (two gentle sunlit robin trills)."""
+    n = int(0.90 * SR)
+    out = np.zeros(n)
+    chirps = [
+        (0.03, 0.14, 2450.0, 3420.0, 26.0, 140.0, 0.34),
+        (0.20, 0.12, 2980.0, 2320.0, 32.0, 110.0, 0.28),
+        (0.42, 0.18, 2620.0, 3780.0, 22.0, 190.0, 0.36),
+        (0.64, 0.16, 3320.0, 2740.0, 28.0, 125.0, 0.26),
+    ]
+    for d_s, dur_s, f_a, f_b, vib_hz, vib_depth, amp in chirps:
+        i0 = int(d_s * SR)
+        m = min(int(dur_s * SR), n - i0)
+        if m <= 16:
+            continue
+        tm = np.arange(m) / SR
+        base_f = f_a + (f_b - f_a) * np.sin(math.pi * tm / dur_s)
+        f_inst = base_f + vib_depth * np.sin(2 * math.pi * vib_hz * tm)
+        ph = 2 * math.pi * np.cumsum(f_inst) / SR
+        env = np.sin(math.pi * np.clip(tm / dur_s, 0.0, 1.0)) ** 1.4
+        out[i0 : i0 + m] += (0.82 * np.sin(ph) + 0.18 * np.sin(2.0 * ph)) * env * amp
+    breeze = bandpass_1pole(rng.normal(0, 1, n), 420, 1900) * env_ad(n, 0.08, 0.55) * 0.04
+    return (out + breeze) * 0.72
+
+
+def synth_festive_chimes(rng: np.random.Generator) -> np.ndarray:
+    """Inharmonic brass & crystal wind-chimes cluster (physical bar modes 1 : 2.756 : 5.404)."""
+    n = int(0.95 * SR)
+    out = np.zeros(n)
+    bars = [
+        (0.00, 1046.50, 0.28),
+        (0.09, 1318.51, 0.25),
+        (0.19, 1567.98, 0.24),
+        (0.32, 1975.53, 0.20),
+        (0.46, 2093.00, 0.18),
+    ]
+    for d_s, f0, amp in bars:
+        i0 = int(d_s * SR)
+        m = n - i0
+        tm = np.arange(m) / SR
+        sig = (
+            0.64 * np.sin(2 * math.pi * f0 * tm) * env_ad(m, 0.002, 0.36)
+            + 0.26 * np.sin(2 * math.pi * (f0 * 2.756) * tm) * env_ad(m, 0.001, 0.18)
+            + 0.10 * np.sin(2 * math.pi * (f0 * 5.404) * tm) * env_ad(m, 0.0008, 0.09)
+        )
+        out[i0:] += sig * amp
+    shimmer = bandpass_1pole(rng.normal(0, 1, n), 3800, 9200) * env_ad(n, 0.02, 0.22) * 0.05
+    return (out + shimmer) * 0.72
+
+
+def synth_step_grass(rng: np.random.Generator) -> np.ndarray:
+    """Soft crisp meadow grass-blade rustle footstep."""
+    n = int(0.28 * SR)
+    t = np.arange(n) / SR
+    rustle = bandpass_1pole(rng.normal(0, 1, n), 1100, 5400) * env_ad(n, 0.014, 0.055) * 0.48
+    soil = np.sin(2 * math.pi * 115.0 * t) * env_ad(n, 0.004, 0.028) * 0.26
+    return (rustle + soil) * 0.70
+
+
+def synth_step_stone(rng: np.random.Generator) -> np.ndarray:
+    """Warm cobblestone heel-tap modal foley."""
+    n = int(0.26 * SR)
+    t = np.arange(n) / SR
+    tap = (
+        0.52 * np.sin(2 * math.pi * 245.0 * t) * env_ad(n, 0.001, 0.028)
+        + 0.34 * np.sin(2 * math.pi * 620.0 * t) * env_ad(n, 0.0008, 0.016)
+        + 0.20 * np.sin(2 * math.pi * 1580.0 * t) * env_ad(n, 0.0005, 0.009)
+    )
+    grit = bandpass_1pole(rng.normal(0, 1, n), 750, 4200) * env_ad(n, 0.0006, 0.012) * 0.42
+    return (tap + grit) * 0.74
+
+
+def synth_step_wood(rng: np.random.Generator) -> np.ndarray:
+    """Hollow wooden bridge/pier plank step resonance."""
+    n = int(0.30 * SR)
+    t = np.arange(n) / SR
+    plank = (
+        0.62 * np.sin(2 * math.pi * 142.0 * t) * env_ad(n, 0.002, 0.058)
+        + 0.38 * np.sin(2 * math.pi * 318.0 * t) * env_ad(n, 0.0015, 0.036)
+        + 0.20 * np.sin(2 * math.pi * 740.0 * t) * env_ad(n, 0.001, 0.018)
+    )
+    knock = bandpass_1pole(rng.normal(0, 1, n), 240, 1650) * env_ad(n, 0.001, 0.018) * 0.32
+    return (plank + knock) * 0.76
+
+
+def synth_pet_chirp(rng: np.random.Generator) -> np.ndarray:
+    """Warm affectionate magical creature double-trill."""
+    n = int(0.55 * SR)
+    out = np.zeros(n)
+    for d_s, dur_s, f_a, f_b, amp in [
+        (0.01, 0.14, 680.0, 1180.0, 0.44),
+        (0.17, 0.22, 880.0, 1560.0, 0.48),
+    ]:
+        i0 = int(d_s * SR)
+        m = min(int(dur_s * SR), n - i0)
+        tm = np.arange(m) / SR
+        f_inst = f_a + (f_b - f_a) * (1.0 - np.exp(-tm * 12.0)) + 42.0 * np.sin(2 * math.pi * 24.0 * tm)
+        ph = 2 * math.pi * np.cumsum(f_inst) / SR
+        env = env_ad(m, 0.008, dur_s * 0.55)
+        out[i0 : i0 + m] += (0.76 * np.sin(ph) + 0.24 * np.sin(2.0 * ph)) * env * amp
+    puff = bandpass_1pole(rng.normal(0, 1, n), 1400, 4800) * env_ad(n, 0.01, 0.09) * 0.08
+    return (out + puff) * 0.78
+
+
 def main() -> None:
     rng = np.random.default_rng(7772026)
     # Fixed offsets matching SFX_ATLAS_CUES in src/engine/audio.ts
@@ -357,9 +461,15 @@ def main() -> None:
         ("hearth_crackle", 12.4, synth_hearth_crackle(rng)),
         ("villager_hello_warm", 13.5, synth_villager_hello_warm(rng)),
         ("villager_hello_jolly", 14.4, synth_villager_hello_jolly(rng)),
+        ("orchard_birds", 15.4, synth_orchard_birds(rng)),
+        ("festive_chimes", 16.45, synth_festive_chimes(rng)),
+        ("step_grass", 17.55, synth_step_grass(rng)),
+        ("step_stone", 17.95, synth_step_stone(rng)),
+        ("step_wood", 18.35, synth_step_wood(rng)),
+        ("pet_chirp", 18.8, synth_pet_chirp(rng)),
     ]
 
-    total_sec = 15.6
+    total_sec = 19.6
     total_samples = int(total_sec * SR)
     left = np.zeros(total_samples, dtype=np.float64)
     right = np.zeros(total_samples, dtype=np.float64)

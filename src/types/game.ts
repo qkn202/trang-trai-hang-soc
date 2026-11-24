@@ -46,6 +46,14 @@ export type FestivalType =
 
 export type TimeOverride = 'realtime' | 'dawn' | 'day' | 'dusk' | 'night';
 
+export type StrollRobeId =
+  | 'burrow_classic'
+  | 'gryffindor_scarf'
+  | 'ravenclaw_cloak'
+  | 'hufflepuff_knit'
+  | 'slytherin_emerald'
+  | 'yule_winter_coat';
+
 export type WeatherKind = 'sunny' | 'cloudy' | 'rain' | 'storm' | 'snow' | 'fog';
 
 export type WeatherOverride =
@@ -1135,8 +1143,18 @@ export interface LeaderboardRankChange {
   houseRank?: number;
 }
 
+export interface MinigameWeeklyProgress {
+  weekKey: string; // Mã tuần khớp Cúp Nhà (VD '2026-W48')
+  stagesCleared: number; // Số màn vượt mới trong tuần (reset về 0 mỗi tuần mới)
+  weightedScore: number; // Điểm tuần Cách A theo khung độ khó màn (20/25/30/35 đ/màn)
+  wins: number; // Số trận thắng trong tuần
+  bestStreak: number; // Chuỗi thắng cao nhất trong tuần
+  bestSessionScore: number; // Điểm ván cao nhất trong tuần
+  updatedAt: number;
+}
+
 export interface MinigamePersonalRecord {
-  bestStage: number; // Highest cleared stage (0..777), or combined mastery (0..500) for seedquiz
+  bestStage: number; // Highest cleared stage (0..777 / 0..7777), or combined mastery (0..500) for seedquiz
   highScore: number; // Best rating / cumulative score in this discipline
   bestSessionScore: number; // Best single-match score (or best streak score)
   totalWins: number; // Total victories / correct spell incantations in this discipline
@@ -1144,6 +1162,8 @@ export interface MinigamePersonalRecord {
   bestEfficiency?: number; // Fewest turns (caro/chess), fewest mistakes (sudoku), max lines (blocks), or mastered Box-5 words (seedquiz)
   lastRankValley?: number;
   updatedAt: number;
+  /** Tiến độ cá nhân theo từng tuần, tự reset về 0 khi sang tuần Cúp Nhà mới */
+  weekly?: MinigameWeeklyProgress;
 }
 
 export interface MinigameLeaderboardState {
@@ -1151,6 +1171,8 @@ export interface MinigameLeaderboardState {
   playerHouseExplicit?: boolean;
   playerHouseLockedByServer?: boolean;
   includeSeededRivals?: boolean;
+  /** Mã tuần Cúp Nhà gần nhất đã đồng bộ cho BXH cá nhân tuần */
+  activeWeekKey?: string;
   records: Record<LeaderboardGameId, MinigamePersonalRecord>;
 }
 
@@ -1622,6 +1644,7 @@ export interface GameState {
     activeFestival: 'auto' | FestivalType;
     yuleThemeMode?: YuleThemeMode;
     rendererMode?: 'webgl2' | 'canvas';
+    strollRobeId?: StrollRobeId;
     youtubeBgmEnabled?: boolean;
     youtubeBgmUrl?: string;
   };

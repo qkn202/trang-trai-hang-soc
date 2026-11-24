@@ -1583,3 +1583,327 @@
 }
 
 }
+
+/* Lazy-split from minigameHalls.css: Seed Quiz Orientation & Fluid Container Queries (@layer s9_sq3) */
+@layer s9_sq3 {
+#seedQuizDialog[data-mg-rotate='90'],
+#seedQuizDialog[data-mg-rotate='270'] {
+  width: 100%;
+  width: 100dvw;
+  height: 100vh;
+  height: 100dvh;
+  max-width: 100%;
+  max-width: 100dvw;
+  max-height: 100vh;
+  max-height: 100dvh;
+  margin: 0;
+  padding: 0;
+}
+
+
+/* --- Seed Quiz (Học Viện Thần Chú Đa Ngữ) explicit Portrait / Landscape overrides --- */
+#seedQuizDialog[data-mg-layout='portrait']:not([data-mg-rotate='90']):not([data-mg-rotate='270']) {
+  width: 100%;
+  width: 100dvw;
+  max-width: 100%;
+  max-width: 100dvw;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+  margin: 0;
+}
+
+#seedQuizDialog[data-mg-layout='portrait']:not([data-mg-rotate='90']):not([data-mg-rotate='270']) .sq-modal-inner {
+  height: 100%;
+  max-height: 100%;
+  border-radius: 0;
+  padding:
+    max(6px, env(safe-area-inset-top, 0px))
+    max(7px, env(safe-area-inset-right, 0px))
+    max(6px, env(safe-area-inset-bottom, 0px))
+    max(7px, env(safe-area-inset-left, 0px));
+}
+
+#seedQuizDialog[data-mg-layout='portrait'] .sq-options-layout {
+  grid-template-columns: 1fr;
+}
+
+#seedQuizDialog[data-mg-layout='portrait'] .sq-lang-tabs {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+#seedQuizDialog[data-mg-layout='landscape'] .sq-options-layout {
+  grid-template-columns: clamp(208px, 27%, 256px) minmax(0, 1fr);
+}
+
+#seedQuizDialog[data-mg-layout='landscape'] .sq-lang-tabs {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+/* --- Fluid Mobile Screen-Size Adaptation across Compact Portrait, Tall 20:9 & Landscape Phones --- */
+.sq-stage-card {
+  container: sq-stage / inline-size;
+}
+
+.sq-stem-main {
+  font-size: clamp(0.92rem, 0.84rem + 0.45vw, 1.15rem);
+}
+
+@supports (font-size: 1cqi) {
+  .sq-stem-main {
+    font-size: clamp(0.92rem, 0.82rem + 1.1cqi, 1.18rem);
+  }
+}
+
+@container sq-stage (inline-size >= 480px) {
+  .sq-choice-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container sq-stage (inline-size < 480px) {
+  .sq-choice-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+}
+
+/* Lazy-split from main.css: Sổ Tay Cổ Ngữ SRS Lexicon Codex (@layer s7_sq1) */
+@layer s7_sq1 {
+/* Sổ Tay Cổ Ngữ (SRS Lexicon Codex) inside Học Viện Thần Chú */
+.sq-view-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.sq-view-tab {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 8px;
+  border-radius: 11px;
+  border: 2px solid var(--border-brass);
+  background: linear-gradient(180deg, var(--surface-chip-top), var(--surface-chip-bot));
+  box-shadow: 0 2px 0 var(--shadow-chip);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.sq-view-tab.active {
+  background: linear-gradient(180deg, var(--sq-quiz-ribbon-top), var(--sq-quiz-ribbon-bot));
+  border-color: var(--teal-deep);
+  color: var(--ts-white);
+}
+
+.sq-stat-pill-btn {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.sq-codex-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 13px;
+  background: var(--surface-panel-solid);
+  border: 2px solid var(--farm-sheet-border);
+}
+
+.sq-codex-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--farm-ink-body);
+}
+
+.sq-codex-pack-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--farm-green-soft-bg);
+  border: 1px solid var(--farm-green-soft-border);
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--farm-green-text);
+}
+
+.sq-codex-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.sq-codex-search {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 2px solid var(--border-brass);
+  background: var(--ts-white);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.sq-codex-search:focus {
+  outline: 2px solid var(--brand-color);
+  outline-offset: 1px;
+}
+
+.sq-codex-filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sq-codex-count {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+
+.sq-codex-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-block-size: min(50vh, 430px);
+  overflow-y: auto;
+  padding-inline-end: 4px;
+}
+
+.sq-codex-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 11px;
+  background: linear-gradient(180deg, var(--farm-note-top), var(--farm-note-mid));
+  border: 1.5px solid var(--farm-sheet-border);
+}
+
+/* Defer off-screen Codex lexicon cards strictly below the initial fold */
+.sq-codex-row:nth-child(n + 9) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 5rem;
+}
+
+.sq-codex-tts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sq-codex-body {
+  min-inline-size: 0;
+}
+
+.sq-codex-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.sq-codex-word {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--farm-ink-title);
+}
+
+.sq-codex-meaning {
+  font-weight: 800;
+  color: var(--brand-strong);
+}
+
+.sq-codex-example {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--farm-ink-body);
+}
+
+.sq-codex-ex-native {
+  font-weight: 700;
+}
+
+.sq-codex-ex-vi {
+  color: var(--ink-soft);
+  margin-inline-start: 4px;
+}
+
+.sq-codex-note {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--sq-indigo-ink);
+}
+
+.sq-codex-srs {
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.sq-codex-srs.is-box5 {
+  background: var(--farm-green-soft-bg);
+  border: 1px solid var(--farm-green-soft-border);
+  color: var(--farm-green-text);
+}
+
+.sq-codex-srs.is-learning {
+  background: var(--sq-indigo-soft-bg);
+  border: 1px solid var(--sq-indigo-soft-border);
+  color: var(--sq-indigo-ink);
+}
+
+.sq-codex-srs.is-due {
+  background: var(--talisman-chip-bg);
+  border: 1px solid var(--talisman-chip-border);
+  color: var(--talisman-chip-ink);
+}
+
+.sq-codex-srs.is-unseen {
+  background: var(--surface-parchment);
+  border: 1px solid var(--border-brass-soft);
+  color: var(--ink-soft);
+}
+
+.sq-codex-empty {
+  padding: 18px 12px;
+  border-radius: 10px;
+  background: var(--surface-parchment);
+  border: 1.5px dashed var(--border-brass);
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 640px) {
+  .sq-codex-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .sq-codex-srs {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+
+}

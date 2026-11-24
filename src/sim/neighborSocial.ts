@@ -16,6 +16,7 @@ import {
   NeighborProfileState,
   NeighborSocialState,
   PlacedBuilding,
+  RoadsideStandState,
   TileOverrideData,
   TimeOverride,
   VerifiedRealPlayerProfile,
@@ -87,6 +88,109 @@ export function getCachedNeighborValleySnapshot(
     if (hit) return hit;
   }
   return undefined;
+}
+
+export interface NeighborRuntimeSocialExtras {
+  neighborId: string;
+  displayName: string;
+  avatarEmoji?: string;
+  roadsideStand?: RoadsideStandState;
+  coopWeekKey?: string;
+  coopPoints?: number;
+  syncedAt: number;
+}
+
+const MAX_NEIGHBOR_SOCIAL_EXTRAS = 64;
+const neighborSocialExtrasCache = new Map<string, NeighborRuntimeSocialExtras>();
+const neighborSocialExtrasByCanonicalId = new Map<string, NeighborRuntimeSocialExtras>();
+
+export function cacheNeighborSocialExtras(
+  neighbor: Pick<NeighborProfileState, 'id' | 'remoteUserId' | 'friendCode' | 'name' | 'avatarEmoji'>,
+  extras: {
+    roadsideStand?: RoadsideStandState;
+    coopWeekKey?: string;
+    coopPoints?: number;
+  },
+  nowMs = Date.now()
+): void {
+  const keys = buildNeighborValleyCacheKeys(neighbor);
+  if (keys.length === 0) return;
+
+  const existing = getCachedNeighborSocialExtras(neighbor);
+  const entry: NeighborRuntimeSocialExtras = {
+    neighborId: neighbor.id,
+    displayName: neighbor.name || existing?.displayName || 'Bạn Hang Sóc',
+    avatarEmoji: neighbor.avatarEmoji || existing?.avatarEmoji,
+    roadsideStand: extras.roadsideStand ?? existing?.roadsideStand,
+    coopWeekKey: extras.coopWeekKey ?? existing?.coopWeekKey,
+    coopPoints:
+      typeof extras.coopPoints === 'number'
+        ? Math.max(0, Math.min(200, Math.round(extras.coopPoints)))
+        : existing?.coopPoints,
+    syncedAt: nowMs,
+  };
+
+  for (const k of keys) {
+    if (neighborSocialExtrasCache.has(k)) {
+      neighborSocialExtrasCache.delete(k);
+    }
+    neighborSocialExtrasCache.set(k, entry);
+  }
+  if (neighborSocialExtrasByCanonicalId.has(neighbor.id)) {
+    neighborSocialExtrasByCanonicalId.delete(neighbor.id);
+  }
+  neighborSocialExtrasByCanonicalId.set(neighbor.id, entry);
+
+  while (neighborSocialExtrasCache.size > MAX_NEIGHBOR_SOCIAL_EXTRAS) {
+    const oldest = neighborSocialExtrasCache.keys().next().value;
+    if (oldest === undefined) break;
+    neighborSocialExtrasCache.delete(oldest);
+  }
+  while (neighborSocialExtrasByCanonicalId.size > MAX_NEIGHBOR_SOCIAL_EXTRAS) {
+    const oldestId = neighborSocialExtrasByCanonicalId.keys().next().value;
+    if (oldestId === undefined) break;
+    neighborSocialExtrasByCanonicalId.delete(oldestId);
+  }
+}
+
+export function getCachedNeighborSocialExtras(
+  neighbor: Pick<NeighborProfileState, 'id' | 'remoteUserId' | 'friendCode'>
+): NeighborRuntimeSocialExtras | undefined {
+  for (const k of buildNeighborValleyCacheKeys(neighbor)) {
+    const hit = neighborSocialExtrasCache.get(k);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+export function getCachedNeighborCoopContributions(weekKey: string): Array<{
+  neighborId: string;
+  displayName: string;
+  avatarEmoji?: string;
+  points: number;
+}> {
+  const out: Array<{
+    neighborId: string;
+    displayName: string;
+    avatarEmoji?: string;
+    points: number;
+  }> = [];
+  for (const entry of neighborSocialExtrasByCanonicalId.values()) {
+    if (entry.coopWeekKey === weekKey && (entry.coopPoints ?? 0) > 0) {
+      out.push({
+        neighborId: entry.neighborId,
+        displayName: entry.displayName,
+        avatarEmoji: entry.avatarEmoji,
+        points: entry.coopPoints ?? 0,
+      });
+    }
+  }
+  return out.sort((a, b) => b.points - a.points);
+}
+
+export function clearNeighborSocialExtrasCache(): void {
+  neighborSocialExtrasCache.clear();
+  neighborSocialExtrasByCanonicalId.clear();
 }
 
 /**
@@ -255,12 +359,20 @@ export function useServerCalendarDayKey(dayKey: string | null): void {
 /**
  * Tính khóa ngày lịch chuẩn Việt Nam (`Asia/Ho_Chi_Minh`, UTC+7) không phụ thuộc múi giờ máy khách.
  */
+let cachedVnDayBucket = -1;
+let cachedVnDayStr = '';
+
 export function getVietnamCalendarKey(nowMs = Date.now()): string {
-  const vnDate = new Date(nowMs + 7 * 3600_000);
+  const shifted = nowMs + 7 * 3600_000;
+  const bucket = Math.floor(shifted / 86_400_000);
+  if (bucket === cachedVnDayBucket) return cachedVnDayStr;
+  const vnDate = new Date(shifted);
   const y = vnDate.getUTCFullYear();
   const m = String(vnDate.getUTCMonth() + 1).padStart(2, '0');
   const day = String(vnDate.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  cachedVnDayBucket = bucket;
+  cachedVnDayStr = `${y}-${m}-${day}`;
+  return cachedVnDayStr;
 }
 
 /** HPVN: seconds left until the next Vietnam midnight (UTC+7), when the daily quests reset. */

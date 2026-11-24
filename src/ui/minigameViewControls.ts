@@ -1,3 +1,4 @@
+import '../styles/minigameViewControls.css';
 /**
  * Bộ điều khiển Phóng to / Thu nhỏ bằng ngón tay (Pinch-to-Zoom) & Kéo trượt (Pan)
  * tự nhiên trên màn hình cảm ứng di động (iOS Safari 16+ / Android) dùng chung

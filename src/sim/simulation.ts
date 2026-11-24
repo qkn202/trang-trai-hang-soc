@@ -319,12 +319,15 @@ import type { FarmBatchResult, LocatedItemSource, PlotSoilUpgradeCostInfo } from
 import {
   castStrollCareWave,
   claimVillagerKeepsake,
+  cyclePlayerStrollRobe,
   giftItemToVillager,
   petRoamingCompanion,
   RoamingPetRuntime,
   setActiveRoamingPet,
+  setPlayerStrollRobe,
   setStrollDestination,
   StrollAvatarRuntime,
+  StrollRobeMeta,
   togglePlayerStrollMode,
   updateRoamingPetAndStroll,
 } from './villagerGiftsPetAndStroll';
@@ -339,9 +342,11 @@ import {
   ensureCoopSupplyCrate,
   evaluateCollectionAlmanac,
   getActiveSeasonalFestivalDef,
+  getNeighborhoodCoopSummary,
   getSeasonalFestivalTaskProgress,
   leaveMysteryGiftForNeighbor,
   maybeSpawnHomeVisitorGift,
+  NeighborhoodCoopSummary,
   SeasonalFestivalDef,
   setPostcardFrameTheme,
 } from './socialFestivalsAndAlmanac';
@@ -685,6 +690,9 @@ export class ParkSimulation {
   public fieldMicroEvent: FieldMicroEvent | null = null;
   public nextMicroEventAt = Date.now() + 38_000;
   private helperAndStandAcc = 0;
+  private productionTickAcc = 0.25;
+  private cachedUnlockedZonesSig = '';
+  private cachedUnlockedZonesSet = new Set<string>();
   public layoutEditSnapshot: {
     buildings: PlacedBuilding[];
     tileOverrides: GameState['tileOverrides'];
@@ -945,7 +953,9 @@ export class ParkSimulation {
 
   public getActiveConstructions(now = Date.now()): PlacedBuilding[] { return economyGetActiveConstructions(this, now); }
 
-  public tickProductionToTimestamp(now: number, silent = false): void { return economyTickProductionToTimestamp(this, now, silent); }
+  public tickProductionToTimestamp(now: number, silent = false, skipRoadsideStand = false): void {
+    return economyTickProductionToTimestamp(this, now, silent, skipRoadsideStand);
+  }
 
   public getEffectiveItemStarCost(item: CatalogItem): number { return economyGetEffectiveItemStarCost(this, item); }
 
@@ -1190,8 +1200,28 @@ export class ParkSimulation {
     const clampedDt = Math.min(0.1, dt) * this.simSpeed;
     const now = Date.now();
 
+    const unlockedZones = this.state.unlockedZones;
+    const zonesSig = `${this.stateRevision}|${unlockedZones.length}|${unlockedZones[unlockedZones.length - 1] ?? ''}`;
+    if (this.cachedUnlockedZonesSig !== zonesSig) {
+      this.cachedUnlockedZonesSet.clear();
+      for (let i = 0; i < unlockedZones.length; i++) {
+        this.cachedUnlockedZonesSet.add(unlockedZones[i]);
+      }
+      this.cachedUnlockedZonesSig = zonesSig;
+    }
+    const unlockedSet = this.cachedUnlockedZonesSet;
+
+    this.productionTickAcc += clampedDt;
+    const isCatchupStep = dt >= 0.08;
+    const runProductionTick = isCatchupStep || this.productionTickAcc >= 0.2;
+    if (runProductionTick) {
+      this.productionTickAcc = 0;
+    }
+
     if (!this.isVisitingNeighbor) {
-      this.tickProductionToTimestamp(now);
+      if (runProductionTick) {
+        this.tickProductionToTimestamp(now, false, !isCatchupStep);
+      }
       this.helperAndStandAcc += clampedDt;
       if (this.helperAndStandAcc >= 2.0) {
         this.helperAndStandAcc = 0;
@@ -1226,8 +1256,6 @@ export class ParkSimulation {
       this.tickNeighborSocialBackground(now);
     }
 
-    const unlockedSet = new Set(this.state.unlockedZones);
-
     if (!this.isVisitingNeighbor) {
       // Periodic gentle staff wage accounting every 45s
       this.wageTickAcc += clampedDt;
@@ -1245,8 +1273,10 @@ export class ParkSimulation {
         this.state.finance.staffWagesPaid += wage;
       }
 
-      // Update Contraption Wear & Breakdowns!
-      this.updateRideQueues(clampedDt, now);
+      // Update Contraption Wear & Breakdowns (throttled to 4 Hz)
+      if (runProductionTick) {
+        this.updateRideQueues(clampedDt, now);
+      }
 
       // Creature hunger (slowed down if a Creature Feeder is nearby; rural farmstead coops/pastures are auto-tended!)
       for (const b of this.state.buildings) {
@@ -1291,16 +1321,18 @@ export class ParkSimulation {
     }
 
     // Automatic nighttime fireworks when Fireworks Pavilion is built!
-    const period = this.getRealTimePeriod();
-    if (period === 'dusk' || period === 'night') {
-      const hasPavilion = this.state.buildings.some(
-        (b) => getCatalogItem(b.itemId)?.isFireworksLauncher && now >= b.constructEndsAt
-      );
-      if (hasPavilion) {
-        this.nightFireworkAcc += clampedDt;
-        if (this.nightFireworkAcc >= 3.2) {
-          this.nightFireworkAcc = 0;
-          this.launchFireworksShow(2);
+    if (runProductionTick) {
+      const period = this.getRealTimePeriod();
+      if (period === 'dusk' || period === 'night') {
+        const hasPavilion = this.state.buildings.some(
+          (b) => getCatalogItem(b.itemId)?.isFireworksLauncher && now >= b.constructEndsAt
+        );
+        if (hasPavilion) {
+          this.nightFireworkAcc += 0.25;
+          if (this.nightFireworkAcc >= 3.2) {
+            this.nightFireworkAcc = 0;
+            this.launchFireworksShow(2);
+          }
         }
       }
     }
@@ -1674,8 +1706,10 @@ export class ParkSimulation {
     return getNeighborRoadsideOffer(neighbor);
   }
 
-  public buyVisitedNeighborRoadsideOffer(): { ok: boolean; msg: string } {
-    return buyVisitedNeighborRoadsideOffer(this);
+  public buyVisitedNeighborRoadsideOffer(
+    options?: { atomicServerVerified?: boolean; expectedSlotIndex?: number }
+  ): { ok: boolean; msg: string } {
+    return buyVisitedNeighborRoadsideOffer(this, options);
   }
 
   public isFarmHelperActive(nowMs = Date.now()): boolean {
@@ -2233,8 +2267,24 @@ export class ParkSimulation {
     return castStrollCareWave(this);
   }
 
+  public setStrollRobe(robeId: import('../types/game').StrollRobeId): {
+    ok: boolean;
+    robe: StrollRobeMeta;
+    msg: string;
+  } {
+    return setPlayerStrollRobe(this, robeId);
+  }
+
+  public cycleStrollRobe(): { ok: boolean; robe: StrollRobeMeta; msg: string } {
+    return cyclePlayerStrollRobe(this);
+  }
+
   public ensureCoopSupplyCrate(nowMs = Date.now()): CoopSupplyCrateState {
     return ensureCoopSupplyCrate(this.homeStateWhileVisiting ?? this.state, nowMs);
+  }
+
+  public getNeighborhoodCoopSummary(nowMs = Date.now()): NeighborhoodCoopSummary {
+    return getNeighborhoodCoopSummary(this, nowMs);
   }
 
   public contributeToCoopSupplyCrate(

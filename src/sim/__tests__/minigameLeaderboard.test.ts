@@ -1,11 +1,17 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MagicalAudio } from '../../engine/audio';
+import {
+  applyHouseCup,
+  getHouseCupWeeklyCycle,
+  resetHouseCupViewForTest,
+} from '../../hpvn/houseCup';
 import { generateNextQuizChallenge } from '../languageQuizEngine';
 import {
   ALL_HOGWARTS_HOUSES,
   ALL_LEADERBOARD_GAMES,
   buildMinigameLeaderboard,
   clearCachedCloudLeaderboards,
+  getActiveLeaderboardWeekKey,
   HOGWARTS_HOUSE_META,
   isScoredLeaderboardGame,
   LEADERBOARD_GAME_META,
@@ -44,6 +50,11 @@ describe('Per-Mini-Game Leaderboards (All 6 Scored Games: Match-3, Minesweeper/C
   beforeEach(() => {
     storageMap.clear();
     clearCachedCloudLeaderboards();
+    resetHouseCupViewForTest();
+  });
+
+  afterEach(() => {
+    resetHouseCupViewForTest();
   });
 
   it('contains zero NPCs by default across all 6 scored mini-games (Match-3, Caro/Mines, Sudoku, Chess/Fish, Blocks, Jigsaw)', () => {
@@ -75,7 +86,7 @@ describe('Per-Mini-Game Leaderboards (All 6 Scored Games: Match-3, Minesweeper/C
   it('tracks independent victories on all 6 scored games (including Minesweeper/caro & FishShooter/chess) while keeping SeedQuiz unscored', () => {
     const sim = new ParkSimulation(new MagicalAudio());
 
-    // Seed real online players on Match-3 & Sudoku leaderboards
+    // Seed real online players on Match-3 & Sudoku weekly leaderboards (Cách A: 20 đ/màn ở khung Màn 1–15)
     setCachedCloudLeaderboardEntries('match3', [
       {
         userId: 'real_user_m3_1',
@@ -84,11 +95,13 @@ describe('Per-Mini-Game Leaderboards (All 6 Scored Games: Match-3, Minesweeper/C
         friendCode: 'HS-MKHG-11',
         avatarEmoji: '🧙‍♂️',
         house: 'Ravenclaw',
+        weeklyCleared: 1,
+        weeklyScore: 20,
         primaryValue: 1,
-        ratingScore: 180,
+        ratingScore: 20,
         totalWins: 1,
         bestStreak: 1,
-        detailLabelVi: '1 thắng • 🔥×1',
+        detailLabelVi: '1 thắng tuần • 🔥×1',
         updatedAt: Date.now(),
       },
       {
@@ -98,11 +111,13 @@ describe('Per-Mini-Game Leaderboards (All 6 Scored Games: Match-3, Minesweeper/C
         friendCode: 'HS-LANH-22',
         avatarEmoji: '🧙‍♀️',
         house: 'Hufflepuff',
-        primaryValue: 2,
-        ratingScore: 340,
-        totalWins: 2,
-        bestStreak: 2,
-        detailLabelVi: '2 thắng • 🔥×2',
+        weeklyCleared: 1,
+        weeklyScore: 30,
+        primaryValue: 1,
+        ratingScore: 30,
+        totalWins: 1,
+        bestStreak: 1,
+        detailLabelVi: '1 thắng tuần • 🔥×1',
         updatedAt: Date.now(),
       },
     ]);
@@ -115,11 +130,13 @@ describe('Per-Mini-Game Leaderboards (All 6 Scored Games: Match-3, Minesweeper/C
         friendCode: 'HS-QBAO-33',
         avatarEmoji: '🔮',
         house: 'Gryffindor',
+        weeklyCleared: 2,
+        weeklyScore: 40,
         primaryValue: 2,
-        ratingScore: 360,
+        ratingScore: 40,
         totalWins: 2,
         bestStreak: 2,
-        detailLabelVi: '2 thắng • 🔥×2',
+        detailLabelVi: '2 thắng tuần • 🔥×2',
         updatedAt: Date.now(),
       },
     ]);
@@ -739,5 +756,203 @@ describe('Per-Mini-Game Leaderboards (All 6 Scored Games: Match-3, Minesweeper/C
     }
     mgr.setZoom('jigsaw', 5.4);
     expect(mgr.getState('jigsaw').zoom).toBe(5.4);
+  });
+
+  it('ranks individual leaderboard strictly by weekly Cách A score matching Cúp Nhà (not all-time level), resets cleanly every week, and filters stale prior-week entries', async () => {
+    // 1. Friday 17:00 -> next Friday 16:00 ICT cycle uses one unified weekKey matching Cúp Nhà
+    const friEvening = Date.parse('2026-11-20T18:00:00+07:00');
+    const monNoon = Date.parse('2026-11-23T12:00:00+07:00');
+    const friBeforeClose = Date.parse('2026-11-27T15:30:00+07:00');
+    const friAfterClose = Date.parse('2026-11-27T16:10:00+07:00');
+    expect(getHouseCupWeeklyCycle(friEvening).weekKey).toBe('2026-W48');
+    expect(getHouseCupWeeklyCycle(monNoon).weekKey).toBe('2026-W48');
+    expect(getHouseCupWeeklyCycle(friBeforeClose).weekKey).toBe('2026-W48');
+    expect(getHouseCupWeeklyCycle(friAfterClose).weekKey).toBe('2026-W49');
+
+    // Lock server House Cup weekKey = '2026-W48'
+    applyHouseCup({
+      weekKey: '2026-W48',
+      mode: 'medals',
+      unlimited: true,
+      house: 'Gryffindor',
+      memberTodayPoints: 0,
+      memberDailyCap: 0,
+      memberBank: 0,
+      memberTier: 1,
+      perTier: 300,
+    });
+    expect(getActiveLeaderboardWeekKey()).toBe('2026-W48');
+
+    // 2. Player starts at all-time Stage 44 (like dragon_54 in screenshot), clears 10 new stages this week (44 -> 54)
+    // Band 41-80 = 30 pts/stage -> 10 * 30 = 300 weekly pts!
+    const sim = new ParkSimulation(new MagicalAudio());
+    sim.setPlayerHouse('Gryffindor');
+    sim.state.match3.maxClearedLevel = 44;
+    sim.state.match3.currentLevel = 45;
+    sim.ensureMinigameLeaderboard();
+    expect(sim.getMinigameLeaderboard('match3', 'valley').playerEntry.primaryValue).toBe(0);
+    expect(sim.getMinigameLeaderboard('match3', 'valley').playerEntry.ratingScore).toBe(0);
+
+    for (let i = 0; i < 10; i++) {
+      sim.completeMatch3LevelVictory(10, { sessionScore: 3000 });
+    }
+
+    // Seed cloud rivals with much higher all-time levels (Màn 790 / 785 / 755) but lower weekly scores!
+    setCachedCloudLeaderboardEntries('match3', [
+      {
+        userId: 'aries_uid',
+        name: 'Aries',
+        parkName: 'Tháp Ravenclaw',
+        friendCode: 'HS-ARIE-01',
+        avatarEmoji: '🦅',
+        house: 'Ravenclaw',
+        weekKey: '2026-W48',
+        weeklyCleared: 3, // < 5 stages -> 0 House pts!
+        weeklyScore: 105,
+        bestStage: 790,
+        primaryValue: 3,
+        ratingScore: 105,
+        totalWins: 3,
+        bestStreak: 3,
+        detailLabelVi: '3 màn tuần • Màn 790',
+        updatedAt: Date.now(),
+      },
+      {
+        userId: 'nguyen_uid',
+        name: 'Nguyên',
+        parkName: 'Hầm Slytherin',
+        friendCode: 'HS-NGUY-02',
+        avatarEmoji: '🐍',
+        house: 'Slytherin',
+        weekKey: '2026-W48',
+        weeklyCleared: 7,
+        weeklyScore: 245,
+        bestStage: 785,
+        primaryValue: 7,
+        ratingScore: 245,
+        totalWins: 7,
+        bestStreak: 5,
+        detailLabelVi: '7 màn tuần • Màn 785',
+        updatedAt: Date.now(),
+      },
+      {
+        userId: 'love_hp_uid',
+        name: 'i_love_hp_forever',
+        parkName: 'Vườn Hufflepuff',
+        friendCode: 'HS-LVHP-03',
+        avatarEmoji: '🦡',
+        house: 'Hufflepuff',
+        weekKey: '2026-W48',
+        weeklyCleared: 8,
+        weeklyScore: 280,
+        bestStage: 755,
+        primaryValue: 8,
+        ratingScore: 280,
+        totalWins: 8,
+        bestStreak: 4,
+        detailLabelVi: '8 màn tuần • Màn 755',
+        updatedAt: Date.now(),
+      },
+      {
+        userId: 'easy_grinder_uid',
+        name: 'Tân Binh Chăm Chỉ',
+        parkName: 'Đồi Lúa Mì',
+        friendCode: 'HS-TBIN-04',
+        avatarEmoji: '🧙',
+        house: 'Gryffindor',
+        weekKey: '2026-W48',
+        weeklyCleared: 11, // More weekly stages (11 vs 10) in Stage 1-15 band (20 pts/stage = 220 đ < 300 đ!)
+        weeklyScore: 220,
+        bestStage: 12,
+        primaryValue: 11,
+        ratingScore: 220,
+        totalWins: 11,
+        bestStreak: 11,
+        detailLabelVi: '11 màn tuần • Màn 12',
+        updatedAt: Date.now(),
+      },
+      {
+        userId: 'stale_last_week_uid',
+        name: 'Cao Thủ Tuần Trước',
+        parkName: 'Ký Ức Tuần W47',
+        friendCode: 'HS-OLDW-99',
+        avatarEmoji: '🧙',
+        house: 'Ravenclaw',
+        weekKey: '2026-W47', // Stale prior week -> must be excluded from 2026-W48!
+        weeklyCleared: 99,
+        weeklyScore: 3465,
+        bestStage: 900,
+        primaryValue: 99,
+        ratingScore: 3465,
+        totalWins: 99,
+        bestStreak: 20,
+        detailLabelVi: '99 màn tuần',
+        updatedAt: Date.now() - 86_400_000,
+      },
+    ]);
+
+    const w48 = sim.getMinigameLeaderboard('match3', 'valley');
+    expect(w48.weekKey).toBe('2026-W48');
+    // Stale W47 entry excluded
+    expect(w48.entries.some((e) => e.id === 'cloud:stale_last_week_uid')).toBe(false);
+    // Ranked strictly by weekly Cách A score (300 > 280 > 245 > 220 > 105), NEVER by all-time stage (790) or raw stage count (11)!
+    expect(w48.entries.map((e) => [e.isPlayer ? 'SELF' : e.name, e.ratingScore, e.primaryValue, e.cupContributionPoints])).toEqual([
+      ['SELF', 300, 10, 100],                // #1 (qualified >= 5 -> +100 đ Nhà)
+      ['i_love_hp_forever', 280, 8, 80],     // #2 (+80 đ Nhà)
+      ['Nguyên', 245, 7, 65],                // #3 (+65 đ Nhà)
+      ['Tân Binh Chăm Chỉ', 220, 11, 50],    // #4 (11 easy stages = 220 đ < 245 đ -> +50 đ Nhà)
+      ['Aries', 105, 3, 0],                  // #5 (all-time Màn 790, only 3 weekly stages < 5 -> 0 đ Nhà!)
+    ]);
+    expect(w48.playerEntry.primaryDisplayVi).toBe('10 màn tuần');
+    expect(w48.playerEntry.ratingDisplayVi).toBe('300 đ');
+    expect(w48.playerEntry.allTimeBestStage).toBe(54);
+    expect(w48.playerEntry.allTimeStageDisplayVi).toBe('Màn 54/7777');
+
+    // 3. Verify LeaderboardModalController renders weekly header, weekly points, weekly stages & House Cup contribution
+    const { LeaderboardModalController } = await import('../../ui/leaderboardModal');
+    const mount = {
+      innerHTML: '',
+      querySelectorAll: () => [],
+      querySelector: () => null,
+    };
+    const fakeRoot = {
+      querySelector: (sel: string) => (sel === '#leaderboardTabMount' ? mount : null),
+    };
+    const modal = new LeaderboardModalController(fakeRoot as never, sim);
+    modal.activeGameId = 'match3';
+    modal.activeScope = 'valley';
+    modal.render(mount as never);
+    expect(mount.innerHTML).toContain('BXH Tuần 2026-W48');
+    expect(mount.innerHTML).toContain('300 đ');
+    expect(mount.innerHTML).toContain('10 màn tuần');
+    expect(mount.innerHTML).toContain('+100 đ Nhà');
+    expect(mount.innerHTML).not.toContain('Màn 790');
+
+    // Kỷ Lục tab shows weekly rank/score alongside all-time stage milestone
+    modal.activeScope = 'personal';
+    modal.render(mount as never);
+    expect(mount.innerHTML).toContain('10 màn tuần');
+    expect(mount.innerHTML).toContain('Đỉnh Màn 54');
+
+    // 4. Roll over to next week (2026-W49): weekly individual board resets cleanly to 0 while preserving all-time bestStage!
+    applyHouseCup({
+      weekKey: '2026-W49',
+      mode: 'medals',
+      unlimited: true,
+      house: 'Gryffindor',
+      memberTodayPoints: 0,
+      memberDailyCap: 0,
+      memberBank: 0,
+      memberTier: 1,
+      perTier: 300,
+    });
+    const w49 = sim.getMinigameLeaderboard('match3', 'valley');
+    expect(w49.weekKey).toBe('2026-W49');
+    expect(w49.entries).toHaveLength(1); // All W48 rivals cleared out on new week
+    expect(w49.playerEntry.primaryValue).toBe(0);
+    expect(w49.playerEntry.primaryDisplayVi).toBe('0 màn tuần');
+    expect(w49.playerEntry.ratingScore).toBe(0);
+    expect(w49.playerEntry.cupContributionPoints).toBe(0);
+    expect(w49.playerEntry.allTimeBestStage).toBe(54); // Lifetime progress safely preserved!
   });
 });

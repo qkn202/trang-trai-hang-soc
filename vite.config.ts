@@ -106,6 +106,20 @@ export default defineConfig({
           ) {
             return;
           }
+          if (id.includes('/src/hpvn/') && !id.includes('/src/hpvn/levelBar')) {
+            return 'hpvn-platform';
+          }
+          if (
+            id.includes('/src/ui/hudFarmAndWorkshop') ||
+            id.includes('/src/ui/hudQuestsAndSettings') ||
+            id.includes('/src/ui/hudSocialAndTutorial') ||
+            id.includes('/src/ui/hudInspect') ||
+            id.includes('/src/ui/hudHeaderAndDock') ||
+            id.includes('/src/ui/hudShell') ||
+            id.includes('/src/ui/hudShared')
+          ) {
+            return 'ui-hud';
+          }
           if (id.includes('/src/data/')) {
             return 'game-data';
           }
@@ -114,9 +128,36 @@ export default defineConfig({
             id.includes('/src/engine/bgmMood') ||
             id.includes('/src/engine/pathfinding') ||
             id.includes('/src/engine/isometric') ||
-            id.includes('/src/sim/')
+            id.includes('/src/sim/neighborSocial') ||
+            id.includes('/src/sim/minigameLeaderboard') ||
+            id.includes('/src/sim/proofOfPlay') ||
+            id.includes('/src/sim/puzzleShared') ||
+            id.includes('/src/sim/retentionAndNarrative') ||
+            id.includes('/src/sim/roadsideStandAndEvents') ||
+            id.includes('/src/sim/languageQuizEngine') ||
+            id.includes('/src/sim/coaster') ||
+            id.includes('/src/sim/zooAndBackstage') ||
+            id.includes('/src/sim/economyIntegrity') ||
+            id.includes('/src/sim/yuleEvent') ||
+            id.includes('/src/sim/buildTransactions')
           ) {
-            return 'sim';
+            return 'sim-foundation';
+          }
+          if (id.includes('/src/sim/simulationData')) {
+            return 'sim-data';
+          }
+          if (
+            id.includes('/src/sim/simulationFarm') ||
+            id.includes('/src/sim/simulationEconomy') ||
+            id.includes('/src/sim/simulationWorld') ||
+            id.includes('/src/sim/simulationCreatures') ||
+            id.includes('/src/sim/simulationVillagers') ||
+            id.includes('/src/sim/villagerGiftsPetAndStroll')
+          ) {
+            return 'sim-world';
+          }
+          if (id.includes('/src/sim/')) {
+            return 'sim-core';
           }
           if (id.includes('/src/engine/')) {
             return 'engine';

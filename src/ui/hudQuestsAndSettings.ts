@@ -67,6 +67,7 @@ import {
   MAX_MINIGAME_STAGE,
 } from '../data/match3Levels';
 import { getZoneById, GRID_SIZE, ZONES } from '../data/zones';
+import { triggerAmbientOwlFlyby } from '../engine/ambientWildlife';
 import {
   Camera,
   centerCameraOnGrid,
@@ -153,9 +154,16 @@ import {
   BUILD_HUD_CATEGORIES,
   HEATMAP_CYCLE,
   InspectSelection,
+  captureModalScrollSnapshot,
   escapeHtml,
+  restoreModalScrollSnapshot,
 } from "./hudShared";
-import { VILLAGER_AFFECTION_GIFT_META } from '../sim/villagerGiftsPetAndStroll';
+import {
+  STROLL_ROBE_ORDER,
+  STROLL_ROBE_WARDROBE,
+  VILLAGER_AFFECTION_GIFT_META,
+} from '../sim/villagerGiftsPetAndStroll';
+import type { StrollRobeId } from '../types/game';
 import type { GameHUD } from './hud';
 
 export function questsUiOpenHarvestFeastDialog(hud: GameHUD): void {
@@ -215,6 +223,7 @@ export function questsUiShowRibbonUnveilBanner(hud: GameHUD, info: RibbonUnveilC
 export function questsUiRenderHarvestFeastDialog(hud: GameHUD): void {
     const box = hud.root.querySelector('#harvestFeastDialogContent') as HTMLElement | null;
     if (!box) return;
+    const scrollSnap = captureModalScrollSnapshot(box);
 
     const feast = hud.sim.ensureHarvestFeast();
     const claimedSet = new Set(feast.claimedTiers);
@@ -369,6 +378,7 @@ export function questsUiRenderHarvestFeastDialog(hud: GameHUD): void {
         ${tiersHtml}
       </div>
     `;
+    restoreModalScrollSnapshot(box, scrollSnap);
 
     box.querySelector('#btnFeastClaimAll')?.addEventListener('click', () => {
       const res = hud.sim.claimAllHarvestFeastTiers();
@@ -760,6 +770,9 @@ export function questsUiRenderHouseCupIntroDialog(hud: GameHUD): void {
 
 export function questsUiRenderAlbumDialog(hud: GameHUD): void {
     const box = hud.root.querySelector('#albumDialogContent') as HTMLElement;
+    const prevTabSig = box.dataset.activeAlbumTabSig ?? '';
+    const nextTabSig = `${hud.activeAlbumTab}:${hud.activeProfileSubTab}`;
+    const scrollSnap = captureModalScrollSnapshot(box);
     const st = hud.sim.homeStateWhileVisiting ?? hud.sim.state;
     hud.sim.checkAndToastAchievements();
     const ret = ensureRetentionState(st);
@@ -893,7 +906,7 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
               const curLabel = curVal.toLocaleString('vi-VN');
               const targetLabel = def.target.toLocaleString('vi-VN');
               return `
-                <div class="aaa-ach-card" data-unlocked="${unlocked}">
+                <div class="aaa-ach-card" data-ach-card="${def.id}" data-unlocked="${unlocked}">
                   <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
                     <div style="min-width:0;flex:1;">
                       <div class="hs-card-title">${def.titleVi}</div>
@@ -905,7 +918,7 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
                       }
                     </div>
                   </div>
-                  <div style="flex-shrink:0;text-align:right;">
+                  <div data-ach-cta style="flex-shrink:0;text-align:right;">
                     ${
                       claimed
                         ? `<span style="font-size:12px;font-weight:700;color:var(--farm-green-text);">✓ Đã nhận</span>`
@@ -1069,6 +1082,23 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
         `;
       }
 
+      const currentRobeId: StrollRobeId = st.settings.strollRobeId ?? 'burrow_classic';
+      const robePillsHtml = STROLL_ROBE_ORDER.map((rid) => {
+        const meta = STROLL_ROBE_WARDROBE[rid];
+        const active = rid === currentRobeId;
+        return `
+          <button
+            type="button"
+            class="hs-robe-pill ${active ? 'is-active' : ''}"
+            data-stroll-robe="${rid}"
+            aria-pressed="${active}"
+          >
+            <span class="hs-robe-swatch" style="background:${meta.scarfPrimary};border-color:${meta.scarfAccent};" aria-hidden="true"></span>
+            <span>${escapeHtml(meta.labelVi)}</span>
+          </button>
+        `;
+      }).join('');
+
       bodyHtml = `
         <div class="hs-profile-card" data-house="${escapeHtml(playerHouse)}">
           <img class="hs-profile-crest" src="${crestSrc}" alt="" width="36" height="36" />
@@ -1080,6 +1110,10 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
             <div class="hs-profile-meta">Cấp ${st.level} · ${escapeHtml(getPlayerTitle(st.level))} · 🌟 ${(st.match3?.stars ?? 0).toLocaleString('vi-VN')} · Thành tựu ${codex.unlocked}/${codex.total}</div>
           </div>
         </div>
+        <div class="hs-robe-bar" role="group" aria-label="Trang phục đi dạo Hang Sóc">
+          <span class="hs-robe-bar-label">✨ Áo đi dạo:</span>
+          <div class="hs-robe-pills">${robePillsHtml}</div>
+        </div>
         <div class="lb-scope-pills hs-profile-subtabs" role="tablist" aria-label="Chi tiết hồ sơ">
           ${psubBtn('login7', 'Điểm danh', claimableLoginCount)}${psubBtn('achievements', 'Thành tựu', claimableAchCount)}${psubBtn('friendship', 'Dân làng')}${psubBtn('almanac', 'Bách khoa', hud.sim.evaluateCollectionAlmanac().claimableCount)}
         </div>
@@ -1088,6 +1122,8 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
     }
 
     box.innerHTML = tabsHtml + bodyHtml;
+    box.dataset.activeAlbumTabSig = nextTabSig;
+    restoreModalScrollSnapshot(box, scrollSnap, Boolean(prevTabSig && prevTabSig !== nextTabSig));
 
     if (hud.activeAlbumTab === 'leaderboard') {
       const mount = box.querySelector('#leaderboardTabMount') as HTMLElement | null;
@@ -1129,6 +1165,20 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
       });
     });
 
+    box.querySelectorAll<HTMLButtonElement>('[data-stroll-robe]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const rid = btn.dataset.strollRobe as StrollRobeId;
+        const res = hud.sim.setStrollRobe(rid);
+        hud.showToast(res.msg, '✨');
+        // In-place patch: keep focus & DOM intact with zero modal flicker
+        box.querySelectorAll<HTMLButtonElement>('[data-stroll-robe]').forEach((p) => {
+          const isAct = p.dataset.strollRobe === res.robe.id;
+          p.classList.toggle('is-active', isAct);
+          p.setAttribute('aria-pressed', String(isAct));
+        });
+      });
+    });
+
     box.querySelector('#btnClaimAllAchievements')?.addEventListener('click', () => {
       const res = hud.sim.claimAllAchievements();
       hud.showToast(res.msg, res.ok ? '🎖️' : '⚠️');
@@ -1144,8 +1194,46 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
 
     box.querySelectorAll<HTMLButtonElement>('[data-claim-ach]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const res = hud.sim.claimAchievement(String(btn.dataset.claimAch));
+        const achId = String(btn.dataset.claimAch);
+        const res = hud.sim.claimAchievement(achId);
         hud.showToast(res.msg, res.ok ? '🎖️' : '⚠️');
+        if (!res.ok) return;
+        // In-place patch: update just the claimed achievement card & badges without rebuilding all 52 cards
+        const card = box.querySelector<HTMLElement>(`[data-ach-card="${achId}"]`);
+        const cta = card?.querySelector<HTMLElement>('[data-ach-cta]');
+        if (card && cta) {
+          cta.innerHTML = `<span style="font-size:12px;font-weight:700;color:var(--farm-green-text);">✓ Đã nhận</span>`;
+          card.classList.remove('is-patched-pop');
+          void card.offsetWidth;
+          card.classList.add('is-patched-pop');
+          const curSt = hud.sim.homeStateWhileVisiting ?? hud.sim.state;
+          const curRet = ensureRetentionState(curSt);
+          const remAch = ACHIEVEMENT_REGISTRY.filter((a) => {
+            const e = curRet.achievements[a.id];
+            return Boolean(e?.unlockedAt && !e?.claimedAt);
+          }).length;
+          const claimAllBtn = box.querySelector<HTMLButtonElement>('#btnClaimAllAchievements');
+          if (claimAllBtn) {
+            if (remAch > 0) claimAllBtn.textContent = `Nhận tất cả (${remAch})`;
+            else claimAllBtn.remove();
+          }
+          const achSubBadge = box.querySelector('[data-psub="achievements"] .hs-tab-badge');
+          if (achSubBadge) {
+            if (remAch > 0) achSubBadge.textContent = String(remAch);
+            else achSubBadge.remove();
+          }
+          const maxDay = hud.sim.getUnlockedLoginDayMax(curSt);
+          const remLogin = DAY_1_TO_7_REWARDS.filter(
+            (d) => d.day <= maxDay && !curRet.claimedLoginDays.includes(d.day)
+          ).length;
+          const profBadge = box.querySelector('[data-atab="profile"] .hs-tab-badge');
+          if (profBadge) {
+            if (remAch + remLogin > 0) profBadge.textContent = String(remAch + remLogin);
+            else profBadge.remove();
+          }
+          hud.refreshHeader();
+          return;
+        }
         questsUiRenderAlbumDialog(hud);
       });
     });
@@ -1282,14 +1370,15 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
         })
         .join('');
 
-      const selSpBonus = selectedOrder ? hud.sim.getOwlOrderSpotlightBonus(selectedOrder) : null;
-      const detailHtml = selectedOrder
-        ? `
+      const buildDetailHtml = (order: (typeof barn.owlOrders)[number] | undefined): string => {
+        if (!order) return '';
+        const selSpBonus = hud.sim.getOwlOrderSpotlightBonus(order);
+        return `
           <div class="owl-detail-sheet">
             <div class="owl-detail-head">
               <div>
-                <div class="owl-detail-title">${escapeHtml(selectedOrder.senderName)}</div>
-                <div class="owl-detail-sub">🦉 ${escapeHtml(selectedOrder.owlName)}</div>
+                <div class="owl-detail-title">${escapeHtml(order.senderName)}</div>
+                <div class="owl-detail-sub">🦉 ${escapeHtml(order.owlName)}</div>
               </div>
               <button type="button" id="btnRefreshOwlOrder" class="brass-btn" style="padding:4px 9px;font-size:12px;" ${hud.sim.getOwlRerollsLeft() > 0 ? `title="Đổi đơn (còn ${hud.sim.getOwlRerollsLeft()} lượt hôm nay)"` : 'disabled title="Hết lượt đổi hôm nay"'}>
                 ${hud.sim.getOwlRerollsLeft() > 0 ? `🔄 Đổi (${hud.sim.getOwlRerollsLeft()})` : 'Hết lượt đổi'}
@@ -1297,7 +1386,7 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
             </div>
 
             <div class="owl-req-list">
-              ${selectedOrder.requirements
+              ${order.requirements
                 .map((req, reqIdx) => {
                   const meta = getFarmItemMeta(req.itemId);
                   const have = hud.sim.getFarmItemCount(req.itemId);
@@ -1306,7 +1395,7 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
                     0,
                     MAX_DAILY_OWL_HELP_REQUESTS - social.dailyOwlHelpRequestedCount
                   );
-                  const helpReq = hud.sim.getOwlRequirementHelpState(selectedOrder.id, reqIdx);
+                  const helpReq = hud.sim.getOwlRequirementHelpState(order.id, reqIdx);
                   const helpedByFriend = Boolean(helpReq?.fulfilledAt);
                   const ok = hud.sim.state.sandboxMode || helpedByFriend || have >= req.qty;
                   const coOpControlHtml = helpedByFriend
@@ -1335,20 +1424,20 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
 
             <div class="owl-reward-box">
               <div class="owl-reward-pills">
-                <span class="owl-rew-pill gold">🪙 +${selectedOrder.rewardSickle}</span>
-                <span class="owl-rew-pill xp">⭐ +${selectedOrder.rewardXp + (selSpBonus?.bonusXp ?? 0)}</span>
+                <span class="owl-rew-pill gold">🪙 +${order.rewardSickle}</span>
+                <span class="owl-rew-pill xp">⭐ +${order.rewardXp + (selSpBonus?.bonusXp ?? 0)}</span>
                 ${
                   selSpBonus?.hasSpotlight
                     ? `<span class="owl-rew-pill plug">🎪 +${selSpBonus.bonusCompost}🌿</span>`
                     : ''
                 }
                 ${
-                  selectedOrder.rewardMugglePlug
-                    ? `<span class="owl-rew-pill plug">🔌 +${selectedOrder.rewardMugglePlug}</span>`
+                  order.rewardMugglePlug
+                    ? `<span class="owl-rew-pill plug">🔌 +${order.rewardMugglePlug}</span>`
                     : ''
                 }
                 ${
-                  (selectedOrder.isFeastMarquee || (barn.ordersDelivered + 1) % 3 === 0) &&
+                  (order.isFeastMarquee || (barn.ordersDelivered + 1) % 3 === 0) &&
                   hud.sim.getPhoenixTalismanCount() < MAX_PHOENIX_TALISMANS
                     ? `<span class="owl-rew-pill plug">🔥 +1</span>`
                     : ''
@@ -1356,8 +1445,37 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
               </div>
             </div>
           </div>
-        `
-        : '';
+        `;
+      };
+
+      const bindOwlDetailSheetEvents = (sheetRoot: ParentNode, order: (typeof barn.owlOrders)[number] | undefined) => {
+        sheetRoot.querySelector('#btnRefreshOwlOrder')?.addEventListener('click', () => {
+          if (order) {
+            hud.sim.refreshFarmOwlOrder(order.id);
+            hud.selectedOwlOrderId = null;
+            questsUiRenderQuestDialog(hud);
+          }
+        });
+        sheetRoot.querySelectorAll<HTMLButtonElement>('[data-ask-owl-help]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            if (!order) return;
+            const reqIdx = Number(btn.dataset.askOwlHelp);
+            if (!Number.isFinite(reqIdx)) return;
+            const res = hud.sim.requestPlayerOwlCrateHelp(order.id, reqIdx);
+            if (!res.ok) hud.showToast(res.msg, '⚠️');
+            questsUiRenderQuestDialog(hud);
+          });
+        });
+        sheetRoot.querySelectorAll<HTMLButtonElement>('[data-jump-owl-item]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const itemId = btn.dataset.jumpOwlItem as FarmItemId;
+            (hud.root.querySelector('#questDialog') as HTMLDialogElement | null)?.close();
+            hud.jumpToMissingFarmItem(itemId);
+          });
+        });
+      };
+
+      const detailHtml = buildDetailHtml(selectedOrder);
 
       box.innerHTML = `
         ${tabsSwitchHtml}
@@ -1387,51 +1505,48 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
 
       box.querySelectorAll<HTMLButtonElement>('[data-select-owl]').forEach((btn) => {
         btn.addEventListener('click', () => {
-          hud.selectedOwlOrderId = btn.dataset.selectOwl ?? null;
-          questsUiRenderQuestDialog(hud);
-        });
-      });
-
-      box.querySelector('#btnRefreshOwlOrder')?.addEventListener('click', () => {
-        if (selectedOrder) {
-          hud.sim.refreshFarmOwlOrder(selectedOrder.id);
-          hud.selectedOwlOrderId = null;
-          questsUiRenderQuestDialog(hud);
-        }
-      });
-
-      box.querySelectorAll<HTMLButtonElement>('[data-ask-owl-help]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          if (!selectedOrder) return;
-          const reqIdx = Number(btn.dataset.askOwlHelp);
-          if (!Number.isFinite(reqIdx)) return;
-          const res = hud.sim.requestPlayerOwlCrateHelp(selectedOrder.id, reqIdx);
-          if (!res.ok) {
-            hud.showToast(res.msg, '⚠️');
+          const nextId = btn.dataset.selectOwl ?? null;
+          if (!nextId || nextId === hud.selectedOwlOrderId) return;
+          hud.selectedOwlOrderId = nextId;
+          // In-place patch: keep pin notes & portraits intact without rebuilding the board!
+          const curBarn = hud.sim.ensureFarmBarn();
+          const nextOrder = curBarn.owlOrders.find((o) => o.id === nextId);
+          const curSheet = box.querySelector('.owl-detail-sheet');
+          const sendBtn = box.querySelector<HTMLButtonElement>('#btnSendOwlOrder');
+          if (nextOrder && curSheet && sendBtn) {
+            box.querySelectorAll<HTMLButtonElement>('[data-select-owl]').forEach((pin) => {
+              pin.classList.toggle('selected', pin.dataset.selectOwl === nextId);
+            });
+            curSheet.outerHTML = buildDetailHtml(nextOrder);
+            const freshSheet = box.querySelector('.owl-detail-sheet');
+            if (freshSheet) bindOwlDetailSheetEvents(freshSheet, nextOrder);
+            const canSendNext = hud.sim.canFulfillFarmOwlOrder(nextOrder);
+            sendBtn.classList.toggle('ready', canSendNext);
+            sendBtn.classList.toggle('not-ready', !canSendNext);
+            sendBtn.textContent = canSendNext ? 'Giao hàng' : 'Mở Kho';
+            return;
           }
           questsUiRenderQuestDialog(hud);
         });
       });
 
-      box.querySelectorAll<HTMLButtonElement>('[data-jump-owl-item]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const itemId = btn.dataset.jumpOwlItem as FarmItemId;
-          (hud.root.querySelector('#questDialog') as HTMLDialogElement | null)?.close();
-          hud.jumpToMissingFarmItem(itemId);
-        });
-      });
+      bindOwlDetailSheetEvents(box, selectedOrder);
 
       box.querySelector('#btnSendOwlOrder')?.addEventListener('click', () => {
-        if (!selectedOrder) return;
-        if (!hud.sim.canFulfillFarmOwlOrder(selectedOrder)) {
-          const res = hud.sim.fulfillFarmOwlOrder(selectedOrder.id);
+        const curBarn = hud.sim.ensureFarmBarn();
+        const activeOrder =
+          curBarn.owlOrders.find((o) => o.id === hud.selectedOwlOrderId) ?? curBarn.owlOrders[0];
+        if (!activeOrder) return;
+        if (!hud.sim.canFulfillFarmOwlOrder(activeOrder)) {
+          const res = hud.sim.fulfillFarmOwlOrder(activeOrder.id);
           hud.showToast(res.msg, '🧺');
           (hud.root.querySelector('#questDialog') as HTMLDialogElement).close();
           hud.openWorkshopDialog('barn');
           return;
         }
-        const sent = hud.sim.fulfillFarmOwlOrder(selectedOrder.id);
+        const sent = hud.sim.fulfillFarmOwlOrder(activeOrder.id);
         if (sent.ok) {
+          triggerAmbientOwlFlyby();
           hud.showToast(sent.msg, '🦉');
         }
         hud.selectedOwlOrderId = null;
@@ -1579,6 +1694,8 @@ let activeRoadmapTab: 'zones' | 'milestones' = 'zones';
 
 export function questsUiRenderRoadmapDialog(hud: GameHUD): void {
     const box = hud.root.querySelector('#roadmapDialogContent') as HTMLElement;
+    const prevRmTab = box.dataset.activeRmTab ?? '';
+    const scrollSnap = captureModalScrollSnapshot(box);
     const unlockedSet = new Set(hud.sim.state.unlockedZones);
     const reqTrial = hud.sim.getRequiredLevelTrial();
     const unlockedCount = ZONES.filter((z) => unlockedSet.has(z.id) || hud.sim.state.sandboxMode).length;
@@ -1658,6 +1775,8 @@ export function questsUiRenderRoadmapDialog(hud: GameHUD): void {
     }
 
     box.innerHTML = tabsHtml + bodyHtml;
+    box.dataset.activeRmTab = activeRoadmapTab;
+    restoreModalScrollSnapshot(box, scrollSnap, Boolean(prevRmTab && prevRmTab !== activeRoadmapTab));
 
     box.querySelectorAll<HTMLButtonElement>('[data-rmtab]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -1700,6 +1819,7 @@ function segRowHtml(label: string, attr: string, items: Array<[string, string]>,
 
 export function questsUiRenderSettingsDialog(hud: GameHUD): void {
     const box = hud.root.querySelector('#settingsDialogContent') as HTMLElement;
+    const scrollSnap = captureModalScrollSnapshot(box);
     const st = hud.sim.state;
     const toonOn = hud.sprites ? hud.sprites.isToonEnabled() : true;
     const a11y = hud.getEffectiveA11ySettings();
@@ -1811,6 +1931,7 @@ export function questsUiRenderSettingsDialog(hud: GameHUD): void {
         }
       </div>
     `;
+    restoreModalScrollSnapshot(box, scrollSnap);
 
     // Enhance newly rendered switch inputs if polyfill is active
     if (!('switch' in HTMLInputElement.prototype)) {

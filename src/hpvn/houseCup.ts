@@ -341,6 +341,125 @@ export const HOUSE_CUP_ALLIANCE_ROTATION: readonly [
   ],
 ];
 
+const HOUSE_CUP_VN_OFFSET_MS = 7 * 3_600_000;
+const HOUSE_CUP_DAY_MS = 86_400_000;
+const HOUSE_CUP_FIRST_SEASON_START_MS = Date.UTC(2026, 10, 20, 10, 0, 0, 0); // 2026-11-20 17:00:00+07:00
+
+/** Mã tuần ISO 8601 (`YYYY-Www`) tính theo giờ Việt Nam (UTC+7). */
+export function getVietnamIsoWeekKey(epochMs = Date.now()): string {
+  const vn = new Date(epochMs + HOUSE_CUP_VN_OFFSET_MS);
+  const utcDay = new Date(Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()));
+  const dayNum = utcDay.getUTCDay() || 7; // Mon=1..Sun=7
+  utcDay.setUTCDate(utcDay.getUTCDate() + 4 - dayNum); // Nearest Thursday determines ISO year
+  const isoYear = utcDay.getUTCFullYear();
+  const yearStart = Date.UTC(isoYear, 0, 1);
+  const weekNo = Math.ceil((((utcDay.getTime() - yearStart) / HOUSE_CUP_DAY_MS) + 1) / 7);
+  return `${isoYear}-W${String(weekNo).padStart(2, '0')}`;
+}
+
+export interface HouseCupWeeklyCycleInfo {
+  phase: 'upcoming' | 'active' | 'break';
+  startsAt: number;
+  endsAt: number;
+  cycleKey: string;
+  weekKey: string;
+}
+
+/**
+ * Chu kỳ tuần Cúp Nhà chuẩn (giờ Việt Nam UTC+7):
+ * - Bắt đầu: 17:00 Thứ Sáu (mùa đầu 2026-11-20 17:00 ICT)
+ * - Kết thúc & chốt thưởng: 16:00 Thứ Sáu tuần kế tiếp
+ * - Cả 6 ngày 23 giờ trong 1 kỳ đua dùng chung 1 `weekKey` (tuần ISO của ngày Thứ Sáu chốt sổ `endsAt`),
+ *   nên Cúp Nhà và BXH cá nhân từng tuần reset & chốt thưởng trùng khớp từng phút.
+ */
+export function getHouseCupWeeklyCycle(nowMs = Date.now()): HouseCupWeeklyCycleInfo {
+  const startDay = HOUSE_CUP_SEASON_START_WEEKDAY_VN;
+  const startHour = HOUSE_CUP_SEASON_START_HOUR_VN;
+  const endDay = HOUSE_CUP_PAYOUT_WEEKDAY_VN;
+  const endHour = HOUSE_CUP_PAYOUT_HOUR_VN;
+  const endDaysOffset = (endDay - startDay + 7) % 7 || 7;
+  const seasonDurationMs = endDaysOffset * HOUSE_CUP_DAY_MS + (endHour - startHour) * 3_600_000;
+  const fmtVnDate = (ms: number) => {
+    const d = new Date(ms + HOUSE_CUP_VN_OFFSET_MS);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+  };
+
+  if (nowMs < HOUSE_CUP_FIRST_SEASON_START_MS) {
+    const startsAt = HOUSE_CUP_FIRST_SEASON_START_MS;
+    const endsAt = startsAt + seasonDurationMs;
+    return { phase: 'upcoming', startsAt, endsAt, cycleKey: fmtVnDate(endsAt), weekKey: getVietnamIsoWeekKey(endsAt) };
+  }
+
+  const vnNowMs = nowMs + HOUSE_CUP_VN_OFFSET_MS;
+  const d = new Date(vnNowMs);
+  const daysSinceStart = (d.getUTCDay() - startDay + 7) % 7;
+  let startVnMs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - daysSinceStart, startHour, 0, 0, 0);
+  if (startVnMs > vnNowMs) startVnMs -= 7 * HOUSE_CUP_DAY_MS;
+  const startsAt = startVnMs - HOUSE_CUP_VN_OFFSET_MS;
+  const endsAt = startsAt + seasonDurationMs;
+
+  if (nowMs < endsAt) {
+    return { phase: 'active', startsAt, endsAt, cycleKey: fmtVnDate(endsAt), weekKey: getVietnamIsoWeekKey(endsAt) };
+  }
+  const nextStartsAt = startsAt + 7 * HOUSE_CUP_DAY_MS;
+  const nextEndsAt = nextStartsAt + seasonDurationMs;
+  return { phase: 'break', startsAt: nextStartsAt, endsAt: nextEndsAt, cycleKey: fmtVnDate(nextEndsAt), weekKey: getVietnamIsoWeekKey(nextEndsAt) };
+}
+
+/**
+ * Mã tuần Cúp Nhà đang chạy: ưu tiên `weekKey` máy chủ HPVN trả về (khi không phải stub `'Local'`),
+ * dự phòng theo đúng chu kỳ 17:00 Thứ Sáu → 16:00 Thứ Sáu tuần sau (ICT).
+ */
+export function getActiveHouseCupWeekKey(nowMs = Date.now()): string {
+  const serverWeek = typeof view?.weekKey === 'string' ? view.weekKey.trim() : '';
+  if (serverWeek && serverWeek.toLowerCase() !== 'local') {
+    return serverWeek;
+  }
+  return getHouseCupWeeklyCycle(nowMs).weekKey;
+}
+
+/** Chuỗi ngắn hiển thị mốc chốt sổ / khai màn Cúp Nhà tuần hiện tại (dùng chung cho Cúp Nhà & BXH Tuần). */
+export function formatHouseCupWeeklySchedulePillVi(nowMs = Date.now()): string {
+  const cycle = getHouseCupWeeklyCycle(nowMs);
+  const ar = view?.allianceReward;
+  let label = cycle.phase === 'active' ? 'Chốt 16:00 T6' : 'Mở 17:00 T6';
+  let targetAt = cycle.phase === 'active' ? cycle.endsAt : cycle.startsAt;
+  let soonLabel = cycle.phase === 'active' ? 'Sắp chốt sổ' : 'Sắp mở tuần mới';
+
+  if (typeof ar?.seasonStartsAt === 'number' && ar.seasonStartsAt > nowMs) {
+    targetAt = ar.seasonStartsAt;
+    label = `Mở ${String(ar.startHourVn ?? HOUSE_CUP_SEASON_START_HOUR_VN).padStart(2, '0')}:00 T6`;
+    soonLabel = 'Sắp mở tuần mới';
+  } else if (typeof ar?.nextPayoutAt === 'number' && ar.nextPayoutAt > nowMs) {
+    targetAt = ar.nextPayoutAt;
+    label = `Chốt ${String(ar.payoutHourVn ?? HOUSE_CUP_PAYOUT_HOUR_VN).padStart(2, '0')}:00 T6`;
+    soonLabel = 'Sắp chốt sổ';
+  }
+
+  const diffMs = Math.max(0, Math.floor(targetAt - nowMs));
+  if (diffMs < 60_000) return `${label} · ${soonLabel}`;
+  const totalMinutes = Math.floor(diffMs / 60_000);
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const mins = totalMinutes % 60;
+  const countdown =
+    days > 0
+      ? `Còn ${days} ngày ${hours} giờ`
+      : hours > 0
+        ? mins > 0
+          ? `Còn ${hours} giờ ${mins} phút`
+          : `Còn ${hours} giờ`
+        : `Còn ${mins} phút`;
+  return `${label} · ${countdown}`;
+}
+
+/** Chỉ dùng cho kiểm thử tự động: xoá bộ nhớ tạm `view` của Cúp Nhà giữa các ca test. */
+export function resetHouseCupViewForTest(): void {
+  view = null;
+  fetchedAt = 0;
+  inFlight = null;
+}
+
 /** Converts an ISO week key (`YYYY-Www`) to a continuous Monday-based week serial so consecutive weeks always advance by +1 (even across year boundaries). */
 export function getIsoWeekSerial(weekKey?: string, nowMs = Date.now()): number {
   const m = typeof weekKey === 'string' ? /^(\d{4})-W(\d{1,2})$/i.exec(weekKey.trim()) : null;

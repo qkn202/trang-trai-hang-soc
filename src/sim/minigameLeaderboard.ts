@@ -6,13 +6,24 @@ import {
   LeaderboardScope,
   MinigameLeaderboardState,
   MinigamePersonalRecord,
+  MinigameWeeklyProgress,
   NeighborProfileState,
 } from '../types/game';
 import { isNpcNeighborProfile } from './neighborSocial';
 import { CURRENT_ARCADE_DISCIPLINE_REV } from './puzzleShared';
 import { MAX_MATCH3_STAGE } from '../data/match3Levels';
 import { flushFarmSave, identity, request } from '../hpvn/bridge';
-import { houseWeekPoints } from '../hpvn/houseCup';
+import {
+  computeHousePointsForLeaderboardRank,
+  computeStageDifficultyPoints,
+  computeWeeklyStageProgressScore,
+  getActiveHouseCupWeekKey,
+  houseCup,
+  houseCupMinStagesForPoints,
+  houseCupRankTiers,
+  houseCupStageScoreBands,
+  houseWeekPoints,
+} from '../hpvn/houseCup';
 
 export const SCORED_LEADERBOARD_GAMES: ReadonlyArray<LeaderboardGameId> = [
   'match3',
@@ -67,11 +78,11 @@ export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMet
     shortVi: 'Bùa Gặt Honeydukes',
     tabVi: 'Bùa Gặt',
     titleVi: 'Bùa Gặt Honeydukes',
-    cupTitleVi: 'Cúp Đại Sư Bùa Gặt Honeydukes (7.777 Màn)',
-    subtitleVi: 'Xếp hạng theo Màn Đỉnh vượt qua, Điểm Bùa Gặt & Chuỗi Thắng Liên Tiếp',
-    primaryColVi: 'Màn Đỉnh',
-    secondaryColVi: 'Điểm Phép',
-    detailColVi: 'Thắng & Chuỗi',
+    cupTitleVi: 'BXH Tuần Bùa Gặt Honeydukes (Khớp Cúp Nhà)',
+    subtitleVi: 'BXH cá nhân từng tuần — xếp hạng theo Điểm Tuần có trọng số độ khó màn vượt mới',
+    primaryColVi: 'Màn Tuần',
+    secondaryColVi: 'Điểm Tuần',
+    detailColVi: 'Thắng Tuần & Chuỗi',
   },
   caro: {
     id: 'caro',
@@ -80,11 +91,11 @@ export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMet
     shortVi: 'Dò Mìn Phép Thuật',
     tabVi: 'Dò Mìn',
     titleVi: 'Dò Mìn Phép Thuật',
-    cupTitleVi: 'Cúp Bậc Thầy Dò Mìn Phép Thuật (777 Màn)',
-    subtitleVi: 'Xếp hạng theo Màn Đỉnh vượt qua & Tốc Độ Mở Bãi Đá Cổ',
-    primaryColVi: 'Màn Đỉnh',
-    secondaryColVi: 'Điểm Dò Mìn',
-    detailColVi: 'Thắng & Chuẩn Xác',
+    cupTitleVi: 'BXH Tuần Dò Mìn Phép Thuật (Khớp Cúp Nhà)',
+    subtitleVi: 'BXH cá nhân từng tuần — xếp hạng theo Điểm Tuần có trọng số độ khó màn vượt mới',
+    primaryColVi: 'Màn Tuần',
+    secondaryColVi: 'Điểm Tuần',
+    detailColVi: 'Thắng Tuần & Chuỗi',
   },
   sudoku: {
     id: 'sudoku',
@@ -93,11 +104,11 @@ export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMet
     shortVi: 'Số Học Huyền Bí',
     tabVi: 'Số Học',
     titleVi: 'Số Học Huyền Bí',
-    cupTitleVi: 'Cúp Bậc Thầy Số Học Huyền Bí (777 Màn)',
-    subtitleVi: 'Xếp hạng theo Màn Đỉnh, Điểm Chuẩn Xác & Ván Không Sai Sót',
-    primaryColVi: 'Màn Đỉnh',
-    secondaryColVi: 'Điểm Chuẩn Xác',
-    detailColVi: 'Thắng & Độ Chuẩn',
+    cupTitleVi: 'BXH Tuần Số Học Huyền Bí (Khớp Cúp Nhà)',
+    subtitleVi: 'BXH cá nhân từng tuần — xếp hạng theo Điểm Tuần có trọng số độ khó màn vượt mới',
+    primaryColVi: 'Màn Tuần',
+    secondaryColVi: 'Điểm Tuần',
+    detailColVi: 'Thắng Tuần & Chuỗi',
   },
   chess: {
     id: 'chess',
@@ -106,11 +117,11 @@ export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMet
     shortVi: 'Bắn Cá Hồ Đen',
     tabVi: 'Bắn Cá',
     titleVi: 'Bắn Cá Hồ Đen',
-    cupTitleVi: 'Cúp Thiện Xạ Bắn Cá Hồ Đen (777 Màn)',
-    subtitleVi: 'Xếp hạng theo Màn Đỉnh vượt qua, Điểm Săn Cá & Đỉnh Combo',
-    primaryColVi: 'Màn Đỉnh',
-    secondaryColVi: 'Điểm Săn Cá',
-    detailColVi: 'Thắng & Đỉnh Combo',
+    cupTitleVi: 'BXH Tuần Bắn Cá Hồ Đen (Khớp Cúp Nhà)',
+    subtitleVi: 'BXH cá nhân từng tuần — xếp hạng theo Điểm Tuần có trọng số độ khó màn vượt mới',
+    primaryColVi: 'Màn Tuần',
+    secondaryColVi: 'Điểm Tuần',
+    detailColVi: 'Thắng Tuần & Chuỗi',
   },
   blocks: {
     id: 'blocks',
@@ -119,11 +130,11 @@ export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMet
     shortVi: 'Sinh Vật Huyền Bí',
     tabVi: 'Sinh Vật',
     titleVi: 'Sinh Vật Huyền Bí',
-    cupTitleVi: 'Cúp Kiện Tướng Sinh Vật Huyền Bí (777 Màn)',
-    subtitleVi: 'Xếp hạng theo Màn Đỉnh, Điểm Ghép Cặp & Kỷ Lục Chuỗi Combo',
-    primaryColVi: 'Màn Đỉnh',
-    secondaryColVi: 'Điểm Sinh Vật',
-    detailColVi: 'Thắng & Đỉnh Combo',
+    cupTitleVi: 'BXH Tuần Sinh Vật Huyền Bí (Khớp Cúp Nhà)',
+    subtitleVi: 'BXH cá nhân từng tuần — xếp hạng theo Điểm Tuần có trọng số độ khó màn vượt mới',
+    primaryColVi: 'Màn Tuần',
+    secondaryColVi: 'Điểm Tuần',
+    detailColVi: 'Thắng Tuần & Chuỗi',
   },
   jigsaw: {
     id: 'jigsaw',
@@ -132,11 +143,11 @@ export const LEADERBOARD_GAME_META: Record<LeaderboardGameId, LeaderboardGameMet
     shortVi: 'Tranh Ghép Phép Thuật',
     tabVi: 'Tranh Ghép',
     titleVi: 'Tranh Ghép Phép Thuật',
-    cupTitleVi: 'Cúp Đại Sư Tranh Ghép Phép Thuật (777 Màn)',
-    subtitleVi: 'Xếp hạng theo Màn Đỉnh, Điểm Tuyệt Tác & Kỷ Lục Chuỗi Khớp Tranh',
-    primaryColVi: 'Màn Đỉnh',
-    secondaryColVi: 'Điểm Tuyệt Tác',
-    detailColVi: 'Thắng & Chuỗi Khớp',
+    cupTitleVi: 'BXH Tuần Tranh Ghép Phép Thuật (Khớp Cúp Nhà)',
+    subtitleVi: 'BXH cá nhân từng tuần — xếp hạng theo Điểm Tuần có trọng số độ khó màn vượt mới',
+    primaryColVi: 'Màn Tuần',
+    secondaryColVi: 'Điểm Tuần',
+    detailColVi: 'Thắng Tuần & Chuỗi',
   },
   seedquiz: {
     id: 'seedquiz',
@@ -275,6 +286,16 @@ export interface CloudLeaderboardEntry {
   /** HPVN profile picture (server: normalizeShoutAvatarUrl), only when the member has one */
   avatarUrl?: string;
   house: HouseName;
+  /** Mã tuần Cúp Nhà của dòng BXH này (VD '2026-W48'); khớp với houseCup()?.weekKey */
+  weekKey?: string;
+  /** Số màn vượt mới trong tuần (Cách A Cúp Nhà) */
+  weeklyCleared?: number;
+  /** Điểm tuần có trọng số độ khó màn (Cách A: 20/25/30/35 đ/màn) */
+  weeklyScore?: number;
+  /** Số trận thắng trong tuần */
+  weeklyWins?: number;
+  /** Màn đỉnh tích luỹ trọn đời (chỉ để tham khảo, KHÔNG dùng xếp hạng tuần) */
+  bestStage?: number;
   primaryValue: number;
   ratingScore: number;
   totalWins: number;
@@ -286,6 +307,7 @@ export interface CloudLeaderboardEntry {
 export interface LeaderboardRowEntry {
   id: string;
   rank: number;
+  weekKey: string;
   name: string;
   titleVi: string;
   parkName: string;
@@ -298,13 +320,20 @@ export interface LeaderboardRowEntry {
   isFriend: boolean;
   isCloudPlayer?: boolean;
   neighborId?: string;
+  /** Số màn vượt mới trong tuần (dùng đối chiếu mốc >= 5 màn Cúp Nhà) */
   primaryValue: number;
   primaryDisplayVi: string;
+  /** Điểm tuần có trọng số độ khó màn (Cách A — khóa sắp xếp chính của BXH tuần) */
   ratingScore: number;
   ratingDisplayVi: string;
   totalWins: number;
   bestStreak: number;
   detailDisplayVi: string;
+  /** Màn cao nhất tích luỹ (chỉ tham khảo ở tab Kỷ Lục, không dùng xếp hạng tuần) */
+  allTimeBestStage?: number;
+  allTimeStageDisplayVi?: string;
+  /** Điểm đóng góp cho Nhà trong tuần này theo đúng bảng bậc hạng Cúp Nhà (100/80/65/50/35/20, 0 nếu < 5 màn tuần) */
+  cupContributionPoints: number;
   league: LeaderboardLeagueBadge;
 }
 
@@ -312,6 +341,8 @@ export interface LeaderboardStandingResult {
   gameId: LeaderboardGameId;
   meta: LeaderboardGameMeta;
   scope: Exclude<LeaderboardScope, 'personal'>;
+  weekKey: string;
+  isLegacyCloudFallback?: boolean;
   entries: LeaderboardRowEntry[];
   playerEntry: LeaderboardRowEntry;
   playerRank: number;
@@ -325,6 +356,7 @@ export interface LeaderboardStandingResult {
 export interface PersonalDisciplineSummaryRow {
   gameId: LeaderboardGameId;
   meta: LeaderboardGameMeta;
+  weekKey: string;
   valleyRank: number;
   valleyTotal: number;
   friendsRank: number;
@@ -332,50 +364,46 @@ export interface PersonalDisciplineSummaryRow {
   primaryDisplayVi: string;
   ratingDisplayVi: string;
   detailDisplayVi: string;
+  allTimeBestStage: number;
+  allTimeStageDisplayVi: string;
+  cupContributionPoints: number;
   bestSessionScore: number;
   league: LeaderboardLeagueBadge;
 }
 
 export function getLeaderboardLeagueBadge(
   gameId: LeaderboardGameId,
-  primaryValue: number
+  weeklyCleared: number
 ): LeaderboardLeagueBadge {
   if (gameId === 'seedquiz') {
-    if (primaryValue >= 450) {
-      return { tierId: 'legend', icon: '👑', labelVi: 'Đại Học Giả 5 Ngữ' };
+    if (weeklyCleared >= 120) {
+      return { tierId: 'legend', icon: '👑', labelVi: 'Đại Học Giả Tuần' };
     }
-    if (primaryValue >= 180) {
-      return { tierId: 'grandmaster', icon: '💎', labelVi: 'Thủ Khoa N.E.W.T.' };
+    if (weeklyCleared >= 60) {
+      return { tierId: 'grandmaster', icon: '💎', labelVi: 'Thủ Khoa Tuần' };
     }
-    if (primaryValue >= 60) {
+    if (weeklyCleared >= 25) {
       return { tierId: 'gold', icon: '🥇', labelVi: 'Ưu Tú O.W.L.' };
     }
-    if (primaryValue >= 15) {
+    if (weeklyCleared >= 10) {
       return { tierId: 'silver', icon: '🥈', labelVi: 'Học Giả Bạc' };
     }
-    return { tierId: 'bronze', icon: '🥉', labelVi: 'Tân Sinh Đồng' };
+    return { tierId: 'bronze', icon: '🥉', labelVi: 'Tân Sinh Tuần' };
   }
 
-  if (gameId === 'match3') {
-    if (primaryValue >= MAX_MATCH3_STAGE) {
-      return { tierId: 'legend', icon: '👑', labelVi: 'Huyền Thoại 7777' };
-    }
-    if (primaryValue >= 777) {
-      return { tierId: 'legend', icon: '👑', labelVi: 'Huyền Thoại 777+' };
-    }
-  } else if (primaryValue >= MAX_PUZZLE_TOWER_STAGE) {
-    return { tierId: 'legend', icon: '👑', labelVi: 'Huyền Thoại 777' };
+  if (weeklyCleared >= 35) {
+    return { tierId: 'legend', icon: '👑', labelVi: 'Huyền Thoại Tuần' };
   }
-  if (primaryValue >= 300) {
+  if (weeklyCleared >= 20) {
     return { tierId: 'grandmaster', icon: '💎', labelVi: 'Đại Kiện Tướng' };
   }
-  if (primaryValue >= 100) {
+  if (weeklyCleared >= 10) {
     return { tierId: 'gold', icon: '🥇', labelVi: 'Quán Quân Vàng' };
   }
-  if (primaryValue >= 25) {
+  if (weeklyCleared >= 5) {
     return { tierId: 'silver', icon: '🥈', labelVi: 'Học Giả Bạc' };
   }
-  return { tierId: 'bronze', icon: '🥉', labelVi: 'Tân Binh Đồng' };
+  return { tierId: 'bronze', icon: '🥉', labelVi: 'Tân Binh Tuần' };
 }
 
 function deriveBaseRecordFromState(
@@ -462,7 +490,61 @@ function deriveBaseRecordFromState(
   };
 }
 
-export function ensureMinigameLeaderboardState(state: GameState): MinigameLeaderboardState {
+const cloudEntriesMemoryCache: Partial<Record<LeaderboardGameId, CloudLeaderboardEntry[]>> = {};
+const cloudBoardWeekKeyCache: Partial<Record<LeaderboardGameId, string>> = {};
+const cloudBoardLegacyFlagCache: Partial<Record<LeaderboardGameId, boolean>> = {};
+
+export function getActiveLeaderboardWeekKey(
+  nowMs?: number,
+  gameId?: LeaderboardGameId
+): string {
+  const cupWeek = houseCup()?.weekKey?.trim() ?? '';
+  if (cupWeek && cupWeek.toLowerCase() !== 'local') {
+    return cupWeek;
+  }
+  if (gameId) {
+    const cloudWeek = cloudBoardWeekKeyCache[gameId]?.trim() ?? '';
+    if (cloudWeek && cloudWeek.toLowerCase() !== 'local') {
+      return cloudWeek;
+    }
+  }
+  return getActiveHouseCupWeekKey(nowMs);
+}
+
+function createEmptyWeeklyProgress(weekKey: string): MinigameWeeklyProgress {
+  return {
+    weekKey,
+    stagesCleared: 0,
+    weightedScore: 0,
+    wins: 0,
+    bestStreak: 0,
+    bestSessionScore: 0,
+    updatedAt: 0,
+  };
+}
+
+function ensureWeeklyProgressRecord(
+  rec: MinigamePersonalRecord,
+  weekKey: string
+): MinigameWeeklyProgress {
+  if (!rec.weekly || rec.weekly.weekKey !== weekKey) {
+    rec.weekly = createEmptyWeeklyProgress(weekKey);
+    rec.lastRankValley = undefined;
+    return rec.weekly;
+  }
+  rec.weekly.stagesCleared = Math.max(0, Math.floor(Number(rec.weekly.stagesCleared) || 0));
+  rec.weekly.weightedScore = Math.max(0, Math.floor(Number(rec.weekly.weightedScore) || 0));
+  rec.weekly.wins = Math.max(0, Math.floor(Number(rec.weekly.wins) || 0));
+  rec.weekly.bestStreak = Math.max(0, Math.floor(Number(rec.weekly.bestStreak) || 0));
+  rec.weekly.bestSessionScore = Math.max(0, Math.floor(Number(rec.weekly.bestSessionScore) || 0));
+  rec.weekly.updatedAt = Math.max(0, Math.floor(Number(rec.weekly.updatedAt) || 0));
+  return rec.weekly;
+}
+
+export function ensureMinigameLeaderboardState(
+  state: GameState,
+  nowMs?: number
+): MinigameLeaderboardState {
   if (!state.minigameLeaderboard || typeof state.minigameLeaderboard !== 'object') {
     state.minigameLeaderboard = {
       records: {
@@ -477,6 +559,9 @@ export function ensureMinigameLeaderboardState(state: GameState): MinigameLeader
     };
   }
 
+  const activeWeekKey = getActiveLeaderboardWeekKey(nowMs);
+  state.minigameLeaderboard.activeWeekKey = activeWeekKey;
+
   const rev = Math.floor(Number(state.puzzleArcade?.arcadeDisciplineRev) || 0);
   for (const gid of SCORED_LEADERBOARD_GAMES) {
     if ((gid === 'caro' || gid === 'chess') && rev < CURRENT_ARCADE_DISCIPLINE_REV) {
@@ -488,19 +573,24 @@ export function ensureMinigameLeaderboardState(state: GameState): MinigameLeader
         bestStreak: 0,
         bestEfficiency: undefined,
         updatedAt: 0,
+        weekly: createEmptyWeeklyProgress(activeWeekKey),
       };
       continue;
     }
     const base = deriveBaseRecordFromState(state, gid);
     const cur = state.minigameLeaderboard.records[gid];
     if (!cur) {
-      state.minigameLeaderboard.records[gid] = base;
+      state.minigameLeaderboard.records[gid] = {
+        ...base,
+        weekly: createEmptyWeeklyProgress(activeWeekKey),
+      };
     } else {
       cur.bestStage = Math.max(cur.bestStage ?? 0, base.bestStage);
       cur.totalWins = Math.max(cur.totalWins ?? 0, base.totalWins);
       cur.bestStreak = Math.max(cur.bestStreak ?? 0, base.bestStreak);
       cur.highScore = Math.max(cur.highScore ?? 0, base.highScore);
       cur.bestSessionScore = Math.max(cur.bestSessionScore ?? 0, base.bestSessionScore);
+      ensureWeeklyProgressRecord(cur, activeWeekKey);
     }
   }
 
@@ -513,6 +603,7 @@ export function ensureMinigameLeaderboardState(state: GameState): MinigameLeader
     bestStreak: 0,
     bestEfficiency: undefined,
     updatedAt: 0,
+    weekly: createEmptyWeeklyProgress(activeWeekKey),
   };
 
   return state.minigameLeaderboard;
@@ -542,15 +633,24 @@ export function rollSortingHatHouse(state: GameState, randomFn = Math.random): H
   return setPlayerHogwartsHouse(state, pick);
 }
 
-function formatPrimaryDisplayVi(gameId: LeaderboardGameId, primaryVal: number): string {
+export function formatAllTimeStageDisplayVi(gameId: LeaderboardGameId, bestStage: number): string {
+  const safeVal = Math.max(0, Math.floor(bestStage || 0));
   if (gameId === 'seedquiz') {
-    return `${primaryVal.toLocaleString('vi-VN')} câu đúng`;
+    return `${safeVal.toLocaleString('vi-VN')} câu đúng`;
   }
   const maxStage = gameId === 'match3' ? MAX_MATCH3_STAGE : MAX_PUZZLE_TOWER_STAGE;
-  if (primaryVal >= maxStage) {
+  if (safeVal >= maxStage) {
     return `👑 ${maxStage}/${maxStage}`;
   }
-  return `Màn ${primaryVal}/${maxStage}`;
+  return `Màn ${safeVal}/${maxStage}`;
+}
+
+export function formatWeeklyStagesDisplayVi(gameId: LeaderboardGameId, weeklyCleared: number): string {
+  const safeVal = Math.max(0, Math.floor(weeklyCleared || 0));
+  if (gameId === 'seedquiz') {
+    return `${safeVal.toLocaleString('vi-VN')} câu tuần`;
+  }
+  return `${safeVal.toLocaleString('vi-VN')} màn tuần`;
 }
 
 function formatDetailDisplayVi(
@@ -565,11 +665,11 @@ function formatDetailDisplayVi(
   }
   if (gameId === 'caro') {
     const eff = efficiency && efficiency > 0 ? ` • ⚡${efficiency} lượt` : '';
-    return `${totalWins} thắng • 🔥×${bestStreak}${eff}`;
+    return `${totalWins} thắng tuần • 🔥×${bestStreak}${eff}`;
   }
   if (gameId === 'chess') {
     const eff = efficiency && efficiency > 0 ? ` • ⚡Combo ×${efficiency}` : '';
-    return `${totalWins} thắng • 🔥×${bestStreak}${eff}`;
+    return `${totalWins} thắng tuần • 🔥×${bestStreak}${eff}`;
   }
   if (gameId === 'sudoku') {
     const eff =
@@ -578,18 +678,18 @@ function formatDetailDisplayVi(
           ? ' • ✨0 lỗi'
           : ` • ≤${efficiency} lỗi`
         : '';
-    return `${totalWins} thắng • 🔥×${bestStreak}${eff}`;
+    return `${totalWins} thắng tuần • 🔥×${bestStreak}${eff}`;
   }
   if (gameId === 'blocks') {
     const eff = efficiency && efficiency > 0 ? ` • ⚡Combo ×${efficiency}` : '';
-    return `${totalWins} thắng • 🔥×${bestStreak}${eff}`;
+    return `${totalWins} thắng tuần • 🔥×${bestStreak}${eff}`;
   }
   if (gameId === 'jigsaw') {
     const eff = efficiency && efficiency > 0 ? ` • 🧩Combo ×${efficiency}` : '';
-    return `${totalWins} thắng • 🔥×${bestStreak}${eff}`;
+    return `${totalWins} thắng tuần • 🔥×${bestStreak}${eff}`;
   }
   const bestRun = efficiency && efficiency > 0 ? ` • 🎯${efficiency.toLocaleString('vi-VN')}đ` : '';
-  return `${totalWins} thắng • 🔥×${bestStreak}${bestRun}`;
+  return `${totalWins} thắng tuần • 🔥×${bestStreak}${bestRun}`;
 }
 
 function normalizeValidFriendCode(code?: string): string {
@@ -605,21 +705,46 @@ function normalizeMemberHandle(name?: string): string {
   return (name || '').trim().toLowerCase();
 }
 
+function extractCloudWeeklyMetrics(ce: CloudLeaderboardEntry): {
+  weeklyCleared: number;
+  weeklyScore: number;
+  weeklyWins: number;
+  bestStreak: number;
+  allTimeBestStage?: number;
+} {
+  const weeklyCleared = Math.max(0, Math.floor(Number(ce.weeklyCleared ?? ce.primaryValue) || 0));
+  const weeklyScore = Math.max(0, Math.floor(Number(ce.weeklyScore ?? ce.ratingScore) || 0));
+  const weeklyWins = Math.max(
+    weeklyCleared,
+    Math.floor(Number(ce.weeklyWins ?? ce.totalWins) || 0)
+  );
+  const bestStreak = Math.max(0, Math.floor(Number(ce.bestStreak) || 0));
+  const allTimeBestStage =
+    typeof ce.bestStage === 'number' && Number.isFinite(ce.bestStage)
+      ? Math.max(0, Math.floor(ce.bestStage))
+      : undefined;
+  return { weeklyCleared, weeklyScore, weeklyWins, bestStreak, allTimeBestStage };
+}
+
+function isCloudEntryInActiveWeek(ce: CloudLeaderboardEntry, activeWeekKey: string): boolean {
+  const entryWeek = typeof ce.weekKey === 'string' ? ce.weekKey.trim() : '';
+  if (!entryWeek || entryWeek.toLowerCase() === 'local') return true;
+  return entryWeek === activeWeekKey;
+}
+
 function isBetterCloudEntry(
   candidate: CloudLeaderboardEntry,
   prev: CloudLeaderboardEntry
 ): boolean {
-  const cPv = Math.max(0, Math.floor(candidate.primaryValue || 0));
-  const pPv = Math.max(0, Math.floor(prev.primaryValue || 0));
-  if (cPv !== pPv) return cPv > pPv;
-  const cRs = Math.max(0, Math.floor(candidate.ratingScore || 0));
-  const pRs = Math.max(0, Math.floor(prev.ratingScore || 0));
-  if (cRs !== pRs) return cRs > pRs;
-  const cTw = Math.max(0, Math.floor(candidate.totalWins || 0));
-  const pTw = Math.max(0, Math.floor(prev.totalWins || 0));
-  if (cTw !== pTw) return cTw > pTw;
+  const cm = extractCloudWeeklyMetrics(candidate);
+  const pm = extractCloudWeeklyMetrics(prev);
+  if (cm.weeklyScore !== pm.weeklyScore) return cm.weeklyScore > pm.weeklyScore;
+  if (cm.weeklyCleared !== pm.weeklyCleared) return cm.weeklyCleared > pm.weeklyCleared;
+  if (cm.weeklyWins !== pm.weeklyWins) return cm.weeklyWins > pm.weeklyWins;
   return (candidate.updatedAt || 0) > (prev.updatedAt || 0);
 }
+
+type UnrankedLeaderboardRow = Omit<LeaderboardRowEntry, 'rank' | 'cupContributionPoints'>;
 
 function dedupeCloudEntries(
   raw: ReadonlyArray<CloudLeaderboardEntry>
@@ -672,19 +797,18 @@ function dedupeCloudEntries(
 function buildNeighborLeaderboardEntry(
   neighbor: NeighborProfileState,
   gameId: LeaderboardGameId,
+  activeWeekKey: string,
   cloudMatch?: CloudLeaderboardEntry
-): Omit<LeaderboardRowEntry, 'rank'> {
+): UnrankedLeaderboardRow {
   if (cloudMatch) {
-    const pv = Math.max(0, Math.floor(cloudMatch.primaryValue || 0));
-    const rs = Math.max(0, Math.floor(cloudMatch.ratingScore || 0));
-    const tw = Math.max(0, Math.floor(cloudMatch.totalWins || 0));
-    const bs = Math.max(0, Math.floor(cloudMatch.bestStreak || 0));
+    const m = extractCloudWeeklyMetrics(cloudMatch);
     const resolvedHouse: HouseName =
       cloudMatch.house && ALL_HOGWARTS_HOUSES.includes(cloudMatch.house)
         ? cloudMatch.house
         : neighbor.house || 'Gryffindor';
     return {
       id: `friend:${neighbor.id}`,
+      weekKey: activeWeekKey,
       name: (cloudMatch.name || '').trim() || neighbor.name,
       titleVi: neighbor.titleVi || 'Người Chơi Thật • Hàng Xóm',
       parkName: (cloudMatch.parkName || '').trim() || neighbor.parkName,
@@ -697,21 +821,28 @@ function buildNeighborLeaderboardEntry(
       isFriend: true,
       isCloudPlayer: true,
       neighborId: neighbor.id,
-      primaryValue: pv,
-      primaryDisplayVi: formatPrimaryDisplayVi(gameId, pv),
-      ratingScore: rs,
-      ratingDisplayVi: `${rs.toLocaleString('vi-VN')} đ`,
-      totalWins: tw,
-      bestStreak: bs,
+      primaryValue: m.weeklyCleared,
+      primaryDisplayVi: formatWeeklyStagesDisplayVi(gameId, m.weeklyCleared),
+      ratingScore: m.weeklyScore,
+      ratingDisplayVi: `${m.weeklyScore.toLocaleString('vi-VN')} đ`,
+      totalWins: m.weeklyWins,
+      bestStreak: m.bestStreak,
       detailDisplayVi:
-        cloudMatch.detailLabelVi || formatDetailDisplayVi(gameId, tw, bs),
-      league: getLeaderboardLeagueBadge(gameId, pv),
+        cloudMatch.detailLabelVi || formatDetailDisplayVi(gameId, m.weeklyWins, m.bestStreak),
+      ...(m.allTimeBestStage !== undefined
+        ? {
+            allTimeBestStage: m.allTimeBestStage,
+            allTimeStageDisplayVi: formatAllTimeStageDisplayVi(gameId, m.allTimeBestStage),
+          }
+        : {}),
+      league: getLeaderboardLeagueBadge(gameId, m.weeklyCleared),
     };
   }
 
-  // Người chơi thật trong danh bạ nhưng chưa có kỷ lục trực tuyến ở bộ môn này -> hiển thị 0 thật (không bịa điểm ảo)
+  // Người chơi thật trong danh bạ nhưng chưa có điểm tuần ở bộ môn này -> hiển thị 0 thật (không bịa điểm ảo)
   return {
     id: `friend:${neighbor.id}`,
+    weekKey: activeWeekKey,
     name: neighbor.name,
     titleVi: neighbor.titleVi || 'Người Chơi Thật • Hàng Xóm',
     parkName: neighbor.parkName,
@@ -724,12 +855,12 @@ function buildNeighborLeaderboardEntry(
     isFriend: true,
     neighborId: neighbor.id,
     primaryValue: 0,
-    primaryDisplayVi: formatPrimaryDisplayVi(gameId, 0),
+    primaryDisplayVi: formatWeeklyStagesDisplayVi(gameId, 0),
     ratingScore: 0,
     ratingDisplayVi: '0 đ',
     totalWins: 0,
     bestStreak: 0,
-    detailDisplayVi: 'Chưa có kỷ lục môn này',
+    detailDisplayVi: 'Chưa ghi điểm tuần này',
     league: getLeaderboardLeagueBadge(gameId, 0),
   };
 }
@@ -737,10 +868,13 @@ function buildNeighborLeaderboardEntry(
 export function buildPlayerLeaderboardEntry(
   state: GameState,
   gameId: LeaderboardGameId,
-  selfCloud?: CloudLeaderboardEntry
-): Omit<LeaderboardRowEntry, 'rank'> {
-  const lb = ensureMinigameLeaderboardState(state);
+  selfCloud?: CloudLeaderboardEntry,
+  nowMs?: number
+): UnrankedLeaderboardRow {
+  const activeWeekKey = getActiveLeaderboardWeekKey(nowMs, gameId);
+  const lb = ensureMinigameLeaderboardState(state, nowMs);
   const rec = lb.records[gameId];
+  const weekly = ensureWeeklyProgressRecord(rec, activeWeekKey);
   const friendCode = state.neighborSocial?.playerFriendCode || 'HS-YOU1-01';
   const house = getPlayerHogwartsHouse(state);
   const baseDisplayName =
@@ -749,10 +883,17 @@ export function buildPlayerLeaderboardEntry(
     state.neighborSocial?.playerDisplayName?.trim() ||
     state.parkName ||
     'Trang Trại Hang Sóc';
-  const primaryValue = Math.max(rec.bestStage, Math.max(0, Math.floor(selfCloud?.primaryValue || 0)));
-  const ratingScore = Math.max(rec.highScore, Math.max(0, Math.floor(selfCloud?.ratingScore || 0)));
-  const totalWins = Math.max(rec.totalWins, Math.max(0, Math.floor(selfCloud?.totalWins || 0)));
-  const bestStreak = Math.max(rec.bestStreak, Math.max(0, Math.floor(selfCloud?.bestStreak || 0)));
+
+  const validSelfCloud =
+    selfCloud && isCloudEntryInActiveWeek(selfCloud, activeWeekKey)
+      ? extractCloudWeeklyMetrics(selfCloud)
+      : null;
+
+  const primaryValue = Math.max(weekly.stagesCleared, validSelfCloud?.weeklyCleared ?? 0);
+  const ratingScore = Math.max(weekly.weightedScore, validSelfCloud?.weeklyScore ?? 0);
+  const totalWins = Math.max(weekly.wins, validSelfCloud?.weeklyWins ?? 0);
+  const bestStreak = Math.max(weekly.bestStreak, validSelfCloud?.bestStreak ?? 0);
+  const allTimeBestStage = Math.max(rec.bestStage, validSelfCloud?.allTimeBestStage ?? 0);
   const playerTitle =
     state.level >= 80
       ? 'Đại Điền Chủ Thung Lũng'
@@ -764,6 +905,7 @@ export function buildPlayerLeaderboardEntry(
 
   return {
     id: 'player:self',
+    weekKey: activeWeekKey,
     name: `${baseDisplayName} (Bạn)`,
     titleVi: `${playerTitle} • Cấp ${state.level}`,
     parkName: state.parkName || 'Trang Trại Hang Sóc',
@@ -774,7 +916,7 @@ export function buildPlayerLeaderboardEntry(
     isPlayer: true,
     isFriend: true,
     primaryValue,
-    primaryDisplayVi: formatPrimaryDisplayVi(gameId, primaryValue),
+    primaryDisplayVi: formatWeeklyStagesDisplayVi(gameId, primaryValue),
     ratingScore,
     ratingDisplayVi: `${ratingScore.toLocaleString('vi-VN')} đ`,
     totalWins,
@@ -785,16 +927,19 @@ export function buildPlayerLeaderboardEntry(
       bestStreak,
       rec.bestEfficiency
     ),
+    allTimeBestStage,
+    allTimeStageDisplayVi: formatAllTimeStageDisplayVi(gameId, allTimeBestStage),
     league: getLeaderboardLeagueBadge(gameId, primaryValue),
   };
 }
 
 function compareEntries(
-  a: Omit<LeaderboardRowEntry, 'rank'>,
-  b: Omit<LeaderboardRowEntry, 'rank'>
+  a: UnrankedLeaderboardRow,
+  b: UnrankedLeaderboardRow
 ): number {
-  if (b.primaryValue !== a.primaryValue) return b.primaryValue - a.primaryValue;
+  // Khớp 100% Cúp Nhà Cách A: xếp hạng tuần theo Điểm Tuần có trọng số độ khó trước, hòa mới xét số màn tuần
   if (b.ratingScore !== a.ratingScore) return b.ratingScore - a.ratingScore;
+  if (b.primaryValue !== a.primaryValue) return b.primaryValue - a.primaryValue;
   if (b.totalWins !== a.totalWins) return b.totalWins - a.totalWins;
   if (a.isPlayer !== b.isPlayer) return a.isPlayer ? -1 : 1;
   return a.id.localeCompare(b.id);
@@ -802,7 +947,7 @@ function compareEntries(
 
 export function buildHouseCupStandings(
   state: GameState,
-  entries: ReadonlyArray<Omit<LeaderboardRowEntry, 'rank'>>
+  entries: ReadonlyArray<Pick<LeaderboardRowEntry, 'house' | 'primaryValue' | 'totalWins'>>
 ): HouseCupStanding[] {
   const playerHouse = getPlayerHogwartsHouse(state);
   const map = new Map<
@@ -869,9 +1014,13 @@ function buildRawPoolForScoredGame(
   state: GameState,
   gameId: LeaderboardGameId,
   scope: Exclude<LeaderboardScope, 'personal'>,
-  extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>
-): Array<Omit<LeaderboardRowEntry, 'rank'>> {
-  const effectiveCloud = extraCloudEntries ?? cloudEntriesMemoryCache[gameId] ?? [];
+  extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>,
+  nowMs?: number
+): Array<UnrankedLeaderboardRow> {
+  const activeWeekKey = getActiveLeaderboardWeekKey(nowMs, gameId);
+  const effectiveCloud = (extraCloudEntries ?? cloudEntriesMemoryCache[gameId] ?? []).filter(
+    (ce) => ce && isCloudEntryInActiveWeek(ce, activeWeekKey)
+  );
   const dedupedCloud = dedupeCloudEntries(effectiveCloud);
 
   const cloudByCode = new Map<string, CloudLeaderboardEntry>();
@@ -908,7 +1057,7 @@ function buildRawPoolForScoredGame(
   const selfCloud = hasRealLocalUid
     ? (cloudByUid.get(localUid) ?? (localSlug ? cloudByUidSlug.get(localSlug) : undefined))
     : undefined;
-  const playerRaw = buildPlayerLeaderboardEntry(state, gameId, selfCloud);
+  const playerRaw = buildPlayerLeaderboardEntry(state, gameId, selfCloud, nowMs);
   const playerCode = normalizeValidFriendCode(playerRaw.friendCode);
   const selfHandle = normalizeMemberHandle(identity?.displayName);
 
@@ -983,10 +1132,10 @@ function buildRawPoolForScoredGame(
       if (cCode) friendCodeSet.add(cCode);
     }
 
-    return buildNeighborLeaderboardEntry(n, gameId, cMatch);
+    return buildNeighborLeaderboardEntry(n, gameId, activeWeekKey, cMatch);
   });
 
-  const pool: Array<Omit<LeaderboardRowEntry, 'rank'>> = [playerRaw, ...friendEntries];
+  const pool: Array<UnrankedLeaderboardRow> = [playerRaw, ...friendEntries];
 
   if (scope === 'valley') {
     for (const ce of dedupedCloud) {
@@ -1007,8 +1156,10 @@ function buildRawPoolForScoredGame(
       if (normCode !== '' && (normCode === playerCode || friendCodeSet.has(normCode))) {
         continue;
       }
+      const m = extractCloudWeeklyMetrics(ce);
       pool.push({
         id: `cloud:${ceUid}`,
+        weekKey: activeWeekKey,
         name: ce.name || ce.parkName || 'Người Chơi Trực Tuyến',
         titleVi: 'Người Chơi Thật Trực Tuyến',
         parkName: ce.parkName || 'Điền Trang Phép Thuật',
@@ -1019,19 +1170,22 @@ function buildRawPoolForScoredGame(
         isPlayer: false,
         isFriend: false,
         isCloudPlayer: true,
-        primaryValue: Math.max(0, Math.floor(ce.primaryValue || 0)),
-        primaryDisplayVi: formatPrimaryDisplayVi(
-          gameId,
-          Math.max(0, Math.floor(ce.primaryValue || 0))
-        ),
-        ratingScore: Math.max(0, Math.floor(ce.ratingScore || 0)),
-        ratingDisplayVi: `${Math.max(0, Math.floor(ce.ratingScore || 0)).toLocaleString('vi-VN')} đ`,
-        totalWins: Math.max(0, Math.floor(ce.totalWins || 0)),
-        bestStreak: Math.max(0, Math.floor(ce.bestStreak || 0)),
+        primaryValue: m.weeklyCleared,
+        primaryDisplayVi: formatWeeklyStagesDisplayVi(gameId, m.weeklyCleared),
+        ratingScore: m.weeklyScore,
+        ratingDisplayVi: `${m.weeklyScore.toLocaleString('vi-VN')} đ`,
+        totalWins: m.weeklyWins,
+        bestStreak: m.bestStreak,
         detailDisplayVi:
           ce.detailLabelVi ||
-          formatDetailDisplayVi(gameId, ce.totalWins || 0, ce.bestStreak || 0),
-        league: getLeaderboardLeagueBadge(gameId, Math.max(0, Math.floor(ce.primaryValue || 0))),
+          formatDetailDisplayVi(gameId, m.weeklyWins, m.bestStreak),
+        ...(m.allTimeBestStage !== undefined
+          ? {
+              allTimeBestStage: m.allTimeBestStage,
+              allTimeStageDisplayVi: formatAllTimeStageDisplayVi(gameId, m.allTimeBestStage),
+            }
+          : {}),
+        league: getLeaderboardLeagueBadge(gameId, m.weeklyCleared),
       });
     }
   }
@@ -1043,7 +1197,8 @@ function buildUnifiedHouseCupStandings(
   state: GameState,
   scope: Exclude<LeaderboardScope, 'personal'>,
   activeGameId: LeaderboardGameId,
-  extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>
+  extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>,
+  nowMs?: number
 ): HouseCupStanding[] {
   const playerHouse = getPlayerHogwartsHouse(state);
   const map = new Map<
@@ -1073,7 +1228,8 @@ function buildUnifiedHouseCupStandings(
       state,
       gid,
       scope,
-      gid === activeGameId ? extraCloudEntries : undefined
+      gid === activeGameId ? extraCloudEntries : undefined,
+      nowMs
     );
     for (const row of gPool) {
       const h: HouseName = ALL_HOGWARTS_HOUSES.includes(row.house) ? row.house : 'Gryffindor';
@@ -1129,22 +1285,50 @@ export function buildMinigameLeaderboard(
   rawGameId: LeaderboardGameId,
   scope: Exclude<LeaderboardScope, 'personal'> = 'valley',
   extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>,
-  houseFilter: 'all' | HouseName = 'all'
+  houseFilter: 'all' | HouseName = 'all',
+  nowMs?: number
 ): LeaderboardStandingResult {
   const gameId = normalizeScoredLeaderboardGame(rawGameId);
-  const pool = buildRawPoolForScoredGame(state, gameId, scope, extraCloudEntries);
+  const weekKey = getActiveLeaderboardWeekKey(nowMs, gameId);
+  const pool = buildRawPoolForScoredGame(state, gameId, scope, extraCloudEntries, nowMs);
   pool.sort(compareEntries);
 
   const houseStandings = buildUnifiedHouseCupStandings(
     state,
     scope,
     gameId,
-    extraCloudEntries
+    extraCloudEntries,
+    nowMs
   );
-  const fullEntries: LeaderboardRowEntry[] = pool.map((item, idx) => ({
-    ...item,
-    rank: idx + 1,
-  }));
+
+  // Tính điểm đóng góp cho Nhà theo đúng công thức Cúp Nhà Cách A (rankAndScoreDisciplineFromWeeklyPlayers):
+  // chỉ tính hạng trong nhóm người chơi đã vượt >= minStages (mặc định 5) màn mới trong tuần, đồng điểm cùng hạng.
+  const minStages = houseCupMinStagesForPoints();
+  const rankTiers = houseCupRankTiers();
+  let qualifiedRank = 0;
+  let qualifiedCount = 0;
+  let prevQualifiedScore = -1;
+  const fullEntries: LeaderboardRowEntry[] = pool.map((item, idx) => {
+    let cupContributionPoints = 0;
+    if (item.primaryValue >= minStages) {
+      qualifiedCount += 1;
+      if (item.ratingScore !== prevQualifiedScore) {
+        qualifiedRank = qualifiedCount;
+        prevQualifiedScore = item.ratingScore;
+      }
+      cupContributionPoints = computeHousePointsForLeaderboardRank(
+        qualifiedRank,
+        item.primaryValue,
+        minStages,
+        rankTiers
+      );
+    }
+    return {
+      ...item,
+      rank: idx + 1,
+      cupContributionPoints,
+    };
+  });
 
   const playerIdx = fullEntries.findIndex((e) => e.isPlayer);
   const playerEntry = fullEntries[Math.max(0, playerIdx)];
@@ -1164,6 +1348,9 @@ export function buildMinigameLeaderboard(
     gameId,
     meta: LEADERBOARD_GAME_META[gameId],
     scope,
+    weekKey,
+    isLegacyCloudFallback:
+      extraCloudEntries === undefined ? Boolean(cloudBoardLegacyFlagCache[gameId]) : false,
     entries: filteredEntries,
     playerEntry,
     playerRank: playerEntry.rank,
@@ -1177,16 +1364,19 @@ export function buildMinigameLeaderboard(
 
 export function buildAllPersonalRecordsSummary(
   state: GameState,
-  cloudCache?: Partial<Record<LeaderboardGameId, CloudLeaderboardEntry[]>>
+  cloudCache?: Partial<Record<LeaderboardGameId, CloudLeaderboardEntry[]>>,
+  nowMs?: number
 ): PersonalDisciplineSummaryRow[] {
-  const lb = ensureMinigameLeaderboardState(state);
+  const lb = ensureMinigameLeaderboardState(state, nowMs);
   return ALL_LEADERBOARD_GAMES.map((gid) => {
-    const valley = buildMinigameLeaderboard(state, gid, 'valley', cloudCache?.[gid]);
-    const friends = buildMinigameLeaderboard(state, gid, 'friends', cloudCache?.[gid]);
+    const valley = buildMinigameLeaderboard(state, gid, 'valley', cloudCache?.[gid], 'all', nowMs);
+    const friends = buildMinigameLeaderboard(state, gid, 'friends', cloudCache?.[gid], 'all', nowMs);
     const rec = lb.records[gid];
+    const allTimeBestStage = Math.max(rec.bestStage, valley.playerEntry.allTimeBestStage ?? 0);
     return {
       gameId: gid,
       meta: LEADERBOARD_GAME_META[gid],
+      weekKey: valley.weekKey,
       valleyRank: valley.playerRank,
       valleyTotal: valley.totalEntries,
       friendsRank: friends.playerRank,
@@ -1194,6 +1384,9 @@ export function buildAllPersonalRecordsSummary(
       primaryDisplayVi: valley.playerEntry.primaryDisplayVi,
       ratingDisplayVi: valley.playerEntry.ratingDisplayVi,
       detailDisplayVi: valley.playerEntry.detailDisplayVi,
+      allTimeBestStage,
+      allTimeStageDisplayVi: formatAllTimeStageDisplayVi(gid, allTimeBestStage),
+      cupContributionPoints: valley.playerEntry.cupContributionPoints,
       bestSessionScore: rec.bestSessionScore,
       league: valley.playerEntry.league,
     };
@@ -1201,6 +1394,7 @@ export function buildAllPersonalRecordsSummary(
 }
 
 export interface MinigameSessionMetricInput {
+  previousClearedStage?: number;
   clearedStage?: number;
   sessionScore?: number;
   efficiency?: number;
@@ -1214,7 +1408,7 @@ export function recordMinigameSessionResult(
   gameId: LeaderboardGameId,
   input: MinigameSessionMetricInput = {}
 ): LeaderboardRankChange {
-  // Đủ 6 game mini (Bùa Gặt, Dò Mìn, Số Học, Bắn Cá, Sinh Vật, Tranh Ghép) đều tính điểm BXH & Cúp 4 Nhà
+  // Đủ 6 game mini (Bùa Gặt, Dò Mìn, Số Học, Bắn Cá, Sinh Vật, Tranh Ghép) đều tính điểm BXH Tuần & Cúp 4 Nhà
   if (!isScoredLeaderboardGame(gameId)) {
     const playerHouse = getPlayerHogwartsHouse(state);
     return {
@@ -1228,20 +1422,34 @@ export function recordMinigameSessionResult(
     };
   }
 
+  // Ghi nhận bestStage trước khi ensureMinigameLeaderboardState đồng bộ từ state (vốn có thể đã cộng màn mới)
+  const existingRecordBeforeEnsure = state.minigameLeaderboard?.records?.[gameId];
+  const existingBestStageBeforeEnsure = existingRecordBeforeEnsure?.bestStage;
+  const activeWeekKey = getActiveLeaderboardWeekKey(input.nowMs, gameId);
+  const sameWeekAsSnapshot = existingRecordBeforeEnsure?.weekly?.weekKey === activeWeekKey;
+
   const previousRankFromSnapshot =
     input.previousRankOverride && input.previousRankOverride > 0
       ? input.previousRankOverride
-      : state.minigameLeaderboard?.records?.[gameId]?.lastRankValley;
+      : sameWeekAsSnapshot
+        ? existingRecordBeforeEnsure?.lastRankValley
+        : undefined;
 
   const beforeStanding = !previousRankFromSnapshot
-    ? buildMinigameLeaderboard(state, gameId, 'valley')
+    ? buildMinigameLeaderboard(state, gameId, 'valley', undefined, 'all', input.nowMs)
     : null;
-  const lb = ensureMinigameLeaderboardState(state);
+  const lb = ensureMinigameLeaderboardState(state, input.nowMs);
   const rec = lb.records[gameId];
+  const weekly = ensureWeeklyProgressRecord(rec, activeWeekKey);
   const previousRank = previousRankFromSnapshot ?? beforeStanding?.playerRank ?? 1;
 
   const baseAfter = deriveBaseRecordFromState(state, gameId);
-  const prevBestStage = rec.bestStage;
+  const prevBestStage =
+    input.previousClearedStage !== undefined && Number.isFinite(input.previousClearedStage)
+      ? Math.max(0, Math.floor(input.previousClearedStage))
+      : existingBestStageBeforeEnsure !== undefined
+        ? Math.max(0, Math.floor(existingBestStageBeforeEnsure))
+        : 0;
   const nextBestStage = Math.max(
     rec.bestStage,
     baseAfter.bestStage,
@@ -1274,8 +1482,7 @@ export function recordMinigameSessionResult(
     }
   }
 
-  // Recompute authoritative composite rating score for all 6 scored minigames
-  // Cap effectiveWins relative to bestStage so spamming Stage 1 cannot farm infinite rating points!
+  // Recompute all-time personal composite score (kept for backwards save compatibility)
   const effBonus =
     gameId === 'sudoku'
       ? rec.bestEfficiency !== undefined
@@ -1299,12 +1506,32 @@ export function recordMinigameSessionResult(
     advancedStage ? rec.highScore + (sessionScore > 0 ? 15 : 8) : rec.highScore,
     computedRating
   );
-  rec.updatedAt = input.nowMs ?? Date.now();
+
+  // Cập nhật điểm tuần Cách A khớp 100% Cúp Nhà (20 / 25 / 30 / 35 đ/màn theo khung độ khó màn vượt mới)
+  const maxStage = gameId === 'match3' ? MAX_MATCH3_STAGE : MAX_PUZZLE_TOWER_STAGE;
+  const stageBands = houseCupStageScoreBands();
+  if (nextBestStage > prevBestStage) {
+    const progress = computeWeeklyStageProgressScore(prevBestStage, nextBestStage, 10, stageBands);
+    weekly.stagesCleared += progress.deltaStages;
+    weekly.weightedScore += progress.weightedScore;
+  } else if (prevBestStage >= maxStage) {
+    // Người chơi đã chạm đỉnh tháp (777 / 7777): chơi thắng lại màn đỉnh vẫn ghi 1 màn tuần theo khung cao nhất
+    weekly.stagesCleared += 1;
+    weekly.weightedScore += computeStageDifficultyPoints(maxStage, stageBands);
+  }
+  weekly.wins += 1;
+  weekly.bestStreak = Math.max(weekly.bestStreak, Math.floor(input.streak ?? 0), 1);
+  if (sessionScore > 0) {
+    weekly.bestSessionScore = Math.max(weekly.bestSessionScore, sessionScore);
+  }
+  const nowTs = input.nowMs ?? Date.now();
+  weekly.updatedAt = nowTs;
+  rec.updatedAt = nowTs;
 
   // HPVN: no house points here: the server awards them from the saved wins (trang-trai-hang-soc-boards.js)
   const playerHouse = getPlayerHogwartsHouse(state);
 
-  const afterStanding = buildMinigameLeaderboard(state, gameId, 'valley');
+  const afterStanding = buildMinigameLeaderboard(state, gameId, 'valley', undefined, 'all', input.nowMs);
   const newRank = afterStanding.playerRank;
   const rankUpBy = Math.max(0, previousRank - newRank);
   rec.lastRankValley = newRank;
@@ -1326,8 +1553,6 @@ export function getClientLeaderboardUserId(): string {
   return identity?.uid ?? 'local_player';
 }
 
-const cloudEntriesMemoryCache: Partial<Record<LeaderboardGameId, CloudLeaderboardEntry[]>> = {};
-
 export function getCachedCloudLeaderboardEntries(
   gameId: LeaderboardGameId
 ): CloudLeaderboardEntry[] {
@@ -1336,14 +1561,25 @@ export function getCachedCloudLeaderboardEntries(
 
 export function setCachedCloudLeaderboardEntries(
   gameId: LeaderboardGameId,
-  entries: ReadonlyArray<CloudLeaderboardEntry>
+  entries: ReadonlyArray<CloudLeaderboardEntry>,
+  weekKey?: string
 ): void {
   cloudEntriesMemoryCache[gameId] = [...entries];
+  cloudBoardLegacyFlagCache[gameId] = false;
+  if (typeof weekKey === 'string' && weekKey.trim()) {
+    cloudBoardWeekKeyCache[gameId] = weekKey.trim();
+  }
+}
+
+export function isCloudLeaderboardLegacyFallback(gameId: LeaderboardGameId): boolean {
+  return Boolean(cloudBoardLegacyFlagCache[gameId]);
 }
 
 export function clearCachedCloudLeaderboards(): void {
   for (const gid of ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw', 'seedquiz'] as const) {
     delete cloudEntriesMemoryCache[gid];
+    delete cloudBoardWeekKeyCache[gid];
+    delete cloudBoardLegacyFlagCache[gid];
   }
 }
 
@@ -1353,20 +1589,59 @@ export function getAllCachedCloudLeaderboards(): Partial<
   return cloudEntriesMemoryCache;
 }
 
-// HPVN: the boards come from the HPVN server (trangTraiHangSoc op 'board'), which reads each member's scores from
-// the farm save it stores; the page never posts a score.
+interface CloudBoardReply {
+  period?: string;
+  weekKey?: string;
+  cycleKey?: string;
+  entries?: CloudLeaderboardEntry[];
+}
+
+// HPVN: the boards come from the HPVN server (trangTraiHangSoc op 'board'), which ranks each member's
+// weekly Cách A progress matching Cúp Nhà; the page never posts a score.
 export async function fetchCloudLeaderboardEntries(gameId: LeaderboardGameId): Promise<CloudLeaderboardEntry[]> {
   if (!isScoredLeaderboardGame(gameId) || !identity) return cloudEntriesMemoryCache[gameId] ?? [];
+  const requestedWeekKey = getActiveLeaderboardWeekKey(undefined, gameId);
   try {
-    const result = await request<{ entries?: CloudLeaderboardEntry[] }>('farm', { op: 'board', game: gameId });
-    if (Array.isArray(result?.entries)) cloudEntriesMemoryCache[gameId] = result.entries;
+    const result = await request<CloudBoardReply>('farm', {
+      op: 'board',
+      game: gameId,
+      period: 'weekly',
+      weekKey: requestedWeekKey,
+    });
+    if (Array.isArray(result?.entries)) {
+      const respWeekKey = typeof result.weekKey === 'string' ? result.weekKey.trim() : '';
+      const hasWeeklyMarker =
+        result.period === 'weekly' ||
+        Boolean(respWeekKey) ||
+        result.entries.length === 0 ||
+        result.entries.some(
+          (e) =>
+            (typeof e?.weekKey === 'string' && e.weekKey.trim().length > 0) ||
+            typeof e?.weeklyScore === 'number' ||
+            typeof e?.weeklyCleared === 'number'
+        );
+
+      if (hasWeeklyMarker) {
+        cloudBoardLegacyFlagCache[gameId] = false;
+        if (respWeekKey && respWeekKey.toLowerCase() !== 'local') {
+          cloudBoardWeekKeyCache[gameId] = respWeekKey;
+        }
+        cloudEntriesMemoryCache[gameId] = respWeekKey
+          ? result.entries.map((e) => (e.weekKey ? e : { ...e, weekKey: respWeekKey }))
+          : result.entries;
+      } else {
+        // Máy chủ chưa bật patch BXH tuần (trả BXH tổng theo level cũ): không trộn điểm tổng vào BXH tuần
+        cloudBoardLegacyFlagCache[gameId] = true;
+        cloudEntriesMemoryCache[gameId] = [];
+      }
+    }
   } catch {
     // keep the last board
   }
   return cloudEntriesMemoryCache[gameId] ?? [];
 }
 
-/** HPVN: «submit» sends the pending farm save now, so the server ranks the latest scores. */
+/** HPVN: «submit» sends the pending farm save now, so the server ranks the latest weekly scores. */
 export async function submitPlayerCloudLeaderboardEntry(_state: GameState, _gameId: LeaderboardGameId): Promise<void> {
   if (identity) await flushFarmSave();
 }

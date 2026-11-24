@@ -1525,8 +1525,11 @@ describe('Candy Crush Hogwarts 7-Year × 777 Stages Generator & Engine', () => {
     expect(reloaded.state.match3.maxClearedLevel).toBe(7777);
     expect(reloaded.getDisciplineStageInfo('match3').isMaxed).toBe(true);
     const lb = reloaded.getMinigameLeaderboard('match3', 'valley');
-    expect(lb.playerEntry.primaryDisplayVi).toBe('👑 7777/7777');
-    expect(lb.playerEntry.league.labelVi).toContain('7777');
+    expect(lb.playerEntry.primaryValue).toBe(2);
+    expect(lb.playerEntry.primaryDisplayVi).toBe('2 màn tuần');
+    expect(lb.playerEntry.ratingScore).toBe(70); // 2 stages in 81+ band (35 + 35)
+    expect(lb.playerEntry.allTimeBestStage).toBe(7777);
+    expect(lb.playerEntry.allTimeStageDisplayVi).toBe('👑 7777/7777');
 
     eng2500.destroy();
   });

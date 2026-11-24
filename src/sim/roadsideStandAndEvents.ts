@@ -1,5 +1,5 @@
 import { FARM_CROPS, FARM_GOODS, getCatalogItem, getFarmItemMeta } from '../data/catalog';
-import { getVietnamCalendarKey } from './neighborSocial';
+import { getCachedNeighborSocialExtras, getVietnamCalendarKey } from './neighborSocial';
 import type { ParkSimulation } from './simulation';
 import {
   FarmCropId,
@@ -233,10 +233,41 @@ export function claimRoadsideStandSlot(
   };
 }
 
+export interface NeighborRoadsideOffer {
+  itemId: FarmItemId;
+  qty: number;
+  totalSickle: number;
+  isRealFriendListing: boolean;
+  slotIndex?: number;
+}
+
 export function getNeighborRoadsideOffer(
   neighbor: NeighborProfileState,
   dayKey = getVietnamCalendarKey()
-): { itemId: FarmItemId; qty: number; totalSickle: number } {
+): NeighborRoadsideOffer {
+  const cachedStand = getCachedNeighborSocialExtras(neighbor)?.roadsideStand;
+  if (cachedStand && Array.isArray(cachedStand.slots)) {
+    const activeSlot = cachedStand.slots.find(
+      (s) =>
+        s &&
+        typeof s.itemId === 'string' &&
+        (s.itemId in FARM_CROPS || s.itemId in FARM_GOODS) &&
+        !s.soldAt &&
+        s.qty > 0
+    );
+    if (activeSlot && activeSlot.itemId) {
+      const meta = getFarmItemMeta(activeSlot.itemId);
+      const rawTotal = Math.round(activeSlot.qty * (activeSlot.unitPrice || meta.sellValue));
+      return {
+        itemId: activeSlot.itemId,
+        qty: Math.max(1, Math.min(10, Math.round(activeSlot.qty))),
+        totalSickle: Math.max(2, Math.min(260, rawTotal)),
+        isRealFriendListing: true,
+        slotIndex: activeSlot.slotIndex,
+      };
+    }
+  }
+
   let hash = 2166136261;
   const key = `${neighbor.id}:${dayKey}`;
   for (let i = 0; i < key.length; i++) {
@@ -251,11 +282,28 @@ export function getNeighborRoadsideOffer(
   const qty = 2 + (hash % 2);
   const meta = getFarmItemMeta(itemId);
   const totalSickle = Math.max(4, Math.round(meta.sellValue * qty * 0.8));
-  return { itemId, qty, totalSickle };
+  return { itemId, qty, totalSickle, isRealFriendListing: false };
+}
+
+export function markCachedNeighborStandSlotSold(
+  neighbor: NeighborProfileState,
+  slotIndex: number,
+  buyerName = 'Bạn',
+  nowMs = Date.now()
+): void {
+  const cachedStand = getCachedNeighborSocialExtras(neighbor)?.roadsideStand;
+  if (!cachedStand || !Array.isArray(cachedStand.slots)) return;
+  const target = cachedStand.slots.find((s) => s && s.slotIndex === slotIndex);
+  if (target && target.itemId && !target.soldAt) {
+    target.soldAt = nowMs;
+    target.buyerName = buyerName;
+    target.buyerEmoji = '🦉';
+  }
 }
 
 export function buyVisitedNeighborRoadsideOffer(
-  sim: ParkSimulation
+  sim: ParkSimulation,
+  options?: { atomicServerVerified?: boolean; expectedSlotIndex?: number }
 ): { ok: boolean; msg: string } {
   const nb = sim.getActiveVisitingNeighbor();
   if (!nb) {
@@ -281,16 +329,33 @@ export function buyVisitedNeighborRoadsideOffer(
     homeState.galleons = sim.state.galleons;
   }
   stand.dailyFriendBoughtIds = [...(stand.dailyFriendBoughtIds ?? []), nb.id];
+  const soldIdx =
+    typeof options?.expectedSlotIndex === 'number'
+      ? options.expectedSlotIndex
+      : offer.isRealFriendListing
+        ? offer.slotIndex
+        : undefined;
+  if (typeof soldIdx === 'number') {
+    markCachedNeighborStandSlotSold(nb, soldIdx, homeState.parkName || 'Bạn');
+  }
   sim.audio.playCoinChime?.();
   sim.onToast?.(
-    `🧺 Đã mua ${added} ${meta.emoji} ${meta.name} giá hời từ sạp của ${nb.name} (−${actualCost} Sickle)!`,
+    options?.atomicServerVerified
+      ? `🧺 Giao dịch 2 chiều thành công! Đã mua ${added} ${meta.emoji} ${meta.name} từ Sạp của ${nb.name} (−${actualCost} Sickle · chủ sạp đã nhận tiền qua Cổng Floo)!`
+      : offer.isRealFriendListing
+        ? `🧺 Đã mua ${added} ${meta.emoji} ${meta.name} đang bày thật trên Sạp của ${nb.name} (−${actualCost} Sickle)!`
+        : `🧺 Đã mua ${added} ${meta.emoji} ${meta.name} giá hời từ sạp của ${nb.name} (−${actualCost} Sickle)!`,
     '🧺'
   );
   sim.saveToStorage();
   sim.onUiChange?.();
   return {
     ok: true,
-    msg: `Đã mua ${added} ${meta.name} từ sạp của ${nb.name}!`,
+    msg: options?.atomicServerVerified
+      ? `Giao dịch 2 chiều thành công: đã mua ${added} ${meta.name} từ Sạp thật của ${nb.name}!`
+      : offer.isRealFriendListing
+        ? `Đã mua ${added} ${meta.name} trực tiếp từ Sạp thật của ${nb.name}!`
+        : `Đã mua ${added} ${meta.name} từ sạp của ${nb.name}!`,
   };
 }
 

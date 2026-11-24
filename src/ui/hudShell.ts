@@ -1316,6 +1316,12 @@ export function shellBindEvents(hud: GameHUD): void {
     });
 
     hud.root.querySelector('#btnFloatingSwap')?.addEventListener('click', () => {
+      if (hud.sim.strollModeActive && !hud.selectedCatalogItem) {
+        const res = hud.sim.cycleStrollRobe();
+        hud.showToast(res.msg, '✨');
+        hud.refreshAll();
+        return;
+      }
       if (hud.selectedCatalogItem) {
         const selItem = hud.selectedCatalogItem;
         const selWasChristmas = isWinterChristmasBuildItem(selItem);

@@ -115,6 +115,7 @@ async function bootstrap(): Promise<void> {
   });
   // HPVN: helps other members gave this farm (server inbox), applied once to the home farm and saved
   setInboxListener((entries) => {
+    const galleonsBeforeInbox = sim.state.galleons;
     const applied = applyFarmInbox(sim.homeStateWhileVisiting ?? sim.state, entries, Date.now(), sim.state);
     if (!applied.length) return;
     const bought = applied.reduce((sum, entry) => sum + (entry.kind === 'sickles' ? entry.sickle ?? 0 : 0), 0);
@@ -122,7 +123,19 @@ async function bootstrap(): Promise<void> {
     const cups = applied.filter((entry) => entry.kind === 'cup');
     const cupSickles = cups.reduce((s, e) => s + (Number.isSafeInteger(e.sickle) && e.sickle! > 0 ? e.sickle! : 0), 0);
     const cupSand = cups.reduce((s, e) => s + (Number.isSafeInteger(e.sand) && e.sand! > 0 && Number.isSafeInteger(e.sickle) && e.sickle! > 0 ? e.sand! : 0), 0);
-    sim.creditVerifiedInboxGrant(bought + cupSickles, cupSand);
+    const standSales = applied.filter((entry) => entry.kind === 'stand-sale');
+    const totalCreditedSickles = Math.max(bought + cupSickles, sim.state.galleons - galleonsBeforeInbox);
+    sim.creditVerifiedInboxGrant(totalCreditedSickles, cupSand);
+    if (standSales.length) {
+      const standEarned = standSales.reduce((s, e) => s + (Number.isSafeInteger(e.sickle) && e.sickle! > 0 ? e.sickle! : 0), 0);
+      const firstBuyer = standSales[0].name || 'Bạn HPVN';
+      hud.showToast(
+        standSales.length > 1
+          ? `🧺 ${firstBuyer} và ${standSales.length - 1} bạn vừa mua hàng ở Sạp Đầu Ngõ (+${standEarned.toLocaleString('vi-VN')} Sickle)!`
+          : `🧺 ${firstBuyer} vừa mua hàng tại Sạp Đầu Ngõ của bạn (+${standEarned.toLocaleString('vi-VN')} Sickle)!`,
+        '🧺'
+      );
+    }
     const helps = applied.filter((entry) => entry.kind === 'help');
     for (const entry of helps) hud.flooHelpersToday.push({ uid: entry.uid ?? '', name: entry.name ?? '', avatarUrl: entry.avatarUrl, at: entry.at });
     if (helps.length) hud.showToast(`${helps[0].name}${helps.length > 1 ? ` +${helps.length - 1} bạn` : ''} chăm giúp · cây chín sớm 15 phút`, '🤝');
@@ -141,7 +154,7 @@ async function bootstrap(): Promise<void> {
       hud.showToast([tiers ? `Cúp Đợt ${tiers}` : 'Cúp Đợt', ...gains].join(' · '), '🏆');
     }
     sim.saveToStorage();
-    if (bought || applied.some((entry) => entry.kind === 'cup')) void flushFarmSave(); // a bought pack or cup reward reaches the server at once
+    if (bought || cups.length || standSales.length) void flushFarmSave(); // a bought pack, cup reward or stand sale reaches the server at once
     hud.refreshAll();
   });
 
@@ -2769,6 +2782,8 @@ async function bootstrap(): Promise<void> {
   let mainRafId = 0;
   let lastWorldRenderMs = 0;
   let fullscreenBgSimAccumSec = 0;
+  let soundscapeAccumSec = 0.25;
+  const minimapWrapEl = hud.root.querySelector('#minimapWrap') as HTMLElement | null;
 
   function frame(now: number): void {
     mainRafId = 0;
@@ -2975,8 +2990,13 @@ async function bootstrap(): Promise<void> {
       }
     }
 
-    // Symphonic Celesta BGM & Spatial Weather Soundscape
+    // Symphonic Celesta BGM & Spatial Weather Soundscape (throttled to 4 Hz to avoid 60fps 121-tile + building scans)
     if (runSoundscapeNow) {
+      soundscapeAccumSec += soundscapeDt;
+    }
+    if (runSoundscapeNow && soundscapeAccumSec >= 0.25) {
+      const effectiveSoundDt = Math.min(0.35, soundscapeAccumSec);
+      soundscapeAccumSec = 0;
       const period = sim.getRealTimePeriod();
       const curWeather = sim.getCurrentWeather();
       const rot = cam.viewRot ?? 0;
@@ -3037,7 +3057,7 @@ async function bootstrap(): Promise<void> {
         if (isFestiveDecor && dist < festiveDistPx) festiveDistPx = dist;
       }
       audio.updateSoundscape(
-        soundscapeDt,
+        effectiveSoundDt,
         period === 'night' || period === 'dusk',
         cam.zoom,
         nearStation,
@@ -3108,7 +3128,7 @@ async function bootstrap(): Promise<void> {
 
       if (gpuWorldRenderer && activeGpuSettings && !gpuWorldRenderer.gpuDevice.contextLost) {
         if (gpuMode !== 'canvas') {
-          if (gpuPointerClient.moved && !document.querySelector('dialog[open]')) {
+          if (gpuPointerClient.moved && !cachedAnyDialogOpen) {
             const viewW = Math.max(1, window.innerWidth);
             const viewH = Math.max(1, window.innerHeight);
             const invZoom = 1 / Math.max(0.15, cam.zoom);
@@ -3183,7 +3203,15 @@ async function bootstrap(): Promise<void> {
       }
 
       minimapFrame++;
-      if (!cachedAnyDialogOpen && minimapFrame % 6 === 0 && !hud.photoModeActive) {
+      if (
+        !cachedAnyDialogOpen &&
+        minimapFrame % 6 === 0 &&
+        !hud.photoModeActive &&
+        !hud.minimapCollapsed &&
+        minimapWrapEl &&
+        !minimapWrapEl.classList.contains('hidden') &&
+        !hud.minimapCanvas.classList.contains('hidden')
+      ) {
         renderer.renderMinimap(hud.minimapCanvas, sim, cam);
       }
     }

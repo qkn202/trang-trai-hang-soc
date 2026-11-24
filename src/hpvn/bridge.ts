@@ -1,4 +1,4 @@
-import { applyHouseCup } from './houseCup';
+import { applyHouseCup, getActiveHouseCupWeekKey } from './houseCup';
 
 // HPVN Game Zone bridge: the member comes from the parent's identity handoff (never a typed name) and the farm
 // is kept by the HPVN server through the parent page (this frame never touches Firebase or another host).
@@ -118,7 +118,7 @@ export function request<T = unknown>(action: string, data: object = {}): Promise
         case 'wallet':
           return Promise.resolve({ enabled: false } as T);
         case 'board':
-          return Promise.resolve({ entries: [] } as T);
+          return Promise.resolve({ period: 'weekly', weekKey: getActiveHouseCupWeekKey(), entries: [] } as T);
         default:
           return Promise.reject(new Error('Tính năng trực tuyến này cần mở trên cổng HPVN.'));
       }

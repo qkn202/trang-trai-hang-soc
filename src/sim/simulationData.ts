@@ -2834,6 +2834,15 @@ export function migrateLoadedState(parsed: GameState): GameState {
           ? parsed.settings.yuleThemeMode
           : 'auto',
       rendererMode: parsed.settings?.rendererMode === 'canvas' ? 'canvas' : 'webgl2',
+      strollRobeId:
+        parsed.settings?.strollRobeId === 'gryffindor_scarf' ||
+        parsed.settings?.strollRobeId === 'ravenclaw_cloak' ||
+        parsed.settings?.strollRobeId === 'hufflepuff_knit' ||
+        parsed.settings?.strollRobeId === 'slytherin_emerald' ||
+        parsed.settings?.strollRobeId === 'yule_winter_coat' ||
+        parsed.settings?.strollRobeId === 'burrow_classic'
+          ? parsed.settings.strollRobeId
+          : undefined,
       // HPVN: the grid choice survives a reload (only the see-through house mode resets)
       showGrid: typeof parsed.settings?.showGrid === 'boolean' ? parsed.settings.showGrid : false,
       toonEnabled: typeof parsed.settings?.toonEnabled === 'boolean' ? parsed.settings.toonEnabled : undefined,
