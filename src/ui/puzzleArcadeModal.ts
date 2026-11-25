@@ -11,6 +11,8 @@ import {
   FISH_SPECIES_CATALOG,
   FISH_WEAPON_CATALOG,
   FishShooterEngine,
+  FishSpeciesId,
+  FishStageMission,
   FloatingAmmoDrop,
   JIGSAW_PIECE_BOARD,
   JIGSAW_PIECE_LOCKED,
@@ -594,19 +596,19 @@ export class PuzzleArcadeModalController {
       this.hitStopTimer = 0;
       this.inspectingTurningPoint = false;
       this.cleanupJigsawTrayDrag();
-      if (this.minesWinRevealTimer > 0 && !this.victoryClaimed) {
+      if ((this.minesWinRevealTimer > 0 || (this.mode === 'caro' && this.minesEngine?.status === 'won')) && !this.victoryClaimed) {
         this.minesWinRevealTimer = 0;
         this.checkAndClaimVictory();
       }
-      if (this.fishWinRevealTimer > 0 && !this.victoryClaimed) {
+      if ((this.fishWinRevealTimer > 0 || (this.mode === 'chess' && this.fishEngine?.status === 'won')) && !this.victoryClaimed) {
         this.fishWinRevealTimer = 0;
         this.checkAndClaimVictory();
       }
-      if (this.onetWinRevealTimer > 0 && !this.victoryClaimed) {
+      if ((this.onetWinRevealTimer > 0 || (this.mode === 'blocks' && this.onetEngine?.status === 'won')) && !this.victoryClaimed) {
         this.onetWinRevealTimer = 0;
         this.checkAndClaimVictory();
       }
-      if (this.jigsawWinRevealTimer > 0 && !this.victoryClaimed) {
+      if ((this.jigsawWinRevealTimer > 0 || (this.mode === 'jigsaw' && this.jigsawEngine?.status === 'won')) && !this.victoryClaimed) {
         this.jigsawWinRevealTimer = 0;
         this.checkAndClaimVictory();
       }
@@ -1010,7 +1012,7 @@ export class PuzzleArcadeModalController {
     const targetArenaW = aspect >= 1 ? Math.round(540 * aspect) : 520;
     const targetArenaH = aspect >= 1 ? 540 : Math.round(520 / aspect);
     const scaleY = virtH / Math.max(1, targetArenaH);
-    const topHudPx = virtH < 410 ? 40 : 64;
+    const topHudPx = virtH < 410 ? 66 : 92;
     const topHudArenaPad = Math.ceil((topHudPx + 14) / Math.max(0.2, scaleY));
     this.fishEngine.setArenaSize(targetArenaW, targetArenaH, topHudArenaPad);
   }
@@ -1454,7 +1456,11 @@ export class PuzzleArcadeModalController {
       (this.minesWinRevealTimer > 0 ||
         this.fishWinRevealTimer > 0 ||
         this.onetWinRevealTimer > 0 ||
-        this.jigsawWinRevealTimer > 0) &&
+        this.jigsawWinRevealTimer > 0 ||
+        (this.mode === 'caro' && this.minesEngine?.status === 'won') ||
+        (this.mode === 'chess' && this.fishEngine?.status === 'won') ||
+        (this.mode === 'blocks' && this.onetEngine?.status === 'won') ||
+        (this.mode === 'jigsaw' && this.jigsawEngine?.status === 'won')) &&
       !this.victoryClaimed
     ) {
       this.minesWinRevealTimer = 0;
@@ -1704,7 +1710,11 @@ export class PuzzleArcadeModalController {
       (this.minesWinRevealTimer > 0 ||
         this.fishWinRevealTimer > 0 ||
         this.onetWinRevealTimer > 0 ||
-        this.jigsawWinRevealTimer > 0) &&
+        this.jigsawWinRevealTimer > 0 ||
+        (this.mode === 'caro' && this.minesEngine?.status === 'won') ||
+        (this.mode === 'chess' && this.fishEngine?.status === 'won') ||
+        (this.mode === 'blocks' && this.onetEngine?.status === 'won') ||
+        (this.mode === 'jigsaw' && this.jigsawEngine?.status === 'won')) &&
       !this.victoryClaimed
     ) {
       this.minesWinRevealTimer = 0;
@@ -1798,6 +1808,7 @@ export class PuzzleArcadeModalController {
           this.companionCharge = Math.max(0, Math.round(pa.minesSession.companionCharge ?? 0));
           this.snackPieUsedThisAttempt = Boolean(pa.minesSession.snackPieUsed);
           this.lossStreakResetForStage = false;
+          this.ensureRestoredPopRecorder('caro', stage, Math.max(1, pa.minesSession.movesCount));
         } else {
           this.resetStageSynergySession();
           if (!rescueStage) {
@@ -1840,6 +1851,11 @@ export class PuzzleArcadeModalController {
           this.companionCharge = Math.max(0, Math.round(savedFish.companionCharge ?? 0));
           this.snackPieUsedThisAttempt = Boolean(savedFish.snackPieUsed);
           this.lossStreakResetForStage = false;
+          this.ensureRestoredPopRecorder(
+            'chess',
+            stage,
+            Math.max(1, savedFish.caughtCount || savedFish.shotsFired)
+          );
         } else {
           this.resetStageSynergySession();
           if (!rescueStage) {
@@ -2497,10 +2513,14 @@ export class PuzzleArcadeModalController {
       `;
       if (fe.status === 'lost') {
         const fishRev = fe.getTurningPointReview();
-        stageAlert = `Hết giờ · ${fe.score.toLocaleString('vi-VN')}/${fe.targetScore.toLocaleString('vi-VN')} điểm`;
+        stageAlert =
+          fe.score >= fe.targetScore && !fe.allMissionsCompleted
+            ? `Hết giờ · Chưa xong nhiệm vụ (${fe.completedMissionsCount}/${fe.missions.length})`
+            : `Hết giờ · ${fe.score.toLocaleString('vi-VN')}/${fe.targetScore.toLocaleString('vi-VN')} điểm · NV ${fe.completedMissionsCount}/${fe.missions.length}`;
         stageAction = rescueBtn(canTalisman);
         if (fishRev) statusBannerHtml += `<div class="pa-alert-strip">${this.renderTurningPointCardHtml(fishRev)}</div>`;
       }
+      statusBannerHtml += this.renderFishMissionsBarHtml(fe);
     } else if (this.mode === 'blocks' && this.onetEngine) {
       const oe = this.onetEngine;
       // the shift direction is the board's rule: it tags the sub line (a fourth cell does not fit 360px beside «Màn 150/777»)
@@ -2988,6 +3008,26 @@ export class PuzzleArcadeModalController {
               : fe.paidSkillsLeft > 0
                 ? `${fe.skillGoldCost} Sickle`
                 : '0';
+        }
+      }
+      const missionRatioEl = box.querySelector('#paFishMissionRatio');
+      if (missionRatioEl) {
+        missionRatioEl.textContent = `${fe.completedMissionsCount}/${fe.missions.length}`;
+      }
+      const needsMissionsOnly = fe.score >= fe.targetScore && !fe.allMissionsCompleted;
+      const missionsBar = box.querySelector('#paFishMissionsBar');
+      if (missionsBar) {
+        missionsBar.classList.toggle('is-urgent', needsMissionsOnly);
+        missionsBar.classList.toggle('is-all-done', fe.allMissionsCompleted);
+      }
+      for (const m of fe.missions) {
+        const pillEl = box.querySelector<HTMLElement>(`[data-fish-mission-id="${m.id}"]`);
+        if (!pillEl) continue;
+        pillEl.classList.toggle('is-done', m.completed);
+        pillEl.classList.toggle('is-urgent', needsMissionsOnly && !m.completed);
+        const countEl = pillEl.querySelector('.pa-fish-mission-count');
+        if (countEl) {
+          countEl.textContent = m.completed ? '✓' : `${m.current}/${m.target}`;
         }
       }
     } else if (this.mode === 'blocks' && this.onetEngine) {
@@ -4938,6 +4978,8 @@ export class PuzzleArcadeModalController {
             this.fishWinRevealTimer = 0;
             this.checkAndClaimVictory();
           }
+        } else if (this.fishEngine && this.fishEngine.status === 'won') {
+          this.checkAndClaimVictory();
         } else if (this.fishEngine && this.fishEngine.status === 'playing') {
           const isPageHidden = typeof document !== 'undefined' && document.hidden;
           const openDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
@@ -4977,6 +5019,10 @@ export class PuzzleArcadeModalController {
                 this.spawnBurst(dx, dy, dropEv.color, 14);
                 this.sim.audio.playPowerupBlast();
               }
+            }
+            if (tick.completedMissions?.length) {
+              this.spawnBurst(virt.w * 0.5, 86, '#34d399', 18);
+              this.sim.audio.playPowerupBlast();
             }
             if (tick.caughtEvents.length > 0) {
               this.bumpCompanionCharge();
@@ -7143,6 +7189,161 @@ export class PuzzleArcadeModalController {
     ctx.restore();
   }
 
+  private renderFishMissionsBarHtml(fe: FishShooterEngine): string {
+    const needsMissionsOnly = fe.score >= fe.targetScore && !fe.allMissionsCompleted;
+    const pillsHtml = fe.missions
+      .map((m) => {
+        const cls = `pa-fish-mission-pill${m.completed ? ' is-done' : ''}${
+          needsMissionsOnly && !m.completed ? ' is-urgent' : ''
+        }`;
+        const progress = m.completed ? '✓' : `${m.current}/${m.target}`;
+        return `<span class="${cls}" data-fish-mission-id="${escapeHtml(m.id)}" title="${escapeHtml(m.labelVi)}"><span class="pa-fish-mission-lbl">${escapeHtml(m.labelVi)}</span><strong class="pa-fish-mission-count">${progress}</strong></span>`;
+      })
+      .join('');
+    return `
+      <div id="paFishMissionsBar" class="pa-fish-missions-bar${needsMissionsOnly ? ' is-urgent' : ''}${fe.allMissionsCompleted ? ' is-all-done' : ''}" role="region" aria-label="Nhiệm vụ qua màn Bắn Cá">
+        <span class="pa-fish-missions-head">Nhiệm vụ <strong id="paFishMissionRatio">${fe.completedMissionsCount}/${fe.missions.length}</strong></span>
+        <div class="pa-fish-missions-list">${pillsHtml}</div>
+      </div>
+    `;
+  }
+
+  private getFishSpeciesAtlasCell(species: FishSpeciesId): { col: number; row: number } {
+    switch (species) {
+      case 'minnow':
+        return { col: 0, row: 0 };
+      case 'clown':
+        return { col: 1, row: 0 };
+      case 'emerald_koi':
+        return { col: 2, row: 0 };
+      case 'moon_jelly':
+        return { col: 3, row: 0 };
+      case 'puffer_bomb':
+        return { col: 0, row: 1 };
+      case 'golden_ray':
+        return { col: 1, row: 1 };
+      case 'leviathan_carp':
+        return { col: 2, row: 1 };
+    }
+  }
+
+  private drawFishMissionCanvasBar(
+    ctx: CanvasRenderingContext2D,
+    engine: FishShooterEngine,
+    hudX: number,
+    barY: number,
+    hudW: number,
+    nowSec: number
+  ): void {
+    const missions = engine.missions;
+    if (!missions || missions.length === 0) return;
+
+    const barH = 22;
+    const gap = 6;
+    const needsOnlyMissions = engine.score >= engine.targetScore && !engine.allMissionsCompleted;
+    const atlas =
+      this.blackLakeCreaturesAtlas &&
+      this.blackLakeCreaturesAtlas.complete &&
+      this.blackLakeCreaturesAtlas.naturalWidth >= 1024
+        ? this.blackLakeCreaturesAtlas
+        : null;
+
+    ctx.save();
+    ctx.font = '800 10.5px "Be Vietnam Pro", system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+
+    const items = missions.map((m: FishStageMission) => {
+      const countText = m.completed ? '✓' : `${m.current}/${m.target}`;
+      const labelText = `${m.shortLabelVi} ${countText}`;
+      const textW = Math.ceil(ctx.measureText(labelText).width);
+      const pillW = Math.min(Math.floor((hudW - gap * (missions.length - 1)) / missions.length), textW + 30);
+      return { m, labelText, pillW: Math.max(76, pillW) };
+    });
+
+    const totalW = items.reduce((s, it) => s + it.pillW, 0) + gap * Math.max(0, items.length - 1);
+    let curX = hudX + (hudW - totalW) * 0.5;
+    const pulse = 0.55 + 0.45 * Math.sin(nowSec * 7.5);
+
+    for (const { m, labelText, pillW } of items) {
+      drawRoundedRect(ctx, curX, barY, pillW, barH, 11);
+      ctx.fillStyle = m.completed
+        ? 'rgba(6, 78, 59, 0.92)'
+        : needsOnlyMissions
+          ? `rgba(69, 26, 3, ${(0.86 + pulse * 0.1).toFixed(2)})`
+          : 'rgba(6, 28, 36, 0.90)';
+      ctx.fill();
+
+      ctx.lineWidth = needsOnlyMissions && !m.completed ? 1.8 : 1.25;
+      ctx.strokeStyle = m.completed
+        ? '#34d399'
+        : needsOnlyMissions
+          ? `rgba(253, 224, 71, ${(0.72 + pulse * 0.28).toFixed(2)})`
+          : 'rgba(244, 198, 104, 0.72)';
+      ctx.stroke();
+
+      // Miniature icon on the left side of the mission pill
+      const icoCx = curX + 12;
+      const icoCy = barY + barH * 0.5;
+      if (m.species && atlas) {
+        const cell = this.getFishSpeciesAtlasCell(m.species);
+        const cellW = atlas.naturalWidth / 4;
+        const cellH = atlas.naturalHeight / 2;
+        ctx.drawImage(
+          atlas,
+          cell.col * cellW,
+          cell.row * cellH,
+          cellW,
+          cellH,
+          icoCx - 8,
+          icoCy - 8,
+          16,
+          16
+        );
+      } else if (m.species) {
+        ctx.beginPath();
+        ctx.arc(icoCx, icoCy, 5, 0, Math.PI * 2);
+        ctx.fillStyle = FISH_SPECIES_CATALOG[m.species].bodyColor;
+        ctx.fill();
+        ctx.strokeStyle = '#fde047';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      } else if (m.kind === 'collect_weapon') {
+        ctx.fillStyle = '#38bdf8';
+        this.drawFourPointStar(ctx, icoCx, icoCy, 6, 2.2);
+        ctx.fill();
+      } else if (m.kind === 'reach_combo') {
+        ctx.fillStyle = '#fde047';
+        ctx.beginPath();
+        ctx.moveTo(icoCx + 1, icoCy - 6);
+        ctx.lineTo(icoCx - 4, icoCy + 0.5);
+        ctx.lineTo(icoCx, icoCy + 0.5);
+        ctx.lineTo(icoCx - 1, icoCy + 6);
+        ctx.lineTo(icoCx + 4, icoCy - 0.5);
+        ctx.lineTo(icoCx, icoCy - 0.5);
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.arc(icoCx, icoCy, 4.5, 0, Math.PI * 2);
+        ctx.strokeStyle = '#67e8f9';
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(icoCx, icoCy, 1.8, 0, Math.PI * 2);
+        ctx.fillStyle = '#fde047';
+        ctx.fill();
+      }
+
+      ctx.fillStyle = m.completed ? '#a7f3d0' : needsOnlyMissions ? '#fef08a' : '#fffbeb';
+      ctx.textAlign = 'left';
+      ctx.fillText(labelText, curX + 23, icoCy, Math.max(40, pillW - 28));
+
+      curX += pillW + gap;
+    }
+
+    ctx.restore();
+  }
+
   private drawFishEntity(
     ctx: CanvasRenderingContext2D,
     fish: SwimmingFish,
@@ -7150,7 +7351,8 @@ export class PuzzleArcadeModalController {
     cy: number,
     unitScale: number,
     frozen: boolean,
-    nowSec: number
+    nowSec: number,
+    isMissionTarget = false
   ): void {
     const def = FISH_SPECIES_CATALOG[fish.species];
     const r = Math.max(10, fish.radius * unitScale);
@@ -7637,6 +7839,36 @@ export class PuzzleArcadeModalController {
       ctx.stroke();
     }
 
+    // Golden quest target reticle & bouncing chevron arrow for active stage mission species
+    if (isMissionTarget) {
+      const pulse = 1 + Math.sin(nowSec * 6.4 + fish.uid) * 0.06;
+      ctx.save();
+      ctx.rotate(nowSec * 0.9 + fish.uid * 0.3);
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 1.18 * pulse, 0, Math.PI * 2);
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = 'rgba(253, 224, 71, 0.88)';
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+
+      const bob = Math.abs(Math.sin(nowSec * 5.2 + fish.uid)) * 4;
+      const arrowY = -r * 1.38 - 10 - bob;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(0, arrowY + 7);
+      ctx.lineTo(-5.5, arrowY);
+      ctx.lineTo(5.5, arrowY);
+      ctx.closePath();
+      ctx.fillStyle = '#fde047';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // Mini HP bar above multi-HP damaged creature or Giant Squid boss
     if ((fish.maxHp > 1 && fish.hp < fish.maxHp) || fish.species === 'leviathan_carp') {
       const barW = Math.max(24, r * 1.45);
@@ -7668,7 +7900,8 @@ export class PuzzleArcadeModalController {
     dx: number,
     dy: number,
     unitScale: number,
-    nowSec: number
+    nowSec: number,
+    isMissionTarget = false
   ): void {
     const wDef = FISH_WEAPON_CATALOG[drop.weaponId];
     const r = Math.max(16, drop.radius * unitScale);
@@ -7822,6 +8055,21 @@ export class PuzzleArcadeModalController {
     ctx.textBaseline = 'middle';
     ctx.fillText(tagText, 0, r + 4 + tagH * 0.5);
 
+    if (isMissionTarget) {
+      const bob = Math.abs(Math.sin(nowSec * 5.6 + drop.uid)) * 4;
+      const arrowY = -r * 1.32 - 8 - bob;
+      ctx.beginPath();
+      ctx.moveTo(0, arrowY + 7);
+      ctx.lineTo(-5.5, arrowY);
+      ctx.lineTo(5.5, arrowY);
+      ctx.closePath();
+      ctx.fillStyle = '#fde047';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+
     ctx.restore();
   }
 
@@ -7850,12 +8098,30 @@ export class PuzzleArcadeModalController {
     // 1. Swimming Black Lake Magical Creatures
     const frozen = engine.freezeTimer > 0;
     for (const fish of engine.fishList) {
-      this.drawFishEntity(ctx, fish, toX(fish.x), toY(fish.y), vp.unitScale, frozen, nowSec);
+      this.drawFishEntity(
+        ctx,
+        fish,
+        toX(fish.x),
+        toY(fish.y),
+        vp.unitScale,
+        frozen,
+        nowSec,
+        engine.isTargetMissionSpecies(fish.species)
+      );
     }
 
     // 1B. Floating Shoot-to-Collect Mystical Ocean Ammo Capsules ("bắn vào để lấy")
+    const weaponMissionActive = engine.hasIncompleteWeaponMission;
     for (const drop of engine.ammoDrops) {
-      this.drawFishAmmoDrop(ctx, drop, toX(drop.x), toY(drop.y), vp.unitScale, nowSec);
+      this.drawFishAmmoDrop(
+        ctx,
+        drop,
+        toX(drop.x),
+        toY(drop.y),
+        vp.unitScale,
+        nowSec,
+        weaponMissionActive
+      );
     }
 
     // 2. Expanding Hogwarts Runic Binding Circles, Whirlpool Vortexes & Shockwave Blasts
@@ -8275,11 +8541,18 @@ export class PuzzleArcadeModalController {
       engine.activeWeaponTimer > 0 && engine.activeWeapon !== 'normal'
         ? `${sep}${engine.activeWeaponDef.badgeVi} ${Math.ceil(engine.activeWeaponTimer)}s`
         : '';
-    const scoreLbl = `${compactTimePrefix}${engine.score.toLocaleString('vi-VN')} / ${engine.targetScore.toLocaleString('vi-VN')} điểm${
-      engine.combo >= 2 ? `${sep}COMBO ×${engine.combo}` : ''
+    const waitingMissions = engine.score >= engine.targetScore && !engine.allMissionsCompleted;
+    const scoreCore = waitingMissions
+      ? `Đủ điểm ✓${sep}Hoàn thành nhiệm vụ!`
+      : `${engine.score.toLocaleString('vi-VN')} / ${engine.targetScore.toLocaleString('vi-VN')} điểm`;
+    const scoreLbl = `${compactTimePrefix}${scoreCore}${
+      !waitingMissions && engine.combo >= 2 ? `${sep}COMBO ×${engine.combo}` : ''
     }${activeWepTag}${engine.freezeTimer > 0 ? `${sep}GLACIUS ${Math.ceil(engine.freezeTimer)}s` : ''}`;
     ctx.fillText(scoreLbl, hudX + hudW * 0.5, hudY + hudH * 0.5, Math.max(120, hudW - 18));
     ctx.restore();
+
+    // 4C. Active Stage Missions Pill Strip (must complete all missions + reach targetScore to clear stage)
+    this.drawFishMissionCanvasBar(ctx, engine, hudX, hudY + hudH + 4, hudW, nowSec);
 
     // 5. Arcane Spell Aim Line & Runic Reticle (when playing)
     const tx = toX(engine.turretX);

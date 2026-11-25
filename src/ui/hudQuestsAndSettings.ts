@@ -4,10 +4,12 @@
 import { avatarGlyph } from '../hpvn/emoji';
 import {
   fetchHouseCup,
+  getActiveHouseCupWeekKey,
   houseCup,
   houseCupAllianceStandings,
   houseCupDisciplineSummaries,
   houseCupFirstPlaceCounts,
+  houseCupMinStagesForPoints,
   HouseCupDisciplineId,
   houseWeekPoints,
 } from '../hpvn/houseCup';
@@ -119,6 +121,7 @@ import {
   FarmItemId,
   FestivalType,
   FlyRewardKind,
+  GameState,
   HeatmapMode,
   HouseName,
   LayoutPresetId,
@@ -495,13 +498,19 @@ function openHouseCupDiscipline(hud: GameHUD, discId: HouseCupDisciplineId): voi
   }
 }
 
-function buildHouseCupDisciplinesHtml(playerHouse: HouseName, noHouse: boolean): string {
+function buildHouseCupDisciplinesHtml(
+  playerHouse: HouseName,
+  noHouse: boolean,
+  weeklyClearedByDisc?: Partial<Record<HouseCupDisciplineId, number>>
+): string {
   const summaries = houseCupDisciplineSummaries();
   if (summaries.length === 0) return '';
+  const minStages = houseCupMinStagesForPoints();
   const cardsHtml = summaries
     .map((disc) => {
       const meta = CUP_DISCIPLINE_META[disc.id];
       const myRow = disc.byHouse[playerHouse];
+      const myWeeklyCleared = Math.max(0, Math.floor(weeklyClearedByDisc?.[disc.id] ?? 0));
       const isLeading = !noHouse && disc.leaderHouse !== null && myRow?.rank === 1 && myRow.rawPoints > 0;
       const leaderHtml = disc.leaderHouse
         ? `<span class="hs-cup-disc-lead" data-house="${disc.leaderHouse}">
@@ -514,9 +523,18 @@ function buildHouseCupDisciplinesHtml(playerHouse: HouseName, noHouse: boolean):
       let statusText = 'Chưa phân Nhà';
       if (!noHouse && myRow) {
         if (myRow.rawPoints <= 0) {
-          statusText = 'Nhà bạn: 0 đ (+0 Cúp)';
+          if (myWeeklyCleared > 0 && myWeeklyCleared < minStages) {
+            statusText = `Bạn: ${myWeeklyCleared}/${minStages} màn tuần · +0 Cúp`;
+          } else if (myWeeklyCleared >= minStages) {
+            statusText = `Nhà bạn: 0 đ · Bạn ${myWeeklyCleared} màn tuần`;
+          } else {
+            statusText = 'Nhà bạn: 0 đ (+0 Cúp)';
+          }
         } else if (myRow.rank === 1) {
-          statusText = `Hạng 1 · +${myRow.cupPoints} đ Cúp`;
+          statusText =
+            myWeeklyCleared > 0 && myWeeklyCleared < minStages
+              ? `Hạng 1 · +${myRow.cupPoints} đ · Bạn ${myWeeklyCleared}/${minStages} màn`
+              : `Hạng 1 · +${myRow.cupPoints} đ Cúp`;
         } else {
           statusText = `Hạng ${myRow.rank} (+${myRow.cupPoints} đ) · Kém ${myRow.gapToFirst.toLocaleString('vi-VN')}`;
         }
@@ -606,10 +624,31 @@ function buildHouseCupAlliancesHtml(
     </div>`;
 }
 
+function extractLocalWeeklyClearedByDiscipline(
+  records?: GameState['minigameLeaderboard'] extends infer L
+    ? L extends { records?: infer R }
+      ? R
+      : never
+    : never
+): Partial<Record<HouseCupDisciplineId, number>> {
+  const out: Partial<Record<HouseCupDisciplineId, number>> = {};
+  if (!records) return out;
+  const activeWeek = getActiveHouseCupWeekKey();
+  const ids: readonly HouseCupDisciplineId[] = ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw'];
+  for (const id of ids) {
+    const w = records[id]?.weekly;
+    if (w && w.weekKey === activeWeek && w.stagesCleared > 0) {
+      out[id] = Math.floor(w.stagesCleared);
+    }
+  }
+  return out;
+}
+
 function buildHouseCupStandingsHtml(
   playerHouse: HouseName,
   cup: ReturnType<typeof houseCup>,
-  localPlays?: Partial<Record<HouseCupDisciplineId, number>>
+  localPlays?: Partial<Record<HouseCupDisciplineId, number>>,
+  weeklyClearedByDisc?: Partial<Record<HouseCupDisciplineId, number>>
 ): {
   alliancesHtml: string;
   prizeBannerHtml: string;
@@ -663,7 +702,9 @@ function buildHouseCupStandingsHtml(
     noHouse,
     localPlays,
   });
-  const disciplinesHtml = isMedalMode ? buildHouseCupDisciplinesHtml(playerHouse, noHouse) : '';
+  const disciplinesHtml = isMedalMode
+    ? buildHouseCupDisciplinesHtml(playerHouse, noHouse, weeklyClearedByDisc)
+    : '';
   return { alliancesHtml, prizeBannerHtml, listHtml, disciplinesHtml, isMedalMode, noHouse, perTier, bank };
 }
 
@@ -687,7 +728,12 @@ export function questsUiRenderHouseCupIntroDialog(hud: GameHUD): void {
   refreshHouseCup(hud).catch(() => {});
 
   const { alliancesHtml, prizeBannerHtml, listHtml, disciplinesHtml, isMedalMode, noHouse, perTier, bank } =
-    buildHouseCupStandingsHtml(playerHouse, cup, hud.sim.state.minigamePlays);
+    buildHouseCupStandingsHtml(
+      playerHouse,
+      cup,
+      hud.sim.state.minigamePlays,
+      extractLocalWeeklyClearedByDiscipline(hud.sim.state.minigameLeaderboard?.records)
+    );
   const tierNum = cup?.memberTier ?? 1;
   const dailyCap = cup?.memberDailyCap ?? 0;
   const todayPts = cup?.memberTodayPoints ?? 0;
@@ -805,7 +851,12 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
       const cup = houseCup();
       refreshHouseCup(hud).catch(() => {});
       const { alliancesHtml, prizeBannerHtml, listHtml, disciplinesHtml, noHouse, perTier, bank } =
-        buildHouseCupStandingsHtml(playerHouse, cup, st.minigamePlays);
+        buildHouseCupStandingsHtml(
+          playerHouse,
+          cup,
+          st.minigamePlays,
+          extractLocalWeeklyClearedByDiscipline(st.minigameLeaderboard?.records)
+        );
       const pts = (v: number) => `${v.toLocaleString('vi-VN')} đ`;
       const row = (lead: string, name: string, value: string, pct: number | null, house = '', mine = false) => `
         <li class="hs-cup-row"${house ? ` data-house="${house}" data-mine="${mine}"` : ''}>

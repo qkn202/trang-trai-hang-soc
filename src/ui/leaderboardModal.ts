@@ -9,6 +9,7 @@ import { buildAvatarBadgeHtml, wireAvatarImgFallbacks } from './hudSocialAndTuto
 import {
   ALL_LEADERBOARD_GAMES,
   fetchCloudLeaderboardEntries,
+  fetchCloudOverallLeaderboardEntries,
   getActiveLeaderboardWeekKey,
   isScoredLeaderboardGame,
   LEADERBOARD_GAME_META,
@@ -66,24 +67,37 @@ function houseRankPtsTag(e: LeaderboardRowEntry, compact = false): string {
   return '';
 }
 
-// a real podium: three blocks side by side as steps (#2 · #1 highest · #3), the rank cut into each block face with the weekly
-// points & weekly stages under it; the avatar stands on its block in a metal ring (#1 larger, with its house crest), the name between them
-function podiumHtml(e: LeaderboardRowEntry, place: 1 | 2 | 3): string {
+// a real podium: three blocks side by side as steps (#2 · #1 highest · #3), the rank cut into each block face with the
+// primary metric under it; the avatar stands on its block in a metal ring (#1 larger, with its house crest), the name between them
+function podiumHtml(e: LeaderboardRowEntry, place: 1 | 2 | 3, isOverall = false): string {
   const crest = place === 1
     ? `<img class="hs-lb-crest" src="/game/trang-trai-hang-soc/sprites/crest-${escapeHtml(e.house.toLowerCase())}.webp" alt="${escapeHtml(e.house)}">`
     : '';
+  const metricsHtml = isOverall
+    ? `<span class="hs-lb-pts">${escapeHtml(e.primaryDisplayVi)}</span><span class="hs-lb-pod-lv">${escapeHtml(e.house)}</span>`
+    : `<span class="hs-lb-pts">${escapeHtml(e.ratingDisplayVi)}</span><span class="hs-lb-pod-lv">${escapeHtml(e.primaryDisplayVi)}</span>${houseRankPtsTag(e, true)}`;
   return `
     <li class="hs-lb-pod place-${place}${e.isPlayer ? ' is-me' : ''}" data-house="${escapeHtml(e.house)}">
       <span class="hs-lb-pod-av">${avatarHtml(e)}${crest}</span>
       ${nameHtml(e)}
-      <span class="hs-lb-block"><span class="hs-lb-place" role="img" aria-label="Hạng ${place}">${place}</span><span class="hs-lb-pts">${escapeHtml(e.ratingDisplayVi)}</span><span class="hs-lb-pod-lv">${escapeHtml(e.primaryDisplayVi)}</span>${houseRankPtsTag(e, true)}</span>
+      <span class="hs-lb-block"><span class="hs-lb-place" role="img" aria-label="Hạng ${place}">${place}</span>${metricsHtml}</span>
       ${visitHtml(e)}
     </li>`;
 }
 
 // the sub line: the house gives way, weekly stages («10 màn tuần») and House Cup contribution stay whole; the points column
-// holds weekly weighted points only, matching Cúp Nhà Cách A
-function rowHtml(e: LeaderboardRowEntry): string {
+// holds weekly weighted points on weekly mode, or total stages cleared on overall mode
+function rowHtml(e: LeaderboardRowEntry, isOverall = false): string {
+  if (isOverall) {
+    return `
+    <li class="hs-lb-row${e.isPlayer ? ' is-me' : ''}" data-house="${escapeHtml(e.house)}">
+      <span class="hs-lb-rank">${e.rank.toLocaleString('vi-VN')}</span>
+      ${avatarHtml(e)}
+      <span class="hs-lb-who">${nameHtml(e)}<span class="hs-lb-sub">${houseHtml(e)}<span class="hs-lb-lv">· Tổng tích luỹ</span></span></span>
+      <span class="hs-lb-pts">${escapeHtml(e.primaryDisplayVi)}</span>
+      ${visitHtml(e)}
+    </li>`;
+  }
   const league = e.isPlayer && e.primaryValue >= houseCupMinStagesForPoints()
     ? `<span class="hs-lb-lv">· ${escapeHtml(e.league.labelVi)}</span>`
     : '';
@@ -120,8 +134,10 @@ export class LeaderboardModalController {
     } else if (!ALL_LEADERBOARD_GAMES.includes(this.activeGameId)) {
       this.activeGameId = 'match3';
     }
-    if (scope === 'valley' || scope === 'friends' || scope === 'personal') {
+    if (scope === 'valley' || scope === 'personal') {
       this.activeScope = scope;
+    } else if (scope === 'overall' || scope === 'friends') {
+      this.activeScope = 'overall';
     }
   }
 
@@ -132,6 +148,7 @@ export class LeaderboardModalController {
       .then(() =>
         Promise.all([
           fetchHouseCup().catch(() => null),
+          fetchCloudOverallLeaderboardEntries(this.activeGameId).catch(() => []),
           ...ALL_LEADERBOARD_GAMES.map((gid) => fetchCloudLeaderboardEntries(gid)),
         ])
       )
@@ -169,26 +186,35 @@ export class LeaderboardModalController {
       return `<button type="button" role="tab" aria-selected="${isAct}" data-lb-game="${gid}" class="lb-game-tab ${isAct ? 'active' : ''}" title="${escapeHtml(m.titleVi)}"><span class="lb-tab-copy"><strong>${escapeHtml(m.tabVi)}</strong></span></button>`;
     }).join('');
 
-    const scope = (id: LeaderboardScope, label: string) =>
-      `<button type="button" role="tab" aria-selected="${this.activeScope === id}" data-lb-scope="${id}" class="lb-scope-pill ${this.activeScope === id ? 'active' : ''}">${label}</button>`;
+    const normalizedScope: 'valley' | 'overall' | 'personal' =
+      this.activeScope === 'friends' ? 'overall' : this.activeScope;
+    const scope = (id: 'valley' | 'overall' | 'personal', label: string) =>
+      `<button type="button" role="tab" aria-selected="${normalizedScope === id}" data-lb-scope="${id}" class="lb-scope-pill ${normalizedScope === id ? 'active' : ''}">${label}</button>`;
     const meta = LEADERBOARD_GAME_META[this.activeGameId];
     const weekKey = getActiveLeaderboardWeekKey(undefined, this.activeGameId);
     const schedulePill = formatHouseCupWeeklySchedulePillVi();
+    const kickerHtml =
+      normalizedScope === 'overall'
+        ? `<div class="hs-lb-week-bar is-overall">
+            <span class="hs-lb-week-key">Xếp Hạng Tổng · Top 3</span>
+            <span class="hs-lb-week-sched">Tổng màn đã chơi · Mọi thời đại</span>
+          </div>`
+        : `<div class="hs-lb-week-bar">
+            <span class="hs-lb-week-key">BXH Tuần ${escapeHtml(weekKey)}</span>
+            <span class="hs-lb-week-sched">${escapeHtml(schedulePill)}</span>
+          </div>`;
     const toolbarHtml = `
       <div class="hs-lb-bar">
-        <div class="lb-scope-pills" role="tablist" aria-label="Phạm vi bảng xếp hạng">${scope('valley', 'Thung Lũng')}${scope('friends', 'Bạn Bè')}${scope('personal', 'Kỷ Lục')}</div>
+        <div class="lb-scope-pills" role="tablist" aria-label="Phạm vi bảng xếp hạng">${scope('valley', 'Thung Lũng')}${scope('overall', 'Xếp Hạng Tổng')}${scope('personal', 'Kỷ Lục')}</div>
         <button id="btnLbPlayActiveGame" type="button" class="brass-btn gold-cta hs-lb-play" aria-label="Chơi ${escapeHtml(meta.shortVi)}">Chơi</button>
       </div>
-      <div class="hs-lb-week-bar">
-        <span class="hs-lb-week-key">BXH Tuần ${escapeHtml(weekKey)}</span>
-        <span class="hs-lb-week-sched">${escapeHtml(schedulePill)}</span>
-      </div>`;
+      ${kickerHtml}`;
 
     container.innerHTML = `
       <div class="lb-shell">
         <div class="lb-game-tabs" role="tablist" aria-label="Chọn bảng xếp hạng từng mini game">${gameTabsHtml}</div>
         ${toolbarHtml}
-        ${this.activeScope === 'personal' ? this.renderRecordsHtml() : this.renderStandingHtml(this.activeScope)}
+        ${normalizedScope === 'personal' ? this.renderRecordsHtml() : this.renderStandingHtml(normalizedScope)}
       </div>
     `;
     wireAvatarImgFallbacks(container);
@@ -196,22 +222,29 @@ export class LeaderboardModalController {
     this.bindEvents(container);
   }
 
-  private renderStandingHtml(scope: 'valley' | 'friends'): string {
+  private renderStandingHtml(scope: 'valley' | 'overall'): string {
     const standing = this.sim.getMinigameLeaderboard(this.activeGameId, scope, 'all');
+    if (scope === 'overall') {
+      const topEntries = standing.entries.slice(0, 3);
+      if (!topEntries.length) {
+        return `<p class="hs-lb-note">Chưa có học viên hoàn thành màn nào.</p>`;
+      }
+      if (topEntries.length < 3) {
+        return `<ol class="hs-lb-list">${topEntries.map((e) => rowHtml(e, true)).join('')}</ol>`;
+      }
+      const top = ([1, 2, 3] as const).map((place) => podiumHtml(topEntries[place - 1], place, true)).join('');
+      return `<ol class="hs-lb-podium" aria-label="Top 3 xếp hạng tổng">${top}</ol>`;
+    }
+
     const { entries } = standing;
     const legacyNote = standing.isLegacyCloudFallback
       ? `<p class="hs-lb-note">Đang chờ máy chủ HPVN đồng bộ BXH Tuần ${escapeHtml(standing.weekKey)} cho các thành viên khác.</p>`
       : '';
-    // under three people a podium is a lone block: the board stays a plain list. Bạn Bè ends on one row: the count + «Thêm bạn»
-    const friends = entries.filter((e) => !e.isPlayer).length;
-    const foot = scope === 'friends'
-      ? `<div class="hs-lb-foot"><span class="hs-lb-foot-n">${friends ? `${friends.toLocaleString('vi-VN')} bạn` : 'Chưa có bạn'}</span><button id="btnLbOpenFriendsBook" type="button" class="brass-btn hs-lb-add">Thêm bạn</button></div>`
-      : '';
-    if (!entries.length) return legacyNote + (foot || `<p class="hs-lb-note">Chưa có học viên ghi điểm tuần này.</p>`);
-    if (entries.length < 3) return `<ol class="hs-lb-list">${entries.map((e) => rowHtml(e)).join('')}</ol>${legacyNote}${foot}`;
+    if (!entries.length) return legacyNote || `<p class="hs-lb-note">Chưa có học viên ghi điểm tuần này.</p>`;
+    if (entries.length < 3) return `<ol class="hs-lb-list">${entries.map((e) => rowHtml(e)).join('')}</ol>${legacyNote}`;
     const top = ([1, 2, 3] as const).map((place) => podiumHtml(entries[place - 1], place)).join('');
     const rest = entries.slice(3).map((e) => rowHtml(e)).join('');
-    return `<ol class="hs-lb-podium" aria-label="Top 3 tuần ${escapeHtml(standing.weekKey)}">${top}</ol>${rest ? `<ol class="hs-lb-list" start="4">${rest}</ol>` : ''}${legacyNote}${foot}`;
+    return `<ol class="hs-lb-podium" aria-label="Top 3 tuần ${escapeHtml(standing.weekKey)}">${top}</ol>${rest ? `<ol class="hs-lb-list" start="4">${rest}</ol>` : ''}${legacyNote}`;
   }
 
   private renderRecordsHtml(): string {
@@ -244,9 +277,15 @@ export class LeaderboardModalController {
         this.render();
         void submitPlayerCloudLeaderboardEntry(this.sim.state, gid)
           .catch(() => {})
-          .then(() => fetchCloudLeaderboardEntries(gid))
-          .then((cloud) => {
-            if (cloud.length > 0 && this.activeGameId === gid) {
+          .then(() =>
+            Promise.all([
+              fetchCloudLeaderboardEntries(gid),
+              fetchCloudOverallLeaderboardEntries(gid),
+            ])
+          )
+          .then(([weeklyCloud, overallCloud]) => {
+            const dlg = this.root.querySelector('#albumDialog') as HTMLDialogElement | null;
+            if (dlg?.open && (weeklyCloud.length > 0 || overallCloud.length > 0) && this.activeGameId === gid) {
               this.render();
             }
           });
@@ -258,8 +297,17 @@ export class LeaderboardModalController {
         const sc = btn.dataset.lbScope as LeaderboardScope | undefined;
         if (!sc) return;
         this.sim.audio.playClick();
-        this.activeScope = sc;
+        this.activeScope = sc === 'friends' ? 'overall' : sc;
         this.render();
+        if (this.activeScope === 'overall') {
+          const gid = this.activeGameId;
+          void fetchCloudOverallLeaderboardEntries(gid).then((overallCloud) => {
+            const dlg = this.root.querySelector('#albumDialog') as HTMLDialogElement | null;
+            if (dlg?.open && overallCloud.length > 0 && this.activeGameId === gid && this.activeScope === 'overall') {
+              this.render();
+            }
+          });
+        }
       });
     });
 
@@ -268,12 +316,6 @@ export class LeaderboardModalController {
       const target = this.activeGameId;
       this.close();
       this.onJumpToGame?.(target);
-    });
-
-    container.querySelector('#btnLbOpenFriendsBook')?.addEventListener('click', () => {
-      this.sim.audio.playClick();
-      this.close();
-      this.onOpenNeighborBook?.();
     });
 
     container.querySelectorAll<HTMLButtonElement>('[data-lb-jump-play]').forEach((btn) => {

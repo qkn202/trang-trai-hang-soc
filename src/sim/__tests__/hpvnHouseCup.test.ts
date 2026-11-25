@@ -494,3 +494,55 @@ it('records leaderboard, Proof-of-Play, and saved cleared progress across all 6 
     });
   }
 });
+
+it('shows personal weekly stage progress (X/5) on Bắn Cá card in Cúp Nhà before hitting the 5-stage threshold', async () => {
+  const { resetHouseCupViewForTest } = await import('../../hpvn/houseCup');
+  const { questsUiRenderHouseCupIntroDialog } = await import('../../ui/hudQuestsAndSettings');
+  resetHouseCupViewForTest();
+  applyHouseCup({
+    weekKey: '2026-W48',
+    mode: 'medals',
+    unlimited: true,
+    disciplines: {
+      match3: { Gryffindor: 100, Slytherin: 80, Ravenclaw: 65, Hufflepuff: 0 },
+      chess: { Gryffindor: 0, Slytherin: 0, Ravenclaw: 0, Hufflepuff: 0 },
+    },
+    house: 'Gryffindor',
+    memberTodayPoints: 60,
+    memberDailyCap: 0,
+    memberBank: 60,
+    memberTier: 1,
+    perTier: 300,
+  });
+
+  const sim = new ParkSimulation(new MagicalAudio());
+  sim.lockPlayerHouse('Gryffindor');
+  // Clear 3 stages of Bắn Cá (below the 5-stage weekly House Cup threshold)
+  for (let i = 0; i < 3; i++) {
+    sim.completePuzzleArcadeVictory('chess', { stars: 1, sand: 0, gold: 50, xp: 20 });
+  }
+  expect(sim.state.puzzleArcade.chessCleared).toBe(3);
+  expect(sim.state.minigameLeaderboard?.records.chess.weekly?.stagesCleared).toBe(3);
+
+  const contentBox = { innerHTML: '', querySelector: () => null, querySelectorAll: () => [] };
+  const fakeHud = {
+    sim,
+    root: {
+      querySelector: (sel: string) => (sel === '#houseCupIntroDialogContent' ? contentBox : null),
+    },
+  } as any;
+
+  questsUiRenderHouseCupIntroDialog(fakeHud);
+  expect(contentBox.innerHTML).toContain('Bắn Cá');
+  expect(contentBox.innerHTML).toContain('Bạn: 3/5 màn tuần · +0 Cúp');
+
+  // Clear 2 more stages -> now 5/5 stages qualified locally
+  for (let i = 0; i < 2; i++) {
+    sim.completePuzzleArcadeVictory('chess', { stars: 1, sand: 0, gold: 50, xp: 20 });
+  }
+  expect(sim.state.puzzleArcade.chessCleared).toBe(5);
+  questsUiRenderHouseCupIntroDialog(fakeHud);
+  expect(contentBox.innerHTML).toContain('Nhà bạn: 0 đ · Bạn 5 màn tuần');
+
+  resetHouseCupViewForTest();
+});

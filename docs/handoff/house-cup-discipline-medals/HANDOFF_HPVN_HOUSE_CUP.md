@@ -826,6 +826,60 @@ Nếu máy chủ HPVN vẫn còn danh sách 4 môn cũ từ bản ban đầu, **
 const SCORED_BOARD_GAMES = ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw'];
 ```
 
+### 9.3. Fix bắt buộc phía Máy chủ cho lỗi «Bắn Cá / Dò Mìn chơi qua màn nhưng không ghi nhận trên bảng điểm Nhà»
+
+Có **3 lỗi thực tế trên `functions/games/trang-trai-hang-soc-boards.js`** khiến người chơi qua màn **Bắn Cá Hồ Đen (`chess`)** (và **Dò Mìn (`caro`)**) bị ghi `0 đ` trên bảng điểm Nhà — cần kiểm tra & vá đủ cả 3:
+
+1. **Kẹt mốc cũ `lastClearedByDiscipline.chess` từ game Cờ Phù Thủy cũ (trước `arcadeDisciplineRev = 2`):**
+   - Trước khi đổi **Cờ Phù Thủy (`chess`) → Bắn Cá Hồ Đen (`chess`)** và **Caro (`caro`) → Dò Mìn (`caro`)**, nhiều tài khoản đã có sẵn `memberCup.lastClearedByDiscipline.chess = N` (VD `N = 10` hoặc `30`) trên Firestore.
+   - Khi client nâng lên `arcadeDisciplineRev = 2`, client đã reset `save.puzzleArcade.chessCleared = 0`, `chessStage = 1`.
+   - Nếu máy chủ **không** kiểm tra `memberCup.arcadeDisciplineRev < 2` để reset `lastClearedByDiscipline.chess = 0` & `lastPlayedByDiscipline.chess = 0`, thì mọi màn Bắn Cá từ Màn `1 → N` đều bị tính `delta = Math.max(0, nextCleared - N) = 0` → **không cộng 1 điểm nào cho Nhà**!
+2. **Nuốt màn đầu tiên khi khởi tạo môn mới (`?? nextCleared[disc]` thay vì `?? 0`):**
+   - Với người chơi cũ chưa từng có key `chess` trong `memberCup.lastClearedByDiscipline`, tuyệt đối **không** khởi tạo `prev = memberCup.lastClearedByDiscipline?.chess ?? nextCleared.chess` (vì lần lưu thắng Màn 1 sẽ thành `1 - 1 = 0`). Phải khởi tạo bằng `0`!
+3. **Danh sách `CUP_DISCIPLINES` thiếu `'chess'` hoặc đọc nhầm tên field (`fishingCleared` thay vì `chessCleared`):**
+   - Trong Save JSON, Bắn Cá Hồ Đen vẫn dùng key lịch sử `save.puzzleArcade.chessCleared` (chỉ đọc khi `arcadeDisciplineRev >= 2`).
+
+**Patch drop-in gọi ngay đầu `op: 'save'` (TRƯỚC vòng `for (const disc of CUP_DISCIPLINES)` tính delta ở §6.2 & §7.2):**
+
+```js
+const CURRENT_ARCADE_DISCIPLINE_REV = 2;
+
+function reconcileMemberCupDisciplineRevision(memberCup, saveObj) {
+  const saveRev = Math.floor(Number(saveObj?.puzzleArcade?.arcadeDisciplineRev) || 0);
+  const memberRev = Math.floor(Number(memberCup.arcadeDisciplineRev) || 0);
+
+  // Khi thành viên lần đầu lưu với save đã migrate sang Dò Mìn & Bắn Cá (rev >= 2):
+  // reset mốc cũ của Caro / Cờ Phù Thủy về 0 để các màn Bắn Cá/Dò Mìn từ Màn 1 đều được cộng điểm!
+  if (saveRev >= CURRENT_ARCADE_DISCIPLINE_REV && memberRev < CURRENT_ARCADE_DISCIPLINE_REV) {
+    memberCup.lastClearedByDiscipline = {
+      ...(memberCup.lastClearedByDiscipline || {}),
+      caro: 0,
+      chess: 0,
+    };
+    memberCup.lastPlayedByDiscipline = {
+      ...(memberCup.lastPlayedByDiscipline || {}),
+      caro: 0,
+      chess: 0,
+    };
+    memberCup.arcadeDisciplineRev = CURRENT_ARCADE_DISCIPLINE_REV;
+  }
+
+  // Khởi tạo mốc = 0 cho mọi môn mới mở trong CUP_DISCIPLINES (không lấy nextCleared làm mốc ban đầu)
+  memberCup.lastClearedByDiscipline = memberCup.lastClearedByDiscipline || {};
+  memberCup.lastPlayedByDiscipline = memberCup.lastPlayedByDiscipline || {};
+  for (const disc of CUP_DISCIPLINES) {
+    if (memberCup.lastClearedByDiscipline[disc] === undefined) {
+      memberCup.lastClearedByDiscipline[disc] = 0;
+    }
+    if (memberCup.lastPlayedByDiscipline[disc] === undefined) {
+      memberCup.lastPlayedByDiscipline[disc] = 0;
+    }
+  }
+}
+```
+
+> **Lưu ý kiểm tra nhanh trên Firestore:** Mở doc `farmMembers/{uid}` của tài khoản báo lỗi và kiểm tra 4 trường: (a) `cup.arcadeDisciplineRev` đã là `2` chưa, (b) `cup.lastClearedByDiscipline.chess` có đang lớn hơn `save.puzzleArcade.chessCleared` không, (c) `cup.weeklyClearedByDiscipline.chess` đã đạt ngưỡng **`>= 5` màn mới trong tuần** (luật Cách A §6.2) chưa, và (d) `gameHouseCupWeeks/{weekKey}.disciplines.chess` đã tồn tại key `'chess'` chưa.
+
 ---
 
 ## 10. Bảng Xếp Hạng Cá Nhân Từng Tuần (`op: 'board'`) Đồng Bộ 100% Với Cúp Nhà
@@ -920,6 +974,79 @@ async function handleWeeklyBoardOp(db, { game }) {
   };
 }
 ```
+
+### 10.3. Bảng «Xếp Hạng Tổng» Top 3 Mọi Thời Đại (`op: 'board'`, `period: 'all_time'`)
+
+Tab **Bạn Bè** trong Bảng Xếp Hạng đã được đổi thành **Xếp Hạng Tổng** — xếp hạng **mọi thời đại** theo **tổng số màn chơi user đã vượt qua (`bestStage`)** (không giới hạn trong tuần `weekKey`), và **chỉ lấy đúng Top 3**.
+
+Khi `op: 'board'` nhận `{ game, period: 'all_time', limit: 3 }`:
+
+```js
+async function handleAllTimeTop3BoardOp(db, { game, limit = 3 }) {
+  if (!SCORED_BOARD_GAMES.includes(game)) {
+    return { period: 'all_time', entries: [] };
+  }
+  const topLimit = Math.max(1, Math.min(3, Math.floor(Number(limit) || 3)));
+  const snaps = await db.collection('farmMembers').get();
+
+  const entries = [];
+  snaps.forEach((doc) => {
+    const data = doc.data() || {};
+    if (data.sandboxTainted) return;
+    const cup = data.cup || {};
+    const rev = Math.floor(Number(cup.arcadeDisciplineRev) || 0);
+    let bestStage = Math.max(0, Math.floor(Number(cup.lastClearedByDiscipline?.[game]) || 0));
+
+    // Guard cho 2 môn đổi cơ chế (Dò Mìn caro & Bắn Cá chess): chỉ đọc màn khi arcadeDisciplineRev >= 2
+    if ((game === 'caro' || game === 'chess') && rev < CURRENT_ARCADE_DISCIPLINE_REV) {
+      bestStage = 0;
+    }
+
+    // Fallback đọc từ save JSON nếu lastClearedByDiscipline chưa được ghi
+    if (bestStage <= 0 && typeof data.save === 'string' && data.save.length > 0) {
+      try {
+        const parsed = JSON.parse(data.save);
+        bestStage = Math.max(0, Math.floor(Number(extractClearedByDiscipline(parsed)?.[game]) || 0));
+      } catch {
+        bestStage = 0;
+      }
+    }
+    if (bestStage <= 0) return;
+
+    const house = HOUSES.includes(data.house) ? data.house : 'Gryffindor';
+    entries.push({
+      userId: doc.id,
+      name: data.displayName || data.parkName || 'Phù Thủy',
+      parkName: data.parkName || 'Trang Trại Hang Sóc',
+      friendCode: data.friendCode || '',
+      avatarEmoji: '🧙',
+      ...(data.avatarUrl ? { avatarUrl: data.avatarUrl } : {}),
+      house,
+      bestStage,
+      primaryValue: bestStage,
+      ratingScore: bestStage,
+      totalWins: bestStage,
+      bestStreak: 0,
+      detailLabelVi: `${bestStage} màn tích luỹ`,
+      updatedAt: Number(cup.updatedAtMs || data.updatedAtMs) || Date.now(),
+    });
+  });
+
+  entries.sort(
+    (a, b) =>
+      b.bestStage - a.bestStage ||
+      b.totalWins - a.totalWins ||
+      a.updatedAt - b.updatedAt
+  );
+
+  return {
+    period: 'all_time',
+    entries: entries.slice(0, topLimit),
+  };
+}
+```
+
+> **Điều phối trong `op === 'board'`:** Nếu `req.period === 'all_time'` gọi `handleAllTimeTop3BoardOp(db, req)`; ngược lại gọi `handleWeeklyBoardOp(db, req)`. Phía Client cũng tự tương thích ngược: nếu server chưa kịp triển khai nhánh `period: 'all_time'` (vẫn trả BXH tổng cũ hoặc BXH tuần có kèm `bestStage`), Client tự tách lấy `bestStage`, sắp xếp giảm dần và cắt đúng **Top 3**.
 
 
 

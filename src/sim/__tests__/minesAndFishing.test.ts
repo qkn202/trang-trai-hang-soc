@@ -272,7 +272,7 @@ describe('MinesweeperEngine (Dò Mìn Phép Thuật — 777 Màn) & FishShooterE
     expect(fe50.freezeTimer).toBeGreaterThan(0);
     expect(fe50.ammo).toBeGreaterThan(prevAmmo);
 
-    // Timeout & Phoenix Talisman revive + reach targetScore win
+    // Timeout & Phoenix Talisman revive + must complete missions AND reach targetScore to win
     fe50.score = Math.min(fe50.score, fe50.targetScore - 100);
     fe50.status = 'playing';
     fe50.remainingSec = 0.02;
@@ -285,7 +285,21 @@ describe('MinesweeperEngine (Dò Mìn Phép Thuật — 777 Màn) & FishShooterE
     expect(fe50.status).not.toBe('lost');
     expect(fe50.remainingSec).toBeGreaterThan(20);
 
+    // Reaching targetScore alone while stage missions remain incomplete does NOT win yet
+    for (const m of fe50.missions) {
+      m.current = 0;
+      m.completed = false;
+    }
     fe50.score = fe50.targetScore + 50;
+    const blockedWinTick = fe50.tick(0.04);
+    expect(blockedWinTick.won).toBe(false);
+    expect(fe50.status).toBe('playing');
+
+    // Completing all stage missions while score >= targetScore clears the stage
+    for (const m of fe50.missions) {
+      m.current = m.target;
+      m.completed = true;
+    }
     const winTick = fe50.tick(0.04);
     expect(winTick.won).toBe(true);
     expect(fe50.status).toBe('won');
@@ -610,6 +624,8 @@ describe('MinesweeperEngine (Dò Mìn Phép Thuật — 777 Màn) & FishShooterE
       expect(htmlChess).toContain('btnPaFishSkill');
       expect(htmlChess).toContain('ui_icon_hammer_wand.webp');
       expect(htmlChess).toContain('m3_obs_ice.webp');
+      expect(htmlChess).toContain('paFishMissionsBar');
+      expect(htmlChess).toContain('Nhiệm vụ');
       expect(FISH_SPECIES_CATALOG.minnow.nameVi).toBe('Cá Plimpy Lam');
       expect(FISH_SPECIES_CATALOG.clown.nameVi).toBe('Quỷ Nước Grindylow');
       expect(FISH_SPECIES_CATALOG.leviathan_carp.nameVi).toBe('Mực Khổng Lồ Hồ Đen');
@@ -950,5 +966,141 @@ describe('MinesweeperEngine (Dò Mìn Phép Thuật — 777 Màn) & FishShooterE
     expect(freshJe.restoreSession({ ...wonJigsawSnap, status: 'playing' })).toBe(false);
     expect(freshJe.lockedCount).toBe(0);
     expect(freshJe.status).toBe('playing');
+  });
+
+  it('FishShooterEngine enforces stage missions before clearing, tracks species/weapon/combo missions, and persists mission progress', () => {
+    // 1. Stage 1 has 1 species mission (minnow x4) & seeds target species in initial school
+    const fe1 = new FishShooterEngine(1);
+    expect(fe1.missions).toHaveLength(1);
+    expect(fe1.missions[0].kind).toBe('catch_species');
+    expect(fe1.missions[0].species).toBe('minnow');
+    expect(fe1.missions[0].target).toBe(4);
+    expect(fe1.isTargetMissionSpecies('minnow')).toBe(true);
+    expect(fe1.isTargetMissionSpecies('golden_ray')).toBe(false);
+    expect(fe1.fishList.some((f) => f.species === 'minnow')).toBe(true);
+
+    // Reaching targetScore WITHOUT completing the mission keeps status = 'playing'
+    fe1.score = fe1.targetScore + 2000;
+    const blocked = fe1.tick(0.03);
+    expect(blocked.won).toBe(false);
+    expect(fe1.status).toBe('playing');
+    expect(fe1.allMissionsCompleted).toBe(false);
+
+    // Place 4 low-HP minnows directly ahead and shoot them down -> mission completes & stage clears
+    fe1.fishList = Array.from({ length: 4 }, (_, idx) => ({
+      uid: 7700 + idx,
+      species: 'minnow' as const,
+      x: 385 + idx * 10,
+      y: 280,
+      baseY: 280,
+      dir: 1 as const,
+      speed: 0,
+      waveAmp: 0,
+      waveFreq: 0,
+      wavePhase: 0,
+      tailPhase: 0,
+      hp: 1,
+      maxHp: 2,
+      radius: 17,
+      points: 180,
+      ammoDrop: 1,
+      hitFlash: 0,
+    }));
+    fe1.setCannonTier(3);
+    expect(fe1.fireShot(400, 280, false).fired).toBe(true);
+    let wonAfterMission = false;
+    let completedMissionIds: string[] = [];
+    for (let i = 0; i < 20; i++) {
+      const tr = fe1.tick(0.04);
+      if (tr.completedMissions?.length) {
+        completedMissionIds.push(...tr.completedMissions.map((m) => m.id));
+      }
+      if (tr.won) {
+        wonAfterMission = true;
+        break;
+      }
+    }
+    expect(fe1.missions[0].completed).toBe(true);
+    expect(fe1.missions[0].current).toBe(4);
+    expect(completedMissionIds).toContain(fe1.missions[0].id);
+    expect(wonAfterMission).toBe(true);
+    expect(fe1.status).toBe('won');
+
+    // 2. Stage 3 has a collect_weapon mission that completes when shooting a floating weapon drop
+    const fe3 = new FishShooterEngine(3);
+    expect(fe3.missions).toHaveLength(2);
+    const weaponMission = fe3.missions.find((m) => m.kind === 'collect_weapon');
+    expect(weaponMission).toBeDefined();
+    expect(fe3.hasIncompleteWeaponMission).toBe(true);
+    fe3.fishList = Array.from({ length: 13 }, (_, idx) => ({
+      uid: 7800 + idx,
+      species: 'minnow' as const,
+      x: 740,
+      y: 110,
+      baseY: 110,
+      dir: 1 as const,
+      speed: 0,
+      waveAmp: 0,
+      waveFreq: 0,
+      wavePhase: 0,
+      tailPhase: 0,
+      hp: 4,
+      maxHp: 4,
+      radius: 17,
+      points: 180,
+      ammoDrop: 1,
+      hitFlash: 0,
+    }));
+    const orb = fe3.spawnAmmoDrop('chain_lightning', 400, 320);
+    orb.vx = 0;
+    orb.spawnGrace = 0;
+    expect(fe3.fireShot(400, 320, false).fired).toBe(true);
+    for (let i = 0; i < 15; i++) fe3.tick(0.04);
+    expect(weaponMission!.completed).toBe(true);
+    expect(fe3.hasIncompleteWeaponMission).toBe(false);
+
+    // 3. Milestone Boss stages (e.g. Stage 25, 50) have 3 missions including leviathan_carp
+    const feBoss25 = new FishShooterEngine(25);
+    expect(feBoss25.milestoneBoss).not.toBeNull();
+    expect(feBoss25.missions).toHaveLength(3);
+    expect(feBoss25.missions[0].species).toBe('leviathan_carp');
+    expect(feBoss25.missions[0].target).toBe(1);
+
+    const feBoss50 = new FishShooterEngine(50);
+    expect(feBoss50.milestoneBoss).not.toBeNull();
+    expect(feBoss50.missions).toHaveLength(3);
+    expect(feBoss50.missions[0].species).toBe('leviathan_carp');
+    expect(feBoss50.missions[0].target).toBe(2);
+
+    // 4. All 777 stages generate 1..3 valid missions with positive targets & every milestone boss stage requires leviathan_carp
+    let bossStagesAudited = 0;
+    for (let s = 1; s <= 777; s++) {
+      const fe = new FishShooterEngine(s);
+      expect(fe.missions.length).toBeGreaterThanOrEqual(1);
+      expect(fe.missions.length).toBeLessThanOrEqual(3);
+      if (fe.milestoneBoss !== null) {
+        bossStagesAudited += 1;
+        expect(fe.missions.length).toBe(3);
+        expect(fe.missions[0].species).toBe('leviathan_carp');
+      }
+      for (const m of fe.missions) {
+        expect(m.target).toBeGreaterThan(0);
+        expect(m.labelVi.length).toBeGreaterThan(2);
+        expect(m.current).toBe(0);
+        expect(m.completed).toBe(false);
+      }
+    }
+    expect(bossStagesAudited).toBeGreaterThanOrEqual(10);
+
+    // 5. exportSession / restoreSession persists missionProgress accurately
+    fe3.missions[0].current = 2;
+    const snap3 = fe3.exportSession();
+    expect(snap3.missionProgress).toEqual([2, 1]);
+    const restored3 = new FishShooterEngine(3);
+    expect(restored3.restoreSession(snap3)).toBe(true);
+    expect(restored3.missions[0].current).toBe(2);
+    expect(restored3.missions[0].completed).toBe(false);
+    expect(restored3.missions[1].current).toBe(1);
+    expect(restored3.missions[1].completed).toBe(true);
   });
 });

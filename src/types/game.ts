@@ -1079,6 +1079,7 @@ export interface SavedFishShooterSession {
   autoFire?: boolean;
   activeWeapon?: FishWeaponId;
   activeWeaponTimer?: number;
+  missionProgress?: number[];
   companionCharge?: number;
   snackPieUsed?: boolean;
 }
@@ -1131,7 +1132,7 @@ export type LeaderboardGameId =
   | 'jigsaw'
   | 'seedquiz';
 
-export type LeaderboardScope = 'valley' | 'friends' | 'personal';
+export type LeaderboardScope = 'valley' | 'overall' | 'friends' | 'personal';
 
 export interface LeaderboardRankChange {
   gameId: LeaderboardGameId;

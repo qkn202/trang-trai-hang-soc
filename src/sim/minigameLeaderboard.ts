@@ -491,6 +491,7 @@ function deriveBaseRecordFromState(
 }
 
 const cloudEntriesMemoryCache: Partial<Record<LeaderboardGameId, CloudLeaderboardEntry[]>> = {};
+const cloudOverallEntriesMemoryCache: Partial<Record<LeaderboardGameId, CloudLeaderboardEntry[]>> = {};
 const cloudBoardWeekKeyCache: Partial<Record<LeaderboardGameId, string>> = {};
 const cloudBoardLegacyFlagCache: Partial<Record<LeaderboardGameId, boolean>> = {};
 
@@ -651,6 +652,14 @@ export function formatWeeklyStagesDisplayVi(gameId: LeaderboardGameId, weeklyCle
     return `${safeVal.toLocaleString('vi-VN')} câu tuần`;
   }
   return `${safeVal.toLocaleString('vi-VN')} màn tuần`;
+}
+
+export function formatOverallStagesDisplayVi(gameId: LeaderboardGameId, totalStages: number): string {
+  const safeVal = Math.max(0, Math.floor(totalStages || 0));
+  if (gameId === 'seedquiz') {
+    return `${safeVal.toLocaleString('vi-VN')} câu`;
+  }
+  return `${safeVal.toLocaleString('vi-VN')} màn`;
 }
 
 function formatDetailDisplayVi(
@@ -1010,10 +1019,124 @@ export function buildHouseCupStandings(
   }));
 }
 
+function extractCloudAllTimeMetrics(ce: CloudLeaderboardEntry): {
+  totalStages: number;
+  totalWins: number;
+  ratingScore: number;
+  bestStreak: number;
+  hasAllTimeStage: boolean;
+} {
+  const rawWeek = typeof ce.weekKey === 'string' ? ce.weekKey.trim() : '';
+  const isWeeklyScoped =
+    (rawWeek.length > 0 && rawWeek.toLowerCase() !== 'all_time') ||
+    typeof ce.weeklyCleared === 'number' ||
+    typeof ce.weeklyScore === 'number';
+
+  const hasExplicitBestStage =
+    typeof ce.bestStage === 'number' && Number.isFinite(ce.bestStage) && ce.bestStage >= 0;
+
+  const totalStages = hasExplicitBestStage
+    ? Math.max(0, Math.floor(ce.bestStage!))
+    : !isWeeklyScoped
+      ? Math.max(0, Math.floor(Number(ce.primaryValue) || 0))
+      : 0;
+
+  const totalWins = Math.max(
+    totalStages,
+    !isWeeklyScoped ? Math.floor(Number(ce.totalWins) || 0) : 0
+  );
+  const ratingScore = Math.max(
+    totalStages,
+    !isWeeklyScoped ? Math.floor(Number(ce.ratingScore) || 0) : 0
+  );
+  const bestStreak = Math.max(0, Math.floor(Number(ce.bestStreak) || 0));
+  return {
+    totalStages,
+    totalWins,
+    ratingScore,
+    bestStreak,
+    hasAllTimeStage: hasExplicitBestStage || !isWeeklyScoped,
+  };
+}
+
+function isBetterOverallCloudEntry(
+  candidate: CloudLeaderboardEntry,
+  prev: CloudLeaderboardEntry
+): boolean {
+  const cm = extractCloudAllTimeMetrics(candidate);
+  const pm = extractCloudAllTimeMetrics(prev);
+  if (cm.totalStages !== pm.totalStages) return cm.totalStages > pm.totalStages;
+  if (cm.totalWins !== pm.totalWins) return cm.totalWins > pm.totalWins;
+  if (cm.ratingScore !== pm.ratingScore) return cm.ratingScore > pm.ratingScore;
+  return (candidate.updatedAt || 0) > (prev.updatedAt || 0);
+}
+
+function dedupeCloudOverallEntries(
+  raw: ReadonlyArray<CloudLeaderboardEntry>
+): CloudLeaderboardEntry[] {
+  const result: CloudLeaderboardEntry[] = [];
+  const byUid = new Map<string, number>();
+  const byCode = new Map<string, number>();
+
+  for (const ce of raw) {
+    if (!ce) continue;
+    const metrics = extractCloudAllTimeMetrics(ce);
+    if (!metrics.hasAllTimeStage) continue;
+    const uid = (ce.userId || '').trim();
+    const code = normalizeValidFriendCode(ce.friendCode);
+    const usableCode = code && !code.startsWith('FLOO-') ? code : '';
+    const existingIdx =
+      (uid ? byUid.get(uid) : undefined) ??
+      (usableCode ? byCode.get(usableCode) : undefined);
+
+    if (existingIdx === undefined) {
+      const idx = result.length;
+      result.push(ce);
+      if (uid) byUid.set(uid, idx);
+      if (usableCode) byCode.set(usableCode, idx);
+      continue;
+    }
+
+    const prev = result[existingIdx];
+    const nextBest = isBetterOverallCloudEntry(ce, prev) ? ce : prev;
+    const other = nextBest === ce ? prev : ce;
+    const merged: CloudLeaderboardEntry = {
+      ...nextBest,
+      name: (nextBest.name || '').trim() || other.name,
+      avatarUrl: nextBest.avatarUrl || other.avatarUrl,
+      friendCode:
+        normalizeValidFriendCode(nextBest.friendCode) ||
+        normalizeValidFriendCode(other.friendCode) ||
+        nextBest.friendCode,
+    };
+    result[existingIdx] = merged;
+    if (uid) byUid.set(uid, existingIdx);
+    if (usableCode) byCode.set(usableCode, existingIdx);
+    const prevUid = (prev.userId || '').trim();
+    const prevCode = normalizeValidFriendCode(prev.friendCode);
+    if (prevUid) byUid.set(prevUid, existingIdx);
+    if (prevCode && !prevCode.startsWith('FLOO-')) byCode.set(prevCode, existingIdx);
+  }
+
+  return result;
+}
+
+function compareOverallEntries(
+  a: UnrankedLeaderboardRow,
+  b: UnrankedLeaderboardRow
+): number {
+  // Xếp hạng tổng mọi thời đại: xếp theo tổng số màn đã vượt qua (không xếp theo tuần)
+  if (b.primaryValue !== a.primaryValue) return b.primaryValue - a.primaryValue;
+  if (b.totalWins !== a.totalWins) return b.totalWins - a.totalWins;
+  if (b.ratingScore !== a.ratingScore) return b.ratingScore - a.ratingScore;
+  if (a.isPlayer !== b.isPlayer) return a.isPlayer ? -1 : 1;
+  return a.id.localeCompare(b.id);
+}
+
 function buildRawPoolForScoredGame(
   state: GameState,
   gameId: LeaderboardGameId,
-  scope: Exclude<LeaderboardScope, 'personal'>,
+  scope: 'valley' | 'friends',
   extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>,
   nowMs?: number
 ): Array<UnrankedLeaderboardRow> {
@@ -1195,7 +1318,7 @@ function buildRawPoolForScoredGame(
 
 function buildUnifiedHouseCupStandings(
   state: GameState,
-  scope: Exclude<LeaderboardScope, 'personal'>,
+  scope: 'valley' | 'friends',
   activeGameId: LeaderboardGameId,
   extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>,
   nowMs?: number
@@ -1280,6 +1403,325 @@ function buildUnifiedHouseCupStandings(
   }));
 }
 
+const OVERALL_TOP_LIMIT = 3;
+
+function buildOverallMinigameLeaderboard(
+  state: GameState,
+  gameId: LeaderboardGameId,
+  extraCloudEntries?: ReadonlyArray<CloudLeaderboardEntry>,
+  houseFilter: 'all' | HouseName = 'all',
+  nowMs?: number
+): LeaderboardStandingResult {
+  const lb = ensureMinigameLeaderboardState(state, nowMs);
+  const rec = lb.records[gameId];
+  const rawCloud: CloudLeaderboardEntry[] =
+    extraCloudEntries !== undefined
+      ? [...extraCloudEntries]
+      : [
+          ...(cloudOverallEntriesMemoryCache[gameId] ?? []),
+          ...(cloudEntriesMemoryCache[gameId] ?? []),
+        ];
+  const dedupedCloud = dedupeCloudOverallEntries(rawCloud);
+
+  const cloudByCode = new Map<string, CloudLeaderboardEntry>();
+  const cloudByUid = new Map<string, CloudLeaderboardEntry>();
+  const cloudByUidSlug = new Map<string, CloudLeaderboardEntry>();
+  const cloudHandleCount = new Map<string, number>();
+  const cloudByHandleCandidate = new Map<string, CloudLeaderboardEntry>();
+
+  for (const ce of dedupedCloud) {
+    const uid = (ce.userId || '').trim();
+    const slug = toUidSlug(uid);
+    const code = normalizeValidFriendCode(ce.friendCode);
+    const handle = normalizeMemberHandle(ce.name);
+    if (uid && !cloudByUid.has(uid)) cloudByUid.set(uid, ce);
+    if (slug && !cloudByUidSlug.has(slug)) cloudByUidSlug.set(slug, ce);
+    if (code && !code.startsWith('FLOO-') && !cloudByCode.has(code)) {
+      cloudByCode.set(code, ce);
+    }
+    if (handle) {
+      cloudHandleCount.set(handle, (cloudHandleCount.get(handle) ?? 0) + 1);
+      if (!cloudByHandleCandidate.has(handle)) cloudByHandleCandidate.set(handle, ce);
+    }
+  }
+  const cloudByHandle = new Map<string, CloudLeaderboardEntry>();
+  for (const [handle, ce] of cloudByHandleCandidate) {
+    if (cloudHandleCount.get(handle) === 1) {
+      cloudByHandle.set(handle, ce);
+    }
+  }
+
+  const localUid = getClientLeaderboardUserId().trim();
+  const hasRealLocalUid = Boolean(localUid && localUid !== 'local_player');
+  const localSlug = toUidSlug(localUid);
+  const selfCloud = hasRealLocalUid
+    ? (cloudByUid.get(localUid) ?? (localSlug ? cloudByUidSlug.get(localSlug) : undefined))
+    : undefined;
+  const selfCloudMetrics = selfCloud ? extractCloudAllTimeMetrics(selfCloud) : null;
+
+  const friendCode = state.neighborSocial?.playerFriendCode || 'HS-YOU1-01';
+  const playerHouse = getPlayerHogwartsHouse(state);
+  const baseDisplayName =
+    identity?.displayName?.trim() ||
+    selfCloud?.name?.trim() ||
+    state.neighborSocial?.playerDisplayName?.trim() ||
+    state.parkName ||
+    'Trang Trại Hang Sóc';
+  const selfTotalStages = Math.max(rec.bestStage, selfCloudMetrics?.totalStages ?? 0);
+  const selfTotalWins = Math.max(rec.totalWins, selfTotalStages, selfCloudMetrics?.totalWins ?? 0);
+  const selfRating = Math.max(rec.highScore, selfCloudMetrics?.ratingScore ?? 0);
+  const selfStreak = Math.max(rec.bestStreak, selfCloudMetrics?.bestStreak ?? 0);
+  const playerTitle =
+    state.level >= 80
+      ? 'Đại Điền Chủ Thung Lũng'
+      : state.level >= 40
+        ? 'Phù Thủy Kiến Thiết Cấp Cao'
+        : state.level >= 15
+          ? 'Chủ Trang Trại Đang Lên'
+          : 'Tân Phù Thủy Hang Sóc';
+
+  const playerRaw: UnrankedLeaderboardRow = {
+    id: 'player:self',
+    weekKey: 'all_time',
+    name: `${baseDisplayName} (Bạn)`,
+    titleVi: `${playerTitle} • Cấp ${state.level}`,
+    parkName: state.parkName || 'Trang Trại Hang Sóc',
+    friendCode,
+    avatarEmoji: '🧙‍♂️',
+    avatarUrl: state.neighborSocial?.playerAvatarUrl || selfCloud?.avatarUrl,
+    house: playerHouse,
+    isPlayer: true,
+    isFriend: true,
+    primaryValue: selfTotalStages,
+    primaryDisplayVi: formatOverallStagesDisplayVi(gameId, selfTotalStages),
+    ratingScore: selfRating,
+    ratingDisplayVi: formatOverallStagesDisplayVi(gameId, selfTotalStages),
+    totalWins: selfTotalWins,
+    bestStreak: selfStreak,
+    detailDisplayVi: `${selfTotalStages.toLocaleString('vi-VN')} màn tích luỹ`,
+    allTimeBestStage: selfTotalStages,
+    allTimeStageDisplayVi: formatAllTimeStageDisplayVi(gameId, selfTotalStages),
+    league: getLeaderboardLeagueBadge(gameId, selfTotalStages),
+  };
+
+  const playerCode = normalizeValidFriendCode(playerRaw.friendCode);
+  const selfHandle = normalizeMemberHandle(identity?.displayName);
+
+  const rawNeighbors = (state.neighborSocial?.neighbors ?? []).filter(
+    (n) => !isNpcNeighborProfile(n)
+  );
+  const seenFriendUids = new Set<string>();
+  const seenFriendSlugs = new Set<string>();
+  const seenFriendCodes = new Set<string>();
+  const neighbors: NeighborProfileState[] = [];
+
+  for (const n of rawNeighbors) {
+    const nUid = (n.remoteUserId || '').trim();
+    const nSlug = toUidSlug(nUid || (n.id.startsWith('floo_') ? n.id.slice(5) : ''));
+    const nCode = normalizeValidFriendCode(n.friendCode);
+    if (
+      (hasRealLocalUid && (nUid === localUid || (nSlug && nSlug === localSlug))) ||
+      (playerCode && nCode === playerCode)
+    ) {
+      continue;
+    }
+    if (
+      (nUid && seenFriendUids.has(nUid)) ||
+      (nSlug && seenFriendSlugs.has(nSlug)) ||
+      (nCode && seenFriendCodes.has(nCode))
+    ) {
+      continue;
+    }
+    neighbors.push(n);
+    if (nUid) seenFriendUids.add(nUid);
+    if (nSlug) seenFriendSlugs.add(nSlug);
+    if (nCode) seenFriendCodes.add(nCode);
+  }
+
+  const matchedCloudRefs = new Set<CloudLeaderboardEntry>();
+  const friendUidSet = new Set<string>();
+  const friendUidSlugSet = new Set<string>();
+  const friendCodeSet = new Set<string>();
+
+  const pool: Array<UnrankedLeaderboardRow> = [];
+  if (playerRaw.primaryValue > 0) {
+    pool.push(playerRaw);
+  }
+
+  for (const n of neighbors) {
+    const nUid = (n.remoteUserId || '').trim();
+    const nSlug = toUidSlug(nUid || (n.id.startsWith('floo_') ? n.id.slice(5) : ''));
+    const nCode = normalizeValidFriendCode(n.friendCode);
+    if (nUid) friendUidSet.add(nUid);
+    if (nSlug) friendUidSlugSet.add(nSlug);
+    if (nCode) friendCodeSet.add(nCode);
+
+    let cMatch =
+      (nUid ? cloudByUid.get(nUid) : undefined) ??
+      (nSlug ? cloudByUidSlug.get(nSlug) : undefined) ??
+      (nCode && !nCode.startsWith('FLOO-') ? cloudByCode.get(nCode) : undefined) ??
+      ((n.isVerifiedPlayer || n.id.startsWith('floo_')) && !nUid
+        ? cloudByHandle.get(normalizeMemberHandle(n.name))
+        : undefined);
+
+    if (
+      cMatch &&
+      ((hasRealLocalUid && cMatch.userId.trim() === localUid) || matchedCloudRefs.has(cMatch))
+    ) {
+      cMatch = undefined;
+    }
+
+    if (!cMatch) continue;
+    matchedCloudRefs.add(cMatch);
+    const cUid = cMatch.userId.trim();
+    if (cUid) {
+      friendUidSet.add(cUid);
+      const cSlug = toUidSlug(cUid);
+      if (cSlug) friendUidSlugSet.add(cSlug);
+    }
+    const cCode = normalizeValidFriendCode(cMatch.friendCode);
+    if (cCode) friendCodeSet.add(cCode);
+
+    const m = extractCloudAllTimeMetrics(cMatch);
+    if (m.totalStages <= 0) continue;
+    const resolvedHouse: HouseName =
+      cMatch.house && ALL_HOGWARTS_HOUSES.includes(cMatch.house)
+        ? cMatch.house
+        : n.house || 'Gryffindor';
+    pool.push({
+      id: `friend:${n.id}`,
+      weekKey: 'all_time',
+      name: (cMatch.name || '').trim() || n.name,
+      titleVi: n.titleVi || 'Người Chơi Thật • Hàng Xóm',
+      parkName: (cMatch.parkName || '').trim() || n.parkName,
+      friendCode: normalizeValidFriendCode(cMatch.friendCode) || n.friendCode,
+      avatarEmoji: cMatch.avatarEmoji || n.avatarEmoji || '🧙',
+      avatarUrl: cMatch.avatarUrl || n.avatarUrl,
+      portraitSprite: n.portraitSprite,
+      house: resolvedHouse,
+      isPlayer: false,
+      isFriend: true,
+      isCloudPlayer: true,
+      neighborId: n.id,
+      primaryValue: m.totalStages,
+      primaryDisplayVi: formatOverallStagesDisplayVi(gameId, m.totalStages),
+      ratingScore: m.ratingScore,
+      ratingDisplayVi: formatOverallStagesDisplayVi(gameId, m.totalStages),
+      totalWins: m.totalWins,
+      bestStreak: m.bestStreak,
+      detailDisplayVi: `${m.totalStages.toLocaleString('vi-VN')} màn tích luỹ`,
+      allTimeBestStage: m.totalStages,
+      allTimeStageDisplayVi: formatAllTimeStageDisplayVi(gameId, m.totalStages),
+      league: getLeaderboardLeagueBadge(gameId, m.totalStages),
+    });
+  }
+
+  for (const ce of dedupedCloud) {
+    const ceUid = (ce?.userId || '').trim();
+    if (!ce || !ceUid) continue;
+    if (matchedCloudRefs.has(ce)) continue;
+    const ceSlug = toUidSlug(ceUid);
+    if (hasRealLocalUid && (ceUid === localUid || (ceSlug && ceSlug === localSlug))) {
+      continue;
+    }
+    if (hasRealLocalUid && selfHandle && normalizeMemberHandle(ce.name) === selfHandle) {
+      continue;
+    }
+    if (friendUidSet.has(ceUid) || (ceSlug && friendUidSlugSet.has(ceSlug))) {
+      continue;
+    }
+    const normCode = normalizeValidFriendCode(ce.friendCode);
+    if (normCode !== '' && (normCode === playerCode || friendCodeSet.has(normCode))) {
+      continue;
+    }
+    const m = extractCloudAllTimeMetrics(ce);
+    if (m.totalStages <= 0) continue;
+    pool.push({
+      id: `cloud:${ceUid}`,
+      weekKey: 'all_time',
+      name: ce.name || ce.parkName || 'Người Chơi Trực Tuyến',
+      titleVi: 'Người Chơi Thật Trực Tuyến',
+      parkName: ce.parkName || 'Điền Trang Phép Thuật',
+      friendCode: ce.friendCode || 'HS-CLUD-00',
+      avatarEmoji: ce.avatarEmoji || '🌐',
+      avatarUrl: ce.avatarUrl,
+      house: ce.house || 'Gryffindor',
+      isPlayer: false,
+      isFriend: false,
+      isCloudPlayer: true,
+      primaryValue: m.totalStages,
+      primaryDisplayVi: formatOverallStagesDisplayVi(gameId, m.totalStages),
+      ratingScore: m.ratingScore,
+      ratingDisplayVi: formatOverallStagesDisplayVi(gameId, m.totalStages),
+      totalWins: m.totalWins,
+      bestStreak: m.bestStreak,
+      detailDisplayVi: `${m.totalStages.toLocaleString('vi-VN')} màn tích luỹ`,
+      allTimeBestStage: m.totalStages,
+      allTimeStageDisplayVi: formatAllTimeStageDisplayVi(gameId, m.totalStages),
+      league: getLeaderboardLeagueBadge(gameId, m.totalStages),
+    });
+  }
+
+  pool.sort(compareOverallEntries);
+
+  const fullEntries: LeaderboardRowEntry[] = pool.map((item, idx) => ({
+    ...item,
+    rank: idx + 1,
+    cupContributionPoints: 0,
+  }));
+
+  const playerIdx = fullEntries.findIndex((e) => e.isPlayer);
+  const playerEntry: LeaderboardRowEntry =
+    playerIdx >= 0
+      ? fullEntries[playerIdx]
+      : {
+          ...playerRaw,
+          rank: fullEntries.length + 1,
+          cupContributionPoints: 0,
+        };
+  const nextRivalAbove =
+    playerIdx > 0
+      ? fullEntries[playerIdx - 1]
+      : playerIdx < 0 && fullEntries.length > 0
+        ? fullEntries[fullEntries.length - 1]
+        : null;
+
+  const filteredEntries =
+    houseFilter === 'all'
+      ? fullEntries
+      : fullEntries
+          .filter((e) => e.house === houseFilter)
+          .map((item, idx) => ({
+            ...item,
+            rank: idx + 1,
+          }));
+
+  const topEntries = filteredEntries.slice(0, OVERALL_TOP_LIMIT);
+  const houseStandings = buildUnifiedHouseCupStandings(
+    state,
+    'valley',
+    gameId,
+    undefined,
+    nowMs
+  );
+
+  return {
+    gameId,
+    meta: LEADERBOARD_GAME_META[gameId],
+    scope: 'overall',
+    weekKey: 'all_time',
+    isLegacyCloudFallback: false,
+    entries: topEntries,
+    playerEntry,
+    playerRank: playerEntry.rank,
+    totalEntries: fullEntries.length,
+    nextRivalAbove,
+    houseStandings,
+    playerHouse: playerEntry.house,
+    activeHouseFilter: houseFilter,
+  };
+}
+
 export function buildMinigameLeaderboard(
   state: GameState,
   rawGameId: LeaderboardGameId,
@@ -1289,6 +1731,9 @@ export function buildMinigameLeaderboard(
   nowMs?: number
 ): LeaderboardStandingResult {
   const gameId = normalizeScoredLeaderboardGame(rawGameId);
+  if (scope === 'overall') {
+    return buildOverallMinigameLeaderboard(state, gameId, extraCloudEntries, houseFilter, nowMs);
+  }
   const weekKey = getActiveLeaderboardWeekKey(nowMs, gameId);
   const pool = buildRawPoolForScoredGame(state, gameId, scope, extraCloudEntries, nowMs);
   pool.sort(compareEntries);
@@ -1571,6 +2016,19 @@ export function setCachedCloudLeaderboardEntries(
   }
 }
 
+export function getCachedCloudOverallLeaderboardEntries(
+  gameId: LeaderboardGameId
+): CloudLeaderboardEntry[] {
+  return cloudOverallEntriesMemoryCache[gameId] ?? [];
+}
+
+export function setCachedCloudOverallLeaderboardEntries(
+  gameId: LeaderboardGameId,
+  entries: ReadonlyArray<CloudLeaderboardEntry>
+): void {
+  cloudOverallEntriesMemoryCache[gameId] = [...entries];
+}
+
 export function isCloudLeaderboardLegacyFallback(gameId: LeaderboardGameId): boolean {
   return Boolean(cloudBoardLegacyFlagCache[gameId]);
 }
@@ -1578,6 +2036,7 @@ export function isCloudLeaderboardLegacyFallback(gameId: LeaderboardGameId): boo
 export function clearCachedCloudLeaderboards(): void {
   for (const gid of ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw', 'seedquiz'] as const) {
     delete cloudEntriesMemoryCache[gid];
+    delete cloudOverallEntriesMemoryCache[gid];
     delete cloudBoardWeekKeyCache[gid];
     delete cloudBoardLegacyFlagCache[gid];
   }
@@ -1596,6 +2055,22 @@ interface CloudBoardReply {
   entries?: CloudLeaderboardEntry[];
 }
 
+function hasWeeklyBoardMarker(result: CloudBoardReply): boolean {
+  const respWeekKey = typeof result.weekKey === 'string' ? result.weekKey.trim() : '';
+  return (
+    result.period === 'weekly' ||
+    Boolean(respWeekKey) ||
+    (Array.isArray(result.entries) &&
+      result.entries.length > 0 &&
+      result.entries.some(
+        (e) =>
+          (typeof e?.weekKey === 'string' && e.weekKey.trim().length > 0) ||
+          typeof e?.weeklyScore === 'number' ||
+          typeof e?.weeklyCleared === 'number'
+      ))
+  );
+}
+
 // HPVN: the boards come from the HPVN server (trangTraiHangSoc op 'board'), which ranks each member's
 // weekly Cách A progress matching Cúp Nhà; the page never posts a score.
 export async function fetchCloudLeaderboardEntries(gameId: LeaderboardGameId): Promise<CloudLeaderboardEntry[]> {
@@ -1610,18 +2085,9 @@ export async function fetchCloudLeaderboardEntries(gameId: LeaderboardGameId): P
     });
     if (Array.isArray(result?.entries)) {
       const respWeekKey = typeof result.weekKey === 'string' ? result.weekKey.trim() : '';
-      const hasWeeklyMarker =
-        result.period === 'weekly' ||
-        Boolean(respWeekKey) ||
-        result.entries.length === 0 ||
-        result.entries.some(
-          (e) =>
-            (typeof e?.weekKey === 'string' && e.weekKey.trim().length > 0) ||
-            typeof e?.weeklyScore === 'number' ||
-            typeof e?.weeklyCleared === 'number'
-        );
+      const isWeeklyReply = hasWeeklyBoardMarker(result) || result.entries.length === 0;
 
-      if (hasWeeklyMarker) {
+      if (isWeeklyReply) {
         cloudBoardLegacyFlagCache[gameId] = false;
         if (respWeekKey && respWeekKey.toLowerCase() !== 'local') {
           cloudBoardWeekKeyCache[gameId] = respWeekKey;
@@ -1630,15 +2096,52 @@ export async function fetchCloudLeaderboardEntries(gameId: LeaderboardGameId): P
           ? result.entries.map((e) => (e.weekKey ? e : { ...e, weekKey: respWeekKey }))
           : result.entries;
       } else {
-        // Máy chủ chưa bật patch BXH tuần (trả BXH tổng theo level cũ): không trộn điểm tổng vào BXH tuần
+        // Máy chủ chưa bật patch BXH tuần (trả BXH tổng theo level cũ): không trộn vào BXH tuần, lưu riêng cho Xếp Hạng Tổng
         cloudBoardLegacyFlagCache[gameId] = true;
         cloudEntriesMemoryCache[gameId] = [];
+        cloudOverallEntriesMemoryCache[gameId] = result.entries;
       }
     }
   } catch {
     // keep the last board
   }
   return cloudEntriesMemoryCache[gameId] ?? [];
+}
+
+/** Tải Top 3 Xếp Hạng Tổng mọi thời đại theo tổng số màn đã vượt qua (không xếp theo tuần). */
+export async function fetchCloudOverallLeaderboardEntries(
+  gameId: LeaderboardGameId
+): Promise<CloudLeaderboardEntry[]> {
+  if (!isScoredLeaderboardGame(gameId) || !identity) {
+    return cloudOverallEntriesMemoryCache[gameId] ?? [];
+  }
+  try {
+    const result = await request<CloudBoardReply>('farm', {
+      op: 'board',
+      game: gameId,
+      period: 'all_time',
+      limit: OVERALL_TOP_LIMIT,
+    });
+    if (Array.isArray(result?.entries)) {
+      const isAllTimeReply =
+        result.period === 'all_time' ||
+        (!hasWeeklyBoardMarker(result) && result.entries.length > 0);
+      if (isAllTimeReply) {
+        cloudOverallEntriesMemoryCache[gameId] = result.entries;
+      } else {
+        // Nếu máy chủ trả danh sách tuần có kèm bestStage tích luỹ -> chắt lọc giữ lại bestStage cho BXH tổng
+        const withAllTime = result.entries.filter(
+          (e) => typeof e?.bestStage === 'number' && Number.isFinite(e.bestStage) && e.bestStage > 0
+        );
+        if (withAllTime.length > 0) {
+          cloudOverallEntriesMemoryCache[gameId] = withAllTime;
+        }
+      }
+    }
+  } catch {
+    // keep the last all-time board
+  }
+  return cloudOverallEntriesMemoryCache[gameId] ?? [];
 }
 
 /** HPVN: «submit» sends the pending farm save now, so the server ranks the latest weekly scores. */

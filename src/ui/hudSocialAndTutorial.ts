@@ -1931,7 +1931,7 @@ export function socialUiRenderNeighborDialog(hud: GameHUD): void {
   if (bxhBtn) {
     bxhBtn.onclick = () => {
       hud.sim.audio.playClick();
-      hud.openLeaderboardDialog(undefined, 'friends');
+      hud.openLeaderboardDialog(undefined, 'overall');
     };
   }
 

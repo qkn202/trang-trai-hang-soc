@@ -8,21 +8,20 @@ const bridgeMocks = vi.hoisted(() => ({
   identity: null as { uid: string; displayName: string; house: string; nonce: string; issuedAt: number } | null,
 }));
 
-vi.mock('../../hpvn/bridge', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../hpvn/bridge')>();
-  return {
-    ...actual,
-    request: bridgeMocks.request,
-    flushFarmSave: bridgeMocks.flushFarmSave,
-    deliverInbox: bridgeMocks.deliverInbox,
-    get isStandaloneLocal() {
-      return bridgeMocks.isStandaloneLocal;
-    },
-    get identity() {
-      return bridgeMocks.identity;
-    },
-  };
-});
+vi.mock('../../hpvn/bridge', () => ({
+  request: bridgeMocks.request,
+  flushFarmSave: bridgeMocks.flushFarmSave,
+  queueFarmSave: vi.fn(),
+  deliverInbox: bridgeMocks.deliverInbox,
+  shareFarmPhoto: vi.fn().mockResolvedValue(undefined),
+  MAX_SAVE_BYTES: 1_000_000,
+  get isStandaloneLocal() {
+    return bridgeMocks.isStandaloneLocal;
+  },
+  get identity() {
+    return bridgeMocks.identity;
+  },
+}));
 
 import {
   ALLIANCE_FIRST_SEASON_START_MS,
@@ -43,7 +42,14 @@ import {
   resetPendingReverseExchangeForTest,
   validateReverseExchangeEligibility,
 } from '../../hpvn/exchange';
-import { applyHouseCup, houseCup, houseCupAllianceStandings } from '../../hpvn/houseCup';
+import {
+  applyHouseCup,
+  fetchHouseCup,
+  houseCup,
+  houseCupAllianceStandings,
+  invalidateHouseCupCache,
+  resetHouseCupViewForTest,
+} from '../../hpvn/houseCup';
 import { MagicalAudio } from '../../engine/audio';
 import { ParkSimulation } from '../simulation';
 
@@ -414,6 +420,240 @@ describe('Weekly Alliance #1 Galleons Reward (Start Fri 17:00 → End next Fri 1
         read: () => globalThis.localStorage?.getItem('hangsoc_valley_save_v1') ?? null,
         write: (json) => globalThis.localStorage?.setItem('hangsoc_valley_save_v1', json),
       });
+    }
+  });
+
+  it('awaits flushFarmSave() BEFORE requesting op: cup and does not cache failed cup requests', async () => {
+    resetHouseCupViewForTest();
+    const order: string[] = [];
+    let releaseFlush!: () => void;
+    bridgeMocks.flushFarmSave.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          order.push('flush-start');
+          releaseFlush = () => {
+            order.push('flush-done');
+            // Simulate a save reply without full disciplines clearing the 60s cache
+            invalidateHouseCupCache();
+            resolve();
+          };
+        })
+    );
+    bridgeMocks.request.mockImplementationOnce(async (_action: string, data?: { op?: string }) => {
+      order.push(`req:${data?.op ?? ''}`);
+      return {
+        weekKey: '2026-W48',
+        mode: 'medals',
+        unlimited: true,
+        disciplines: {
+          chess: { Gryffindor: 100, Slytherin: 0, Ravenclaw: 0, Hufflepuff: 0 },
+        },
+        house: 'Gryffindor',
+        memberTodayPoints: 100,
+        memberDailyCap: 0,
+        memberBank: 100,
+        memberTier: 1,
+        perTier: 300,
+      };
+    });
+
+    const pendingCup = fetchHouseCup();
+    await Promise.resolve();
+    expect(order).toEqual(['flush-start']);
+    expect(bridgeMocks.request).not.toHaveBeenCalled();
+
+    releaseFlush();
+    const view = await pendingCup;
+    expect(order).toEqual(['flush-start', 'flush-done', 'req:cup']);
+    expect(view?.disciplines?.chess?.Gryffindor).toBe(100);
+
+    // Within 60s without invalidation, fetchHouseCup serves cached view without hitting server
+    bridgeMocks.request.mockClear();
+    const cached = await fetchHouseCup();
+    expect(cached).toBe(view);
+    expect(bridgeMocks.request).not.toHaveBeenCalled();
+
+    // After invalidation + transient error, cache must NOT stay poisoned for 60s
+    invalidateHouseCupCache();
+    bridgeMocks.request.mockRejectedValueOnce(new Error('network blip'));
+    await expect(fetchHouseCup()).rejects.toThrow('network blip');
+
+    bridgeMocks.request.mockResolvedValueOnce({
+      weekKey: '2026-W48',
+      mode: 'medals',
+      disciplines: {
+        chess: { Gryffindor: 180, Slytherin: 0, Ravenclaw: 0, Hufflepuff: 0 },
+      },
+      house: 'Gryffindor',
+      memberTodayPoints: 120,
+      memberDailyCap: 0,
+      memberBank: 120,
+      memberTier: 1,
+      perTier: 300,
+    });
+    const retried = await fetchHouseCup();
+    expect(retried?.disciplines?.chess?.Gryffindor).toBe(180);
+    resetHouseCupViewForTest();
+  });
+
+  it('fetches op: board with period: all_time (limit 3) for Xếp Hạng Tổng and safely routes legacy non-weekly board replies to overall cache only', async () => {
+    const {
+      clearCachedCloudLeaderboards,
+      fetchCloudLeaderboardEntries,
+      fetchCloudOverallLeaderboardEntries,
+      getCachedCloudLeaderboardEntries,
+      getCachedCloudOverallLeaderboardEntries,
+      isCloudLeaderboardLegacyFallback,
+    } = await import('../minigameLeaderboard');
+
+    clearCachedCloudLeaderboards();
+    bridgeMocks.identity = {
+      uid: 'uid-board-qa',
+      displayName: 'QA Wizard',
+      house: 'Ravenclaw',
+      nonce: 'n-qa',
+      issuedAt: Date.now(),
+    };
+
+    try {
+      // 1. Legacy server reply on weekly fetch (no period/weekKey/weeklyScore): must NOT pollute weekly cache, MUST hydrate overall cache
+      bridgeMocks.request.mockResolvedValueOnce({
+        entries: [
+          {
+            userId: 'legacy_top1',
+            name: 'Aries',
+            parkName: 'Tháp Ravenclaw',
+            friendCode: 'HS-ARIE-01',
+            avatarEmoji: '🧙',
+            house: 'Ravenclaw',
+            primaryValue: 790,
+            ratingScore: 150000,
+            totalWins: 790,
+            bestStreak: 12,
+            detailLabelVi: '790 màn',
+            updatedAt: 1700000000000,
+          },
+        ],
+      });
+      const weeklyFromLegacy = await fetchCloudLeaderboardEntries('match3');
+      expect(weeklyFromLegacy).toEqual([]);
+      expect(getCachedCloudLeaderboardEntries('match3')).toEqual([]);
+      expect(isCloudLeaderboardLegacyFallback('match3')).toBe(true);
+      expect(getCachedCloudOverallLeaderboardEntries('match3').map((e) => e.userId)).toEqual(['legacy_top1']);
+
+      // 2. Upgraded server reply on period: 'all_time' fetch -> sends limit: 3 and stores Top 3 all-time entries
+      bridgeMocks.request.mockClear();
+      bridgeMocks.request.mockResolvedValueOnce({
+        period: 'all_time',
+        entries: [
+          {
+            userId: 'all_1',
+            name: 'Aries',
+            parkName: 'Tháp',
+            friendCode: '',
+            avatarEmoji: '🧙',
+            house: 'Ravenclaw',
+            bestStage: 810,
+            primaryValue: 810,
+            ratingScore: 810,
+            totalWins: 810,
+            bestStreak: 0,
+            detailLabelVi: '810 màn tích luỹ',
+            updatedAt: 1700000000000,
+          },
+          {
+            userId: 'all_2',
+            name: 'Nguyên',
+            parkName: 'Hầm',
+            friendCode: '',
+            avatarEmoji: '🧙',
+            house: 'Slytherin',
+            bestStage: 785,
+            primaryValue: 785,
+            ratingScore: 785,
+            totalWins: 785,
+            bestStreak: 0,
+            detailLabelVi: '785 màn tích luỹ',
+            updatedAt: 1700000000000,
+          },
+          {
+            userId: 'all_3',
+            name: 'i_love_hp_forever',
+            parkName: 'Vườn',
+            friendCode: '',
+            avatarEmoji: '🧙',
+            house: 'Hufflepuff',
+            bestStage: 755,
+            primaryValue: 755,
+            ratingScore: 755,
+            totalWins: 755,
+            bestStreak: 0,
+            detailLabelVi: '755 màn tích luỹ',
+            updatedAt: 1700000000000,
+          },
+        ],
+      });
+      const overall = await fetchCloudOverallLeaderboardEntries('chess');
+      expect(bridgeMocks.request).toHaveBeenCalledWith('farm', {
+        op: 'board',
+        game: 'chess',
+        period: 'all_time',
+        limit: 3,
+      });
+      expect(overall).toHaveLength(3);
+      expect(overall.map((e) => [e.name, e.bestStage])).toEqual([
+        ['Aries', 810],
+        ['Nguyên', 785],
+        ['i_love_hp_forever', 755],
+      ]);
+
+      // 3. Fallback when server responds with weekly entries carrying bestStage
+      bridgeMocks.request.mockResolvedValueOnce({
+        period: 'weekly',
+        weekKey: '2026-W48',
+        entries: [
+          {
+            userId: 'wk_with_best',
+            name: 'Minh Khang',
+            parkName: 'Hang Sóc',
+            friendCode: '',
+            avatarEmoji: '🧙',
+            house: 'Gryffindor',
+            weekKey: '2026-W48',
+            weeklyCleared: 6,
+            weeklyScore: 180,
+            bestStage: 62,
+            primaryValue: 6,
+            ratingScore: 180,
+            totalWins: 6,
+            bestStreak: 4,
+            detailLabelVi: '6 màn tuần',
+            updatedAt: 1700000000000,
+          },
+          {
+            userId: 'wk_without_best',
+            name: 'Chưa Có BestStage',
+            parkName: 'Hang Sóc',
+            friendCode: '',
+            avatarEmoji: '🧙',
+            house: 'Slytherin',
+            weekKey: '2026-W48',
+            weeklyCleared: 10,
+            weeklyScore: 300,
+            primaryValue: 10,
+            ratingScore: 300,
+            totalWins: 10,
+            bestStreak: 5,
+            detailLabelVi: '10 màn tuần',
+            updatedAt: 1700000000000,
+          },
+        ],
+      });
+      const extracted = await fetchCloudOverallLeaderboardEntries('jigsaw');
+      expect(extracted.map((e) => e.userId)).toEqual(['wk_with_best']);
+    } finally {
+      bridgeMocks.identity = null;
+      clearCachedCloudLeaderboards();
     }
   });
 });

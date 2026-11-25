@@ -2652,3 +2652,126 @@
   }
 }
 
+@layer s3_pa {
+  .pa-fish-missions-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 4px;
+    padding: 6px 10px;
+    border-radius: 12px;
+    background: linear-gradient(180deg, var(--ts-wood-track-top), var(--ts-wood-track-bot));
+    border: 1.5px solid var(--ts-rim-gold-mid);
+    color: var(--ink-cream);
+    flex-shrink: 0;
+  }
+
+  .pa-fish-missions-bar.is-urgent {
+    border-color: var(--focus-color);
+    box-shadow: 0 0 0 2px var(--talisman-glow);
+  }
+
+  .pa-fish-missions-bar.is-all-done {
+    border-color: var(--farm-green-soft-border);
+    background: linear-gradient(180deg, var(--farm-teal-mid), var(--farm-teal-bot));
+  }
+
+  .pa-fish-missions-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    color: var(--gold-soft);
+  }
+
+  .pa-fish-missions-head strong {
+    color: var(--ink-cream);
+  }
+
+  .pa-fish-missions-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .pa-fish-mission-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 3px 9px;
+    border-radius: var(--radius-pill);
+    background: var(--ts-wood-track-inner);
+    border: 1px solid var(--ts-rim-gold-mid);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ink-cream);
+    line-height: 1.25;
+  }
+
+  .pa-fish-mission-pill.is-done {
+    background: var(--farm-green-soft-bg);
+    border-color: var(--farm-green-soft-border);
+    color: var(--farm-green-text);
+  }
+
+  .pa-fish-mission-pill.is-urgent {
+    background: var(--aaa-mastery-gold-bg);
+    border-color: var(--focus-color);
+    color: var(--aaa-mastery-gold-ink);
+  }
+
+  .pa-fish-mission-count {
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  @media (min-width: 980px) {
+    #puzzleArcadeDialog[data-mg-layout='landscape'][data-pa-active-mode='chess']
+      .pa-layout-shell
+      > .pa-controls-bar
+      > :is(#btnPaFishAuto, #btnPaFishPower, #btnPaFishSkill) {
+      grid-column: span 2;
+      min-inline-size: 0;
+      padding-inline: 4px;
+    }
+
+    #puzzleArcadeDialog[data-mg-layout='landscape'][data-pa-active-mode='chess']
+      .pa-layout-shell
+      .pa-side-dock
+      .pa-mode-tabs
+      > .pa-mode-tab {
+      min-block-size: 34px;
+    }
+  }
+
+  @media (max-width: 979px) {
+    .pa-fish-missions-bar {
+      flex-direction: row;
+      align-items: center;
+      flex-wrap: wrap;
+      padding: 6px 10px;
+      margin-top: 2px;
+      gap: 5px 8px;
+    }
+
+    .pa-fish-missions-head {
+      gap: 5px;
+      white-space: nowrap;
+    }
+
+    .pa-fish-mission-pill {
+      padding: 3px 8px;
+      font-size: 11px;
+    }
+  }
+
+  @media (max-height: 450px) and (orientation: landscape) {
+    .pa-fish-missions-bar {
+      display: none;
+    }
+  }
+}
+

@@ -492,9 +492,11 @@ async function bootstrap(): Promise<void> {
         : undefined;
     const rawScope = params.get('lbscope');
     const validScope: LeaderboardScope | undefined =
-      rawScope === 'valley' || rawScope === 'friends' || rawScope === 'personal'
+      rawScope === 'valley' || rawScope === 'overall' || rawScope === 'friends' || rawScope === 'personal'
         ? rawScope
-        : undefined;
+        : rawScope === 'total' || rawScope === 'all_time'
+          ? 'overall'
+          : undefined;
     hud.openLeaderboardDialog(validGame, validScope);
   } else if (!params.get('tour') && !params.get('visit') && !sim.isHeadmasterPreview) {
     try {

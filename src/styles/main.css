@@ -6089,6 +6089,22 @@ body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(96px + ma
 :is(#albumDialog, #leaderboardDialog) .hs-lb-bar { display: flex; align-items: center; gap: var(--hs-space-2); margin: 0 0 var(--hs-space-2); }
 :is(#albumDialog, #leaderboardDialog)[open] .hs-lb-bar > .lb-scope-pills { flex: 1 1 auto; min-inline-size: 0; }
 :is(#albumDialog, #leaderboardDialog) .hs-lb-bar > .hs-lb-play { flex: none; block-size: 40px; min-block-size: 40px; padding: 0 var(--hs-space-4); font-size: var(--hs-text-14); }
+@media (max-width: 480px) {
+  :is(#albumDialog, #leaderboardDialog) .hs-lb-bar { gap: 6px; }
+  :is(#albumDialog, #leaderboardDialog)[open] .hs-lb-bar > .lb-scope-pills > * { padding-inline: 4px; font-size: var(--hs-text-11); }
+  :is(#albumDialog, #leaderboardDialog) .hs-lb-bar > .hs-lb-play { padding-inline: 11px; font-size: var(--hs-text-13); }
+}
+@media (max-width: 480px) {
+  :is(#albumDialog, #leaderboardDialog) .hs-lb-bar { gap: 6px; }
+  :is(#albumDialog, #leaderboardDialog)[open] .hs-lb-bar > .lb-scope-pills > * { padding-inline: 4px; font-size: 11px; }
+  :is(#albumDialog, #leaderboardDialog) .hs-lb-bar > .hs-lb-play { padding-inline: 11px; font-size: var(--hs-text-13); }
+}
+@media (max-width: 480px) {
+  :is(#albumDialog, #leaderboardDialog) .hs-lb-bar { gap: 6px; }
+  :is(#albumDialog, #leaderboardDialog) .hs-lb-bar > .lb-scope-pills > * { padding-inline: 5px; font-size: var(--hs-text-11); }
+  :is(#albumDialog, #leaderboardDialog) .hs-lb-bar > .hs-lb-play { padding-inline: 11px; font-size: var(--hs-text-13); }
+}
+@media (max-width: 480px) { :is(#albumDialog, #leaderboardDialog) .hs-lb-bar { gap: 6px; } :is(#albumDialog, #leaderboardDialog) .hs-lb-bar > .hs-lb-play { padding: 0 10px; font-size: var(--hs-text-13); } :is(#albumDialog, #leaderboardDialog)[open] .hs-lb-bar > .lb-scope-pills > * { padding: 0 5px; font-size: var(--hs-text-11); } }
 :is(#albumDialog, #leaderboardDialog) .hs-lb-week-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 10px; margin: 0 0 var(--hs-space-3); padding: 4px 10px; border-radius: var(--hs-radius-s); border: var(--hs-line) solid rgba(176, 125, 67, 0.34); background: rgba(255, 248, 224, 0.72); font-size: var(--hs-text-12); line-height: 1.35; font-variant-numeric: tabular-nums; }
 :is(#albumDialog, #leaderboardDialog) .hs-lb-week-key { color: var(--hs-ink); font-weight: var(--hs-weight-title); }
 :is(#albumDialog, #leaderboardDialog) .hs-lb-week-sched { color: var(--hs-ink-soft); font-weight: var(--hs-weight-label); }
@@ -8820,6 +8836,17 @@ button.brass-btn:hover:not(:disabled) {
     font-size: var(--hs-text-12);
     justify-content: center;
     white-space: nowrap;
+  }
+}
+
+@media (max-height: 720px) and (orientation: landscape) {
+  #puzzleArcadeDialog[data-mg-layout='landscape'][data-pa-active-mode='chess'] .pa-layout-shell .pa-side-dock {
+    min-block-size: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  #puzzleArcadeDialog[data-mg-layout='landscape'][data-pa-active-mode='chess'] .pa-layout-shell .pa-side-dock::-webkit-scrollbar {
+    display: none;
   }
 }
 

@@ -2,7 +2,7 @@
 // and stores nothing about the cup, in the save or on the device: this is a memory copy of the server's numbers.
 // The load and every save reply carry the member's own numbers; op 'cup' adds the week's totals per HPVN house
 // (supporting both legacy flat week totals and per-discipline Medal Bracket arenas without daily caps).
-import { request } from './bridge';
+import { flushFarmSave, request } from './bridge';
 import type { HouseName } from '../types/game';
 
 export type HouseCupDisciplineId = 'match3' | 'caro' | 'sudoku' | 'chess' | 'blocks' | 'jigsaw';
@@ -458,6 +458,7 @@ export function resetHouseCupViewForTest(): void {
   view = null;
   fetchedAt = 0;
   inFlight = null;
+  cupCacheVersion = 0;
 }
 
 /** Converts an ISO week key (`YYYY-Www`) to a continuous Monday-based week serial so consecutive weeks always advance by +1 (even across year boundaries). */
@@ -948,20 +949,42 @@ export function applyHouseCup(raw: unknown): void {
   };
   // Khi phản hồi từ op: 'save' chỉ mang số liệu cá nhân (không kèm houses/disciplines), xoá cache 60s để lần mở Tab Cúp kế tiếp tải bảng tổng 4 Nhà mới nhất ngay.
   if (!housesObj && !(r.disciplines && typeof r.disciplines === 'object')) {
-    fetchedAt = 0;
+    invalidateHouseCupCache();
   }
   listener();
 }
 
 let inFlight: Promise<HouseCupView | null> | null = null;
 let fetchedAt = 0;
-/** The week's totals (op 'cup'); one call in flight, at most one a minute. */
+let cupCacheVersion = 0;
+
+/** Xoá cache 60 giây của `op: 'cup'` (VD ngay sau khi `op: 'save'` ghi nhận màn thắng mới) để lần mở Cúp Nhà kế tiếp tải bảng điểm mới nhất. */
+export function invalidateHouseCupCache(): void {
+  cupCacheVersion += 1;
+  fetchedAt = 0;
+}
+
+/** The week's totals (op 'cup'); flushes any pending save first so newly cleared stages (incl. Bắn Cá) reach the server before reading totals, one call in flight, at most one a minute. */
 export function fetchHouseCup(): Promise<HouseCupView | null> {
   if (inFlight) return inFlight;
-  if (Date.now() - fetchedAt < 60_000) return Promise.resolve(view);
-  fetchedAt = Date.now();
-  inFlight = request('farm', { op: 'cup' })
-    .then((reply) => { applyHouseCup(reply); return view; })
-    .finally(() => { inFlight = null; });
+  const flushPending =
+    typeof flushFarmSave === 'function'
+      ? flushFarmSave().catch(() => {})
+      : Promise.resolve();
+  inFlight = flushPending
+    .then(() => {
+      if (fetchedAt > 0 && Date.now() - fetchedAt < 60_000) return view;
+      const reqVersion = cupCacheVersion;
+      return request('farm', { op: 'cup' }).then((reply) => {
+        applyHouseCup(reply);
+        if (cupCacheVersion === reqVersion) {
+          fetchedAt = Date.now();
+        }
+        return view;
+      });
+    })
+    .finally(() => {
+      inFlight = null;
+    });
   return inFlight;
 }

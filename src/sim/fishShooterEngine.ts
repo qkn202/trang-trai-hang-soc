@@ -28,6 +28,7 @@ export type FishSpeciesId =
 export interface FishSpeciesDef {
   id: FishSpeciesId;
   nameVi: string;
+  shortNameVi: string;
   radius: number;
   baseHp: number;
   basePoints: number;
@@ -45,6 +46,7 @@ export const FISH_SPECIES_CATALOG: Record<FishSpeciesId, FishSpeciesDef> = {
   minnow: {
     id: 'minnow',
     nameVi: 'Cá Plimpy Lam',
+    shortNameVi: 'Cá Plimpy',
     radius: 17,
     baseHp: 2,
     basePoints: 180,
@@ -60,6 +62,7 @@ export const FISH_SPECIES_CATALOG: Record<FishSpeciesId, FishSpeciesDef> = {
   clown: {
     id: 'clown',
     nameVi: 'Quỷ Nước Grindylow',
+    shortNameVi: 'Grindylow',
     radius: 22,
     baseHp: 4,
     basePoints: 360,
@@ -75,6 +78,7 @@ export const FISH_SPECIES_CATALOG: Record<FishSpeciesId, FishSpeciesDef> = {
   emerald_koi: {
     id: 'emerald_koi',
     nameVi: 'Thủy Xà Slytherin',
+    shortNameVi: 'Thủy Xà',
     radius: 26,
     baseHp: 7,
     basePoints: 680,
@@ -90,6 +94,7 @@ export const FISH_SPECIES_CATALOG: Record<FishSpeciesId, FishSpeciesDef> = {
   moon_jelly: {
     id: 'moon_jelly',
     nameVi: 'Sứa Ánh Trăng Huyền Bí',
+    shortNameVi: 'Sứa Trăng',
     radius: 25,
     baseHp: 8,
     basePoints: 820,
@@ -105,6 +110,7 @@ export const FISH_SPECIES_CATALOG: Record<FishSpeciesId, FishSpeciesDef> = {
   puffer_bomb: {
     id: 'puffer_bomb',
     nameVi: 'Cá Nóc Gai Tinh Quang',
+    shortNameVi: 'Cá Nóc Gai',
     radius: 28,
     baseHp: 10,
     basePoints: 1150,
@@ -120,6 +126,7 @@ export const FISH_SPECIES_CATALOG: Record<FishSpeciesId, FishSpeciesDef> = {
   golden_ray: {
     id: 'golden_ray',
     nameVi: 'Cá Đuối Hoàng Kim',
+    shortNameVi: 'Cá Đuối Vàng',
     radius: 36,
     baseHp: 18,
     basePoints: 2200,
@@ -135,6 +142,7 @@ export const FISH_SPECIES_CATALOG: Record<FishSpeciesId, FishSpeciesDef> = {
   leviathan_carp: {
     id: 'leviathan_carp',
     nameVi: 'Mực Khổng Lồ Hồ Đen',
+    shortNameVi: 'Mực Khổng Lồ',
     radius: 45,
     baseHp: 34,
     basePoints: 4800,
@@ -148,6 +156,190 @@ export const FISH_SPECIES_CATALOG: Record<FishSpeciesId, FishSpeciesDef> = {
     stripeColor: '#4c0519',
   },
 };
+
+export type FishMissionKind =
+  | 'catch_species'
+  | 'puffer_chain'
+  | 'collect_weapon'
+  | 'reach_combo'
+  | 'catch_total';
+
+export interface FishStageMission {
+  id: string;
+  kind: FishMissionKind;
+  species?: FishSpeciesId;
+  target: number;
+  current: number;
+  labelVi: string;
+  shortLabelVi: string;
+  completed: boolean;
+}
+
+export function buildFishStageMissions(
+  stage: number,
+  milestoneBoss: MilestoneBossMeta | null
+): FishStageMission[] {
+  const safeStage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(stage)));
+  const rng = mulberry32((safeStage * 0x85ebca6b + 0xc2b2ae35) >>> 0);
+  const tierScale = Math.min(8, Math.floor((safeStage - 1) / 45));
+
+  const makeSpeciesMission = (
+    idx: number,
+    species: FishSpeciesId,
+    target: number
+  ): FishStageMission => {
+    const def = FISH_SPECIES_CATALOG[species];
+    return {
+      id: `m${safeStage}_${idx}_sp_${species}`,
+      kind: 'catch_species',
+      species,
+      target,
+      current: 0,
+      labelVi: `Săn ${target} ${def.nameVi}`,
+      shortLabelVi: def.shortNameVi,
+      completed: false,
+    };
+  };
+
+  const makePufferMission = (idx: number, target: number): FishStageMission => ({
+    id: `m${safeStage}_${idx}_puffer`,
+    kind: 'puffer_chain',
+    species: 'puffer_bomb',
+    target,
+    current: 0,
+    labelVi: `Kích nổ ${target} Cá Nóc Gai`,
+    shortLabelVi: 'Nổ Cá Nóc',
+    completed: false,
+  });
+
+  const makeWeaponMission = (idx: number, target: number): FishStageMission => ({
+    id: `m${safeStage}_${idx}_wep`,
+    kind: 'collect_weapon',
+    target,
+    current: 0,
+    labelVi: `Thu ${target} Đạn Đặc Biệt`,
+    shortLabelVi: 'Đạn Đặc Biệt',
+    completed: false,
+  });
+
+  const makeComboMission = (idx: number, target: number): FishStageMission => ({
+    id: `m${safeStage}_${idx}_combo`,
+    kind: 'reach_combo',
+    target,
+    current: 0,
+    labelVi: `Đạt chuỗi Combo ×${target}`,
+    shortLabelVi: `Combo ×${target}`,
+    completed: false,
+  });
+
+  const makeTotalMission = (idx: number, target: number): FishStageMission => ({
+    id: `m${safeStage}_${idx}_total`,
+    kind: 'catch_total',
+    target,
+    current: 0,
+    labelVi: `Thu phục ${target} sinh vật biển`,
+    shortLabelVi: 'Sinh vật',
+    completed: false,
+  });
+
+  const targetCountForSpecies = (species: FishSpeciesId, isSecondary = false): number => {
+    switch (species) {
+      case 'minnow':
+        return Math.min(8, (isSecondary ? 4 : 5) + Math.floor(tierScale / 2));
+      case 'clown':
+        return Math.min(7, (isSecondary ? 3 : 4) + Math.floor(tierScale / 2));
+      case 'emerald_koi':
+        return Math.min(6, (isSecondary ? 2 : 3) + Math.floor(tierScale / 3));
+      case 'moon_jelly':
+        return Math.min(6, (isSecondary ? 2 : 3) + Math.floor(tierScale / 3));
+      case 'puffer_bomb':
+        return Math.min(4, 2 + Math.floor(tierScale / 4));
+      case 'golden_ray':
+        return Math.min(4, (safeStage >= 60 ? 2 : 1) + Math.floor(tierScale / 4));
+      case 'leviathan_carp':
+        return safeStage >= 200 ? 3 : safeStage >= 50 ? 2 : 1;
+    }
+  };
+
+  // Màn 1–2: 1 nhiệm vụ rõ ràng để người chơi làm quen cơ chế hoàn thành nhiệm vụ mới qua màn
+  if (safeStage === 1) {
+    return [makeSpeciesMission(0, 'minnow', 4)];
+  }
+  if (safeStage === 2) {
+    return [makeSpeciesMission(0, 'clown', 3)];
+  }
+
+  // Màn Trùm Mốc (10, 20, 25, 30, 50, 100...): 3 nhiệm vụ gồm săn Mực Khổng Lồ + tinh anh + kỹ năng
+  if (milestoneBoss) {
+    const bossCount = targetCountForSpecies('leviathan_carp');
+    const elitePool: FishSpeciesId[] = ['golden_ray', 'puffer_bomb', 'emerald_koi', 'moon_jelly'];
+    const eliteSpecies = elitePool[Math.floor(rng() * elitePool.length) % elitePool.length];
+    const eliteTarget = Math.max(2, targetCountForSpecies(eliteSpecies, true));
+    const thirdMission =
+      safeStage % 20 === 0
+        ? makeComboMission(2, Math.min(7, 4 + Math.floor(tierScale / 2)))
+        : makeWeaponMission(2, safeStage >= 100 ? 2 : 1);
+    return [
+      makeSpeciesMission(0, 'leviathan_carp', bossCount),
+      makeSpeciesMission(1, eliteSpecies, eliteTarget),
+      thirdMission,
+    ];
+  }
+
+  // Màn 3–9: 2 nhiệm vụ cân bằng
+  if (safeStage <= 9) {
+    const primaryPool: FishSpeciesId[] =
+      safeStage >= 6
+        ? ['emerald_koi', 'moon_jelly', 'puffer_bomb', 'golden_ray']
+        : ['clown', 'emerald_koi', 'moon_jelly', 'puffer_bomb'];
+    const primarySpecies = primaryPool[(safeStage - 3) % primaryPool.length];
+    const primaryTarget =
+      primarySpecies === 'golden_ray'
+        ? 1
+        : primarySpecies === 'puffer_bomb'
+          ? 2
+          : primarySpecies === 'clown'
+            ? 4
+            : 3;
+
+    const mod = safeStage % 3;
+    const secondMission =
+      mod === 0
+        ? makeWeaponMission(1, 1)
+        : mod === 1
+          ? makeComboMission(1, safeStage >= 7 ? 4 : 3)
+          : makeTotalMission(1, safeStage >= 7 ? 12 : 10);
+    return [makeSpeciesMission(0, primarySpecies, primaryTarget), secondMission];
+  }
+
+  // Màn 10+ (thường): 2 nhiệm vụ đa dạng — săn loài trung/hiếm + thử thách hành động/loài phụ không trùng
+  const primaryPool: FishSpeciesId[] =
+    safeStage >= 12
+      ? ['emerald_koi', 'moon_jelly', 'puffer_bomb', 'golden_ray', 'leviathan_carp', 'clown']
+      : ['emerald_koi', 'moon_jelly', 'puffer_bomb', 'golden_ray', 'clown'];
+  const primarySpecies = primaryPool[Math.floor(rng() * primaryPool.length) % primaryPool.length];
+  const m1 = makeSpeciesMission(0, primarySpecies, targetCountForSpecies(primarySpecies));
+
+  const secondRoll = Math.floor(rng() * 5);
+  let m2: FishStageMission;
+  if (secondRoll === 0) {
+    m2 = makeWeaponMission(1, safeStage >= 120 ? 3 : safeStage >= 35 ? 2 : 1);
+  } else if (secondRoll === 1) {
+    m2 = makeComboMission(1, Math.min(7, 4 + Math.floor(tierScale / 2)));
+  } else if (secondRoll === 2 && primarySpecies !== 'puffer_bomb') {
+    m2 = makePufferMission(1, Math.min(3, 2 + Math.floor(tierScale / 5)));
+  } else if (secondRoll === 3) {
+    const secondaryPool = (
+      ['minnow', 'clown', 'emerald_koi', 'moon_jelly', 'golden_ray'] as FishSpeciesId[]
+    ).filter((sp) => sp !== primarySpecies);
+    const secSpecies = secondaryPool[Math.floor(rng() * secondaryPool.length) % secondaryPool.length];
+    m2 = makeSpeciesMission(1, secSpecies, targetCountForSpecies(secSpecies, true));
+  } else {
+    m2 = makeTotalMission(1, Math.min(22, 12 + Math.floor(tierScale * 1.2)));
+  }
+
+  return [m1, m2];
+}
 
 export type FishSpecialWeaponId = Exclude<FishWeaponId, 'normal'>;
 
@@ -339,6 +531,11 @@ export interface FishTickResult {
     nameVi: string;
     color: string;
   }>;
+  completedMissions?: Array<{
+    id: string;
+    labelVi: string;
+    shortLabelVi: string;
+  }>;
   wallBounces?: Array<{ x: number; y: number }>;
 }
 
@@ -377,6 +574,11 @@ export function sanitizeSavedFishShooterSession(
   const rawWeaponTimer = Math.max(0, Math.min(30, Number(r.activeWeaponTimer) || 0));
   const rawWeapon = sanitizeWeaponId(r.activeWeapon);
   const activeWeapon: FishWeaponId = rawWeapon !== 'normal' && rawWeaponTimer > 0 ? rawWeapon : 'normal';
+  const missionProgress = Array.isArray(r.missionProgress)
+    ? r.missionProgress
+        .slice(0, 4)
+        .map((v) => Math.max(0, Math.min(999, Math.round(Number(v) || 0))))
+    : undefined;
 
   return {
     v: 1,
@@ -399,6 +601,7 @@ export function sanitizeSavedFishShooterSession(
     autoFire: r.autoFire === undefined ? true : Boolean(r.autoFire),
     activeWeapon,
     activeWeaponTimer: activeWeapon === 'normal' ? 0 : rawWeaponTimer,
+    ...(missionProgress ? { missionProgress } : {}),
     companionCharge:
       typeof r.companionCharge === 'number' && Number.isFinite(r.companionCharge)
         ? Math.max(0, Math.round(r.companionCharge))
@@ -413,8 +616,10 @@ export class FishShooterEngine {
   public readonly timeLimitSec: number;
   public readonly reward: PuzzleRewardSpec;
   public readonly milestoneBoss: MilestoneBossMeta | null;
+  public readonly missions: FishStageMission[];
 
   public score = 0;
+  public weaponsCollectedCount = 0;
   public ammo: number;
   public cannonTier: 1 | 2 | 3 = 1;
   public remainingSec: number;
@@ -459,6 +664,7 @@ export class FishShooterEngine {
   private nextUid = 1;
   private rng: () => number;
   private lastWholeSecond: number;
+  private pendingCompletedMissions: NonNullable<FishTickResult['completedMissions']> = [];
 
   public get turretX(): number {
     return this.arenaW * 0.5;
@@ -513,9 +719,108 @@ export class FishShooterEngine {
     return Math.max(autoTop, this.customTopMarginY);
   }
 
+  public get allMissionsCompleted(): boolean {
+    return this.missions.every((m) => m.completed);
+  }
+
+  public get completedMissionsCount(): number {
+    let cnt = 0;
+    for (const m of this.missions) {
+      if (m.completed) cnt += 1;
+    }
+    return cnt;
+  }
+
+  public get isVictoryReady(): boolean {
+    return this.score >= this.targetScore && this.allMissionsCompleted;
+  }
+
+  public isTargetMissionSpecies(species: FishSpeciesId): boolean {
+    for (const m of this.missions) {
+      if (m.completed) continue;
+      if (m.kind === 'catch_species' && m.species === species) return true;
+      if (m.kind === 'puffer_chain' && species === 'puffer_bomb') return true;
+    }
+    return false;
+  }
+
+  public get hasIncompleteWeaponMission(): boolean {
+    return this.missions.some((m) => !m.completed && m.kind === 'collect_weapon');
+  }
+
+  private getNeededMissionSpecies(): FishSpeciesId[] {
+    const out: FishSpeciesId[] = [];
+    for (const m of this.missions) {
+      if (m.completed) continue;
+      if (m.kind === 'catch_species' && m.species && !out.includes(m.species)) {
+        out.push(m.species);
+      } else if (m.kind === 'puffer_chain' && !out.includes('puffer_bomb')) {
+        out.push('puffer_bomb');
+      }
+    }
+    return out;
+  }
+
+  private recordMissionEvent(ev: {
+    species?: FishSpeciesId;
+    weaponCollected?: boolean;
+    combo?: number;
+    caughtDelta?: number;
+  }): number {
+    let newlyCompleted = 0;
+    for (const m of this.missions) {
+      if (m.completed) continue;
+      let changed = false;
+      if (m.kind === 'catch_species' && ev.species && m.species === ev.species) {
+        m.current = Math.min(m.target, m.current + 1);
+        changed = true;
+      } else if (m.kind === 'puffer_chain' && ev.species === 'puffer_bomb') {
+        m.current = Math.min(m.target, m.current + 1);
+        changed = true;
+      } else if (m.kind === 'collect_weapon' && ev.weaponCollected) {
+        m.current = Math.min(m.target, m.current + 1);
+        changed = true;
+      } else if (m.kind === 'reach_combo' && ev.combo !== undefined && ev.combo > m.current) {
+        m.current = Math.min(m.target, ev.combo);
+        changed = true;
+      } else if (m.kind === 'catch_total' && ev.caughtDelta && ev.caughtDelta > 0) {
+        m.current = Math.min(m.target, m.current + ev.caughtDelta);
+        changed = true;
+      }
+      if (changed && m.current >= m.target) {
+        m.completed = true;
+        newlyCompleted += 1;
+        // Thưởng điểm khích lệ nhỏ khi hoàn tất từng nhiệm vụ (vẫn phải đủ điểm & hết nhiệm vụ mới qua màn)
+        this.score += 350;
+        this.popups.push({
+          x: this.arenaW * 0.5,
+          y: Math.max(92, this.getTopSwimMarginY() + 26),
+          text: `✓ Xong: ${m.shortLabelVi}! (+350)`,
+          color: '#34d399',
+          age: 0,
+          duration: 1.45,
+        });
+        this.pendingCompletedMissions.push({
+          id: m.id,
+          labelVi: m.labelVi,
+          shortLabelVi: m.shortLabelVi,
+        });
+      }
+    }
+    return newlyCompleted;
+  }
+
+  private drainCompletedMissions(): NonNullable<FishTickResult['completedMissions']> {
+    if (this.pendingCompletedMissions.length === 0) return [];
+    const drained = this.pendingCompletedMissions;
+    this.pendingCompletedMissions = [];
+    return drained;
+  }
+
   constructor(stage: number) {
     this.stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(stage)));
     this.milestoneBoss = getMilestoneBossMeta(this.stage);
+    this.missions = buildFishStageMissions(this.stage, this.milestoneBoss);
     const tier = getMinigameDifficultyTier(this.stage);
     const isBoss = Boolean(this.milestoneBoss);
 
@@ -528,6 +833,10 @@ export class FishShooterEngine {
 
     this.freeSkillsLeft = isBoss ? 2 : 1;
     this.paidSkillsLeft = 2;
+
+    if (this.hasIncompleteWeaponMission) {
+      this.ammoDropSpawnTimer = 1.6;
+    }
 
     this.reward = {
       stars: getStageStarReward(this.stage),
@@ -543,9 +852,22 @@ export class FishShooterEngine {
   private seedInitialSchool(): void {
     this.fishList = [];
     const targetCount = this.getDesiredFishCount();
+    const seededMissionSpecies: FishSpeciesId[] = [];
+    for (const sp of this.getNeededMissionSpecies()) {
+      seededMissionSpecies.push(sp);
+      if (sp !== 'leviathan_carp' && sp !== 'golden_ray') {
+        seededMissionSpecies.push(sp);
+      }
+    }
     for (let i = 0; i < targetCount; i++) {
-      const f = this.createFish(true, i === 0 && Boolean(this.milestoneBoss));
-      this.fishList.push(f);
+      if (i === 0 && Boolean(this.milestoneBoss)) {
+        this.fishList.push(this.createFish(true, true));
+      } else if (seededMissionSpecies.length > 0) {
+        const forcedSp = seededMissionSpecies.shift()!;
+        this.fishList.push(this.createFish(true, false, forcedSp));
+      } else {
+        this.fishList.push(this.createFish(true, false));
+      }
     }
   }
 
@@ -559,6 +881,17 @@ export class FishShooterEngine {
   private pickSpecies(forceBoss = false): FishSpeciesId {
     if (forceBoss) return 'leviathan_carp';
     const hasLeviathan = this.fishList.some((f) => f.species === 'leviathan_carp');
+    const needed = this.getNeededMissionSpecies();
+    if (needed.length > 0) {
+      const underrepresented = needed.filter((sp) => {
+        const countOnScreen = this.fishList.filter((f) => f.species === sp).length;
+        const cap = sp === 'leviathan_carp' ? 1 : 2;
+        return countOnScreen < cap;
+      });
+      if (underrepresented.length > 0 && this.rng() < 0.5) {
+        return underrepresented[Math.floor(this.rng() * underrepresented.length) % underrepresented.length];
+      }
+    }
     const r = this.rng();
     if (!hasLeviathan && r > (this.milestoneBoss ? 0.86 : 0.94)) return 'leviathan_carp';
     if (r < 0.32) return 'minnow';
@@ -569,8 +902,12 @@ export class FishShooterEngine {
     return 'golden_ray';
   }
 
-  private createFish(inView: boolean, forceBoss = false): SwimmingFish {
-    const species = this.pickSpecies(forceBoss);
+  private createFish(
+    inView: boolean,
+    forceBoss = false,
+    forcedSpecies?: FishSpeciesId
+  ): SwimmingFish {
+    const species = forcedSpecies ?? this.pickSpecies(forceBoss);
     const def = FISH_SPECIES_CATALOG[species];
     const dir: 1 | -1 = this.rng() < 0.5 ? 1 : -1;
     const marginYTop = this.getTopSwimMarginY();
@@ -845,6 +1182,11 @@ export class FishShooterEngine {
       this.score += ptsEarned;
       this.ammo = Math.min(999, this.ammo + f.ammoDrop);
       this.caughtCount += 1;
+      this.recordMissionEvent({
+        species: f.species,
+        combo: this.combo,
+        caughtDelta: 1,
+      });
 
       // Không cộng thêm giây khi bắn trúng/thu phục cá — đếm ngược chuẩn theo thời lượng màn
       const bonusSec = 0;
@@ -1016,7 +1358,9 @@ export class FishShooterEngine {
       if (this.ammoDrops.length < 3) {
         this.spawnAmmoDrop();
       }
-      this.ammoDropSpawnTimer = 5.4 + this.rng() * 2.2;
+      this.ammoDropSpawnTimer = this.hasIncompleteWeaponMission
+        ? 3.2 + this.rng() * 1.4
+        : 5.4 + this.rng() * 2.2;
     }
 
     for (let i = this.ammoDrops.length - 1; i >= 0; i--) {
@@ -1162,6 +1506,8 @@ export class FishShooterEngine {
           const picked = this.ammoDrops.splice(hitDropIdx, 1)[0];
           const wDef = FISH_WEAPON_CATALOG[picked.weaponId];
           this.equipWeaponDrop(picked.weaponId);
+          this.weaponsCollectedCount += 1;
+          this.recordMissionEvent({ weaponCollected: true });
           weaponUiChanged = true;
           this.comboTimer = Math.max(this.comboTimer, 2.8);
           this.nets.push({
@@ -1369,7 +1715,8 @@ export class FishShooterEngine {
       }
     }
 
-    if (this.score >= this.targetScore) {
+    const completedMissions = this.drainCompletedMissions();
+    if (this.isVictoryReady) {
       this.status = 'won';
       return {
         timedOut: false,
@@ -1377,12 +1724,16 @@ export class FishShooterEngine {
         wholeSecondChanged: true,
         caughtEvents,
         collectedDrops,
+        completedMissions,
         wallBounces,
       };
     }
 
     let wholeSecondChanged =
-      caughtEvents.length > 0 || collectedDrops.length > 0 || weaponUiChanged;
+      caughtEvents.length > 0 ||
+      collectedDrops.length > 0 ||
+      completedMissions.length > 0 ||
+      weaponUiChanged;
     if (!isSandbox) {
       this.remainingSec = Math.max(0, this.remainingSec - clampedDt);
       const curWhole = Math.ceil(this.remainingSec);
@@ -1398,6 +1749,7 @@ export class FishShooterEngine {
           wholeSecondChanged: true,
           caughtEvents,
           collectedDrops,
+          completedMissions,
           wallBounces,
         };
       }
@@ -1409,6 +1761,7 @@ export class FishShooterEngine {
       wholeSecondChanged,
       caughtEvents,
       collectedDrops,
+      completedMissions,
       wallBounces,
     };
   }
@@ -1418,9 +1771,10 @@ export class FishShooterEngine {
     zappedCount: number;
     won: boolean;
     caughtEvents: FishTickResult['caughtEvents'];
+    completedMissions: NonNullable<FishTickResult['completedMissions']>;
   } {
     if (this.status !== 'playing') {
-      return { ok: false, zappedCount: 0, won: false, caughtEvents: [] };
+      return { ok: false, zappedCount: 0, won: false, caughtEvents: [], completedMissions: [] };
     }
     this.freezeTimer = 5.5;
     this.ammo = Math.min(999, this.ammo + 8);
@@ -1433,17 +1787,24 @@ export class FishShooterEngine {
       this.detonateNet(t.x, t.y, 28, 2.2, 1.0, 3, true, caughtEvents, t.uid);
     }
 
-    const won = this.score >= this.targetScore;
+    const completedMissions = this.drainCompletedMissions();
+    const won = this.isVictoryReady;
     if (won) this.status = 'won';
-    return { ok: true, zappedCount: targets.length, won, caughtEvents };
+    return { ok: true, zappedCount: targets.length, won, caughtEvents, completedMissions };
   }
 
-  public applyPhoenixTalisman(): { ok: boolean; msg: string; won: boolean } {
+  public applyPhoenixTalisman(): {
+    ok: boolean;
+    msg: string;
+    won: boolean;
+    completedMissions: NonNullable<FishTickResult['completedMissions']>;
+  } {
     if (this.talismanUsed) {
       return {
         ok: false,
         msg: 'Bùa Phượng Hoàng chỉ dùng 1 lần/ngày cho Bắn Cá.',
         won: false,
+        completedMissions: [],
       };
     }
     this.talismanUsed = true;
@@ -1461,15 +1822,22 @@ export class FishShooterEngine {
     const caughtEvents: FishTickResult['caughtEvents'] = [];
     const blastR = Math.max(420, Math.hypot(this.arenaW, this.arenaH) * 0.58);
     this.detonateNet(this.arenaW * 0.5, this.arenaH * 0.46, blastR, 14.0, 14.0, 3, true, caughtEvents);
-    const won = this.score >= this.targetScore;
+    if (this.hasIncompleteWeaponMission && this.ammoDrops.length < 3) {
+      this.spawnAmmoDrop(undefined, this.arenaW * 0.5, this.arenaH * 0.42);
+    }
+    const completedMissions = this.drainCompletedMissions();
+    const won = this.isVictoryReady;
     if (won) this.status = 'won';
 
     return {
       ok: true,
       msg: won
-        ? 'Bùa Phượng Hoàng: lưới lửa rực sáng thu trọn đàn cá đủ điểm thắng!'
-        : 'Bùa Phượng Hoàng: +35s giờ, +30 Đạn Ngọc & đóng băng toàn Hồ Đen!',
+        ? 'Bùa Phượng Hoàng: lưới lửa rực sáng hoàn tất nhiệm vụ và đủ điểm thắng!'
+        : this.score >= this.targetScore && !this.allMissionsCompleted
+          ? 'Bùa Phượng Hoàng: +35s giờ & đóng băng Hồ Đen — hãy hoàn tất nhiệm vụ màn để qua màn!'
+          : 'Bùa Phượng Hoàng: +35s giờ, +30 Đạn Ngọc & đóng băng toàn Hồ Đen!',
       won,
+      completedMissions,
     };
   }
 
@@ -1506,14 +1874,21 @@ export class FishShooterEngine {
     if (this.status === 'playing') return null;
     const scoreStr = this.score.toLocaleString('vi-VN');
     const targetStr = this.targetScore.toLocaleString('vi-VN');
+    const doneCnt = this.completedMissionsCount;
+    const totalCnt = this.missions.length;
     if (this.status === 'lost') {
+      const pending = this.missions.filter((m) => !m.completed);
+      const pendingHint =
+        pending.length > 0
+          ? `Còn thiếu: ${pending.map((m) => `${m.shortLabelVi} (${m.current}/${m.target})`).join(', ')}`
+          : 'Dùng Đũa ×3 nhắm Cá Nóc Gai Tinh Quang & Mực Khổng Lồ';
       return {
         mode: 'chess',
         plyNumber: Math.max(1, this.shotsFired),
         outcomeTagVi: 'Hết giờ săn thủy quái',
-        playedCoordVi: `${scoreStr}/${targetStr} điểm (${this.caughtCount} sinh vật biển)`,
-        recommendedCoordVi: 'Dùng Đũa ×3 nhắm Cá Nóc Gai Tinh Quang & Mực Khổng Lồ',
-        summaryVi: `Đạt ${scoreStr}/${targetStr} điểm dưới đại dương. Thu phục Cá Nóc Gai Tinh Quang để tạo sóng xung kích gom cả đàn cá!`,
+        playedCoordVi: `${scoreStr}/${targetStr} điểm · Nhiệm vụ ${doneCnt}/${totalCnt}`,
+        recommendedCoordVi: pendingHint,
+        summaryVi: `Đạt ${scoreStr}/${targetStr} điểm và hoàn thành ${doneCnt}/${totalCnt} nhiệm vụ màn. Ưu tiên bắn các sinh vật có vòng mục tiêu vàng kim!`,
         highlightCells: [],
       };
     }
@@ -1521,9 +1896,9 @@ export class FishShooterEngine {
       mode: 'chess',
       plyNumber: Math.max(1, this.shotsFired),
       outcomeTagVi: 'Chinh phục Hồ Đen Hogwarts',
-      playedCoordVi: `${this.caughtCount} sinh vật · Đỉnh combo ×${Math.max(1, this.maxCombo)}`,
+      playedCoordVi: `Nhiệm vụ ${doneCnt}/${totalCnt} ✓ · ${this.caughtCount} sinh vật`,
       recommendedCoordVi: `${scoreStr}/${targetStr} điểm · Còn ${this.formatRemainingTime()}`,
-      summaryVi: `Thu phục ${this.caughtCount} sinh vật Hồ Đen, đạt ${scoreStr} điểm với đỉnh combo ×${Math.max(1, this.maxCombo)}.`,
+      summaryVi: `Hoàn tất ${doneCnt}/${totalCnt} nhiệm vụ màn, thu phục ${this.caughtCount} sinh vật Hồ Đen (${scoreStr} điểm, combo ×${Math.max(1, this.maxCombo)}).`,
       highlightCells: [],
     };
   }
@@ -1553,6 +1928,7 @@ export class FishShooterEngine {
       autoFire: this.autoFire,
       activeWeapon: this.activeWeaponTimer > 0 ? this.activeWeapon : 'normal',
       activeWeaponTimer: Math.round(this.activeWeaponTimer * 10) / 10,
+      missionProgress: this.missions.map((m) => m.current),
       companionCharge: extra?.companionCharge ?? 0,
       snackPieUsed: Boolean(extra?.snackPieUsed),
     };
@@ -1592,6 +1968,18 @@ export class FishShooterEngine {
       this.activeWeapon !== 'normal'
         ? Math.max(FISH_WEAPON_CATALOG[this.activeWeapon].durationSec, this.activeWeaponTimer)
         : 12;
+    if (Array.isArray(s.missionProgress)) {
+      for (let i = 0; i < this.missions.length; i++) {
+        const m = this.missions[i];
+        const savedCur = Math.max(0, Math.min(m.target, Math.floor(s.missionProgress[i] ?? 0)));
+        m.current = savedCur;
+        m.completed = savedCur >= m.target;
+      }
+      if (s.status === 'playing' && this.isVictoryReady) {
+        this.score = Math.min(this.score, Math.max(0, this.targetScore - 1));
+      }
+    }
+    this.pendingCompletedMissions = [];
     return true;
   }
 }

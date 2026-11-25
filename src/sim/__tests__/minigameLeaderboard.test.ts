@@ -17,6 +17,7 @@ import {
   LEADERBOARD_GAME_META,
   SCORED_LEADERBOARD_GAMES,
   setCachedCloudLeaderboardEntries,
+  setCachedCloudOverallLeaderboardEntries,
 } from '../minigameLeaderboard';
 import {
   CREATURE_ONET_SPECIES,
@@ -954,5 +955,176 @@ describe('Per-Mini-Game Leaderboards (All 6 Scored Games: Match-3, Minesweeper/C
     expect(w49.playerEntry.ratingScore).toBe(0);
     expect(w49.playerEntry.cupContributionPoints).toBe(0);
     expect(w49.playerEntry.allTimeBestStage).toBe(54); // Lifetime progress safely preserved!
+  });
+
+  it('replaces Friends tab with all-time Top 3 «Xếp Hạng Tổng» ranked strictly by total cleared stages (never weekly)', async () => {
+    applyHouseCup({
+      weekKey: '2026-W48',
+      mode: 'medals',
+      unlimited: true,
+      house: 'Gryffindor',
+      memberTodayPoints: 0,
+      memberDailyCap: 0,
+      memberBank: 0,
+      memberTier: 1,
+      perTier: 300,
+    });
+
+    const sim = new ParkSimulation(new MagicalAudio());
+    sim.setPlayerHouse('Gryffindor');
+
+    // Empty all-time board when nobody has cleared any stage yet -> 0 entries (no 0-stage placeholder on Top 3 podium)
+    const emptyOverall = sim.getMinigameLeaderboard('jigsaw', 'overall');
+    expect(emptyOverall.entries).toHaveLength(0);
+    expect(emptyOverall.weekKey).toBe('all_time');
+    expect(emptyOverall.playerEntry.primaryValue).toBe(0);
+
+    // Player clears 54 stages total in Match-3 (with high weekly score 300 đ this week)
+    sim.state.match3.maxClearedLevel = 44;
+    sim.state.match3.currentLevel = 45;
+    sim.ensureMinigameLeaderboard();
+    for (let i = 0; i < 10; i++) {
+      sim.completeMatch3LevelVictory(10, { sessionScore: 3000 });
+    }
+
+    // Seed both weekly board (with bestStage + stale W47 entry + pure weekly entry without bestStage)
+    // and dedicated all-time board (including legacy all-time entries without weekKey)
+    setCachedCloudLeaderboardEntries('match3', [
+      {
+        userId: 'aries_uid',
+        name: 'Aries',
+        parkName: 'Tháp Ravenclaw',
+        friendCode: 'HS-ARIE-01',
+        avatarEmoji: '🦅',
+        house: 'Ravenclaw',
+        weekKey: '2026-W48',
+        weeklyCleared: 3,
+        weeklyScore: 105,
+        bestStage: 790,
+        primaryValue: 3,
+        ratingScore: 105,
+        totalWins: 3,
+        bestStreak: 3,
+        detailLabelVi: '3 màn tuần',
+        updatedAt: Date.now(),
+      },
+      {
+        userId: 'pure_weekly_no_best_uid',
+        name: 'Chỉ Có Tuần',
+        parkName: 'Vườn Mới',
+        friendCode: 'HS-WKON-77',
+        avatarEmoji: '🧙',
+        house: 'Hufflepuff',
+        weekKey: '2026-W48',
+        weeklyCleared: 20,
+        weeklyScore: 700,
+        primaryValue: 20,
+        ratingScore: 700,
+        totalWins: 20,
+        bestStreak: 5,
+        detailLabelVi: '20 màn tuần',
+        updatedAt: Date.now(),
+      },
+    ]);
+
+    setCachedCloudOverallLeaderboardEntries('match3', [
+      {
+        userId: 'veteran_w47_uid',
+        name: 'Lão Làng W47',
+        parkName: 'Lâu Đài Cổ',
+        friendCode: 'HS-VTRN-99',
+        avatarEmoji: '🧙',
+        house: 'Ravenclaw',
+        weekKey: '2026-W47', // Prior week -> MUST STILL be included in all-time overall!
+        bestStage: 900,
+        primaryValue: 900,
+        ratingScore: 900,
+        totalWins: 910,
+        bestStreak: 15,
+        detailLabelVi: '900 màn tích luỹ',
+        updatedAt: Date.now() - 86_400_000,
+      },
+      {
+        userId: 'nguyen_uid',
+        name: 'Nguyên',
+        parkName: 'Hầm Slytherin',
+        friendCode: 'HS-NGUY-02',
+        avatarEmoji: '🐍',
+        house: 'Slytherin',
+        primaryValue: 785, // Legacy all-time payload (no weekKey, no explicit bestStage)
+        ratingScore: 120000,
+        totalWins: 785,
+        bestStreak: 9,
+        detailLabelVi: '785 màn',
+        updatedAt: Date.now(),
+      },
+      {
+        userId: 'love_hp_uid',
+        name: 'i_love_hp_forever',
+        parkName: 'Vườn Hufflepuff',
+        friendCode: 'HS-LVHP-03',
+        avatarEmoji: '🦡',
+        house: 'Hufflepuff',
+        bestStage: 755,
+        primaryValue: 755,
+        ratingScore: 110000,
+        totalWins: 755,
+        bestStreak: 8,
+        detailLabelVi: '755 màn',
+        updatedAt: Date.now(),
+      },
+    ]);
+
+    const overall = sim.getMinigameLeaderboard('match3', 'overall');
+    expect(overall.scope).toBe('overall');
+    expect(overall.weekKey).toBe('all_time');
+    // Strictly Top 3 only even though 5 players (900, 790, 785, 755, 54) have all-time cleared stages!
+    expect(overall.entries).toHaveLength(3);
+    expect(overall.totalEntries).toBe(5);
+    expect(overall.playerRank).toBe(5);
+    expect(overall.playerEntry.primaryValue).toBe(54);
+    expect(overall.entries.map((e) => [e.rank, e.name, e.primaryValue, e.primaryDisplayVi, e.cupContributionPoints])).toEqual([
+      [1, 'Lão Làng W47', 900, '900 màn', 0],
+      [2, 'Aries', 790, '790 màn', 0],
+      [3, 'Nguyên', 785, '785 màn', 0],
+    ]);
+    // Pure weekly entry without bestStage never leaks into all-time ranking
+    expect(overall.entries.some((e) => e.name === 'Chỉ Có Tuần')).toBe(false);
+
+    // Verify LeaderboardModalController renders «Xếp Hạng Tổng» instead of «Bạn Bè», shows Top 3 podium only, and omits weekly chrome
+    const { LeaderboardModalController } = await import('../../ui/leaderboardModal');
+    const mount = {
+      innerHTML: '',
+      querySelectorAll: () => [],
+      querySelector: () => null,
+    };
+    const fakeRoot = {
+      querySelector: (sel: string) => (sel === '#leaderboardTabMount' ? mount : null),
+    };
+    const modal = new LeaderboardModalController(fakeRoot as never, sim);
+    // Legacy 'friends' scope maps cleanly to 'overall'
+    modal.configure('match3', 'friends');
+    expect(modal.activeScope).toBe('overall');
+    modal.render(mount as never);
+
+    expect(mount.innerHTML).toContain('Xếp Hạng Tổng');
+    expect(mount.innerHTML).not.toContain('>Bạn Bè<');
+    expect(mount.innerHTML).not.toContain('Thêm bạn');
+    expect(mount.innerHTML).toContain('Xếp Hạng Tổng · Top 3');
+    expect(mount.innerHTML).toContain('Tổng màn đã chơi · Mọi thời đại');
+    expect(mount.innerHTML).not.toContain('BXH Tuần');
+    expect(mount.innerHTML).not.toContain('đ Nhà');
+    expect(mount.innerHTML).toContain('900 màn');
+    expect(mount.innerHTML).toContain('790 màn');
+    expect(mount.innerHTML).toContain('785 màn');
+    // #4 and #5 must NOT be rendered in Top 3 overall tab!
+    expect(mount.innerHTML).not.toContain('i_love_hp_forever');
+    expect(mount.innerHTML).not.toContain('755 màn');
+    expect(mount.innerHTML).not.toContain('start="4"');
+
+    // Empty all-time tab on unplayed game shows clean empty state
+    modal.activeGameId = 'jigsaw';
+    modal.render(mount as never);
+    expect(mount.innerHTML).toContain('Chưa có học viên hoàn thành màn nào.');
   });
 });

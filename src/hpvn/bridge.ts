@@ -1,4 +1,4 @@
-import { applyHouseCup, getActiveHouseCupWeekKey } from './houseCup';
+import { applyHouseCup, getActiveHouseCupWeekKey, invalidateHouseCupCache } from './houseCup';
 
 // HPVN Game Zone bridge: the member comes from the parent's identity handoff (never a typed name) and the farm
 // is kept by the HPVN server through the parent page (this frame never touches Firebase or another host).
@@ -118,7 +118,11 @@ export function request<T = unknown>(action: string, data: object = {}): Promise
         case 'wallet':
           return Promise.resolve({ enabled: false } as T);
         case 'board':
-          return Promise.resolve({ period: 'weekly', weekKey: getActiveHouseCupWeekKey(), entries: [] } as T);
+          return Promise.resolve(
+            ((data as { period?: string }).period === 'all_time'
+              ? { period: 'all_time', entries: [] }
+              : { period: 'weekly', weekKey: getActiveHouseCupWeekKey(), entries: [] }) as T
+          );
         default:
           return Promise.reject(new Error('Tính năng trực tuyến này cần mở trên cổng HPVN.'));
       }
@@ -177,7 +181,13 @@ function flush(): Promise<void> {
   if (new TextEncoder().encode(save).length > MAX_SAVE_BYTES) { onSaveStatus('too-big'); return flight; }
   flight = flight.then(() => request<{ inbox?: unknown[]; cup?: unknown }>('farm', { op: 'save', save, cup: 2 })).then((result) => {
     sent = save;
-    onSaveStatus('saved'); applyHouseCup(result?.cup); deliverInbox(result?.inbox);
+    onSaveStatus('saved');
+    if (result?.cup && typeof result.cup === 'object') {
+      applyHouseCup(result.cup);
+    } else {
+      invalidateHouseCupCache();
+    }
+    deliverInbox(result?.inbox);
   }, (error: Error & { code?: string }) => {
     if (/nơi khác|thiết bị khác/.test(error.message)) { stopped = true; onSaveStatus('replaced'); } else onSaveStatus('error');
   });

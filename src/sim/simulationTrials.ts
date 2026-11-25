@@ -157,7 +157,6 @@ import {
   buildMinigameLeaderboard,
   ensureMinigameLeaderboardState,
   getAllCachedCloudLeaderboards,
-  getCachedCloudLeaderboardEntries,
   getPlayerHogwartsHouse,
   HOGWARTS_HOUSE_META,
   isScoredLeaderboardGame,
@@ -587,7 +586,7 @@ export function trialsGetMinigameLeaderboard(sim: ParkSimulation,
       sim.state,
       scoredGameId,
       scope,
-      getCachedCloudLeaderboardEntries(scoredGameId),
+      undefined,
       houseFilter
     );
 }
