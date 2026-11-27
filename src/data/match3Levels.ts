@@ -2,10 +2,12 @@ import { CatalogItem, Match3BoosterId, Match3ProgressionState, ZoneDef, ZoneId }
 import { ZONES } from './zones';
 
 export const MATCH3_BOARD_SIZE = 8;
-export const MAX_MINIGAME_STAGE = 777;
+export const MAX_MINIGAME_STAGE = 7777;
 export const MAX_MATCH3_STAGE = 7777;
-export const TOTAL_MINIGAME_STAGES = MAX_MATCH3_STAGE + MAX_MINIGAME_STAGE * 5; // 7,777 + 5 × 777 = 11,662 stages
+export const TOTAL_MINIGAME_STAGES = MAX_MATCH3_STAGE + MAX_MINIGAME_STAGE * 5; // 6 × 7,777 = 46,662 stages
 export const MAX_MATCH3_HEARTS = 5;
+
+const LEGACY_STAGE_STAR_CURVE_CAP = 777;
 
 export function getMaxStageForDiscipline(kind: string): number {
   return kind === 'match3' ? MAX_MATCH3_STAGE : MAX_MINIGAME_STAGE;
@@ -188,7 +190,7 @@ const MILESTONE_BOSS_TITLES: Record<number, { guardian: string; title: string; t
   7777: {
     guardian: 'Chúa Tể Hắc Ám Bất Diệt — Đỉnh Tháp Vĩnh Hằng',
     title: 'ĐẠI KẾT CỤC VĨNH HẰNG ĐỈNH 7777',
-    tag: 'Đại Kết Giới Tối Thượng 7777 — Đỉnh Vinh Quang Bùa Gặt',
+    tag: 'Đại Kết Giới Tối Thượng 7777 — Đỉnh Vinh Quang Tháp Phép Thuật',
   },
 };
 
@@ -205,7 +207,7 @@ export function getMilestoneBossMeta(rawStage: number): MilestoneBossMeta | null
 }
 
 export function getMinigameDifficultyTier(rawStage: number): MinigameDifficultyTier {
-  const s = Math.max(1, Math.min(MAX_MATCH3_STAGE, Math.floor(rawStage)));
+  const s = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(rawStage)));
   if (s <= 25) return { tierIndex: 1, label: 'Tân Sinh Nhập Môn', badgeEmoji: '🌱' };
   if (s <= 100) return { tierIndex: 2, label: 'Học Trò Hang Sóc', badgeEmoji: '🌿' };
   if (s <= 220) return { tierIndex: 3, label: 'Phù Thủy Thực Chiến', badgeEmoji: '⚡' };
@@ -219,12 +221,12 @@ export function getMinigameDifficultyTier(rawStage: number): MinigameDifficultyT
 /**
  * Unified base Star reward curve:
  * - Stages 1..777 sum to exactly 1,455 🌟 per discipline (preserving the 7,150 🌟 estate economy).
- * - Stages 778..7777 continue rewarding Ascension progress in Bùa Gặt up to Stage 7777.
+ * - Stages 778..7777 continue rewarding Ascension progress across all minigames up to Stage 7777.
  */
 export function getStageStarReward(rawStage: number): number {
-  const s = Math.max(1, Math.min(MAX_MATCH3_STAGE, Math.floor(rawStage)));
-  if (s <= MAX_MINIGAME_STAGE) {
-    if (s === MAX_MINIGAME_STAGE) return 6;
+  const s = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(rawStage)));
+  if (s <= LEGACY_STAGE_STAR_CURVE_CAP) {
+    if (s === LEGACY_STAGE_STAR_CURVE_CAP) return 6;
     if (s % 10 === 0) return s >= 500 ? 5 : s >= 200 ? 4 : 3;
     if (s % 10 === 5) return s >= 300 ? 3 : 2;
     if (s >= 250 && s % 5 === 3) return 2;
@@ -232,7 +234,7 @@ export function getStageStarReward(rawStage: number): number {
     if (s >= 560) return 2;
     return 1;
   }
-  if (s === MAX_MATCH3_STAGE) return 8;
+  if (s === MAX_MINIGAME_STAGE) return 8;
   if (s % 1111 === 0 || s % 1000 === 0 || s % 111 === 0) return 6;
   if (s % 10 === 0) return 5;
   if (s % 10 === 5) return 3;

@@ -351,7 +351,7 @@ export const STORY_QUESTS: Omit<QuestDef, 'progress' | 'completed' | 'claimed'>[
     giverEmoji: '🍬',
     title: 'Chương 4.2: Tiệm Kẹo Công Tước Mật Honeydukes (Cấp 17)',
     dialogue:
-      'Đạt Cấp 17 và dựng Tiệm Kẹo Honeydukes mái hồng xanh rực rỡ — cổng dẫn thẳng lên Gác Xép Bùa Gặt 777 màn!',
+      'Đạt Cấp 17 và dựng Tiệm Kẹo Honeydukes mái hồng xanh rực rỡ — cổng dẫn thẳng lên Gác Xép Bùa Gặt 7.777 màn!',
     objectiveType: 'build_item',
     targetId: 'burrow_honeydukes_canon',
     targetAmount: 1,

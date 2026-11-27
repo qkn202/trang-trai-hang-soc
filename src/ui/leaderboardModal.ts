@@ -252,7 +252,7 @@ export class LeaderboardModalController {
       const cupTag = s.cupContributionPoints > 0
         ? `<span class="hs-lb-house-pts">· +${s.cupContributionPoints} đ Nhà</span>`
         : '';
-      const allTimeCompact = s.allTimeStageDisplayVi.replace(/\/\d+$/, '');
+      const allTimeCompact = s.allTimeStageDisplayVi.replace(/\/[\d.,]+$/, '');
       return `
       <li class="hs-lb-row is-game">
         <img class="hs-lb-av" src="${s.meta.spriteIcon}" alt="">

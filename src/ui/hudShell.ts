@@ -50,6 +50,7 @@ import {
   getUpgradePuzzleStarCost,
   getZonePuzzleStarCost,
   MAX_MATCH3_HEARTS,
+  MAX_MATCH3_STAGE,
   MAX_MINIGAME_STAGE,
 } from '../data/match3Levels';
 import { getZoneById, GRID_SIZE, ZONES } from '../data/zones';
@@ -336,16 +337,16 @@ export function shellMountDOM(hud: GameHUD): void {
           <!-- HPVN 15/11: each group has a small name; seven games by their short tab names plus BXH, on the same 3-column grid -->
           <p class="hg-menu-group" id="hgMenuGroupGames">Trò chơi</p>
           <div class="hg-menu-games-pills" role="group" aria-labelledby="hgMenuGroupGames">
-            <button id="btnOpenMatch3" type="button" data-switch-minigame="match3" class="hg-game-pill" title="Bùa Gặt Honeydukes — 7.777 Màn (Phím J)">
-              Bùa Gặt <small id="lblMatch3Lv" class="sr-only-hud">1/7777</small>
+            <button id="btnOpenMatch3" type="button" data-switch-minigame="match3" class="hg-game-pill" title="Bùa Gặt Honeydukes — ${MAX_MATCH3_STAGE.toLocaleString('vi-VN')} Màn (Phím J)">
+              Bùa Gặt <small id="lblMatch3Lv" class="sr-only-hud">1/${MAX_MATCH3_STAGE}</small>
             </button>
-            <button id="btnOpenPuzzleArcade" type="button" data-switch-minigame="caro" class="hg-game-pill" title="Dò Mìn Phép Thuật (Phím K)">
-              Dò Mìn <small id="lblArcadeTowerLv" class="sr-only-hud">0/3885</small>
+            <button id="btnOpenPuzzleArcade" type="button" data-switch-minigame="caro" class="hg-game-pill" title="Dò Mìn Phép Thuật — ${MAX_MINIGAME_STAGE.toLocaleString('vi-VN')} Màn (Phím K)">
+              Dò Mìn <small id="lblArcadeTowerLv" class="sr-only-hud">0/${MAX_MINIGAME_STAGE * 5}</small>
             </button>
-            <button type="button" data-switch-minigame="sudoku" class="hg-game-pill" aria-label="Số Học Huyền Bí">Số Học</button>
-            <button type="button" data-switch-minigame="blocks" class="hg-game-pill" aria-label="Sinh Vật Huyền Bí">Sinh Vật</button>
-            <button type="button" data-switch-minigame="jigsaw" class="hg-game-pill" aria-label="Tranh Ghép Phép Thuật">Tranh Ghép</button>
-            <button type="button" data-switch-minigame="chess" class="hg-game-pill" aria-label="Bắn Cá Hồ Đen">Bắn Cá</button>
+            <button type="button" data-switch-minigame="sudoku" class="hg-game-pill" aria-label="Số Học Huyền Bí" title="Số Học Huyền Bí — ${MAX_MINIGAME_STAGE.toLocaleString('vi-VN')} Màn">Số Học</button>
+            <button type="button" data-switch-minigame="blocks" class="hg-game-pill" aria-label="Sinh Vật Huyền Bí" title="Sinh Vật Huyền Bí — ${MAX_MINIGAME_STAGE.toLocaleString('vi-VN')} Màn">Sinh Vật</button>
+            <button type="button" data-switch-minigame="jigsaw" class="hg-game-pill" aria-label="Tranh Ghép Phép Thuật" title="Tranh Ghép Phép Thuật — ${MAX_MINIGAME_STAGE.toLocaleString('vi-VN')} Màn">Tranh Ghép</button>
+            <button type="button" data-switch-minigame="chess" class="hg-game-pill" aria-label="Bắn Cá Hồ Đen" title="Bắn Cá Hồ Đen — ${MAX_MINIGAME_STAGE.toLocaleString('vi-VN')} Màn">Bắn Cá</button>
             <button type="button" data-switch-minigame="seedquiz" class="hg-game-pill" aria-label="Học Viện Thần Chú">Thần Chú</button>
           </div>
 

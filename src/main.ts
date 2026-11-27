@@ -5,6 +5,7 @@ import './styles/hudAndMatch3.css';
 import './styles/minigameHalls.css';
 import { getCatalogItem } from './data/catalog';
 import { getLevelInfo } from './data/levels';
+import { MAX_MATCH3_STAGE, MAX_MINIGAME_STAGE } from './data/match3Levels';
 import { TUTORIAL_STEPS } from './data/quests';
 import { GRID_SIZE } from './data/zones';
 import { MagicalAudio } from './engine/audio';
@@ -418,8 +419,8 @@ async function bootstrap(): Promise<void> {
   } else if (dlgParam === 'match3') {
     const m3LvParam = Number(params.get('m3level') || 0);
     const maxAllowedM3 = isDevHostAllowed
-      ? 7777
-      : Math.min(7777, (sim.state.match3.maxClearedLevel ?? 0) + 1);
+      ? MAX_MATCH3_STAGE
+      : Math.min(MAX_MATCH3_STAGE, (sim.state.match3.maxClearedLevel ?? 0) + 1);
     const safeM3Lv =
       Number.isFinite(m3LvParam) && m3LvParam >= 1 ? Math.min(maxAllowedM3, Math.floor(m3LvParam)) : undefined;
     const allowDevJump = Boolean(
@@ -459,7 +460,19 @@ async function bootstrap(): Promise<void> {
       pmode === 'jigsaw'
         ? pmode
         : undefined;
-    hud.openPuzzleArcadeDialog(validMode);
+    const pStageParam = Number(params.get('pstage') || 0);
+    const clearedForMode = validMode ? sim.getDisciplineStageInfo(validMode).clearedStages : 0;
+    const maxAllowedPa = isDevHostAllowed
+      ? MAX_MINIGAME_STAGE
+      : Math.min(MAX_MINIGAME_STAGE, clearedForMode + 1);
+    const safePStage =
+      validMode && Number.isFinite(pStageParam) && pStageParam >= 1
+        ? Math.min(maxAllowedPa, Math.floor(pStageParam))
+        : undefined;
+    const allowPaDevJump = Boolean(
+      isDevHostAllowed && validMode && safePStage && safePStage > clearedForMode + 1
+    );
+    hud.openPuzzleArcadeDialog(validMode, safePStage, allowPaDevJump);
   } else if (dlgParam === 'neighbors' || dlgParam === 'friends') {
     hud.openNeighborDialog();
   } else if (dlgParam === 'feast') {
@@ -597,6 +610,7 @@ async function bootstrap(): Promise<void> {
     'dialog',
     'm3level',
     'pmode',
+    'pstage',
     'lbgame',
     'lbscope',
     'sqtab',

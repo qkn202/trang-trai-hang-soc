@@ -63,7 +63,7 @@ export class JigsawPuzzleEngine {
   private nextZ = 10;
 
   constructor(stage: number) {
-    this.stage = Math.max(1, Math.floor(stage));
+    this.stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(Number(stage) || 1)));
     const paintIdx = (this.stage - 1) % JIGSAW_PAINTINGS.length;
     this.painting = JIGSAW_PAINTINGS[paintIdx];
 
@@ -461,7 +461,7 @@ export class RunicBlockPuzzleEngine {
   private nextUid = 1;
 
   constructor(stage: number, forceSubMode?: 'tangram' | 'blast') {
-    this.stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(stage)));
+    this.stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(Number(stage) || 1)));
     this.rng = mulberry32(this.stage * 104729 + 57);
     const defaultSubMode: 'tangram' | 'blast' = this.stage % 2 === 1 ? 'tangram' : 'blast';
     this.subModeLocked = isArcadeSubModeLocked(this.stage);
@@ -477,13 +477,17 @@ export class RunicBlockPuzzleEngine {
     this.assistGoldCost = Math.min(260, 85 + Math.floor(this.stage / 6));
 
     const stars = getStageStarReward(this.stage);
-    const effectiveCap = Math.min(this.stage, 260) + Math.floor(Math.max(0, this.stage - 260) * 0.35);
+    const effectiveCap =
+      Math.min(this.stage, 260) +
+      Math.floor(Math.max(0, Math.min(this.stage, 777) - 260) * 0.35) +
+      Math.min(420, Math.floor(Math.max(0, this.stage - 777) * 0.06));
+    const isFinaleOr777 = this.stage === 777 || this.stage === MAX_MINIGAME_STAGE;
     this.reward = {
       stars,
-      sand: this.stage === MAX_MINIGAME_STAGE ? 5 : this.milestoneBoss || this.stage % 10 === 0 ? 2 : 1,
+      sand: isFinaleOr777 ? 5 : this.milestoneBoss || this.stage % 10 === 0 ? 2 : 1,
       gold: Math.round(75 + effectiveCap * 3.8 + stars * 18),
       xp: Math.round(55 + effectiveCap * 2.8 + stars * 12),
-      isMasterpiece: Boolean(this.milestoneBoss) || this.stage % 10 === 0 || this.stage === MAX_MINIGAME_STAGE,
+      isMasterpiece: Boolean(this.milestoneBoss) || this.stage % 10 === 0 || isFinaleOr777,
     };
 
     this.grid = Array.from({ length: BLOCK_BOARD_SIZE }, () =>
@@ -534,10 +538,10 @@ export class RunicBlockPuzzleEngine {
   }
 
   private generateProceduralTangramMold(): BlueprintTemplate {
-    // Grow mold cell count from 26 cells (stage 16) up to 60 cells (stage 700..777)
+    // Grow mold cell count from 26 cells (stage 16) up to 60 cells (stage 777), holding at 60 for Ascension 778..7777
     const targetCells = Math.min(
       60,
-      26 + Math.floor(((this.stage - 16) / (MAX_MINIGAME_STAGE - 16)) * 34)
+      26 + Math.floor(((this.stage - 16) / 761) * 34)
     );
     const active = Array.from({ length: BLOCK_BOARD_SIZE }, () =>
       Array<boolean>(BLOCK_BOARD_SIZE).fill(false)
@@ -686,7 +690,7 @@ export class RunicBlockPuzzleEngine {
   }
 
   private initBlockBlastStage(): void {
-    // Scale pre-placed symmetrical rune blocks from 6 (early) up to 22 (stages 500..777)
+    // Scale pre-placed symmetrical rune blocks from 6 (early) up to 22 (stages 500..7777)
     const pairs =
       this.stage <= 25
         ? 3 + (this.stage % 2)
@@ -719,7 +723,7 @@ export class RunicBlockPuzzleEngine {
       placedCoords.push([r, c]);
       placedPairs++;
     }
-    // Stages 45..777 (or Milestone Boss >= 30): Upgrade 1..3 symmetric pairs into 2-Layer Obsidian Rune Seals!
+    // Stages 45..7777 (or Milestone Boss >= 30): Upgrade 1..3 symmetric pairs into 2-Layer Obsidian Rune Seals!
     if ((this.stage >= 45 || (this.milestoneBoss && this.stage >= 30)) && placedCoords.length > 0) {
       const targetObsidianPairs = Math.min(
         placedCoords.length,
@@ -1119,7 +1123,7 @@ export class TileMatchZenEngine {
   private rng: () => number;
 
   constructor(stage: number) {
-    this.stage = Math.max(1, Math.floor(stage));
+    this.stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(Number(stage) || 1)));
     this.rng = mulberry32(this.stage * 65537 + 911);
 
     const diffTier = this.stage % 5 === 0 ? 3 : this.stage >= 3 ? 2 : 1;

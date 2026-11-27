@@ -159,7 +159,7 @@ export const CHESS_TACTIC_PRESETS: ReadonlyArray<ChessTacticPreset> = [
     fen: '5rk1/5ppp/8/8/8/6Q1/5PPP/R5K1 w - - 0 1',
     tier: 2,
   },
-  // Tier 3: Deep Sacrifices, Endgame Studies & Middlegame Storms (Stages 140..777)
+  // Tier 3: Deep Sacrifices, Endgame Studies & Middlegame Storms (Stages 140..7777)
   {
     title: 'Đại Chiến Bàn Cờ Đá McGonagall',
     subtitle: 'Phối hợp Hậu, Tượng, Chiến Mã & Song Xe phá vỡ phòng tuyến Đá Đen!',
@@ -298,7 +298,7 @@ export interface ResolvedChessTacticEntry {
   mirrored: boolean;
 }
 
-export const CHESS_UNIQUE_TACTICS_DECK: ReadonlyArray<ResolvedChessTacticEntry> = (() => {
+const CHESS_TACTICS_DECK_BUNDLE = (() => {
   const combined: ReadonlyArray<ChessTacticPreset> = [
     ...CHESS_TACTIC_PRESETS,
     ...(EXTRA_CHESS_TACTICS as ReadonlyArray<ChessTacticPreset>),
@@ -327,28 +327,48 @@ export const CHESS_UNIQUE_TACTICS_DECK: ReadonlyArray<ResolvedChessTacticEntry> 
   const m2 = takeUnique(t2, true);
   const m1 = takeUnique(t1, true);
 
+  const tier1Prefix = u1.slice(0, 15);
+  const tier2Prefix = u2.slice(0, 41);
+  const highTierCore = [...u3, ...m3, ...u2.slice(41), ...m2];
+  const highTierStart = tier1Prefix.length + tier2Prefix.length; // 56
+  const highTierEnd = highTierStart + highTierCore.length;
+
   // Ordinals 0..14 (stage <= 25): Tier 1
   // Ordinals 15..55 (26 <= stage <= 150, 41 stages): Tier 2
   // Ordinals 56..264 (151 <= stage <= 777, 209 stages): Tier 3 + mirrored Tier 3 + advanced Tier 2
-  return [
-    ...u1.slice(0, 15),
-    ...u2.slice(0, 41),
-    ...u3,
-    ...m3,
-    ...u2.slice(41),
-    ...m2,
+  // Ascension stages 778..7777 continue seamlessly within [highTierStart, highTierEnd) (Tier 3 & Tier 2 only)
+  const deck: ReadonlyArray<ResolvedChessTacticEntry> = [
+    ...tier1Prefix,
+    ...tier2Prefix,
+    ...highTierCore,
     ...u1.slice(15),
     ...m1,
   ];
+  return { deck, highTierStart, highTierEnd };
 })();
 
+export const CHESS_UNIQUE_TACTICS_DECK: ReadonlyArray<ResolvedChessTacticEntry> =
+  CHESS_TACTICS_DECK_BUNDLE.deck;
+
 export function getChessTacticalOrdinal(stage: number): number {
-  if (stage <= 10) return Math.max(0, stage - 1); // 0..9
-  if ((stage - 13) % 3 === 0) {
-    return 10 + Math.floor((stage - 13) / 3); // 10..264 across stages 13..775
+  const safeStage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(Number(stage) || 1)));
+  if (safeStage <= 10) return Math.max(0, safeStage - 1); // 0..9
+  if (safeStage <= 777) {
+    if ((safeStage - 13) % 3 === 0) {
+      return 10 + Math.floor((safeStage - 13) / 3); // 10..264 across stages 13..775
+    }
+    // Fallback for forced 'tactics' in unit tests on non-default stages 11..777
+    return 265 + safeStage;
   }
-  // Fallback for forced 'tactics' in unit tests on non-default stages > 10
-  return 265 + stage;
+  // Ascension stages 778..7777: continue seamlessly from ordinal 265 strictly across Tier 3 & Tier 2 pool
+  const { highTierStart, highTierEnd } = CHESS_TACTICS_DECK_BUNDLE;
+  const span = Math.max(1, highTierEnd - highTierStart);
+  const ascStep =
+    (safeStage - 13) % 3 === 0
+      ? Math.floor((safeStage - 778) / 3)
+      : safeStage - 777;
+  const seamlessOffset = Math.max(0, 265 - highTierStart);
+  return highTierStart + ((seamlessOffset + ascStep) % span);
 }
 
 export const PIECE_VALUES: Record<ChessPieceType, number> = {

@@ -1329,28 +1329,33 @@ export class Match3ModalController {
         return `<img src="/game/trang-trai-hang-soc/sprites/m3_icon_star.webp" alt="" class="m3-victory-star-img ${isCenter ? 'center' : ''}" />`;
       }).join('');
 
+      const isM3PeakWin =
+        this.sim.getDisciplineStageInfo('match3').isMaxed || lv.id >= MAX_MATCH3_STAGE;
+
       return `
         <div class="m3-board-overlay" role="region" aria-label="Chiến thắng màn giải đố">
           <div class="m3-overlay-card victory">
             <div class="m3-victory-stars-row">${starIconsHtml}</div>
             <div class="pa-victory-title">${
-              vs.isMasterReplay
-                ? `${MAX_MATCH3_STAGE}/${MAX_MATCH3_STAGE} · ${escapeHtml(lv.title)}`
-                : lv.id >= MAX_MATCH3_STAGE
-                  ? `${MAX_MATCH3_STAGE}/${MAX_MATCH3_STAGE} · Xong`
-                  : `Màn ${lv.id} · Xong`
+              isM3PeakWin
+                ? vs.isMasterReplay
+                  ? `${MAX_MATCH3_STAGE}/${MAX_MATCH3_STAGE} · ${escapeHtml(lv.title)}`
+                  : `${MAX_MATCH3_STAGE}/${MAX_MATCH3_STAGE} · Xong`
+                : `Màn ${lv.id} · Xong`
             }</div>
             <div class="m3-reward-badges">
               ${
                 vs.starsEarned > 0
                   ? `<span class="m3-reward-chip star">+${vs.starsEarned} ★</span>`
-                  : `<span class="m3-reward-chip star">${MAX_MATCH3_STAGE}/${MAX_MATCH3_STAGE}</span>`
+                  : isM3PeakWin
+                    ? `<span class="m3-reward-chip star">${MAX_MATCH3_STAGE}/${MAX_MATCH3_STAGE}</span>`
+                    : ''
               }
               ${vs.goldEarned > 0 ? `<span class="m3-reward-chip">+${vs.goldEarned} Sickle</span>` : ''} <!-- HPVN: Sickle reward -->
             </div>
             <div class="pa-victory-actions">
               <button id="btnM3NextLevel" type="button" class="brass-btn gold-cta">
-                ${vs.isMasterReplay || lv.id >= MAX_MATCH3_STAGE ? `Chơi lại` : `Màn ${vs.nextLevel}`}
+                ${isM3PeakWin ? `Chơi lại` : `Màn ${vs.nextLevel}`}
               </button>
               <button id="btnM3VictoryLeaderboard" type="button" class="brass-btn">Hạng ${m3Rank}</button>
               <button id="btnM3UseStarsInPark" type="button" class="brass-btn">Về vườn · ${st.sandboxMode ? '∞' : m3.stars} ★</button>

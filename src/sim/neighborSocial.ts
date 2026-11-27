@@ -276,8 +276,8 @@ export const NEIGHBOR_PRESET_NOTES: ReadonlyArray<NeighborPresetNoteMeta> = [
   {
     id: 'lucky_stars',
     emoji: '🌟',
-    shortVi: 'Vượt tháp 777',
-    textVi: 'Chúc bạn chinh phục đỉnh 777 màn và gom thật nhiều Sao!',
+    shortVi: 'Vượt tháp 7777',
+    textVi: 'Chúc bạn chinh phục đỉnh 7.777 màn và gom thật nhiều Sao!',
   },
   {
     id: 'owl_greetings',

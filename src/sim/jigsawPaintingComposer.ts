@@ -2,6 +2,7 @@ import {
   JIGSAW_PAINTINGS,
   JigsawPaintingDef,
   MAX_MINIGAME_STAGE,
+  getMilestoneBossMeta,
   isArcadeSubModeLocked,
   mulberry32,
 } from './puzzleShared';
@@ -290,9 +291,12 @@ const HOUSE_PALETTES: ReadonlyArray<{
   },
 ];
 
-const MILESTONE_BOSS_STAGE_SET = new Set<number>([
+// Ordered milestone boss ordinals: indices 0..10 preserve legacy 25..777 artworks identically;
+// indices 11..27 assign unique Ascension milestone artworks across 1000..7777.
+const ORDERED_MILESTONE_BOSS_STAGES: readonly number[] = [
   25, 50, 100, 150, 200, 300, 400, 500, 600, 700, 777,
-]);
+  1000, 1111, 1500, 2000, 2222, 2500, 3000, 3333, 4000, 4444, 5000, 5555, 6000, 6666, 7000, 7500, 7777,
+];
 
 const WEATHER_MOTIFS: readonly JigsawStageArtworkSpec['weatherMotif'][] = [
   'starlight',
@@ -329,8 +333,9 @@ const CHAPTER_EPITHETS_VI: readonly string[] = [
 const specCache = new Map<number, JigsawStageArtworkSpec>();
 
 /**
- * Tạo đặc tả bức tranh độc bản cho từng màn `1..777`.
- * Cam kết 777/777 màn có `paintingId`, `titleVi` và `signatureKey` khác biệt hoàn toàn.
+ * Tạo đặc tả bức tranh độc bản cho từng màn `1..7777`.
+ * Cam kết 7.777/7.777 màn có `paintingId`, `titleVi` và `signatureKey` khác biệt hoàn toàn,
+ * đồng thời giữ nguyên 100% đặc tả màn `1..777`.
  */
 export function getJigsawStageArtworkSpec(rawStage: number): JigsawStageArtworkSpec {
   const stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(Number(rawStage) || 1)));
@@ -370,9 +375,10 @@ export function getJigsawStageArtworkSpec(rawStage: number): JigsawStageArtworkS
     return spec;
   }
 
-  // Các màn Đại Trùm Mốc (25, 50, 100, ..., 777) là bức Khung Vòm Đại Kiệt Tác Hoàng Kim độc bản
-  if (MILESTONE_BOSS_STAGE_SET.has(stage)) {
-    const bossOrd = Array.from(MILESTONE_BOSS_STAGE_SET).indexOf(stage);
+  // Các màn Đại Trùm Mốc (25..777 và 1000..7777) là bức Khung Vòm Đại Kiệt Tác Hoàng Kim độc bản
+  if (getMilestoneBossMeta(stage) !== null) {
+    const knownOrd = ORDERED_MILESTONE_BOSS_STAGES.indexOf(stage);
+    const bossOrd = knownOrd >= 0 ? knownOrd : stage;
     const base = JIGSAW_PAINTINGS[(bossOrd * 3 + 8) % JIGSAW_PAINTINGS.length];
     const dio = DIORAMA_SUBJECT_GROUPS[bossOrd % DIORAMA_SUBJECT_GROUPS.length];
     const spec: JigsawStageArtworkSpec = {
@@ -395,7 +401,7 @@ export function getJigsawStageArtworkSpec(rawStage: number): JigsawStageArtworkS
     return spec;
   }
 
-  // Từ màn 20..776: đan xen 7 trường phái "Chụp Cảnh Diorama" & "Tự Vẽ Thế Giới Harry Potter"
+  // Từ màn 20..7776 (non-boss): đan xen 7 trường phái "Chụp Cảnh Diorama" & "Tự Vẽ Thế Giới Harry Potter"
   const styleCycle: readonly JigsawArtStyle[] = [
     'diorama_capture',
     'stained_glass',
@@ -501,7 +507,7 @@ export function getJigsawStageArtworkSpec(rawStage: number): JigsawStageArtworkS
 }
 
 // ============================================================================
-// BỘ CỌ VẼ & DÀN DỰNG NHIẾP ẢNH CANVAS 2D ĐỘ PHÂN GIẢI CAO (777 BỨC ĐỘC BẢN)
+// BỘ CỌ VẼ & DÀN DỰNG NHIẾP ẢNH CANVAS 2D ĐỘ PHÂN GIẢI CAO (7.777 BỨC ĐỘC BẢN)
 // ============================================================================
 
 function drawCoverImage(
@@ -1232,7 +1238,7 @@ function drawMarauderAstronomyArt(
 }
 
 /**
- * Vẽ hoàn chỉnh bức tranh Harry Potter của màn `stage` (`1..777`) lên `ctx` ở kích thước `(w, h)`.
+ * Vẽ hoàn chỉnh bức tranh Harry Potter của màn `stage` (`1..7777`) lên `ctx` ở kích thước `(w, h)`.
  * Hàm trả về `usedFallbackForPendingImage = true` nếu có ảnh sơn dầu mạng đang tải dở để UI tự re-bake khi tải xong.
  */
 export function renderJigsawStagePainting(

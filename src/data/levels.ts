@@ -6,7 +6,7 @@ export const MAX_LEVEL = 100;
 
 /**
  * Số màn mini-game mới cần vượt qua ở Cấp Giải Đố `level` để thăng lên `level + 1`.
- * Tổng cộng từ Cấp 1 -> Cấp 100 = 3.435 màn thắng độc nhất trên tổng 3.885 màn (5 trò × 777 màn),
+ * Tổng cộng từ Cấp 1 -> Cấp 100 = 3.435 màn thắng độc nhất trên tổng 46.662 màn (6 trò × 7.777 màn),
  * đảm bảo hành trình ít nhất 200+ giờ chơi thực tế mà phút đầu tiên vẫn lên cấp cực mượt!
  */
 export function getWinsRequiredForNextLevel(level: number): number {
@@ -40,37 +40,37 @@ const FEATURED_DISCIPLINE_ROTATION: ReadonlyArray<{
     kind: 'caro',
     icon: '🧨',
     shortVi: 'Dò Mìn Phép Thuật',
-    descVi: 'Mở sạch bãi đá cổ và cắm cờ chuẩn xác trong Dò Mìn Phép Thuật (777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
+    descVi: 'Mở sạch bãi đá cổ và cắm cờ chuẩn xác trong Dò Mìn Phép Thuật (7.777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
   },
   {
     kind: 'sudoku',
     icon: '🔢',
     shortVi: 'Số Học Huyền Bí',
-    descVi: 'Điền chuẩn xác bảng 9×9 trong Số Học Huyền Bí (777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
+    descVi: 'Điền chuẩn xác bảng 9×9 trong Số Học Huyền Bí (7.777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
   },
   {
     kind: 'chess',
     icon: '🎯',
     shortVi: 'Bắn Cá Hồ Đen',
-    descVi: 'Điều khiển đại bác ngọc trai săn đàn cá phép trong Bắn Cá Hồ Đen (777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
+    descVi: 'Điều khiển đại bác ngọc trai săn đàn cá phép trong Bắn Cá Hồ Đen (7.777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
   },
   {
     kind: 'blocks',
     icon: '🦄',
     shortVi: 'Sinh Vật Huyền Bí',
-    descVi: 'Ghép đôi các loài trong Sinh Vật Huyền Bí bằng đường nối tối đa 3 đoạn thẳng (777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
+    descVi: 'Ghép đôi các loài trong Sinh Vật Huyền Bí bằng đường nối tối đa 3 đoạn thẳng (7.777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
   },
   {
     kind: 'jigsaw',
     icon: '🧩',
     shortVi: 'Tranh Ghép Phép Thuật',
-    descVi: 'Phục chế bức tranh thế giới phù thủy trong Tranh Ghép Phép Thuật (777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
+    descVi: 'Phục chế bức tranh thế giới phù thủy trong Tranh Ghép Phép Thuật (7.777 màn) để tích tiến độ lên cấp + thưởng Sao Đề Cử & +1 ⏳ Cát!',
   },
 ];
 
 /**
  * Môn Đề Cử Cụ Dumbledore ở mỗi Cấp Điền Trang:
- * Vượt màn mới ở BẤT KỲ mini-game nào (chưa chạm trần 777/777) đều cộng +1 tiến độ lên cấp;
+ * Vượt màn mới ở BẤT KỲ mini-game nào (chưa chạm trần 7.777/7.777) đều cộng +1 tiến độ lên cấp;
  * chơi đúng Môn Đề Cử nhận thêm +1 🌟 Sao mở màn cấp (và mỗi 5 trận đề cử), +1 ⏳ Cát & +35% Sickle!
  */
 export function getLevelTrialRequirement(

@@ -1,4 +1,4 @@
-// Engine Match-3 Chiến Thuật chuẩn Playrix Gardenscapes × Hogwarts — 7 Năm Học (777 Màn, Khay 7×7..10×10)
+// Engine Match-3 Chiến Thuật chuẩn Playrix Gardenscapes × Hogwarts — 7 Năm Học × 10 Bậc Tinh Thông (7.777 Màn, Khay 7×7..10×10)
 // Đầy đủ Bậc Thang Thuốc Nổ Bán Kính (Pháo Hoa, Bom, Thuốc Nổ, Thùng TNT), Chong Chóng Tầm Thủ 2×2,
 // Thanh Nạp 🌈 Cầu Vồng Tích Năng (0–100%), Chạm Đúp Nổ Tại Chỗ, Kéo Đổi Ô Bất Kỳ Để Nổ & Đại Combo Kép!
 

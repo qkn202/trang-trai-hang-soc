@@ -10,8 +10,10 @@
  *    và tính chuỗi băm kép 64-bit (`chainHi`, `chainLo`) bắt đầu từ `(gameId, stage, seed, nonce)`.
  * 3. Server (`BurrowAuthoritativeBackend`) tái tính lại chính xác 100% `(chainHi, chainLo)` từ đầu chuỗi,
  *    kiểm tra nhịp độ thao tác con người (chống macro 0ms), thời gian tối thiểu theo bộ môn, trần điểm hợp lý
- *    theo tầng tháp (1..777), và khử phát lại (`nonce` anti-replay).
+ *    theo tầng tháp (1..7777), và khử phát lại (`nonce` anti-replay).
  */
+
+import { MAX_MINIGAME_STAGE } from '../data/match3Levels';
 
 export type ProofOfPlayGameId = 'match3' | 'caro' | 'sudoku' | 'chess' | 'blocks' | 'jigsaw';
 
@@ -201,8 +203,8 @@ export function getMinHumanElapsedMs(gameId: ProofOfPlayGameId, moveCount: numbe
   }
 }
 
-export function getMaxStageForProofGame(gameId: string): number {
-  return gameId === 'match3' ? 7777 : 777;
+export function getMaxStageForProofGame(_gameId: string): number {
+  return MAX_MINIGAME_STAGE;
 }
 
 export function getMaxPlausibleSessionScore(gameId: ProofOfPlayGameId, stage: number): number {
@@ -226,7 +228,7 @@ export function getMaxPlausibleSessionScore(gameId: ProofOfPlayGameId, stage: nu
 }
 
 /**
- * Trần điểm xếp hạng tổng hợp hợp lý cho một tầng tháp (`1..7777` với Bùa Gặt, `1..777` với các môn khác).
+ * Trần điểm xếp hạng tổng hợp hợp lý cho một tầng tháp (`1..7777` trên cả 6 bộ môn khảo thí).
  * Dùng cho cả luồng PoP trực tiếp lẫn luồng đồng bộ hồ sơ cũ (ngăn chặn bơm `ratingScore: 9999999` qua DevTools).
  */
 export function getMaxPlausibleLeaderboardRating(

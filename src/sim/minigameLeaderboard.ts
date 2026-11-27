@@ -11,7 +11,7 @@ import {
 } from '../types/game';
 import { isNpcNeighborProfile } from './neighborSocial';
 import { CURRENT_ARCADE_DISCIPLINE_REV } from './puzzleShared';
-import { MAX_MATCH3_STAGE } from '../data/match3Levels';
+import { MAX_MATCH3_STAGE, MAX_MINIGAME_STAGE } from '../data/match3Levels';
 import { flushFarmSave, identity, request } from '../hpvn/bridge';
 import {
   computeHousePointsForLeaderboardRank,
@@ -53,7 +53,7 @@ export function normalizeScoredLeaderboardGame(gameId?: string): LeaderboardGame
   return gameId && isScoredLeaderboardGame(gameId) ? gameId : 'match3';
 }
 
-export const MAX_PUZZLE_TOWER_STAGE = 777;
+export const MAX_PUZZLE_TOWER_STAGE = MAX_MINIGAME_STAGE;
 
 export interface LeaderboardGameMeta {
   id: LeaderboardGameId;
@@ -1960,7 +1960,7 @@ export function recordMinigameSessionResult(
     weekly.stagesCleared += progress.deltaStages;
     weekly.weightedScore += progress.weightedScore;
   } else if (prevBestStage >= maxStage) {
-    // Người chơi đã chạm đỉnh tháp (777 / 7777): chơi thắng lại màn đỉnh vẫn ghi 1 màn tuần theo khung cao nhất
+    // Người chơi đã chạm đỉnh tháp (7777): chơi thắng lại màn đỉnh vẫn ghi 1 màn tuần theo khung cao nhất
     weekly.stagesCleared += 1;
     weekly.weightedScore += computeStageDifficultyPoints(maxStage, stageBands);
   }

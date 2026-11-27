@@ -1113,8 +1113,8 @@ export interface PuzzleArcadeState {
 export interface Match3ProgressionState {
   stars: number; // 🌟 Sao Phép Thuật (Gardenscapes / Royal Match central progression currency)
   totalStarsEarned: number;
-  currentLevel: number; // Tower Stage 1 -> 777
-  maxClearedLevel?: number; // Highest cleared Match-3 stage (0 -> 777)
+  currentLevel: number; // Tower Stage 1 -> 7777
+  maxClearedLevel?: number; // Highest cleared Match-3 stage (0 -> 7777)
   winStreak: number; // 0..3+ Butler Gift pre-level power-up streak
   hearts: number; // 0..5 ❤️ Lives
   nextHeartAt: number; // Timestamp ms when next heart regenerates (0 when full)
@@ -1155,7 +1155,7 @@ export interface MinigameWeeklyProgress {
 }
 
 export interface MinigamePersonalRecord {
-  bestStage: number; // Highest cleared stage (0..777 / 0..7777), or combined mastery (0..500) for seedquiz
+  bestStage: number; // Highest cleared stage (0..7777), or combined mastery (0..500) for seedquiz
   highScore: number; // Best rating / cumulative score in this discipline
   bestSessionScore: number; // Best single-match score (or best streak score)
   totalWins: number; // Total victories / correct spell incantations in this discipline

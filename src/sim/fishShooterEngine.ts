@@ -179,7 +179,7 @@ export function buildFishStageMissions(
   stage: number,
   milestoneBoss: MilestoneBossMeta | null
 ): FishStageMission[] {
-  const safeStage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(stage)));
+  const safeStage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(Number(stage) || 1)));
   const rng = mulberry32((safeStage * 0x85ebca6b + 0xc2b2ae35) >>> 0);
   const tierScale = Math.min(8, Math.floor((safeStage - 1) / 45));
 
@@ -564,7 +564,7 @@ export function sanitizeSavedFishShooterSession(
   }
   const timeLimitSec = Math.max(30, Math.min(FISH_MAX_TIME_SEC, Number(r.timeLimitSec) || FISH_STAGE_TIME_LIMIT_SEC));
   const remainingSec = Math.max(0, Math.min(FISH_MAX_TIME_SEC, Number(r.remainingSec) || 0));
-  const targetScore = Math.max(200, Math.min(500000, Math.round(Number(r.targetScore) || 12500)));
+  const targetScore = Math.max(200, Math.min(1000000, Math.round(Number(r.targetScore) || 12500)));
   const score = Math.max(0, Math.min(9999999, Math.round(Number(r.score) || 0)));
   const cannonTier = r.cannonTier === 2 || r.cannonTier === 3 ? r.cannonTier : 1;
   if (r.status !== 'playing' && r.status !== 'lost') {
@@ -818,13 +818,20 @@ export class FishShooterEngine {
   }
 
   constructor(stage: number) {
-    this.stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(stage)));
+    this.stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(Number(stage) || 1)));
     this.milestoneBoss = getMilestoneBossMeta(this.stage);
     this.missions = buildFishStageMissions(this.stage, this.milestoneBoss);
     const tier = getMinigameDifficultyTier(this.stage);
     const isBoss = Boolean(this.milestoneBoss);
 
-    const rawTarget = 24500 + Math.pow(this.stage - 1, 0.82) * 680 + (isBoss ? 7500 : 0);
+    // Preserve legacy stages 1..777 identically; scale Ascension 778..7777 smoothly within playable 180s ceiling
+    const rawTarget =
+      this.stage <= 777
+        ? 24500 + Math.pow(this.stage - 1, 0.82) * 680 + (isBoss ? 7500 : 0)
+        : 24500 +
+          Math.pow(776, 0.82) * 680 +
+          Math.pow(Math.min(1, (this.stage - 777) / 7000), 0.78) * 76000 +
+          (isBoss ? 12000 : 0);
     this.targetScore = Math.round(rawTarget / 100) * 100;
     this.timeLimitSec = FISH_STAGE_TIME_LIMIT_SEC;
     this.remainingSec = this.timeLimitSec;
@@ -840,7 +847,7 @@ export class FishShooterEngine {
 
     this.reward = {
       stars: getStageStarReward(this.stage),
-      sand: isBoss ? 2 : 1,
+      sand: this.stage === MAX_MINIGAME_STAGE && MAX_MINIGAME_STAGE > 777 ? 5 : isBoss ? 2 : 1,
       gold: Math.round(54 + tier.tierIndex * 15 + (isBoss ? 48 : 0)),
       xp: Math.round(38 + tier.tierIndex * 10 + (isBoss ? 32 : 0)),
     };
@@ -919,12 +926,19 @@ export class FishShooterEngine {
         ? -def.radius - 16 - this.rng() * 55
         : this.arenaW + def.radius + 16 + this.rng() * 55;
 
-    const hpScale = 1 + Math.min(1.15, Math.pow(this.stage - 1, 0.68) * 0.018);
+    const ascRatio = this.stage > 777 ? Math.min(1, (this.stage - 777) / 7000) : 0;
+    const hpScale =
+      this.stage <= 777
+        ? 1 + Math.min(1.15, Math.pow(this.stage - 1, 0.68) * 0.018)
+        : 2.15 + ascRatio * 0.45;
     const hpBoost = species === 'leviathan_carp' && this.milestoneBoss ? 12 : 0;
     const maxHp = Math.max(2, Math.round(def.baseHp * hpScale) + hpBoost);
     const speedScale = 1 + Math.min(0.42, (this.stage - 1) * 0.0012);
     const speed = (def.minSpeed + this.rng() * (def.maxSpeed - def.minSpeed)) * speedScale;
-    const pointScale = 1 + Math.min(1.6, Math.pow(this.stage - 1, 0.72) * 0.016);
+    const pointScale =
+      this.stage <= 777
+        ? 1 + Math.min(1.6, Math.pow(this.stage - 1, 0.72) * 0.016)
+        : 2.6 + ascRatio * 0.9;
     const points = Math.round((def.basePoints * pointScale) / 10) * 10;
 
     return {

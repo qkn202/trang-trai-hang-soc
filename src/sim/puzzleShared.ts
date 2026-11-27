@@ -5,6 +5,7 @@ import {
   getMilestoneBossMeta,
   getMinigameDifficultyTier,
   getStageStarReward,
+  isMilestoneBossStage,
 } from "../data/match3Levels";
 import { PuzzleArcadeMode, PuzzleArcadeState } from "../types/game";
 
@@ -13,6 +14,7 @@ export {
   getMilestoneBossMeta,
   getMinigameDifficultyTier,
   getStageStarReward,
+  isMilestoneBossStage,
 };
 export type { MilestoneBossMeta, PuzzleArcadeMode, PuzzleArcadeState };
 

@@ -2121,7 +2121,7 @@ dialog::backdrop {
 }
 
 
-/* 777-Stage Puzzle Tower Inline Status & Locked Submode Pills */
+/* 7777-Stage Puzzle Tower Inline Status & Locked Submode Pills */
 .pa-err-inline {
   color: var(--pa-err-crimson);
   font-weight: 900;
@@ -6182,7 +6182,7 @@ body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(96px + ma
 /* ===== /HPVN UI refresh — BXH ===== */
 
 /* ===== HPVN UI refresh — level bar (owner 15/11 «thiết kế lại, tránh AI slop»; hpvn/levelBar.ts) =====
-   One bar for every minigame. Left: «Màn 4/777» (13/700) over one sub line (12, ellipsis). Right: the figures as cells
+   One bar for every minigame. Left: «Màn 4/7777» (13/700) over one sub line (12, ellipsis). Right: the figures as cells
    (icon + 13/700 tabular number, ruled apart, no «•»); a number in danger fills its cell with --hs-bad. A loss turns the bar
    itself: light red with a red rim, the message on the sub line, the rescue action where the figures were. Portrait: one
    44px band in every state, so the board under it never jumps. Landscape side dock: the cells drop under the title as one
@@ -6194,6 +6194,13 @@ body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(96px + ma
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout] .pa-side-dock .hs-lv-stats { flex: none; display: flex; align-items: center; block-size: 36px; }
 @media (max-width: 480px) {
   :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .hs-lv-stat { gap: 3px; padding: 0 5px; }
+}
+@media (max-width: 400px) {
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-layout-shell .pa-side-dock .pa-stage-banner.hs-lv { gap: var(--hs-space-1); padding-inline-start: var(--hs-space-2); }
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .hs-lv-stage { font-size: var(--hs-text-12); }
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .hs-lv-stat { gap: 2px; padding: 0 4px; }
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .hs-lv-stat :is(strong, .pa-err-inline) { font-size: var(--hs-text-12); }
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .hs-lv-stat .hs-ico { inline-size: 14px; block-size: 14px; }
 }
 /* the stage never gives way (the sub line adds nothing to the title block's minimum); Sinh Vật's shift direction is a tag on it */
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout] .pa-side-dock .hs-lv-sub .hs-lv-tag { color: var(--hs-cream); font-weight: var(--hs-weight-label); }
@@ -6212,13 +6219,14 @@ body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(96px + ma
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout] .pa-side-dock .hs-lv.is-alert .hs-lv-stat + .hs-lv-stat { box-shadow: inset 1px 0 0 rgba(185, 56, 34, 0.3); }
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout] .pa-side-dock .hs-lv-stats > .hs-lv-act { flex: none; box-sizing: border-box; block-size: 100%; min-block-size: 0; margin: 0; padding: 0 var(--hs-space-3); font-size: var(--hs-text-13); white-space: nowrap; box-shadow: none; }
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-side-dock .hs-lv-stats > .hs-lv-act { block-size: 40px; }
-/* landscape side dock (174–272px wide, 375px tall on a phone): «Màn 4/777 · sub» on one line, the cells as one 20px row under
+/* landscape side dock (174–272px wide, 375px tall on a phone): «Màn 4/7777 · sub» on one line, the cells as one 20px row under
    it. A loss keeps the 48px: the message (≤ 3 lines of 14px) takes the stage line, the
    40px rescue action sits beside it (Số Học and Cờ have no spare pixel in a 375px dock) */
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .pa-stage-banner.hs-lv { flex-wrap: wrap; row-gap: 2px; block-size: auto; padding: var(--hs-space-1) var(--hs-space-1); border-width: 0; border-radius: var(--hs-radius-m); background: none; }
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .pa-stage-banner.hs-lv.is-alert { padding: 2px 2px 2px var(--hs-space-2); border-width: var(--hs-line-shell); background: var(--hs-bad-bg); }
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .pa-stage-banner.hs-lv.is-alert:has(.hs-lv-act) { flex-wrap: nowrap; }
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .hs-lv-meta { flex: 1 1 100%; flex-direction: row; align-items: baseline; gap: var(--hs-space-1); }
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .hs-lv-stage { flex: 0 0 auto; max-inline-size: 100%; }
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .hs-lv-sub { flex: 1 1 0%; }
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .hs-lv.is-alert .hs-lv-meta { flex: 1 1 auto; }
 :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .hs-lv.is-alert .hs-lv-stage { display: none; }
@@ -6234,7 +6242,7 @@ body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(96px + ma
 /* phone landscape (<=450px tall, e.g. 844×390): 2×3 game grid so all 6 tabs fit at once, compact 40px controls without vertical stretch, no duplicate loss overlap */
 @media (max-height: 450px) and (orientation: landscape) {
   :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .pa-stage-banner.hs-lv:not(.is-alert) { row-gap: 0; padding-block: 0; }
-  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .hs-lv-stage { line-height: 16px; }
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .hs-lv-stage { font-size: var(--hs-text-12); line-height: 16px; }
   :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .hs-lv-stat { block-size: 18px; }
   :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .pa-stage-banner.hs-lv.is-alert { padding: 0 0 0 var(--hs-space-2); border-width: 0; box-shadow: inset 0 0 0 var(--hs-line-shell) var(--hs-bad); }
   :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .hs-lv.is-alert .hs-lv-sub { line-height: 13px; }
@@ -6310,7 +6318,7 @@ body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(96px + ma
   #match3Dialog[data-mg-layout='landscape'] .pa-side-dock .m3-goals-list:has(> .m3-goal-pill:nth-child(3)) .m3-goal-meta { flex: 1 1 0%; flex-direction: column; align-items: flex-start; gap: 0; min-inline-size: 0; }
   #match3Dialog[data-mg-layout='landscape'] .pa-side-dock .m3-goals-list:has(> .m3-goal-pill:nth-child(3)) .m3-goal-count { margin: 0; }
   #match3Dialog[data-mg-layout='landscape'] .pa-side-dock .m3-goals-list:has(> .m3-goal-pill:nth-child(3)) .m3-goal-name { max-inline-size: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  /* level bar: the sub line wraps instead of «…» (the dock has the room); a loss keeps «Màn N/777» over the message */
+  /* level bar: the sub line wraps instead of «…» (the dock has the room); a loss keeps «Màn N/7777» over the message */
   :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .hs-lv-sub { white-space: normal; contain: none; }
   :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .hs-lv.is-alert .hs-lv-meta { flex-direction: column; gap: 0; }
   :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-side-dock .hs-lv.is-alert .hs-lv-stage { display: block; }

@@ -12,13 +12,13 @@ import {
 } from './puzzleShared';
 
 // ============================================================================
-// 5. CLASSIC PIKACHU 2003 ONET CONNECT ("PIKACHU CỔ ĐIỂN HANG SÓC" — 777 STAGES)
+// 5. CLASSIC PIKACHU 2003 ONET CONNECT ("PIKACHU CỔ ĐIỂN HANG SÓC" — 7777 STAGES)
 //    - Authentic Pikachu PC 2003 (Kawai) rules & progressive board scaling:
 //      * Progressive grid sizes across 12 tiers: from 4 × 6 = 24 tiles (Stage 1)
 //        up to Classic 9 × 16 = 144 tiles (Stage 200+) & Grandmaster 10 × 16 = 160 tiles (Stage 400+).
 //      * Connect matching tiles with <= 3 straight orthogonal segments (<= 2 90° turns),
 //        including the 1-cell walkable outer border [-1..rows] × [-1..cols].
-//      * Classic 9 rotating shift/gravity modes across stages 1..777:
+//      * Classic 9 rotating shift/gravity modes across stages 1..7777:
 //        1: Static, 2: Down, 3: Up, 4: Left, 5: Right,
 //        6: Converge Horizontal, 7: Split Horizontal, 8: Converge Vertical, 9: Split Vertical.
 //      * Live Classic Pikachu countdown timer bar (+ small match combo time refill)
@@ -329,7 +329,7 @@ const ONET_PROGRESSION_TIERS: readonly OnetTierSpec[] = [
     matchBonusSec: ONET_MATCH_BONUS_SEC,
     maxLives: 5,
   },
-  // Bậc 12 (Màn 400–777): 10 × 16 = 160 ô (80 cặp, đại trận kiện tướng)
+  // Bậc 12 (Màn 400–7777): 10 × 16 = 160 ô (80 cặp, đại trận kiện tướng)
   {
     minStage: 400,
     maxStage: MAX_MINIGAME_STAGE,
@@ -344,7 +344,7 @@ const ONET_PROGRESSION_TIERS: readonly OnetTierSpec[] = [
 ];
 
 export function getOnetStageConfig(rawStage: number): OnetStageConfig {
-  const stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(rawStage)));
+  const stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(Number(rawStage) || 1)));
   let foundIdx = ONET_PROGRESSION_TIERS.length - 1;
   for (let i = 0; i < ONET_PROGRESSION_TIERS.length; i++) {
     const t = ONET_PROGRESSION_TIERS[i];
@@ -476,21 +476,16 @@ export class CreatureOnetEngine {
 
     const stars = getStageStarReward(this.stage);
     const effectiveCap =
-      Math.min(this.stage, 260) + Math.floor(Math.max(0, this.stage - 260) * 0.35);
+      Math.min(this.stage, 260) +
+      Math.floor(Math.max(0, Math.min(this.stage, 777) - 260) * 0.35) +
+      Math.min(420, Math.floor(Math.max(0, this.stage - 777) * 0.06));
+    const isFinaleOr777 = this.stage === 777 || this.stage === MAX_MINIGAME_STAGE;
     this.reward = {
       stars,
-      sand:
-        this.stage === MAX_MINIGAME_STAGE
-          ? 5
-          : this.milestoneBoss || this.stage % 10 === 0
-            ? 2
-            : 1,
+      sand: isFinaleOr777 ? 5 : this.milestoneBoss || this.stage % 10 === 0 ? 2 : 1,
       gold: Math.round(85 + effectiveCap * 3.8 + stars * 18),
       xp: Math.round(60 + effectiveCap * 2.8 + stars * 12),
-      isMasterpiece:
-        Boolean(this.milestoneBoss) ||
-        this.stage % 10 === 0 ||
-        this.stage === MAX_MINIGAME_STAGE,
+      isMasterpiece: Boolean(this.milestoneBoss) || this.stage % 10 === 0 || isFinaleOr777,
     };
 
     this.populateInitialBoard();
@@ -606,7 +601,7 @@ export class CreatureOnetEngine {
       Array.from({ length: this.cols }, (_, c) => deck[r * this.cols + c])
     );
 
-    // Higher stages scatter adjacent identical pairs from stage 2+ to reward 2- and 3-segment paths
+    // Higher stages scatter adjacent identical pairs from stage 2+ (ramps 2..777, plateaus at 0.88 for Ascension 778..7777)
     const antiClumpProb =
       this.stage <= 1
         ? 0

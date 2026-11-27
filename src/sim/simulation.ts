@@ -1039,10 +1039,10 @@ export class ParkSimulation {
   public isWaitingOnLevelTrial(): boolean { return trialsIsWaitingOnLevelTrial(this); }
 
   /**
-   * Vòng lặp Tháp Giải Đố 5×777 Màn (200+ giờ):
-   * Thắng màn mới (1..777) của bất kỳ môn giải đố nào sẽ tích lũy tiến trình Cấp Giải Đố Tổng (3.435 trận -> Cấp 100),
+   * Vòng lặp Tháp Giải Đố 6×7.777 Màn (200+ giờ):
+   * Thắng màn mới (1..7.777) của bất kỳ môn giải đố nào sẽ tích lũy tiến trình Cấp Giải Đố Tổng (3.435 trận -> Cấp 100),
    * mở khóa bản vẽ công trình, cây trồng & vùng đất mới!
-   * Nếu chơi lại Màn 777 đã phá đảo (countWinProgress = false), chỉ cộng thống kê & nhiệm vụ, không cày vô hạn Cấp.
+   * Nếu chơi lại Màn 7777 đã phá đảo (countWinProgress = false), chỉ cộng thống kê & nhiệm vụ, không cày vô hạn Cấp.
    */
   private advanceMasterPuzzleLevel(
     modeOrKind: MinigameTrialKind,

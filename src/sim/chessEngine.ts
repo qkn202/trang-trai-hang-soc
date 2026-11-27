@@ -86,7 +86,7 @@ export class WizardChessEngine {
   private cachedTurningPoint: TurningPointReview | null = null;
 
   constructor(stage: number, forceSubMode?: ChessSubMode) {
-    this.stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(stage)));
+    this.stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(Number(stage) || 1)));
     const defaultSubMode: ChessSubMode =
       this.stage <= 10
         ? this.stage % 2 === 1
@@ -200,18 +200,25 @@ export class WizardChessEngine {
     }
 
     const stars = getStageStarReward(this.stage);
-    const effectiveCap = Math.min(this.stage, 260) + Math.floor(Math.max(0, this.stage - 260) * 0.35);
+    const effectiveCap =
+      Math.min(this.stage, 260) +
+      Math.floor(Math.max(0, Math.min(this.stage, 777) - 260) * 0.35) +
+      Math.min(420, Math.floor(Math.max(0, this.stage - 777) * 0.06));
+    const isFinaleOr777 = this.stage === 777 || this.stage === MAX_MINIGAME_STAGE;
     this.reward = {
       stars,
-      sand:
-        this.stage === MAX_MINIGAME_STAGE
-          ? 5
-          : this.milestoneBoss || this.stage % 10 === 0 || this.subMode === 'match'
-            ? 2
-            : 1,
+      sand: isFinaleOr777
+        ? 5
+        : this.milestoneBoss || this.stage % 10 === 0 || this.subMode === 'match'
+          ? 2
+          : 1,
       gold: Math.round(110 + effectiveCap * 4.6 + stars * 22),
       xp: Math.round(70 + effectiveCap * 3.2 + stars * 15),
-      isMasterpiece: Boolean(this.milestoneBoss) || this.subMode === 'match' || this.stage % 10 === 0,
+      isMasterpiece:
+        Boolean(this.milestoneBoss) ||
+        this.subMode === 'match' ||
+        this.stage % 10 === 0 ||
+        isFinaleOr777,
     };
   }
 

@@ -991,7 +991,7 @@ export function createInitialGameState(): GameState {
     staffPatrolZones: {},
     lastProphetHeadline: {
       title: '🎄 CHÀO MỪNG MÙA ĐÔNG GIÁNG SINH TẠI ĐỒI TUYẾT HANG SÓC & HOGSMEADE!',
-      subtitle: 'Tuyết đầu mùa phủ trắng thung lũng — thắp đèn lễ hội, trồng hoa Đông & chinh phục 5×777 màn Khảo Thí!',
+      subtitle: 'Tuyết đầu mùa phủ trắng thung lũng — thắp đèn lễ hội, trồng hoa Đông & chinh phục 6×7.777 màn Khảo Thí!',
       positive: true,
     },
     finance: {
@@ -2519,10 +2519,12 @@ export function migrateLoadedState(parsed: GameState): GameState {
       let safeM3Cleared = Math.round(
         clampFinite(parsed.match3?.maxClearedLevel, 0, MAX_MATCH3_STAGE, defaultM3Cleared)
       );
+      const isLegacy777Cap = safeM3Level === 777 && safeM3Cleared === 777;
       if (safeLevelsWon === 0 && safeM3Level === 1 && !parsed.match3?.activeSession) {
         safeM3Cleared = 0;
       } else if (
         !sandboxAllowedOnLoad &&
+        !isLegacy777Cap &&
         safeM3Cleared > 0 &&
         safeM3Level < Math.min(MAX_MATCH3_STAGE, safeM3Cleared + 1)
       ) {
@@ -2577,10 +2579,12 @@ export function migrateLoadedState(parsed: GameState): GameState {
       ): { stage: number; cleared: number } => {
         let stage = Math.round(clampFinite(rawStageVal, 1, MAX_MINIGAME_STAGE, 1));
         let cleared = Math.round(clampFinite(rawClearedVal, 0, MAX_MINIGAME_STAGE, stage - 1));
+        const isLegacy777Cap = stage === 777 && cleared === 777;
         if (zeroWinsEver && stage === 1 && !hasSession) {
           cleared = 0;
         } else if (
           !sandboxAllowedOnLoad &&
+          !isLegacy777Cap &&
           cleared > 0 &&
           stage < Math.min(MAX_MINIGAME_STAGE, cleared + 1)
         ) {
@@ -2689,7 +2693,7 @@ export function migrateLoadedState(parsed: GameState): GameState {
               new Set(
                 parsed.puzzleArcade.restoredPaintings
                   .filter((x: unknown): x is string => typeof x === 'string')
-                  .slice(0, 800)
+                  .slice(0, MAX_MINIGAME_STAGE + 100)
               )
             )
           : [],

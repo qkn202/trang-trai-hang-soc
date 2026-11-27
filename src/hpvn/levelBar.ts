@@ -1,5 +1,5 @@
 // HPVN (owner 15/11 «thiết kế lại, tránh AI slop»): one level bar for every minigame (Bùa Gặt and the five arcade boards).
-// Left: the stage («Màn 4/777», bold) over one line of title / difficulty. Right: the figures as cells, icon + number, ruled
+// Left: the stage («Màn 4/7777», bold) over one line of title / difficulty. Right: the figures as cells, icon + number, ruled
 // apart (no «•» chain); a cell turns --hs-bad when its number is in danger (.pa-err-inline, toggled by the live counters).
 // A loss is the bar's own state, not one more box: red rim, the message takes the sub line and the rescue action the figures'
 // place; the bar keeps its height in every state, so the board never jumps (main.css «level bar»).

@@ -1234,8 +1234,8 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
     sim.addHarvestFeastPoints(isFirstClear ? (playedStage % 25 === 0 ? 40 : 28) : 14);
     sim.recordQuestProgress('cast_spells', undefined, 2);
     sim.checkAndToastAchievements?.();
-    if (isFirstClear && playedStage === MAX_MINIGAME_STAGE) {
-      sim.launchFireworksShow(18);
+    if (isFirstClear && (playedStage === 777 || playedStage === MAX_MINIGAME_STAGE)) {
+      sim.launchFireworksShow(playedStage === MAX_MINIGAME_STAGE ? 18 : 10);
     }
 
     const rawReduceSec = streakInfo.rawReduceSec;

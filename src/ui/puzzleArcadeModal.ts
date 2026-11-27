@@ -44,7 +44,11 @@ import {
 } from '../sim/proofOfPlay';
 import { MinigameGpuFxBatcher } from '../render/fx/minigameGpuFx';
 import { isScoredLeaderboardGame } from '../sim/minigameLeaderboard';
-import { ParkSimulation } from '../sim/simulation';
+import {
+  IS_SANDBOX_BUILD_ENABLED,
+  isSandboxRuntimeAllowed,
+  ParkSimulation,
+} from '../sim/simulation';
 import {
   ActiveMinigameResumeRecord,
   BuildReductionResult,
@@ -508,6 +512,7 @@ export class PuzzleArcadeModalController {
     buildReduction?: BuildReductionResult;
   } | null = null;
   private lastSeenSosRescuedAt = 0;
+  private devJumpReturnStage: { mode: PuzzleArcadeMode; stage: number } | null = null;
   private popRecorders = new Map<ProofOfPlayGameId, ProofOfPlayRecorder>();
   private popActionSeq = 0;
   private gpuFx: MinigameGpuFxBatcher | null = null;
@@ -625,6 +630,8 @@ export class PuzzleArcadeModalController {
         this.jigsawEngine = null;
         this.jigsawBakeCache = null;
         this.sim.saveToStorage();
+      } else if (this.devJumpReturnStage) {
+        this.restoreDevJumpStageIfAny(true);
       } else {
         this.persistModeSession(this.mode, true);
       }
@@ -1392,7 +1399,57 @@ export class PuzzleArcadeModalController {
     };
   }
 
-  public open(initialMode?: PuzzleArcadeMode): void {
+  private getModeStageKey(
+    mode: PuzzleArcadeMode
+  ): 'sudokuStage' | 'caroStage' | 'chessStage' | 'blockStage' | 'jigsawStage' {
+    if (mode === 'sudoku') return 'sudokuStage';
+    if (mode === 'caro') return 'caroStage';
+    if (mode === 'chess') return 'chessStage';
+    if (mode === 'jigsaw') return 'jigsawStage';
+    return 'blockStage';
+  }
+
+  private resetModeEngineInstance(mode: PuzzleArcadeMode, clearSavedSession: boolean): void {
+    const pa = this.sim.state.puzzleArcade;
+    if (mode === 'sudoku') {
+      if (clearSavedSession) pa.sudokuSession = null;
+      this.sudokuEngine = null;
+    } else if (mode === 'caro') {
+      if (clearSavedSession) pa.minesSession = null;
+      this.minesEngine = null;
+    } else if (mode === 'chess') {
+      if (clearSavedSession) pa.fishingSession = null;
+      this.fishEngine = null;
+    } else if (mode === 'jigsaw') {
+      if (clearSavedSession) pa.jigsawSession = null;
+      this.jigsawEngine = null;
+      this.jigsawBakeCache = null;
+    } else {
+      if (clearSavedSession) pa.onetSession = null;
+      this.onetEngine = null;
+    }
+  }
+
+  private restoreDevJumpStageIfAny(saveToDisk: boolean): void {
+    if (!this.devJumpReturnStage) return;
+    const { mode, stage } = this.devJumpReturnStage;
+    const stageKey = this.getModeStageKey(mode);
+    const maxNormal = Math.min(
+      MAX_MINIGAME_STAGE,
+      this.sim.getDisciplineStageInfo(mode).clearedStages + 1
+    );
+    if ((this.sim.state.puzzleArcade[stageKey] ?? 1) > maxNormal) {
+      this.sim.state.puzzleArcade[stageKey] = Math.min(maxNormal, stage);
+      this.resetModeEngineInstance(mode, false);
+    }
+    this.devJumpReturnStage = null;
+    if (saveToDisk) {
+      this.sim.saveToStorage();
+    }
+  }
+
+  public open(initialMode?: PuzzleArcadeMode, overrideStage?: number, allowDevJump = false): void {
+    this.restoreDevJumpStageIfAny(false);
     this.rescueContext = null;
     this.rescueVictoryOutcome = null;
     const rawMode = initialMode ?? this.sim.state.puzzleArcade?.activeMode ?? 'caro';
@@ -1407,6 +1464,36 @@ export class PuzzleArcadeModalController {
     this.mode = targetMode;
     this.sim.state.puzzleArcade.activeMode = targetMode;
     this.sim.setLastPlayedMinigame(targetMode);
+    const safeDevJump = Boolean(
+      allowDevJump && IS_SANDBOX_BUILD_ENABLED && isSandboxRuntimeAllowed()
+    );
+    if (typeof overrideStage === 'number' && Number.isFinite(overrideStage) && overrideStage >= 1) {
+      const stageKey = this.getModeStageKey(targetMode);
+      const normalMaxAllowed = Math.min(
+        MAX_MINIGAME_STAGE,
+        this.sim.getDisciplineStageInfo(targetMode).clearedStages + 1
+      );
+      const maxAllowed =
+        this.sim.state.sandboxMode || this.sim.isHeadmasterPreview || safeDevJump
+          ? MAX_MINIGAME_STAGE
+          : normalMaxAllowed;
+      const clampedStage = Math.min(maxAllowed, Math.floor(overrideStage));
+      const isTemporaryDevJump =
+        safeDevJump &&
+        !this.sim.state.sandboxMode &&
+        !this.sim.isHeadmasterPreview &&
+        clampedStage > normalMaxAllowed;
+      if (isTemporaryDevJump) {
+        this.devJumpReturnStage = {
+          mode: targetMode,
+          stage: Math.min(normalMaxAllowed, this.sim.state.puzzleArcade[stageKey] ?? 1),
+        };
+      }
+      if (clampedStage !== this.sim.state.puzzleArcade[stageKey]) {
+        this.resetModeEngineInstance(targetMode, !isTemporaryDevJump);
+      }
+      this.sim.state.puzzleArcade[stageKey] = clampedStage;
+    }
     this.ensureEngineForMode(targetMode, false);
     this.lastSeenSosRescuedAt = this.sim.ensureNeighborSocial().playerMinigameSos?.rescuedAt ?? 0;
 
@@ -1416,7 +1503,7 @@ export class PuzzleArcadeModalController {
     if (!dlg.open) {
       dlg.showModal();
     }
-    if (!this.rescueContext) {
+    if (!this.rescueContext && !this.devJumpReturnStage) {
       this.persistModeSession(targetMode, true);
       this.persistActiveModalResumeMarker();
     } else {
@@ -1469,9 +1556,10 @@ export class PuzzleArcadeModalController {
       this.jigsawWinRevealTimer = 0;
       this.checkAndClaimVictory();
     }
-    if (!this.rescueContext) {
+    if (!this.rescueContext && !this.devJumpReturnStage) {
       this.persistModeSession(this.mode, false);
     }
+    this.restoreDevJumpStageIfAny(false);
     this.mode = nextMode;
     this.sim.state.puzzleArcade.activeMode = nextMode;
     this.sim.setLastPlayedMinigame(nextMode);
@@ -1600,7 +1688,7 @@ export class PuzzleArcadeModalController {
   }
 
   private persistModeSession(mode: PuzzleArcadeMode, saveToDisk = true): void {
-    if (this.rescueContext) return;
+    if (this.rescueContext || this.devJumpReturnStage) return;
     const pa = this.sim.state.puzzleArcade;
     const extra =
       this.mode === mode
@@ -1723,11 +1811,11 @@ export class PuzzleArcadeModalController {
       this.jigsawWinRevealTimer = 0;
       this.checkAndClaimVictory();
     }
-    if (!this.rescueContext) {
+    if (!this.rescueContext && !this.devJumpReturnStage) {
       this.persistModeSession(this.mode, true);
     }
     const openDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
-    if (openDlg?.open && !this.rescueContext && !this.victoryClaimed) {
+    if (openDlg?.open && !this.rescueContext && !this.devJumpReturnStage && !this.victoryClaimed) {
       this.persistActiveModalResumeMarker();
     }
   }
@@ -2523,7 +2611,7 @@ export class PuzzleArcadeModalController {
       statusBannerHtml += this.renderFishMissionsBarHtml(fe);
     } else if (this.mode === 'blocks' && this.onetEngine) {
       const oe = this.onetEngine;
-      // the shift direction is the board's rule: it tags the sub line (a fourth cell does not fit 360px beside «Màn 150/777»)
+      // the shift direction is the board's rule: it tags the sub line (a fourth cell does not fit 360px beside «Màn 7777/7777»)
       stageSub = `${oe.rows}×${oe.cols} · <span class="hs-lv-tag">${escapeHtml(oe.shiftBadgeVi)}</span>`;
       stageStats =
         lvStat('Thời gian', `<strong id="paOnetTimer" class="${!st.sandboxMode && oe.isTimeCritical ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : oe.formatRemainingTime()}</strong>`, timeIcon) +
@@ -2662,13 +2750,15 @@ export class PuzzleArcadeModalController {
       const vs = this.victorySummary;
       const winReview = this.getActiveTurningPointReview();
 
+      const isStagePeakWin = curInfo.isMaxed || activeStageNum >= MAX_MINIGAME_STAGE;
+
       if (this.inspectingTurningPoint && winReview) {
         inspectReturnBarHtml = `
           <div class="pa-inspect-return-bar" role="region" aria-label="Đang soi Gương Chiếu Hậu Pháp Thuật">
             <span>${escapeHtml(winReview.playedCoordVi)} → <strong>${escapeHtml(winReview.recommendedCoordVi)}</strong></span>
             <div class="pa-inspect-return-actions">
               <button id="btnPaReturnVictoryCard" type="button" class="brass-btn gold-cta">Bảng thưởng</button>
-              <button id="btnPaNextStage" type="button" class="brass-btn">Màn ${vs.nextStage}</button>
+              <button id="btnPaNextStage" type="button" class="brass-btn">${isStagePeakWin ? 'Chơi lại' : `Màn ${vs.nextStage}`}</button>
             </div>
           </div>
         `;
@@ -2677,15 +2767,17 @@ export class PuzzleArcadeModalController {
           <div class="pa-victory-overlay" role="region" aria-label="Hoàn thành màn giải đố">
             <div class="pa-victory-card">
               <div class="pa-victory-title">${
-                vs.isMasterReplay || curInfo.isMaxed
-                  ? `777/777 · Xong`
+                isStagePeakWin
+                  ? `${MAX_MINIGAME_STAGE}/${MAX_MINIGAME_STAGE} · Xong`
                   : `Màn ${activeStageNum} · Xong`
               }</div>
               <div class="m3-reward-badges">
                 ${
                   vs.starsEarned > 0
                     ? `<span class="m3-reward-chip star">+${vs.starsEarned} ★</span>`
-                    : `<span class="m3-reward-chip star">777/777</span>`
+                    : isStagePeakWin
+                      ? `<span class="m3-reward-chip star">${MAX_MINIGAME_STAGE}/${MAX_MINIGAME_STAGE}</span>`
+                      : ''
                 }
                 ${vs.goldEarned > 0 ? `<span class="m3-reward-chip">+${vs.goldEarned} Sickle</span>` : ''} <!-- HPVN: Sickle reward -->
                 ${
@@ -2697,7 +2789,7 @@ export class PuzzleArcadeModalController {
               ${winReview ? this.renderTurningPointCardHtml(winReview, true) : ''}
               <div class="pa-victory-actions">
                 <button id="btnPaNextStage" type="button" class="brass-btn gold-cta">
-                  ${vs.isMasterReplay || curInfo.isMaxed ? `Chơi lại` : `Màn ${vs.nextStage}`}
+                  ${isStagePeakWin ? `Chơi lại` : `Màn ${vs.nextStage}`}
                 </button>
                 ${
                   isScoredMode
@@ -6570,7 +6662,7 @@ export class PuzzleArcadeModalController {
   }
 
   // --------------------------------------------------------------------------
-  // RENDERER 5: DÒ MÌN PHÉP THUẬT — BẢN ĐỒ ĐẠO TẶC & PHÁ BẪY HOGWARTS (777 MÀN)
+  // RENDERER 5: DÒ MÌN PHÉP THUẬT — BẢN ĐỒ ĐẠO TẶC & PHÁ BẪY HOGWARTS (7.777 MÀN)
   // --------------------------------------------------------------------------
 
   private drawHogwartsMinesBackdrop(
@@ -7044,7 +7136,7 @@ export class PuzzleArcadeModalController {
   }
 
   // --------------------------------------------------------------------------
-  // RENDERER 6: BẮN CÁ HỒ ĐEN — THỢ SĂN HỒ ĐEN HOGWARTS (777 MÀN)
+  // RENDERER 6: BẮN CÁ HỒ ĐEN — THỢ SĂN HỒ ĐEN HOGWARTS (7.777 MÀN)
   // --------------------------------------------------------------------------
 
   private drawFishShooterBackdrop(

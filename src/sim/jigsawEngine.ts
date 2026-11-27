@@ -90,6 +90,14 @@ const STAGE_GRID_PRESETS: readonly GridPreset[] = [
   { maxStage: 755, rows: 38, cols: 50, timeLimitSec: 6300, tierLabelVi: 'Tuyệt Tác Hai Ngàn Mảnh' },
   { maxStage: 776, rows: 40, cols: 50, timeLimitSec: 6600, tierLabelVi: 'Tuyệt Tác Hai Ngàn Mảnh' },
   { maxStage: 777, rows: 40, cols: 50, timeLimitSec: 7200, tierLabelVi: 'Tuyệt Tác Hai Ngàn Mảnh' },
+  // Bậc 9: Thần Thoại Vĩnh Hằng (Màn 778–7777: giữ trần an toàn 40×50 = 2.000 mảnh & tối đa 2h00p = 7.200s)
+  {
+    maxStage: MAX_MINIGAME_STAGE,
+    rows: 40,
+    cols: 50,
+    timeLimitSec: JIGSAW_MAX_TIME_SEC,
+    tierLabelVi: 'Thần Thoại Hai Ngàn Mảnh',
+  },
 ];
 
 const BREATHER_AFTER_BOSS_STAGES = new Set<number>([
@@ -494,7 +502,14 @@ export class MasterJigsawEngine {
     const pieceScaleBonus = Math.min(260, Math.round(Math.sqrt(this.totalPieces) * 5.5));
     this.reward = {
       stars,
-      sand: isBoss || this.totalPieces >= 1000 ? 2 : this.stage % 5 === 0 ? 1 : 0,
+      sand:
+        this.stage === MAX_MINIGAME_STAGE && MAX_MINIGAME_STAGE > 777
+          ? 5
+          : isBoss || this.totalPieces >= 1000
+            ? 2
+            : this.stage % 5 === 0
+              ? 1
+              : 0,
       gold: 95 + Math.min(220, this.stage * 2) + pieceScaleBonus,
       xp: 80 + Math.min(180, Math.round(this.stage * 1.6)) + Math.round(pieceScaleBonus * 0.7),
       paintingId: this.artwork.paintingId,

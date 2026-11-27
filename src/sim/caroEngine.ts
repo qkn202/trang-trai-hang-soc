@@ -136,7 +136,7 @@ export class CaroGameEngine {
   }> = [];
 
   constructor(stage: number) {
-    this.stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(stage)));
+    this.stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(Number(stage) || 1)));
     const tier = getMinigameDifficultyTier(this.stage);
     this.milestoneBoss = getMilestoneBossMeta(this.stage);
     this.difficultyLabel = this.milestoneBoss
@@ -170,13 +170,17 @@ export class CaroGameEngine {
     this.undoGoldCost = Math.min(220, 65 + Math.floor(this.stage / 7));
 
     const stars = getStageStarReward(this.stage);
-    const effectiveCap = Math.min(this.stage, 260) + Math.floor(Math.max(0, this.stage - 260) * 0.35);
+    const effectiveCap =
+      Math.min(this.stage, 260) +
+      Math.floor(Math.max(0, Math.min(this.stage, 777) - 260) * 0.35) +
+      Math.min(420, Math.floor(Math.max(0, this.stage - 777) * 0.06));
+    const isFinaleOr777 = this.stage === 777 || this.stage === MAX_MINIGAME_STAGE;
     this.reward = {
       stars,
-      sand: this.stage === MAX_MINIGAME_STAGE ? 5 : this.milestoneBoss || this.stage % 10 === 0 ? 2 : 1,
+      sand: isFinaleOr777 ? 5 : this.milestoneBoss || this.stage % 10 === 0 ? 2 : 1,
       gold: Math.round(95 + effectiveCap * 4.2 + stars * 20),
       xp: Math.round(62 + effectiveCap * 3.0 + stars * 14),
-      isMasterpiece: Boolean(this.milestoneBoss) || this.stage % 10 === 0 || this.stage === MAX_MINIGAME_STAGE,
+      isMasterpiece: Boolean(this.milestoneBoss) || this.stage % 10 === 0 || isFinaleOr777,
     };
 
     this.grid = Array.from({ length: CARO_BOARD_SIZE }, () =>
@@ -187,23 +191,55 @@ export class CaroGameEngine {
   }
 
   private seedBoardFormation(): void {
-    // Milestone Boss >= 100: symmetric 4-corner Elder Wax Rune Guard around the central Marauder courtyard
+    // Milestone Boss >= 100: symmetric Elder Wax Rune Guard around the central Marauder courtyard
     if (this.milestoneBoss && this.stage >= 100) {
+      const ascensionBossGuards: ReadonlyArray<ReadonlyArray<[number, number]>> = [
+        [
+          [3, 3],
+          [3, 9],
+          [9, 3],
+          [9, 9],
+          [4, 6],
+        ],
+        [
+          [3, 4],
+          [3, 8],
+          [9, 4],
+          [9, 8],
+          [8, 6],
+        ],
+        [
+          [4, 3],
+          [8, 3],
+          [4, 9],
+          [8, 9],
+          [6, 4],
+        ],
+        [
+          [2, 6],
+          [10, 6],
+          [6, 2],
+          [6, 10],
+          [4, 4],
+        ],
+      ];
       const bossSeals: ReadonlyArray<[number, number]> =
-        this.stage >= 500
-          ? [
-              [3, 3],
-              [3, 9],
-              [9, 3],
-              [9, 9],
-              [4, 6],
-            ]
-          : [
-              [4, 4],
-              [4, 8],
-              [8, 4],
-              [8, 8],
-            ];
+        this.stage > 777
+          ? ascensionBossGuards[this.stage % ascensionBossGuards.length]
+          : this.stage >= 500
+            ? [
+                [3, 3],
+                [3, 9],
+                [9, 3],
+                [9, 9],
+                [4, 6],
+              ]
+            : [
+                [4, 4],
+                [4, 8],
+                [8, 4],
+                [8, 8],
+              ];
       let placedBoss = 0;
       for (const [r, c] of bossSeals) {
         if (this.grid[r][c] === 0) {
@@ -213,7 +249,7 @@ export class CaroGameEngine {
       }
       this.runeSealCount = placedBoss;
     } else {
-      // Stages 25..777: place 1..5 Ancient Wax Rune Obstacles (stone = 3) so memorized patterns fail
+      // Stages 25..7777: place 1..5 Ancient Wax Rune Obstacles (stone = 3) so memorized patterns fail
       const targetSeals =
         this.stage < 25
           ? 0
@@ -241,7 +277,7 @@ export class CaroGameEngine {
       this.runeSealCount = placedSeals;
     }
 
-    // Stages 8..777: Pro-Renju central exchange (1 Phoenix + 1 Dark Mark) so every stage starts fresh!
+    // Stages 8..7777: Pro-Renju central exchange (1 Phoenix + 1 Dark Mark) so every stage starts fresh!
     if (this.stage >= 8) {
       const opening = CARO_PRO_OPENINGS[(this.stage * 7 + 3) % CARO_PRO_OPENINGS.length];
       for (const [r, c, st] of opening) {

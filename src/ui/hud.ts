@@ -892,14 +892,18 @@ export class GameHUD {
     }, () => {});
   }
 
-  public openPuzzleArcadeDialog(mode?: PuzzleArcadeMode): void {
+  public openPuzzleArcadeDialog(
+    mode?: PuzzleArcadeMode,
+    overrideStage?: number,
+    allowDevJump = false
+  ): void {
     this.closeHudPopovers();
     this.hideOpenFloatingTrays();
     if (mode) {
       this.sim.setLastPlayedMinigame(mode);
     }
     void this.getPuzzleArcadeModal().then((m) => {
-      m.open(mode);
+      m.open(mode, overrideStage, allowDevJump);
       headerSyncToastStackHost(this);
     }, () => {});
   }

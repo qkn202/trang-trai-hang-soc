@@ -149,7 +149,7 @@ export class SudokuPuzzleEngine {
   public status: 'playing' | 'won' | 'lost' = 'playing';
 
   constructor(stage: number) {
-    this.stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(stage)));
+    this.stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(Number(stage) || 1)));
     this.milestoneBoss = getMilestoneBossMeta(this.stage);
 
     let targetBlanks = 42;
@@ -185,13 +185,17 @@ export class SudokuPuzzleEngine {
 
     const stars = getStageStarReward(this.stage);
     const effectiveCap =
-      Math.min(this.stage, 260) + Math.floor(Math.max(0, this.stage - 260) * 0.35);
+      Math.min(this.stage, 260) +
+      Math.floor(Math.max(0, Math.min(this.stage, 777) - 260) * 0.35) +
+      Math.min(420, Math.floor(Math.max(0, this.stage - 777) * 0.06));
+    const isFinaleOr777 = this.stage === 777 || this.stage === MAX_MINIGAME_STAGE;
+    const isAscensionBoss = this.stage > 777 && Boolean(this.milestoneBoss);
     this.reward = {
       stars,
-      sand: this.stage === MAX_MINIGAME_STAGE ? 5 : this.stage % 10 === 0 ? 2 : 1,
+      sand: isFinaleOr777 ? 5 : isAscensionBoss || this.stage % 10 === 0 ? 2 : 1,
       gold: Math.round(90 + effectiveCap * 4.2 + stars * 20),
       xp: Math.round(60 + effectiveCap * 3.0 + stars * 14),
-      isMasterpiece: this.stage % 10 === 0 || this.stage === MAX_MINIGAME_STAGE,
+      isMasterpiece: isFinaleOr777 || isAscensionBoss || this.stage % 10 === 0,
     };
 
     this.generateUniqueBoard(targetBlanks);

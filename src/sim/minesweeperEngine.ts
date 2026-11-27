@@ -43,7 +43,7 @@ function getMinesweeperStageSpec(stage: number): {
   mines: number;
   baseShields: number;
 } {
-  const s = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(stage)));
+  const s = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(Number(stage) || 1)));
   const boss = getMilestoneBossMeta(s) !== null;
   let rows = 8;
   let cols = 8;
@@ -73,10 +73,16 @@ function getMinesweeperStageSpec(stage: number): {
     rows = 13;
     cols = 18;
     mines = 42 + Math.floor((s - 301) / 50);
-  } else {
+  } else if (s <= 777) {
+    // Preserve legacy stages 501..777 identically (52..55 mines; +2 on boss = 57 at 777)
     rows = 14;
     cols = 20;
     mines = 52 + Math.floor((s - 501) / 70);
+  } else {
+    // Ascension stages 778..7777: smooth ramp from 56 -> 66 mines (max 68 on boss <= 25% of 280 cells)
+    rows = 14;
+    cols = 20;
+    mines = Math.min(66, 56 + Math.floor((s - 778) / 650));
   }
 
   if (boss) {
@@ -188,7 +194,7 @@ export class MinesweeperEngine {
   public lastHintCell: { r: number; c: number } | null = null;
 
   constructor(stage: number, attemptSeed?: number) {
-    this.stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(stage)));
+    this.stage = Math.max(1, Math.min(MAX_MINIGAME_STAGE, Math.floor(Number(stage) || 1)));
     this.attemptSeed =
       attemptSeed !== undefined && Number.isFinite(attemptSeed)
         ? (Math.floor(attemptSeed) >>> 0) || 1
@@ -207,7 +213,7 @@ export class MinesweeperEngine {
 
     this.reward = {
       stars: getStageStarReward(this.stage),
-      sand: isBoss ? 2 : 1,
+      sand: this.stage === MAX_MINIGAME_STAGE && MAX_MINIGAME_STAGE > 777 ? 5 : isBoss ? 2 : 1,
       gold: Math.round(52 + tier.tierIndex * 14 + (isBoss ? 45 : 0)),
       xp: Math.round(36 + tier.tierIndex * 10 + (isBoss ? 30 : 0)),
     };
