@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Preview Khung Floo — Pha Lê Cầu Vồng (crystal-mine)</title>
+  <link rel="stylesheet" href="./crystal-mine-floo.css" />
+  <style>
+    :root {
+      --bg-page: #0d0914;
+      --bg-feed: #140f1e;
+      --border-feed: rgba(231, 211, 167, 0.28);
+      --text-page: #efe9f8;
+      --text-sub: #c0b4d4;
+      --seal-bg: #1e1530;
+    }
+
+    body.is-light {
+      --bg-page: #ece8f2;
+      --bg-feed: #f8f6fc;
+      --border-feed: rgba(130, 108, 72, 0.34);
+      --text-page: #251b35;
+      --text-sub: #5b4d70;
+      --seal-bg: #e7dff3;
+    }
+
+    body.is-light .shout-house-seal {
+      color: #5b431f;
+    }
+
+    body {
+      margin: 0;
+      padding: 24px 16px 36px;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg-page);
+      color: var(--text-page);
+      transition: background-color 0.18s ease, color 0.18s ease;
+    }
+
+    .demo-shell {
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .demo-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .demo-title {
+      font-size: 18px;
+      margin: 0;
+      letter-spacing: -0.01em;
+    }
+
+    .demo-toggle {
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border-feed);
+      background: var(--bg-feed);
+      color: var(--text-page);
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .demo-desc {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text-sub);
+      margin: 0 0 12px;
+    }
+
+    .demo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 12px;
+      margin-bottom: 16px;
+      border-radius: 999px;
+      border: 1px solid rgba(231, 211, 167, 0.42);
+      background: rgba(28, 19, 43, 0.85);
+      color: #f3eef9;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .floo-mock-feed {
+      background: var(--bg-feed);
+      border: 1px solid var(--border-feed);
+      border-radius: 16px;
+      padding: 28px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      box-shadow: 0 12px 32px rgba(7, 3, 15, 0.35);
+    }
+
+    .shout-message-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      position: relative;
+    }
+
+    .shout-message-row.is-self {
+      justify-content: flex-end;
+    }
+
+    .shout-house-seal {
+      width: 28px;
+      height: 28px;
+      flex: 0 0 28px;
+      border-radius: 8px;
+      border: 1px solid rgba(231, 211, 167, 0.36);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 14px;
+      background: var(--seal-bg);
+      color: #e7d3a7;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .shout-message-content {
+      max-width: 84%;
+      min-width: 0;
+    }
+
+    .shout-message-row[data-store-frame] .shout-message-bubble {
+      position: relative;
+      box-sizing: border-box;
+      width: fit-content;
+      max-width: 100%;
+      background: var(--sf-paper);
+      box-shadow: var(--sf-shadow);
+      border-radius: 14px 14px 14px 4px;
+      font-size: 14px;
+      line-height: 1.48;
+    }
+
+    .shout-message-row.is-self:not(.is-self-shared-direction) .shout-message-bubble {
+      border-radius: 14px 14px 4px 14px;
+      margin-left: auto;
+    }
+
+    /* Local preview points to workspace WebP assets under public/paintings/floo-items/crystal-mine/ */
+    .shout-message-row[data-store-frame="crystal-mine"] {
+      --cm-mine-img: image-set(
+        url("../../../public/paintings/floo-items/crystal-mine/crystal-mine.webp") type("image/webp") 1x,
+        url("../../../public/paintings/floo-items/crystal-mine/crystal-mine-2x.webp") type("image/webp") 2x,
+        url("./crystal-mine.png") type("image/png") 1x
+      ) !important;
+    }
+
+    .shout-meta-line {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 4px;
+      font-size: 12.5px;
+    }
+
+    .shout-message-author {
+      font-weight: 700;
+    }
+
+    .shout-message-meta-time {
+      font-size: 11.5px;
+    }
+
+    .shout-quote-preview {
+      margin: 4px 0 7px;
+      padding: 5px 10px;
+      border-left: 2.5px solid #c5aa79;
+      border-radius: 4px;
+      font-size: 12.5px;
+    }
+
+    .shout-rich-text {
+      position: relative;
+      z-index: 2;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-shell">
+    <div class="demo-head">
+      <h1 class="demo-title">Khung Chat Floo — Pha Lê Cầu Vồng</h1>
+      <button id="toggleTheme" type="button" class="demo-toggle">Đổi nền Sáng / Tối</button>
+    </div>
+    <p class="demo-desc">
+      Bản chốt Mẫu số 2 «Tinh Vân Nhung» tinh giản thanh lịch: giữ nguyên màu nền đen–tím khói nhung, nâng cấp
+      khung viền mảnh vàng champagne phay lụa 1.5px kèm chỉ đôi nội vi &amp; hoa văn góc tinh xảo, cung quỹ đạo tròn
+      chuẩn tỷ lệ; trái mìn pha lê cầu vồng 3D góc trên phải nổ tung và bật hiện số <strong>777 màu cầu vồng ánh kim</strong>.
+    </p>
+    <div class="demo-badge">
+      Mã khung: <code>data-store-frame="crystal-mine"</code> · Bản chốt Mẫu số 2
+    </div>
+
+    <div class="floo-mock-feed">
+      <div class="shout-message-row is-other" data-store-frame="crystal-mine">
+        <div class="shout-house-seal" aria-hidden="true">R</div>
+        <div class="shout-message-content">
+          <div class="shout-message-bubble">
+            <div class="shout-meta-line">
+              <span class="shout-message-author">Aries</span>
+              <span class="shout-message-meta-time">20:42</span>
+            </div>
+            <div class="shout-rich-text">
+              Ánh pha lê cầu vồng phản chiếu trên nền đen ánh tím trông thanh lịch và huyền bí hẳn —
+              viền vàng champagne mỏng sắc nét, không hề bị chói mắt.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="shout-message-row is-other" data-store-frame="crystal-mine">
+        <div class="shout-house-seal" aria-hidden="true">R</div>
+        <div class="shout-message-content">
+          <div class="shout-message-bubble">
+            <div class="shout-meta-line">
+              <span class="shout-message-author">Aries</span>
+              <span class="shout-message-meta-time">20:43</span>
+            </div>
+            <div class="shout-rich-text">Đẹp chuẩn quý phái!</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="shout-message-row is-self" data-store-frame="crystal-mine">
+        <div class="shout-message-content">
+          <div class="shout-message-bubble">
+            <div class="shout-meta-line" style="justify-content: flex-end;">
+              <span class="shout-message-author">Bạn</span>
+              <span class="shout-message-meta-time">20:44</span>
+            </div>
+            <div class="shout-quote-preview">
+              <b>Aries:</b> Góc trên phải có trái mìn pha lê cầu vồng nổi khối như khung chuông luôn.
+            </div>
+            <div class="shout-rich-text">
+              Góc nhìn chính chủ (<code>.is-self</code>) vẫn giữ khoảng đệm an toàn ở mép trên bên phải
+              cùng hoa văn hai góc tinh tế và <a href="#crystal-mine">liên kết mẫu</a>.
+            </div>
+          </div>
+        </div>
+        <div class="shout-house-seal" aria-hidden="true">S</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const btn = document.getElementById('toggleTheme');
+    btn.addEventListener('click', () => {
+      document.body.classList.toggle('is-light');
+    });
+  </script>
+</body>
+</html>
