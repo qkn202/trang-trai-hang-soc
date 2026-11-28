@@ -2,102 +2,172 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Preview Khung Floo — Pha Lê Cầu Vồng (crystal-mine)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Preview Khung Floo — Pha Lê Cầu Vồng (crystal-mine · pangting) Chuẩn Rule</title>
   <link rel="stylesheet" href="./crystal-mine-floo.css" />
   <style>
     :root {
-      --bg-page: #0d0914;
-      --bg-feed: #140f1e;
+      color-scheme: dark;
+      --bg-page: #0a0712;
+      --bg-card: #130e1e;
+      --bg-feed: #150f22;
       --border-feed: rgba(231, 211, 167, 0.28);
-      --text-page: #efe9f8;
-      --text-sub: #c0b4d4;
-      --seal-bg: #1e1530;
+      --text-page: #f4effa;
+      --text-sub: #c3b7d8;
+      --seal-bg: #201633;
+      --seal-ink: #ebd8ae;
     }
 
     body.is-light {
-      --bg-page: #ece8f2;
-      --bg-feed: #f8f6fc;
+      color-scheme: light;
+      --bg-page: #ebe6f3;
+      --bg-card: #ffffff;
+      --bg-feed: #f7f4fc;
       --border-feed: rgba(130, 108, 72, 0.34);
-      --text-page: #251b35;
-      --text-sub: #5b4d70;
+      --text-page: #231934;
+      --text-sub: #5a4c70;
       --seal-bg: #e7dff3;
+      --seal-ink: #5d451f;
     }
 
-    body.is-light .shout-house-seal {
-      color: #5b431f;
-    }
+    *, *::before, *::after { box-sizing: border-box; }
 
     body {
       margin: 0;
-      padding: 24px 16px 36px;
+      padding: 20px 14px 48px;
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       background: var(--bg-page);
       color: var(--text-page);
-      transition: background-color 0.18s ease, color 0.18s ease;
+      line-height: 1.5;
     }
 
     .demo-shell {
-      max-width: 700px;
+      max-width: 820px;
       margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .demo-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-feed);
+      border-radius: 16px;
+      padding: 18px 20px;
+      box-shadow: 0 12px 28px rgba(6, 3, 14, 0.28);
     }
 
     .demo-head {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      gap: 10px;
       flex-wrap: wrap;
-      margin-bottom: 12px;
     }
 
     .demo-title {
-      font-size: 18px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(19px, 3vw, 24px);
       margin: 0;
-      letter-spacing: -0.01em;
+      color: #f3e2bc;
     }
 
-    .demo-toggle {
-      padding: 6px 12px;
+    body.is-light .demo-title {
+      color: #4a3415;
+    }
+
+    .demo-desc {
+      font-size: 13px;
+      color: var(--text-sub);
+      margin: 8px 0 12px;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .rule-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #dcfce7;
+      background: rgba(22, 163, 74, 0.16);
+      border: 1px solid rgba(74, 222, 128, 0.4);
+    }
+
+    body.is-light .rule-pill {
+      color: #14532d;
+      background: rgba(22, 163, 74, 0.12);
+      border-color: rgba(22, 163, 74, 0.35);
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn {
+      padding: 7px 12px;
       border-radius: 999px;
       border: 1px solid var(--border-feed);
       background: var(--bg-feed);
       color: var(--text-page);
       font-size: 12.5px;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
     }
 
-    .demo-desc {
-      font-size: 13px;
-      line-height: 1.5;
-      color: var(--text-sub);
-      margin: 0 0 12px;
+    .btn.is-active {
+      border-color: #e6c98e;
+      background: rgba(230, 201, 142, 0.18);
     }
 
-    .demo-badge {
-      display: inline-flex;
+    .rm-banner {
+      display: none;
       align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: rgba(245, 158, 11, 0.14);
+      border: 1px solid rgba(251, 191, 36, 0.52);
+      font-size: 12.5px;
+      margin-top: 10px;
+    }
+
+    .rm-banner.is-visible { display: flex; }
+
+    .feed-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
       gap: 8px;
-      padding: 5px 12px;
-      margin-bottom: 16px;
-      border-radius: 999px;
-      border: 1px solid rgba(231, 211, 167, 0.42);
-      background: rgba(28, 19, 43, 0.85);
-      color: #f3eef9;
       font-size: 12px;
-      font-weight: 600;
+      color: var(--text-sub);
+      margin-bottom: 10px;
     }
 
     .floo-mock-feed {
       background: var(--bg-feed);
       border: 1px solid var(--border-feed);
       border-radius: 16px;
-      padding: 28px 20px;
+      padding: 20px 16px;
+      max-height: 540px;
+      overflow-y: auto;
+      overflow-x: hidden;
       display: flex;
       flex-direction: column;
-      gap: 24px;
-      box-shadow: 0 12px 32px rgba(7, 3, 15, 0.35);
+      gap: 18px;
     }
 
     .shout-message-row {
@@ -112,36 +182,37 @@
     }
 
     .shout-house-seal {
-      width: 28px;
-      height: 28px;
-      flex: 0 0 28px;
-      border-radius: 8px;
+      width: 30px;
+      height: 30px;
+      flex: 0 0 30px;
+      border-radius: 9px;
       border: 1px solid rgba(231, 211, 167, 0.36);
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-top: 14px;
+      margin-top: 6px;
       background: var(--seal-bg);
-      color: #e7d3a7;
+      color: var(--seal-ink);
       font-size: 13px;
-      font-weight: 700;
+      font-weight: 800;
     }
 
     .shout-message-content {
-      max-width: 84%;
+      max-width: min(84%, 560px);
       min-width: 0;
     }
 
-    .shout-message-row[data-store-frame] .shout-message-bubble {
+    .shout-message-bubble {
       position: relative;
-      box-sizing: border-box;
       width: fit-content;
       max-width: 100%;
-      background: var(--sf-paper);
-      box-shadow: var(--sf-shadow);
       border-radius: 14px 14px 14px 4px;
       font-size: 14px;
       line-height: 1.48;
+      padding: 12px 16px;
+      background: rgba(40, 32, 56, 0.85);
+      color: #f4effa;
+      border: 1px solid rgba(231, 211, 167, 0.2);
     }
 
     .shout-message-row.is-self:not(.is-self-shared-direction) .shout-message-bubble {
@@ -149,13 +220,23 @@
       margin-left: auto;
     }
 
-    /* Local preview points to workspace WebP assets under public/paintings/floo-items/crystal-mine/ */
-    .shout-message-row[data-store-frame="crystal-mine"] {
-      --cm-mine-img: image-set(
-        url("../../../public/paintings/floo-items/crystal-mine/crystal-mine.webp") type("image/webp") 1x,
-        url("../../../public/paintings/floo-items/crystal-mine/crystal-mine-2x.webp") type("image/webp") 2x,
-        url("./crystal-mine.png") type("image/png") 1x
-      ) !important;
+    /* Chế độ Ẩn khung & avatar vật phẩm của Mạng Floo */
+    [data-hide-frames="true"] .shout-message-row[data-store-frame="crystal-mine"] .shout-message-bubble {
+      background: rgba(40, 32, 56, 0.85);
+      box-shadow: none;
+      border: 1px solid rgba(231, 211, 167, 0.24);
+      padding: 12px 16px;
+      min-height: 0;
+    }
+
+    body.is-light [data-hide-frames="true"] .shout-message-row[data-store-frame="crystal-mine"] .shout-message-bubble {
+      background: #ffffff;
+      color: #231934;
+    }
+
+    /* Trỏ đúng 1 tệp WebP phẳng < 12 KB trong workspace (không PNG, không image-set, không !important) */
+    .floo-mock-feed .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-a {
+      background-image: url("../../../public/paintings/floo-items/crystal-mine/crystal-mine.webp");
     }
 
     .shout-meta-line {
@@ -166,8 +247,12 @@
       font-size: 12.5px;
     }
 
+    .shout-message-row.is-self .shout-meta-line {
+      justify-content: flex-end;
+    }
+
     .shout-message-author {
-      font-weight: 700;
+      font-weight: 800;
     }
 
     .shout-message-meta-time {
@@ -177,88 +262,286 @@
     .shout-quote-preview {
       margin: 4px 0 7px;
       padding: 5px 10px;
-      border-left: 2.5px solid #c5aa79;
-      border-radius: 4px;
       font-size: 12.5px;
     }
 
     .shout-rich-text {
-      position: relative;
-      z-index: 2;
       word-break: break-word;
+    }
+
+    .row-tag {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.12);
+      color: #e5daf2;
+    }
+
+    /* Chế độ mô phỏng Reduce Motion chỉ dùng trong trang preview */
+    body.preview-reduce-motion .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-a,
+    body.preview-reduce-motion .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-b,
+    body.preview-reduce-motion .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-b::after,
+    body.preview-reduce-motion .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-band,
+    body.preview-reduce-motion .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-top,
+    body.preview-reduce-motion .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-shine {
+      animation: none;
+    }
+
+    /* Tuỳ chọn xem thử động khi OS đang bật Reduce Motion (chỉ trong trang preview) */
+    body.preview-force-motion:not(.preview-reduce-motion)
+      .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-a {
+      animation: hpvn-lg-cm-mine 6.2s ease-in-out 2 forwards;
+    }
+    body.preview-force-motion:not(.preview-reduce-motion)
+      .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-b {
+      animation: hpvn-lg-cm-shockwave 6.2s ease-in-out 2 forwards;
+    }
+    body.preview-force-motion:not(.preview-reduce-motion)
+      .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-b::after {
+      animation: hpvn-lg-cm-flash 6.2s ease-in-out 2 forwards;
+    }
+    body.preview-force-motion:not(.preview-reduce-motion)
+      .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-band {
+      animation: hpvn-lg-cm-shards 6.2s ease-in-out 2 forwards;
+    }
+    body.preview-force-motion:not(.preview-reduce-motion)
+      .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-top {
+      animation: hpvn-lg-cm-777 6.2s ease-in-out 2 forwards;
+    }
+    body.preview-force-motion:not(.preview-reduce-motion)
+      .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-shine {
+      animation: hpvn-lg-cm-shine 3.8s ease-in-out 0.5s 2 forwards;
+    }
+
+    /* Chế độ soi khoảnh khắc nổ & số 777 (t = 3.9s trong chu kỳ 6.2s) chỉ trong trang preview */
+    body.preview-freeze-777 .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-a {
+      animation: hpvn-lg-cm-mine 6.2s ease-in-out -3.9s 2 forwards paused;
+    }
+    body.preview-freeze-777 .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-b {
+      animation: hpvn-lg-cm-shockwave 6.2s ease-in-out -3.9s 2 forwards paused;
+    }
+    body.preview-freeze-777 .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-b::after {
+      animation: hpvn-lg-cm-flash 6.2s ease-in-out -3.9s 2 forwards paused;
+    }
+    body.preview-freeze-777 .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-band {
+      animation: hpvn-lg-cm-shards 6.2s ease-in-out -3.9s 2 forwards paused;
+    }
+    body.preview-freeze-777 .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-top {
+      animation: hpvn-lg-cm-777 6.2s ease-in-out -3.9s 2 forwards paused;
     }
   </style>
 </head>
 <body>
   <div class="demo-shell">
-    <div class="demo-head">
-      <h1 class="demo-title">Khung Chat Floo — Pha Lê Cầu Vồng</h1>
-      <button id="toggleTheme" type="button" class="demo-toggle">Đổi nền Sáng / Tối</button>
-    </div>
-    <p class="demo-desc">
-      Bản chốt Mẫu số 2 «Tinh Vân Nhung» tinh giản thanh lịch: giữ nguyên màu nền đen–tím khói nhung, nâng cấp
-      khung viền mảnh vàng champagne phay lụa 1.5px kèm chỉ đôi nội vi &amp; hoa văn góc tinh xảo, cung quỹ đạo tròn
-      chuẩn tỷ lệ; trái mìn pha lê cầu vồng 3D góc trên phải nổ tung và bật hiện số <strong>777 màu cầu vồng ánh kim</strong>.
-    </p>
-    <div class="demo-badge">
-      Mã khung: <code>data-store-frame="crystal-mine"</code> · Gắn cho ID: <code>pangting</code> · Bản chốt Mẫu số 2
-    </div>
-
-    <div class="floo-mock-feed">
-      <div class="shout-message-row is-other" data-store-frame="crystal-mine">
-        <div class="shout-house-seal" aria-hidden="true">R</div>
-        <div class="shout-message-content">
-          <div class="shout-message-bubble">
-            <div class="shout-meta-line">
-              <span class="shout-message-author">pangting</span>
-              <span class="shout-message-meta-time">20:42</span>
-            </div>
-            <div class="shout-rich-text">
-              Ánh pha lê cầu vồng phản chiếu trên nền đen ánh tím trông thanh lịch và huyền bí hẳn —
-              viền vàng champagne mỏng sắc nét, không hề bị chói mắt.
-            </div>
-          </div>
-        </div>
+    <section class="demo-card">
+      <div class="demo-head">
+        <h1 class="demo-title">Khung Floo — Pha Lê Cầu Vồng (crystal-mine · pangting)</h1>
       </div>
-
-      <div class="shout-message-row is-other" data-store-frame="crystal-mine">
-        <div class="shout-house-seal" aria-hidden="true">R</div>
-        <div class="shout-message-content">
-          <div class="shout-message-bubble">
-            <div class="shout-meta-line">
-              <span class="shout-message-author">pangting</span>
-              <span class="shout-message-meta-time">20:43</span>
-            </div>
-            <div class="shout-rich-text">Đẹp chuẩn quý phái!</div>
-          </div>
-        </div>
+      <p class="demo-desc">
+        Đã tái cấu trúc 100% theo luật khung chat động Mạng Floo (HPVNN) &amp; iOS Safari 16+: dùng đúng
+        cấu trúc <code>.shout-lg-fx</code> của <code>LEGENDARY_FRAMES</code>, chỉ animate <code>opacity</code> &amp;
+        <code>transform</code> (tiền tố <code>hpvn-lg-</code>), chạy <strong>2 lượt rồi dừng tĩnh (<code>2 forwards</code>)</strong>,
+        1 ảnh WebP phẳng <code>&lt; 12 KB</code>, 0 <code>filter</code>, 0 <code>@property</code>, 0 <code>!important</code>.
+      </p>
+      <div class="pill-row">
+        <span class="rule-pill">ID: pangting</span>
+        <span class="rule-pill">Key: crystal-mine</span>
+        <span class="rule-pill">hpvn-lg-* · 2 forwards</span>
+        <span class="rule-pill">0 filter / @property / !important</span>
+        <span class="rule-pill">1 WebP phẳng 8.56 KB</span>
+        <span class="rule-pill">data-offscreen IO</span>
       </div>
-
-      <div class="shout-message-row is-self" data-store-frame="crystal-mine">
-        <div class="shout-message-content">
-          <div class="shout-message-bubble">
-            <div class="shout-meta-line" style="justify-content: flex-end;">
-              <span class="shout-message-author">pangting</span>
-              <span class="shout-message-meta-time">20:44</span>
-            </div>
-            <div class="shout-quote-preview">
-              <b>Aries:</b> Góc trên phải có trái mìn pha lê cầu vồng nổi khối như khung chuông luôn.
-            </div>
-            <div class="shout-rich-text">
-              Góc nhìn chính chủ (<code>.is-self</code>) vẫn giữ khoảng đệm an toàn ở mép trên bên phải
-              cùng hoa văn hai góc tinh tế và <a href="#crystal-mine">liên kết mẫu</a>.
-            </div>
-          </div>
-        </div>
-        <div class="shout-house-seal" aria-hidden="true">S</div>
+      <div class="toolbar">
+        <button id="btnReplay" type="button" class="btn">Chạy lại 2 lượt</button>
+        <button id="btnFreeze777" type="button" class="btn">Soi khoảnh khắc nổ 777</button>
+        <button id="btnTheme" type="button" class="btn">Đổi nền Sáng / Tối</button>
+        <button id="btnHideFrames" type="button" class="btn">Ẩn khung vật phẩm</button>
+        <button id="btnReduceMotion" type="button" class="btn">Giả lập Giảm chuyển động</button>
       </div>
-    </div>
+      <div id="rmBanner" class="rm-banner" role="status">
+        <span>Hệ điều hành đang bật <strong>Giảm chuyển động (Reduce Motion)</strong> — khung đang hiển thị chuẩn tĩnh theo luật mục 3.3.</span>
+        <button id="btnForceMotion" type="button" class="btn">Xem thử hiệu ứng động</button>
+      </div>
+    </section>
+
+    <section class="demo-card">
+      <div class="feed-meta">
+        <span>Danh sách mô phỏng 14 tin nhắn (cuộn xuống rồi cuộn lên để kiểm tra <code>data-offscreen</code>)</span>
+        <span id="offscreenStat">Hiển thị: — / Ẩn ngoài màn: —</span>
+      </div>
+      <div id="feed" class="floo-mock-feed"></div>
+    </section>
   </div>
 
   <script>
-    const btn = document.getElementById('toggleTheme');
-    btn.addEventListener('click', () => {
+    const MESSAGES = [
+      {
+        self: false,
+        seal: 'R',
+        author: 'pangting',
+        time: '20:42',
+        text: 'Ánh pha lê cầu vồng trên nền Tinh Vân Nhung tím khói — viền vàng champagne 1.5px mảnh sắc nét, trái mìn nổ tung và bật hiện số 777 ánh kim 3D sau đúng 2 lượt rồi dừng mượt 0% GPU!'
+      },
+      {
+        self: true,
+        seal: 'S',
+        author: 'pangting',
+        time: '20:44',
+        quote: '<b>Aries:</b> Góc khung nổ ra 777 cầu vồng chrome nhìn sang cực kỳ luôn!',
+        text: 'Góc nhìn chính chủ (<code>.is-self</code>) đối xứng trái/phải gọn gàng, số 777 vẫn xuôi chiều đọc cùng <a href="#crystal-mine">liên kết mẫu</a>.'
+      },
+      {
+        self: false,
+        seal: 'R',
+        author: 'pangting',
+        time: '20:45',
+        text: 'Đẹp chuẩn quý phái!'
+      },
+      {
+        self: false,
+        seal: 'H',
+        author: 'pangting',
+        time: '20:46',
+        extraClass: 'is-sonorus',
+        tag: 'Sonorus — tự tắt FX',
+        text: 'Tin Sonorus giữ nguyên nguyên tắc Mạng Floo: tự ẩn lớp động .shout-lg-fx để ưu tiên thông báo.'
+      },
+      {
+        self: false,
+        seal: 'R',
+        author: 'pangting',
+        time: '20:47',
+        extraClass: 'is-prisoner-censored',
+        tag: 'Kiểm duyệt — tự tắt FX',
+        text: '[Tin nhắn kiểm duyệt Azkaban — lớp hiệu ứng động đã được tắt tự động.]'
+      },
+      { self: true, seal: 'S', author: 'pangting', time: '20:48', text: 'Tin số 6: Cuộn xuống kiểm tra danh sách ≥ 12 bong bóng mượt trên iPhone Safari 16+.' },
+      { self: false, seal: 'R', author: 'pangting', time: '20:49', text: 'Tin số 7: Không dùng filter hay backdrop-filter nên cuộn không rớt khung hình.' },
+      { self: true, seal: 'S', author: 'pangting', time: '20:50', text: 'Tin số 8: Mọi sóng xung kích & 10 mảnh pha lê đều cắt gọn trong .shout-lg-clip (overflow: hidden).' },
+      { self: false, seal: 'R', author: 'pangting', time: '20:51', text: 'Tin số 9: Không làm dài khoảng trống cuối danh sách tin nhắn.' },
+      { self: true, seal: 'S', author: 'pangting', time: '20:52', text: 'Tin số 10: Padding cố định từ đầu, không bao giờ nhảy bố cục khi hiệu ứng nổ chạy.' },
+      { self: false, seal: 'R', author: 'pangting', time: '20:53', text: 'Tin số 11: Hào quang mềm của trái mìn đã bake sẵn vào 1 tệp WebP phẳng < 12 KB.' },
+      { self: true, seal: 'S', author: 'pangting', time: '20:54', text: 'Tin số 12: Khi cuộn ra khỏi khung nhìn, IntersectionObserver tự gắn data-offscreen.' },
+      { self: false, seal: 'R', author: 'pangting', time: '20:55', text: 'Tin số 13: Cuộn ngược lại màn hình thì .shout-lg-fx hiện lại và diễn lại 2 lượt mới.' },
+      { self: true, seal: 'S', author: 'pangting', time: '20:56', text: 'Tin số 14: Cuối danh sách — kiểm tra không tràn ngang ở màn hình 390px.' }
+    ];
+
+    const feed = document.getElementById('feed');
+    const offscreenStat = document.getElementById('offscreenStat');
+
+    function buildRow(msg) {
+      const row = document.createElement('div');
+      row.className = `shout-message-row ${msg.self ? 'is-self' : 'is-other'}${msg.extraClass ? ' ' + msg.extraClass : ''}`;
+      row.setAttribute('data-store-frame', 'crystal-mine');
+
+      const sealHtml = `<div class="shout-house-seal" aria-hidden="true">${msg.seal}</div>`;
+      const quoteHtml = msg.quote ? `<div class="shout-quote-preview">${msg.quote}</div>` : '';
+      const tagHtml = msg.tag ? `<span class="row-tag">${msg.tag}</span>` : '';
+
+      const bubbleHtml = `
+        <div class="shout-message-content">
+          <div class="shout-message-bubble">
+            <div class="shout-lg-fx" aria-hidden="true">
+              <span class="shout-lg-aura"></span>
+              <span class="shout-lg-rim"></span>
+              <span class="shout-lg-clip">
+                <span class="shout-lg-b"></span>
+                <span class="shout-lg-band"></span>
+                <span class="shout-lg-a"></span>
+                <span class="shout-lg-top"></span>
+              </span>
+            </div>
+            <div class="shout-meta-line">
+              <span class="shout-message-author">
+                ${msg.author}<span class="shout-lg-shine" aria-hidden="true">${msg.author}</span>
+              </span>
+              <span class="shout-message-meta-time">${msg.time}</span>
+              ${tagHtml}
+            </div>
+            ${quoteHtml}
+            <div class="shout-rich-text">${msg.text}</div>
+          </div>
+        </div>
+      `;
+
+      row.innerHTML = msg.self ? bubbleHtml + sealHtml : sealHtml + bubbleHtml;
+      return row;
+    }
+
+    MESSAGES.forEach((m) => feed.appendChild(buildRow(m)));
+
+    function updateOffscreenStats() {
+      const rows = feed.querySelectorAll('.shout-message-row');
+      let off = 0;
+      rows.forEach((r) => { if (r.hasAttribute('data-offscreen')) off++; });
+      offscreenStat.textContent = `Hiển thị: ${rows.length - off} / Ẩn ngoài màn (data-offscreen): ${off}`;
+    }
+
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.removeAttribute('data-offscreen');
+        } else {
+          entry.target.setAttribute('data-offscreen', '');
+        }
+      });
+      updateOffscreenStats();
+    }, { root: feed, threshold: 0.05 });
+
+    feed.querySelectorAll('.shout-message-row').forEach((r) => io.observe(r));
+
+    function replayTwoCycles() {
+      document.body.classList.remove('preview-freeze-777');
+      document.getElementById('btnFreeze777').classList.remove('is-active');
+      feed.querySelectorAll('.shout-lg-fx, .shout-lg-shine').forEach((el) => {
+        const prev = el.style.display;
+        el.style.display = 'none';
+        void el.offsetWidth;
+        el.style.display = prev;
+      });
+    }
+
+    document.getElementById('btnReplay').addEventListener('click', replayTwoCycles);
+
+    const btnFreeze777 = document.getElementById('btnFreeze777');
+    btnFreeze777.addEventListener('click', () => {
+      const active = document.body.classList.toggle('preview-freeze-777');
+      btnFreeze777.classList.toggle('is-active', active);
+    });
+
+    document.getElementById('btnTheme').addEventListener('click', () => {
       document.body.classList.toggle('is-light');
+    });
+
+    const btnHideFrames = document.getElementById('btnHideFrames');
+    btnHideFrames.addEventListener('click', () => {
+      const hidden = feed.getAttribute('data-hide-frames') === 'true';
+      feed.setAttribute('data-hide-frames', hidden ? 'false' : 'true');
+      btnHideFrames.classList.toggle('is-active', !hidden);
+    });
+
+    const btnReduceMotion = document.getElementById('btnReduceMotion');
+    btnReduceMotion.addEventListener('click', () => {
+      const rm = document.body.classList.toggle('preview-reduce-motion');
+      btnReduceMotion.classList.toggle('is-active', rm);
+    });
+
+    const rmQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const rmBanner = document.getElementById('rmBanner');
+    const btnForceMotion = document.getElementById('btnForceMotion');
+    function syncRmBanner() {
+      rmBanner.classList.toggle('is-visible', rmQuery.matches);
+    }
+    syncRmBanner();
+    rmQuery.addEventListener('change', syncRmBanner);
+    btnForceMotion.addEventListener('click', () => {
+      const forced = document.body.classList.toggle('preview-force-motion');
+      btnForceMotion.classList.toggle('is-active', forced);
+      btnForceMotion.textContent = forced ? 'Quay về tĩnh theo hệ điều hành' : 'Xem thử hiệu ứng động';
+      if (forced) replayTwoCycles();
     });
   </script>
 </body>

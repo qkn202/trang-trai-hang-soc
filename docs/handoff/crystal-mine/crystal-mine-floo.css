@@ -1,411 +1,83 @@
-/* ==========================================================================
-   Mạng Floo HPVN — Khung Bong Bóng «Pha Lê Cầu Vồng» ("crystal-mine")
-   Tài khoản gắn khung: ID / username `pangting`
-   Bản chốt chính thức — Mẫu số 2 «Tinh Vân Nhung» (Bản tinh giản thanh lịch):
-     - Khung viền mảnh trang sức vàng champagne (1.5px border-box + chỉ lồng
-       champagne 4.8px bên trong): thanh thoát, không dày nặng, có viền mảnh tối
-       bao ngoài giúp tách sắc nét trên cả nền tối lẫn nền sáng
-     - Hoa văn móc mảnh Art-Nouveau & viên thoi champagne cố định 2 góc đối xứng,
-       ôm sát đường chỉ đôi nội vi kèm ánh lụa mảnh ở giữa mép trên/dưới
-     - Giữ nguyên 100% bảng màu nền Mẫu số 2 «Tinh Vân Nhung» (~70% đen mực &
-       đen tím nhung #0a090f -> #1e1429, ~30% mây tím mận nhung #573763 ->
-       #704784 -> #885e99), tách lớp cung quỹ đạo & chòm sao tròn chuẩn tỷ lệ
-       (không méo trên bong bóng ngắn), đứng yên sắc nét, không sao lấp lánh
-     - Trái Mìn Pha Lê Cầu Vồng nổ tung (::after — 96x96px, trái mìn 54x54px ở tâm)
-       + số 777 màu cầu vồng ánh kim nổi khối 3D (::before) đồng bộ chu kỳ 6.2s
-       (100% pure CSS, không cần JS)
-   Đường dẫn ảnh trên repo hpvn-archive.net:
-     public/images/floo-items/crystal-mine/ -> /images/floo-items/crystal-mine/*
-   ========================================================================== */
+/* ============================================================================
+   MẠNG FLOO (HPVNN) — KHUNG HUYỀN THOẠI «PHA LÊ CẦU VỒNG» ("crystal-mine")
+   Tài khoản gắn khung riêng: ID / username `pangting` (gringotts-own-floo-frames.json)
+   Bản chốt Mẫu số 2 «Tinh Vân Nhung» — Tối ưu 100% chuẩn rule iOS Safari 16+
 
-@property --cm-ring-r {
-  syntax: "<percentage>";
-  initial-value: 8%;
-  inherits: false;
-}
+   File cắm trực tiếp vào: client/app/styles/05-floo/20-store-appearance.css
+   Key đăng ký vào:
+     - LEGENDARY_FRAMES (client/app/components/ShoutMessageRow.ts)
+     - client/features/floo/model/itemAppearanceKeys.json (xếp theo chữ cái)
+     - functions/galleons/gringotts-own-floo-frames.json (gắn theo uid pangting)
+   Ảnh WebP phẳng duy nhất (< 12 KB):
+     - client/public/images/floo-items/crystal-mine/crystal-mine.webp
 
-@property --cm-ring-a {
-  syntax: "<number>";
-  initial-value: 0;
-  inherits: false;
-}
+   Ràng buộc bắt buộc đã tuân thủ 100%:
+   - Dùng đúng DOM sẵn có của LEGENDARY_FRAMES (.shout-lg-fx > .shout-lg-aura,
+     .shout-lg-rim, .shout-lg-clip > (.shout-lg-b, .shout-lg-band, .shout-lg-a,
+     .shout-lg-top) + .shout-lg-shine), không thêm thẻ DOM mới
+   - Mọi @keyframes mang tiền tố hpvn-lg-, chỉ đổi opacity & transform
+   - Không infinite: chạy đúng 2 lượt rồi dừng đẹp ở khung tĩnh (2 forwards)
+   - Mọi animation nằm trong @media (prefers-reduced-motion: no-preference)
+   - Dừng ngoài màn hình bằng [data-offscreen], tương thích .is-sonorus,
+     .is-prisoner-censored, :has(.shout-image-album.is-stack), [data-hide-frames]
+   - Cấm filter, feGaussianBlur, backdrop-filter, mix-blend-mode, @property,
+     !important, canvas, PNG và image-set
+   - Một khung, một viền mảnh vàng champagne 1.5px (-webkit-mask + mask)
+   ============================================================================ */
 
-@property --cm-flash-a {
-  syntax: "<number>";
-  initial-value: 0;
-  inherits: false;
-}
-
-@property --cm-shard-d {
-  syntax: "<percentage>";
-  initial-value: 0%;
-  inherits: false;
-}
-
-@property --cm-shard-a {
-  syntax: "<number>";
-  initial-value: 0;
-  inherits: false;
-}
-
-/* Chu kỳ 6.2s đồng bộ cho trái mìn (::after) và số 777 cầu vồng ánh kim (::before) */
-@keyframes crystalMineDetonate {
-  0%,
-  37% {
-    transform: translateY(0) scale(1) rotate(0deg);
-    background-size:
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      54px 54px;
-    --cm-ring-r: 8%;
-    --cm-ring-a: 0;
-    --cm-flash-a: 0;
-    --cm-shard-d: 0%;
-    --cm-shard-a: 0;
-    filter:
-      drop-shadow(0 4px 8px rgba(4, 2, 10, 0.9))
-      drop-shadow(0 0 8px rgba(176, 132, 206, 0.34))
-      drop-shadow(0 0 3px rgba(242, 226, 188, 0.28));
-  }
-  18% {
-    transform: translateY(-2px) scale(1.02) rotate(1.5deg);
-    filter:
-      drop-shadow(0 6px 10px rgba(4, 2, 10, 0.92))
-      drop-shadow(0 0 12px rgba(196, 148, 224, 0.48))
-      drop-shadow(0 0 5px rgba(248, 236, 206, 0.4));
-  }
-  41% {
-    transform: translate(-1.5px, 0.5px) scale(1.04) rotate(-6deg);
-    filter:
-      brightness(1.16)
-      saturate(1.22)
-      drop-shadow(0 0 12px rgba(255, 224, 150, 0.56))
-      drop-shadow(0 0 16px rgba(206, 142, 255, 0.62));
-  }
-  45% {
-    transform: translate(1.8px, -1px) scale(1.07) rotate(7deg);
-    filter:
-      brightness(1.3)
-      saturate(1.32)
-      drop-shadow(0 0 15px rgba(255, 228, 160, 0.72))
-      drop-shadow(0 0 20px rgba(218, 140, 255, 0.72));
-  }
-  48% {
-    transform: translate(-2px, 1px) scale(1.09) rotate(-8deg);
-    filter:
-      brightness(1.46)
-      saturate(1.42)
-      drop-shadow(0 0 18px rgba(255, 236, 182, 0.86))
-      drop-shadow(0 0 24px rgba(226, 136, 255, 0.85));
-  }
-  51% {
-    transform: translate(1.5px, -1.5px) scale(1.12) rotate(9deg);
-    background-size:
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      54px 54px;
-    --cm-flash-a: 0.28;
-    --cm-ring-a: 0;
-    --cm-shard-a: 0;
-    filter:
-      brightness(1.7)
-      saturate(1.5)
-      drop-shadow(0 0 22px rgba(255, 244, 206, 0.95));
-  }
-  54% {
-    transform: scale(0.84) rotate(0deg);
-    background-size:
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      50px 50px;
-    --cm-ring-r: 10%;
-    --cm-ring-a: 0.25;
-    --cm-flash-a: 0.72;
-    --cm-shard-d: 4%;
-    --cm-shard-a: 0.35;
-    filter:
-      brightness(2.1)
-      drop-shadow(0 0 24px rgba(255, 250, 224, 1));
-  }
-  57% {
-    transform: scale(1.14) rotate(6deg);
-    background-size:
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      60px 60px;
-    --cm-ring-r: 22%;
-    --cm-ring-a: 0.96;
-    --cm-flash-a: 1;
-    --cm-shard-d: 18%;
-    --cm-shard-a: 1;
-    filter:
-      brightness(1.6)
-      saturate(1.35)
-      drop-shadow(0 0 26px rgba(255, 242, 204, 0.98))
-      drop-shadow(0 0 34px rgba(214, 124, 255, 0.82));
-  }
-  61% {
-    transform: scale(1.04) rotate(14deg);
-    background-size:
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      0px 0px;
-    --cm-ring-r: 36%;
-    --cm-ring-a: 0.8;
-    --cm-flash-a: 0.48;
-    --cm-shard-d: 32%;
-    --cm-shard-a: 1;
-    filter:
-      brightness(1.22)
-      saturate(1.32)
-      drop-shadow(0 0 14px rgba(255, 236, 186, 0.86));
-  }
-  67% {
-    transform: scale(1) rotate(22deg);
-    background-size:
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      0px 0px;
-    --cm-ring-r: 47%;
-    --cm-ring-a: 0.22;
-    --cm-flash-a: 0;
-    --cm-shard-d: 42%;
-    --cm-shard-a: 0.52;
-    filter: drop-shadow(0 0 8px rgba(224, 180, 255, 0.55));
-  }
-  78%,
-  84% {
-    transform: scale(0.92) rotate(26deg);
-    background-size:
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      0px 0px;
-    --cm-ring-r: 49%;
-    --cm-ring-a: 0;
-    --cm-flash-a: 0;
-    --cm-shard-d: 46%;
-    --cm-shard-a: 0;
-    filter: drop-shadow(0 0 4px rgba(214, 180, 255, 0.2));
-  }
-  90% {
-    transform: scale(1.08) rotate(-3deg);
-    background-size:
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      58px 58px;
-    --cm-ring-r: 8%;
-    --cm-ring-a: 0;
-    --cm-flash-a: 0.22;
-    --cm-shard-d: 0%;
-    --cm-shard-a: 0;
-    filter:
-      brightness(1.25)
-      drop-shadow(0 4px 10px rgba(4, 2, 10, 0.9))
-      drop-shadow(0 0 14px rgba(214, 186, 255, 0.65));
-  }
-  95%,
-  100% {
-    transform: translateY(0) scale(1) rotate(0deg);
-    background-size:
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      54px 54px;
-    --cm-ring-r: 8%;
-    --cm-ring-a: 0;
-    --cm-flash-a: 0;
-    --cm-shard-d: 0%;
-    --cm-shard-a: 0;
-    filter:
-      drop-shadow(0 4px 8px rgba(4, 2, 10, 0.9))
-      drop-shadow(0 0 8px rgba(176, 132, 206, 0.34))
-      drop-shadow(0 0 3px rgba(242, 226, 188, 0.28));
-  }
-}
-
-/* Số 777 màu cầu vồng ánh kim bật thẳng đứng từ tâm vụ nổ (::before, đồng bộ chu kỳ 6.2s) */
-@keyframes crystalMine777Reveal {
-  0%,
-  55% {
-    opacity: 0;
-    transform: translateY(4px) scale(0.32);
-    filter: brightness(1.4) drop-shadow(0 2px 4px rgba(8, 3, 16, 0.9));
-  }
-  60% {
-    opacity: 1;
-    transform: translateY(-1px) scale(1.16);
-    filter:
-      brightness(1.36)
-      saturate(1.25)
-      drop-shadow(0 3px 8px rgba(8, 3, 18, 0.95))
-      drop-shadow(0 0 14px rgba(255, 232, 178, 0.85))
-      drop-shadow(0 0 22px rgba(206, 126, 255, 0.72));
-  }
-  65% {
-    opacity: 1;
-    transform: translateY(-2px) scale(1);
-    filter:
-      brightness(1.12)
-      saturate(1.18)
-      drop-shadow(0 3px 7px rgba(8, 3, 18, 0.95))
-      drop-shadow(0 0 10px rgba(220, 152, 255, 0.65));
-  }
-  72% {
-    opacity: 1;
-    transform: translateY(-3px) scale(1.03);
-    filter:
-      brightness(1.24)
-      saturate(1.25)
-      drop-shadow(0 3px 8px rgba(8, 3, 18, 0.95))
-      drop-shadow(0 0 13px rgba(255, 236, 184, 0.75))
-      drop-shadow(0 0 18px rgba(128, 220, 255, 0.55));
-  }
-  79% {
-    opacity: 1;
-    transform: translateY(-4px) scale(1);
-    filter:
-      brightness(1.1)
-      saturate(1.15)
-      drop-shadow(0 3px 7px rgba(8, 3, 18, 0.95))
-      drop-shadow(0 0 10px rgba(214, 146, 255, 0.55));
-  }
-  85%,
-  100% {
-    opacity: 0;
-    transform: translateY(-9px) scale(0.88);
-    filter: brightness(1.35) drop-shadow(0 0 8px rgba(242, 210, 255, 0.35));
-  }
-}
-
+/* ----------------------------------------------------------------------------
+   1. BIẾN MÀU & CHẤT LIỆU MẪU SỐ 2 «TINH VÂN NHUNG»
+   ---------------------------------------------------------------------------- */
 .shout-message-row[data-store-frame="crystal-mine"] {
-  --sf-edge: transparent;
-  --sf-text: #faf6fc;
-  --sf-author: #f3e4c4;
-  --sf-meta: rgba(212, 198, 222, 0.8);
-  --sf-link: #e9cceb;
-  --sf-quote-bg: rgba(12, 8, 19, 0.66);
-  --sf-quote-border: rgba(226, 204, 160, 0.74);
-  --cm-mine-img: image-set(
-    url("/images/floo-items/crystal-mine/crystal-mine.webp") type("image/webp") 1x,
-    url("/images/floo-items/crystal-mine/crystal-mine-2x.webp") type("image/webp") 2x,
-    url("/images/floo-items/crystal-mine/crystal-mine.png") type("image/png") 1x
+  --sf-edge-width: 1.5px;
+  --sf-edge: linear-gradient(
+    138deg,
+    #9b8259 0%,
+    #f0e1c2 20%,
+    #fff8ea 32%,
+    #c9b082 52%,
+    #8b724b 72%,
+    #ecdab7 88%,
+    #fbf2dd 94%,
+    #9c835a 100%
   );
+  --lg-ink: #faf6fc;
+  --lg-time: rgba(218, 204, 230, 0.86);
+  --sf-text: var(--lg-ink);
+  --sf-author: #f5e6c8;
+  --sf-meta: var(--lg-time);
+  --sf-link: #f0d0f4;
+  --sf-quote-bg: rgba(12, 8, 19, 0.68);
+  --sf-quote-border: rgba(232, 208, 162, 0.78);
+  --sf-quote-ink: #f1eafb;
   --sf-shadow:
-    0 0 0 1px rgba(8, 5, 13, 0.88),
-    0 12px 28px rgba(5, 3, 10, 0.64),
-    0 2px 8px rgba(7, 4, 14, 0.46),
-    0 0 22px rgba(136, 94, 153, 0.16),
-    inset 0 1px 0 rgba(255, 249, 236, 0.48),
-    inset 0 -1px 0 rgba(204, 166, 214, 0.24),
-    inset 0 0 0 4px rgba(10, 7, 16, 0.42),
-    inset 0 0 0 4.85px rgba(232, 212, 172, 0.28);
+    0 0 0 1px rgba(8, 5, 13, 0.86),
+    0 10px 24px rgba(5, 3, 10, 0.56),
+    0 2px 7px rgba(7, 4, 14, 0.42),
+    inset 0 1px 0 rgba(255, 249, 236, 0.34),
+    inset 0 -1px 0 rgba(204, 166, 214, 0.2);
   --sf-paper:
-    /* 1. Hoa văn chỉ mảnh & viên thoi champagne cố định 2 góc đối xứng (ôm sát đường chỉ đôi nội vi) */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36' fill='none'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23fff6e0'/%3E%3Cstop offset='46%25' stop-color='%23e3ca9a' stop-opacity='0.88'/%3E%3Cstop offset='100%25' stop-color='%23b59969' stop-opacity='0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M0.8 33V8.3A7.5 7.5 0 0 1 8.3 0.8H33' stroke='url(%23g)' stroke-width='0.95' stroke-linecap='round'/%3E%3Cpath d='M4.2 21V9.7A5.5 5.5 0 0 1 9.7 4.2H21' stroke='%23e8d3a8' stroke-width='0.65' stroke-opacity='0.58' stroke-linecap='round'/%3E%3Cpath d='M8.6 6.6L10.2 8.6L8.6 10.6L7 8.6Z' fill='%23fbf1da' fill-opacity='0.88'/%3E%3Ccircle cx='15.6' cy='4.2' r='0.75' fill='%23f2dfc0' fill-opacity='0.76'/%3E%3Ccircle cx='4.2' cy='15.6' r='0.75' fill='%23f2dfc0' fill-opacity='0.76'/%3E%3C/svg%3E") left 4px top 4px / 36px 36px no-repeat padding-box,
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36' fill='none'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23fff6e0'/%3E%3Cstop offset='46%25' stop-color='%23e3ca9a' stop-opacity='0.88'/%3E%3Cstop offset='100%25' stop-color='%23b59969' stop-opacity='0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg transform='rotate(180 18 18)'%3E%3Cpath d='M0.8 33V8.3A7.5 7.5 0 0 1 8.3 0.8H33' stroke='url(%23g)' stroke-width='0.95' stroke-linecap='round'/%3E%3Cpath d='M4.2 21V9.7A5.5 5.5 0 0 1 9.7 4.2H21' stroke='%23e8d3a8' stroke-width='0.65' stroke-opacity='0.58' stroke-linecap='round'/%3E%3Cpath d='M8.6 6.6L10.2 8.6L8.6 10.6L7 8.6Z' fill='%23fbf1da' fill-opacity='0.88'/%3E%3Ccircle cx='15.6' cy='4.2' r='0.75' fill='%23f2dfc0' fill-opacity='0.76'/%3E%3Ccircle cx='4.2' cy='15.6' r='0.75' fill='%23f2dfc0' fill-opacity='0.76'/%3E%3C/g%3E%3C/svg%3E") right 4px bottom 4px / 36px 36px no-repeat padding-box,
-    /* 2. Ánh lụa champagne mảnh bắt sáng ở giữa mép trên & mép dưới */
+    /* 1. Hoa văn chỉ mảnh & viên thoi champagne cố định 2 góc đối xứng */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36' fill='none'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23fff6e0'/%3E%3Cstop offset='46%25' stop-color='%23e3ca9a' stop-opacity='0.88'/%3E%3Cstop offset='100%25' stop-color='%23b59969' stop-opacity='0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M0.8 33V8.3A7.5 7.5 0 0 1 8.3 0.8H33' stroke='url(%23g)' stroke-width='0.95' stroke-linecap='round'/%3E%3Cpath d='M4.2 21V9.7A5.5 5.5 0 0 1 9.7 4.2H21' stroke='%23e8d3a8' stroke-width='0.65' stroke-opacity='0.58' stroke-linecap='round'/%3E%3Cpath d='M8.6 6.6L10.2 8.6L8.6 10.6L7 8.6Z' fill='%23fbf1da' fill-opacity='0.88'/%3E%3Ccircle cx='15.6' cy='4.2' r='0.75' fill='%23f2dfc0' fill-opacity='0.76'/%3E%3Ccircle cx='4.2' cy='15.6' r='0.75' fill='%23f2dfc0' fill-opacity='0.76'/%3E%3C/svg%3E")
+      left 5px top 5px / 34px 34px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36' fill='none'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23fff6e0'/%3E%3Cstop offset='46%25' stop-color='%23e3ca9a' stop-opacity='0.88'/%3E%3Cstop offset='100%25' stop-color='%23b59969' stop-opacity='0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg transform='rotate(180 18 18)'%3E%3Cpath d='M0.8 33V8.3A7.5 7.5 0 0 1 8.3 0.8H33' stroke='url(%23g)' stroke-width='0.95' stroke-linecap='round'/%3E%3Cpath d='M4.2 21V9.7A5.5 5.5 0 0 1 9.7 4.2H21' stroke='%23e8d3a8' stroke-width='0.65' stroke-opacity='0.58' stroke-linecap='round'/%3E%3Cpath d='M8.6 6.6L10.2 8.6L8.6 10.6L7 8.6Z' fill='%23fbf1da' fill-opacity='0.88'/%3E%3Ccircle cx='15.6' cy='4.2' r='0.75' fill='%23f2dfc0' fill-opacity='0.76'/%3E%3Ccircle cx='4.2' cy='15.6' r='0.75' fill='%23f2dfc0' fill-opacity='0.76'/%3E%3C/g%3E%3C/svg%3E")
+      right 5px bottom 5px / 34px 34px no-repeat,
+    /* 2. Ánh lụa champagne mảnh bắt sáng giữa mép trên & mép dưới */
     linear-gradient(
       90deg,
       transparent 0%,
-      rgba(255, 247, 228, 0.42) 50%,
+      rgba(255, 247, 228, 0.4) 50%,
       transparent 100%
-    ) 50% 4px / 44% 1px no-repeat padding-box,
+    )
+      50% 4px / 44% 1px no-repeat,
     linear-gradient(
       90deg,
       transparent 0%,
-      rgba(232, 212, 174, 0.34) 50%,
+      rgba(232, 212, 174, 0.32) 50%,
       transparent 100%
-    ) 50% calc(100% - 4px) / 36% 1px no-repeat padding-box,
-    /* 3. Lớp bóng lụa satin dịu nhẹ trên & dưới (giữ trọn chiều sâu nền đen-tím) */
+    )
+      50% calc(100% - 4px) / 36% 1px no-repeat,
+    /* 3. Lớp bóng lụa satin dịu nhẹ trên & dưới */
     linear-gradient(
       180deg,
       rgba(244, 226, 240, 0.1) 0%,
@@ -414,69 +86,89 @@
       rgba(10, 8, 15, 0) 84%,
       rgba(112, 71, 132, 0.07) 94%,
       rgba(222, 186, 220, 0.09) 100%
-    ) padding-box,
-    /* 4. Cung quỹ đạo tròn chuẩn tỷ lệ & chòm sao khắc mảnh (không bị méo trên bong bóng ngắn) */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 220' preserveAspectRatio='xMidYMid slice'%3E%3Ccircle cx='358' cy='24' r='74' fill='none' stroke='%23d8b8cf' stroke-width='0.75' stroke-opacity='0.28'/%3E%3Ccircle cx='364' cy='20' r='82' fill='none' stroke='%23cbb0b8' stroke-width='0.55' stroke-opacity='0.18'/%3E%3Ccircle cx='444' cy='118' r='108' fill='none' stroke='%23d8b8cf' stroke-width='0.7' stroke-opacity='0.23'/%3E%3Ccircle cx='68' cy='98' r='88' fill='none' stroke='%23c4a2bf' stroke-width='0.65' stroke-opacity='0.2'/%3E%3Cg stroke='%23e4c6da' stroke-width='0.55' stroke-opacity='0.28' fill='none'%3E%3Cpolyline points='156,74 176,104 198,96 184,72'/%3E%3Cpolyline points='432,96 456,82 470,104 452,118 432,96'/%3E%3Cpolyline points='92,42 114,52 104,68'/%3E%3C/g%3E%3Cg fill='%23f6dced'%3E%3Ccircle cx='156' cy='74' r='1.05' fill-opacity='0.82'/%3E%3Ccircle cx='176' cy='104' r='1.2' fill-opacity='0.85'/%3E%3Ccircle cx='198' cy='96' r='0.95' fill-opacity='0.78'/%3E%3Ccircle cx='184' cy='72' r='0.9' fill-opacity='0.74'/%3E%3Ccircle cx='432' cy='96' r='1' fill-opacity='0.8'/%3E%3Ccircle cx='456' cy='82' r='1.15' fill-opacity='0.84'/%3E%3Ccircle cx='470' cy='104' r='0.95' fill-opacity='0.76'/%3E%3Ccircle cx='452' cy='118' r='1.05' fill-opacity='0.8'/%3E%3Ccircle cx='432' cy='38' r='1.35' fill-opacity='0.68'/%3E%3Ccircle cx='306' cy='104' r='1.25' fill-opacity='0.64'/%3E%3C/g%3E%3C/svg%3E") 50% 50% / 100% 100% no-repeat padding-box,
-    /* 5. Nền Mẫu số 2 «Tinh Vân Nhung» GIỮ NGUYÊN 100% bảng màu (~70% đen mực/đen tím nhung + ~30% tím khói nhung) */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 220' preserveAspectRatio='none'%3E%3Cdefs%3E%3ClinearGradient id='v' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%230a090f'/%3E%3Cstop offset='42%25' stop-color='%23160f20'/%3E%3Cstop offset='76%25' stop-color='%231e1429'/%3E%3Cstop offset='100%25' stop-color='%230d0a14'/%3E%3C/linearGradient%3E%3CradialGradient id='s1' cx='0.52' cy='0.64' r='0.34'%3E%3Cstop offset='0%25' stop-color='%23704784' stop-opacity='0.68'/%3E%3Cstop offset='38%25' stop-color='%234d3054' stop-opacity='0.44'/%3E%3Cstop offset='72%25' stop-color='%23251831' stop-opacity='0.18'/%3E%3Cstop offset='100%25' stop-color='%230e0c15' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='s2' cx='0.22' cy='0.34' r='0.26'%3E%3Cstop offset='0%25' stop-color='%23674378' stop-opacity='0.56'/%3E%3Cstop offset='46%25' stop-color='%23332040' stop-opacity='0.3'/%3E%3Cstop offset='100%25' stop-color='%230e0c15' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='s3' cx='0.82' cy='0.52' r='0.28'%3E%3Cstop offset='0%25' stop-color='%23573763' stop-opacity='0.56'/%3E%3Cstop offset='50%25' stop-color='%232d1d37' stop-opacity='0.28'/%3E%3Cstop offset='100%25' stop-color='%230e0c15' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='s4' cx='0.72' cy='0.18' r='0.22'%3E%3Cstop offset='0%25' stop-color='%23885e99' stop-opacity='0.58'/%3E%3Cstop offset='48%25' stop-color='%233f274f' stop-opacity='0.28'/%3E%3Cstop offset='100%25' stop-color='%230e0c15' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='glow' cx='0.53' cy='0.72' r='0.15'%3E%3Cstop offset='0%25' stop-color='%239b69ae' stop-opacity='0.54'/%3E%3Cstop offset='46%25' stop-color='%23653d76' stop-opacity='0.32'/%3E%3Cstop offset='100%25' stop-color='%231e1429' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='dust' cx='0.34' cy='0.44' r='0.16'%3E%3Cstop offset='0%25' stop-color='%23daafd2' stop-opacity='0.32'/%3E%3Cstop offset='52%25' stop-color='%23674378' stop-opacity='0.16'/%3E%3Cstop offset='100%25' stop-color='%23181023' stop-opacity='0'/%3E%3C/radialGradient%3E%3Cfilter id='b' filterUnits='userSpaceOnUse' x='-60' y='-60' width='720' height='340'%3E%3CfeGaussianBlur stdDeviation='16'/%3E%3C/filter%3E%3C/defs%3E%3Crect width='600' height='220' fill='url(%23v)'/%3E%3Crect width='600' height='220' fill='url(%23s2)'/%3E%3Crect width='600' height='220' fill='url(%23s3)'/%3E%3Crect width='600' height='220' fill='url(%23s1)'/%3E%3Crect width='600' height='220' fill='url(%23s4)'/%3E%3Cpath d='M90 164 C 154 114, 212 140, 276 94 C 330 56, 398 118, 464 82' fill='none' stroke='%23573763' stroke-width='32' stroke-linecap='round' opacity='0.36' filter='url(%23b)'/%3E%3Cpath d='M250 184 C 312 138, 366 154, 424 120' fill='none' stroke='%23704784' stroke-width='22' stroke-linecap='round' opacity='0.34' filter='url(%23b)'/%3E%3Crect width='600' height='220' fill='url(%23glow)'/%3E%3Crect width='600' height='220' fill='url(%23dust)'/%3E%3C/svg%3E") 50% 50% / 100% 100% no-repeat padding-box,
-    /* 6. Viền kim loại vàng champagne phay lụa mảnh 1.5px đứng yên thanh lịch */
-    linear-gradient(
-      138deg,
-      #9b8259 0%,
-      #f0e1c2 20%,
-      #fff8ea 32%,
-      #c9b082 52%,
-      #8b724b 72%,
-      #ecdab7 88%,
-      #fbf2dd 94%,
-      #9c835a 100%
-    ) border-box;
+    ),
+    /* 4. Cung quỹ đạo tròn chuẩn tỷ lệ & chòm sao khắc mảnh (không méo trên tin ngắn) */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 220' preserveAspectRatio='xMidYMid slice'%3E%3Ccircle cx='358' cy='24' r='74' fill='none' stroke='%23d8b8cf' stroke-width='0.75' stroke-opacity='0.28'/%3E%3Ccircle cx='364' cy='20' r='82' fill='none' stroke='%23cbb0b8' stroke-width='0.55' stroke-opacity='0.18'/%3E%3Ccircle cx='444' cy='118' r='108' fill='none' stroke='%23d8b8cf' stroke-width='0.7' stroke-opacity='0.23'/%3E%3Ccircle cx='68' cy='98' r='88' fill='none' stroke='%23c4a2bf' stroke-width='0.65' stroke-opacity='0.2'/%3E%3Cg stroke='%23e4c6da' stroke-width='0.55' stroke-opacity='0.28' fill='none'%3E%3Cpolyline points='156,74 176,104 198,96 184,72'/%3E%3Cpolyline points='432,96 456,82 470,104 452,118 432,96'/%3E%3Cpolyline points='92,42 114,52 104,68'/%3E%3C/g%3E%3Cg fill='%23f6dced'%3E%3Ccircle cx='156' cy='74' r='1.05' fill-opacity='0.82'/%3E%3Ccircle cx='176' cy='104' r='1.2' fill-opacity='0.85'/%3E%3Ccircle cx='198' cy='96' r='0.95' fill-opacity='0.78'/%3E%3Ccircle cx='184' cy='72' r='0.9' fill-opacity='0.74'/%3E%3Ccircle cx='432' cy='96' r='1' fill-opacity='0.8'/%3E%3Ccircle cx='456' cy='82' r='1.15' fill-opacity='0.84'/%3E%3Ccircle cx='470' cy='104' r='0.95' fill-opacity='0.76'/%3E%3Ccircle cx='452' cy='118' r='1.05' fill-opacity='0.8'/%3E%3Ccircle cx='432' cy='38' r='1.35' fill-opacity='0.68'/%3E%3Ccircle cx='306' cy='104' r='1.25' fill-opacity='0.64'/%3E%3C/g%3E%3C/svg%3E")
+      50% 50% / 100% 100% no-repeat,
+    /* 5. Nền Tinh Vân Nhung (~70% đen mực #0a090f-#1e1429 + ~30% tím mận nhung #573763-#885e99, 0 SVG blur) */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 220' preserveAspectRatio='none'%3E%3Cdefs%3E%3ClinearGradient id='v' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%230a090f'/%3E%3Cstop offset='42%25' stop-color='%23160f20'/%3E%3Cstop offset='76%25' stop-color='%231e1429'/%3E%3Cstop offset='100%25' stop-color='%230d0a14'/%3E%3C/linearGradient%3E%3CradialGradient id='s1' cx='0.52' cy='0.64' r='0.34'%3E%3Cstop offset='0%25' stop-color='%23704784' stop-opacity='0.68'/%3E%3Cstop offset='38%25' stop-color='%234d3054' stop-opacity='0.44'/%3E%3Cstop offset='72%25' stop-color='%23251831' stop-opacity='0.18'/%3E%3Cstop offset='100%25' stop-color='%230e0c15' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='s2' cx='0.22' cy='0.34' r='0.26'%3E%3Cstop offset='0%25' stop-color='%23674378' stop-opacity='0.56'/%3E%3Cstop offset='46%25' stop-color='%23332040' stop-opacity='0.3'/%3E%3Cstop offset='100%25' stop-color='%230e0c15' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='s3' cx='0.82' cy='0.52' r='0.28'%3E%3Cstop offset='0%25' stop-color='%23573763' stop-opacity='0.56'/%3E%3Cstop offset='50%25' stop-color='%232d1d37' stop-opacity='0.28'/%3E%3Cstop offset='100%25' stop-color='%230e0c15' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='s4' cx='0.72' cy='0.18' r='0.22'%3E%3Cstop offset='0%25' stop-color='%23885e99' stop-opacity='0.58'/%3E%3Cstop offset='48%25' stop-color='%233f274f' stop-opacity='0.28'/%3E%3Cstop offset='100%25' stop-color='%230e0c15' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='w1' cx='0.5' cy='0.5' r='0.5'%3E%3Cstop offset='0%25' stop-color='%23573763' stop-opacity='0.44'/%3E%3Cstop offset='54%25' stop-color='%2343294e' stop-opacity='0.18'/%3E%3Cstop offset='100%25' stop-color='%23160f20' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='w2' cx='0.5' cy='0.5' r='0.5'%3E%3Cstop offset='0%25' stop-color='%23704784' stop-opacity='0.42'/%3E%3Cstop offset='52%25' stop-color='%234a2e5c' stop-opacity='0.16'/%3E%3Cstop offset='100%25' stop-color='%23160f20' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='glow' cx='0.53' cy='0.72' r='0.15'%3E%3Cstop offset='0%25' stop-color='%239b69ae' stop-opacity='0.54'/%3E%3Cstop offset='46%25' stop-color='%23653d76' stop-opacity='0.32'/%3E%3Cstop offset='100%25' stop-color='%231e1429' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='dust' cx='0.34' cy='0.44' r='0.16'%3E%3Cstop offset='0%25' stop-color='%23daafd2' stop-opacity='0.32'/%3E%3Cstop offset='52%25' stop-color='%23674378' stop-opacity='0.16'/%3E%3Cstop offset='100%25' stop-color='%23181023' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='600' height='220' fill='url(%23v)'/%3E%3Crect width='600' height='220' fill='url(%23s2)'/%3E%3Crect width='600' height='220' fill='url(%23s3)'/%3E%3Crect width='600' height='220' fill='url(%23s1)'/%3E%3Crect width='600' height='220' fill='url(%23s4)'/%3E%3Cellipse cx='272' cy='112' rx='210' ry='56' transform='rotate(-14 272 112)' fill='url(%23w1)'/%3E%3Cellipse cx='356' cy='144' rx='136' ry='42' transform='rotate(-16 356 144)' fill='url(%23w2)'/%3E%3Crect width='600' height='220' fill='url(%23glow)'/%3E%3Crect width='600' height='220' fill='url(%23dust)'/%3E%3C/svg%3E")
+      50% 50% / 100% 100% no-repeat;
 }
 
-@media (forced-colors: active) {
-  .shout-message-row[data-store-frame="crystal-mine"]
-    .shout-message-bubble:not(:has(.shout-image-album.is-stack)) {
-    border: 2px solid CanvasText !important;
-    background: Canvas !important;
-    color: CanvasText !important;
-  }
-}
-
-.shout-message-row[data-store-frame="crystal-mine"]
-  .shout-message-bubble:not(:has(.shout-image-album.is-stack)) {
-  color: var(--sf-text);
-  border: 1.5px solid transparent !important;
-  background: var(--sf-paper) !important;
-  box-shadow: var(--sf-shadow);
-  min-width: 162px;
-  margin-top: 18px;
-  padding: 15px 52px 15px 23px;
-}
-
-.shout-message-row[data-store-frame="crystal-mine"]
-  .shout-message-bubble:not(:has(.shout-image-album.is-stack)) > * {
+/* ----------------------------------------------------------------------------
+   2. KHỐI BONG BÓNG, PADDING CỐ ĐỊNH & TƯƠNG PHẢN VĂN BẢN
+   (Không ghi đè tin Sonorus, tin kiểm duyệt hay album ảnh xếp chồng)
+   ---------------------------------------------------------------------------- */
+.shout-message-row[data-store-frame="crystal-mine"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) {
   position: relative;
-  z-index: 1;
+  border: 0;
+  color: var(--lg-ink);
+  background: var(--sf-paper);
+  box-shadow: var(--sf-shadow);
+  min-width: 176px;
+  min-height: 76px;
+  padding: 14px 78px 14px 20px;
 }
 
-/* Hướng chính chủ (.is-self) giữ khoảng đệm phải 52px để tên/giờ không chạm trái mìn góc trên phải */
-.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="crystal-mine"]
-  .shout-message-bubble:not(:has(.shout-image-album.is-stack)) {
-  padding: 15px 52px 15px 23px;
+.shout-message-row[data-store-frame="crystal-mine"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) > :not(.shout-lg-fx) {
+  position: relative;
+  z-index: 2;
+}
+
+/* Đối xứng trái/phải cho tin của chính chủ (.is-self) */
+.shout-message-row.is-self:not(.is-self-shared-direction):not(.is-sonorus):not(.is-prisoner-censored)[data-store-frame="crystal-mine"]
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) {
+  padding: 14px 20px 14px 78px;
+}
+
+@media (max-width: 640px) {
+  .shout-message-row[data-store-frame="crystal-mine"]:not(.is-sonorus):not(.is-prisoner-censored)
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) {
+    min-width: 158px;
+    min-height: 68px;
+    padding: 12px 66px 13px 16px;
+  }
+
+  .shout-message-row.is-self:not(.is-self-shared-direction):not(.is-sonorus):not(.is-prisoner-censored)[data-store-frame="crystal-mine"]
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) {
+    padding: 12px 16px 13px 66px;
+  }
 }
 
 .shout-message-row[data-store-frame="crystal-mine"]
   .shout-message-bubble:not(:has(.shout-image-album.is-stack))
   .shout-message-author {
-  color: var(--sf-author) !important;
+  position: relative;
+  display: inline-block;
+  color: var(--sf-author);
   letter-spacing: 0.015em;
   text-shadow: 0 1px 3px rgba(10, 4, 20, 0.94), 0 0 8px rgba(18, 8, 34, 0.68);
+}
+
+/* Bản sao ánh lụa champagne trên tên tác giả (.shout-lg-shine, chuẩn iOS Safari 16+) */
+.shout-message-row[data-store-frame="crystal-mine"] .shout-lg-shine {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(
+    112deg,
+    transparent 24%,
+    #fffaf0 48%,
+    #f0d8a8 56%,
+    transparent 76%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  opacity: 0;
 }
 
 .shout-message-row[data-store-frame="crystal-mine"]
   .shout-message-bubble:not(:has(.shout-image-album.is-stack))
   .shout-message-meta-time {
-  color: var(--sf-meta);
+  color: var(--lg-time);
   letter-spacing: 0.01em;
   text-shadow: 0 1px 2px rgba(10, 4, 20, 0.88);
 }
@@ -492,7 +184,8 @@
   .shout-rich-text
   a {
   color: var(--sf-link);
-  text-decoration-color: rgba(233, 204, 235, 0.52);
+  text-decoration: underline;
+  text-decoration-color: rgba(240, 208, 244, 0.6);
   text-underline-offset: 2.5px;
   text-decoration-thickness: 1px;
 }
@@ -501,100 +194,455 @@
   .shout-message-bubble:not(:has(.shout-image-album.is-stack))
   .shout-quote-preview {
   background: var(--sf-quote-bg);
-  border: 1px solid rgba(226, 204, 160, 0.16);
-  border-left: 2px solid var(--sf-quote-border);
+  border: 1px solid rgba(226, 204, 160, 0.2);
+  border-inline-start: 2.5px solid var(--sf-quote-border);
   border-radius: 6px;
-  color: #efe8fa;
+  color: var(--sf-quote-ink);
 }
 
-/* Số 777 màu cầu vồng ánh kim nổi khối 3D bật ra ngay khi mìn nổ (::before, đồng bộ chu kỳ 6.2s) */
-.shout-message-row[data-store-frame="crystal-mine"]
-  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack))::before {
-  content: "";
-  z-index: 4;
-  pointer-events: none;
+/* ----------------------------------------------------------------------------
+   3. LỚP HIỆU ỨNG .shout-lg-fx CÓ SẴN CỦA LEGENDARY_FRAMES
+   ---------------------------------------------------------------------------- */
+.shout-message-row[data-store-frame="crystal-mine"] .shout-lg-fx {
   position: absolute;
-  width: 96px;
-  height: 96px;
-  top: -38px;
-  right: -31px;
-  bottom: auto;
-  left: auto;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* Hào quang tím khói - champagne mềm ôm gọn trong khung (không tràn scroll, không filter) */
+.shout-message-row[data-store-frame="crystal-mine"] .shout-lg-aura {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 86% 90% at 50% 50%,
+    rgba(136, 94, 153, 0.22) 0%,
+    rgba(236, 218, 183, 0.1) 52%,
+    transparent 78%
+  );
+  opacity: 0.72;
+}
+
+/* Một khung, một viền vàng champagne phay lụa mảnh 1.5px (-webkit-mask + mask) */
+.shout-message-row[data-store-frame="crystal-mine"] .shout-lg-rim {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: var(--sf-edge-width);
+  background: var(--sf-edge);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* Cắt gọn mọi vòng xung kích & mảnh pha lê nổ trong lòng bong bóng */
+.shout-message-row[data-store-frame="crystal-mine"] .shout-lg-clip {
+  position: absolute;
+  inset: 1.5px;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 3a. .shout-lg-b — Vòng sóng xung kích champagne-tím & chớp lõi nổ (::after) */
+.shout-message-row[data-store-frame="crystal-mine"] .shout-lg-b {
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  width: 88px;
+  height: 88px;
+  pointer-events: none;
+  z-index: 1;
   opacity: 0;
-  animation: crystalMine777Reveal 6.2s ease-in-out infinite;
+  transform: scale(0.18);
+  background: radial-gradient(
+    circle at 50% 50%,
+    transparent 38%,
+    rgba(255, 246, 214, 0.94) 50%,
+    rgba(208, 146, 255, 0.82) 58%,
+    transparent 70%
+  );
+}
+
+.shout-message-row[data-store-frame="crystal-mine"] .shout-lg-b::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.3);
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(255, 253, 242, 0.98) 0%,
+    rgba(255, 224, 156, 0.86) 24%,
+    rgba(212, 126, 255, 0.62) 48%,
+    transparent 72%
+  );
+}
+
+/* 3b. .shout-lg-band — 10 mảnh pha lê đá quý cầu vồng & hạt bụi champagne văng tỏa */
+.shout-message-row[data-store-frame="crystal-mine"] .shout-lg-band {
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  width: 88px;
+  height: 88px;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  transform: scale(0.18) rotate(0deg);
+  background-repeat: no-repeat;
+  background-image:
+    radial-gradient(ellipse 4.2px 2.5px at 84% 31%, #ff4e76 0 68%, transparent 100%),
+    radial-gradient(ellipse 4px 2.3px at 86% 62%, #ffba48 0 68%, transparent 100%),
+    radial-gradient(ellipse 3.8px 2.4px at 68% 85%, #40eca4 0 68%, transparent 100%),
+    radial-gradient(ellipse 3.8px 2.4px at 32% 85%, #4ce2ff 0 68%, transparent 100%),
+    radial-gradient(ellipse 4.2px 2.4px at 13% 58%, #6094ff 0 68%, transparent 100%),
+    radial-gradient(ellipse 4px 2.4px at 20% 24%, #c470ff 0 68%, transparent 100%),
+    radial-gradient(ellipse 3.8px 2.4px at 48% 12%, #ff70e0 0 68%, transparent 100%),
+    radial-gradient(circle 2.2px at 74% 16%, #fff4ce 0 65%, transparent 100%),
+    radial-gradient(circle 2px at 15% 36%, #fff0c6 0 65%, transparent 100%),
+    radial-gradient(circle 2px at 56% 90%, #fff4d2 0 65%, transparent 100%);
+}
+
+/* 3c. .shout-lg-a — Trái Mìn Pha Lê Cầu Vồng 3D (WebP phẳng < 12 KB, tải lười theo key) */
+.shout-message-row[data-store-frame="crystal-mine"] .shout-lg-a {
+  position: absolute;
+  top: 9px;
+  right: 11px;
+  width: 54px;
+  height: 54px;
+  pointer-events: none;
+  z-index: 3;
   background-repeat: no-repeat;
   background-position: center;
-  background-size: 86px 48px;
+  background-size: contain;
+  background-image: url("/images/floo-items/crystal-mine/crystal-mine.webp");
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+}
+
+/* 3d. .shout-lg-top — Số 777 cầu vồng ánh kim chrome nổi khối 3D bật ra ngay khi mìn nổ */
+.shout-message-row[data-store-frame="crystal-mine"] .shout-lg-top {
+  position: absolute;
+  top: 11px;
+  right: 3px;
+  width: 72px;
+  height: 48px;
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0;
+  transform: translate3d(0, 5px, 0) scale(0.35);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 66'%3E%3Cdefs%3E%3ClinearGradient id='rb' x1='0.04' y1='0.18' x2='0.96' y2='0.82'%3E%3Cstop offset='0%25' stop-color='%23ff3d7f'/%3E%3Cstop offset='17%25' stop-color='%23ff9e2c'/%3E%3Cstop offset='34%25' stop-color='%23ffea64'/%3E%3Cstop offset='51%25' stop-color='%232ee89b'/%3E%3Cstop offset='67%25' stop-color='%2336daff'/%3E%3Cstop offset='83%25' stop-color='%236d86ff'/%3E%3Cstop offset='100%25' stop-color='%23dc5cff'/%3E%3C/linearGradient%3E%3ClinearGradient id='chrome' x1='0' y1='0.1' x2='0' y2='0.92'%3E%3Cstop offset='0%25' stop-color='%23ffffff' stop-opacity='0.82'/%3E%3Cstop offset='26%25' stop-color='%23fff6e0' stop-opacity='0.34'/%3E%3Cstop offset='46%25' stop-color='%23160726' stop-opacity='0.36'/%3E%3Cstop offset='56%25' stop-color='%23ffffff' stop-opacity='0.68'/%3E%3Cstop offset='80%25' stop-color='%231d0a2e' stop-opacity='0.24'/%3E%3Cstop offset='100%25' stop-color='%23ffefc8' stop-opacity='0.58'/%3E%3C/linearGradient%3E%3ClinearGradient id='rim' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23fff9e6'/%3E%3Cstop offset='50%25' stop-color='%23f2d6a0'/%3E%3Cstop offset='100%25' stop-color='%23ffffff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg font-family='Georgia,Times New Roman,serif' font-weight='900' font-size='44' text-anchor='middle' letter-spacing='-1.5'%3E%3Ctext x='61.5' y='49.5' fill='%2314061f' stroke='%2314061f' stroke-width='6.5' stroke-linejoin='round'%3E777%3C/text%3E%3Ctext x='60' y='47' fill='none' stroke='url(%23rim)' stroke-width='2.6' stroke-linejoin='round'%3E777%3C/text%3E%3Ctext x='60' y='47' fill='url(%23rb)'%3E777%3C/text%3E%3Ctext x='60' y='47' fill='url(%23chrome)'%3E777%3C/text%3E%3C/g%3E%3Cpath d='M33 13L34.1 17.4L38.5 18.5L34.1 19.6L33 24L31.9 19.6L27.5 18.5L31.9 17.4Z' fill='%23ffffff' fill-opacity='0.96'/%3E%3Cpath d='M94 14L94.8 17.2L98 18L94.8 18.8L94 22L93.2 18.8L90 18L93.2 17.2Z' fill='%23fff6da' fill-opacity='0.94'/%3E%3C/svg%3E");
 }
 
-/* Trái Mìn Pha Lê Cầu Vồng nổi khối 3D góc trên phải + Hiệu ứng NỔ TUNG (::after) */
-.shout-message-row[data-store-frame="crystal-mine"]
-  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack))::after {
-  content: "";
-  z-index: 3;
-  pointer-events: none;
-  position: absolute;
-  width: 96px;
-  height: 96px;
-  top: -38px;
-  right: -31px;
-  bottom: auto;
-  left: auto;
-  animation: crystalMineDetonate 6.2s ease-in-out infinite;
-  filter:
-    drop-shadow(0 4px 8px rgba(4, 2, 10, 0.9))
-    drop-shadow(0 0 8px rgba(176, 132, 206, 0.34))
-    drop-shadow(0 0 3px rgba(242, 226, 188, 0.28));
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size:
-    100% 100%,
-    100% 100%,
-    100% 100%,
-    100% 100%,
-    100% 100%,
-    100% 100%,
-    100% 100%,
-    100% 100%,
-    100% 100%,
-    100% 100%,
-    100% 100%,
-    100% 100%,
-    54px 54px;
-  background-image:
-    radial-gradient(
-      circle at 50% 50%,
-      rgb(255 253 242 / var(--cm-flash-a, 0)) 0%,
-      rgb(255 224 156 / var(--cm-flash-a, 0)) 18%,
-      rgb(212 126 255 / var(--cm-flash-a, 0)) 36%,
-      transparent 60%
-    ),
-    radial-gradient(
-      circle at 50% 50%,
-      transparent calc(var(--cm-ring-r, 8%) - 4%),
-      rgb(255 244 210 / var(--cm-ring-a, 0)) var(--cm-ring-r, 8%),
-      rgb(206 146 255 / var(--cm-ring-a, 0)) calc(var(--cm-ring-r, 8%) + 3%),
-      transparent calc(var(--cm-ring-r, 8%) + 8%)
-    ),
-    radial-gradient(ellipse 4px 2.4px at calc(50% + var(--cm-shard-d, 0%) * 0.88) calc(50% - var(--cm-shard-d, 0%) * 0.48), rgb(255 78 118 / var(--cm-shard-a, 0)) 0 65%, transparent 100%),
-    radial-gradient(ellipse 3.8px 2.2px at calc(50% + var(--cm-shard-d, 0%) * 0.92) calc(50% + var(--cm-shard-d, 0%) * 0.32), rgb(255 186 72 / var(--cm-shard-a, 0)) 0 65%, transparent 100%),
-    radial-gradient(ellipse 3.6px 2.4px at calc(50% + var(--cm-shard-d, 0%) * 0.46) calc(50% + var(--cm-shard-d, 0%) * 0.88), rgb(64 236 164 / var(--cm-shard-a, 0)) 0 65%, transparent 100%),
-    radial-gradient(ellipse 3.6px 2.4px at calc(50% - var(--cm-shard-d, 0%) * 0.46) calc(50% + var(--cm-shard-d, 0%) * 0.88), rgb(76 226 255 / var(--cm-shard-a, 0)) 0 65%, transparent 100%),
-    radial-gradient(ellipse 4px 2.4px at calc(50% - var(--cm-shard-d, 0%) * 0.94) calc(50% + var(--cm-shard-d, 0%) * 0.2), rgb(96 148 255 / var(--cm-shard-a, 0)) 0 65%, transparent 100%),
-    radial-gradient(ellipse 3.8px 2.4px at calc(50% - var(--cm-shard-d, 0%) * 0.74) calc(50% - var(--cm-shard-d, 0%) * 0.68), rgb(196 112 255 / var(--cm-shard-a, 0)) 0 65%, transparent 100%),
-    radial-gradient(ellipse 3.6px 2.4px at calc(50% - var(--cm-shard-d, 0%) * 0.06) calc(50% - var(--cm-shard-d, 0%) * 0.96), rgb(255 112 224 / var(--cm-shard-a, 0)) 0 65%, transparent 100%),
-    radial-gradient(circle at calc(50% + var(--cm-shard-d, 0%) * 0.62) calc(50% - var(--cm-shard-d, 0%) * 0.86), rgb(255 244 206 / var(--cm-shard-a, 0)) 0 2px, transparent 4px),
-    radial-gradient(circle at calc(50% - var(--cm-shard-d, 0%) * 0.88) calc(50% - var(--cm-shard-d, 0%) * 0.34), rgb(255 240 198 / var(--cm-shard-a, 0)) 0 1.8px, transparent 3.8px),
-    radial-gradient(circle at calc(50% + var(--cm-shard-d, 0%) * 0.14) calc(50% + var(--cm-shard-d, 0%) * 1.02), rgb(255 244 210 / var(--cm-shard-a, 0)) 0 1.8px, transparent 3.8px),
-    var(--cm-mine-img);
+/* Đối xứng góc trái cho tin của chính chủ (.is-self) — giữ số 777 xuôi chiều đọc */
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="crystal-mine"] .shout-lg-b,
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="crystal-mine"] .shout-lg-band {
+  right: auto;
+  left: -6px;
 }
 
-@media (prefers-reduced-motion: reduce) {
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="crystal-mine"] .shout-lg-a {
+  right: auto;
+  left: 11px;
+}
+
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="crystal-mine"] .shout-lg-top {
+  right: auto;
+  left: 3px;
+}
+
+@media (max-width: 640px) {
+  .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-b,
+  .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-band {
+    top: -6px;
+    right: -6px;
+    width: 76px;
+    height: 76px;
+  }
+
+  .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-a {
+    top: 8px;
+    right: 8px;
+    width: 48px;
+    height: 48px;
+  }
+
+  .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-top {
+    top: 10px;
+    right: 2px;
+    width: 62px;
+    height: 44px;
+  }
+
+  .shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="crystal-mine"] .shout-lg-b,
+  .shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="crystal-mine"] .shout-lg-band {
+    right: auto;
+    left: -6px;
+  }
+
+  .shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="crystal-mine"] .shout-lg-a {
+    right: auto;
+    left: 8px;
+  }
+
+  .shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="crystal-mine"] .shout-lg-top {
+    right: auto;
+    left: 2px;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   4. KEYFRAMES THUẦN GPU (tiền tố hpvn-lg-, chỉ đổi opacity & transform, 2 forwards)
+   Đồng bộ chu kỳ 6.2s: Trôi êm -> Rung nạp -> Nén lực -> NỔ TUNG + 777 -> Tái tụ
+   ---------------------------------------------------------------------------- */
+@keyframes hpvn-lg-cm-mine {
+  0%,
+  36% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+  18% {
+    opacity: 1;
+    transform: translate3d(0, -2.5px, 0) scale(1.03) rotate(2deg);
+  }
+  41% {
+    opacity: 1;
+    transform: translate3d(-1.5px, 0.5px, 0) scale(1.05) rotate(-6deg);
+  }
+  45% {
+    opacity: 1;
+    transform: translate3d(1.8px, -1px, 0) scale(1.08) rotate(7deg);
+  }
+  48% {
+    opacity: 1;
+    transform: translate3d(-2px, 1px, 0) scale(1.1) rotate(-8deg);
+  }
+  51% {
+    opacity: 1;
+    transform: translate3d(1.5px, -1.5px, 0) scale(1.13) rotate(9deg);
+  }
+  54% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(0.82) rotate(0deg);
+  }
+  57% {
+    opacity: 0.9;
+    transform: translate3d(0, 0, 0) scale(1.2) rotate(6deg);
+  }
+  60%,
+  84% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.18) rotate(18deg);
+  }
+  90% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1.08) rotate(-3deg);
+  }
+  96%,
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+}
+
+@keyframes hpvn-lg-cm-shockwave {
+  0%,
+  52% {
+    opacity: 0;
+    transform: scale(0.18);
+  }
+  55% {
+    opacity: 0.85;
+    transform: scale(0.45);
+  }
+  59% {
+    opacity: 0.96;
+    transform: scale(0.92);
+  }
+  66% {
+    opacity: 0.44;
+    transform: scale(1.28);
+  }
+  74%,
+  100% {
+    opacity: 0;
+    transform: scale(1.48);
+  }
+}
+
+@keyframes hpvn-lg-cm-flash {
+  0%,
+  51% {
+    opacity: 0;
+    transform: scale(0.28);
+  }
+  54% {
+    opacity: 0.72;
+    transform: scale(0.68);
+  }
+  57% {
+    opacity: 0.98;
+    transform: scale(1.12);
+  }
+  62% {
+    opacity: 0.36;
+    transform: scale(1.28);
+  }
+  68%,
+  100% {
+    opacity: 0;
+    transform: scale(1.36);
+  }
+}
+
+@keyframes hpvn-lg-cm-shards {
+  0%,
+  53% {
+    opacity: 0;
+    transform: scale(0.18) rotate(0deg);
+  }
+  57% {
+    opacity: 1;
+    transform: scale(0.68) rotate(8deg);
+  }
+  62% {
+    opacity: 0.98;
+    transform: scale(1.04) rotate(16deg);
+  }
+  69% {
+    opacity: 0.5;
+    transform: scale(1.26) rotate(24deg);
+  }
+  77%,
+  100% {
+    opacity: 0;
+    transform: scale(1.38) rotate(28deg);
+  }
+}
+
+@keyframes hpvn-lg-cm-777 {
+  0%,
+  55% {
+    opacity: 0;
+    transform: translate3d(0, 5px, 0) scale(0.34);
+  }
+  60% {
+    opacity: 1;
+    transform: translate3d(0, -1px, 0) scale(1.15);
+  }
+  65% {
+    opacity: 1;
+    transform: translate3d(0, -2px, 0) scale(1);
+  }
+  72% {
+    opacity: 1;
+    transform: translate3d(0, -3px, 0) scale(1.04);
+  }
+  79% {
+    opacity: 1;
+    transform: translate3d(0, -4px, 0) scale(1);
+  }
+  86%,
+  100% {
+    opacity: 0;
+    transform: translate3d(0, -8px, 0) scale(0.88);
+  }
+}
+
+@keyframes hpvn-lg-cm-shine {
+  0% {
+    opacity: 0;
+    transform: translate3d(-12%, 0, 0);
+  }
+  35% {
+    opacity: 0.92;
+  }
+  75% {
+    opacity: 0.25;
+    transform: translate3d(12%, 0, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(14%, 0, 0);
+  }
+}
+
+/* Toàn bộ chuyển động bọc trong prefers-reduced-motion: no-preference và dừng sau 2 lượt */
+@media (prefers-reduced-motion: no-preference) {
+  .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-a {
+    animation: hpvn-lg-cm-mine 6.2s ease-in-out 2 forwards;
+  }
+
+  .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-b {
+    animation: hpvn-lg-cm-shockwave 6.2s ease-in-out 2 forwards;
+  }
+
+  .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-b::after {
+    animation: hpvn-lg-cm-flash 6.2s ease-in-out 2 forwards;
+  }
+
+  .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-band {
+    animation: hpvn-lg-cm-shards 6.2s ease-in-out 2 forwards;
+  }
+
+  .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-top {
+    animation: hpvn-lg-cm-777 6.2s ease-in-out 2 forwards;
+  }
+
+  .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-shine {
+    animation: hpvn-lg-cm-shine 3.8s ease-in-out 0.5s 2 forwards;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   5. DỪNG NGOÀI MÀN HÌNH & TƯƠNG THÍCH TRẠNG THÁI ĐẶC BIỆT MẠNG FLOO
+   ---------------------------------------------------------------------------- */
+.shout-message-row[data-offscreen][data-store-frame="crystal-mine"] .shout-lg-fx {
+  display: none;
+}
+
+.shout-message-row[data-offscreen][data-store-frame="crystal-mine"] .shout-lg-shine {
+  animation-play-state: paused;
+}
+
+.shout-message-row.is-sonorus[data-store-frame="crystal-mine"] .shout-lg-fx,
+.shout-message-row.is-prisoner-censored[data-store-frame="crystal-mine"] .shout-lg-fx,
+.shout-message-row[data-store-frame="crystal-mine"]
+  .shout-message-bubble.is-prisoner-censored
+  .shout-lg-fx,
+.shout-message-row[data-store-frame="crystal-mine"]
+  .shout-message-bubble:has(.shout-image-album.is-stack)
+  .shout-lg-fx,
+[data-hide-frames="true"] .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-fx {
+  display: none;
+}
+
+@media (forced-colors: active) {
   .shout-message-row[data-store-frame="crystal-mine"]
-    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack))::before,
-  .shout-message-row[data-store-frame="crystal-mine"]
-    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack))::after {
-    animation: none !important;
+    .shout-message-bubble:not(:has(.shout-image-album.is-stack)) {
+    border: 2px solid CanvasText;
+    background: Canvas;
+    color: CanvasText;
+    box-shadow: none;
+  }
+
+  .shout-message-row[data-store-frame="crystal-mine"] .shout-lg-fx {
+    display: none;
   }
 }
