@@ -1368,16 +1368,28 @@ export class MasterJigsawEngine {
     lockedPieces: number[];
     won: boolean;
   } {
+    if (this.status === 'won') {
+      return { addedSec: 0, lockedPieces: [], won: true };
+    }
     const bonusSec = Math.min(300, Math.max(45, Math.round(this.timeLimitSec * 0.1)));
     const prevSec = this.timeRemainingSec;
     this.addBonusTime(bonusSec);
     this.freeHintsLeft += 1;
     const chosen = this.pickPriorityUnlockedPieces(this.totalPieces >= 200 ? 4 : 2);
-    const locked = this.lockPiecesInternal(chosen);
+    // Mở rộng cả cụm Union-Find cho các mảnh đang nằm trên bàn để tránh hỏng cây ufParent/ufSize
+    const toLock = new Set<number>();
+    for (const idx of chosen) {
+      if (this.pieceState[idx] === JIGSAW_PIECE_BOARD) {
+        for (const m of this.getClusterMembers(idx)) toLock.add(m);
+      } else {
+        toLock.add(idx);
+      }
+    }
+    const locked = this.lockPiecesInternal(Array.from(toLock));
     return {
       addedSec: Math.round(this.timeRemainingSec - prevSec),
       lockedPieces: locked,
-      won: this.status === 'won',
+      won: this.lockedCount >= this.totalPieces,
     };
   }
 

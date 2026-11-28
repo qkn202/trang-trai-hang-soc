@@ -30,13 +30,13 @@ describe('4 Pillars of Gameplay Depth (Time & HPVN Price Invariants Preserved)',
   });
 
   describe('0. Time Rules & Full-Barn HPVN Price Invariants', () => {
-    it('keeps FIRST_ECONOMIC_CYCLE_SEC = 3600 and 1h -> 2h -> 4h -> 6h untouched', () => {
-      expect(FIRST_ECONOMIC_CYCLE_SEC).toBe(3600);
-      expect(FARM_CROPS.ottery_wheat.growSec).toBe(3600);
-      expect(computeEconomicCycleSeconds(0, FARM_CROPS.ottery_wheat.growSec)).toBe(3600);
-      expect(computeEconomicCycleSeconds(1, FARM_CROPS.ottery_wheat.growSec)).toBe(7200);
-      expect(computeEconomicCycleSeconds(2, FARM_CROPS.ottery_wheat.growSec)).toBe(14400);
-      expect(computeEconomicCycleSeconds(3, FARM_CROPS.ottery_wheat.growSec)).toBe(21600);
+    it('preserves relaxed cozy pacing baseline (5m -> 4h max) and gentle +15% repeat curve', () => {
+      expect(FIRST_ECONOMIC_CYCLE_SEC).toBe(300);
+      expect(FARM_CROPS.ottery_wheat.growSec).toBe(300);
+      expect(computeEconomicCycleSeconds(0, FARM_CROPS.ottery_wheat.growSec)).toBe(300);
+      expect(computeEconomicCycleSeconds(1, FARM_CROPS.ottery_wheat.growSec)).toBe(345);
+      expect(computeEconomicCycleSeconds(2, FARM_CROPS.ottery_wheat.growSec)).toBe(390);
+      expect(computeEconomicCycleSeconds(3, FARM_CROPS.ottery_wheat.growSec)).toBe(435);
     });
 
     it('upgrading soil to Tier V + applying compost never alters crop grow duration', () => {

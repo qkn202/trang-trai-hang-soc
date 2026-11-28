@@ -96,7 +96,7 @@ export const JIGSAW_PAINTINGS: JigsawPaintingDef[] = [
   {
     id: 'p6_phoenix_astronomy',
     title: 'Phượng Hoàng Lửa Trên Đỉnh Tháp Thiên Văn',
-    subtitle: 'Chim bất tử khoe bộ lông đỏ vàng rực cháy bên quả cầu thiên체 bằng đồng cổ.',
+    subtitle: 'Chim bất tử khoe bộ lông đỏ vàng rực cháy bên quả cầu thiên thể bằng đồng cổ.',
     imageUrl: '/game/trang-trai-hang-soc/paintings/p6_phoenix_astronomy.webp',
     accentColor: '#f43f5e',
   },

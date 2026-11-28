@@ -1318,26 +1318,7 @@ export class FishShooterEngine {
 
     if (this.fireCooldown > 0) this.fireCooldown = Math.max(0, this.fireCooldown - clampedDt);
     if (this.cannonRecoil > 0) this.cannonRecoil = Math.max(0, this.cannonRecoil - clampedDt * 5.2);
-    if (this.freezeTimer > 0) this.freezeTimer = Math.max(0, this.freezeTimer - clampedDt);
     if (this.timeFlashTimer > 0) this.timeFlashTimer = Math.max(0, this.timeFlashTimer - clampedDt);
-    if (this.fishDropCooldown > 0) {
-      this.fishDropCooldown = Math.max(0, this.fishDropCooldown - clampedDt);
-    }
-    if (this.activeWeaponTimer > 0) {
-      const prevCeil = Math.ceil(this.activeWeaponTimer);
-      this.activeWeaponTimer = Math.max(0, this.activeWeaponTimer - clampedDt);
-      const nextCeil = Math.ceil(this.activeWeaponTimer);
-      if (nextCeil !== prevCeil) weaponUiChanged = true;
-      if (this.activeWeaponTimer <= 0) {
-        this.activeWeapon = 'normal';
-        this.activeWeaponMaxTimer = 12;
-        weaponUiChanged = true;
-      }
-    }
-    if (this.comboTimer > 0) {
-      this.comboTimer = Math.max(0, this.comboTimer - clampedDt);
-      if (this.comboTimer <= 0) this.combo = 0;
-    }
 
     for (let i = this.nets.length - 1; i >= 0; i--) {
       this.nets[i].age += clampedDt;
@@ -1364,6 +1345,26 @@ export class FishShooterEngine {
         collectedDrops,
         wallBounces,
       };
+    }
+
+    if (this.freezeTimer > 0) this.freezeTimer = Math.max(0, this.freezeTimer - clampedDt);
+    if (this.fishDropCooldown > 0) {
+      this.fishDropCooldown = Math.max(0, this.fishDropCooldown - clampedDt);
+    }
+    if (this.activeWeaponTimer > 0) {
+      const prevCeil = Math.ceil(this.activeWeaponTimer);
+      this.activeWeaponTimer = Math.max(0, this.activeWeaponTimer - clampedDt);
+      const nextCeil = Math.ceil(this.activeWeaponTimer);
+      if (nextCeil !== prevCeil) weaponUiChanged = true;
+      if (this.activeWeaponTimer <= 0) {
+        this.activeWeapon = 'normal';
+        this.activeWeaponMaxTimer = 12;
+        weaponUiChanged = true;
+      }
+    }
+    if (this.comboTimer > 0) {
+      this.comboTimer = Math.max(0, this.comboTimer - clampedDt);
+      if (this.comboTimer <= 0) this.combo = 0;
     }
 
     // Periodic Ocean Current Ammo Drops ("bắn vào để lấy")
@@ -1813,6 +1814,9 @@ export class FishShooterEngine {
     won: boolean;
     completedMissions: NonNullable<FishTickResult['completedMissions']>;
   } {
+    if (this.status === 'won') {
+      return { ok: false, msg: 'Màn Bắn Cá đã hoàn thành!', won: true, completedMissions: [] };
+    }
     if (this.talismanUsed) {
       return {
         ok: false,
@@ -1856,6 +1860,7 @@ export class FishShooterEngine {
   }
 
   public applyApplePieBoost(): { ok: boolean; revived: boolean } {
+    if (this.status === 'won') return { ok: false, revived: false };
     const revived = this.status === 'lost';
     if (revived) {
       this.status = 'playing';
@@ -1955,10 +1960,10 @@ export class FishShooterEngine {
       s.status === 'playing' && s.targetScore > 0 && s.targetScore < 5000 && this.targetScore >= 10000
         ? Math.min(this.targetScore - 100, Math.round(s.score * (this.targetScore / s.targetScore)))
         : s.score;
-    this.score =
-      s.status === 'playing'
-        ? Math.min(Math.max(0, this.targetScore - 1), scaledScore)
-        : scaledScore;
+    this.score = Math.max(0, scaledScore);
+    if (s.status === 'playing' && this.score >= this.targetScore) {
+      this.score = Math.max(0, this.targetScore - 1);
+    }
     this.ammo = s.ammo;
     this.cannonTier = s.cannonTier;
     this.remainingSec =

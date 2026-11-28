@@ -139,7 +139,10 @@ export default defineConfig({
             id.includes('/src/sim/zooAndBackstage') ||
             id.includes('/src/sim/economyIntegrity') ||
             id.includes('/src/sim/yuleEvent') ||
-            id.includes('/src/sim/buildTransactions')
+            id.includes('/src/sim/buildTransactions') ||
+            id.includes('/src/sim/minigameSynergy') ||
+            id.includes('/src/sim/hayDayFarming') ||
+            id.includes('/src/sim/weeklyDerbyEngine')
           ) {
             return 'sim-foundation';
           }

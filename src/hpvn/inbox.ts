@@ -42,8 +42,9 @@ export function applyFarmInbox(state: GameState, entries: unknown, now = Date.no
               s &&
               s.itemId &&
               !s.soldAt &&
-              ((typeof entry.slotIndex === 'number' && s.slotIndex === entry.slotIndex) ||
-                (typeof entry.itemId === 'string' && s.itemId === entry.itemId))
+              (typeof entry.slotIndex === 'number'
+                ? s.slotIndex === entry.slotIndex
+                : typeof entry.itemId === 'string' && s.itemId === entry.itemId)
           )
         : undefined;
       if (matchedSlot) {

@@ -23,6 +23,11 @@ import {
   MAX_LEVEL,
 } from '../data/levels';
 import { HOUSES } from '../data/names';
+import { getJigsawValleyAuraMultiplier } from './minigameSynergy';
+import {
+  advanceHayDayHarvestDropMeter,
+  recordWorkshopMasteryBatch,
+} from './hayDayFarming';
 import {
   createDailyQuests,
   createOwlOrderQuest,
@@ -519,27 +524,66 @@ export function economySpeedUpWithTimeSand(sim: ParkSimulation, uid: string, fin
     const now = Date.now();
     if (now >= b.constructEndsAt) return false;
 
-    if (!sim.state.sandboxMode) {
-      const floorLabel = formatDurationCompactVi(economyGetBuildingMinFloorSec(sim, b));
+    if (sim.state.sandboxMode) {
+      const remainSec = Math.max(1, Math.ceil((b.constructEndsAt - now) / 1000));
+      const sandNeeded = finishAll ? Math.max(1, Math.ceil(remainSec / TIME_SAND_SKIP_SECONDS)) : 1;
+      b.constructEndsAt = finishAll
+        ? now
+        : Math.max(now, b.constructEndsAt - sandNeeded * TIME_SAND_SKIP_SECONDS * 1000);
+      b.lastTickAt = b.constructEndsAt;
+      if (now >= b.constructEndsAt) {
+        economyTickProductionToTimestamp(sim, now, false);
+      } else {
+        sim.saveToStorage();
+      }
+      sim.audio.playSpell();
+      sim.onUiChange?.();
+      return true;
+    }
+
+    const floorSec = economyGetBuildingMinFloorSec(sim, b);
+    const floorEndsAt = now + floorSec * 1000;
+    const reducibleMs = Math.max(0, b.constructEndsAt - floorEndsAt);
+    if (reducibleMs <= 0) {
+      const floorLabel = formatDurationCompactVi(floorSec);
       sim.onToast?.(
-        `🔨 Công trình không dùng Cát ⏳ để bỏ qua trắng — hãy vượt Khảo Thí Pháp Thuật hoặc niệm Thần Chú Đa Ngữ để giảm giờ xây (tối đa còn ${floorLabel} để hoàn thành)!`,
-        '🔨'
+        `⏳ Công trình đã chạm chặng hoàn thiện cuối (${floorLabel}) — sẵn sàng khánh thành rất sớm!`,
+        '⏳'
       );
       return false;
     }
 
-    const remainSec = Math.max(1, Math.ceil((b.constructEndsAt - now) / 1000));
-    const sandNeeded = finishAll ? Math.max(1, Math.ceil(remainSec / TIME_SAND_SKIP_SECONDS)) : 1;
-    b.constructEndsAt = finishAll
-      ? now
-      : Math.max(now, b.constructEndsAt - sandNeeded * TIME_SAND_SKIP_SECONDS * 1000);
+    const availableSand = Math.max(0, Math.floor(sim.state.timeSand ?? 0));
+    if (availableSand <= 0) {
+      sim.onToast?.(
+        '⏳ Hết Cát Xoay Thời Gian! Nhận thêm từ Rương Mùa Gặt, lên cấp hoặc thắng Môn Đề Cử.',
+        '⏳'
+      );
+      return false;
+    }
+
+    const reducibleSec = Math.max(1, Math.ceil(reducibleMs / 1000));
+    const maxSandNeeded = Math.max(1, Math.ceil(reducibleSec / TIME_SAND_SKIP_SECONDS));
+    const sandToSpend = finishAll ? Math.min(availableSand, maxSandNeeded) : 1;
+    const shaveMs = Math.min(reducibleMs, sandToSpend * TIME_SAND_SKIP_SECONDS * 1000);
+    const shaveSec = Math.max(1, Math.round(shaveMs / 1000));
+
+    sim.state.timeSand = Math.max(0, availableSand - sandToSpend);
+    b.constructEndsAt = Math.max(floorEndsAt, b.constructEndsAt - shaveMs);
     b.lastTickAt = b.constructEndsAt;
+    b.buildReducedSec = (b.buildReducedSec ?? 0) + shaveSec;
+
     if (now >= b.constructEndsAt) {
       economyTickProductionToTimestamp(sim, now, false);
     } else {
       sim.saveToStorage();
     }
+    sim.onBuildingTactile?.(b.uid);
     sim.audio.playSpell();
+    sim.onToast?.(
+      `⏳ Dùng ${sandToSpend} Cát Xoay Thời Gian: rút ngắn −${formatDurationCompactVi(shaveSec)}!`,
+      '⏳'
+    );
     sim.onUiChange?.();
     return true;
 }
@@ -610,8 +654,9 @@ export function economyGetBuildingProductionPerCycle(sim: ParkSimulation, b: Pla
       mult *= 0.2;
     }
 
-    // V3 System #3: District Synergy Aura Multipliers!
+    // V3 System #3: District Synergy Aura Multipliers & Jigsaw Valley Aura!
     mult *= sim.activeSynergies.buildingGoldMult.get(b.uid) ?? 1.0;
+    mult *= getJigsawValleyAuraMultiplier(sim.state);
 
     // V3 System #4: Aged Butterbeer & Felix Felicis Workshop Buffs!
     const now = Date.now();
@@ -644,6 +689,7 @@ export function economyTickProductionToTimestamp(
     }
     if (!skipRoadsideStand) {
       tickRoadsideStandBuyers(sim, now, silent);
+      sim.tickTrashedOwlOrders(now);
     }
     // Check Workshop Brewing cauldron completion!
     const activeBrew = sim.state.supply?.activeBrew;
@@ -735,16 +781,23 @@ export function economyTickProductionToTimestamp(
         }
       }
 
-      // Process Workshop Oven / Craft Queue slots (Playrix Township queue!)
+      // Process Workshop Oven / Craft Queue slots (Playrix Township / Hay Day Machine Mastery queue!)
       if (b.workshopQueue && b.workshopQueue.length > 0) {
         let finishedAnySlot = false;
         while (b.workshopQueue.length > 0 && now >= b.workshopQueue[0].endsAt) {
           const doneSlot = b.workshopQueue.shift()!;
           const gMeta = FARM_GOODS[doneSlot.goodId];
+          const mastery = item.workshopGroupId
+            ? recordWorkshopMasteryBatch(sim, item.workshopGroupId, item.name, silent)
+            : null;
           b.readyFarmGoods = [...(b.readyFarmGoods ?? []), doneSlot.goodId];
           b.readyBubbles = Math.min(8, b.readyBubbles + 1);
-          b.storedSickle += Math.max(8, Math.round(gMeta.sellValue * 0.45));
-          b.storedXp += gMeta.xp;
+          const goldMult = mastery?.goldMult ?? 1;
+          const xpMult = mastery?.xpMult ?? 1;
+          b.storedSickle += Math.max(8, Math.round(gMeta.sellValue * 0.45 * goldMult));
+          b.storedXp += Math.max(1, Math.round(gMeta.xp * xpMult));
+          advanceHayDayHarvestDropMeter(sim, 1, b.gx + item.width * 0.5, b.gy + item.height * 0.5);
+          sim.recordWeeklyDerbyProgress('workshop_batch', 1, now);
           finishedAnySlot = true;
           if (!silent) {
             sim.audio.playHarvestBubble();

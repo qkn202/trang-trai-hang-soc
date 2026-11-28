@@ -33,6 +33,11 @@ import {
 } from '../sim/candyHogwartsEngine';
 import { MAX_DAILY_MINIGAME_RESCUES } from '../sim/neighborSocial';
 import {
+  computeMatch3DdaBonusMoves,
+  MINIGAME_FARM_SPECIALTIES,
+  type MinigameFarmSpecialtyOutcome,
+} from '../sim/minigameSynergy';
+import {
   IS_SANDBOX_BUILD_ENABLED,
   isSandboxRuntimeAllowed,
   ParkSimulation,
@@ -339,12 +344,14 @@ export class Match3ModalController {
     isMasterReplay?: boolean;
     buildReduction?: BuildReductionResult;
     leaderboardRankUp?: LeaderboardRankChange;
+    specialtyReward?: MinigameFarmSpecialtyOutcome;
   } | null = null;
   private lastGameEndPayload: CandyGameEndPayload | null = null;
 
   private prevObjectiveRemaining: number[] = [];
   private companionCharge = 0;
   private snackPieUsedThisAttempt = false;
+  private stageLossMap = new Map<number, number>();
   private devJumpReturnLevel: number | null = null;
   private popRecorder: ProofOfPlayRecorder | null = null;
   private gpuFx: MinigameGpuFxBatcher | null = null;
@@ -468,8 +475,14 @@ export class Match3ModalController {
             ? (openDlg.querySelector('.m3-modal-inner') as HTMLElement | null)
             : null;
         const prevLayout = openDlg?.dataset?.mgLayout;
+        const prevDockSig = openDlg?.dataset?.m3DockSig;
         const res = sharedMinigameViewport.applyDialogOrientation(openDlg, modalInner, false);
-        if (prevLayout && prevLayout !== res.effectiveLayout) {
+        const nextFold =
+          res.effectiveLayout === 'portrait' ||
+          Boolean(window.matchMedia?.('(max-height: 450px) and (orientation: landscape)').matches);
+        const nextDesktopWide = Boolean(window.matchMedia?.('(min-width: 980px)').matches);
+        const nextDockSig = `${res.effectiveLayout}:${nextFold ? 1 : 0}:${nextDesktopWide ? 1 : 0}`;
+        if ((prevLayout && prevLayout !== res.effectiveLayout) || (prevDockSig && prevDockSig !== nextDockSig)) {
           this.renderDOM();
           return;
         }
@@ -921,10 +934,22 @@ export class Match3ModalController {
     this.prevObjectiveRemaining = [];
     this.popRecorder = new ProofOfPlayRecorder('match3', levelNum);
 
+    const ddaBonusMoves =
+      allowRestore || this.rescueContext
+        ? 0
+        : computeMatch3DdaBonusMoves(levelNum, this.stageLossMap.get(levelNum) ?? 0);
+
     eng.loadLevel(levelData, {
       house: houseId,
       winStreak: this.sim.state.match3.winStreak,
+      extraDdaMoves: ddaBonusMoves,
     });
+    if (ddaBonusMoves > 0) {
+      this.showToast(
+        `🪄 Bà Molly tiếp thêm +${ddaBonusMoves} lượt thử lại cho màn khó này!`,
+        '🪄'
+      );
+    }
 
     const saved =
       allowRestore && !this.rescueContext && this.sim.state.match3.activeSession?.levelId === levelNum
@@ -937,6 +962,13 @@ export class Match3ModalController {
       );
       this.companionCharge = Math.max(0, Math.round(saved.companionCharge ?? 0));
       this.snackPieUsedThisAttempt = Boolean(saved.snackPieUsed);
+      const restoredMoves = Math.min(12, Math.max(this.movesMadeThisAttempt, Math.round(eng.movesUsed || 0)));
+      if (restoredMoves > 0) {
+        const nowPerf = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        for (let i = 0; i < restoredMoves; i++) {
+          this.popRecorder.recordMove(0x7000 + i, nowPerf - (restoredMoves - i) * 350);
+        }
+      }
     }
 
     const snap = eng.getHudSnapshot();
@@ -967,6 +999,7 @@ export class Match3ModalController {
         } else {
           if (resolvedStage !== this.sim.state.match3.currentLevel) return;
           this.victoryClaimed = true;
+          this.stageLossMap.delete(resolvedStage);
           this.sim.state.match3.activeSession = null;
           this.clearActiveModalResumeMarker();
           const sealedPop =
@@ -994,6 +1027,10 @@ export class Match3ModalController {
       return;
     }
 
+    if (!this.rescueContext) {
+      const failLv = this.engine?.level?.id ?? payload.levelId;
+      this.stageLossMap.set(failLv, (this.stageLossMap.get(failLv) ?? 0) + 1);
+    }
     this.flushDeferredSave();
     this.announceInDialog(
       payload.failReason === 'bomb'
@@ -1352,6 +1389,11 @@ export class Match3ModalController {
                     : ''
               }
               ${vs.goldEarned > 0 ? `<span class="m3-reward-chip">+${vs.goldEarned} Sickle</span>` : ''} <!-- HPVN: Sickle reward -->
+              ${
+                vs.specialtyReward
+                  ? `<span class="m3-reward-chip specialty" title="${escapeHtml(vs.specialtyReward.detailToastVi)}">${escapeHtml(vs.specialtyReward.badgeLabelVi)}</span>`
+                  : ''
+              }
             </div>
             <div class="pa-victory-actions">
               <button id="btnM3NextLevel" type="button" class="brass-btn gold-cta">
@@ -1429,7 +1471,14 @@ export class Match3ModalController {
       typeof dlg?.querySelector === 'function'
         ? (dlg.querySelector('.m3-modal-inner') as HTMLElement | null)
         : null;
-    sharedMinigameViewport.applyDialogOrientation(dlg, modalInner, false);
+    const orientRes = sharedMinigameViewport.applyDialogOrientation(dlg, modalInner, false);
+    if (dlg?.dataset) {
+      const curFold =
+        orientRes.effectiveLayout === 'portrait' ||
+        Boolean(globalThis.matchMedia?.('(max-height: 450px) and (orientation: landscape)').matches);
+      const curDesktopWide = Boolean(globalThis.matchMedia?.('(min-width: 980px)').matches);
+      dlg.dataset.m3DockSig = `${orientRes.effectiveLayout}:${curFold ? 1 : 0}:${curDesktopWide ? 1 : 0}`;
+    }
 
     const st = this.sim.state;
     const m3 = st.match3;
@@ -1490,7 +1539,7 @@ export class Match3ModalController {
               <img src="/game/trang-trai-hang-soc/sprites/beast_phoenix.webp" alt="" class="m3-res-icon" /><!-- HPVN: no emoji -->
               <strong id="m3ModalTalismanText">${st.sandboxMode ? '∞' : this.sim.getPhoenixTalismanCount()}</strong>
             </span>
-            <button id="btnM3ToggleYuleSkin" type="button" class="m3-res-chip yule-skin-toggle-pill ${this.sim.isYuleVisualThemeActive() ? 'is-yule-active' : ''}" aria-pressed="${this.sim.isYuleVisualThemeActive()}" title="Bật/Tắt giao diện Giáng Sinh">
+            <button id="btnM3ToggleYuleSkin" type="button" class="m3-res-chip yule-skin-toggle-pill ${((st.settings.yuleThemeMode ?? 'auto') === 'on' || ((st.settings.yuleThemeMode ?? 'auto') !== 'off' && (this.sim.isYuleVisualThemeActive() || this.sim.isWinterMainMapActive()))) ? 'is-yule-active' : ''}" aria-pressed="${(st.settings.yuleThemeMode ?? 'auto') === 'on' || ((st.settings.yuleThemeMode ?? 'auto') !== 'off' && (this.sim.isYuleVisualThemeActive() || this.sim.isWinterMainMapActive()))}" title="Bật/Tắt giao diện Giáng Sinh">
               <span>Noel</span>
             </button>
           </div>
@@ -1504,22 +1553,22 @@ export class Match3ModalController {
         </div>
 
         <div class="pa-mode-tabs" role="tablist"${globalThis.matchMedia?.('(min-width: 980px)').matches ? ' aria-orientation="vertical"' : ''} aria-label="Chọn môn khảo thí phép thuật Hogwarts" ${this.rescueContext ? 'style="opacity:0.65;pointer-events:none;"' : ''}>
-          <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="caro" class="pa-mode-tab" title="Dò Mìn Phép Thuật">
+          <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="caro" class="pa-mode-tab" title="Dò Mìn Phép Thuật • ${MINIGAME_FARM_SPECIALTIES.caro.shortTagVi}">
             <span class="pa-tab-name"><span class="pa-tab-name-full">🧨 Dò Mìn Phép Thuật</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🧨</span> Dò Mìn</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('caro')}</span>${trialBadgeFor('caro')}</span>
           </button>
-          <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="sudoku" class="pa-mode-tab" title="Số Học Huyền Bí">
+          <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="sudoku" class="pa-mode-tab" title="Số Học Huyền Bí • ${MINIGAME_FARM_SPECIALTIES.sudoku.shortTagVi}">
             <span class="pa-tab-name"><span class="pa-tab-name-full">🔢 Số Học Huyền Bí</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🔢</span> Số Học</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('sudoku')}</span>${trialBadgeFor('sudoku')}</span>
           </button>
-          <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="chess" class="pa-mode-tab" title="Bắn Cá Hồ Đen">
+          <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="chess" class="pa-mode-tab" title="Bắn Cá Hồ Đen • ${MINIGAME_FARM_SPECIALTIES.chess.shortTagVi}">
             <span class="pa-tab-name"><span class="pa-tab-name-full">🎯 Bắn Cá Hồ Đen</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🎯</span> Bắn Cá</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('chess')}</span>${trialBadgeFor('chess')}</span>
           </button>
-          <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="blocks" class="pa-mode-tab" title="Sinh Vật Huyền Bí">
+          <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="blocks" class="pa-mode-tab" title="Sinh Vật Huyền Bí • ${MINIGAME_FARM_SPECIALTIES.blocks.shortTagVi}">
             <span class="pa-tab-name"><span class="pa-tab-name-full">🦄 Sinh Vật Huyền Bí</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🦄</span> Sinh Vật</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('blocks')}</span>${trialBadgeFor('blocks')}</span>
           </button>
-          <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="jigsaw" class="pa-mode-tab" title="Tranh Ghép Phép Thuật">
+          <button type="button" role="tab" aria-selected="false" data-m3-jump-arcade="jigsaw" class="pa-mode-tab" title="Tranh Ghép Phép Thuật • ${MINIGAME_FARM_SPECIALTIES.jigsaw.shortTagVi}">
             <span class="pa-tab-name"><span class="pa-tab-name-full">🧩 Tranh Ghép Phép Thuật</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🧩</span> Tranh Ghép</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('jigsaw')}</span>${trialBadgeFor('jigsaw')}</span>
           </button>
-          <button type="button" role="tab" aria-selected="true" class="pa-mode-tab active" title="Bùa Gặt Honeydukes">
+          <button type="button" role="tab" aria-selected="true" class="pa-mode-tab active" title="Bùa Gặt Honeydukes • ${MINIGAME_FARM_SPECIALTIES.match3.shortTagVi}">
             <span class="pa-tab-name"><span class="pa-tab-name-full">🍬 Bùa Gặt Honeydukes</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🍬</span> Bùa Gặt</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('match3')}</span>${trialBadgeFor('match3')}</span>
           </button>
         </div>
@@ -1627,6 +1676,18 @@ export class Match3ModalController {
       box.querySelector('#btnM3OpenLeaderboard')?.addEventListener('click', () => {
         this.sim.audio.playClick();
         this.onOpenLeaderboard?.();
+      });
+      box.querySelector('#btnM3ToggleYuleSkin')?.addEventListener('click', () => {
+        this.sim.audio.playClick();
+        const active = this.sim.toggleYuleVisualTheme();
+        if (typeof document !== 'undefined') {
+          document.documentElement.dataset.yuleTheme = active ? 'true' : 'false';
+        }
+        this.onParentRefresh();
+        this.renderDOM();
+      });
+      box.querySelector('#btnM3ClaimSosRescue')?.addEventListener('click', () => {
+        this.handleClaimFriendSos();
       });
       box.querySelector('#btnM3EmptyGoArcade')?.addEventListener('click', () => {
         this.getDialog()?.close();
@@ -1775,17 +1836,18 @@ export class Match3ModalController {
       </button>
     `;
 
+    const m3Kit = this.sim.getMollySupplyForMinigame('match3');
     const synergyDockHtml = `
-      <div class="aaa-synergy-dock" role="region" aria-label="Bánh Táo Quế tiếp sức">
+      <div class="aaa-synergy-dock" role="region" aria-label="Hộp Tiếp Tế Bà Molly">
         <button
           id="btnM3SnackApplePie"
           type="button"
           class="aaa-snack-btn"
-          ${this.snackPieUsedThisAttempt || snap.status === 'won' || (!st.sandboxMode && pieQty <= 0) ? 'disabled' : ''}
-          title="Dùng 1 Bánh Táo Quế từ Kho Đỏ (+3 Lượt đi & lùi +3 nhịp Bom)"
+          ${this.snackPieUsedThisAttempt || snap.status === 'won' || !m3Kit.ready ? 'disabled' : ''}
+          title="${escapeHtml(m3Kit.tooltipVi)}"
         >
           <img src="/game/trang-trai-hang-soc/sprites/ui_icon_pie_ready.webp" alt="" width="20" height="20" class="aaa-synergy-sprite" />
-          <span><span class="aaa-lbl-full">Bánh Táo </span><strong data-m3-pie-qty="1">${this.snackPieUsedThisAttempt ? '✓' : st.sandboxMode ? '∞' : `×${pieQty}`}</strong></span>
+          <span><span class="aaa-lbl-full">${escapeHtml(m3Kit.shortLabelVi)} </span><strong data-m3-pie-qty="1">${this.snackPieUsedThisAttempt ? '✓' : st.sandboxMode ? '∞' : `×${m3Kit.haveQty}`}</strong></span>
         </button>
       </div>
     `;
@@ -1943,6 +2005,10 @@ export class Match3ModalController {
 
   private async triggerMatch3Talisman(): Promise<void> {
     if (!this.engine || this.engine.status === 'won') return;
+    if (this.engine.hasAnyAsyncActivity() && this.engine.status !== 'out_of_moves') {
+      this.showToast('Chờ chuỗi kẹo rơi xong rồi hãy kích hoạt Bùa Phượng Hoàng!', '🔥');
+      return;
+    }
     const gate = this.sim.canUsePhoenixTalismanInGame('match3');
     if (!gate.ok) {
       this.showToast(gate.msg, '🔥');
@@ -1961,13 +2027,16 @@ export class Match3ModalController {
       return;
     }
     const wasOutOfMoves = this.engine.status === 'out_of_moves';
-    if (wasOutOfMoves) {
-      const mount = this.root.querySelector('#m3OverlayMount') as HTMLElement | null;
-      if (mount) mount.innerHTML = '';
-    }
     const res = await this.engine.applyPhoenixTalisman();
     if (!res.ok) {
       this.sim.refundPhoenixTalismanAttempt('match3');
+      if (wasOutOfMoves) this.mountOverlayOnly();
+    } else {
+      this.popRecorder?.recordMove(0x7001);
+      if (wasOutOfMoves) {
+        const mount = this.root.querySelector('#m3OverlayMount') as HTMLElement | null;
+        if (mount) mount.innerHTML = '';
+      }
     }
     this.showToast(res.msg, '🔥');
     this.onParentRefresh();
@@ -2098,20 +2167,25 @@ export class Match3ModalController {
       }
     });
 
-    // Farm Synergy Dock
+    // Farm Synergy Dock (Hộp Tiếp Tế Bà Molly: Bánh Bí Ngô +4 lượt hoặc Bánh Táo +3 lượt)
     box.querySelector('#btnM3SnackApplePie')?.addEventListener('click', () => {
       if (!this.engine || this.engine.status === 'won' || this.snackPieUsedThisAttempt) return;
-      const res = this.sim.consumeMollyMinigameSnack('cinnamon_apple_pie');
+      if (this.engine.hasAnyAsyncActivity() && this.engine.status !== 'out_of_moves') {
+        this.showToast('Chờ chuỗi kẹo rơi xong rồi hãy mở Hộp Tiếp Tế Bà Molly!', '🥧');
+        return;
+      }
+      const res = this.sim.consumeMollySupplyKit('match3');
       if (!res.ok) {
         this.showToast(res.msg, '🥧');
         return;
       }
       this.snackPieUsedThisAttempt = true;
+      this.popRecorder?.recordMove(0x7002);
       const wasOut = this.engine.status === 'out_of_moves';
-      this.engine.addExtraMoves(3);
+      this.engine.addExtraMoves(res.isSignature ? 4 : 3);
       this.persistMatch3Session(true);
       this.onParentRefresh();
-      this.showToast('🥧 Bánh Táo Quế Bà Molly tiếp sức: +3 Lượt đi & lùi ngòi Bom!', '🥧');
+      this.showToast(res.msg, '🥧');
       if (wasOut) {
         this.mountOverlayOnly();
       }

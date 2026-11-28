@@ -25,6 +25,11 @@ import {
   MAX_LEVEL,
 } from '../data/levels';
 import {
+  advanceHayDayHarvestDropMeter,
+  getEffectiveWorkshopQueueCapacity,
+  getWorkshopMasteryInfo,
+} from './hayDayFarming';
+import {
   createDailyQuests,
   createOwlOrderQuest,
   HARVEST_FEAST_TIERS,
@@ -394,7 +399,7 @@ export function questsAddXp(sim: ParkSimulation, amount: number): void {
     const nextTier = Math.floor(Math.max(0, sim.state.xp) / FARM_HARVEST_CHEST_XP);
     const chestsEarned = nextTier - prevTier;
     if (chestsEarned > 0 && !sim.state.sandboxMode && !sim.isHeadmasterPreview) {
-      const bonusGold = chestsEarned * 13;
+      const bonusGold = chestsEarned * 18;
       const bonusSand = chestsEarned;
       sim.state.galleons += bonusGold;
       sim.state.finance.harvestRevenue += bonusGold;
@@ -407,12 +412,47 @@ export function questsAddXp(sim: ParkSimulation, amount: number): void {
         const bMeta = MATCH3_BOOSTERS.find((b) => b.id === pick);
         if (bMeta) boosterGiftTag = ` +1 ${bMeta.emoji} ${bMeta.shortLabel}`;
       }
+
+      // Dual-Track Progression: mỗi Rương Mùa Gặt Nông Trại đóng góp tiến độ lên cấp
+      // (tối đa 50% thanh cấp độ ở cấp >= 4, hoặc giúp thăng cấp mượt ngay ở Lv 1–3)
+      let levelProgAdded = 0;
+      let leveledUp = false;
+      for (let i = 0; i < chestsEarned && sim.state.level < MAX_LEVEL; i++) {
+        const reqWins = getWinsRequiredForNextLevel(sim.state.level);
+        const farmCap = reqWins <= 1 ? 1 : Math.floor(reqWins * 0.5);
+        const curProg = Math.max(0, Math.round(sim.state.puzzleLevelWinsProgress ?? 0));
+        if (curProg >= farmCap) break;
+        const nextProg = curProg + 1;
+        levelProgAdded++;
+        if (nextProg >= reqWins) {
+          sim.state.level += 1;
+          sim.state.puzzleLevelWinsProgress = 0;
+          sim.state.levelUpTrialCompletedLevel = sim.state.level;
+          const info = getLevelInfo(sim.state.level);
+          sim.state.galleons += info.rewardSickle;
+          sim.state.timeSand += info.rewardTimeSand;
+          sim.recordQuestProgress('reach_level', undefined, sim.state.level);
+          leveledUp = true;
+        } else {
+          sim.state.puzzleLevelWinsProgress = nextProg;
+        }
+      }
+
       sim.onRewardFly?.('galleons', bonusGold);
       sim.onRewardFly?.('sand', bonusSand);
+      const levelProgTag = leveledUp
+        ? ` • 🎉 Lên Cấp ${sim.state.level}!`
+        : levelProgAdded > 0
+          ? ` • +${levelProgAdded} Tiến độ Cấp`
+          : '';
       sim.onToast?.(
-        `🎁 Rương Mùa Gặt Điền Trang! Nhận +${bonusGold} Sickle +${bonusSand} ⏳ Cát${boosterGiftTag} hỗ trợ Giải Đố!`,
+        `🎁 Rương Mùa Gặt Điền Trang! Nhận +${bonusGold} Sickle +${bonusSand} ⏳ Cát${boosterGiftTag}${levelProgTag}`,
         '🎁'
       );
+      if (leveledUp) {
+        sim.syncValleyVillagers();
+        sim.onLevelUp?.(sim.state.level);
+      }
       sim.saveToStorage();
     }
 }
@@ -926,7 +966,7 @@ export function questsEnqueueWorkshopRecipe(sim: ParkSimulation, uid: string, re
     );
     if (!recipe) return { ok: false, msg: 'Công thức không hợp lệ!' };
 
-    const maxQueue = getWorkshopMaxQueueSlots(b.stars);
+    const maxQueue = getEffectiveWorkshopQueueCapacity(b);
     const curQueue = b.workshopQueue ?? [];
     if (curQueue.length >= maxQueue) {
       return { ok: false, msg: `Hàng đợi lò đã đầy (${maxQueue}/${maxQueue} khay)!` };
@@ -953,11 +993,12 @@ export function questsEnqueueWorkshopRecipe(sim: ParkSimulation, uid: string, re
 
     const now = Date.now();
     const starSpeed = getWorkshopStarSpeedMultiplier(b.stars);
+    const masteryInfo = getWorkshopMasteryInfo(sim.state.workshopMastery?.[item.workshopGroupId] ?? 0);
     const slotOrder = (b.harvestCycleCount ?? 0) + (b.readyFarmGoods?.length ?? 0) + curQueue.length;
     const baseCraftSec = computeEconomicCycleSeconds(slotOrder, recipe.craftSec);
     const durMs = sim.state.sandboxMode
       ? 3000
-      : Math.max(5000, Math.round(baseCraftSec * starSpeed * 1000));
+      : Math.max(5000, Math.round(baseCraftSec * starSpeed * masteryInfo.speedMult * 1000));
     const startAt = curQueue.length > 0 ? Math.max(now, curQueue[curQueue.length - 1].endsAt) : now;
     const nextSlot = {
       goodId: recipe.goodId,
@@ -1021,6 +1062,7 @@ export function questsGetOwlRequirementHelpState(sim: ParkSimulation,
 }
 
 export function questsCanFulfillFarmOwlOrder(sim: ParkSimulation, order: FarmOwlOrder): boolean {
+    if (order.trashedUntilAt && order.trashedUntilAt > Date.now()) return false;
     if (sim.state.sandboxMode) return true;
     return order.requirements.every((req, reqIdx) => {
       const helped = questsGetOwlRequirementHelpState(sim, order.id, reqIdx);
@@ -1070,16 +1112,23 @@ export function questsFulfillFarmOwlOrder(sim: ParkSimulation, orderId: string):
     );
 
     const spotlightBonus = farmGetOwlOrderSpotlightBonus(sim, order);
+    const nextStreak = (barn.deliveryStreak ?? 0) + 1;
+    barn.deliveryStreak = nextStreak;
+    const hitDeliveryStreak = nextStreak % 3 === 0;
+    const streakBonusSickle = hitDeliveryStreak ? Math.max(4, Math.round(order.rewardSickle * 0.2)) : 0;
+    const totalOrderSickle = order.rewardSickle + streakBonusSickle;
 
-    sim.state.galleons += order.rewardSickle;
-    sim.state.finance.shopRevenue += order.rewardSickle;
+    sim.state.galleons += totalOrderSickle;
+    sim.state.finance.shopRevenue += totalOrderSickle;
     sim.state.stats.butterbeerServed += 1;
-    if (spotlightBonus.hasSpotlight) {
+    const compostReward = (spotlightBonus.hasSpotlight ? spotlightBonus.bonusCompost : 0) + (hitDeliveryStreak ? 1 : 0);
+    if (compostReward > 0) {
       sim.state.herbalCompost = Math.min(
         99999,
-        Math.max(0, Math.floor(sim.state.herbalCompost ?? 0)) + spotlightBonus.bonusCompost
+        Math.max(0, Math.floor(sim.state.herbalCompost ?? 0)) + compostReward
       );
     }
+    advanceHayDayHarvestDropMeter(sim, 1, 14.5, 19.5);
     if (order.rewardMugglePlug) {
       barn.goods.muggle_plug_kit = (barn.goods.muggle_plug_kit ?? 0) + order.rewardMugglePlug;
     }
@@ -1114,6 +1163,7 @@ export function questsFulfillFarmOwlOrder(sim: ParkSimulation, orderId: string):
     );
     questsRecordQuestProgress(sim, 'serve_butterbeer', undefined, 1);
     questsRecordQuestProgress(sim, 'harvest_galleons', undefined, order.rewardSickle);
+    sim.recordWeeklyDerbyProgress('owl_order', 1);
 
     sim.owlSeedCounter += 1;
     barn.owlOrders[idx] = createCanonFarmOwlOrder(
@@ -1130,7 +1180,10 @@ export function questsFulfillFarmOwlOrder(sim: ParkSimulation, orderId: string):
     const fairTag = spotlightBonus.hasSpotlight
       ? ` +${spotlightBonus.bonusCompost} 🌿 Phân Ủ (🎪 Tiêu Điểm)`
       : '';
-    const msg = `🦉 Cú ${order.owlName} giao đơn cho ${order.senderName}! Nhận +${order.rewardSickle} Sickle${fairTag}${sandTag}${talismanTag}${boosterTag}${plugTag}!`;
+    const streakTag = hitDeliveryStreak
+      ? ` • 🔥 Chuỗi ${nextStreak} đơn (+${streakBonusSickle} Sickle & +1 🌿)`
+      : '';
+    const msg = `🦉 Cú ${order.owlName} giao đơn cho ${order.senderName}! Nhận +${totalOrderSickle} Sickle${fairTag}${streakTag}${sandTag}${talismanTag}${boosterTag}${plugTag}!`;
     sim.onToast?.(msg, '🦉');
     sim.advanceTutorialStep('build_and_owl_order');
     sim.checkAndToastAchievements?.();
@@ -1173,6 +1226,84 @@ export function questsRefreshFarmOwlOrder(sim: ParkSimulation, orderId: string):
     sim.saveToStorage();
     sim.onUiChange?.();
     return true;
+}
+
+/** Hay Day Truck Board: xé đơn không thích miễn phí không giới hạn, hồi đơn mới sau 5 phút (hoặc đổi ngay bằng 1 Cát). */
+export const OWL_ORDER_TRASH_COOLDOWN_MS = 300_000;
+
+export function questsTrashFarmOwlOrder(
+  sim: ParkSimulation,
+  orderId: string,
+  nowMs = Date.now()
+): { ok: boolean; msg: string } {
+  const barn = sim.ensureFarmBarn();
+  const order = barn.owlOrders.find((o) => o.id === orderId);
+  if (!order) return { ok: false, msg: 'Không tìm thấy Đơn Cú này!' };
+  if (order.trashedUntilAt && order.trashedUntilAt > nowMs) {
+    return { ok: false, msg: 'Ô đơn này đang chờ cú mang đơn mới về!' };
+  }
+  order.trashedUntilAt = nowMs + OWL_ORDER_TRASH_COOLDOWN_MS;
+  barn.deliveryStreak = 0;
+  const social = sim.ensureNeighborSocial();
+  social.playerOwlHelpRequests = social.playerOwlHelpRequests.filter((r) => r.orderId !== orderId);
+  sim.audio.playClick();
+  const msg = '🧹 Đã xé đơn hàng khó — Cú sẽ mang đơn mới về sau 5 phút (hoặc dùng 1 ⏳ Cát gọi ngay)!';
+  sim.onToast?.(msg, '🧹');
+  sim.saveToStorage();
+  sim.onUiChange?.();
+  return { ok: true, msg };
+}
+
+export function questsTickTrashedOwlOrders(sim: ParkSimulation, nowMs = Date.now()): boolean {
+  const barn = sim.state.farmBarn;
+  if (!barn || !Array.isArray(barn.owlOrders)) return false;
+  let refreshedAny = false;
+  for (let i = 0; i < barn.owlOrders.length; i++) {
+    const o = barn.owlOrders[i];
+    if (o?.trashedUntilAt && nowMs >= o.trashedUntilAt) {
+      sim.owlSeedCounter += 1;
+      barn.owlOrders[i] = createCanonFarmOwlOrder(
+        sim.state.level,
+        sim.owlSeedCounter + i * 7,
+        sim.state.buildings
+      );
+      refreshedAny = true;
+    }
+  }
+  return refreshedAny;
+}
+
+export function questsInstantRestoreTrashedOwlOrder(
+  sim: ParkSimulation,
+  orderId: string,
+  nowMs = Date.now()
+): { ok: boolean; msg: string } {
+  const barn = sim.ensureFarmBarn();
+  const idx = barn.owlOrders.findIndex((o) => o.id === orderId);
+  if (idx === -1) return { ok: false, msg: 'Không tìm thấy ô đơn hàng!' };
+  const order = barn.owlOrders[idx];
+  if (!order.trashedUntilAt || order.trashedUntilAt <= nowMs) {
+    questsTickTrashedOwlOrders(sim, nowMs);
+    return { ok: true, msg: '🦉 Đơn mới đã sẵn sàng trên bảng!' };
+  }
+  if (!sim.state.sandboxMode && sim.state.timeSand < 1) {
+    return { ok: false, msg: 'Cần 1 ⏳ Cát Xoay Thời Gian để gọi Cú mang đơn mới ngay!' };
+  }
+  if (!sim.state.sandboxMode) {
+    sim.state.timeSand -= 1;
+  }
+  sim.owlSeedCounter += 1;
+  barn.owlOrders[idx] = createCanonFarmOwlOrder(
+    sim.state.level,
+    sim.owlSeedCounter + idx * 9,
+    sim.state.buildings
+  );
+  sim.audio.playOwlHoot(0.035);
+  const msg = '⏳ Đã gọi Cú mang đơn hàng mới về tức thì!';
+  sim.onToast?.(msg, '🦉');
+  sim.saveToStorage();
+  sim.onUiChange?.();
+  return { ok: true, msg };
 }
 
 export function questsGetBrewDurationSec(sim: ParkSimulation, recipe: CraftRecipeDef): number {
@@ -1403,6 +1534,7 @@ export function questsFulfillCargoCrate(sim: ParkSimulation, crateId: string): {
     sim.state.timeSand += crate.rewardTimeSand;
     questsAddXp(sim, crate.rewardXp);
     questsRecordQuestProgress(sim, 'harvest_galleons', undefined, crate.rewardSickle);
+    sim.recordWeeklyDerbyProgress('cargo_crate', 1);
     sim.audio.playHarvestBubble();
 
     const departure = questsCheckAndDepartCargoTrain(sim);

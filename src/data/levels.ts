@@ -114,7 +114,7 @@ const TITLES_BY_MILESTONE: Record<number, string> = {
 };
 
 const MILESTONE_NOTES: Record<number, string> = {
-  1: 'Khởi đầu từ đồi cỏ trống: Tự tay dựng Nhà Hang Sóc 6 Tầng (3 🌟) & Lò Nướng Bánh Bà Molly (5 🌟)!',
+  1: 'Khởi đầu từ đồi cỏ trống: Tự tay dựng Nhà Hang Sóc 6 Tầng (1 🌟) & Lò Nướng Bánh Bà Molly (2 🌟)!',
   2: 'Mở khóa bản vẽ Xe Gỗ Bán Bia Bơ Nóng + hạt Bắp Ngọt & Bò Sữa Đốm Kem!',
   3: 'Mở khóa Chuồng Gà Mái Nâu Hang Sóc — thu hoạch Giỏ Trứng Gà tươi!',
   4: 'Mở khóa Vùng Đất Ao Ếch & Đầm Lau Sậy + Khung Đan Áo Len Phép Chữ W!',

@@ -309,6 +309,13 @@ export class MinigameViewportManager {
       });
       window.addEventListener('blur', () => {
         this.spacePressed = false;
+        this.activePinchCount = 0;
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          this.spacePressed = false;
+          this.activePinchCount = 0;
+        }
       });
     }
   }
@@ -365,6 +372,7 @@ export class MinigameViewportManager {
   }
 
   public unbindStageInteractions(hostKey: 'arcade' | 'match3'): void {
+    this.activePinchCount = 0;
     const prevCleanup = this.stageCleanupByHost.get(hostKey);
     if (prevCleanup) {
       this.stageCleanupByHost.delete(hostKey);
@@ -477,6 +485,7 @@ export class MinigameViewportManager {
     dialogEl: HTMLDialogElement | null,
     modalInnerEl: HTMLElement | null
   ): void {
+    this.activePinchCount = 0;
     if (dialogEl?.dataset) {
       delete dialogEl.dataset.mgLayout;
       delete dialogEl.dataset.mgRotate;

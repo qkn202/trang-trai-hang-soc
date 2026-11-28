@@ -80,13 +80,20 @@ function buildTxnApplyTransition(
   const toByUid = new Map(toSnap.buildings.map((b) => [b.uid, b]));
   const liveByUid = new Map(sim.state.buildings.map((b) => [b.uid, b]));
 
-  // Refuse undoing/removing a building that subsequently started growing crops, grazing animals, or crafting
+  // Refuse undoing/removing OR overwriting a building that subsequently gained active farm work or star upgrades
   for (const [uid, fromB] of fromByUid) {
     const toB = toByUid.get(uid);
+    const liveB = liveByUid.get(uid);
     if (!toB) {
-      const liveB = liveByUid.get(uid);
       if (!liveB) return false;
       if (!hasActiveFarmWork(fromB) && hasActiveFarmWork(liveB)) {
+        return false;
+      }
+    } else if (liveB && JSON.stringify(fromB) !== JSON.stringify(toB)) {
+      if (!hasActiveFarmWork(fromB) && hasActiveFarmWork(liveB)) {
+        return false;
+      }
+      if ((liveB.stars ?? 1) !== (fromB.stars ?? 1)) {
         return false;
       }
     }
@@ -156,9 +163,28 @@ function buildTxnApplyTransition(
     sim.state.stashedDecorInventory = Object.keys(curInv).length > 0 ? curInv : undefined;
   }
   if (fromSnap.stashedDecorStars || toSnap.stashedDecorStars) {
-    sim.state.stashedDecorStars = toSnap.stashedDecorStars
-      ? structuredClone(toSnap.stashedDecorStars)
-      : undefined;
+    const fStars = fromSnap.stashedDecorStars ?? {};
+    const tStars = toSnap.stashedDecorStars ?? {};
+    const curStarsMap: Record<string, number[]> = {};
+    for (const [k, arr] of Object.entries(sim.state.stashedDecorStars ?? {})) {
+      if (Array.isArray(arr)) curStarsMap[k] = [...arr];
+    }
+    const starKeys = new Set([...Object.keys(fStars), ...Object.keys(tStars)]);
+    for (const k of starKeys) {
+      const fArr = fStars[k] ?? [];
+      const tArr = tStars[k] ?? [];
+      if (JSON.stringify(fArr) === JSON.stringify(tArr)) continue;
+      if (tArr.length > fArr.length) {
+        curStarsMap[k] = [...(curStarsMap[k] ?? []), ...tArr.slice(fArr.length)];
+      } else if (tArr.length < fArr.length) {
+        const dropCount = fArr.length - tArr.length;
+        const nextArr = [...(curStarsMap[k] ?? [])];
+        nextArr.splice(Math.max(0, nextArr.length - dropCount), dropCount);
+        if (nextArr.length > 0) curStarsMap[k] = nextArr;
+        else delete curStarsMap[k];
+      }
+    }
+    sim.state.stashedDecorStars = Object.keys(curStarsMap).length > 0 ? curStarsMap : undefined;
   }
 
   sim.rideQueues.clear();

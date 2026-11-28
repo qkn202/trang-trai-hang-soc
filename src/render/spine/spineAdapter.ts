@@ -252,30 +252,30 @@ function compileProgram(gl: WebGL2RenderingContext, vsSrc: string, fsSrc: string
  */
 export class SpineSlotAdapter {
   private readonly gl: WebGL2RenderingContext;
-  private readonly prog: WebGLProgram;
-  private readonly vao: WebGLVertexArrayObject;
-  private readonly vbo: WebGLBuffer;
-  private readonly ibo: WebGLBuffer;
-  private readonly indexCount: number;
-  private readonly uAlbedoLoc: WebGLUniformLocation | null;
-  private readonly uUvTableLoc: WebGLUniformLocation | null;
-  private readonly uCameraLoc: WebGLUniformLocation | null;
-  private readonly uViewportLoc: WebGLUniformLocation | null;
-  private readonly uPoseRectLoc: WebGLUniformLocation | null;
-  private readonly uBoneParamsLoc: WebGLUniformLocation | null;
-  private readonly uPoseExtraLoc: WebGLUniformLocation | null;
-  private readonly uAmbientTintLoc: WebGLUniformLocation | null;
-  private readonly uAlphaLoc: WebGLUniformLocation | null;
+  private prog!: WebGLProgram;
+  private vao!: WebGLVertexArrayObject;
+  private vbo!: WebGLBuffer;
+  private ibo!: WebGLBuffer;
+  private indexCount = 0;
+  private uAlbedoLoc: WebGLUniformLocation | null = null;
+  private uUvTableLoc: WebGLUniformLocation | null = null;
+  private uCameraLoc: WebGLUniformLocation | null = null;
+  private uViewportLoc: WebGLUniformLocation | null = null;
+  private uPoseRectLoc: WebGLUniformLocation | null = null;
+  private uBoneParamsLoc: WebGLUniformLocation | null = null;
+  private uPoseExtraLoc: WebGLUniformLocation | null = null;
+  private uAmbientTintLoc: WebGLUniformLocation | null = null;
+  private uAlphaLoc: WebGLUniformLocation | null = null;
 
-  private readonly spineProg: WebGLProgram;
-  private readonly spineVao: WebGLVertexArrayObject;
-  private readonly spineVbo: WebGLBuffer;
-  private readonly spineIbo: WebGLBuffer;
-  private readonly uSpineAtlasLoc: WebGLUniformLocation | null;
-  private readonly uSpineCameraLoc: WebGLUniformLocation | null;
-  private readonly uSpineViewportLoc: WebGLUniformLocation | null;
-  private readonly uSpineAmbientLoc: WebGLUniformLocation | null;
-  private readonly uSpineAlphaLoc: WebGLUniformLocation | null;
+  private spineProg!: WebGLProgram;
+  private spineVao!: WebGLVertexArrayObject;
+  private spineVbo!: WebGLBuffer;
+  private spineIbo!: WebGLBuffer;
+  private uSpineAtlasLoc: WebGLUniformLocation | null = null;
+  private uSpineCameraLoc: WebGLUniformLocation | null = null;
+  private uSpineViewportLoc: WebGLUniformLocation | null = null;
+  private uSpineAmbientLoc: WebGLUniformLocation | null = null;
+  private uSpineAlphaLoc: WebGLUniformLocation | null = null;
   private readonly spineVertData = new Float32Array(MAX_SPINE_QUADS * 4 * 6);
   private readonly evaluator = new SpinePoseEvaluator();
   private spineAtlasTex: WebGLTexture | null = null;
@@ -283,6 +283,18 @@ export class SpineSlotAdapter {
 
   constructor(gl: WebGL2RenderingContext) {
     this.gl = gl;
+    this.initGpuResources();
+    ensureSharedVillagerSpineRuntime();
+  }
+
+  public rebuildGpuResources(): void {
+    this.spineAtlasTex = null;
+    this.externalSpineLoaded = false;
+    this.initGpuResources();
+  }
+
+  private initGpuResources(): void {
+    const gl = this.gl;
     const prog = compileProgram(gl, PUPPET_VS, PUPPET_FS);
     this.prog = prog;
 
@@ -372,8 +384,6 @@ export class SpineSlotAdapter {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.spineIbo);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, spineIndices, gl.STATIC_DRAW);
     gl.bindVertexArray(null);
-
-    ensureSharedVillagerSpineRuntime();
   }
 
   private ensureSpineAtlasTexture(img: HTMLImageElement): WebGLTexture {

@@ -1425,6 +1425,40 @@ export function generateNextQuizChallenge(
     return scored[0].c;
   };
 
+  // Due Leitner SRS / reviewQueue cards outside recentIds surface on schedule (respecting active format/topic filters without forcing early repeats)
+  const dueReviewCandidates: Array<{ qId: string; priority: number }> = [];
+  for (const rev of profile.reviewQueue) {
+    if (
+      rev.dueAtTurn <= profile.totalAnswered &&
+      !recentIndexMap.has(rev.qId) &&
+      !sessionExcludedIds.has(rev.qId)
+    ) {
+      dueReviewCandidates.push({ qId: rev.qId, priority: rev.dueAtTurn });
+    }
+  }
+  for (const [qId, boxRec] of Object.entries(srsBoxes)) {
+    if (
+      boxRec.box <= 2 &&
+      boxRec.dueAtTurn <= profile.totalAnswered &&
+      !reviewMap.has(qId) &&
+      !recentIndexMap.has(qId) &&
+      !sessionExcludedIds.has(qId)
+    ) {
+      dueReviewCandidates.push({ qId, priority: boxRec.dueAtTurn + 1 });
+    }
+  }
+  dueReviewCandidates.sort((a, b) => a.priority - b.priority);
+  for (const due of dueReviewCandidates) {
+    if (prefTopic !== 'all') {
+      const dueTopic = resolveQidTopic(due.qId, lexById, curById);
+      if (dueTopic && dueTopic !== prefTopic) continue;
+    }
+    const rebuilt = reconstructChallengeById(due.qId, lang, true);
+    if (rebuilt && (pref === 'all' || rebuilt.format === pref)) {
+      return rebuilt;
+    }
+  }
+
   // Bucket 0: Unseen qId AND unseen root word/concept across all formats
   for (const fmt of orderedFormats) {
     const bucket0 = (candidatesByFormat.get(fmt) ?? []).filter(

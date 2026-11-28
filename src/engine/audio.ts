@@ -241,6 +241,8 @@ export function computeProximityAmbientMix(input: ProximityAmbientInput): {
 interface BgmSlot {
   id: 'A' | 'B';
   audio: HTMLAudioElement | null;
+  mediaSource: MediaElementAudioSourceNode | null;
+  gainNode: GainNode | null;
   mood: BgmMood | null;
   gain: number;       // Normalized current gain [0.0 .. 1.0]
   targetGain: number; // Normalized target gain [0.0 .. 1.0]
@@ -281,6 +283,44 @@ export class MagicalAudio {
   private sfxAtlasLoading = false;
   private masterFilter: BiquadFilterNode | null = null;
   private modalMuffled = false;
+  private sfxVoiceTimestamps: number[] = [];
+
+  /** Polyphony cap (max 5 non-essential SFX / 120ms) chống méo tiếng khi vuốt thu hoạch hàng loạt kiểu Hay Day. */
+  public canPlaySfxVoice(nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now(), highPriority = false): boolean {
+    if (highPriority) return true;
+    while (this.sfxVoiceTimestamps.length > 0 && nowMs - this.sfxVoiceTimestamps[0] > 120) {
+      this.sfxVoiceTimestamps.shift();
+    }
+    if (this.sfxVoiceTimestamps.length >= 5) return false;
+    this.sfxVoiceTimestamps.push(nowMs);
+    return true;
+  }
+
+  /**
+   * Định tuyến BGM qua Web Audio GainNode -> masterFilter để crossfade, thanh âm lượng và muffle 1800 Hz
+   * hoạt động chuẩn trên iOS Safari (nơi `HTMLAudioElement.volume` chỉ đọc = 1.0).
+   */
+  private ensureBgmWebAudioRoute(slot: BgmSlot): GainNode | null {
+    if (slot.gainNode) return slot.gainNode;
+    if (!slot.audio || !this.unlocked) return null;
+    const ctx = this.ensureCtx();
+    if (!ctx || typeof ctx.createMediaElementSource !== 'function' || typeof ctx.createGain !== 'function') {
+      return null;
+    }
+    try {
+      const src = ctx.createMediaElementSource(slot.audio);
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      src.connect(gain);
+      gain.connect(this.getMasterOutput(ctx));
+      slot.mediaSource = src;
+      slot.gainNode = gain;
+      slot.audio.volume = 1;
+      return gain;
+    } catch {
+      return null;
+    }
+  }
 
   constructor() {
     this.slotA = this.initBgmSlot('A');
@@ -420,6 +460,8 @@ export class MagicalAudio {
     return {
       id,
       audio,
+      mediaSource: null,
+      gainNode: null,
       mood: null,
       gain: 0,
       targetGain: 0,
@@ -506,7 +548,12 @@ export class MagicalAudio {
       if (slot.audio) {
         const musicBus = this.ceiling.getEffectiveBusGain('music');
         const effectiveVol = Math.max(0, Math.min(1, slot.gain * this.bgmMasterVolume * musicBus));
-        slot.audio.volume = effectiveVol;
+        const routedGain = this.ensureBgmWebAudioRoute(slot);
+        if (routedGain && this.ctx) {
+          routedGain.gain.setTargetAtTime(effectiveVol, this.ctx.currentTime, 0.04);
+        } else {
+          slot.audio.volume = effectiveVol;
+        }
 
         // "track nào idle thì pause ở 0"
         if (slot.gain <= 0 && slot.targetGain <= 0) {
@@ -525,18 +572,20 @@ export class MagicalAudio {
   public stopBgm(): void {
     this.slotA.targetGain = 0;
     this.slotA.gain = 0;
+    if (this.slotA.gainNode) this.slotA.gainNode.gain.value = 0;
     if (this.slotA.audio && !this.slotA.audio.paused) {
       this.slotA.audio.pause();
       this.slotA.audio.currentTime = 0;
-      this.slotA.audio.volume = 0;
+      if (!this.slotA.gainNode) this.slotA.audio.volume = 0;
     }
 
     this.slotB.targetGain = 0;
     this.slotB.gain = 0;
+    if (this.slotB.gainNode) this.slotB.gainNode.gain.value = 0;
     if (this.slotB.audio && !this.slotB.audio.paused) {
       this.slotB.audio.pause();
       this.slotB.audio.currentTime = 0;
-      this.slotB.audio.volume = 0;
+      if (!this.slotB.gainNode) this.slotB.audio.volume = 0;
     }
 
     this.bgmCurrentMood = null;
@@ -1033,9 +1082,169 @@ export class MagicalAudio {
     this.playTone(1174.66, 0.16, 'sine', 0.036 * sfxGain, 0.09);
   }
 
+  private playFilteredNoiseBurst(
+    startDelay: number,
+    duration: number,
+    startFreq: number,
+    endFreq: number,
+    q: number,
+    peakGain: number,
+    pan = 0
+  ): void {
+    const ctx = this.ensureCtx();
+    if (!ctx || ctx.state !== 'running') return;
+    if (
+      typeof ctx.createBufferSource !== 'function' ||
+      typeof ctx.createBiquadFilter !== 'function' ||
+      typeof ctx.createGain !== 'function'
+    ) {
+      return;
+    }
+    const now = ctx.currentTime + Math.max(0, startDelay);
+    const dur = Math.max(0.02, duration);
+    const src = ctx.createBufferSource();
+    src.buffer = this.getNoiseBuffer(ctx);
+
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(Math.max(40, startFreq), now);
+    bp.frequency.exponentialRampToValueAtTime(Math.max(40, endFreq), now + dur);
+    bp.Q.setValueAtTime(Math.max(0.1, q), now);
+
+    const gain = ctx.createGain();
+    const safePeak = Math.max(0.0002, peakGain);
+    const attack = Math.min(0.012, dur * 0.22);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(safePeak, now + attack);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+    src.connect(bp);
+    bp.connect(gain);
+    this.connectWithOptionalPan(ctx, gain, pan);
+    src.start(now);
+    src.stop(now + dur + 0.015);
+  }
+
+  /**
+   * Hay Day signature tactile swipe-harvest cue:
+   * Crisp 55ms bandpass scythe/wheat swish + bright C-major pentatonic celesta pluck
+   * climbing smoothly across comboIndex and clamping softly with warm shimmer at top note.
+   */
+  public playSwipeHarvestNote(comboIndex: number, pan = 0): void {
+    if (!this.enabled || !this.canPlaySfxVoice()) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
+    this.ceiling.triggerIntensityPulse(0.1);
+
+    const scale = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5, 1174.66, 1318.51];
+    const rawIdx = Number.isFinite(comboIndex) ? Math.floor(comboIndex) : 0;
+    const clampedIdx = Math.min(scale.length - 1, Math.max(0, rawIdx));
+    const freq = scale[clampedIdx];
+
+    // 1. Crisp ~55ms scythe/wheat swish through bandpass-filtered noise
+    const swishStart = 1850 + clampedIdx * 95;
+    const swishEnd = 3350 + clampedIdx * 110;
+    this.playFilteredNoiseBurst(0, 0.055, swishStart, swishEnd, 2.2, 0.052 * sfxGain, pan);
+
+    // 2. Warm C-major pentatonic celesta/pluck tone
+    this.playTone(freq, 0.2, 'sine', 0.072 * sfxGain, 0.01, pan);
+    this.playTone(freq * 1.5, 0.16, 'triangle', 0.028 * sfxGain, 0.022, pan);
+
+    // 3. Gentle warm shimmer when capped past top note so 15+ plot swipes stay euphoric, never shrill
+    if (rawIdx >= scale.length) {
+      const shimmerFreq = rawIdx % 2 === 0 ? 1567.98 : 1760.0;
+      this.playTone(shimmerFreq, 0.18, 'sine', 0.018 * sfxGain, 0.032, pan);
+    }
+  }
+
+  /**
+   * Tactile swipe-sow & swipe-water cue:
+   * Soft earthy pat + ascending warm marimba pluck across comboIndex.
+   */
+  public playSwipeSowNote(comboIndex: number, pan = 0): void {
+    if (!this.enabled || !this.canPlaySfxVoice()) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
+
+    const scale = [392.0, 440.0, 493.88, 587.33, 659.25, 783.99];
+    const rawIdx = Number.isFinite(comboIndex) ? Math.floor(comboIndex) : 0;
+    const clampedIdx = Math.min(scale.length - 1, Math.max(0, rawIdx));
+    const freq = scale[clampedIdx];
+
+    // 1. Soft earthy soil pat
+    this.playFilteredNoiseBurst(0, 0.044, 460, 210, 1.35, 0.046 * sfxGain, pan);
+    this.playTone(148, 0.055, 'sine', 0.038 * sfxGain, 0, pan);
+
+    // 2. Ascending warm marimba pluck
+    this.playTone(freq, 0.17, 'triangle', 0.064 * sfxGain, 0.01, pan);
+    this.playTone(freq * 2, 0.085, 'sine', 0.02 * sfxGain, 0.014, pan);
+
+    if (rawIdx >= scale.length) {
+      this.playTone(987.77, 0.12, 'sine', 0.016 * sfxGain, 0.026, pan);
+    }
+  }
+
+  /**
+   * Cheerful ceramic/wooden counter pop ascending gently when collecting artisan goods off a workshop shelf.
+   */
+  public playWorkshopCollectNote(index = 0, pan = 0): void {
+    if (!this.enabled || !this.canPlaySfxVoice()) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
+    this.ceiling.triggerIntensityPulse(0.1);
+
+    const scale = [587.33, 659.25, 783.99, 880.0, 1046.5, 1174.66];
+    const rawIdx = Number.isFinite(index) ? Math.floor(index) : 0;
+    const clampedIdx = Math.min(scale.length - 1, Math.max(0, rawIdx));
+    const freq = scale[clampedIdx];
+
+    // 1. Tactile wooden counter pitch-pop
+    const ctx = this.ensureCtx();
+    if (ctx && ctx.state === 'running' && typeof ctx.createOscillator === 'function' && typeof ctx.createGain === 'function') {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq * 0.56, now);
+      osc.frequency.exponentialRampToValueAtTime(freq, now + 0.042);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, 0.068 * sfxGain), now + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.145);
+
+      osc.connect(gain);
+      this.connectWithOptionalPan(ctx, gain, pan);
+      osc.start(now);
+      osc.stop(now + 0.165);
+    }
+
+    // 2. Bright ceramic resonance overtone
+    this.playTone(freq * 1.5, 0.15, 'sine', 0.04 * sfxGain, 0.03, pan);
+    this.playTone(freq * 2.0, 0.1, 'sine', 0.02 * sfxGain, 0.048, pan);
+  }
+
+  /**
+   * Crisp parchment paper flutter + subtle wooden latch click when opening the Daily Prophet mailbox.
+   */
+  public playMailboxRustle(pan = 0): void {
+    if (!this.enabled || !this.canPlaySfxVoice()) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
+
+    // 1. Subtle wooden mailbox latch click
+    this.playTone(255, 0.042, 'triangle', 0.05 * sfxGain, 0, pan);
+    this.playTone(920, 0.024, 'triangle', 0.028 * sfxGain, 0.014, pan);
+
+    // 2. Two-stage crisp parchment paper flutter
+    this.playFilteredNoiseBurst(0.024, 0.085, 2400, 3800, 1.6, 0.048 * sfxGain, pan);
+    this.playFilteredNoiseBurst(0.105, 0.095, 2800, 1850, 1.4, 0.036 * sfxGain, pan);
+  }
+
   public playHarvestBubble(): void {
     this.ceiling.triggerIntensityPulse(0.12);
-    if (!this.enabled) return;
+    if (!this.enabled || !this.canPlaySfxVoice()) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
     const nowMs = performance.now();
     if (nowMs - this.lastStreakTime < 900) {
       this.streakCount = Math.min(10, this.streakCount + 1);
@@ -1047,69 +1256,97 @@ export class MagicalAudio {
       523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.66, 1318.5, 1567.98, 1760, 2093,
     ];
     const base = scaleNotes[this.streakCount];
-    if (this.playAtlasCue('harvest', 0.34, Math.min(2.0, base / 523.25))) return;
-    this.playTone(base, 0.22, 'sine', 0.075, 0);
-    this.playTone(base * 1.5, 0.28, 'triangle', 0.04, 0.045);
+    if (this.playAtlasCue('harvest', 0.34 * sfxGain, Math.min(2.0, base / 523.25))) return;
+    this.playTone(base, 0.22, 'sine', 0.075 * sfxGain, 0);
+    this.playTone(base * 1.5, 0.28, 'triangle', 0.04 * sfxGain, 0.045);
+  }
+
+  /** Âm thanh pha lê ngân vang đặc trưng khi nổ Lộc Mùa Vàng (Hay Day Wheating Bonus Drop). */
+  public playWheatingBonusDrop(): void {
+    if (!this.enabled) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
+    const notes = [659.25, 880, 1174.66, 1567.98];
+    notes.forEach((n, i) => {
+      this.playTone(n, 0.28, 'sine', 0.068 * sfxGain, i * 0.045);
+      this.playTone(n * 1.5, 0.2, 'triangle', 0.025 * sfxGain, i * 0.045 + 0.015);
+    });
   }
 
   public playWaterSplash(): void {
-    if (!this.enabled) return;
-    if (this.playAtlasCue('water', 0.36, 0.96 + Math.random() * 0.08)) return;
-    this.playTone(587.33, 0.14, 'sine', 0.055, 0);
-    this.playTone(880.0, 0.18, 'sine', 0.045, 0.06);
+    if (!this.enabled || !this.canPlaySfxVoice()) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
+    if (this.playAtlasCue('water', 0.36 * sfxGain, 0.96 + Math.random() * 0.08)) return;
+    this.playTone(587.33, 0.14, 'sine', 0.055 * sfxGain, 0);
+    this.playTone(880.0, 0.18, 'sine', 0.045 * sfxGain, 0.06);
   }
 
   public playChessClack(heavy = false): void {
-    if (!this.enabled || typeof window === 'undefined') return;
+    if (!this.enabled || typeof window === 'undefined' || !this.canPlaySfxVoice()) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
     const rate = heavy ? 0.86 : 0.97 + Math.random() * 0.07;
-    if (this.playAtlasCue('chess_clack', heavy ? 0.42 : 0.32, rate)) return;
-    this.playTone(heavy ? 196 : 293.66, 0.09, 'triangle', 0.065, 0);
+    if (this.playAtlasCue('chess_clack', (heavy ? 0.42 : 0.32) * sfxGain, rate)) return;
+    this.playTone(heavy ? 196 : 293.66, 0.09, 'triangle', 0.065 * sfxGain, 0);
   }
 
   public playCrateCrack(): void {
-    if (!this.enabled || typeof window === 'undefined') return;
-    if (this.playAtlasCue('crate_crack', 0.38, 0.96 + Math.random() * 0.08)) return;
+    if (!this.enabled || typeof window === 'undefined' || !this.canPlaySfxVoice()) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
+    if (this.playAtlasCue('crate_crack', 0.38 * sfxGain, 0.96 + Math.random() * 0.08)) return;
     this.playPowerupBlast();
   }
 
   public playRibbonCut(): void {
     if (!this.enabled) return;
-    if (!this.playAtlasCue('build_complete', 0.42, 1.04)) {
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
+    if (!this.playAtlasCue('build_complete', 0.42 * sfxGain, 1.04)) {
       this.playBuildComplete();
     }
   }
 
   public playPlace(): void {
-    if (!this.enabled) return;
-    if (this.playAtlasCue('place', 0.34, 0.97 + Math.random() * 0.06)) return;
-    this.playTone(293.66, 0.12, 'triangle', 0.07, 0);
-    this.playTone(440.0, 0.18, 'sine', 0.06, 0.05);
+    if (!this.enabled || !this.canPlaySfxVoice()) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
+    if (this.playAtlasCue('place', 0.34 * sfxGain, 0.97 + Math.random() * 0.06)) return;
+    this.playTone(293.66, 0.12, 'triangle', 0.07 * sfxGain, 0);
+    this.playTone(440.0, 0.18, 'sine', 0.06 * sfxGain, 0.05);
   }
 
   /** Warm ascending celesta arpeggio played the moment a building finishes construction. */
   public playBuildComplete(): void {
     if (!this.enabled) return;
-    if (this.playAtlasCue('build_complete', 0.38, 1.0)) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
+    if (this.playAtlasCue('build_complete', 0.38 * sfxGain, 1.0)) return;
     const notes = [523.25, 659.25, 783.99, 1046.5];
     notes.forEach((n, i) => {
-      this.playTone(n, 0.36, 'sine', 0.062, i * 0.055);
-      this.playTone(n * 2, 0.2, 'triangle', 0.014, i * 0.055 + 0.01);
+      this.playTone(n, 0.36, 'sine', 0.062 * sfxGain, i * 0.055);
+      this.playTone(n * 2, 0.2, 'triangle', 0.014 * sfxGain, i * 0.055 + 0.01);
     });
   }
 
   public playClick(): void {
-    if (!this.enabled || typeof window === 'undefined') return;
-    if (this.playAtlasCue('click', 0.24, 0.98 + Math.random() * 0.05)) return;
-    this.playTone(587.33, 0.08, 'triangle', 0.045, 0);
+    if (!this.enabled || typeof window === 'undefined' || !this.canPlaySfxVoice()) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
+    if (this.playAtlasCue('click', 0.24 * sfxGain, 0.98 + Math.random() * 0.05)) return;
+    this.playTone(587.33, 0.08, 'triangle', 0.045 * sfxGain, 0);
   }
 
   public playSpell(): void {
-    if (!this.enabled) return;
-    if (typeof window !== 'undefined' && this.playAtlasCue('wand_spell', 0.34, 0.97 + Math.random() * 0.06)) {
+    if (!this.enabled || !this.canPlaySfxVoice()) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
+    if (typeof window !== 'undefined' && this.playAtlasCue('wand_spell', 0.34 * sfxGain, 0.97 + Math.random() * 0.06)) {
       return;
     }
     const notes = [659.25, 783.99, 987.77, 1318.51];
-    notes.forEach((n, i) => this.playTone(n, 0.24, 'sine', 0.055, i * 0.045));
+    notes.forEach((n, i) => this.playTone(n, 0.24, 'sine', 0.055 * sfxGain, i * 0.045));
   }
 
   /**
@@ -1117,12 +1354,14 @@ export class MagicalAudio {
    */
   public playTalismanBlast(): void {
     if (!this.enabled) return;
-    if (this.playAtlasCue('talisman_blast', 0.44, 1.0)) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
+    if (this.playAtlasCue('talisman_blast', 0.44 * sfxGain, 1.0)) return;
     // 1. Rapid 4-note ascending fire arpeggio (E4, G#4, B4, E5, G#5)
     const fireNotes = [329.63, 415.3, 493.88, 659.25, 830.61];
     fireNotes.forEach((freq, idx) => {
-      this.playTone(freq, 0.26, 'triangle', 0.075, idx * 0.04);
-      this.playTone(freq * 1.5, 0.2, 'sine', 0.04, idx * 0.04 + 0.01);
+      this.playTone(freq, 0.26, 'triangle', 0.075 * sfxGain, idx * 0.04);
+      this.playTone(freq * 1.5, 0.2, 'sine', 0.04 * sfxGain, idx * 0.04 + 0.01);
     });
 
     // 2. Fiery noise burst (whoosh of phoenix flames)
@@ -1142,12 +1381,12 @@ export class MagicalAudio {
 
       const gain = ctx.createGain();
       gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.065, now + 0.035);
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, 0.065 * sfxGain), now + 0.035);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
 
       src.connect(bp);
       bp.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getMasterOutput(ctx));
       src.start(now);
       src.stop(now + dur + 0.02);
     }
@@ -1155,8 +1394,10 @@ export class MagicalAudio {
 
   public playCardFound(): void {
     if (!this.enabled) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
     const notes = [523.25, 659.25, 783.99, 1046.5, 1318.51];
-    notes.forEach((n, i) => this.playTone(n, 0.34, 'sine', 0.068, i * 0.06));
+    notes.forEach((n, i) => this.playTone(n, 0.34, 'sine', 0.068 * sfxGain, i * 0.06));
   }
 
   /**
@@ -1164,54 +1405,62 @@ export class MagicalAudio {
    */
   public playLevelUp(): void {
     if (!this.enabled) return;
-    if (this.playAtlasCue('fanfare_win', 0.42, 1.0)) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
+    if (this.playAtlasCue('fanfare_win', 0.42 * sfxGain, 1.0)) return;
     // Ascending celebratory scale
     const notes = [440, 554.37, 659.25, 880, 1108.73, 1318.51];
-    notes.forEach((n, i) => this.playTone(n, 0.42, 'triangle', 0.07, i * 0.075));
+    notes.forEach((n, i) => this.playTone(n, 0.42, 'triangle', 0.07 * sfxGain, i * 0.075));
     // Triumphant 3-note major fanfare chord (A5, C#6, E6) blossoming at peak
     const fanfareTriad = [880, 1108.73, 1318.51];
     fanfareTriad.forEach((freq) => {
-      this.playTone(freq, 0.65, 'sine', 0.045, 0.48);
-      this.playTone(freq * 2, 0.35, 'triangle', 0.015, 0.49);
+      this.playTone(freq, 0.65, 'sine', 0.045 * sfxGain, 0.48);
+      this.playTone(freq * 2, 0.35, 'triangle', 0.015 * sfxGain, 0.49);
     });
   }
 
   public playCheekyAlert(): void {
-    if (!this.enabled) return;
-    this.playTone(392, 0.14, 'triangle', 0.065, 0);
-    this.playTone(349.23, 0.14, 'triangle', 0.065, 0.09);
-    this.playTone(523.25, 0.2, 'sine', 0.065, 0.18);
+    if (!this.enabled || !this.canPlaySfxVoice()) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
+    this.playTone(392, 0.14, 'triangle', 0.065 * sfxGain, 0);
+    this.playTone(349.23, 0.14, 'triangle', 0.065 * sfxGain, 0.09);
+    this.playTone(523.25, 0.2, 'sine', 0.065 * sfxGain, 0.18);
   }
 
   /**
    * Match-3 pop SFX with special celebratory combo-break chimes when combo >= 4.
    */
   public playMatchPop(combo = 1): void {
-    if (!this.enabled || typeof window === 'undefined') return;
+    if (!this.enabled || typeof window === 'undefined' || !this.canPlaySfxVoice(undefined, combo >= 4)) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
     const scale = [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.66, 1318.51];
     const f = scale[Math.min(scale.length - 1, Math.max(0, combo - 1))];
-    const playedAtlas = this.playAtlasCue('match_pop', 0.34, Math.min(2.2, f / 523.25));
+    const playedAtlas = this.playAtlasCue('match_pop', 0.34 * sfxGain, Math.min(2.2, f / 523.25));
     if (!playedAtlas) {
-      this.playTone(f, 0.16, 'sine', 0.07, 0);
-      this.playTone(f * 1.5, 0.18, 'triangle', 0.035, 0.03);
+      this.playTone(f, 0.16, 'sine', 0.07 * sfxGain, 0);
+      this.playTone(f * 1.5, 0.18, 'triangle', 0.035 * sfxGain, 0.03);
     }
 
     // Combo-break SFX when combo >= 4: celebratory high sparkle flourish
     if (combo >= 4) {
       const sparkles = [1318.51, 1567.98, 2093.0];
       sparkles.forEach((sFreq, idx) => {
-        this.playTone(sFreq, 0.18, 'sine', 0.04, 0.06 + idx * 0.045);
-        this.playTone(sFreq * 1.25, 0.12, 'triangle', 0.02, 0.07 + idx * 0.045);
+        this.playTone(sFreq, 0.18, 'sine', 0.04 * sfxGain, 0.06 + idx * 0.045);
+        this.playTone(sFreq * 1.25, 0.12, 'triangle', 0.02 * sfxGain, 0.07 + idx * 0.045);
       });
     }
   }
 
   public playPowerupBlast(): void {
-    if (!this.enabled || typeof window === 'undefined') return;
-    if (this.playAtlasCue('powerup_blast', 0.42, 0.95 + Math.random() * 0.08)) return;
-    this.playTone(220, 0.28, 'triangle', 0.085, 0);
-    this.playTone(440, 0.24, 'sine', 0.065, 0.03);
-    this.playTone(880, 0.3, 'sine', 0.055, 0.07);
+    if (!this.enabled || typeof window === 'undefined' || !this.canPlaySfxVoice(undefined, true)) return;
+    const sfxGain = this.ceiling.getEffectiveBusGain('sfx');
+    if (sfxGain <= 0.001) return;
+    if (this.playAtlasCue('powerup_blast', 0.42 * sfxGain, 0.95 + Math.random() * 0.08)) return;
+    this.playTone(220, 0.28, 'triangle', 0.085 * sfxGain, 0);
+    this.playTone(440, 0.24, 'sine', 0.065 * sfxGain, 0.03);
+    this.playTone(880, 0.3, 'sine', 0.055 * sfxGain, 0.07);
   }
 
   public pause(): void {
@@ -1235,7 +1484,7 @@ export class MagicalAudio {
     ) {
       this.ctx.resume().catch(() => {});
     }
-    if (this.bgmEnabled && this.unlocked) {
+    if (this.bgmEnabled && this.unlocked && !this.externalBgmActive) {
       const active = this.activeSlotId === 'A' ? this.slotA : this.slotB;
       if (active.audio && active.audio.paused && (active.gain > 0 || active.targetGain > 0)) {
         active.audio.play().catch(() => {});

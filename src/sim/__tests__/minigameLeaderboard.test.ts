@@ -23,6 +23,7 @@ import {
   CREATURE_ONET_SPECIES,
   CreatureOnetEngine,
   getOnetStageConfig,
+  getVisualOnetShiftSpec,
 } from '../puzzleArcadeEngine';
 import { ParkSimulation } from '../simulation';
 import {
@@ -523,6 +524,34 @@ describe('Per-Mini-Game Leaderboards (All 6 Scored Games: Match-3, Minesweeper/C
       'split_v',
       'none',
     ]);
+
+    // Verify visual shift label stays 100% faithful to transposed portrait boards (dr = c, dc = r) & 90° CW board rotations
+    expect(getVisualOnetShiftSpec('down', false, 0)).toEqual({ mode: 'down', badgeVi: '⬇️ Rơi Xuống' });
+    expect(getVisualOnetShiftSpec('down', true, 0)).toEqual({ mode: 'right', badgeVi: '➡️ Dồn Phải' });
+    expect(getVisualOnetShiftSpec('up', true, 0)).toEqual({ mode: 'left', badgeVi: '⬅️ Dồn Trái' });
+    expect(getVisualOnetShiftSpec('left', true, 0)).toEqual({ mode: 'up', badgeVi: '⬆️ Dồn Lên' });
+    expect(getVisualOnetShiftSpec('right', true, 0)).toEqual({ mode: 'down', badgeVi: '⬇️ Rơi Xuống' });
+    expect(getVisualOnetShiftSpec('center_h', true, 0)).toEqual({ mode: 'center_v', badgeVi: '⬇️⬆️ Gom Tâm Dọc' });
+    expect(getVisualOnetShiftSpec('split_h', true, 0)).toEqual({ mode: 'split_v', badgeVi: '⬆️⬇️ Tách Đỉnh Đáy' });
+    expect(getVisualOnetShiftSpec('center_v', true, 0)).toEqual({ mode: 'center_h', badgeVi: '➡️⬅️ Gom Tâm Ngang' });
+    expect(getVisualOnetShiftSpec('split_v', true, 0)).toEqual({ mode: 'split_h', badgeVi: '⬅️➡️ Tách Hai Biên' });
+    expect(getVisualOnetShiftSpec('down', false, 1).mode).toBe('left');
+    expect(getVisualOnetShiftSpec('down', false, 2).mode).toBe('up');
+    expect(getVisualOnetShiftSpec('down', false, 3).mode).toBe('right');
+    expect(getVisualOnetShiftSpec('down', true, 1).mode).toBe('down');
+
+    // Verify center_v compacts symmetrically on even-row boards (e.g. stage 98 = 8×14 -> top 0..3 down to 3, bottom 4..7 up to 4)
+    const centerVGame = new CreatureOnetEngine(98); // (98 - 1) % 9 = 7 -> center_v, rows = 8
+    expect(centerVGame.shiftMode).toBe('center_v');
+    expect(centerVGame.rows).toBe(8);
+    for (let r = 0; r < centerVGame.rows; r++) {
+      centerVGame.grid[r][0] = r === 0 || r === 7 ? 'phoenix' : null;
+    }
+    centerVGame.applyStageShift();
+    expect(centerVGame.grid[3][0]).toBe('phoenix');
+    expect(centerVGame.grid[4][0]).toBe('phoenix');
+    expect(centerVGame.grid[0][0]).toBeNull();
+    expect(centerVGame.grid[7][0]).toBeNull();
 
     // Verify outer-border 3-segment U-turn (top row r=0 via r=-1) AND rejection of 4-segment S-bend
     const custom = new CreatureOnetEngine(1);

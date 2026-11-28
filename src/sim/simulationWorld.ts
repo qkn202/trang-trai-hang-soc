@@ -456,7 +456,9 @@ export function worldRecomputeAllCoastersAndBiomes(sim: ParkSimulation): void {
     if (!sim.isHeadmasterPreview && prevIds.size > 0) {
       for (const id of sim.activeSynergies.activeIds) {
         if (!prevIds.has(id)) {
-          const link = sim.activeSynergies.links.find((l) => l.name.length > 0);
+          const link =
+            sim.activeSynergies.links.find((l) => l.id === id) ??
+            sim.activeSynergies.links.find((l) => l.name.length > 0);
           if (link) {
             sim.onToast?.(`✨ Kích hoạt Combo Khu Phố mới: ${link.emoji} ${link.name}!`, '🌟');
           }

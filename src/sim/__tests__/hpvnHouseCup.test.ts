@@ -2,15 +2,25 @@
 import { expect, it, vi } from 'vitest';
 import {
   applyHouseCup,
+  computeAllianceHeadcountMultipliers,
   computeDisciplineBracketTotals,
+  computeF2AllianceStandingsFromDisciplines,
+  computeF2HouseTotals,
   computeHousePointsForLeaderboardRank,
   computeHousePointsFromLeaderboardEntries,
   computeStageDifficultyPoints,
   computeWeeklyStageProgressScore,
+  formatAllianceMultiplierVi,
+  getAllianceFlooFrameKey,
   getIsoWeekSerial,
   getWeeklyHouseAlliances,
+  HOUSE_CUP_ALLIANCE_FLOO_FRAMES,
+  HOUSE_CUP_ALLIANCE_MULTIPLIER_CAP,
+  HOUSE_CUP_ALLIANCE_ROSTER_FLOOR,
+  HOUSE_CUP_ALLIANCE_ROSTER_WINDOW_WEEKS,
   HOUSE_CUP_MIN_STAGES_FOR_POINTS,
   houseCup,
+  houseCupAllianceBalance,
   houseCupAlliances,
   houseCupAllianceStandings,
   houseCupDisciplineSummaries,
@@ -543,6 +553,155 @@ it('shows personal weekly stage progress (X/5) on Bắn Cá card in Cúp Nhà be
   expect(sim.state.puzzleArcade.chessCleared).toBe(5);
   questsUiRenderHouseCupIntroDialog(fakeHud);
   expect(contentBox.innerHTML).toContain('Nhà bạn: 0 đ · Bạn 5 màn tuần');
+
+  resetHouseCupViewForTest();
+});
+
+it('F2: balances 2v2 Alliances with locked 3-week rolling headcount multiplier (floor 4, cap 2.5x), direct 6-discipline sum, 0% newbie penalty, and transparent UI badge', async () => {
+  const { resetHouseCupViewForTest } = await import('../../hpvn/houseCup');
+  const { questsUiRenderHouseCupIntroDialog } = await import('../../ui/hudQuestsAndSettings');
+  resetHouseCupViewForTest();
+
+  expect(HOUSE_CUP_ALLIANCE_ROSTER_WINDOW_WEEKS).toBe(3);
+  expect(HOUSE_CUP_ALLIANCE_ROSTER_FLOOR).toBe(4);
+  expect(HOUSE_CUP_ALLIANCE_MULTIPLIER_CAP).toBe(2.5);
+  expect(formatAllianceMultiplierVi(1.5)).toBe('1,5');
+  expect(formatAllianceMultiplierVi(2)).toBe('2');
+  expect(formatAllianceMultiplierVi(1.333)).toBe('1,33');
+
+  const pair = getWeeklyHouseAlliances('2026-W48'); // 3-pair rotation preserved: G+S vs R+H or similar
+  const [a0, a1] = pair[0].houses;
+  const [b0, b1] = pair[1].houses;
+
+  // 1. Cold-start (no 3-week history yet) -> 1.0x for both alliances
+  const cold = computeAllianceHeadcountMultipliers(pair, {
+    Gryffindor: 0,
+    Slytherin: 0,
+    Ravenclaw: 0,
+    Hufflepuff: 0,
+  });
+  expect(cold.byAlliance.alliance_a.multiplier).toBe(1);
+  expect(cold.byAlliance.alliance_b.multiplier).toBe(1);
+
+  // 2. 2:1 imbalance (16 vs 8 active avg) -> smaller alliance gets exact 2.0x
+  const ratio2to1 = computeAllianceHeadcountMultipliers(pair, {
+    [a0]: 8,
+    [a1]: 8,
+    [b0]: 4,
+    [b1]: 4,
+  });
+  expect(ratio2to1.byAlliance.alliance_a.multiplier).toBe(1);
+  expect(ratio2to1.byAlliance.alliance_b.multiplier).toBe(2);
+
+  // 3. Extreme imbalance (18 vs 2) -> floor 4 clamps small alliance effective roster to 4, cap 2.5x clamps 18/4 = 4.5 -> 2.5x
+  const capped = computeAllianceHeadcountMultipliers(pair, {
+    [a0]: 10,
+    [a1]: 8,
+    [b0]: 1,
+    [b1]: 1,
+  });
+  expect(capped.byAlliance.alliance_b.effectiveRoster).toBe(4);
+  expect(capped.byAlliance.alliance_b.multiplier).toBe(2.5);
+  expect(capped.byAlliance.alliance_a.multiplier).toBe(1);
+
+  // 4. Direct 6-discipline sum + locked multiplier: smaller alliance (8p, 2x) playing better per-player beats larger alliance (16p, 1x),
+  //    AND adding a casual newbie (+20 pts) ALWAYS strictly increases the smaller alliance's score (0% newbie penalty!)
+  const baseDiscs = {
+    match3: { [a0]: 140, [a1]: 120, [b0]: 100, [b1]: 80 } as Record<any, number>,
+    caro: { [a0]: 110, [a1]: 100, [b0]: 90, [b1]: 60 } as Record<any, number>,
+    sudoku: { [a0]: 100, [a1]: 90, [b0]: 80, [b1]: 50 } as Record<any, number>,
+    chess: { [a0]: 110, [a1]: 95, [b0]: 85, [b1]: 55 } as Record<any, number>,
+    blocks: { [a0]: 95, [a1]: 85, [b0]: 75, [b1]: 45 } as Record<any, number>,
+    jigsaw: { [a0]: 85, [a1]: 70, [b0]: 65, [b1]: 45 } as Record<any, number>,
+  };
+  // Alliance A raw = 640 + 560 = 1200 (1x -> 1200); Alliance B raw = 495 + 335 = 830 (2x -> 1660)
+  const houseTotals = computeF2HouseTotals(baseDiscs);
+  expect(houseTotals.houses[a0]).toBe(640);
+  expect(houseTotals.houses[b0]).toBe(495);
+
+  const f2Before = computeF2AllianceStandingsFromDisciplines(baseDiscs, pair, {
+    balance: ratio2to1,
+    playerHouse: b0,
+  });
+  expect(f2Before.standings[0].id).toBe('alliance_b');
+  expect(f2Before.standings[0].rawPoints).toBe(830);
+  expect(f2Before.standings[0].balanceMultiplier).toBe(2);
+  expect(f2Before.standings[0].points).toBe(1660);
+  expect(f2Before.standings[1].points).toBe(1200);
+
+  // Add 1 casual newbie clearing 5 stages in match3 (+20 pts) to Alliance B while weekly multiplier stays LOCKED at 2x
+  const withNewbie = {
+    ...baseDiscs,
+    match3: { ...baseDiscs.match3, [b1]: baseDiscs.match3[b1] + 20 } as Record<any, number>,
+  };
+  const f2After = computeF2AllianceStandingsFromDisciplines(withNewbie, pair, {
+    balance: ratio2to1,
+    playerHouse: b0,
+  });
+  expect(f2After.standings[0].rawPoints).toBe(850);
+  expect(f2After.standings[0].points).toBe(1700); // Strictly +40 higher (+20 * 2x), 0% newbie penalty!
+
+  // 5. applyHouseCup with mode: 'f2' + houseActiveAvg auto-derives multipliers, sums houses, and renders transparent UI badge
+  applyHouseCup({
+    weekKey: '2026-W48',
+    mode: 'f2',
+    unlimited: true,
+    disciplines: baseDiscs,
+    allianceBalance: {
+      windowWeeks: 3,
+      rosterFloor: 4,
+      multiplierCap: 2.5,
+      houseActiveAvg: {
+        [a0]: 7,
+        [a1]: 5,
+        [b0]: 5,
+        [b1]: 3,
+      }, // 12 vs 8 -> 1.5x for alliance_b
+    },
+    house: b0,
+    memberTodayPoints: 150,
+    memberDailyCap: 0,
+    memberBank: 150,
+    memberTier: 2,
+    perTier: 300,
+  });
+
+  expect(houseCup()?.mode).toBe('f2');
+  expect(houseWeekPoints(a0)).toBe(640);
+  expect(houseWeekPoints(b0)).toBe(495);
+  expect(houseCupAllianceBalance()?.byAlliance.alliance_b.multiplier).toBe(1.5);
+
+  const [lead, trail] = houseCupAllianceStandings(b0);
+  expect(lead.id).toBe('alliance_b');
+  expect(lead.rawPoints).toBe(830);
+  expect(lead.balanceMultiplier).toBe(1.5);
+  expect(lead.points).toBe(1245); // 830 * 1.5 = 1245 > 1200!
+  expect(trail.points).toBe(1200);
+
+  const sim = new ParkSimulation(new MagicalAudio());
+  sim.lockPlayerHouse(b0);
+  const contentBox = { innerHTML: '', querySelector: () => null, querySelectorAll: () => [] };
+  questsUiRenderHouseCupIntroDialog({
+    sim,
+    root: {
+      querySelector: (sel: string) => (sel === '#houseCupIntroDialogContent' ? contentBox : null),
+    },
+  } as any);
+
+  expect(contentBox.innerHTML).toContain('×1,5 cân quân số');
+  expect(contentBox.innerHTML).toContain('Gốc 830 đ');
+  expect(contentBox.innerHTML).toContain('1.245 đ');
+  expect(contentBox.innerHTML).not.toContain('đ Cúp');
+
+  // 6. All 6 Alliance pairs resolve cleanly (order-independent) to their 6 dedicated Floo frame keys
+  expect(HOUSE_CUP_ALLIANCE_FLOO_FRAMES).toHaveLength(6);
+  expect(getAllianceFlooFrameKey(['Gryffindor', 'Hufflepuff'])).toBe('alliance-anh-duong');
+  expect(getAllianceFlooFrameKey(['Hufflepuff', 'Gryffindor'])).toBe('alliance-anh-duong');
+  expect(getAllianceFlooFrameKey(['Slytherin', 'Ravenclaw'])).toBe('alliance-nguyet-anh');
+  expect(getAllianceFlooFrameKey(['Gryffindor', 'Ravenclaw'])).toBe('alliance-lua-va-tri');
+  expect(getAllianceFlooFrameKey(['Slytherin', 'Hufflepuff'])).toBe('alliance-ngoc-rung');
+  expect(getAllianceFlooFrameKey(['Gryffindor', 'Slytherin'])).toBe('alliance-song-hung');
+  expect(getAllianceFlooFrameKey(['Ravenclaw', 'Hufflepuff'])).toBe('alliance-tinh-tu');
 
   resetHouseCupViewForTest();
 });

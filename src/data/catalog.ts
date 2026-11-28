@@ -3270,14 +3270,79 @@ export const CATALOG: CatalogItem[] = [
     'Thắp sáng lối đi bằng ánh đèn lồng lụa ấm áp mang dấu ấn Việt Nam.'),
 ];
 
-export const TIME_SAND_SKIP_SECONDS = 300; // 1 Cát Xoay Thời Gian dùng cho lò bánh / thám hiểm / ấp trứng biến thể
+export const TIME_SAND_SKIP_SECONDS = 900; // 1 Cát Xoay Thời Gian rút ngắn 15 phút (900s) cho xây dựng / lò bánh / ấp trứng
 export const MAX_WAIT_DURATION_SECONDS = 3 * 24 * 3600; // Trần tối đa 3 ngày (259.200s = 72 giờ)
-export const MIN_LONG_BUILD_FLOOR_SECONDS = 3600; // Sàn tối thiểu 1 tiếng (3.600s) để tự hoàn thành với công trình >= 1 tiếng
-export const FIRST_ECONOMIC_CYCLE_SEC = 3600; // Ở lần thu hoạch đầu tiên, mặc định hoàn thành trong 1 tiếng đồng hồ (3.600s)
+export const MIN_LONG_BUILD_FLOOR_SECONDS = 1800; // Sàn tối thiểu 30 phút (1.800s) cho đại công trình >= 2 giờ; công trình < 2 giờ hoàn tất được về 0s
+export const FIRST_ECONOMIC_CYCLE_SEC = 300; // Nhịp chậm vừa chuẩn cozy: hạt/thú bậc 1 khởi điểm 5 phút (300s)
 export const MINIGAME_CLEAR_REDUCTION_SEC = 600; // Mỗi lần chơi mini-game qua màn giảm 10 phút (600s) ở chuỗi 1
-export const MAX_ECONOMIC_CYCLE_SEC = 6 * 3600; // Trần tối đa 6 tiếng (21.600s) cho mọi chu kỳ sản xuất kinh tế
-export const TACTICAL_SOIL_FATIGUE_CAP_SEC = MAX_ECONOMIC_CYCLE_SEC; // Trần mềm chiến thuật 6 tiếng (21.600s) chống chờ đợi cực đoan
+export const MAX_ECONOMIC_CYCLE_SEC = 4 * 3600; // Trần tối đa 4 tiếng (14.400s) cho toàn bộ chu kỳ nông sản & xưởng
+export const TACTICAL_SOIL_FATIGUE_CAP_SEC = MAX_ECONOMIC_CYCLE_SEC; // Trần mềm chiến thuật 4 tiếng (14.400s)
 export const MORNING_DEW_REDUCTION_SEC = 900; // 1 Bình Sương Mai rút ngắn 15 phút (900s) có chọn lọc
+
+const QUICK_STAPLE_CROP_IDS: ReadonlySet<string> = new Set([
+  'ottery_wheat',
+  'honey_carrot',
+  'meadow_daisy',
+  'vn_noel_golden_kumquat',
+  'vn_winter_sweet_potato',
+  'yule_peppermint_cane',
+]);
+
+const QUICK_STAPLE_RECIPE_IDS: ReadonlySet<string> = new Set([
+  'rcp_wheat_flour',
+  'rcp_warm_wool_pack',
+]);
+
+/**
+ * Đường cong nhịp chậm vừa (5p -> 15p -> 30p -> 1g -> 2g -> 4g) phù hợp người chơi ghé vườn vài lần mỗi ngày
+ * nhưng vẫn giữ trọn vòng lặp 5 phút đầu tiên mượt mà cho tân thủ.
+ */
+export function computeRelaxedCozyCycleSec(
+  unlockLevel: number,
+  kind: 'crop' | 'animal' | 'recipe' | 'building',
+  isQuickStaple = false
+): number {
+  const lv = Math.max(1, Math.floor(unlockLevel));
+  if (kind === 'crop') {
+    if (isQuickStaple) return 300; // 5 phút
+    if (lv <= 2) return 900; // 15 phút
+    if (lv <= 5) return 1800; // 30 phút
+    if (lv <= 14) return 3600; // 1 giờ
+    if (lv <= 35) return 7200; // 2 giờ
+    return MAX_ECONOMIC_CYCLE_SEC; // 4 giờ
+  }
+  if (kind === 'animal') {
+    if (lv <= 1) return 300; // 5 phút
+    if (lv <= 3) return 900; // 15 phút
+    if (lv <= 7) return 1800; // 30 phút
+    if (lv <= 15) return 3600; // 1 giờ
+    if (lv <= 20) return 7200; // 2 giờ
+    return MAX_ECONOMIC_CYCLE_SEC; // 4 giờ
+  }
+  if (kind === 'recipe') {
+    if (isQuickStaple) return 300; // 5 phút
+    if (lv <= 1) return 600; // 10 phút
+    if (lv <= 3) return 900; // 15 phút
+    if (lv <= 8) return 1800; // 30 phút
+    if (lv <= 18) return 3600; // 1 giờ
+    if (lv <= 30) return 7200; // 2 giờ
+    return MAX_ECONOMIC_CYCLE_SEC; // 4 giờ
+  }
+  // Công trình sinh lợi (quán xá, xưởng thu tiền định kỳ)
+  if (lv <= 3) return 900; // 15 phút
+  if (lv <= 12) return 1800; // 30 phút
+  if (lv <= 30) return 3600; // 1 giờ
+  return 7200; // 2 giờ
+}
+
+/**
+ * Giá mua hạt giống có ROI dương (+54% đến +100% khi bán nông sản thô, ×4–×8 khi nấu xưởng/giao Đơn Cú)
+ * để nông trại tự nuôi được mình mà Học Viện Ngoại Ngữ (hạt 0 Sickle) vẫn giữ nguyên sức hút.
+ */
+export function computeBalancedSeedCost(sellValue: number, yieldQty: number): number {
+  const grossRaw = Math.max(1, sellValue) * Math.max(1, yieldQty);
+  return Math.max(2, Math.floor(grossRaw * 0.65));
+}
 
 export function getCropFamily(cropId: FarmCropId): CropFamily {
   if (
@@ -3416,12 +3481,14 @@ export function computeStrategicPlotGrowSeconds(
   const effectiveFatigueStep = rotatedFamily ? Math.max(0, safeFatigue - 1) : safeFatigue;
   const rawSec = computeEconomicCycleSeconds(effectiveFatigueStep, baseSec);
   const cappedSec = Math.min(TACTICAL_SOIL_FATIGUE_CAP_SEC, rawSec);
+  // Luân canh khác họ cây được thưởng ngay -20% thời gian chín (thay vì phạt nhân đôi nặng)
+  const rotationMult = rotatedFamily ? 0.8 : 1.0;
   const mastery = getCropMasteryTierInfo(masteryHarvests);
-  const growSec = Math.max(60, Math.round(cappedSec * mastery.speedMult));
+  const growSec = Math.max(60, Math.round(cappedSec * rotationMult * mastery.speedMult));
   return {
     growSec,
     effectiveFatigueStep,
-    isRotatedBonus: rotatedFamily && safeFatigue >= 1,
+    isRotatedBonus: rotatedFamily,
   };
 }
 
@@ -3466,17 +3533,17 @@ export function getStageSawtoothTag(stage: number): {
 }
 
 /**
- * Thời gian hoạt động kinh tế (trừ mini-game):
- * - Ở lần thu hoạch đầu tiên (completedCount <= 0): mặc định hoàn thành trong 1 tiếng đồng hồ (3.600s).
- * - Các lần thu hoạch tiếp theo (completedCount = 1, 2, 3, ...): tăng theo cấp số nhân ×2 (2g, 4g) và kẹp trần tối đa 6 tiếng (21.600s).
+ * Thời gian hoạt động kinh tế (nhịp chậm vừa êm ái):
+ * - Ở lần đầu (completedCount <= 0): giữ đúng thời gian gốc của tầng (5p -> 15p -> 30p -> 1g -> 2g -> 4g).
+ * - Lặp lại đơn canh cùng ô: chỉ mỏi đất rất nhẹ (+15%/vụ, tối đa ×1.45) và kẹp trần 4 giờ (14.400s).
  */
 export function computeEconomicCycleSeconds(
   completedCount = 0,
   baseSec = FIRST_ECONOMIC_CYCLE_SEC
 ): number {
-  const step = Math.max(0, Math.min(20, Math.floor(completedCount)));
+  const step = Math.max(0, Math.min(3, Math.floor(completedCount)));
   const startSec = baseSec > 0 ? baseSec : FIRST_ECONOMIC_CYCLE_SEC;
-  const raw = Math.max(60, Math.round(startSec * Math.pow(2, step)));
+  const raw = Math.max(60, Math.round(startSec * (1 + step * 0.15)));
   return Math.min(MAX_ECONOMIC_CYCLE_SEC, raw);
 }
 
@@ -3501,18 +3568,14 @@ export function getWorkshopStarSpeedMultiplier(stars: number): number {
 }
 
 /**
- * Mức thời gian còn lại tối thiểu mà người chơi có thể rút ngắn công trình đang xây
- * thông qua thắng Minigame (Match-3 / 4 môn Giải Đố) hoặc trả lời đúng Quiz Ngoại Ngữ:
- * - Công trình có thời gian xây gốc >= 1 giờ (lên tới tối đa 3 ngày): sàn còn lại tối thiểu là 1 giờ (3.600s).
- * - Công trình trung cấp (15 phút .. < 60 phút): sàn còn lại tối thiểu là 10 phút (600s).
- * - Công trình cấp đầu (< 15 phút): sàn còn lại tối thiểu là 5 phút (300s).
+ * Sàn thời gian còn lại tối thiểu khi rút ngắn công trình đang xây bằng Minigame / Quiz / Cát Thời Gian:
+ * - Công trình dưới 2 giờ (< 7.200s): sàn 0s — người chơi chơi thắng hoặc dùng Cát có thể hoàn tất ngay!
+ * - Đại công trình từ 2 giờ trở lên (>= 7.200s): sàn tối đa 30 phút (1.800s) hoặc 25% thời gian gốc.
  */
 export function getMinRemainingBuildFloorSec(baseBuildSec: number): number {
   const sec = Math.max(0, Math.round(baseBuildSec));
-  if (sec <= 0) return 0;
-  if (sec >= MIN_LONG_BUILD_FLOOR_SECONDS) return MIN_LONG_BUILD_FLOOR_SECONDS;
-  if (sec >= 900) return 600;
-  return Math.min(sec, 300);
+  if (sec < 7200) return 0;
+  return Math.min(MIN_LONG_BUILD_FLOOR_SECONDS, Math.round(sec * 0.25));
 }
 
 /**
@@ -3592,20 +3655,29 @@ export function formatDurationCountdownVi(totalSec: number): string {
   return `${mins}p ${String(remSec).padStart(2, '0')}s`;
 }
 
-// Đồng bộ thời gian hoạt động kinh tế (lần thu hoạch đầu mặc định 1 tiếng = 3.600s) & giảm 5 lần thu nhập công trình
+// Áp dụng nhịp chậm vừa đa tầng (5p -> 15p -> 30p -> 1g -> 2g -> 4g) và chuẩn hoá ROI hạt giống dương
 for (const crop of Object.values(FARM_CROPS)) {
-  crop.growSec = FIRST_ECONOMIC_CYCLE_SEC;
+  crop.growSec = computeRelaxedCozyCycleSec(
+    crop.unlockLevel,
+    'crop',
+    QUICK_STAPLE_CROP_IDS.has(crop.id)
+  );
+  crop.seedCost = computeBalancedSeedCost(crop.sellValue, crop.yieldQty);
 }
 for (const animal of Object.values(PASTURE_ANIMALS)) {
-  animal.cycleSec = FIRST_ECONOMIC_CYCLE_SEC;
+  animal.cycleSec = computeRelaxedCozyCycleSec(animal.unlockLevel, 'animal');
 }
 for (const recipe of FARM_WORKSHOP_RECIPES) {
-  recipe.craftSec = FIRST_ECONOMIC_CYCLE_SEC;
+  recipe.craftSec = computeRelaxedCozyCycleSec(
+    recipe.unlockLevel,
+    'recipe',
+    QUICK_STAPLE_RECIPE_IDS.has(recipe.id)
+  );
 }
 for (const item of CATALOG) {
   item.buildDurationSec = computeRealTimeBuildSeconds(item);
   if (item.cycleSec > 0) {
-    item.cycleSec = FIRST_ECONOMIC_CYCLE_SEC;
+    item.cycleSec = computeRelaxedCozyCycleSec(item.unlockLevel, 'building');
   }
   if (item.baseIncome > 0) {
     item.baseIncome = Math.max(1, Math.round(item.baseIncome / 5));

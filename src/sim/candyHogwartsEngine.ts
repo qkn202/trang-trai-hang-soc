@@ -132,6 +132,7 @@ export interface CandyLoadOptions {
   house?: CandyHouseId;
   winStreak?: number;
   superRainbow?: boolean;
+  extraDdaMoves?: number;
   preBoosters?: Array<'pre_color_bomb' | 'pre_striped_wrapped' | 'pre_lucky_seeker'>;
   instantAnimations?: boolean;
 }
@@ -1132,8 +1133,9 @@ export class CandyHogwartsEngine {
     this.initialDecrees = this.countPositiveCells(this.decree);
     this.initialHorcruxes = this.countPositiveCells(this.horcrux);
 
+    const ddaBonusMoves = Math.max(0, Math.min(5, Math.floor(options.extraDdaMoves ?? 0)));
     this.score = 0;
-    this.movesLeft = levelData.moves;
+    this.movesLeft = levelData.moves + ddaBonusMoves;
     this.movesUsed = 0;
     this.leftoverMovesAtWin = 0;
     this.bonusCoinsFromLeftoverMoves = 0;
@@ -1792,7 +1794,7 @@ export class CandyHogwartsEngine {
   }
 
   public setBoosterMode(boosterKind: 'hammer' | 'swap' | 'shuffle'): void {
-    if (this.busy || this.ended) return;
+    if (this.hasAnyAsyncActivity() || this.ended) return;
     if (boosterKind === 'shuffle') {
       void this.executeShuffleBooster();
       return;
@@ -1828,8 +1830,11 @@ export class CandyHogwartsEngine {
 
   public addExtraMoves(amount = 5): void {
     if (!this.level || this.status === 'won' || (this.ended && this.status !== 'out_of_moves')) return;
+    const revivingFromOut = this.status === 'out_of_moves' || this.ended;
     this.ended = false;
-    this.busy = false;
+    if (revivingFromOut) {
+      this.busy = false;
+    }
     this.status = 'playing';
     this.failReason = null;
     this.movesLeft += amount;
@@ -1848,6 +1853,9 @@ export class CandyHogwartsEngine {
   public async applyPhoenixTalisman(): Promise<{ ok: boolean; msg: string }> {
     if (!this.level || this.status === 'won' || (this.ended && this.status !== 'out_of_moves')) {
       return { ok: false, msg: 'Màn chơi đã hoàn thành!' };
+    }
+    if (this.hasAnyAsyncActivity() && this.status !== 'out_of_moves') {
+      return { ok: false, msg: 'Chờ chuỗi kẹo rơi xong rồi hãy kích hoạt Bùa Phượng Hoàng!' };
     }
     if (this.talismanUsed) {
       return { ok: false, msg: 'Bùa Phượng Hoàng chỉ dùng tối đa 1 lần mỗi lượt thử màn!' };
@@ -1941,7 +1949,7 @@ export class CandyHogwartsEngine {
   }
 
   public async instantFreeShuffle(): Promise<void> {
-    if (this.busy || this.ended || !this.level) return;
+    if (this.hasAnyAsyncActivity() || this.ended || !this.level) return;
     const session = this.sessionId;
     this.busy = true;
     this.activeBooster = null;
@@ -1962,7 +1970,7 @@ export class CandyHogwartsEngine {
   }
 
   public async executeShuffleBooster(): Promise<boolean> {
-    if (this.busy || this.ended || !this.level) return false;
+    if (this.hasAnyAsyncActivity() || this.ended || !this.level) return false;
     if (this.cb.onBoosterConsumed && !this.cb.onBoosterConsumed('shuffle')) {
       return false;
     }
@@ -1987,7 +1995,7 @@ export class CandyHogwartsEngine {
   }
 
   public async executeHammer(r: number, c: number): Promise<boolean> {
-    if (this.busy || this.ended || !this.level) return false;
+    if (this.hasAnyAsyncActivity() || this.ended || !this.level) return false;
     const piece = this.grid[r]?.[c];
     if (piece?.isIngredient && (this.jelly[r]?.[c] || 0) === 0 && !this.isCellLocked(r, c)) {
       this.cb.audio?.onInvalid?.();
@@ -2041,7 +2049,7 @@ export class CandyHogwartsEngine {
   }
 
   public async castPatronus(): Promise<boolean> {
-    if (this.busy || this.ended || !this.level || this.patronusCharge < 100) return false;
+    if (this.hasAnyAsyncActivity() || this.ended || !this.level || this.patronusCharge < 100) return false;
     const session = this.sessionId;
     this.patronusCharge = 0;
     this.busy = true;
@@ -2162,7 +2170,7 @@ export class CandyHogwartsEngine {
   }
 
   public async tryActivateSpecialInPlace(cell: { r: number; c: number }): Promise<boolean> {
-    if (this.busy || this.ended || !this.level) return false;
+    if (this.hasAnyAsyncActivity() || this.ended || !this.level) return false;
     if (!this.isValidCell(cell.r, cell.c) || this.mask[cell.r]?.[cell.c] === 0) return false;
 
     if (this.hasStaticBlocker(cell.r, cell.c) || this.isCellLocked(cell.r, cell.c)) {

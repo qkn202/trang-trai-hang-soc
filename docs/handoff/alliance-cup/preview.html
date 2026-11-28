@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Xem Trước Bộ 6 Khung Mạng Floo — Cúp Liên Minh 2 Nhà (HPVNN)</title>
+  <link rel="stylesheet" href="./alliance-cup-floo.css" />
+  <style>
+    :root {
+      --bg-page: #0b1120;
+      --bg-card: #111827;
+      --bg-feed: #0f172a;
+      --ink-main: #f1f5f9;
+      --ink-muted: #94a3b8;
+      --border-ui: rgba(148, 163, 184, 0.22);
+      --pill-bg: rgba(30, 41, 59, 0.9);
+      --pill-active: #fbbf24;
+      --pill-active-ink: #111827;
+    }
+
+    body.is-light {
+      --bg-page: #f1f5f9;
+      --bg-card: #ffffff;
+      --bg-feed: #e2e8f0;
+      --ink-main: #0f172a;
+      --ink-muted: #475569;
+      --border-ui: rgba(15, 23, 42, 0.14);
+      --pill-bg: #ffffff;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Be Vietnam Pro", "Segoe UI", Roboto, sans-serif;
+      background: var(--bg-page);
+      color: var(--ink-main);
+      padding: 20px 16px 40px;
+      line-height: 1.48;
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+
+    .wrap {
+      max-width: 1080px;
+      margin: 0 auto;
+    }
+
+    .topbar {
+      background: var(--bg-card);
+      border: 1px solid var(--border-ui);
+      border-radius: 16px;
+      padding: 16px 18px;
+      margin-bottom: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .topbar-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.15rem;
+      letter-spacing: 0.01em;
+    }
+
+    .sub {
+      margin: 2px 0 0;
+      font-size: 0.84rem;
+      color: var(--ink-muted);
+    }
+
+    .controls, .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    button {
+      border: 1px solid var(--border-ui);
+      background: var(--pill-bg);
+      color: var(--ink-main);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button.is-active {
+      background: var(--pill-active);
+      color: var(--pill-active-ink);
+      border-color: transparent;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+      gap: 16px;
+    }
+
+    body.is-mobile-preview .grid {
+      grid-template-columns: 1fr;
+      max-width: 390px;
+      margin: 0 auto;
+    }
+
+    .alliance-card {
+      background: var(--bg-feed);
+      border: 1px solid var(--border-ui);
+      border-radius: 16px;
+      padding: 14px 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .alliance-card.is-hidden {
+      display: none;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-ui);
+    }
+
+    .card-title {
+      font-weight: 700;
+      font-size: 0.92rem;
+    }
+
+    .card-meta {
+      font-size: 0.75rem;
+      color: var(--ink-muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    /* Giả lập khung tin nhắn chuẩn ShoutMessageRow.ts */
+    .shout-message-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .shout-message-row.is-self {
+      flex-direction: row-reverse;
+    }
+
+    .shout-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      flex: 0 0 34px;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      font-size: 0.78rem;
+      color: #fff;
+      border: 2px solid rgba(255, 255, 255, 0.25);
+      user-select: none;
+    }
+
+    .shout-message-bubble {
+      border-radius: 16px;
+      max-width: 86%;
+      font-size: 0.9rem;
+    }
+
+    .shout-head {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 3px;
+    }
+
+    .shout-message-row.is-self .shout-head {
+      justify-content: flex-end;
+    }
+
+    .shout-message-author {
+      font-weight: 700;
+      font-size: 0.84rem;
+    }
+
+    .shout-message-meta-time {
+      font-size: 0.72rem;
+      opacity: 0.88;
+    }
+
+    .shout-quote-preview {
+      padding: 5px 8px;
+      font-size: 0.78rem;
+      margin: 4px 0 6px;
+    }
+
+    .shout-rich-text {
+      word-break: break-word;
+    }
+
+    /* Mô phỏng chế độ Giảm chuyển động (Reduce Motion) để kiểm tra khung tĩnh */
+    body.is-reduced-motion .shout-lg-b,
+    body.is-reduced-motion .shout-lg-b::after,
+    body.is-reduced-motion .shout-lg-band,
+    body.is-reduced-motion .shout-lg-a,
+    body.is-reduced-motion .shout-lg-top::before,
+    body.is-reduced-motion .shout-lg-top::after,
+    body.is-reduced-motion .shout-lg-shine {
+      animation: none;
+    }
+
+    /* Ghi đè cục bộ đường dẫn WebP cho trang preview độc lập (không thay đổi file CSS bàn giao) */
+    .shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-a {
+      background-image: url("../../../public/paintings/floo-items/alliance-cup/anh-duong.webp");
+    }
+    .shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-a {
+      background-image: url("../../../public/paintings/floo-items/alliance-cup/nguyet-anh.webp");
+    }
+    .shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-a {
+      background-image: url("../../../public/paintings/floo-items/alliance-cup/lua-va-tri.webp");
+    }
+    .shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-a {
+      background-image: url("../../../public/paintings/floo-items/alliance-cup/ngoc-rung.webp");
+    }
+    .shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-a {
+      background-image: url("../../../public/paintings/floo-items/alliance-cup/song-hung.webp");
+    }
+    .shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-a {
+      background-image: url("../../../public/paintings/floo-items/alliance-cup/tinh-tu.webp");
+    }
+
+    @media (max-width: 640px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="topbar-head">
+        <div>
+          <h1>Bộ 6 Khung Mạng Floo — Cúp Liên Minh 2 Nhà (HPVNN)</h1>
+          <p class="sub">Chuẩn LEGENDARY_FRAMES · iOS Safari 16+ · Chạy đúng 2 lượt (<code>2 forwards</code>) · 6 WebP phẳng &lt; 12 KB · 0 filter / 0 !important</p>
+        </div>
+        <div class="controls">
+          <button id="btnReplay" type="button">▶ Chạy lại 2 lượt</button>
+          <button id="btnTheme" type="button">☀ Nền Sáng / Tối</button>
+          <button id="btnMotion" type="button">⏸ Giảm chuyển động</button>
+          <button id="btnMobile" type="button">📱 Mô phỏng 390px</button>
+        </div>
+      </div>
+      <div class="filters" id="filterBar"></div>
+    </div>
+
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <script>
+    const ALLIANCES = [
+      {
+        key: 'alliance-anh-duong',
+        title: 'Ánh Dương',
+        houses: 'Gryffindor + Hufflepuff',
+        size: '10.91 KB',
+        avatarBg: 'linear-gradient(135deg,#dc2626,#f59e0b)',
+        avatarSelfBg: 'linear-gradient(135deg,#f59e0b,#b91c1c)',
+        otherName: 'Minh Khôi · Gryffindor',
+        otherInit: 'GH',
+        otherText: 'Liên Minh Ánh Dương dẫn đầu tuần này rồi! Ghé <a href="#cup">Bảng Cúp Nhà</a> nhận thưởng nhé mọi người.',
+        quote: '«Hufflepuff vừa kéo xong chuỗi 5 môn liên tiếp!»',
+        selfName: 'Thảo Vy · Hufflepuff',
+        selfInit: 'VY',
+        selfText: 'Cúp Ánh Dương lên khung đẹp rực rỡ quá luôn!'
+      },
+      {
+        key: 'alliance-nguyet-anh',
+        title: 'Nguyệt Ảnh',
+        houses: 'Slytherin + Ravenclaw',
+        size: '10.49 KB',
+        avatarBg: 'linear-gradient(135deg,#059669,#2563eb)',
+        avatarSelfBg: 'linear-gradient(135deg,#38bdf8,#10b981)',
+        otherName: 'Linh Chi · Ravenclaw',
+        otherInit: 'SR',
+        otherText: 'Đêm nay Liên Minh Nguyệt Ảnh giữ vững hạng nhất cả Cờ Phù Thủy lẫn Sudoku. Xem <a href="#cup">thành tích tuần</a>!',
+        quote: '«Slytherin vừa chốt kỷ lục mới ở Ma Trận Cửu Bảo Bối.»',
+        selfName: 'Gia Huy · Slytherin',
+        selfInit: 'GH',
+        selfText: 'Ánh bạc trăng khuya + lục bảo nhìn sang thật sự.'
+      },
+      {
+        key: 'alliance-lua-va-tri',
+        title: 'Lửa & Trí',
+        houses: 'Gryffindor + Ravenclaw',
+        size: '10.52 KB',
+        avatarBg: 'linear-gradient(135deg,#dc2626,#2563eb)',
+        avatarSelfBg: 'linear-gradient(135deg,#f97316,#3b82f6)',
+        otherName: 'Hoàng Nam · Gryffindor',
+        otherInit: 'GR',
+        otherText: 'Ngọn lửa Phượng Hoàng cộng tinh bàn Ravenclaw càn quét Cúp Tuần! Bấm <a href="#cup">Mạng Floo</a> khoe khung mới thôi.',
+        quote: '«Tuần này Lửa & Trí thắng cách biệt nhờ điểm hệ số F2.»',
+        selfName: 'Khánh An · Ravenclaw',
+        selfInit: 'KA',
+        selfText: 'Đẹp quá trời, đúng chất Lửa & Trí!'
+      },
+      {
+        key: 'alliance-ngoc-rung',
+        title: 'Ngọc Rừng',
+        houses: 'Slytherin + Hufflepuff',
+        size: '10.67 KB',
+        avatarBg: 'linear-gradient(135deg,#059669,#d97706)',
+        avatarSelfBg: 'linear-gradient(135deg,#10b981,#f59e0b)',
+        otherName: 'Ngọc Diệp · Hufflepuff',
+        otherInit: 'SH',
+        otherText: 'Rừng Cấm nở hoa rồi! Liên Minh Ngọc Rừng về đích hạng nhất, ghé <a href="#cup">Ngân hàng Gringotts</a> nhận Galleon nhé.',
+        quote: '«Hũ mật ong vàng & vòng nguyệt quế lục bảo đẹp mê ly.»',
+        selfName: 'Đức Anh · Slytherin',
+        selfInit: 'ĐA',
+        selfText: 'Đom đóm bay nhẹ đúng 2 lượt rồi đứng cực êm!'
+      },
+      {
+        key: 'alliance-song-hung',
+        title: 'Song Hùng',
+        houses: 'Gryffindor + Slytherin',
+        size: '9.38 KB',
+        avatarBg: 'linear-gradient(135deg,#b91c1c,#047857)',
+        avatarSelfBg: 'linear-gradient(135deg,#10b981,#dc2626)',
+        otherName: 'Quốc Bảo · Slytherin',
+        otherInit: 'GS',
+        otherText: 'Hai kỳ phùng địch thủ bắt tay nhau thành Song Hùng là không ai cản nổi! Vào <a href="#cup">Đại Sảnh</a> xem Cúp nào.',
+        quote: '«Một cánh đỏ thẫm, một cánh lục bảo, vương miện vàng ở giữa!»',
+        selfName: 'Phương Anh · Gryffindor',
+        selfInit: 'PA',
+        selfText: 'Hợp lực 1 tuần lấy ngay Cúp Song Hùng!'
+      },
+      {
+        key: 'alliance-tinh-tu',
+        title: 'Tinh Tú',
+        houses: 'Ravenclaw + Hufflepuff',
+        size: '10.14 KB',
+        avatarBg: 'linear-gradient(135deg,#1d4ed8,#eab308)',
+        avatarSelfBg: 'linear-gradient(135deg,#f59e0b,#2563eb)',
+        otherName: 'Thanh Trúc · Ravenclaw',
+        otherInit: 'RH',
+        otherText: 'Đài Thiên Văn sáng rực đêm nay! Liên Minh Tinh Tú ôm trọn Cúp Tuần, xem <a href="#cup">bảng vinh danh</a> nhé.',
+        quote: '«Ravenclaw & Hufflepuff chơi đều cả 6 môn cực kỳ ổn định.»',
+        selfName: 'Bảo Long · Hufflepuff',
+        selfInit: 'BL',
+        selfText: 'Cúp thiên văn với bụi sao vàng lung linh quá!'
+      }
+    ];
+
+    const fxHtml = `
+      <div class="shout-lg-fx" aria-hidden="true">
+        <div class="shout-lg-aura"></div>
+        <div class="shout-lg-rim"></div>
+        <div class="shout-lg-clip">
+          <div class="shout-lg-b"></div>
+          <div class="shout-lg-band"></div>
+          <div class="shout-lg-a"></div>
+          <div class="shout-lg-top"></div>
+        </div>
+      </div>`;
+
+    const grid = document.getElementById('grid');
+    const filterBar = document.getElementById('filterBar');
+
+    function renderGrid() {
+      grid.innerHTML = ALLIANCES.map((a) => `
+        <section class="alliance-card" data-card-key="${a.key}">
+          <div class="card-header">
+            <span class="card-title">🏆 Liên Minh ${a.title} · ${a.houses}</span>
+            <span class="card-meta">${a.key} · ${a.size}</span>
+          </div>
+
+          <div class="shout-message-row" data-store-frame="${a.key}">
+            <div class="shout-avatar" style="background:${a.avatarBg}">${a.otherInit}</div>
+            <div class="shout-message-bubble">
+              ${fxHtml}
+              <div class="shout-head">
+                <span class="shout-message-author">${a.otherName}<span class="shout-lg-shine" aria-hidden="true">${a.otherName}</span></span>
+                <span class="shout-message-meta-time">20:14</span>
+              </div>
+              <div class="shout-quote-preview">${a.quote}</div>
+              <div class="shout-rich-text">${a.otherText}</div>
+            </div>
+          </div>
+
+          <div class="shout-message-row is-self" data-store-frame="${a.key}">
+            <div class="shout-avatar" style="background:${a.avatarSelfBg}">${a.selfInit}</div>
+            <div class="shout-message-bubble">
+              ${fxHtml}
+              <div class="shout-head">
+                <span class="shout-message-meta-time">20:15</span>
+                <span class="shout-message-author">${a.selfName}<span class="shout-lg-shine" aria-hidden="true">${a.selfName}</span></span>
+              </div>
+              <div class="shout-rich-text">${a.selfText}</div>
+            </div>
+          </div>
+        </section>
+      `).join('');
+    }
+
+    function buildFilters() {
+      const btns = [{ key: 'all', label: 'Tất cả 6 Liên Minh' }, ...ALLIANCES.map((a) => ({ key: a.key, label: a.title }))];
+      filterBar.innerHTML = btns.map((b, i) => `<button type="button" data-filter="${b.key}" class="${i === 0 ? 'is-active' : ''}">${b.label}</button>`).join('');
+      filterBar.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-filter]');
+        if (!btn) return;
+        const val = btn.dataset.filter;
+        filterBar.querySelectorAll('button').forEach((x) => x.classList.toggle('is-active', x === btn));
+        document.querySelectorAll('.alliance-card').forEach((card) => {
+          card.classList.toggle('is-hidden', val !== 'all' && card.dataset.cardKey !== val);
+        });
+      });
+    }
+
+    renderGrid();
+    buildFilters();
+
+    document.getElementById('btnReplay').addEventListener('click', () => {
+      const activeFilter = filterBar.querySelector('button.is-active')?.dataset.filter || 'all';
+      renderGrid();
+      if (activeFilter !== 'all') {
+        document.querySelectorAll('.alliance-card').forEach((card) => {
+          card.classList.toggle('is-hidden', card.dataset.cardKey !== activeFilter);
+        });
+      }
+    });
+
+    document.getElementById('btnTheme').addEventListener('click', (e) => {
+      document.body.classList.toggle('is-light');
+      e.currentTarget.classList.toggle('is-active', document.body.classList.contains('is-light'));
+    });
+
+    document.getElementById('btnMotion').addEventListener('click', (e) => {
+      document.body.classList.toggle('is-reduced-motion');
+      e.currentTarget.classList.toggle('is-active', document.body.classList.contains('is-reduced-motion'));
+    });
+
+    document.getElementById('btnMobile').addEventListener('click', (e) => {
+      document.body.classList.toggle('is-mobile-preview');
+      e.currentTarget.classList.toggle('is-active', document.body.classList.contains('is-mobile-preview'));
+    });
+  </script>
+</body>
+</html>

@@ -68,16 +68,19 @@ describe('AAA Transformation Suite (Tactical Economy 2.0, Minigame Synergy, Livi
       expect(getCropMasteryTierInfo(25)).toMatchObject({ tier: 5, valueMult: 1.5, speedMult: 0.9 });
     });
 
-    it('caps monoculture soil fatigue at 6h (21,600s) and drops fatigue + grants 2x Golden Harvest on family rotation', () => {
+    it('caps gentle monoculture fatigue at 1.45x / 4h (14,400s) and grants -20% speed + 2x Golden Harvest on family rotation', () => {
       const highMono = computeStrategicPlotGrowSeconds(9, false, 0, FIRST_ECONOMIC_CYCLE_SEC);
-      expect(TACTICAL_SOIL_FATIGUE_CAP_SEC).toBe(21_600);
-      expect(highMono.growSec).toBe(TACTICAL_SOIL_FATIGUE_CAP_SEC);
+      expect(TACTICAL_SOIL_FATIGUE_CAP_SEC).toBe(14_400);
+      expect(highMono.growSec).toBe(Math.round(FIRST_ECONOMIC_CYCLE_SEC * 1.45));
       expect(highMono.isRotatedBonus).toBe(false);
+
+      const highEndgame = computeStrategicPlotGrowSeconds(9, false, 0, 14_400);
+      expect(highEndgame.growSec).toBe(TACTICAL_SOIL_FATIGUE_CAP_SEC);
 
       const rotated = computeStrategicPlotGrowSeconds(2, true, 0, FIRST_ECONOMIC_CYCLE_SEC);
       expect(rotated.isRotatedBonus).toBe(true);
       expect(rotated.effectiveFatigueStep).toBe(1);
-      expect(rotated.growSec).toBe(FIRST_ECONOMIC_CYCLE_SEC * 2);
+      expect(rotated.growSec).toBe(Math.round(FIRST_ECONOMIC_CYCLE_SEC * 1.15 * 0.8));
     });
 
     it('persists soil fatigue at (gx,gy) across bulldozing and doubles harvest yield when rotated', () => {
@@ -127,12 +130,12 @@ describe('AAA Transformation Suite (Tactical Economy 2.0, Minigame Synergy, Livi
         fatigueStep: 1,
       });
 
-      // 2nd plant same family (grain) -> monoculture 2h = 7,200s
+      // 2nd plant same family (grain) -> gentle monoculture +15% = 345s
       expect(sim.plantCropOnPlot(targetPlot.uid, 'ottery_wheat').ok).toBe(true);
       const monoDurationSec = Math.round(
         ((targetPlot.cropReadyAt ?? 0) - (targetPlot.cropPlantedAt ?? 0)) / 1000
       );
-      expect(monoDurationSec).toBe(7200);
+      expect(monoDurationSec).toBe(345);
       targetPlot.cropReadyAt = Date.now() - 1000;
       expect(sim.harvestCropPlot(targetPlot.uid).ok).toBe(true);
       expect(sim.state.plotSoilState?.[coordKey]?.fatigueStep).toBe(2);
@@ -148,13 +151,13 @@ describe('AAA Transformation Suite (Tactical Economy 2.0, Minigame Synergy, Livi
       };
       sim.state.buildings.push(rebuiltPlot);
 
-      // Rotate to Bí Ngô (produce) at (16,16) -> drops effective fatigue 2 -> 1 (7200s instead of 14400s) & cropRotatedBonus = true!
+      // Rotate to Bí Ngô (produce, base 900s) at (16,16) -> drops effective fatigue 2 -> 1 (1035s) & -20% rotation bonus = 828s!
       expect(sim.plantCropOnPlot(rebuiltPlot.uid, 'garden_pumpkin').ok).toBe(true);
       expect(rebuiltPlot.cropRotatedBonus).toBe(true);
       const rotatedDurationSec = Math.round(
         ((rebuiltPlot.cropReadyAt ?? 0) - (rebuiltPlot.cropPlantedAt ?? 0)) / 1000
       );
-      expect(rotatedDurationSec).toBe(7200);
+      expect(rotatedDurationSec).toBe(828);
 
       // Harvest rotated pumpkin -> receives 2x Golden Harvest yield (4 instead of 2)!
       rebuiltPlot.cropReadyAt = Date.now() - 1000;
@@ -188,7 +191,8 @@ describe('AAA Transformation Suite (Tactical Economy 2.0, Minigame Synergy, Livi
       expect(sim.state.examWinStreak).toBe(2);
       sim.completePuzzleArcadeVictory('chess', { stars: 3, sand: 1, gold: 40, xp: 25 });
       expect(sim.state.examWinStreak).toBe(3);
-      expect(sim.state.morningDewPhials).toBe(1);
+      // Bước B: +1 Sương Mai từ đặc quyền Số Học (sudoku) + +1 Sương Mai từ chuỗi 3 thắng Khảo Thí = 2
+      expect(sim.state.morningDewPhials).toBe(2);
 
       // Apply Morning Dew Phial (-15m = 900s) to a growing crop plot
       const now = Date.now();
@@ -216,7 +220,7 @@ describe('AAA Transformation Suite (Tactical Economy 2.0, Minigame Synergy, Livi
       const dewRes = sim.useMorningDewPhial(dewPlot.uid);
       expect(dewRes.ok).toBe(true);
       expect(dewRes.reducedSec).toBe(MORNING_DEW_REDUCTION_SEC);
-      expect(sim.state.morningDewPhials).toBe(0);
+      expect(sim.state.morningDewPhials).toBe(1);
 
       // Losing heart resets examWinStreak back to 0
       sim.loseMatch3Heart();

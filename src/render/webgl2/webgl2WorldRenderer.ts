@@ -18,6 +18,7 @@ import {
   worldIso,
 } from '../../engine/isometric';
 import {
+  isTouchOrIOSDevice,
   resolveBuildingInWorldTimerInfo,
   ScreenHotspot,
 } from '../../engine/rendererShared';
@@ -97,9 +98,50 @@ export function canSpriteReceiveWinterSnowCap(key: string): boolean {
 export function shouldCleanseSpriteBakedHalo(key: string): boolean {
   return YULE_BAKED_HALO_CLEANSE_KEYS.has(key);
 }
-const ATLAS_LAYERS = 8;
+const ATLAS_LAYERS_DESKTOP = 8;
+const ATLAS_LAYERS_MOBILE = 4;
+const NORMAL_ATLAS_SIZE = ATLAS_SIZE >> 1; // 1024x1024 half-res normals/emissive (-75% VRAM)
+const ALBEDO_MIP_LEVELS = 4; // Trilinear GPU mipmaps eliminate zoom-out shimmer
 const MAX_PACKED_SPRITES = 512;
-const ATLAS_PAD = 2;
+const ATLAS_PAD = 4; // 4px padding keeps 4-level mipmaps bleed-free
+
+export interface WebGL2AtlasBudget {
+  atlasSize: number;
+  normalAtlasSize: number;
+  atlasLayers: number;
+  albedoMipLevels: number;
+  spriteMaxDim: number;
+  useHalfFloatFbo: boolean;
+  allocatedAtlasVramMb: number;
+}
+
+/**
+ * Pure GPU memory budget planner for WebGL2 `TEXTURE_2D_ARRAY` & HDR FBOs.
+ * Keeps iOS Safari / mobile devices well below WebKit jetsam crash limits while enabling trilinear mipmaps.
+ */
+export function computeWebGL2AtlasBudget(
+  isTouch: boolean,
+  supportsHalfFloatHdr: boolean
+): WebGL2AtlasBudget {
+  const atlasLayers = isTouch ? ATLAS_LAYERS_MOBILE : ATLAS_LAYERS_DESKTOP;
+  const spriteMaxDim = isTouch ? 256 : 512;
+  const useHalfFloatFbo = !isTouch && supportsHalfFloatHdr;
+  // Exact 4-level mip chain factor: 1 + 1/4 + 1/16 + 1/64 = 1.328125
+  const albedoMipFactor = 1.328125;
+  const albedoMb =
+    atlasLayers * ((ATLAS_SIZE * ATLAS_SIZE * 4) / (1024 * 1024)) * albedoMipFactor;
+  const normalMb =
+    atlasLayers * ((NORMAL_ATLAS_SIZE * NORMAL_ATLAS_SIZE * 4) / (1024 * 1024));
+  return {
+    atlasSize: ATLAS_SIZE,
+    normalAtlasSize: NORMAL_ATLAS_SIZE,
+    atlasLayers,
+    albedoMipLevels: ALBEDO_MIP_LEVELS,
+    spriteMaxDim,
+    useHalfFloatFbo,
+    allocatedAtlasVramMb: Number((albedoMb + normalMb).toFixed(1)),
+  };
+}
 
 function compileShader(gl: WebGL2RenderingContext, type: number, src: string): WebGLShader {
   const sh = gl.createShader(type)!;
@@ -1239,44 +1281,51 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
   private readonly spineAdapter: SpineSlotAdapter;
   private readonly rangeSlices: RangeSliceSegment[] = [];
 
-  // Programs
-  private readonly bakeNormalProg: WebGLProgram;
-  private readonly skyProg: WebGLProgram;
-  private readonly terrainProg: WebGLProgram;
-  private readonly waterProg: WebGLProgram;
-  private readonly grassProg: WebGLProgram;
-  private readonly shadowProg: WebGLProgram;
-  private readonly sceneProg: WebGLProgram;
-  private readonly particleProg: WebGLProgram;
-  private readonly bloomExtractProg: WebGLProgram;
-  private readonly bloomBlurProg: WebGLProgram;
-  private readonly compositeProg: WebGLProgram;
+  // Programs (rebuilt cleanly on WebGL context restore)
+  private bakeNormalProg!: WebGLProgram;
+  private skyProg!: WebGLProgram;
+  private terrainProg!: WebGLProgram;
+  private waterProg!: WebGLProgram;
+  private grassProg!: WebGLProgram;
+  private shadowProg!: WebGLProgram;
+  private sceneProg!: WebGLProgram;
+  private particleProg!: WebGLProgram;
+  private bloomExtractProg!: WebGLProgram;
+  private bloomBlurProg!: WebGLProgram;
+  private compositeProg!: WebGLProgram;
 
   // VAOs & Buffers
-  private readonly emptyVao: WebGLVertexArrayObject;
-  private readonly terrainVao: WebGLVertexArrayObject;
-  private readonly terrainInstanceBuf: WebGLBuffer;
-  private readonly waterVao: WebGLVertexArrayObject;
-  private readonly waterInstanceBuf: WebGLBuffer;
-  private readonly grassVao: WebGLVertexArrayObject;
-  private readonly grassInstanceBuf: WebGLBuffer;
-  private readonly sceneVao: WebGLVertexArrayObject;
-  private readonly sceneInstanceBuf: WebGLBuffer;
-  private readonly particleVao: WebGLVertexArrayObject;
-  private readonly particleInstanceBuf: WebGLBuffer;
+  private emptyVao!: WebGLVertexArrayObject;
+  private diamondBuf!: WebGLBuffer;
+  private uprightBuf!: WebGLBuffer;
+  private centeredBuf!: WebGLBuffer;
+  private terrainVao!: WebGLVertexArrayObject;
+  private terrainInstanceBuf!: WebGLBuffer;
+  private waterVao!: WebGLVertexArrayObject;
+  private waterInstanceBuf!: WebGLBuffer;
+  private grassVao!: WebGLVertexArrayObject;
+  private grassInstanceBuf!: WebGLBuffer;
+  private sceneVao!: WebGLVertexArrayObject;
+  private sceneInstanceBuf!: WebGLBuffer;
+  private particleVao!: WebGLVertexArrayObject;
+  private particleInstanceBuf!: WebGLBuffer;
 
   // Texture2DArray & UV Lookup Table
-  private readonly albedoArrayTex: WebGLTexture;
-  private readonly normalEmissiveArrayTex: WebGLTexture;
-  private readonly bakeFbo: WebGLFramebuffer;
-  private readonly uvTableTex: WebGLTexture;
+  private albedoArrayTex!: WebGLTexture;
+  private normalEmissiveArrayTex!: WebGLTexture;
+  private bakeFbo!: WebGLFramebuffer;
+  private uvTableTex!: WebGLTexture;
   private readonly uvTableData = new Float32Array(MAX_PACKED_SPRITES * 2 * 4);
   private uvTableDirty = false;
+  private albedoMipDirty = false;
   private readonly spriteHandles = new Map<string, SpriteAtlasHandle>();
   private readonly shelf: ShelfState = { layer: 0, curX: ATLAS_PAD, curY: ATLAS_PAD, rowH: 0 };
   private readonly uploadScratchCanvas: HTMLCanvasElement;
   private readonly uploadScratchCtx: CanvasRenderingContext2D;
+  private readonly unlockedZonesScratch = new Set<string>();
+  private readonly atlasBudget: WebGL2AtlasBudget;
   private nextSpriteId = 0;
+  private contextRestoreCount = 0;
 
   // Offscreen Scene & Bloom FBOs
   private readonly useHalfFloatFbo: boolean;
@@ -1321,17 +1370,55 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
     this.sprites = sprites;
     this.gpuDevice = new PixiGpuDevice({
       canvas,
-      preserveDrawingBuffer: true,
+      preserveDrawingBuffer: false,
       onContextRestored: () => {
-        this.uploadedStaticGen = -1;
-        this.uvTableDirty = true;
-        this.uniformLocs = new WeakMap();
+        this.handleContextRestored();
       },
     });
     const gl = this.gpuDevice.gl;
     this.gl = gl;
-    this.useHalfFloatFbo = this.gpuDevice.supportsHalfFloatHdr;
+    this.atlasBudget = computeWebGL2AtlasBudget(
+      isTouchOrIOSDevice(),
+      this.gpuDevice.supportsHalfFloatHdr
+    );
+    this.useHalfFloatFbo = this.atlasBudget.useHalfFloatFbo;
     this.spineAdapter = new SpineSlotAdapter(gl);
+
+    this.uploadScratchCanvas = document.createElement('canvas');
+    this.uploadScratchCanvas.width = 512;
+    this.uploadScratchCanvas.height = 512;
+    this.uploadScratchCtx = this.uploadScratchCanvas.getContext('2d')!;
+
+    this.initGpuResources();
+  }
+
+  public getAtlasBudget(): WebGL2AtlasBudget {
+    return this.atlasBudget;
+  }
+
+  public getContextRestoreCount(): number {
+    return this.contextRestoreCount;
+  }
+
+  private handleContextRestored(): void {
+    this.contextRestoreCount += 1;
+    this.uniformLocs = new WeakMap();
+    this.fboW = 0;
+    this.fboH = 0;
+    this.sceneFbo = null;
+    this.sceneColorTex = null;
+    this.bloomFboA = null;
+    this.bloomTexA = null;
+    this.bloomFboB = null;
+    this.bloomTexB = null;
+    this.uploadedStaticGen = -1;
+    this.invalidateSpriteAtlas();
+    this.initGpuResources();
+    this.spineAdapter.rebuildGpuResources();
+  }
+
+  private initGpuResources(): void {
+    const gl = this.gl;
 
     this.bakeNormalProg = createProgram(gl, FULLSCREEN_VS, BAKE_NORMAL_FS);
     this.skyProg = createProgram(gl, FULLSCREEN_VS, SKY_FS);
@@ -1350,6 +1437,7 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
     // 1. Isometric Diamond Quad Geometry ([-1,0], [0,-1], [0,1], [1,0])
     const diamondVerts = new Float32Array([-1, 0, 0, -1, 0, 1, 1, 0]);
     const diamondBuf = gl.createBuffer()!;
+    this.diamondBuf = diamondBuf;
     gl.bindBuffer(gl.ARRAY_BUFFER, diamondBuf);
     gl.bufferData(gl.ARRAY_BUFFER, diamondVerts, gl.STATIC_DRAW);
 
@@ -1392,6 +1480,7 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
        0.5, 1.0,
     ]);
     const uprightBuf = gl.createBuffer()!;
+    this.uprightBuf = uprightBuf;
     gl.bindBuffer(gl.ARRAY_BUFFER, uprightBuf);
     gl.bufferData(gl.ARRAY_BUFFER, uprightQuad, gl.STATIC_DRAW);
 
@@ -1435,6 +1524,7 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
        0.5,  0.5,
     ]);
     const centeredBuf = gl.createBuffer()!;
+    this.centeredBuf = centeredBuf;
     gl.bindBuffer(gl.ARRAY_BUFFER, centeredBuf);
     gl.bufferData(gl.ARRAY_BUFFER, centeredQuad, gl.STATIC_DRAW);
 
@@ -1455,18 +1545,33 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
 
     gl.bindVertexArray(null);
 
-    // 5. Allocate TEXTURE_2D_ARRAY for Albedo & GPU-Baked Normal+Emissive
+    // 5. Allocate TEXTURE_2D_ARRAY for Albedo (with GPU mipmaps) & Half-Res GPU-Baked Normal+Emissive (-75% VRAM)
+    const { atlasSize, normalAtlasSize, atlasLayers, albedoMipLevels } = this.atlasBudget;
     this.albedoArrayTex = gl.createTexture()!;
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.albedoArrayTex);
-    gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, ATLAS_SIZE, ATLAS_SIZE, ATLAS_LAYERS);
-    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texStorage3D(
+      gl.TEXTURE_2D_ARRAY,
+      albedoMipLevels,
+      gl.RGBA8,
+      atlasSize,
+      atlasSize,
+      atlasLayers
+    );
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
     this.normalEmissiveArrayTex = gl.createTexture()!;
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.normalEmissiveArrayTex);
-    gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, ATLAS_SIZE, ATLAS_SIZE, ATLAS_LAYERS);
+    gl.texStorage3D(
+      gl.TEXTURE_2D_ARRAY,
+      1,
+      gl.RGBA8,
+      normalAtlasSize,
+      normalAtlasSize,
+      atlasLayers
+    );
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -1491,11 +1596,6 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-    this.uploadScratchCanvas = document.createElement('canvas');
-    this.uploadScratchCanvas.width = 1024;
-    this.uploadScratchCanvas.height = 1024;
-    this.uploadScratchCtx = this.uploadScratchCanvas.getContext('2d')!;
   }
 
   private uLoc(prog: WebGLProgram, name: string): WebGLUniformLocation | null {
@@ -1556,7 +1656,7 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
     const rawH = src.height;
     if (!rawW || !rawH) return undefined;
 
-    const maxDim = 1024;
+    const maxDim = this.atlasBudget.spriteMaxDim;
     const scale = Math.min(1, maxDim / Math.max(rawW, rawH));
     const pw = Math.max(4, Math.round(rawW * scale));
     const ph = Math.max(4, Math.round(rawH * scale));
@@ -1567,7 +1667,7 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
       this.shelf.rowH = 0;
     }
     if (this.shelf.curY + ph + ATLAS_PAD > ATLAS_SIZE) {
-      if (this.shelf.layer + 1 >= ATLAS_LAYERS) return undefined;
+      if (this.shelf.layer + 1 >= this.atlasBudget.atlasLayers) return undefined;
       this.shelf.layer += 1;
       this.shelf.curX = ATLAS_PAD;
       this.shelf.curY = ATLAS_PAD;
@@ -1612,8 +1712,14 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
       uploadSrc
     );
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
+    this.albedoMipDirty = true;
 
-    // GPU-bake 2.5D Normal + Window Emissive strictly inside the newly uploaded rect [x, y, pw, ph]!
+    // GPU-bake 2.5D Normal + Window Emissive strictly inside the newly uploaded rect at half-res (1024x1024 = -75% VRAM)!
+    const nSize = this.atlasBudget.normalAtlasSize;
+    const nx = Math.max(0, Math.floor(x * 0.5) - 1);
+    const ny = Math.max(0, Math.floor(y * 0.5) - 1);
+    const nw = Math.min(nSize - nx, Math.ceil(pw * 0.5) + 2);
+    const nh = Math.min(nSize - ny, Math.ceil(ph * 0.5) + 2);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.bakeFbo);
     gl.framebufferTextureLayer(
       gl.FRAMEBUFFER,
@@ -1623,12 +1729,13 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
       layer
     );
     gl.enable(gl.SCISSOR_TEST);
-    gl.viewport(x, y, pw, ph);
-    gl.scissor(x, y, pw, ph);
+    gl.scissor(nx, ny, nw, nh);
     gl.disable(gl.BLEND);
     gl.useProgram(this.bakeNormalProg);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.albedoArrayTex);
+    // Sample base level 0 of albedo during normal bake (before mipmaps regenerate)
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.uniform1i(this.uLoc(this.bakeNormalProg, 'uAlbedo'), 0);
     gl.uniform1f(this.uLoc(this.bakeNormalProg, 'uLayer'), layer);
     gl.uniform2f(this.uLoc(this.bakeNormalProg, 'uTexel'), 1 / ATLAS_SIZE, 1 / ATLAS_SIZE);
@@ -1640,11 +1747,10 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
       pw / ATLAS_SIZE,
       ph / ATLAS_SIZE
     );
-    // Map vUv [0..1] inside viewport(x,y,pw,ph)? No: vUv of fullscreen triangle inside viewport(x,y,pw,ph) spans [0..1],
-    // so we set viewport to (0, 0, ATLAS_SIZE, ATLAS_SIZE) and scissor(x, y, pw, ph)!
-    gl.viewport(0, 0, ATLAS_SIZE, ATLAS_SIZE);
+    gl.viewport(0, 0, nSize, nSize);
     gl.bindVertexArray(this.emptyVao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
     gl.disable(gl.SCISSOR_TEST);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
@@ -1741,7 +1847,11 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
     const viewRot = cam.viewRot ?? 0;
     const zoom = Math.max(0.25, cam.zoom);
     const activeFestival = sim.getActiveFestival();
-    const unlockedSet = new Set<string>(sim.state.unlockedZones);
+    const unlockedSet = this.unlockedZonesScratch;
+    unlockedSet.clear();
+    for (let i = 0; i < sim.state.unlockedZones.length; i++) {
+      unlockedSet.add(sim.state.unlockedZones[i]);
+    }
 
     // 1. Locked Zone Plaques
     if (!sim.state.sandboxMode && !sim.isVisitingNeighbor) {
@@ -1914,7 +2024,10 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
     const profile = GPU_QUALITY_PROFILES[settings.qualityTier];
     const cssW = Math.max(1, this.canvas.parentElement?.clientWidth || window.innerWidth);
     const cssH = Math.max(1, this.canvas.parentElement?.clientHeight || window.innerHeight);
-    const dpr = Math.min(profile.dprCap, window.devicePixelRatio || 1);
+    const effectiveDprCap = overlay?.adaptiveDprCap
+      ? Math.min(profile.dprCap, overlay.adaptiveDprCap)
+      : profile.dprCap;
+    const dpr = Math.min(effectiveDprCap, window.devicePixelRatio || 1);
     const pixelW = Math.max(2, Math.round(cssW * dpr));
     const pixelH = Math.max(2, Math.round(cssH * dpr));
 
@@ -1963,6 +2076,12 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
       );
     }
     const cpuCollectMs = performance.now() - t0;
+
+    if (this.albedoMipDirty) {
+      gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.albedoArrayTex);
+      gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
+      this.albedoMipDirty = false;
+    }
 
     if (this.uvTableDirty) {
       gl.bindTexture(gl.TEXTURE_2D, this.uvTableTex);
@@ -2084,6 +2203,9 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
 
     const timeSec = nowMs * 0.001;
     let drawCalls = 0;
+    const invZoomSafe = 1 / Math.max(0.15, cam.zoom);
+    const renderCamX = cam.x - (overlay?.shakeX ?? 0) * invZoomSafe;
+    const renderCamY = cam.y - (overlay?.shakeY ?? 0) * invZoomSafe;
 
     const useBloom = profile.bloomEnabled && settings.bloomIntensity > 0.02;
     if (useBloom) {
@@ -2108,7 +2230,7 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
     // PASS 2: Isometric Terrain + Cobblestone Paths + Cloud Shadows + Ground Light Pools
     if (this.snapshot.terrainCount > 0) {
       gl.useProgram(this.terrainProg);
-      gl.uniform3f(this.uLoc(this.terrainProg, 'uCamera'), cam.x, cam.y, cam.zoom);
+      gl.uniform3f(this.uLoc(this.terrainProg, 'uCamera'), renderCamX, renderCamY, cam.zoom);
       gl.uniform2f(this.uLoc(this.terrainProg, 'uViewport'), cssW, cssH);
       gl.uniform1f(this.uLoc(this.terrainProg, 'uTime'), timeSec);
       gl.uniform1f(this.uLoc(this.terrainProg, 'uWinterSnow'), winterSnowAmount);
@@ -2128,7 +2250,7 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     if (this.snapshot.waterCount > 0) {
       gl.useProgram(this.waterProg);
-      gl.uniform3f(this.uLoc(this.waterProg, 'uCamera'), cam.x, cam.y, cam.zoom);
+      gl.uniform3f(this.uLoc(this.waterProg, 'uCamera'), renderCamX, renderCamY, cam.zoom);
       gl.uniform2f(this.uLoc(this.waterProg, 'uViewport'), cssW, cssH);
       gl.uniform1f(this.uLoc(this.waterProg, 'uTime'), timeSec);
       gl.uniform1f(this.uLoc(this.waterProg, 'uWinterSnow'), winterSnowAmount);
@@ -2158,7 +2280,7 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
     // PASS 4: GPU Instanced Wind-Swaying & Proximity-Bending Meadow Grass + Wildflowers
     if (this.snapshot.grassCount > 0) {
       gl.useProgram(this.grassProg);
-      gl.uniform3f(this.uLoc(this.grassProg, 'uCamera'), cam.x, cam.y, cam.zoom);
+      gl.uniform3f(this.uLoc(this.grassProg, 'uCamera'), renderCamX, renderCamY, cam.zoom);
       gl.uniform2f(this.uLoc(this.grassProg, 'uViewport'), cssW, cssH);
       gl.uniform1f(this.uLoc(this.grassProg, 'uTime'), timeSec);
       gl.uniform1f(this.uLoc(this.grassProg, 'uWindStrength'), settings.windStrength);
@@ -2200,7 +2322,7 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
 
       // 5a. Directional Sun/Moon Ground Shadows (reset attribute offsets to 0 first)
       gl.useProgram(this.shadowProg);
-      gl.uniform3f(this.uLoc(this.shadowProg, 'uCamera'), cam.x, cam.y, cam.zoom);
+      gl.uniform3f(this.uLoc(this.shadowProg, 'uCamera'), renderCamX, renderCamY, cam.zoom);
       gl.uniform2f(this.uLoc(this.shadowProg, 'uViewport'), cssW, cssH);
       gl.uniform1i(this.uLoc(this.shadowProg, 'uAlbedo'), 0);
       gl.uniform1i(this.uLoc(this.shadowProg, 'uUvTable'), 2);
@@ -2218,7 +2340,7 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
       // 5b. Range-Sliced IsoSceneSortedPass with Interleaved Articulated Spine 2D Slots
       // Uniforms live per-program in WebGL2: upload frame-invariant scene uniforms ONCE, then rebind VAO/program only on slice switches!
       gl.useProgram(this.sceneProg);
-      gl.uniform3f(this.uLoc(this.sceneProg, 'uCamera'), cam.x, cam.y, cam.zoom);
+      gl.uniform3f(this.uLoc(this.sceneProg, 'uCamera'), renderCamX, renderCamY, cam.zoom);
       gl.uniform2f(this.uLoc(this.sceneProg, 'uViewport'), cssW, cssH);
       gl.uniform1i(this.uLoc(this.sceneProg, 'uAlbedo'), 0);
       gl.uniform1i(this.uLoc(this.sceneProg, 'uNormalEmissive'), 1);
@@ -2259,8 +2381,8 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
           if (pose) {
             this.spineAdapter.renderArticulatedSlot(
               pose,
-              cam.x,
-              cam.y,
+              renderCamX,
+              renderCamY,
               cam.zoom,
               cssW,
               cssH,
@@ -2285,7 +2407,7 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
       }
       gl.useProgram(this.particleProg);
-      gl.uniform3f(this.uLoc(this.particleProg, 'uCamera'), cam.x, cam.y, cam.zoom);
+      gl.uniform3f(this.uLoc(this.particleProg, 'uCamera'), renderCamX, renderCamY, cam.zoom);
       gl.uniform2f(this.uLoc(this.particleProg, 'uViewport'), cssW, cssH);
       gl.uniform1f(this.uLoc(this.particleProg, 'uIsSnow'), snowParticles ? 1.0 : 0.0);
       gl.bindVertexArray(this.particleVao);
@@ -2347,8 +2469,7 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
     gl.bindVertexArray(null);
 
     const activeLayers = this.shelf.layer + 1;
-    // Estimate actual GPU VRAM: active albedo + normal layers + FBOs
-    const atlasMb = activeLayers * 2 * ((ATLAS_SIZE * ATLAS_SIZE * 4) / (1024 * 1024));
+    // Honest GPU VRAM accounting: full immutable texStorage3D allocation (albedo mipmaps + half-res normals) + active FBOs
     const fboBytesPerPx = this.useHalfFloatFbo ? 8 : 4;
     const fboMb = useBloom
       ? ((pixelW * pixelH * 1.5 * fboBytesPerPx) / (1024 * 1024))
@@ -2367,13 +2488,38 @@ export class WebGL2WorldRenderer implements SpriteIdResolver {
       activeLights: lc,
       atlasLayers: activeLayers,
       atlasSpritesPacked: this.nextSpriteId,
-      vramEstimateMb: Number((atlasMb + fboMb).toFixed(1)),
+      vramEstimateMb: Number((this.atlasBudget.allocatedAtlasVramMb + fboMb).toFixed(1)),
     };
   }
 
   public destroy(): void {
     const gl = this.gl;
     this.spineAdapter.destroy();
+    gl.deleteProgram(this.bakeNormalProg);
+    gl.deleteProgram(this.skyProg);
+    gl.deleteProgram(this.terrainProg);
+    gl.deleteProgram(this.waterProg);
+    gl.deleteProgram(this.grassProg);
+    gl.deleteProgram(this.shadowProg);
+    gl.deleteProgram(this.sceneProg);
+    gl.deleteProgram(this.particleProg);
+    gl.deleteProgram(this.bloomExtractProg);
+    gl.deleteProgram(this.bloomBlurProg);
+    gl.deleteProgram(this.compositeProg);
+    gl.deleteVertexArray(this.emptyVao);
+    gl.deleteVertexArray(this.terrainVao);
+    gl.deleteVertexArray(this.waterVao);
+    gl.deleteVertexArray(this.grassVao);
+    gl.deleteVertexArray(this.sceneVao);
+    gl.deleteVertexArray(this.particleVao);
+    gl.deleteBuffer(this.diamondBuf);
+    gl.deleteBuffer(this.uprightBuf);
+    gl.deleteBuffer(this.centeredBuf);
+    gl.deleteBuffer(this.terrainInstanceBuf);
+    gl.deleteBuffer(this.waterInstanceBuf);
+    gl.deleteBuffer(this.grassInstanceBuf);
+    gl.deleteBuffer(this.sceneInstanceBuf);
+    gl.deleteBuffer(this.particleInstanceBuf);
     gl.deleteTexture(this.albedoArrayTex);
     gl.deleteTexture(this.normalEmissiveArrayTex);
     gl.deleteTexture(this.uvTableTex);

@@ -41,6 +41,10 @@ import {
 import { SpriteRegistry } from './spriteLoader';
 import { computeWaterShoreLoops, WaterLoop } from './waterOutlines';
 import { JuiceFX } from './juiceFx';
+import {
+  drawHayDayDiegeticWorldOverlay,
+  HayDaySwipeVisualState,
+} from './hayDayWorldOverlay';
 
 import {
   InWorldTimerBadgeInfo,
@@ -64,6 +68,7 @@ export {
   JuiceFX,
   MAX_WEATHER_PARTICLES,
   buildLockedSceneryCatalog,
+  computeAdaptiveDprCap,
   computeVisibleRotatedTileWindow,
   computeWeatherParticleBudget,
   isTouchOrIOSDevice,
@@ -171,6 +176,11 @@ export class IsometricRenderer {
   public dpr = 1;
   public adaptiveDprCap = isTouchOrIOSDevice() ? 1.5 : 2;
   private resizeObserver: ResizeObserver | null = null;
+  private reducedMotionMq: MediaQueryList | null = null;
+  private readonly handleReducedMotionChange = (ev: MediaQueryListEvent): void => {
+    this.reducedMotion = ev.matches;
+    this.juiceFx?.setReducedMotion(ev.matches);
+  };
   private observedCssW = 0;
   private observedCssH = 0;
   private viewCssW = 0;
@@ -197,6 +207,7 @@ export class IsometricRenderer {
   public activeSeedBrushCropId: FarmCropId | null = null;
   public activePastureBrushAnimalId: PastureAnimalId | null = null;
   public activeMovingUid: string | null = null;
+  public hayDaySwipeVisual: HayDaySwipeVisualState | null = null;
   public ghostConnectableRect: {
     gx: number;
     gy: number;
@@ -274,11 +285,9 @@ export class IsometricRenderer {
         ? window.matchMedia?.('(prefers-reduced-motion: reduce)')
         : undefined;
     if (mq) {
+      this.reducedMotionMq = mq;
       this.reducedMotion = mq.matches;
-      mq.addEventListener?.('change', (ev) => {
-        this.reducedMotion = ev.matches;
-        this.juiceFx?.setReducedMotion(ev.matches);
-      });
+      mq.addEventListener?.('change', this.handleReducedMotionChange);
     }
 
     this.juiceFx = new JuiceFX({ reducedMotion: this.reducedMotion });
@@ -357,6 +366,45 @@ export class IsometricRenderer {
 
   public getJuiceFX(): JuiceFX {
     return this.juiceFx;
+  }
+
+  /** Returns the canvas-local CSS pixel center of the Barn HUD button for parabolic crop flights. */
+  public getBarnHudAnchor(): { x: number; y: number } {
+    const viewW = this.viewCssW || this.canvas.clientWidth || 1024;
+    const viewH = this.viewCssH || this.canvas.clientHeight || 768;
+    const canvasRect =
+      typeof this.canvas.getBoundingClientRect === 'function'
+        ? this.canvas.getBoundingClientRect()
+        : { left: 0, top: 0, width: viewW, height: viewH };
+    if (typeof document !== 'undefined') {
+      const selectors = ['#chipHudBarn', '#btnOpenStorageBarn'];
+      for (const sel of selectors) {
+        const el = document.querySelector(sel) as HTMLElement | null;
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width > 4 && r.height > 4) {
+          return {
+            x: r.left + r.width * 0.5 - canvasRect.left,
+            y: r.top + r.height * 0.5 - canvasRect.top,
+          };
+        }
+      }
+    }
+    return { x: viewW * 0.14, y: Math.max(40, viewH - 46) };
+  }
+
+  public tickJuice(dtSec: number): { x: number; y: number } {
+    const safeDt = Math.min(0.05, Math.max(0.001, Number.isFinite(dtSec) ? dtSec : 1 / 60));
+    this.juiceFx.tick(safeDt);
+    if (this.reducedMotion) return { x: 0, y: 0 };
+    return this.juiceFx.getShakeOffset();
+  }
+
+  public destroy(): void {
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
+    this.reducedMotionMq?.removeEventListener?.('change', this.handleReducedMotionChange);
+    this.reducedMotionMq = null;
   }
 
   public notifyJuice(
@@ -531,7 +579,8 @@ export class IsometricRenderer {
     bulldozerActive: boolean,
     selectedUid: string | null,
     movingBuildingUid: string | null = null,
-    pincerPickedLabel: string | null = null
+    pincerPickedLabel: string | null = null,
+    dtSec = 1 / 60
   ): void {
     this.resize();
     if (!this.reducedMotion) {
@@ -549,8 +598,7 @@ export class IsometricRenderer {
     const viewH = this.viewCssH || this.canvas.clientHeight;
     const ctx = this.ctx;
 
-    this.juiceFx.tick(1 / 60);
-    const shake = this.juiceFx.getShakeOffset();
+    const shake = this.tickJuice(dtSec);
     const hasWorldShake = !this.reducedMotion && (shake.x !== 0 || shake.y !== 0);
     if (hasWorldShake) {
       ctx.save();
@@ -1120,6 +1168,18 @@ export class IsometricRenderer {
       this.drawTutorialWorldTarget(sim, cam, viewW, viewH);
     }
 
+    // 6a-hayday. Hay Day diegetic courtyard props, visitors, workshop shelves & live swipe ribbon
+    drawHayDayDiegeticWorldOverlay(
+      this,
+      sim,
+      cam,
+      viewW,
+      viewH,
+      now,
+      isNightLike,
+      this.hayDaySwipeVisual
+    );
+
     // 6b. Internal Juice Hook: Track harvested plots automatically (reset cleanly on scene switch)
     const sceneKey = `${sim.isVisitingNeighbor ? sim.getActiveVisitingNeighbor()?.id ?? 'visit' : 'home'}|${sim.isHeadmasterPreview ? 'preview' : 'live'}`;
     const currentRipePlots = this.nextRipePlots;
@@ -1231,7 +1291,9 @@ export class IsometricRenderer {
     activeBuildItem: CatalogItem | null = null,
     rotation: 0 | 1 | 2 | 3 = 0,
     bulldozerActive = false,
-    pincerPickedLabel: string | null = null
+    pincerPickedLabel: string | null = null,
+    dtSec = 1 / 60,
+    skipJuiceTick = false
   ): void {
     this.resize();
     if (!this.reducedMotion) {
@@ -1252,7 +1314,14 @@ export class IsometricRenderer {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, viewW, viewH);
 
-    this.juiceFx.tick(1 / 60);
+    const shake = skipJuiceTick
+      ? (this.reducedMotion ? { x: 0, y: 0 } : this.juiceFx.getShakeOffset())
+      : this.tickJuice(dtSec);
+    const hasWorldShake = !this.reducedMotion && (shake.x !== 0 || shake.y !== 0);
+    if (hasWorldShake) {
+      ctx.save();
+      ctx.translate(shake.x, shake.y);
+    }
     const period = sim.getRealTimePeriod();
     const festival = sim.getActiveFestival();
     const weather = sim.getCurrentWeather(now);
@@ -1477,7 +1546,8 @@ export class IsometricRenderer {
         this.hotspots.length = prevLen;
       }
     }
-    this.drawWeatherParticles(sim, viewW, viewH, isNightLike, festival, weather, now);
+    // WebGL2 Pass 6 already renders GPU snowflakes & HDR fireflies — only draw fog, rain streaks, splash rings & storm lightning on Canvas2D!
+    this.drawWeatherParticles(sim, viewW, viewH, isNightLike, festival, weather, now, true);
 
     // 1. Locked Zone Plaques
     if (!sim.state.sandboxMode) {
@@ -1622,7 +1692,20 @@ export class IsometricRenderer {
     } else if (sim.strollModeActive) {
       this.drawRoamingPetAndStrollOverlay(sim, cam, viewW, viewH, now, isNightLike);
     }
+    drawHayDayDiegeticWorldOverlay(
+      this,
+      sim,
+      cam,
+      viewW,
+      viewH,
+      now,
+      isNightLike,
+      this.hayDaySwipeVisual
+    );
     this.drawHarvestBloom(now, cam.zoom);
+    if (hasWorldShake) {
+      ctx.restore();
+    }
     this.juiceFx.applyTo(ctx, viewW, viewH);
   }
 
@@ -2294,8 +2377,21 @@ export class IsometricRenderer {
     isNight: boolean,
     festival: string,
     weather: WeatherForecastSlot,
-    now: number
-  ): void { return entitiesDrawWeatherParticles(this, sim, viewW, viewH, isNight, festival, weather, now); }
+    now: number,
+    skipGpuHandledWeather = false
+  ): void {
+    return entitiesDrawWeatherParticles(
+      this,
+      sim,
+      viewW,
+      viewH,
+      isNight,
+      festival,
+      weather,
+      now,
+      skipGpuHandledWeather
+    );
+  }
 
   /**
    * Live Narrative Pulse ("Hello Beat" + periodic village surprise):

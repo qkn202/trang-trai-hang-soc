@@ -167,6 +167,15 @@ export interface GameplayRenderOverlay {
   movingBuildingUid?: string | null;
   hotspotsOut?: ScreenHotspot[];
   skipReadyBubbleSprites?: boolean;
+  /** Adaptive DPR cap from main frame-pacing controller (honored by WebGL2 on mobile thermal pressure). */
+  adaptiveDprCap?: number;
+  /** Shared tactile squash-and-stretch timestamps from IsometricRenderer for WebGL2 parity. */
+  squashMap?: Map<string, number>;
+  /** Shared construction-completion elastic pop timestamps from IsometricRenderer for WebGL2 parity. */
+  completionPopMap?: Map<string, number>;
+  /** Screen-space world shake offsets (px) from JuiceFX for WebGL2 camera parity. */
+  shakeX?: number;
+  shakeY?: number;
 }
 
 const MAX_SKELETAL_SLOTS = 32;
@@ -262,6 +271,28 @@ export class WorldRenderSnapshotCollector {
 
   public staticDirtyGeneration = 0;
   private cachedStaticKey = '';
+
+  // Reusable per-frame scratch maps & cached reduced-motion state (0 allocation per frame)
+  private readonly buildingByUidScratch = new Map<string, PlacedBuilding>();
+  private cachedReducedMotion: boolean | null = null;
+  private reducedMotionBound = false;
+
+  private isReducedMotion(): boolean {
+    if (this.cachedReducedMotion === null) {
+      const mq =
+        typeof window !== 'undefined'
+          ? window.matchMedia?.('(prefers-reduced-motion: reduce)')
+          : undefined;
+      this.cachedReducedMotion = Boolean(mq?.matches);
+      if (mq && !this.reducedMotionBound) {
+        this.reducedMotionBound = true;
+        mq.addEventListener?.('change', (ev) => {
+          this.cachedReducedMotion = ev.matches;
+        });
+      }
+    }
+    return this.cachedReducedMotion;
+  }
 
   public get terrainRevision(): number {
     return this.staticDirtyGeneration;
@@ -378,6 +409,9 @@ export class WorldRenderSnapshotCollector {
   private topoInDeg = new Int32Array(MAX_SCENE_INSTANCES);
   private topoReady = new Int32Array(MAX_SCENE_INSTANCES);
   private topoEmitted = new Uint8Array(MAX_SCENE_INSTANCES);
+  private topoSweepOrder = new Int32Array(MAX_SCENE_INSTANCES);
+  private topoIsoL = new Float32Array(MAX_SCENE_INSTANCES);
+  private topoIsoR = new Float32Array(MAX_SCENE_INSTANCES);
   private topoEdgeCap = 8192;
   private topoNext = new Int32Array(8192);
   private topoTo = new Int32Array(8192);
@@ -436,12 +470,12 @@ export class WorldRenderSnapshotCollector {
     const yuleMode = sim.state?.settings?.yuleThemeMode ?? 'auto';
     const yuleActive =
       yuleMode === 'off'
-        ? sim.state?.settings?.activeFestival === 'christmas'
+        ? false
         : (typeof sim.isWinterMainMapActive === 'function' && sim.isWinterMainMapActive()) ||
           sim.getActiveFestival() === 'christmas' ||
           (typeof sim.isYuleVisualThemeActive === 'function' && sim.isYuleVisualThemeActive());
     const season = resolveSeasonFromDayCount(sim.state.level ?? 1, yuleActive ? 'winter' : 'auto');
-    this.seasonId = season.id;
+    this.seasonId = yuleMode === 'off' && season.id === 'winter' ? 'autumn' : season.id;
 
     if (this.period === 'dawn') {
       this.sunShadowDx = 14;
@@ -740,9 +774,7 @@ export class WorldRenderSnapshotCollector {
   ): void {
     const viewRot = cam.viewRot ?? 0;
     const cutaway = Boolean(sim.state.settings.cutawayMode);
-    const reducedMotion =
-      typeof window !== 'undefined' &&
-      Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+    const reducedMotion = this.isReducedMotion();
     const invZoom = 1 / Math.max(0.15, cam.zoom);
     const marginW = (viewW * 0.5 + 380) * invZoom;
     const marginH = (viewH * 0.5 + 420) * invZoom;
@@ -837,7 +869,8 @@ export class WorldRenderSnapshotCollector {
     }
 
     // 2. Placed Buildings, Connected Farmland, Mature Crop Clusters & Kinetic Rotors
-    const buildingByUid = new Map<string, PlacedBuilding>();
+    const buildingByUid = this.buildingByUidScratch;
+    buildingByUid.clear();
     for (let i = 0; i < sim.state.buildings.length; i++) {
       const b = sim.state.buildings[i];
       buildingByUid.set(b.uid, b);
@@ -994,6 +1027,36 @@ export class WorldRenderSnapshotCollector {
             ? 3
             : 0;
 
+      // Parity with Canvas2D: tactile squash-and-stretch + construction completion elastic pop!
+      let squashSx = 1;
+      let squashSy = 1;
+      let popScale = 1;
+      let popLiftY = 0;
+      if (!reducedMotion) {
+        const squashStarted = overlay?.squashMap?.get(b.uid);
+        if (squashStarted !== undefined) {
+          const st = (nowMs - squashStarted) / 380;
+          if (st >= 1 || st < 0) {
+            overlay?.squashMap?.delete(b.uid);
+          } else {
+            const wave = Math.sin(st * Math.PI * 3.2) * Math.exp(-st * 4.2) * 0.14;
+            squashSx = 1 + wave;
+            squashSy = 1 - wave * 0.88;
+          }
+        }
+        const popStarted = overlay?.completionPopMap?.get(b.uid);
+        if (popStarted !== undefined) {
+          const pt = (nowMs - popStarted) / 1300;
+          if (pt >= 1 || pt < 0) {
+            overlay?.completionPopMap?.delete(b.uid);
+          } else {
+            const spring = Math.sin(pt * Math.PI * 2.8) * Math.exp(-pt * 3.4);
+            popScale = pt < 0.11 ? 0.72 + (pt / 0.11) * 0.34 : 1 + spring * 0.13;
+            popLiftY = pt < 0.36 ? Math.sin((pt / 0.36) * Math.PI) * 14 : 0;
+          }
+        }
+      }
+
       const s = this.slots[slotCount++];
       s.rxMin = rx0 + 0.04;
       s.ryMin = ry0 + 0.04;
@@ -1001,9 +1064,9 @@ export class WorldRenderSnapshotCollector {
       s.ryMax = ry0 + rbh - 0.04;
       s.depth = rx0 + rbw + ry0 + rbh - 0.05;
       s.wx = worldCx;
-      s.wy = worldBottomY + 4.0;
-      const effDrawW = drawW * wsKin.scaleX;
-      const effDrawH = drawH * wsKin.scaleY;
+      s.wy = worldBottomY + 4.0 - popLiftY;
+      const effDrawW = drawW * wsKin.scaleX * squashSx * popScale;
+      const effDrawH = drawH * wsKin.scaleY * squashSy * popScale;
       s.drawW = flipX ? -effDrawW : effDrawW;
       s.drawH = effDrawH;
       s.spriteId = spHandle.id;
@@ -1819,15 +1882,42 @@ export class WorldRenderSnapshotCollector {
       this.topoInDeg[v]++;
     };
 
+    // Sweep-line theo trục iso-X (rxMin - ryMax): giảm độ phức tạp từ O(n^2) xuống O(n log n + k) không cấp phát rác
+    const sweep = this.topoSweepOrder;
+    const isoL = this.topoIsoL;
+    const isoR = this.topoIsoR;
     for (let i = 0; i < n; i++) {
+      const s = this.slots[i];
+      sweep[i] = i;
+      isoL[i] = s.rxMin - s.ryMax;
+      isoR[i] = s.rxMax - s.ryMin;
+    }
+    // Ciura gap sequence shellsort trên mảng chỉ số (0-allocation, cực nhanh cho n <= 2048)
+    const gaps = [701, 301, 132, 57, 23, 10, 4, 1];
+    for (let g = 0; g < gaps.length; g++) {
+      const gap = gaps[g];
+      if (gap >= n) continue;
+      for (let i = gap; i < n; i++) {
+        const idx = sweep[i];
+        const key = isoL[idx];
+        let j = i;
+        while (j >= gap && isoL[sweep[j - gap]] > key) {
+          sweep[j] = sweep[j - gap];
+          j -= gap;
+        }
+        sweep[j] = idx;
+      }
+    }
+
+    for (let si = 0; si < n; si++) {
+      const i = sweep[si];
       const a = this.slots[i];
-      const aIsoL = a.rxMin - a.ryMax;
-      const aIsoR = a.rxMax - a.ryMin;
-      for (let j = i + 1; j < n; j++) {
+      const aIsoR = isoR[i];
+      for (let sj = si + 1; sj < n; sj++) {
+        const j = sweep[sj];
+        if (isoL[j] >= aIsoR - eps) break; // Mọi phần tử sau đều nằm ngoài khoảng iso-X của a
         const b = this.slots[j];
-        const bIsoL = b.rxMin - b.ryMax;
-        const bIsoR = b.rxMax - b.ryMin;
-        if (aIsoR <= bIsoL + eps || bIsoR <= aIsoL + eps) continue;
+        if (isoR[j] <= isoL[i] + eps) continue;
 
         const aBehindB =
           (a.rxMax <= b.rxMin + eps && a.ryMin < b.ryMax - eps) ||

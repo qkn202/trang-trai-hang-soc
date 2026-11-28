@@ -93,6 +93,7 @@ import {
   reconcileRetentionStateOnLoad,
 } from './retentionAndNarrative';
 import { sanitizeRoadsideStandState } from './roadsideStandAndEvents';
+import { sanitizeWeeklyDerbyState } from './weeklyDerbyEngine';
 import {
   BuildReductionResult,
   CatalogItem,
@@ -1916,7 +1917,13 @@ export function migrateLoadedState(parsed: GameState): GameState {
         Array.isArray(b.workshopQueue)
           ? b.workshopQueue
               .filter((s) => s && typeof s.goodId === 'string' && s.goodId in FARM_GOODS)
-              .slice(0, 6)
+              .slice(0, 9)
+          : undefined,
+      extraQueueSlots:
+        item.workshopGroupId &&
+        typeof b.extraQueueSlots === 'number' &&
+        Number.isFinite(b.extraQueueSlots)
+          ? Math.max(0, Math.min(3, Math.round(b.extraQueueSlots)))
           : undefined,
       readyFarmGoods:
         Array.isArray(b.readyFarmGoods)
@@ -2025,6 +2032,10 @@ export function migrateLoadedState(parsed: GameState): GameState {
               })),
               rewardSickle: Math.round(clampFinite(o.rewardSickle, 1, 999999, 25)),
               rewardXp: Math.round(clampFinite(o.rewardXp, 0, 999999, 20)),
+              trashedUntilAt:
+                typeof o.trashedUntilAt === 'number' && Number.isFinite(o.trashedUntilAt) && o.trashedUntilAt > 0
+                  ? Math.round(o.trashedUntilAt)
+                  : undefined,
               portraitSprite:
                 typeof o.portraitSprite === 'string' && !o.portraitSprite.startsWith('guest_')
                   ? o.portraitSprite
@@ -2038,6 +2049,10 @@ export function migrateLoadedState(parsed: GameState): GameState {
     return {
       capacity: Math.round(clampFinite(parsedBarn.capacity, 40, 2000, defBarn.capacity)),
       ordersDelivered: Math.round(clampFinite(parsedBarn.ordersDelivered, 0, 999999, 0)),
+      deliveryStreak:
+        typeof parsedBarn.deliveryStreak === 'number' && Number.isFinite(parsedBarn.deliveryStreak)
+          ? Math.max(0, Math.min(9999, Math.round(parsedBarn.deliveryStreak)))
+          : 0,
       crops: safeCrops,
       goods: safeGoods,
       seeds: safeSeeds,
@@ -2204,7 +2219,27 @@ export function migrateLoadedState(parsed: GameState): GameState {
     dailyQuests: sanitizeQuestList(parsed.dailyQuests, def.dailyQuests),
     collectedCards: parsed.collectedCards ?? {},
     farmBarn: safeBarn,
+    weeklyDerby: sanitizeWeeklyDerbyState(parsed.weeklyDerby),
     roadsideStand: parsed.roadsideStand ? sanitizeRoadsideStandState(parsed.roadsideStand) : undefined,
+    hayDayHarvestDropMeter:
+      typeof parsed.hayDayHarvestDropMeter === 'number' && Number.isFinite(parsed.hayDayHarvestDropMeter)
+        ? Math.max(0, Math.min(999, Math.round(parsed.hayDayHarvestDropMeter)))
+        : 0,
+    hayDayHarvestDropsTotal:
+      typeof parsed.hayDayHarvestDropsTotal === 'number' && Number.isFinite(parsed.hayDayHarvestDropsTotal)
+        ? Math.max(0, Math.min(999999, Math.round(parsed.hayDayHarvestDropsTotal)))
+        : 0,
+    workshopMastery: (() => {
+      const rawM = parsed.workshopMastery;
+      if (!rawM || typeof rawM !== 'object') return undefined;
+      const out: Record<string, number> = {};
+      for (const [k, v] of Object.entries(rawM)) {
+        if (typeof v === 'number' && Number.isFinite(v) && v > 0) {
+          out[sanitizePlainText(k, 40)] = Math.min(999999, Math.round(v));
+        }
+      }
+      return Object.keys(out).length > 0 ? out : undefined;
+    })(),
     seasonalFestivalState:
       parsed.seasonalFestivalState && typeof parsed.seasonalFestivalState === 'object'
         ? {

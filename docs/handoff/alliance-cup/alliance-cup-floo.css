@@ -1,0 +1,1138 @@
+/* ============================================================================
+   MẠNG FLOO (HPVNN) — BỘ 6 KHUNG HUYỀN THOẠI «CÚP LIÊN MINH 2 NHÀ»
+   Thay thế hoàn toàn khung `alliance-cup` cũ bằng 6 khung riêng biệt theo
+   đúng 6 cặp Liên Minh xoay vòng của Cúp Nhà Tuần (HOUSE_CUP_ALLIANCE_ROTATION):
+     1. alliance-anh-duong  — Ánh Dương (Gryffindor + Hufflepuff)   -> anh-duong.webp
+     2. alliance-nguyet-anh — Nguyệt Ảnh (Slytherin + Ravenclaw)    -> nguyet-anh.webp
+     3. alliance-lua-va-tri — Lửa & Trí (Gryffindor + Ravenclaw)    -> lua-va-tri.webp
+     4. alliance-ngoc-rung  — Ngọc Rừng (Slytherin + Hufflepuff)    -> ngoc-rung.webp
+     5. alliance-song-hung  — Song Hùng (Gryffindor + Slytherin)    -> song-hung.webp
+     6. alliance-tinh-tu    — Tinh Tú (Ravenclaw + Hufflepuff)      -> tinh-tu.webp
+
+   Tối ưu 100% chuẩn rule hiệu năng iOS Safari 16+ & kiến trúc 05-floo:
+   - Tách riêng thành tệp `client/app/styles/05-floo/21-alliance-cup-frames.css`
+     (import cùng chỗ `20-store-appearance.css` để không chạm trần 1800 dòng/tệp)
+   - Cắm trực tiếp vào DOM sẵn có của LEGENDARY_FRAMES (`ShoutMessageRow.ts`):
+     .shout-lg-fx > .shout-lg-aura, .shout-lg-rim, .shout-lg-clip >
+     (.shout-lg-b, .shout-lg-band, .shout-lg-a, .shout-lg-top) + .shout-lg-shine
+   - Mọi @keyframes mang tiền tố `hpvn-lg-ac-*`, chỉ đổi `opacity` & `transform`
+   - Không `infinite`: chạy đúng `2 forwards` rồi dừng đẹp ở khung tĩnh (0% GPU)
+   - Mọi `animation` bọc trong `@media (prefers-reduced-motion: no-preference)`
+   - Dừng ngoài màn hình bằng `[data-offscreen]`, giữ nguyên `.is-sonorus`,
+     `.is-prisoner-censored`, `:has(.shout-image-album.is-stack)`, `[data-hide-frames]`
+   - Cấm `filter`, `backdrop-filter`, `mix-blend-mode`, `@property`, `!important`,
+     `<canvas>`, PNG và `image-set`; mỗi WebP phẳng < 12 KB tải theo từng key
+   - Một khung, một viền 3px (`-webkit-mask` + `mask` chuẩn iOS Safari 16+)
+   ============================================================================ */
+
+/* ----------------------------------------------------------------------------
+   1. BẢNG MÀU & CHẤT LIỆU RIÊNG CHO TỪNG CẶP LIÊN MINH (6 BIẾN THỂ)
+   ---------------------------------------------------------------------------- */
+
+/* 1.1. ÁNH DƯƠNG — Gryffindor + Hufflepuff (Hồng Ngọc Lửa × Vàng Mật Ong) */
+.shout-message-row[data-store-frame="alliance-anh-duong"] {
+  --sf-edge-width: 3px;
+  --sf-edge: linear-gradient(128deg, #fef08a 0%, #f59e0b 32%, #dc2626 68%, #fbbf24 100%);
+  --sf-paper:
+    radial-gradient(ellipse 84% 72% at 80% 10%, rgba(251, 191, 36, 0.28), transparent 60%),
+    radial-gradient(circle at 12% 90%, rgba(220, 38, 38, 0.28), transparent 52%),
+    linear-gradient(164deg, #2b0c10 0%, #41190f 52%, #24100b 100%);
+  --sf-shadow:
+    0 0 0 1px rgba(48, 12, 12, 0.78),
+    0 10px 24px rgba(24, 6, 8, 0.48),
+    0 2px 7px rgba(30, 8, 8, 0.34);
+  --lg-ink: #fffbeb;
+  --lg-time: #fcd39c;
+  --sf-text: var(--lg-ink);
+  --sf-author: #fde68a;
+  --sf-meta: var(--lg-time);
+  --sf-link: #fef08a;
+  --sf-link-line: rgba(254, 240, 138, 0.68);
+  --sf-quote-bg: rgba(34, 9, 10, 0.64);
+  --sf-quote-border: #f59e0b;
+  --sf-quote-stroke: rgba(251, 191, 36, 0.26);
+  --sf-quote-ink: #fef3c7;
+  --ac-aura: radial-gradient(ellipse 86% 90% at 50% 50%, rgba(245, 158, 11, 0.26) 0%, rgba(220, 38, 38, 0.16) 54%, transparent 78%);
+  --ac-shine: linear-gradient(110deg, transparent 22%, #fffbeb 48%, #fbbf24 57%, transparent 78%);
+  --ac-glint: linear-gradient(108deg, transparent 32%, rgba(254, 240, 138, 0.26) 49%, rgba(249, 115, 22, 0.16) 55%, transparent 68%);
+  --ac-bg-motif:
+    repeating-linear-gradient(118deg, transparent 0 18px, rgba(253, 224, 71, 0.08) 18px 25px, transparent 25px 46px),
+    radial-gradient(ellipse 92% 28% at 50% 100%, rgba(251, 191, 36, 0.24), transparent 72%);
+}
+
+/* 1.2. NGUYỆT ẢNH — Slytherin + Ravenclaw (Ngọc Lục Bảo × Bạc Lam Trăng Khuya) */
+.shout-message-row[data-store-frame="alliance-nguyet-anh"] {
+  --sf-edge-width: 3px;
+  --sf-edge: linear-gradient(128deg, #e2e8f0 0%, #38bdf8 34%, #10b981 68%, #cbd5e1 100%);
+  --sf-paper:
+    radial-gradient(ellipse 84% 72% at 78% 10%, rgba(56, 189, 248, 0.26), transparent 62%),
+    radial-gradient(circle at 14% 90%, rgba(16, 185, 129, 0.24), transparent 52%),
+    linear-gradient(166deg, #071324 0%, #0b2633 52%, #071a24 100%);
+  --sf-shadow:
+    0 0 0 1px rgba(6, 20, 34, 0.78),
+    0 10px 24px rgba(3, 12, 24, 0.48),
+    0 2px 7px rgba(4, 14, 26, 0.36);
+  --lg-ink: #f0f9ff;
+  --lg-time: #93c5fd;
+  --sf-text: var(--lg-ink);
+  --sf-author: #a7f3d0;
+  --sf-meta: var(--lg-time);
+  --sf-link: #bae6fd;
+  --sf-link-line: rgba(186, 230, 253, 0.65);
+  --sf-quote-bg: rgba(5, 16, 30, 0.64);
+  --sf-quote-border: #38bdf8;
+  --sf-quote-stroke: rgba(56, 189, 248, 0.24);
+  --sf-quote-ink: #dbeafe;
+  --ac-aura: radial-gradient(ellipse 86% 90% at 50% 50%, rgba(56, 189, 248, 0.22) 0%, rgba(16, 185, 129, 0.16) 54%, transparent 78%);
+  --ac-shine: linear-gradient(110deg, transparent 22%, #f8fafc 48%, #7dd3fc 57%, transparent 78%);
+  --ac-glint: linear-gradient(108deg, transparent 32%, rgba(224, 242, 254, 0.24) 49%, rgba(52, 211, 153, 0.16) 55%, transparent 68%);
+  --ac-bg-motif:
+    repeating-linear-gradient(108deg, transparent 0 20px, rgba(186, 230, 253, 0.07) 20px 26px, transparent 26px 50px),
+    radial-gradient(ellipse 90% 26% at 50% 100%, rgba(16, 185, 129, 0.2), transparent 72%);
+}
+
+/* 1.3. LỬA & TRÍ — Gryffindor + Ravenclaw (Phượng Hoàng Đỏ × Tinh Bàn Lam Ngọc) */
+.shout-message-row[data-store-frame="alliance-lua-va-tri"] {
+  --sf-edge-width: 3px;
+  --sf-edge: linear-gradient(128deg, #fde047 0%, #ef4444 34%, #3b82f6 68%, #f59e0b 100%);
+  --sf-paper:
+    radial-gradient(ellipse 84% 72% at 80% 12%, rgba(59, 130, 246, 0.28), transparent 62%),
+    radial-gradient(circle at 12% 88%, rgba(239, 68, 68, 0.28), transparent 52%),
+    linear-gradient(164deg, #210d1b 0%, #171a3c 52%, #291118 100%);
+  --sf-shadow:
+    0 0 0 1px rgba(24, 12, 34, 0.78),
+    0 10px 24px rgba(10, 8, 28, 0.48),
+    0 2px 7px rgba(18, 8, 24, 0.36);
+  --lg-ink: #f8fafc;
+  --lg-time: #bfdbfe;
+  --sf-text: var(--lg-ink);
+  --sf-author: #fcd34d;
+  --sf-meta: var(--lg-time);
+  --sf-link: #fde68a;
+  --sf-link-line: rgba(253, 230, 138, 0.65);
+  --sf-quote-bg: rgba(14, 12, 34, 0.64);
+  --sf-quote-border: #ef4444;
+  --sf-quote-stroke: rgba(96, 165, 250, 0.26);
+  --sf-quote-ink: #e2e8f0;
+  --ac-aura: radial-gradient(ellipse 86% 90% at 50% 50%, rgba(239, 68, 68, 0.22) 0%, rgba(59, 130, 246, 0.18) 54%, transparent 78%);
+  --ac-shine: linear-gradient(110deg, transparent 22%, #fff7ed 48%, #fb923c 57%, transparent 78%);
+  --ac-glint: linear-gradient(108deg, transparent 32%, rgba(253, 224, 71, 0.24) 49%, rgba(96, 165, 250, 0.18) 55%, transparent 68%);
+  --ac-bg-motif:
+    repeating-linear-gradient(124deg, transparent 0 18px, rgba(147, 197, 253, 0.07) 18px 23px, transparent 23px 44px),
+    radial-gradient(ellipse 90% 26% at 50% 100%, rgba(249, 115, 22, 0.22), transparent 72%);
+}
+
+/* 1.4. NGỌC RỪNG — Slytherin + Hufflepuff (Lục Bảo Rừng Cấm × Hổ Phách Mật Ong) */
+.shout-message-row[data-store-frame="alliance-ngoc-rung"] {
+  --sf-edge-width: 3px;
+  --sf-edge: linear-gradient(128deg, #bef264 0%, #10b981 36%, #f59e0b 72%, #34d399 100%);
+  --sf-paper:
+    radial-gradient(ellipse 84% 72% at 78% 10%, rgba(245, 158, 11, 0.24), transparent 60%),
+    radial-gradient(circle at 12% 88%, rgba(16, 185, 129, 0.28), transparent 54%),
+    linear-gradient(166deg, #061c15 0%, #12301f 52%, #1b220e 100%);
+  --sf-shadow:
+    0 0 0 1px rgba(6, 26, 16, 0.78),
+    0 10px 24px rgba(4, 18, 12, 0.48),
+    0 2px 7px rgba(6, 22, 14, 0.36);
+  --lg-ink: #f0fdf4;
+  --lg-time: #a7f3d0;
+  --sf-text: var(--lg-ink);
+  --sf-author: #fde68a;
+  --sf-meta: var(--lg-time);
+  --sf-link: #fef08a;
+  --sf-link-line: rgba(254, 240, 138, 0.64);
+  --sf-quote-bg: rgba(6, 24, 16, 0.64);
+  --sf-quote-border: #10b981;
+  --sf-quote-stroke: rgba(52, 211, 153, 0.24);
+  --sf-quote-ink: #dcfce7;
+  --ac-aura: radial-gradient(ellipse 86% 90% at 50% 50%, rgba(16, 185, 129, 0.24) 0%, rgba(245, 158, 11, 0.16) 54%, transparent 78%);
+  --ac-shine: linear-gradient(110deg, transparent 22%, #fefce8 48%, #a3e635 57%, transparent 78%);
+  --ac-glint: linear-gradient(108deg, transparent 32%, rgba(254, 240, 138, 0.22) 49%, rgba(52, 211, 153, 0.18) 55%, transparent 68%);
+  --ac-bg-motif:
+    repeating-linear-gradient(112deg, transparent 0 20px, rgba(167, 243, 208, 0.07) 20px 26px, transparent 26px 48px),
+    radial-gradient(ellipse 90% 26% at 50% 100%, rgba(245, 158, 11, 0.2), transparent 72%);
+}
+
+/* 1.5. SONG HÙNG — Gryffindor + Slytherin (Đỏ Thẫm × Lục Bảo × Vương Miện Hoàng Kim) */
+.shout-message-row[data-store-frame="alliance-song-hung"] {
+  --sf-edge-width: 3px;
+  --sf-edge: linear-gradient(128deg, #ef4444 0%, #fbbf24 36%, #10b981 70%, #facc15 100%);
+  --sf-paper:
+    radial-gradient(ellipse 76% 74% at 14% 16%, rgba(220, 38, 38, 0.28), transparent 58%),
+    radial-gradient(ellipse 76% 74% at 86% 86%, rgba(16, 185, 129, 0.26), transparent 58%),
+    linear-gradient(164deg, #240c12 0%, #1c171a 50%, #092219 100%);
+  --sf-shadow:
+    0 0 0 1px rgba(32, 14, 16, 0.8),
+    0 10px 24px rgba(10, 8, 12, 0.5),
+    0 2px 7px rgba(12, 10, 14, 0.36);
+  --lg-ink: #fffbeb;
+  --lg-time: #e2e8f0;
+  --sf-text: var(--lg-ink);
+  --sf-author: #fde047;
+  --sf-meta: var(--lg-time);
+  --sf-link: #fef08a;
+  --sf-link-line: rgba(254, 240, 138, 0.66);
+  --sf-quote-bg: rgba(18, 14, 18, 0.66);
+  --sf-quote-border: #fbbf24;
+  --sf-quote-stroke: rgba(251, 191, 36, 0.26);
+  --sf-quote-ink: #f1f5f9;
+  --ac-aura: radial-gradient(ellipse 86% 90% at 50% 50%, rgba(251, 191, 36, 0.22) 0%, rgba(220, 38, 38, 0.14) 52%, transparent 78%);
+  --ac-shine: linear-gradient(110deg, transparent 22%, #fffbeb 48%, #facc15 57%, transparent 78%);
+  --ac-glint: linear-gradient(108deg, transparent 32%, rgba(254, 240, 138, 0.26) 49%, rgba(16, 185, 129, 0.16) 55%, transparent 68%);
+  --ac-bg-motif:
+    repeating-linear-gradient(132deg, transparent 0 18px, rgba(251, 191, 36, 0.075) 18px 23px, transparent 23px 44px),
+    radial-gradient(ellipse 90% 24% at 50% 100%, rgba(251, 191, 36, 0.22), transparent 72%);
+}
+
+/* 1.6. TINH TÚ — Ravenclaw + Hufflepuff (Đài Thiên Văn Lam Đêm × Sao Vàng Đồng) */
+.shout-message-row[data-store-frame="alliance-tinh-tu"] {
+  --sf-edge-width: 3px;
+  --sf-edge: linear-gradient(128deg, #fef08a 0%, #f59e0b 32%, #60a5fa 68%, #fbbf24 100%);
+  --sf-paper:
+    radial-gradient(ellipse 84% 72% at 80% 12%, rgba(253, 224, 71, 0.24), transparent 60%),
+    radial-gradient(circle at 14% 88%, rgba(59, 130, 246, 0.28), transparent 54%),
+    linear-gradient(166deg, #09132e 0%, #14244a 52%, #1d1a30 100%);
+  --sf-shadow:
+    0 0 0 1px rgba(10, 18, 44, 0.78),
+    0 10px 24px rgba(5, 10, 28, 0.48),
+    0 2px 7px rgba(8, 12, 32, 0.36);
+  --lg-ink: #f8fafc;
+  --lg-time: #bfdbfe;
+  --sf-text: var(--lg-ink);
+  --sf-author: #fef08a;
+  --sf-meta: var(--lg-time);
+  --sf-link: #fde68a;
+  --sf-link-line: rgba(253, 230, 138, 0.65);
+  --sf-quote-bg: rgba(9, 16, 40, 0.64);
+  --sf-quote-border: #fbbf24;
+  --sf-quote-stroke: rgba(147, 197, 253, 0.24);
+  --sf-quote-ink: #e0f2fe;
+  --ac-aura: radial-gradient(ellipse 86% 90% at 50% 50%, rgba(96, 165, 250, 0.22) 0%, rgba(251, 191, 36, 0.16) 54%, transparent 78%);
+  --ac-shine: linear-gradient(110deg, transparent 22%, #fffbeb 48%, #fde047 57%, transparent 78%);
+  --ac-glint: linear-gradient(108deg, transparent 32%, rgba(254, 249, 195, 0.26) 49%, rgba(96, 165, 250, 0.16) 55%, transparent 68%);
+  --ac-bg-motif:
+    repeating-linear-gradient(106deg, transparent 0 22px, rgba(254, 240, 138, 0.065) 22px 27px, transparent 27px 52px),
+    radial-gradient(ellipse 90% 26% at 50% 100%, rgba(96, 165, 250, 0.22), transparent 72%);
+}
+
+/* ----------------------------------------------------------------------------
+   2. KHỐI BONG BÓNG, PADDING CỐ ĐỊNH & TƯƠNG PHẢN VĂN BẢN CHUNG CHO 6 KHUNG
+   (Không ghi đè .is-sonorus, .is-prisoner-censored, album ảnh xếp chồng)
+   ---------------------------------------------------------------------------- */
+.shout-message-row[data-store-frame="alliance-anh-duong"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+.shout-message-row[data-store-frame="alliance-nguyet-anh"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+.shout-message-row[data-store-frame="alliance-lua-va-tri"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+.shout-message-row[data-store-frame="alliance-ngoc-rung"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+.shout-message-row[data-store-frame="alliance-song-hung"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+.shout-message-row[data-store-frame="alliance-tinh-tu"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) {
+  position: relative;
+  border: 0;
+  color: var(--lg-ink);
+  background: var(--sf-paper);
+  box-shadow: var(--sf-shadow);
+  min-width: 192px;
+  min-height: 76px;
+  padding: 13px 60px 14px 52px;
+}
+
+.shout-message-row[data-store-frame="alliance-anh-duong"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) > :not(.shout-lg-fx),
+.shout-message-row[data-store-frame="alliance-nguyet-anh"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) > :not(.shout-lg-fx),
+.shout-message-row[data-store-frame="alliance-lua-va-tri"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) > :not(.shout-lg-fx),
+.shout-message-row[data-store-frame="alliance-ngoc-rung"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) > :not(.shout-lg-fx),
+.shout-message-row[data-store-frame="alliance-song-hung"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) > :not(.shout-lg-fx),
+.shout-message-row[data-store-frame="alliance-tinh-tu"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) > :not(.shout-lg-fx) {
+  position: relative;
+  z-index: 2;
+}
+
+/* Đối xứng trái/phải cho tin của chính chủ (.is-self) */
+.shout-message-row.is-self:not(.is-self-shared-direction):not(.is-sonorus):not(.is-prisoner-censored)[data-store-frame="alliance-anh-duong"]
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+.shout-message-row.is-self:not(.is-self-shared-direction):not(.is-sonorus):not(.is-prisoner-censored)[data-store-frame="alliance-nguyet-anh"]
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+.shout-message-row.is-self:not(.is-self-shared-direction):not(.is-sonorus):not(.is-prisoner-censored)[data-store-frame="alliance-lua-va-tri"]
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+.shout-message-row.is-self:not(.is-self-shared-direction):not(.is-sonorus):not(.is-prisoner-censored)[data-store-frame="alliance-ngoc-rung"]
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+.shout-message-row.is-self:not(.is-self-shared-direction):not(.is-sonorus):not(.is-prisoner-censored)[data-store-frame="alliance-song-hung"]
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+.shout-message-row.is-self:not(.is-self-shared-direction):not(.is-sonorus):not(.is-prisoner-censored)[data-store-frame="alliance-tinh-tu"]
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) {
+  padding: 13px 52px 14px 60px;
+}
+
+@media (max-width: 640px) {
+  .shout-message-row[data-store-frame="alliance-anh-duong"]:not(.is-sonorus):not(.is-prisoner-censored)
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+  .shout-message-row[data-store-frame="alliance-nguyet-anh"]:not(.is-sonorus):not(.is-prisoner-censored)
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+  .shout-message-row[data-store-frame="alliance-lua-va-tri"]:not(.is-sonorus):not(.is-prisoner-censored)
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+  .shout-message-row[data-store-frame="alliance-ngoc-rung"]:not(.is-sonorus):not(.is-prisoner-censored)
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+  .shout-message-row[data-store-frame="alliance-song-hung"]:not(.is-sonorus):not(.is-prisoner-censored)
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+  .shout-message-row[data-store-frame="alliance-tinh-tu"]:not(.is-sonorus):not(.is-prisoner-censored)
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) {
+    min-width: 168px;
+    min-height: 68px;
+    padding: 12px 52px 13px 46px;
+  }
+
+  .shout-message-row.is-self:not(.is-self-shared-direction):not(.is-sonorus):not(.is-prisoner-censored)[data-store-frame="alliance-anh-duong"]
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+  .shout-message-row.is-self:not(.is-self-shared-direction):not(.is-sonorus):not(.is-prisoner-censored)[data-store-frame="alliance-nguyet-anh"]
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+  .shout-message-row.is-self:not(.is-self-shared-direction):not(.is-sonorus):not(.is-prisoner-censored)[data-store-frame="alliance-lua-va-tri"]
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+  .shout-message-row.is-self:not(.is-self-shared-direction):not(.is-sonorus):not(.is-prisoner-censored)[data-store-frame="alliance-ngoc-rung"]
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+  .shout-message-row.is-self:not(.is-self-shared-direction):not(.is-sonorus):not(.is-prisoner-censored)[data-store-frame="alliance-song-hung"]
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+  .shout-message-row.is-self:not(.is-self-shared-direction):not(.is-sonorus):not(.is-prisoner-censored)[data-store-frame="alliance-tinh-tu"]
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) {
+    padding: 12px 46px 13px 52px;
+  }
+}
+
+.shout-message-row[data-store-frame="alliance-anh-duong"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-message-author,
+.shout-message-row[data-store-frame="alliance-nguyet-anh"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-message-author,
+.shout-message-row[data-store-frame="alliance-lua-va-tri"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-message-author,
+.shout-message-row[data-store-frame="alliance-ngoc-rung"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-message-author,
+.shout-message-row[data-store-frame="alliance-song-hung"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-message-author,
+.shout-message-row[data-store-frame="alliance-tinh-tu"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-message-author {
+  position: relative;
+  display: inline-block;
+  color: var(--sf-author);
+  letter-spacing: 0.015em;
+  text-shadow: 0 1px 3px rgba(4, 6, 14, 0.92);
+}
+
+/* Bản sao ánh kim lướt qua tên tác giả (.shout-lg-shine, chuẩn iOS Safari 16+) */
+.shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-shine,
+.shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-shine,
+.shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-shine,
+.shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-shine,
+.shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-shine,
+.shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-shine {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--ac-shine);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  opacity: 0;
+}
+
+.shout-message-row[data-store-frame="alliance-anh-duong"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-message-meta-time,
+.shout-message-row[data-store-frame="alliance-nguyet-anh"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-message-meta-time,
+.shout-message-row[data-store-frame="alliance-lua-va-tri"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-message-meta-time,
+.shout-message-row[data-store-frame="alliance-ngoc-rung"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-message-meta-time,
+.shout-message-row[data-store-frame="alliance-song-hung"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-message-meta-time,
+.shout-message-row[data-store-frame="alliance-tinh-tu"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-message-meta-time {
+  color: var(--lg-time);
+  text-shadow: 0 1px 2px rgba(4, 6, 14, 0.85);
+}
+
+.shout-message-row[data-store-frame="alliance-anh-duong"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-rich-text,
+.shout-message-row[data-store-frame="alliance-nguyet-anh"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-rich-text,
+.shout-message-row[data-store-frame="alliance-lua-va-tri"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-rich-text,
+.shout-message-row[data-store-frame="alliance-ngoc-rung"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-rich-text,
+.shout-message-row[data-store-frame="alliance-song-hung"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-rich-text,
+.shout-message-row[data-store-frame="alliance-tinh-tu"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-rich-text {
+  text-shadow: 0 1px 2px rgba(4, 6, 14, 0.86);
+}
+
+.shout-message-row[data-store-frame="alliance-anh-duong"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-rich-text a,
+.shout-message-row[data-store-frame="alliance-nguyet-anh"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-rich-text a,
+.shout-message-row[data-store-frame="alliance-lua-va-tri"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-rich-text a,
+.shout-message-row[data-store-frame="alliance-ngoc-rung"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-rich-text a,
+.shout-message-row[data-store-frame="alliance-song-hung"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-rich-text a,
+.shout-message-row[data-store-frame="alliance-tinh-tu"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-rich-text a {
+  color: var(--sf-link);
+  text-decoration: underline;
+  text-decoration-color: var(--sf-link-line);
+  text-underline-offset: 2.5px;
+  text-decoration-thickness: 1px;
+}
+
+.shout-message-row[data-store-frame="alliance-anh-duong"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-quote-preview,
+.shout-message-row[data-store-frame="alliance-nguyet-anh"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-quote-preview,
+.shout-message-row[data-store-frame="alliance-lua-va-tri"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-quote-preview,
+.shout-message-row[data-store-frame="alliance-ngoc-rung"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-quote-preview,
+.shout-message-row[data-store-frame="alliance-song-hung"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-quote-preview,
+.shout-message-row[data-store-frame="alliance-tinh-tu"]:not(.is-sonorus):not(.is-prisoner-censored)
+  .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) .shout-quote-preview {
+  background: var(--sf-quote-bg);
+  border: 1px solid var(--sf-quote-stroke);
+  border-inline-start: 3px solid var(--sf-quote-border);
+  border-radius: 6px;
+  color: var(--sf-quote-ink);
+}
+
+/* ----------------------------------------------------------------------------
+   3. LỚP HIỆU ỨNG .shout-lg-fx CÓ SẴN CỦA LEGENDARY_FRAMES
+   ---------------------------------------------------------------------------- */
+.shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-fx,
+.shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-fx,
+.shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-fx,
+.shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-fx,
+.shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-fx,
+.shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-fx {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-aura,
+.shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-aura,
+.shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-aura,
+.shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-aura,
+.shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-aura,
+.shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-aura {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--ac-aura);
+  opacity: 0.72;
+}
+
+/* Một khung, một viền 2 Nhà 3px (-webkit-mask + mask chuẩn iOS Safari 16+) */
+.shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-rim,
+.shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-rim,
+.shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-rim,
+.shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-rim,
+.shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-rim,
+.shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-rim {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: var(--sf-edge-width);
+  background: var(--sf-edge);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* Cắt gọn mọi tia sáng, ấn gia huy & hạt phép trong lòng bong bóng */
+.shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-clip,
+.shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-clip,
+.shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-clip,
+.shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-clip,
+.shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-clip,
+.shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-clip {
+  position: absolute;
+  inset: 2.5px;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 3a. .shout-lg-b — Luồng khí quang & vệt sáng kim loại lướt ngang */
+.shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-b,
+.shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-b,
+.shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-b,
+.shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-b,
+.shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-b,
+.shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-b {
+  position: absolute;
+  inset: -12% -16%;
+  pointer-events: none;
+  opacity: 0.56;
+  background: var(--ac-bg-motif);
+}
+
+.shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-b::after,
+.shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-b::after,
+.shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-b::after,
+.shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-b::after,
+.shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-b::after,
+.shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-b::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.32;
+  transform: translate3d(-14%, 0, 0);
+  background: var(--ac-glint);
+}
+
+/* 3b. .shout-lg-band — Huy hiệu Liên Minh 2 Nhà góc trên-trái (SVG vector sắc nét, 0 request mạng) */
+.shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-band,
+.shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-band,
+.shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-band,
+.shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-band,
+.shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-band,
+.shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-band {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 38px;
+  height: 38px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  transform: rotate(-6deg);
+  opacity: 0.96;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-anh-duong"] .shout-lg-band,
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-nguyet-anh"] .shout-lg-band,
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-lua-va-tri"] .shout-lg-band,
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-ngoc-rung"] .shout-lg-band,
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-song-hung"] .shout-lg-band,
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-tinh-tu"] .shout-lg-band {
+  left: auto;
+  right: 6px;
+  transform: rotate(6deg);
+}
+
+/* Huy hiệu vector riêng cho từng Liên Minh (không chứa SVG filter) */
+.shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-band {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cg fill='none'%3E%3Cpath d='M24 3l3.4 9.2L37 9l-3.2 9.6L43 24l-9.2 3.4L37 37l-9.6-3.2L24 43l-3.4-9.2L11 37l3.2-9.6L5 24l9.2-3.4L11 11l9.6 3.2z' fill='%23fbbf24' opacity='.92'/%3E%3Cpath d='M24 11l10 5v8c0 6.5-4.3 11.2-10 13-5.7-1.8-10-6.5-10-13v-8z' fill='%23b91c1c' stroke='%23fef08a' stroke-width='2'/%3E%3Cpath d='M24 11l10 5v8c0 6.5-4.3 11.2-10 13z' fill='%23f59e0b' opacity='.88'/%3E%3Ccircle cx='24' cy='23' r='4.2' fill='%23fffbeb' stroke='%23991b1b' stroke-width='1.4'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-band {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cg fill='none'%3E%3Cpath d='M29.5 7.5A16.5 16.5 0 1 0 39 36.2a13.2 13.2 0 1 1-9.5-28.7z' fill='%23e2e8f0' stroke='%2338bdf8' stroke-width='1.6'/%3E%3Cpath d='M31 11l2.2 5.4L38.6 18.6 33.2 20.8 31 26.2l-2.2-5.4-5.4-2.2 5.4-2.2z' fill='%2334d399' stroke='%23ecfdf5' stroke-width='1.1'/%3E%3Ccircle cx='37' cy='29' r='2.1' fill='%23bae6fd'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-band {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cg fill='none'%3E%3Ccircle cx='24' cy='24' r='16.5' stroke='%23fbbf24' stroke-width='2' stroke-dasharray='5 3'/%3E%3Cellipse cx='24' cy='24' rx='17' ry='7.2' transform='rotate(-34 24 24)' stroke='%2360a5fa' stroke-width='2'/%3E%3Cpath d='M24 9c5.2 5.4 8 10.1 8 15.2a8 8 0 1 1-16 0c0-3.1 1.4-6.4 3.4-9.2.2 2.4 1.4 3.8 2.8 4.2-.8-3.4.2-7.1 1.8-10.2z' fill='%23ef4444' stroke='%23fde68a' stroke-width='1.5'/%3E%3Cpath d='M24 18.5c2.2 2.4 3.4 4.7 3.4 6.9a3.4 3.4 0 1 1-6.8 0c0-2.2 1.2-4.5 3.4-6.9z' fill='%23fef08a'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-band {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cg fill='none'%3E%3Cpath d='M16 37C9 31 8 18 16 10c2 8 1.5 16 5 22' stroke='%2334d399' stroke-width='3' stroke-linecap='round'/%3E%3Cpath d='M32 37c7-6 8-19 0-27-2 8-1.5 16-5 22' stroke='%2310b981' stroke-width='3' stroke-linecap='round'/%3E%3Cpolygon points='24,9 32,20 24,35 16,20' fill='%23059669' stroke='%23fde68a' stroke-width='2'/%3E%3Cpolygon points='24,14 28.5,20.5 24,29 19.5,20.5' fill='%23fbbf24'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-band {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cg fill='none'%3E%3Cpath d='M12 16h12v18l-6 5-6-5z' fill='%23dc2626' stroke='%23fde047' stroke-width='1.8'/%3E%3Cpath d='M24 16h12v18l-6 5-6-5z' fill='%23059669' stroke='%23fde047' stroke-width='1.8'/%3E%3Cpath d='M14 15l3-7 7 4.5L31 8l3 7z' fill='%23fbbf24' stroke='%23fef9c3' stroke-width='1.4' stroke-linejoin='round'/%3E%3Ccircle cx='24' cy='25' r='3.6' fill='%23fef08a' stroke='%2378350f' stroke-width='1.3'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-band {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cg fill='none'%3E%3Ccircle cx='24' cy='24' r='16' stroke='%2360a5fa' stroke-width='1.8' opacity='.85'/%3E%3Cpath d='M24 6l3.4 12.6L40 22l-12.6 3.4L24 38l-3.4-12.6L8 22l12.6-3.4z' fill='%23fbbf24' stroke='%23fef9c3' stroke-width='1.3'/%3E%3Ccircle cx='24' cy='22' r='3.4' fill='%231d4ed8' stroke='%23fef08a' stroke-width='1.4'/%3E%3Ccircle cx='36' cy='12' r='2' fill='%23fef08a'/%3E%3Ccircle cx='12' cy='35' r='1.8' fill='%2393c5fd'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* 3c. .shout-lg-a — Cúp Liên Minh WebP phẳng riêng từng cặp (< 12 KB/tệp, tải lười theo key) */
+.shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-a,
+.shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-a,
+.shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-a,
+.shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-a,
+.shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-a,
+.shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-a {
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  width: 50px;
+  height: 50px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  transform-origin: 50% 82%;
+  transform: rotate(3deg);
+  opacity: 1;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-anh-duong"] .shout-lg-a,
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-nguyet-anh"] .shout-lg-a,
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-lua-va-tri"] .shout-lg-a,
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-ngoc-rung"] .shout-lg-a,
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-song-hung"] .shout-lg-a,
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-tinh-tu"] .shout-lg-a {
+  right: auto;
+  left: 4px;
+  transform: rotate(-3deg);
+}
+
+/* Mỗi key chỉ tải đúng 1 tệp WebP phẳng của Liên Minh đó */
+.shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-a {
+  background-image: url("/images/floo-items/alliance-cup/anh-duong.webp");
+}
+
+.shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-a {
+  background-image: url("/images/floo-items/alliance-cup/nguyet-anh.webp");
+}
+
+.shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-a {
+  background-image: url("/images/floo-items/alliance-cup/lua-va-tri.webp");
+}
+
+.shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-a {
+  background-image: url("/images/floo-items/alliance-cup/ngoc-rung.webp");
+}
+
+.shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-a {
+  background-image: url("/images/floo-items/alliance-cup/song-hung.webp");
+}
+
+.shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-a {
+  background-image: url("/images/floo-items/alliance-cup/tinh-tu.webp");
+}
+
+/* 3d. .shout-lg-top — Chùm hạt phép 2 Nhà bay lên quanh Cúp (thuần radial-gradient, 0 filter) */
+.shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-top,
+.shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-top,
+.shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-top,
+.shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-top,
+.shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-top,
+.shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-top {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 96px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-anh-duong"] .shout-lg-top,
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-nguyet-anh"] .shout-lg-top,
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-lua-va-tri"] .shout-lg-top,
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-ngoc-rung"] .shout-lg-top,
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-song-hung"] .shout-lg-top,
+.shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-tinh-tu"] .shout-lg-top {
+  right: auto;
+  left: 0;
+  transform: scaleX(-1);
+}
+
+.shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-top::before,
+.shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-top::after,
+.shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-top::before,
+.shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-top::after,
+.shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-top::before,
+.shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-top::after,
+.shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-top::before,
+.shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-top::after,
+.shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-top::before,
+.shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-top::after,
+.shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-top::before,
+.shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-top::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 92px;
+  height: 112px;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
+/* Hạt phép Ánh Dương (nắng vàng & tàn lửa hồng ngọc) */
+.shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-top::before {
+  background-image:
+    radial-gradient(circle 3.4px at 66px 70px, #fffbeb 0 42%, rgba(251, 191, 36, 0.72) 72%, transparent 100%),
+    radial-gradient(circle 2.8px at 46px 50px, #fef08a 0 44%, rgba(220, 38, 38, 0.68) 76%, transparent 100%),
+    radial-gradient(circle 2.4px at 74px 36px, #fffbeb 0 45%, rgba(245, 158, 11, 0.7) 75%, transparent 100%),
+    radial-gradient(circle 3px at 56px 22px, #fde68a 0 44%, rgba(249, 115, 22, 0.66) 76%, transparent 100%);
+  opacity: 0.8;
+}
+
+.shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-top::after {
+  background-image:
+    radial-gradient(circle 2.8px at 52px 76px, #fef3c7 0 44%, rgba(220, 38, 38, 0.66) 76%, transparent 100%),
+    radial-gradient(circle 3.6px at 72px 54px, #fffbeb 0 42%, rgba(251, 191, 36, 0.72) 74%, transparent 100%),
+    radial-gradient(circle 2.2px at 38px 36px, #fef08a 0 46%, rgba(245, 158, 11, 0.62) 78%, transparent 100%);
+  opacity: 0.62;
+}
+
+/* Hạt phép Nguyệt Ảnh (sao bạc & sương lục bảo) */
+.shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-top::before {
+  background-image:
+    radial-gradient(circle 3.4px at 66px 70px, #f8fafc 0 44%, rgba(56, 189, 248, 0.72) 74%, transparent 100%),
+    radial-gradient(circle 2.8px at 46px 50px, #ecfdf5 0 44%, rgba(16, 185, 129, 0.72) 76%, transparent 100%),
+    radial-gradient(circle 2.4px at 74px 36px, #f8fafc 0 46%, rgba(186, 230, 253, 0.74) 76%, transparent 100%),
+    radial-gradient(circle 3px at 56px 22px, #d1fae5 0 44%, rgba(52, 211, 153, 0.68) 76%, transparent 100%);
+  opacity: 0.8;
+}
+
+.shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-top::after {
+  background-image:
+    radial-gradient(circle 2.8px at 52px 76px, #e0f2fe 0 44%, rgba(16, 185, 129, 0.68) 76%, transparent 100%),
+    radial-gradient(circle 3.4px at 72px 54px, #f8fafc 0 42%, rgba(56, 189, 248, 0.72) 74%, transparent 100%),
+    radial-gradient(circle 2.2px at 38px 36px, #ecfdf5 0 46%, rgba(125, 211, 252, 0.65) 78%, transparent 100%);
+  opacity: 0.62;
+}
+
+/* Hạt phép Lửa & Trí (tàn phượng hoàng & tia tinh bàn lam) */
+.shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-top::before {
+  background-image:
+    radial-gradient(circle 3.4px at 66px 70px, #fff7ed 0 44%, rgba(239, 68, 68, 0.74) 74%, transparent 100%),
+    radial-gradient(circle 2.8px at 46px 50px, #eff6ff 0 44%, rgba(59, 130, 246, 0.74) 76%, transparent 100%),
+    radial-gradient(circle 2.5px at 74px 36px, #fefce8 0 46%, rgba(245, 158, 11, 0.74) 76%, transparent 100%),
+    radial-gradient(circle 3px at 56px 22px, #dbeafe 0 44%, rgba(96, 165, 250, 0.7) 76%, transparent 100%);
+  opacity: 0.82;
+}
+
+.shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-top::after {
+  background-image:
+    radial-gradient(circle 2.8px at 52px 76px, #dbeafe 0 44%, rgba(59, 130, 246, 0.72) 76%, transparent 100%),
+    radial-gradient(circle 3.5px at 72px 54px, #fffbeb 0 42%, rgba(249, 115, 22, 0.74) 74%, transparent 100%),
+    radial-gradient(circle 2.2px at 38px 36px, #fef08a 0 46%, rgba(239, 68, 68, 0.66) 78%, transparent 100%);
+  opacity: 0.64;
+}
+
+/* Hạt phép Ngọc Rừng (đom đóm mật ong & giọt lục bảo) */
+.shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-top::before {
+  background-image:
+    radial-gradient(circle 3.4px at 66px 70px, #fefce8 0 44%, rgba(251, 191, 36, 0.74) 74%, transparent 100%),
+    radial-gradient(circle 2.8px at 46px 50px, #ecfdf5 0 44%, rgba(16, 185, 129, 0.74) 76%, transparent 100%),
+    radial-gradient(circle 2.4px at 74px 36px, #f7fee7 0 46%, rgba(163, 230, 53, 0.72) 76%, transparent 100%),
+    radial-gradient(circle 3px at 56px 22px, #fef3c7 0 44%, rgba(245, 158, 11, 0.68) 76%, transparent 100%);
+  opacity: 0.8;
+}
+
+.shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-top::after {
+  background-image:
+    radial-gradient(circle 2.8px at 52px 76px, #d1fae5 0 44%, rgba(16, 185, 129, 0.7) 76%, transparent 100%),
+    radial-gradient(circle 3.5px at 72px 54px, #fffbeb 0 42%, rgba(245, 158, 11, 0.72) 74%, transparent 100%),
+    radial-gradient(circle 2.2px at 38px 36px, #ecfccb 0 46%, rgba(52, 211, 153, 0.66) 78%, transparent 100%);
+  opacity: 0.62;
+}
+
+/* Hạt phép Song Hùng (tia đỏ thẫm, lục bảo & hoàng kim) */
+.shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-top::before {
+  background-image:
+    radial-gradient(circle 3.4px at 66px 70px, #fffbeb 0 44%, rgba(250, 204, 21, 0.76) 74%, transparent 100%),
+    radial-gradient(circle 2.8px at 46px 50px, #fef2f2 0 44%, rgba(220, 38, 38, 0.74) 76%, transparent 100%),
+    radial-gradient(circle 2.5px at 74px 36px, #ecfdf5 0 46%, rgba(16, 185, 129, 0.74) 76%, transparent 100%),
+    radial-gradient(circle 3px at 56px 22px, #fef9c3 0 44%, rgba(251, 191, 36, 0.72) 76%, transparent 100%);
+  opacity: 0.82;
+}
+
+.shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-top::after {
+  background-image:
+    radial-gradient(circle 2.8px at 52px 76px, #d1fae5 0 44%, rgba(16, 185, 129, 0.72) 76%, transparent 100%),
+    radial-gradient(circle 3.5px at 72px 54px, #fee2e2 0 42%, rgba(239, 68, 68, 0.74) 74%, transparent 100%),
+    radial-gradient(circle 2.2px at 38px 36px, #fef08a 0 46%, rgba(250, 204, 21, 0.7) 78%, transparent 100%);
+  opacity: 0.64;
+}
+
+/* Hạt phép Tinh Tú (bụi sao vàng đồng & ánh tinh vân lam) */
+.shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-top::before {
+  background-image:
+    radial-gradient(circle 3.4px at 66px 70px, #fffbeb 0 44%, rgba(253, 224, 71, 0.76) 74%, transparent 100%),
+    radial-gradient(circle 2.8px at 46px 50px, #eff6ff 0 44%, rgba(96, 165, 250, 0.74) 76%, transparent 100%),
+    radial-gradient(circle 2.4px at 74px 36px, #fef9c3 0 46%, rgba(245, 158, 11, 0.72) 76%, transparent 100%),
+    radial-gradient(circle 3px at 56px 22px, #e0f2fe 0 44%, rgba(147, 197, 253, 0.72) 76%, transparent 100%);
+  opacity: 0.82;
+}
+
+.shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-top::after {
+  background-image:
+    radial-gradient(circle 2.8px at 52px 76px, #dbeafe 0 44%, rgba(96, 165, 250, 0.72) 76%, transparent 100%),
+    radial-gradient(circle 3.5px at 72px 54px, #fffbeb 0 42%, rgba(251, 191, 36, 0.76) 74%, transparent 100%),
+    radial-gradient(circle 2.2px at 38px 36px, #fef08a 0 46%, rgba(245, 158, 11, 0.68) 78%, transparent 100%);
+  opacity: 0.64;
+}
+
+@media (max-width: 640px) {
+  .shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-band,
+  .shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-band,
+  .shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-band,
+  .shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-band,
+  .shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-band,
+  .shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-band {
+    width: 32px;
+    height: 32px;
+  }
+
+  .shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-a,
+  .shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-a,
+  .shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-a,
+  .shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-a,
+  .shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-a,
+  .shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-a {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   4. KEYFRAMES THUẦN GPU (tiền tố hpvn-lg-ac-*, chỉ đổi opacity & transform)
+   Bọc toàn bộ trong @media (prefers-reduced-motion: no-preference), chạy 2 forwards
+   ---------------------------------------------------------------------------- */
+@keyframes hpvn-lg-ac-drift {
+  0% {
+    opacity: 0.44;
+    transform: translate3d(-4%, -2%, 0);
+  }
+  50% {
+    opacity: 0.72;
+    transform: translate3d(4%, 2%, 0);
+  }
+  100% {
+    opacity: 0.54;
+    transform: translate3d(0%, 0%, 0);
+  }
+}
+
+@keyframes hpvn-lg-ac-glint {
+  0% {
+    opacity: 0;
+    transform: translate3d(-38%, 0, 0);
+  }
+  40% {
+    opacity: 0.5;
+  }
+  80% {
+    opacity: 0.14;
+    transform: translate3d(38%, 0, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(44%, 0, 0);
+  }
+}
+
+@keyframes hpvn-lg-ac-seal {
+  0% {
+    opacity: 0.9;
+    transform: translate3d(0, 0, 0) rotate(-6deg) scale(1);
+  }
+  48% {
+    opacity: 1;
+    transform: translate3d(0, -2.5px, 0) rotate(-2deg) scale(1.06);
+  }
+  100% {
+    opacity: 0.96;
+    transform: translate3d(0, 0, 0) rotate(-6deg) scale(1);
+  }
+}
+
+@keyframes hpvn-lg-ac-seal-self {
+  0% {
+    opacity: 0.9;
+    transform: translate3d(0, 0, 0) rotate(6deg) scale(1);
+  }
+  48% {
+    opacity: 1;
+    transform: translate3d(0, -2.5px, 0) rotate(2deg) scale(1.06);
+  }
+  100% {
+    opacity: 0.96;
+    transform: translate3d(0, 0, 0) rotate(6deg) scale(1);
+  }
+}
+
+@keyframes hpvn-lg-ac-trophy {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(3deg) scale(1);
+  }
+  30% {
+    transform: translate3d(0, 1.5px, 0) rotate(1deg) scale(1.04, 0.97);
+  }
+  56% {
+    transform: translate3d(0, -4.5px, 0) rotate(5deg) scale(0.98, 1.05);
+  }
+  82% {
+    transform: translate3d(0, -1px, 0) rotate(2.5deg) scale(1.01, 0.99);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(3deg) scale(1);
+  }
+}
+
+@keyframes hpvn-lg-ac-trophy-self {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(-3deg) scale(1);
+  }
+  30% {
+    transform: translate3d(0, 1.5px, 0) rotate(-1deg) scale(1.04, 0.97);
+  }
+  56% {
+    transform: translate3d(0, -4.5px, 0) rotate(-5deg) scale(0.98, 1.05);
+  }
+  82% {
+    transform: translate3d(0, -1px, 0) rotate(-2.5deg) scale(1.01, 0.99);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(-3deg) scale(1);
+  }
+}
+
+@keyframes hpvn-lg-ac-sparks-a {
+  0% {
+    opacity: 0;
+    transform: translate3d(2px, 22px, 0) scale(0.6);
+  }
+  20% {
+    opacity: 0.95;
+    transform: translate3d(-4px, 7px, 0) scale(0.94);
+  }
+  55% {
+    opacity: 0.95;
+    transform: translate3d(4px, -15px, 0) scale(1.05);
+  }
+  86% {
+    opacity: 0.78;
+    transform: translate3d(-3px, -32px, 0) scale(1.08);
+  }
+  100% {
+    opacity: 0.74;
+    transform: translate3d(0, -5px, 0) scale(0.96);
+  }
+}
+
+@keyframes hpvn-lg-ac-sparks-b {
+  0% {
+    opacity: 0;
+    transform: translate3d(-3px, 26px, 0) scale(0.55);
+  }
+  24% {
+    opacity: 0.92;
+    transform: translate3d(5px, 9px, 0) scale(0.94);
+  }
+  60% {
+    opacity: 0.9;
+    transform: translate3d(-5px, -17px, 0) scale(1.06);
+  }
+  88% {
+    opacity: 0.72;
+    transform: translate3d(3px, -34px, 0) scale(1.1);
+  }
+  100% {
+    opacity: 0.58;
+    transform: translate3d(0, 0, 0) scale(0.94);
+  }
+}
+
+@keyframes hpvn-lg-ac-shine {
+  0% {
+    opacity: 0;
+    transform: translate3d(-12%, 0, 0);
+  }
+  36% {
+    opacity: 0.92;
+  }
+  76% {
+    opacity: 0.24;
+    transform: translate3d(12%, 0, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(14%, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-b,
+  .shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-b,
+  .shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-b,
+  .shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-b,
+  .shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-b,
+  .shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-b {
+    animation: hpvn-lg-ac-drift 4.8s ease-in-out 2 forwards;
+  }
+
+  .shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-b::after,
+  .shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-b::after,
+  .shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-b::after,
+  .shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-b::after,
+  .shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-b::after,
+  .shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-b::after {
+    animation: hpvn-lg-ac-glint 4.2s ease-in-out 0.25s 2 forwards;
+  }
+
+  .shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-band,
+  .shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-band,
+  .shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-band,
+  .shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-band,
+  .shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-band,
+  .shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-band {
+    animation: hpvn-lg-ac-seal 4.4s ease-in-out 2 forwards;
+  }
+
+  .shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-anh-duong"] .shout-lg-band,
+  .shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-nguyet-anh"] .shout-lg-band,
+  .shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-lua-va-tri"] .shout-lg-band,
+  .shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-ngoc-rung"] .shout-lg-band,
+  .shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-song-hung"] .shout-lg-band,
+  .shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-tinh-tu"] .shout-lg-band {
+    animation: hpvn-lg-ac-seal-self 4.4s ease-in-out 2 forwards;
+  }
+
+  .shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-a,
+  .shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-a,
+  .shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-a,
+  .shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-a,
+  .shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-a,
+  .shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-a {
+    animation: hpvn-lg-ac-trophy 3.4s ease-in-out 2 forwards;
+  }
+
+  .shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-anh-duong"] .shout-lg-a,
+  .shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-nguyet-anh"] .shout-lg-a,
+  .shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-lua-va-tri"] .shout-lg-a,
+  .shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-ngoc-rung"] .shout-lg-a,
+  .shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-song-hung"] .shout-lg-a,
+  .shout-message-row.is-self:not(.is-self-shared-direction)[data-store-frame="alliance-tinh-tu"] .shout-lg-a {
+    animation: hpvn-lg-ac-trophy-self 3.4s ease-in-out 2 forwards;
+  }
+
+  .shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-top::before,
+  .shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-top::before,
+  .shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-top::before,
+  .shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-top::before,
+  .shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-top::before,
+  .shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-top::before {
+    animation: hpvn-lg-ac-sparks-a 3.8s cubic-bezier(0.22, 0.61, 0.36, 1) 2 forwards;
+  }
+
+  .shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-top::after,
+  .shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-top::after,
+  .shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-top::after,
+  .shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-top::after,
+  .shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-top::after,
+  .shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-top::after {
+    animation: hpvn-lg-ac-sparks-b 4.1s cubic-bezier(0.22, 0.61, 0.36, 1) 1.05s 2 forwards;
+  }
+
+  .shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-shine,
+  .shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-shine,
+  .shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-shine,
+  .shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-shine,
+  .shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-shine,
+  .shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-shine {
+    animation: hpvn-lg-ac-shine 3.6s ease-in-out 0.35s 2 forwards;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   5. DỪNG NGOÀI MÀN HÌNH & TƯƠNG THÍCH TRẠNG THÁI ĐẶC BIỆT MẠNG FLOO
+   ---------------------------------------------------------------------------- */
+.shout-message-row[data-offscreen][data-store-frame="alliance-anh-duong"] .shout-lg-fx,
+.shout-message-row[data-offscreen][data-store-frame="alliance-nguyet-anh"] .shout-lg-fx,
+.shout-message-row[data-offscreen][data-store-frame="alliance-lua-va-tri"] .shout-lg-fx,
+.shout-message-row[data-offscreen][data-store-frame="alliance-ngoc-rung"] .shout-lg-fx,
+.shout-message-row[data-offscreen][data-store-frame="alliance-song-hung"] .shout-lg-fx,
+.shout-message-row[data-offscreen][data-store-frame="alliance-tinh-tu"] .shout-lg-fx {
+  display: none;
+}
+
+.shout-message-row[data-offscreen][data-store-frame="alliance-anh-duong"] .shout-lg-shine,
+.shout-message-row[data-offscreen][data-store-frame="alliance-nguyet-anh"] .shout-lg-shine,
+.shout-message-row[data-offscreen][data-store-frame="alliance-lua-va-tri"] .shout-lg-shine,
+.shout-message-row[data-offscreen][data-store-frame="alliance-ngoc-rung"] .shout-lg-shine,
+.shout-message-row[data-offscreen][data-store-frame="alliance-song-hung"] .shout-lg-shine,
+.shout-message-row[data-offscreen][data-store-frame="alliance-tinh-tu"] .shout-lg-shine {
+  animation-play-state: paused;
+}
+
+.shout-message-row.is-sonorus[data-store-frame="alliance-anh-duong"] .shout-lg-fx,
+.shout-message-row.is-sonorus[data-store-frame="alliance-nguyet-anh"] .shout-lg-fx,
+.shout-message-row.is-sonorus[data-store-frame="alliance-lua-va-tri"] .shout-lg-fx,
+.shout-message-row.is-sonorus[data-store-frame="alliance-ngoc-rung"] .shout-lg-fx,
+.shout-message-row.is-sonorus[data-store-frame="alliance-song-hung"] .shout-lg-fx,
+.shout-message-row.is-sonorus[data-store-frame="alliance-tinh-tu"] .shout-lg-fx,
+.shout-message-row.is-prisoner-censored[data-store-frame="alliance-anh-duong"] .shout-lg-fx,
+.shout-message-row.is-prisoner-censored[data-store-frame="alliance-nguyet-anh"] .shout-lg-fx,
+.shout-message-row.is-prisoner-censored[data-store-frame="alliance-lua-va-tri"] .shout-lg-fx,
+.shout-message-row.is-prisoner-censored[data-store-frame="alliance-ngoc-rung"] .shout-lg-fx,
+.shout-message-row.is-prisoner-censored[data-store-frame="alliance-song-hung"] .shout-lg-fx,
+.shout-message-row.is-prisoner-censored[data-store-frame="alliance-tinh-tu"] .shout-lg-fx,
+.shout-message-row[data-store-frame="alliance-anh-duong"] .shout-message-bubble.is-prisoner-censored .shout-lg-fx,
+.shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-message-bubble.is-prisoner-censored .shout-lg-fx,
+.shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-message-bubble.is-prisoner-censored .shout-lg-fx,
+.shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-message-bubble.is-prisoner-censored .shout-lg-fx,
+.shout-message-row[data-store-frame="alliance-song-hung"] .shout-message-bubble.is-prisoner-censored .shout-lg-fx,
+.shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-message-bubble.is-prisoner-censored .shout-lg-fx,
+.shout-message-row[data-store-frame="alliance-anh-duong"] .shout-message-bubble:has(.shout-image-album.is-stack) .shout-lg-fx,
+.shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-message-bubble:has(.shout-image-album.is-stack) .shout-lg-fx,
+.shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-message-bubble:has(.shout-image-album.is-stack) .shout-lg-fx,
+.shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-message-bubble:has(.shout-image-album.is-stack) .shout-lg-fx,
+.shout-message-row[data-store-frame="alliance-song-hung"] .shout-message-bubble:has(.shout-image-album.is-stack) .shout-lg-fx,
+.shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-message-bubble:has(.shout-image-album.is-stack) .shout-lg-fx,
+[data-hide-frames="true"] .shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-fx,
+[data-hide-frames="true"] .shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-fx,
+[data-hide-frames="true"] .shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-fx,
+[data-hide-frames="true"] .shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-fx,
+[data-hide-frames="true"] .shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-fx,
+[data-hide-frames="true"] .shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-fx {
+  display: none;
+}
+
+@media (forced-colors: active) {
+  .shout-message-row[data-store-frame="alliance-anh-duong"]:not(.is-sonorus):not(.is-prisoner-censored)
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+  .shout-message-row[data-store-frame="alliance-nguyet-anh"]:not(.is-sonorus):not(.is-prisoner-censored)
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+  .shout-message-row[data-store-frame="alliance-lua-va-tri"]:not(.is-sonorus):not(.is-prisoner-censored)
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+  .shout-message-row[data-store-frame="alliance-ngoc-rung"]:not(.is-sonorus):not(.is-prisoner-censored)
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+  .shout-message-row[data-store-frame="alliance-song-hung"]:not(.is-sonorus):not(.is-prisoner-censored)
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)),
+  .shout-message-row[data-store-frame="alliance-tinh-tu"]:not(.is-sonorus):not(.is-prisoner-censored)
+    .shout-message-bubble:not(.is-prisoner-censored):not(:has(.shout-image-album.is-stack)) {
+    border: 2px solid Highlight;
+    background: Canvas;
+    color: CanvasText;
+    box-shadow: none;
+  }
+
+  .shout-message-row[data-store-frame="alliance-anh-duong"] .shout-lg-fx,
+  .shout-message-row[data-store-frame="alliance-nguyet-anh"] .shout-lg-fx,
+  .shout-message-row[data-store-frame="alliance-lua-va-tri"] .shout-lg-fx,
+  .shout-message-row[data-store-frame="alliance-ngoc-rung"] .shout-lg-fx,
+  .shout-message-row[data-store-frame="alliance-song-hung"] .shout-lg-fx,
+  .shout-message-row[data-store-frame="alliance-tinh-tu"] .shout-lg-fx {
+    display: none;
+  }
+}

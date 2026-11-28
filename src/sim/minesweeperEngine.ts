@@ -596,6 +596,9 @@ export class MinesweeperEngine {
   }
 
   public applyPhoenixTalisman(): { ok: boolean; msg: string; won: boolean } {
+    if (this.status === 'won') {
+      return { ok: false, msg: 'Màn Dò Mìn đã hoàn thành!', won: true };
+    }
     if (this.talismanUsed) {
       return {
         ok: false,
@@ -656,6 +659,7 @@ export class MinesweeperEngine {
   }
 
   public applyApplePieBoost(): { ok: boolean; revived: boolean } {
+    if (this.status === 'won') return { ok: false, revived: false };
     let revived = false;
     if (this.status === 'lost' && this.explodedCell) {
       const exp = this.grid[this.explodedCell.r]?.[this.explodedCell.c];

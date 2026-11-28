@@ -1056,10 +1056,14 @@ export function headerRefreshHeaderClock(hud: GameHUD): void {
     };
     const lblClock = hud.root.querySelector('#lblClock') as HTMLElement | null;
     if (lblClock) {
-      const speedBadge = hud.sim.simSpeed === 2 ? ' <span class="speed-mini-tag">2×</span>' : '';
-      lblClock.innerHTML = `<span>${hh}:${mm}</span>${speedBadge}`; // HPVN: no weather emoji; the weather is named in the label and in its popover
-      lblClock.setAttribute('aria-label', `${hh}:${mm} · ${weather.labelVi}`);
-      lblClock.title = weather.labelVi;
+      const clockSig = `${hh}:${mm}|${hud.sim.simSpeed}|${weather.labelVi}`;
+      if (lblClock.dataset.clockSig !== clockSig) {
+        lblClock.dataset.clockSig = clockSig;
+        const speedBadge = hud.sim.simSpeed === 2 ? ' <span class="speed-mini-tag">2×</span>' : '';
+        lblClock.innerHTML = `<span>${hh}:${mm}</span>${speedBadge}`; // HPVN: no weather emoji; the weather is named in the label and in its popover
+        lblClock.setAttribute('aria-label', `${hh}:${mm} · ${weather.labelVi}`);
+        lblClock.title = weather.labelVi;
+      }
     }
     if (hud.weatherPopoverOpen) {
       headerRenderWeatherPopover(hud);

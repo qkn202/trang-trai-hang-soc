@@ -258,6 +258,7 @@ export class SeedQuizModalController {
   private ensureActiveLangPackLoaded(lang: QuizLanguageId, autoSpeakWhenReady = false): void {
     if (isLanguageQuizPackLoaded(lang)) return;
     void loadLanguageQuizPack(lang).then((loaded) => {
+      if (!this.isOpen()) return;
       const quiz = this.sim.ensureLanguageQuiz();
       if (quiz.activeLang !== lang) return;
 
@@ -404,13 +405,21 @@ export class SeedQuizModalController {
             ? ` • ⏱️ -${formatDurationCompactVi(outcome.buildReduction.reducedSec)} cho cây đang lớn, thú nuôi & xưởng${outcome.buildReduction.targetName ? `, xây ${outcome.buildReduction.targetName}` : ''}!`
             : ` • 🔨 -${formatDurationCompactVi(outcome.buildReduction.reducedSec)} xây ${outcome.buildReduction.targetName ?? 'công trình'}!`
           : '';
+      const specialtyNote = outcome.specialtyReward
+        ? ` • ${outcome.specialtyReward.badgeLabelVi}!`
+        : '';
       const rankNote =
         outcome.leaderboardRankUp && outcome.leaderboardRankUp.rankUpBy > 0
           ? ` • 🏆 Lên Hạng #${outcome.leaderboardRankUp.newRank} (+${outcome.leaderboardRankUp.rankUpBy} bậc)!`
           : '';
       this.onToast(
-        `🪄 Chuẩn xác thần chú! Nhận +${outcome.seedsAwarded} hạt ${crop.emoji} ${crop.name} (Túi: ${outcome.newSeedCount} hạt)${buildNote}${promoNote}${talismanNote}${rankNote}`,
-        outcome.phoenixTalismanAwarded ? '🔥' : '🌱'
+        `🪄 Chuẩn xác thần chú! Nhận +${outcome.seedsAwarded} hạt ${crop.emoji} ${crop.name} (Túi: ${outcome.newSeedCount} hạt)${buildNote}${specialtyNote}${promoNote}${talismanNote}${rankNote}`,
+        outcome.phoenixTalismanAwarded ? '🔥' : outcome.specialtyReward ? '💧' : '🌱'
+      );
+    } else if (outcome.streakShieldConsumed) {
+      this.onToast(
+        `🛡️ Khiên Thu Hoạch đã giữ nguyên chuỗi ${outcome.newStreak} câu đúng cho bạn!`,
+        '🛡️'
       );
     }
 
@@ -906,9 +915,15 @@ export class SeedQuizModalController {
                 : 'word_flashcard');
 
     const heroSprite = ch.heroSpriteSrc ?? '/game/trang-trai-hang-soc/sprites/ui_icon_seed_sack.webp';
+    const isMultiWordSentencePrompt =
+      ch.format === 'sentence_builder' &&
+      Boolean(ch.expectedSentenceTokens && ch.expectedSentenceTokens.length >= 2) &&
+      Boolean(ch.stemText && ch.stemText !== ch.heroShortVi);
     const heroWord = ch.heroWord ?? ch.stemText;
     const heroPh = ch.heroPhonetic ?? ch.stemPhonetic ?? '';
-    const heroShortVi = ch.heroShortVi ?? formatShortKidMeaningVi(ch.translationVi);
+    const heroShortVi = isMultiWordSentencePrompt
+      ? ch.stemText
+      : (ch.heroShortVi ?? formatShortKidMeaningVi(ch.translationVi));
 
     let heroBannerHtml = '';
     if (gameKind === 'audio_listening') {
@@ -1131,9 +1146,14 @@ export class SeedQuizModalController {
     outcome: QuizAttemptOutcome & { newSeedCount: number; cropName: string }
   ): string {
     const seedCount = this.sim.getSeedCount(this.targetCropId);
-    const heroWord = ch.heroWord ?? ch.fullSentence;
-    const heroPh = ch.heroPhonetic ?? ch.fullPhonetic;
-    const heroShortVi = ch.heroShortVi ?? formatShortKidMeaningVi(ch.translationVi);
+    const isMultiWordSentence =
+      ch.format === 'sentence_builder' &&
+      Boolean(ch.expectedSentenceTokens && ch.expectedSentenceTokens.length >= 2);
+    const heroWord = isMultiWordSentence ? ch.fullSentence : (ch.heroWord ?? ch.fullSentence);
+    const heroPh = isMultiWordSentence ? ch.fullPhonetic : (ch.heroPhonetic ?? ch.fullPhonetic);
+    const heroShortVi = isMultiWordSentence
+      ? ch.translationVi
+      : (ch.heroShortVi ?? formatShortKidMeaningVi(ch.translationVi));
 
     return `
       <div class="sq-explain-card ${outcome.correct ? 'is-pass' : 'is-review'}">
@@ -1415,12 +1435,17 @@ export class SeedQuizModalController {
       if (!this.challenge || this.answeredOutcome) return;
       const expected = this.challenge.expectedSentenceTokens ?? [];
       const tokens = this.challenge.shuffledTokens ?? [];
-      // Remove any wrong trailing tiles first
-      while (this.placedTokenIndices.length > 0) {
-        const lastSlot = this.placedTokenIndices.length - 1;
-        const lastTok = tokens.find((t) => t.idx === this.placedTokenIndices[lastSlot]);
-        if (lastTok?.text === expected[lastSlot]) break;
-        this.placedTokenIndices.pop();
+      // Scan forward from slot 0 and truncate at the first wrong tile so earlier mistakes never deadlock Hint
+      let firstMismatch = this.placedTokenIndices.length;
+      for (let i = 0; i < this.placedTokenIndices.length; i++) {
+        const tok = tokens.find((t) => t.idx === this.placedTokenIndices[i]);
+        if (tok?.text !== expected[i]) {
+          firstMismatch = i;
+          break;
+        }
+      }
+      if (firstMismatch < this.placedTokenIndices.length) {
+        this.placedTokenIndices.length = firstMismatch;
       }
       const nextSlot = this.placedTokenIndices.length;
       if (nextSlot < expected.length) {

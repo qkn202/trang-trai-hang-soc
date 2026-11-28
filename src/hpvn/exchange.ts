@@ -30,6 +30,7 @@ const DISCIPLINE_LABEL_VI: Record<HouseCupDisciplineId, string> = {
   chess: 'Bắn Cá',
   blocks: 'Sinh Vật',
   jigsaw: 'Tranh Ghép',
+  derby: 'Derby Nông Trại',
 };
 const WEEKDAY_LABEL_VI = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'] as const;
 
@@ -183,10 +184,17 @@ const loadFarmWallet = () =>
 let pendingExchange: { galleons: number; requestId: string } | null = null;
 let pendingReverseExchange: { sickles: number; requestId: string } | null = null;
 
+function nextExchangeRequestId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
 /** The page names only a pack and a request id; the server prices it, debits the wallet and sends the Sickles as an
  * inbox entry (applied once). */
 export async function exchangeSickles(galleons: number): Promise<{ balance: number; sickle: number }> {
-  if (pendingExchange?.galleons !== galleons) pendingExchange = { galleons, requestId: crypto.randomUUID() };
+  if (pendingExchange?.galleons !== galleons) pendingExchange = { galleons, requestId: nextExchangeRequestId() };
   const result = await request<{ balance: number; sickle: number; inbox?: unknown[] }>('farm', { op: 'sickles', ...pendingExchange });
   pendingExchange = null;
   deliverInbox(result?.inbox);
@@ -197,15 +205,20 @@ export async function exchangeSickles(galleons: number): Promise<{ balance: numb
  * Reverse exchange (Sickle → HPVN Galleons): flushes the latest farm save first, then asks the server
  * to atomically verify Sickle integrity + daily/weekly caps, deduct Sickles in Firestore, and credit Galleons.
  */
-export async function exchangeGalleons(sickles: number): Promise<ReverseExchangeResult> {
+export async function exchangeGalleons(
+  sickles: number,
+  opts?: { deferInbox?: boolean }
+): Promise<ReverseExchangeResult> {
   const safeSickles = Math.max(1, Math.floor(Number(sickles) || 0));
   if (pendingReverseExchange?.sickles !== safeSickles) {
-    pendingReverseExchange = { sickles: safeSickles, requestId: crypto.randomUUID() };
+    pendingReverseExchange = { sickles: safeSickles, requestId: nextExchangeRequestId() };
   }
   await flushFarmSave();
   const result = await request<ReverseExchangeResult>('farm', { op: 'galleons', ...pendingReverseExchange });
   pendingReverseExchange = null;
-  deliverInbox(result?.inbox);
+  if (!opts?.deferInbox) {
+    deliverInbox(result?.inbox);
+  }
   return result;
 }
 
@@ -638,7 +651,7 @@ export function renderFarmExchange(box: HTMLElement, hud: GameHUD): void {
           return;
         }
         box.querySelectorAll<HTMLButtonElement>('[data-pack], [data-reverse-pack]').forEach((b) => { b.disabled = true; });
-        exchangeGalleons(packSickles).then(
+        exchangeGalleons(packSickles, { deferInbox: true }).then(
           (res) => {
             const deducted = Math.max(0, Math.floor(Number(res?.sicklesDeducted) || packSickles));
             const curSickles = Math.max(0, Math.floor(hud.sim.state.galleons ?? 0));
@@ -647,6 +660,7 @@ export function renderFarmExchange(box: HTMLElement, hud: GameHUD): void {
                 ? Math.max(0, Math.min(curSickles, Math.floor(res.remainingSickles)))
                 : Math.max(0, curSickles - deducted);
             hud.sim.state.galleons = nextSickles;
+            deliverInbox(res?.inbox);
             hud.sim.saveToStorage();
             hud.refreshAll();
             const outGal = Math.max(

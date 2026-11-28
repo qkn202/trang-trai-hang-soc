@@ -136,6 +136,62 @@ const CLASSIC_SHIFT_CYCLE: ReadonlyArray<{
   { mode: 'split_v', badgeVi: '⬆️⬇️ Tách Đỉnh Đáy' },
 ];
 
+const ONET_SHIFT_BADGE_BY_MODE: Record<OnetShiftMode, string> = {
+  none: '⏹️ Đứng Yên',
+  down: '⬇️ Rơi Xuống',
+  up: '⬆️ Dồn Lên',
+  left: '⬅️ Dồn Trái',
+  right: '➡️ Dồn Phải',
+  center_h: '➡️⬅️ Gom Tâm Ngang',
+  split_h: '⬅️➡️ Tách Hai Biên',
+  center_v: '⬇️⬆️ Gom Tâm Dọc',
+  split_v: '⬆️⬇️ Tách Đỉnh Đáy',
+};
+
+const ONET_SHIFT_TRANSPOSE_MAP: Record<OnetShiftMode, OnetShiftMode> = {
+  none: 'none',
+  down: 'right',
+  up: 'left',
+  left: 'up',
+  right: 'down',
+  center_h: 'center_v',
+  split_h: 'split_v',
+  center_v: 'center_h',
+  split_v: 'split_h',
+};
+
+const ONET_SHIFT_ROTATE_CW_MAP: Record<OnetShiftMode, OnetShiftMode> = {
+  none: 'none',
+  down: 'left',
+  left: 'up',
+  up: 'right',
+  right: 'down',
+  center_h: 'center_v',
+  center_v: 'center_h',
+  split_h: 'split_v',
+  split_v: 'split_h',
+};
+
+/**
+ * Ánh xạ hướng trượt/rơi trong hệ toạ độ engine sang hướng hiển thị thực tế trên màn hình
+ * khi bàn cờ bị chuyển vị (mobile dọc `dr = c, dc = r`) hoặc xoay góc 90° theo chiều kim đồng hồ.
+ */
+export function getVisualOnetShiftSpec(
+  mode: OnetShiftMode,
+  transposed: boolean,
+  boardQuarterTurnsCW = 0
+): { mode: OnetShiftMode; badgeVi: string } {
+  let visualMode: OnetShiftMode = transposed ? ONET_SHIFT_TRANSPOSE_MAP[mode] : mode;
+  const turns = ((Math.round(boardQuarterTurnsCW) % 4) + 4) % 4;
+  for (let i = 0; i < turns; i++) {
+    visualMode = ONET_SHIFT_ROTATE_CW_MAP[visualMode];
+  }
+  return {
+    mode: visualMode,
+    badgeVi: ONET_SHIFT_BADGE_BY_MODE[visualMode],
+  };
+}
+
 const ONET_CHAPTER_LOCATIONS_VI: readonly string[] = [
   'Bãi Cỏ Bông Xù Hang Sóc',
   'Trại Chăm Thú Bác Hagrid',
@@ -778,10 +834,10 @@ export class CreatureOnetEngine {
         break;
       }
       case 'center_v': {
-        const midTopEnd = Math.floor(this.rows / 2);
+        const midTopEnd = Math.ceil(this.rows / 2) - 1;
         const midBotStart = midTopEnd + 1;
         for (let c = 0; c < this.cols; c++) {
-          compactColSegment(c, 0, midTopEnd, true);
+          if (midTopEnd >= 0) compactColSegment(c, 0, midTopEnd, true);
           if (midBotStart < this.rows) compactColSegment(c, midBotStart, this.rows - 1, false);
         }
         break;

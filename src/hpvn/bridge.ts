@@ -1,4 +1,10 @@
-import { applyHouseCup, getActiveHouseCupWeekKey, invalidateHouseCupCache } from './houseCup';
+import {
+  applyHouseCup,
+  getActiveHouseCupWeekKey,
+  HOUSE_CUP_DERBY_MAX_WEEKLY_MEMBER_POINTS,
+  invalidateHouseCupCache,
+} from './houseCup';
+import type { ProofOfPlayEnvelope } from '../sim/proofOfPlay';
 
 // HPVN Game Zone bridge: the member comes from the parent's identity handoff (never a typed name) and the farm
 // is kept by the HPVN server through the parent page (this frame never touches Firebase or another host).
@@ -80,19 +86,25 @@ function buildLocalCupStub() {
   };
   const house = houseMap[String(identity?.house || '').toLowerCase()] ?? null;
   const disciplines = {
-    match3: { Gryffindor: 420, Ravenclaw: 1860, Hufflepuff: 380, Slytherin: 540 },
-    caro: { Gryffindor: 260, Ravenclaw: 140, Hufflepuff: 220, Slytherin: 180 },
-    sudoku: { Gryffindor: 240, Ravenclaw: 200, Hufflepuff: 300, Slytherin: 160 },
-    chess: { Gryffindor: 320, Ravenclaw: 180, Hufflepuff: 200, Slytherin: 280 },
-    blocks: { Gryffindor: 180, Ravenclaw: 220, Hufflepuff: 260, Slytherin: 300 },
-    jigsaw: { Gryffindor: 220, Ravenclaw: 160, Hufflepuff: 240, Slytherin: 140 },
+    match3: { Gryffindor: 185, Ravenclaw: 165, Hufflepuff: 120, Slytherin: 145 },
+    caro: { Gryffindor: 150, Ravenclaw: 110, Hufflepuff: 105, Slytherin: 135 },
+    sudoku: { Gryffindor: 130, Ravenclaw: 140, Hufflepuff: 115, Slytherin: 125 },
+    chess: { Gryffindor: 160, Ravenclaw: 125, Hufflepuff: 95, Slytherin: 145 },
+    blocks: { Gryffindor: 120, Ravenclaw: 135, Hufflepuff: 110, Slytherin: 155 },
+    jigsaw: { Gryffindor: 135, Ravenclaw: 115, Hufflepuff: 100, Slytherin: 110 },
+    derby: { Gryffindor: 145, Ravenclaw: 130, Hufflepuff: 175, Slytherin: 120 },
   };
   return {
     weekKey: 'Local',
-    mode: 'medals',
+    mode: 'f2',
     unlimited: true,
-    medalPoints: [100, 75, 50, 25],
     disciplines,
+    allianceBalance: {
+      windowWeeks: 3,
+      rosterFloor: 4,
+      multiplierCap: 2.5,
+      houseActiveAvg: { Gryffindor: 8, Slytherin: 7, Ravenclaw: 5, Hufflepuff: 3 },
+    },
     house,
     memberTodayPoints: 0,
     memberDailyCap: 0,
@@ -141,14 +153,123 @@ export function request<T = unknown>(action: string, data: object = {}): Promise
 // Nothing is kept on the device (no draft, no points): an unsent change lives only in this page until it is saved.
 // `cup: 2` tells the server this page takes house points and «Cúp Đợt» rewards from it (src/hpvn/houseCup.ts).
 type Status = 'saved' | 'error' | 'replaced' | 'too-big';
+export type SaveErrorClass = 'replaced' | 'too-big' | 'retryable';
 export const MAX_SAVE_BYTES = 1_000_000; // ponytail: one Firestore doc (1 MiB, same cap in the trangTraiHangSoc callable); split buildings into their own docs if farms outgrow it
+const MAX_AUTO_RETRIES = 4;
+const MAX_PENDING_POPS = 16;
+const MAX_POPS_PER_SAVE = 8;
+
 let latest: string | null = null;
 let sent: string | null = null;
 let timer = 0;
+let retryTimer = 0;
+let retryAttempt = 0;
 let stopped = false;
 let flight: Promise<void> = Promise.resolve();
 export let onSaveStatus: (status: Status) => void = () => {};
 export const setSaveStatusListener = (fn: (status: Status) => void) => { onSaveStatus = fn; };
+
+/** Phân loại lỗi lưu game theo mã lỗi có cấu trúc từ máy chủ (ưu tiên `error.code`, dự phòng regex thông báo). */
+export function classifySaveError(error: Partial<Error> & { code?: string } | null | undefined): SaveErrorClass {
+  const code = String(error?.code ?? '').trim().toUpperCase().replace(/^FUNCTIONS\//, '');
+  if (
+    code === 'REPLACED' ||
+    code === 'SESSION_REPLACED' ||
+    code === 'CONFLICT' ||
+    code === 'FAILED_PRECONDITION' ||
+    code === 'ABORTED'
+  ) {
+    return 'replaced';
+  }
+  if (code === 'TOO_LARGE' || code === 'PAYLOAD_TOO_LARGE' || code === 'INVALID_ARGUMENT_TOO_LARGE') {
+    return 'too-big';
+  }
+  const msg = String(error?.message ?? '');
+  if (/nơi khác|thiết bị khác|session.?replaced/i.test(msg)) return 'replaced';
+  if (/quá lớn|too.?large|max_save_bytes|1\s*mib/i.test(msg)) return 'too-big';
+  return 'retryable';
+}
+
+/** Độ trễ tự động thử lưu lại theo cấp số nhân (4s -> 8s -> 16s -> 32s -> tối đa 60s). */
+export function computeSaveRetryDelayMs(attempt: number): number {
+  const safe = Math.max(0, Math.min(4, Math.floor(Number.isFinite(attempt) ? attempt : 0)));
+  return Math.min(60_000, 4_000 * (2 ** safe));
+}
+
+// Hàng đợi Proof-of-Play trong RAM (tối đa 16 gói nén < 1.2 KB/gói, khử trùng theo nonce, chỉ giữ tạm trong bộ nhớ).
+const pendingProofOfPlays: ProofOfPlayEnvelope[] = [];
+
+export function enqueueProofOfPlay(envelope: ProofOfPlayEnvelope | undefined | null): boolean {
+  if (
+    !envelope ||
+    envelope.v !== 1 ||
+    typeof envelope.nonce !== 'string' ||
+    envelope.nonce.length < 4 ||
+    typeof envelope.packedStepsHex !== 'string' ||
+    envelope.packedStepsHex.length === 0
+  ) {
+    return false;
+  }
+  if (pendingProofOfPlays.some((e) => e.nonce === envelope.nonce)) {
+    return false;
+  }
+  pendingProofOfPlays.push(envelope);
+  while (pendingProofOfPlays.length > MAX_PENDING_POPS) {
+    pendingProofOfPlays.shift();
+  }
+  return true;
+}
+
+export function getPendingProofOfPlayCount(): number {
+  return pendingProofOfPlays.length;
+}
+
+export function clearPendingProofOfPlaysForTest(): void {
+  pendingProofOfPlays.length = 0;
+}
+
+// Diagnostic telemetry rate-limiter (tối đa 5 báo cáo / 60 giây, khử trùng theo chữ ký lỗi)
+const diagRecentTimestamps: number[] = [];
+const diagSeenAt = new Map<string, number>();
+
+export function shouldAcceptClientDiagnostic(signature: string, nowMs = Date.now()): boolean {
+  const windowMs = 60_000;
+  while (diagRecentTimestamps.length > 0 && nowMs - diagRecentTimestamps[0] > windowMs) {
+    diagRecentTimestamps.shift();
+  }
+  for (const [k, ts] of diagSeenAt) {
+    if (nowMs - ts > windowMs) diagSeenAt.delete(k);
+  }
+  if (diagRecentTimestamps.length >= 5) return false;
+  if (diagSeenAt.has(signature)) return false;
+  diagRecentTimestamps.push(nowMs);
+  diagSeenAt.set(signature, nowMs);
+  return true;
+}
+
+export function resetClientDiagnosticStateForTest(): void {
+  diagRecentTimestamps.length = 0;
+  diagSeenAt.clear();
+}
+
+export function reportClientDiagnostic(
+  kind: 'error' | 'unhandledrejection' | 'webgl_lost',
+  message: string,
+  detail?: string
+): void {
+  const cleanMsg = String(message || 'unknown').slice(0, 240);
+  const sig = `${kind}:${cleanMsg}`;
+  if (!shouldAcceptClientDiagnostic(sig)) return;
+  if (!identity || isStandaloneLocal) return;
+  void request('farm-diag', {
+    kind,
+    message: cleanMsg,
+    detail: detail ? String(detail).slice(0, 400) : undefined,
+    ts: Date.now(),
+  }).catch(() => {
+    // Host shell may not handle farm-diag yet — swallow cleanly
+  });
+}
 
 // Helps from other members (src/hpvn/inbox.ts) ride in the load and save replies; held until the farm is running.
 let onInbox: ((entries: unknown[]) => void) | null = null;
@@ -174,33 +295,158 @@ export async function loadFarm(): Promise<string | null> {
   return sent;
 }
 
+export interface FarmDerbySyncPayload {
+  weekKey: string;
+  points: number;
+  tasksCompleted: number;
+}
+
+const MAX_FARM_DERBY_SYNC_TASKS = 8;
+
+/**
+ * Trích xuất bản tóm tắt Derby tuần (`farmDerby`) từ chuỗi JSON lưu nông trại để đính kèm vào `op: 'save'`.
+ * Tự kẹp điểm về `0..2500` và số nhiệm vụ về `0..8`; trả `null` an toàn khi save chưa có `weeklyDerby`.
+ */
+export function extractFarmDerbySyncPayload(rawJson: string): FarmDerbySyncPayload | null {
+  if (typeof rawJson !== 'string' || !rawJson) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawJson);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+  const derby = (parsed as { weeklyDerby?: unknown }).weeklyDerby;
+  if (!derby || typeof derby !== 'object') return null;
+  const d = derby as Record<string, unknown>;
+  const weekKey = typeof d.weekKey === 'string' ? d.weekKey.trim() : '';
+  if (!weekKey || weekKey.length > 32) return null;
+  const hasPoints =
+    (typeof d.points === 'number' || (typeof d.points === 'string' && d.points.trim() !== '')) &&
+    Number.isFinite(Number(d.points));
+  const hasTasks =
+    (typeof d.tasksCompleted === 'number' ||
+      (typeof d.tasksCompleted === 'string' && d.tasksCompleted.trim() !== '')) &&
+    Number.isFinite(Number(d.tasksCompleted));
+  if (!hasPoints && !hasTasks) return null;
+  const points = hasPoints
+    ? Math.max(0, Math.min(HOUSE_CUP_DERBY_MAX_WEEKLY_MEMBER_POINTS, Math.floor(Number(d.points))))
+    : 0;
+  const tasksCompleted = hasTasks
+    ? Math.max(0, Math.min(MAX_FARM_DERBY_SYNC_TASKS, Math.floor(Number(d.tasksCompleted))))
+    : 0;
+  return { weekKey, points, tasksCompleted };
+}
+
+let inFlightPayload: string | null = null;
+
 function flush(): Promise<void> {
   clearTimeout(timer); timer = 0;
-  if (stopped || latest === null || latest === sent) return flight;
+  clearTimeout(retryTimer); retryTimer = 0;
+  if (stopped || latest === null || latest === sent || latest === inFlightPayload) return flight;
   const save = latest;
   if (new TextEncoder().encode(save).length > MAX_SAVE_BYTES) { onSaveStatus('too-big'); return flight; }
-  flight = flight.then(() => request<{ inbox?: unknown[]; cup?: unknown }>('farm', { op: 'save', save, cup: 2 })).then((result) => {
-    sent = save;
-    onSaveStatus('saved');
-    if (result?.cup && typeof result.cup === 'object') {
-      applyHouseCup(result.cup);
-    } else {
-      invalidateHouseCupCache();
-    }
-    deliverInbox(result?.inbox);
-  }, (error: Error & { code?: string }) => {
-    if (/nơi khác|thiết bị khác/.test(error.message)) { stopped = true; onSaveStatus('replaced'); } else onSaveStatus('error');
-  });
+  inFlightPayload = save;
+  const proofsBatch = pendingProofOfPlays.slice(0, MAX_POPS_PER_SAVE);
+  const farmDerby = extractFarmDerbySyncPayload(save);
+  flight = flight
+    .then(() => {
+      if (stopped) return null;
+      const payload = {
+        op: 'save',
+        save,
+        cup: 2,
+        ...(proofsBatch.length > 0 ? { proofOfPlays: proofsBatch } : {}),
+        ...(farmDerby ? { farmDerby } : {}),
+      };
+      return request<{ inbox?: unknown[]; cup?: unknown }>('farm', payload);
+    })
+    .then((result) => {
+      if (inFlightPayload === save) inFlightPayload = null;
+      if (!result || stopped) return;
+      sent = save;
+      retryAttempt = 0;
+      if (proofsBatch.length > 0) {
+        const ackNonces = new Set(proofsBatch.map((p) => p.nonce));
+        for (let i = pendingProofOfPlays.length - 1; i >= 0; i--) {
+          if (ackNonces.has(pendingProofOfPlays[i].nonce)) {
+            pendingProofOfPlays.splice(i, 1);
+          }
+        }
+      }
+      onSaveStatus('saved');
+      if (result?.cup && typeof result.cup === 'object') {
+        applyHouseCup(result.cup);
+      } else {
+        invalidateHouseCupCache();
+      }
+      deliverInbox(result?.inbox);
+      // Nếu người chơi tiếp tục thao tác khi bản trước đang gửi, xếp lịch lưu nối tiếp ngay
+      if (latest !== null && latest !== sent && !timer) {
+        timer = window.setTimeout(() => { void flush(); }, 2_000);
+      }
+    }, (error: Error & { code?: string }) => {
+      if (inFlightPayload === save) inFlightPayload = null;
+      const kind = classifySaveError(error);
+      if (kind === 'replaced') {
+        stopped = true;
+        clearTimeout(retryTimer); retryTimer = 0;
+        onSaveStatus('replaced');
+      } else if (kind === 'too-big') {
+        clearTimeout(retryTimer); retryTimer = 0;
+        onSaveStatus('too-big');
+      } else {
+        onSaveStatus('error');
+        if (!stopped && latest !== null && latest !== sent && retryAttempt < MAX_AUTO_RETRIES) {
+          const delayMs = computeSaveRetryDelayMs(retryAttempt);
+          retryAttempt += 1;
+          clearTimeout(retryTimer);
+          retryTimer = window.setTimeout(() => {
+            retryTimer = 0;
+            void flush();
+          }, delayMs);
+        }
+      }
+    });
   return flight;
+}
+
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('online', () => {
+    if (!stopped && latest !== null && latest !== sent) {
+      retryAttempt = 0;
+      clearTimeout(retryTimer); retryTimer = 0;
+      void flush();
+    }
+  });
 }
 
 /** Called by every save of the simulation; the server gets at most one write every 5 s, and at once when the page hides. */
 // ponytail: 5 s debounce = ≤ 12 writes/min a member; batch only the changed buildings if Firestore cost grows
 export function queueFarmSave(json: string) {
   latest = json;
+  retryAttempt = 0;
   if (!timer) timer = window.setTimeout(() => { void flush(); }, 5_000);
 }
 export const flushFarmSave = flush;
+
+let gpuBeforeCaptureHook: (() => void) | null = null;
+
+/**
+ * Registers a synchronous pre-capture callback so WebGL2 with `preserveDrawingBuffer: false`
+ * can redraw a fresh frame immediately before screenshots / Floo postcards read `#gpuWorldCanvas`.
+ */
+export function registerGpuBeforeCaptureHook(fn: (() => void) | null): void {
+  gpuBeforeCaptureHook = fn;
+}
+
+export function prepareGpuCanvasForCapture(): void {
+  try {
+    gpuBeforeCaptureHook?.();
+  } catch {
+    // Non-fatal: fallback to existing canvas pixels if capture hook throws
+  }
+}
 
 /** «Khoe lên Mạng Floo»: a ≤ 1080 px picture of the farm prefills Floo (the member presses send). */
 export async function shareFarmPhoto(source: HTMLCanvasElement, text: string): Promise<void> {
@@ -211,7 +457,10 @@ export async function shareFarmPhoto(source: HTMLCanvasElement, text: string): P
   const ctx = canvas.getContext('2d')!;
   // WebGL2 renderer: the ground is on #gpuWorldCanvas under #gameCanvas (both fill the viewport)
   const gpu = source.id === 'gameCanvas' ? (document.getElementById('gpuWorldCanvas') as HTMLCanvasElement | null) : null;
-  if (gpu && gpu.style.display !== 'none' && gpu.width > 0 && gpu.height > 0) ctx.drawImage(gpu, 0, 0, canvas.width, canvas.height);
+  if (gpu && gpu.style.display !== 'none' && gpu.width > 0 && gpu.height > 0) {
+    prepareGpuCanvasForCapture();
+    ctx.drawImage(gpu, 0, 0, canvas.width, canvas.height);
+  }
   ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
   const encode = (type: string) => new Promise<Blob | null>((done) => canvas.toBlob(done, type, 0.85));
   let image = await encode('image/webp');

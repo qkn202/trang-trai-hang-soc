@@ -759,7 +759,8 @@ export function entitiesDrawWeatherParticles(self: IsometricRenderer,
     isNight: boolean,
     festival: string,
     weather: WeatherForecastSlot,
-    now: number
+    now: number,
+    skipGpuHandledWeather = false
   ): void {
     const ctx = self.ctx;
 
@@ -835,8 +836,9 @@ export function entitiesDrawWeatherParticles(self: IsometricRenderer,
     }
 
     // 3. Snowflakes, Winter Crystal Dust, Sunlit Dandelion Pollen Motes & Golden Nighttime Fireflies
+    // In WebGL2 mode, Pass 6 already renders GPU instanced snowflakes & HDR fireflies — skip duplicate Canvas2D radial gradients!
     const mode = sim.state.settings.weatherOverride;
-    if (self.reducedMotion) return;
+    if (self.reducedMotion || skipGpuHandledWeather) return;
 
     const isWinter =
       typeof sim.isWinterMainMapActive === 'function' && sim.isWinterMainMapActive();

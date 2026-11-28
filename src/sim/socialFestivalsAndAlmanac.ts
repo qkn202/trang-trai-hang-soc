@@ -777,6 +777,7 @@ export function claimSeasonalFestivalTask(
     targetState.match3.totalStarsEarned += foundTask.rewardStars;
     parts.push(`+${foundTask.rewardStars} 🌟`);
   }
+  sim.syncClaimedHomePrimitivesToVisitState();
   sim.addHarvestFeastPoints(20);
   sim.onRewardFly?.('galleons', foundTask.rewardSickle);
   sim.audio.playLevelUp();
@@ -808,6 +809,7 @@ export function claimDailyTetLiXi(sim: ParkSimulation, nowMs = Date.now()): { ok
   targetState.morningDewPhials = (targetState.morningDewPhials ?? 0) + 1;
   const social = sim.ensureNeighborSocial();
   social.friendshipTokens += 1;
+  sim.syncClaimedHomePrimitivesToVisitState();
   sim.addXp(15);
   sim.onRewardFly?.('galleons', rewardSickle);
   sim.audio.playLevelUp();
@@ -1003,6 +1005,7 @@ export function claimAlmanacChapterReward(
     st.galleons += 190;
     st.match3.stars += 2;
     st.match3.totalStarsEarned += 2;
+    sim.syncClaimedHomePrimitivesToVisitState();
     sim.onRewardFly?.('galleons', 190);
     sim.onRewardFly?.('stars', 2);
     sim.audio.playLevelUp();
@@ -1043,6 +1046,7 @@ export function claimAlmanacChapterReward(
   st.galleons += rewardSickle;
   st.match3.stars += 1;
   st.match3.totalStarsEarned += 1;
+  sim.syncClaimedHomePrimitivesToVisitState();
   sim.onRewardFly?.('galleons', rewardSickle);
   sim.onRewardFly?.('stars', 1);
   sim.audio.playLevelUp();

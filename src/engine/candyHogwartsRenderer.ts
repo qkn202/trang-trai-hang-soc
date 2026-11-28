@@ -1749,6 +1749,65 @@ export class CandyHogwartsBoardRenderer {
       this.drawSugarKeyBadge(ctx, cx, cy, drawSize, now);
     }
 
+    if (
+      !piece.special &&
+      !piece.isIngredient &&
+      typeof document !== 'undefined' &&
+      document.documentElement?.dataset?.colorblind &&
+      document.documentElement.dataset.colorblind !== 'none'
+    ) {
+      this.drawColorblindGlyph(ctx, piece.color, cx + sSize * 0.24, cy + sSize * 0.24, Math.max(5.5, sSize * 0.13));
+    }
+
+    ctx.restore();
+  }
+
+  private drawColorblindGlyph(
+    ctx: CanvasRenderingContext2D,
+    colorId: number,
+    gx: number,
+    gy: number,
+    r: number
+  ): void {
+    ctx.save();
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+    ctx.beginPath();
+    ctx.arc(gx, gy, r * 1.15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.4;
+    const shape = ((colorId % 6) + 6) % 6;
+    ctx.beginPath();
+    if (shape === 0) {
+      ctx.arc(gx, gy, r * 0.56, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (shape === 1) {
+      ctx.moveTo(gx, gy - r * 0.68);
+      ctx.lineTo(gx + r * 0.65, gy + r * 0.52);
+      ctx.lineTo(gx - r * 0.65, gy + r * 0.52);
+      ctx.closePath();
+      ctx.fill();
+    } else if (shape === 2) {
+      ctx.rect(gx - r * 0.52, gy - r * 0.52, r * 1.04, r * 1.04);
+      ctx.fill();
+    } else if (shape === 3) {
+      ctx.moveTo(gx, gy - r * 0.7);
+      ctx.lineTo(gx + r * 0.62, gy);
+      ctx.lineTo(gx, gy + r * 0.7);
+      ctx.lineTo(gx - r * 0.62, gy);
+      ctx.closePath();
+      ctx.fill();
+    } else if (shape === 4) {
+      ctx.moveTo(gx - r * 0.58, gy);
+      ctx.lineTo(gx + r * 0.58, gy);
+      ctx.moveTo(gx, gy - r * 0.58);
+      ctx.lineTo(gx, gy + r * 0.58);
+      ctx.stroke();
+    } else {
+      ctx.arc(gx, gy, r * 0.56, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 

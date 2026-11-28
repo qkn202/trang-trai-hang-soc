@@ -12,7 +12,8 @@ import {
   RoadsideStandState,
 } from '../types/game';
 
-export const ROADSIDE_STAND_SLOT_COUNT = 6;
+export const ROADSIDE_STAND_SLOT_COUNT = 8;
+export const ROADSIDE_AD_COOLDOWN_MS = 180_000; // Đăng báo Nhật Báo Tiên Tri miễn phí mỗi 3 phút (bán nhanh x3)
 
 const ROADSIDE_BUYERS: ReadonlyArray<{ name: string; emoji: string }> = [
   { name: 'Bà Rosmerta', emoji: '🍺' },
@@ -70,6 +71,7 @@ export function sanitizeRoadsideStandState(
       soldAt: typeof s.soldAt === 'number' && s.soldAt > 0 ? Math.round(s.soldAt) : undefined,
       buyerName: typeof s.buyerName === 'string' ? s.buyerName.slice(0, 40) : undefined,
       buyerEmoji: typeof s.buyerEmoji === 'string' ? s.buyerEmoji.slice(0, 8) : undefined,
+      advertised: Boolean(s.advertised),
     };
   });
   return {
@@ -80,6 +82,10 @@ export function sanitizeRoadsideStandState(
       ? raw.dailyFriendBoughtIds.filter((x): x is string => typeof x === 'string').slice(0, 30)
       : [],
     totalRevenueClaimed: Math.max(0, Math.round(Number(raw.totalRevenueClaimed) || 0)),
+    lastAdPublishedAt:
+      typeof raw.lastAdPublishedAt === 'number' && raw.lastAdPublishedAt > 0
+        ? Math.round(raw.lastAdPublishedAt)
+        : undefined,
   };
 }
 
@@ -111,11 +117,10 @@ export function computeRoadsideUnitPrice(itemId: FarmItemId, tier: RoadsidePrice
   return Math.max(base + 1, Math.round(base * 1.15));
 }
 
-export function getRoadsideSaleWaitMs(unitPrice: number, baseSellValue: number): number {
+export function getRoadsideSaleWaitMs(unitPrice: number, baseSellValue: number, advertised = false): number {
   const ratio = unitPrice / Math.max(1, baseSellValue);
-  if (ratio <= 1.0) return 35_000;
-  if (ratio <= 1.2) return 75_000;
-  return 135_000;
+  const baseMs = ratio <= 1.0 ? 35_000 : ratio <= 1.2 ? 75_000 : 135_000;
+  return advertised ? Math.max(12_000, Math.round(baseMs / 3)) : baseMs;
 }
 
 export function listOnRoadsideStand(
@@ -135,7 +140,7 @@ export function listOnRoadsideStand(
   if (slot.itemId) {
     return { ok: false, msg: 'Ô sạp này đang có hàng hoặc chờ thu tiền!' };
   }
-  const safeQty = Math.max(1, Math.min(5, Math.round(qty)));
+  const safeQty = Math.max(1, Math.min(10, Math.round(qty)));
   const have = sim.getFarmItemCount(itemId);
   const meta = getFarmItemMeta(itemId);
   if (!sim.state.sandboxMode && have < safeQty) {
@@ -152,6 +157,7 @@ export function listOnRoadsideStand(
   slot.soldAt = undefined;
   slot.buyerName = undefined;
   slot.buyerEmoji = undefined;
+  slot.advertised = false;
 
   sim.audio.playPlace();
   sim.saveToStorage();
@@ -169,7 +175,7 @@ export function tickRoadsideStandBuyers(sim: ParkSimulation, nowMs = Date.now(),
   for (const slot of stand.slots) {
     if (!slot.itemId || slot.soldAt) continue;
     const meta = getFarmItemMeta(slot.itemId);
-    const waitMs = getRoadsideSaleWaitMs(slot.unitPrice, meta.sellValue);
+    const waitMs = getRoadsideSaleWaitMs(slot.unitPrice, meta.sellValue, Boolean(slot.advertised));
     if (nowMs - slot.listedAt >= waitMs) {
       const buyer = ROADSIDE_BUYERS[(slot.slotIndex + Math.floor(slot.listedAt / 1000)) % ROADSIDE_BUYERS.length];
       slot.soldAt = nowMs;
@@ -215,6 +221,7 @@ export function claimRoadsideStandSlot(
   slot.soldAt = undefined;
   slot.buyerName = undefined;
   slot.buyerEmoji = undefined;
+  slot.advertised = false;
 
   stand.totalRevenueClaimed = (stand.totalRevenueClaimed ?? 0) + earned;
   sim.state.galleons += earned;
@@ -231,6 +238,44 @@ export function claimRoadsideStandSlot(
     msg: `🪙 Đã thu +${earned} Sickle & +${xp} ⭐ từ lô ${meta.emoji} ${meta.name} tại Sạp Đầu Ngõ!`,
     earnedSickle: earned,
   };
+}
+
+/** Hay Day Roadside Shop: đăng tin rao miễn phí mỗi 3 phút lên Nhật Báo Tiên Tri giúp ô hàng bán nhanh ×3. */
+export function advertiseRoadsideStandSlot(
+  sim: ParkSimulation,
+  slotIndex: number,
+  nowMs = Date.now()
+): { ok: boolean; msg: string; cooldownLeftSec?: number } {
+  if (sim.isVisitingNeighbor) {
+    return { ok: false, msg: 'Chỉ có thể đăng báo cho Sạp Đầu Ngõ tại trang trại nhà!' };
+  }
+  const stand = ensureRoadsideStand(sim.state);
+  const slot = stand.slots[slotIndex];
+  if (!slot || !slot.itemId || slot.soldAt) {
+    return { ok: false, msg: 'Chọn một ô đang bày hàng (chưa bán) để đăng tin lên Nhật Báo Tiên Tri!' };
+  }
+  if (slot.advertised) {
+    return { ok: false, msg: 'Ô hàng này đang được đăng nổi bật trên Nhật Báo Tiên Tri rồi!' };
+  }
+  const lastAt = stand.lastAdPublishedAt ?? 0;
+  if (!sim.state.sandboxMode && lastAt > 0 && nowMs - lastAt < ROADSIDE_AD_COOLDOWN_MS) {
+    const leftSec = Math.ceil((ROADSIDE_AD_COOLDOWN_MS - (nowMs - lastAt)) / 1000);
+    return {
+      ok: false,
+      cooldownLeftSec: leftSec,
+      msg: `Đang chờ số báo kế tiếp — có thể đăng tin miễn phí lại sau ${leftSec}s!`,
+    };
+  }
+  slot.advertised = true;
+  stand.lastAdPublishedAt = nowMs;
+  sim.addXp(5);
+  sim.audio.playOwlHoot?.(0.032);
+  sim.saveToStorage();
+  sim.onUiChange?.();
+  const meta = getFarmItemMeta(slot.itemId);
+  const msg = `📰 Đã đăng rao ${slot.qty} ${meta.emoji} ${meta.name} lên Nhật Báo Tiên Tri — bán chạy gấp 3× (+5 ⭐)!`;
+  sim.onToast?.(msg, '📰');
+  return { ok: true, msg };
 }
 
 export interface NeighborRoadsideOffer {

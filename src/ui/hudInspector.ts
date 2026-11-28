@@ -15,7 +15,6 @@ import {
   getFarmItemIconSrc,
   getFarmItemMeta,
   getSoilTierInfo,
-  getWorkshopMaxQueueSlots,
   getWorkshopStarSpeedMultiplier,
   GOURMET_FEED_QTY,
   PASTURE_ANIMALS,
@@ -470,7 +469,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                   .map((crop) => {
                     const lockedCrop =
                       !hud.sim.state.sandboxMode && hud.sim.state.level < crop.unlockLevel;
-                    const seedCount = hud.sim.getSeedCount(crop.id);
+                    const seedCount = hud.sim.getPlantableSeedCount(crop.id);
                     const curFamily = getCropFamily(crop.id);
                     const rotatedFamily = Boolean(
                       soilEntry && soilEntry.lastFamily !== curFamily
@@ -623,8 +622,30 @@ export function inspectorRenderInspector(hud: GameHUD): void {
               const recipes = hud.sim.getWorkshopRecipesForBuilding(item);
               const queue = b.workshopQueue ?? [];
               const readyGoods = b.readyFarmGoods ?? [];
-              const maxSlots = getWorkshopMaxQueueSlots(b.stars);
-              const starSpeedMult = getWorkshopStarSpeedMultiplier(b.stars);
+              const maxSlots = hud.sim.getEffectiveWorkshopQueueCapacity(b);
+              const nextExtraCost = hud.sim.getNextWorkshopExtraSlotCost(b);
+              const masteryInfo = hud.sim.getWorkshopMastery(item.workshopGroupId);
+              const starSpeedMult = getWorkshopStarSpeedMultiplier(b.stars) * masteryInfo.speedMult;
+              const masteryPct = masteryInfo.nextTarget
+                ? Math.min(100, Math.round((masteryInfo.completedCount / masteryInfo.nextTarget) * 100))
+                : 100;
+
+              const masteryStripHtml = `
+                <div class="quest-card-mini" style="margin-bottom:8px;padding:7px 9px;font-size:12px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <strong>Thông Thạo Xưởng: <span class="hs-insp-stars-inline">${masteryInfo.starsLabel}</span></strong>
+                    <span style="font-weight:700;opacity:0.86;">${
+                      masteryInfo.nextTarget
+                        ? `${masteryInfo.completedCount}/${masteryInfo.nextTarget} mẻ`
+                        : `${masteryInfo.completedCount} mẻ · Tối đa`
+                    }</span>
+                  </div>
+                  <div class="quest-bar" style="height:6px;margin:5px 0 4px;">
+                    <div class="quest-bar-fill" style="width:${masteryPct}%"></div>
+                  </div>
+                  <div style="font-size:11px;opacity:0.84;">${escapeHtml(masteryInfo.perkSummaryVi)}</div>
+                </div>
+              `;
 
               const readyShelfHtml =
                 readyGoods.length > 0
@@ -722,8 +743,24 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                 `;
               }).join('');
 
+              const expandSlotBtnHtml =
+                nextExtraCost !== null && !hud.sim.isVisitingNeighbor
+                  ? `
+                    <button
+                      id="btnInspExpandWsSlot"
+                      type="button"
+                      class="ws-slot-card empty"
+                      title="Mở thêm +1 khay hàng đợi vĩnh viễn (${nextExtraCost} Sickle)"
+                      style="cursor:pointer;border-style:dashed;padding:4px 6px;"
+                    >
+                      <span style="font-size:11px;font-weight:800;line-height:1.2;">+1 Khay<br/>🪙${hud.sim.state.sandboxMode ? 0 : nextExtraCost}</span>
+                    </button>
+                  `
+                  : '';
+
               return `
                 <div class="ws-inspector-board">
+                  ${masteryStripHtml}
                   ${readyShelfHtml}
                   <div class="ws-recipe-grid">${recipeCardsHtml}</div>
                   <div class="ws-oven-strip">
@@ -748,7 +785,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                           : ''
                       }
                     </div>
-                    <div class="ws-queue-slots">${queuedSlotsHtml}</div>
+                    <div class="ws-queue-slots">${queuedSlotsHtml}${expandSlotBtnHtml}</div>
                   </div>
                 </div>
               `;
@@ -975,12 +1012,9 @@ export function inspectorRenderInspector(hud: GameHUD): void {
                       ${
                         hud.sim.state.sandboxMode
                           ? `<button id="btnFinishNowSand" type="button" class="brass-btn" title="Hoàn tất ngay">Xong</button>`
-                          : ''
-                      }
-                      ${
-                        !b.isIndestructible
-                          ? `<button id="btnMoveThis" type="button" class="brass-btn hs-insp-move-btn" title="Dời công trình">Dời</button>`
-                          : ''
+                          : reducibleSec > 0 && (hud.sim.state.timeSand ?? 0) > 0
+                            ? `<button id="btnUseOneSand" type="button" class="brass-btn" title="Dùng 1 Cát Xoay Thời Gian rút ngắn 15 phút">⏳ −15p (×${hud.sim.state.timeSand})</button>`
+                            : ''
                       }
                     </div>
                   </div>
@@ -1227,6 +1261,11 @@ export function inspectorRenderInspector(hud: GameHUD): void {
         hud.sim.speedUpWithTimeSand(b.uid, true);
         inspectorRenderInspector(hud);
       });
+      panel.querySelector('#btnUseOneSand')?.addEventListener('click', () => {
+        hud.sim.speedUpWithTimeSand(b.uid, false);
+        inspectorRenderInspector(hud);
+        hud.refreshHeader();
+      });
       panel.querySelectorAll<HTMLButtonElement>('[data-use-morning-dew]').forEach((btn) => {
         btn.addEventListener('click', () => {
           const res = hud.sim.useMorningDewPhial(b.uid);
@@ -1283,7 +1322,7 @@ export function inspectorRenderInspector(hud: GameHUD): void {
           hud.showToast(res.msg, res.ok ? '🌱' : '🪙');
           if (res.ok) {
             const hasMore =
-              Boolean(hud.sim.state.sandboxMode) || hud.sim.getSeedCount(cid) > 0;
+              Boolean(hud.sim.state.sandboxMode) || hud.sim.getPlantableSeedCount(cid) > 0;
             hud.activeSeedCropId = hasMore ? cid : null;
             hud.seedTrayOpen = false;
             hud.inspectSelection = null;
@@ -1396,6 +1435,12 @@ export function inspectorRenderInspector(hud: GameHUD): void {
       panel.querySelector('#btnInspSpeedSlot')?.addEventListener('click', () => {
         hud.sim.speedUpWorkshopSlot(b.uid);
         inspectorRenderInspector(hud);
+      });
+      panel.querySelector('#btnInspExpandWsSlot')?.addEventListener('click', () => {
+        const res = hud.sim.expandWorkshopQueueSlot(b.uid);
+        if (!res.ok) hud.showToast(res.msg, '🪙');
+        inspectorRenderInspector(hud);
+        hud.refreshHeader();
       });
       panel.querySelector('#btnRepairRide')?.addEventListener('click', () => {
         hud.sim.repairBuilding(b.uid);

@@ -1423,6 +1423,10 @@ dialog::backdrop {
 .yule-event-banner small { margin-top: 2px; max-width: 245px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; opacity: .88; }
 .yule-event-banner-progress { margin-left: auto; min-width: 30px; color: var(--yule-gold-soft, #fde68a); font-size: 12px; font-weight: 900; text-align: right; }
 @media (max-width: 640px) { .yule-event-banner { top: 58px; min-width: 0; width: calc(100vw - 28px); } }
+body:has(#floatingModeBanner:not(.hidden)) #yuleEventBanner,
+body:has(#touchConfirmBar:not(.hidden)) #yuleEventBanner {
+  display: none;
+}
 
 .floating-action-banner {
   align-self: flex-end;
@@ -5377,7 +5381,7 @@ input, textarea { user-select: text; -webkit-user-select: text; }
 :is(#match3Dialog, #puzzleArcadeDialog)[data-mg-layout='portrait'] .pa-controls-bar .aaa-synergy-dock { display: contents; }
 :is(#match3Dialog, #puzzleArcadeDialog)[data-mg-layout='portrait'] .pa-controls-bar :is(.aaa-lbl-full, .aaa-comp-name, .aaa-comp-meter) { display: none; }
 :is(#match3Dialog, #puzzleArcadeDialog)[data-mg-layout='portrait'] .pa-controls-bar .aaa-synergy-sprite { width: 20px; height: 20px; }
-@media (max-width: 389px) {
+@media (max-width: 430px) {
   :is(#match3Dialog, #puzzleArcadeDialog)[data-mg-layout='portrait'] .pa-layout-shell > .pa-controls-bar :is(.pa-tool-btn, .aaa-snack-btn, .aaa-companion-pill) { gap: 2px; font-size: 11px; }
 }
 /* Original colours, fewer rims (owner 13/11: «giữ bản màu mè gốc nhưng làm gọn và bớt viền»).
@@ -5528,8 +5532,8 @@ input, textarea { user-select: text; -webkit-user-select: text; }
 }
 
 /* toast: one paper card, at most 2 lines (the clamp sits on the inner span so no third line shows in the padding) */
-.owl-toast-stack { bottom: calc(84px + var(--hpvn-bottom)); width: min(360px, calc(100vw - 24px)); align-items: center; }
-body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(96px + max(12px, var(--hpvn-bottom))); }
+.owl-toast-stack { bottom: calc(98px + var(--hpvn-bottom)); width: min(360px, calc(100vw - 24px)); align-items: center; }
+body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(108px + max(12px, var(--hpvn-bottom))); }
 .owl-toast { box-sizing: border-box; max-width: 100%; padding: var(--hs-space-2) var(--hs-space-3); border: var(--hs-line-shell) solid var(--hs-brass); border-radius: var(--hs-radius-m); background: var(--hs-paper); color: var(--hs-ink); font-size: var(--hs-text-13); font-weight: var(--hs-weight-label); line-height: var(--hs-leading-body); text-align: center; box-shadow: var(--hs-shadow-float); -webkit-backdrop-filter: none; backdrop-filter: none; }
 .owl-toast > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 
@@ -5586,10 +5590,13 @@ body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(96px + ma
 /* (owner 15/11 «làm lại»: 23 rimmed boxes was a wall) one frame, the panel; the top row is the minigame's figures pill
    (Sao · Tim · Vui · clock, thin rules between, each a button) + the 44px ✕; then three groups, each a small brass name
    over one 3-column grid with 8px gaps; tiles are flat forest-2 with no rim; gold only for a toggle that is on (Nhiệt) */
-.hg-garden-menu .hg-menu-status { grid-row: 1; grid-column: 1; display: flex; flex-wrap: nowrap; align-items: stretch; gap: 0; box-sizing: border-box; block-size: 44px; min-width: 0; max-width: 100%; margin: 0; padding: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; border: var(--hs-line-shell) solid var(--hs-brass-bright); border-radius: var(--hs-radius-m); background: var(--hs-forest-2); }
+.hg-garden-menu .hg-menu-status { grid-row: 1; grid-column: 1; display: flex; flex-wrap: nowrap; align-items: stretch; gap: 0; box-sizing: border-box; min-block-size: 44px; block-size: 44px; min-width: 0; max-width: 100%; margin: 0; padding: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; border: var(--hs-line-shell) solid var(--hs-brass-bright); border-radius: var(--hs-radius-m); background: var(--hs-forest-2); }
+.hg-garden-menu .hg-menu-status:has(#lblFestival:not(.hidden)) { flex-wrap: wrap; block-size: auto; overflow: hidden; }
 .hg-garden-menu .hg-menu-status::-webkit-scrollbar { display: none; }
-.hg-garden-menu .hg-menu-status > .stat-chip { flex: 1 0 auto; display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 0; block-size: auto; margin: 0; padding: 0 9px; border: 0; border-radius: 0; background: none; color: var(--hs-cream); font-size: var(--hs-text-12); font-weight: var(--hs-weight-label); line-height: var(--hs-leading-label); font-variant-numeric: tabular-nums; white-space: nowrap; text-shadow: none; box-shadow: none; }
+.hg-garden-menu .hg-menu-status > .stat-chip { flex: 1 0 auto; display: flex; align-items: center; justify-content: center; gap: 3px; min-height: 40px; block-size: auto; margin: 0; padding: 0 6px; border: 0; border-radius: 0; background: none; color: var(--hs-cream); font-size: var(--hs-text-12); font-weight: var(--hs-weight-label); line-height: var(--hs-leading-label); font-variant-numeric: tabular-nums; white-space: nowrap; text-shadow: none; box-shadow: none; }
 .hg-garden-menu .hg-menu-status > :not(.hidden) ~ :not(.hidden) { border-inline-start: var(--hs-line) solid rgba(244, 198, 104, 0.35); }
+.hg-garden-menu .hg-menu-status > #lblFestival:not(.hidden) { flex: 1 0 100%; order: 2; min-height: 26px; padding: 2px 8px; border-inline-start: 0; border-top: var(--hs-line) solid rgba(244, 198, 104, 0.35); color: var(--hs-brass-bright); }
+.hg-garden-menu .hg-menu-status > #lblFestival:not(.hidden) ~ #lblClock { order: 1; }
 .hg-garden-menu .hg-menu-status :is(.m3-inline-icon, .hs-ico) { flex: none; inline-size: 18px; block-size: 18px; }
 .hg-garden-menu .hpvn-menu-close { grid-row: 1; grid-column: 2; min-height: 0; padding: 0; border: var(--hs-line-shell) solid var(--hs-brass-bright); border-radius: var(--hs-radius-m); background: var(--hs-forest-2); color: var(--hs-cream); box-shadow: none; }
 .hg-garden-menu .hg-menu-group { margin-block-start: var(--hs-space-1); color: var(--hs-brass-bright); font-size: var(--hs-text-12); font-weight: var(--hs-weight-label); line-height: var(--hs-leading-label); }
@@ -5659,7 +5666,7 @@ body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(96px + ma
 }
 /* under 390px a two-word name takes two lines (one word each), so it keeps 8px clear of the card's rims; the card keeps its
    58px and its 29px picture (1px + 3px padding, 12px lines) */
-@media (max-width: 389px) {
+@media (max-width: 430px) {
   .hud-shell-root .ts-corner-left.hg-farm-dock .ts-card-btn.hg-dock-card { padding-block: 1px 3px; }
   .hud-shell-root .ts-corner-left.hg-farm-dock .ts-card-label { flex: none; inline-size: min-content; max-inline-size: 100%; block-size: auto; max-block-size: none; line-height: 12px; text-align: center; white-space: normal; }
 }
@@ -6033,7 +6040,7 @@ body:has(#visitorDockBar:not(.hidden)) .owl-toast-stack { bottom: calc(96px + ma
 }
 /* phones under 390px: 16px icons, 3px gap, 6px beside each inner rule (the pill's ends keep 8px), so «1.234 · 999 · 12,9k · 99»
    plus BXH and ✕ at 44px still fit 360px */
-@media (max-width: 389px) {
+@media (max-width: 430px) {
   :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout] .pa-layout-shell .pa-side-dock .pa-dock-head-row .pa-currencies > .m3-res-chip { gap: 3px; padding-inline: 6px; }
   :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout] .pa-layout-shell .pa-side-dock .pa-dock-head-row .pa-currencies > .m3-res-chip:first-child { padding-inline-start: var(--hs-space-2); }
   :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout] .pa-layout-shell .pa-side-dock .pa-dock-head-row .pa-currencies > .m3-res-chip:last-child { padding-inline-end: var(--hs-space-2); }
@@ -6521,7 +6528,7 @@ b {
   font-size: var(--hs-text-13);
   font-weight: var(--hs-weight-label);
 }
-@media (max-width: 389px) {
+@media (max-width: 430px) {
   .hg-res-val { font-size: var(--hs-text-12); }
 }
 
@@ -6884,7 +6891,7 @@ b {
 
 /* Top-Layer toast stack: stays above #tutorialCoachCard[popover] and any open <dialog> */
 .owl-toast-stack[popover] {
-  inset: auto auto calc(84px + var(--hpvn-bottom)) 50%;
+  inset: auto auto calc(98px + var(--hpvn-bottom)) 50%;
   margin: 0;
   padding: 0;
   border: 0;
@@ -7689,7 +7696,7 @@ body:has(#managePopoverMenu:not(.hidden)) .ts-corner-right {
   }
 }
 
-@media (max-width: 389px) {
+@media (max-width: 430px) {
   .hud-shell-root .ts-corner-right.hg-play-corner .ts-card-btn.hg-hero-play-btn {
     width: 88px;
     min-width: 88px;
@@ -8497,7 +8504,7 @@ body:has(#managePopoverMenu:not(.hidden)) .ts-corner-right {
   font-size: var(--hs-text-12);
   font-weight: var(--hs-weight-label);
 }
-@media (max-width: 389px) {
+@media (max-width: 430px) {
   #inspectorPanel .hs-insp-actions-row > .brass-btn {
     padding-inline: 7px;
   }
@@ -8656,7 +8663,8 @@ body:has(#managePopoverMenu:not(.hidden)) .ts-corner-right {
 .hs-cup-ally-pts { color: var(--hs-ink); font-size: var(--hs-text-14); font-weight: var(--hs-weight-title); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .hs-cup-ally-name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; color: var(--hs-ink); font-size: var(--hs-text-12); font-weight: var(--hs-weight-title); line-height: 1.25; }
 .hs-cup-ally-badge { padding: 1px 6px; border-radius: var(--radius-pill); background: var(--farm-green-text); color: var(--hs-cream); font-size: 10px; font-weight: var(--hs-weight-label); white-space: nowrap; }
-.hs-cup-ally-houses { color: var(--hs-ink-soft); font-size: var(--hs-text-11); line-height: 1.2; }
+.hs-cup-ally-mult { padding: 1px 6px; border-radius: var(--radius-pill); border: var(--hs-line) solid rgba(176, 125, 67, 0.45); background: rgba(176, 125, 67, 0.16); color: var(--hs-ink); font-size: 10px; font-weight: var(--hs-weight-title); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hs-cup-ally-houses { color: var(--hs-ink-soft); font-size: var(--hs-text-11); line-height: 1.25; font-variant-numeric: tabular-nums; }
 .hs-cup-tugbar { display: flex; gap: 3px; block-size: 8px; border-radius: var(--radius-pill); overflow: hidden; background: rgba(122, 86, 56, 0.14); }
 .hs-cup-tugbar > i { display: block; block-size: 100%; transition: width 0.35s ease; }
 .hs-cup-tugbar > i.is-a { background: var(--hs-brass); border-radius: var(--radius-pill) 0 0 var(--radius-pill); }

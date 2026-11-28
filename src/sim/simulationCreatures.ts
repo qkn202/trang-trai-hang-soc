@@ -271,6 +271,7 @@ export function creaturesCatchEscapedCreature(sim: ParkSimulation, escId: string
     sim.spawnFloatingText(esc.gx, esc.gy, `Accio! Thu hồi +${reward} 🪙`, '#60a5fa');
     sim.onRewardFly?.('galleons', reward, esc.gx, esc.gy);
     sim.tryDropWizardCard(esc.gx, esc.gy, 0.25);
+    sim.saveToStorage();
     sim.onToast?.(`Đã đưa ${esc.name} về chuồng an toàn và thu hồi ${reward} Sickle!`, '🐾');
     sim.onUiChange?.();
     return true;
@@ -332,99 +333,120 @@ export function creaturesCastAccioHarvestAll(sim: ParkSimulation): void {
     let count = 0;
     let sumG = 0;
     let sumX = 0;
+    let directG = 0;
+    let directX = 0;
     const now = Date.now();
-    for (const b of sim.state.buildings) {
-      const it = getCatalogItem(b.itemId);
-      if (it?.isFarmlandPlot) {
-        if (b.cropId && b.cropReadyAt && now >= b.cropReadyAt) {
-          if (sim.harvestCropPlot(b.uid).ok) {
+    const prevSuppress = sim.suppressPerActionSave;
+    sim.suppressPerActionSave = true;
+    try {
+      for (const b of sim.state.buildings) {
+        const it = getCatalogItem(b.itemId);
+        if (it?.isFarmlandPlot) {
+          if (b.cropId && b.cropReadyAt && now >= b.cropReadyAt) {
+            const gBefore = sim.state.galleons;
+            const xBefore = sim.state.xp;
+            if (sim.harvestCropPlot(b.uid).ok) {
+              directG += Math.max(0, sim.state.galleons - gBefore);
+              directX += Math.max(0, sim.state.xp - xBefore);
+              count++;
+            }
+          }
+          continue;
+        }
+        if (it?.isAnimalPasturePlot) {
+          if (b.pastureAnimalId && b.pastureReadyAt && now >= b.pastureReadyAt) {
+            const gBefore = sim.state.galleons;
+            const xBefore = sim.state.xp;
+            if (sim.harvestAnimalPasture(b.uid).ok) {
+              directG += Math.max(0, sim.state.galleons - gBefore);
+              directX += Math.max(0, sim.state.xp - xBefore);
+              count++;
+            }
+          }
+          continue;
+        }
+        let remainingGoods: FarmGoodId[] = [];
+        let collectedAnyGood = false;
+        if (b.readyFruitCrops && b.readyFruitCrops.length > 0) {
+          const remFruits: FarmCropId[] = [];
+          for (const cid of b.readyFruitCrops) {
+            if (sim.addFarmItemToBarn(cid, 1) > 0) {
+              collectedAnyGood = true;
+            } else {
+              remFruits.push(cid);
+            }
+          }
+          b.readyFruitCrops = remFruits.length > 0 ? remFruits : undefined;
+          if (collectedAnyGood && it?.id === 'burrow_apple_orchard') {
+            const nextUsed = (b.orchardHarvestsUsed ?? 0) + 1;
+            b.orchardHarvestsUsed = nextUsed;
+            if (nextUsed >= 3) b.needsTreeRevival = true;
+          }
+        }
+        if (b.readyFarmGoods && b.readyFarmGoods.length > 0) {
+          for (const gid of b.readyFarmGoods) {
+            if (sim.addFarmItemToBarn(gid, 1) > 0) {
+              collectedAnyGood = true;
+            } else {
+              remainingGoods.push(gid);
+            }
+          }
+          b.readyFarmGoods = remainingGoods;
+          if (collectedAnyGood && b.storedSickle <= 0) {
             count++;
           }
         }
-        continue;
-      }
-      if (it?.isAnimalPasturePlot) {
-        if (b.pastureAnimalId && b.pastureReadyAt && now >= b.pastureReadyAt) {
-          if (sim.harvestAnimalPasture(b.uid).ok) {
-            count++;
+        if (b.storedSickle > 0) {
+          sumG += b.storedSickle;
+          sumX += b.storedXp;
+          b.storedSickle = 0;
+          b.storedXp = 0;
+          b.readyBubbles = remainingGoods.length > 0 ? Math.min(8, remainingGoods.length) : 0;
+          if (it?.grantsButterbeer) {
+            sim.state.stats.butterbeerServed++;
+            sim.recordQuestProgress('serve_butterbeer', undefined, 1);
           }
-        }
-        continue;
-      }
-      let remainingGoods: FarmGoodId[] = [];
-      let collectedAnyGood = false;
-      if (b.readyFruitCrops && b.readyFruitCrops.length > 0) {
-        const remFruits: FarmCropId[] = [];
-        for (const cid of b.readyFruitCrops) {
-          if (sim.addFarmItemToBarn(cid, 1) > 0) {
-            collectedAnyGood = true;
-          } else {
-            remFruits.push(cid);
-          }
-        }
-        b.readyFruitCrops = remFruits.length > 0 ? remFruits : undefined;
-        if (collectedAnyGood && it?.id === 'burrow_apple_orchard') {
-          const nextUsed = (b.orchardHarvestsUsed ?? 0) + 1;
-          b.orchardHarvestsUsed = nextUsed;
-          if (nextUsed >= 3) b.needsTreeRevival = true;
-        }
-      }
-      if (b.readyFarmGoods && b.readyFarmGoods.length > 0) {
-        for (const gid of b.readyFarmGoods) {
-          if (sim.addFarmItemToBarn(gid, 1) > 0) {
-            collectedAnyGood = true;
-          } else {
-            remainingGoods.push(gid);
-          }
-        }
-        b.readyFarmGoods = remainingGoods;
-        if (collectedAnyGood && b.storedSickle <= 0) {
+          sim.grantBuildingIngredientDrop(b, it, false);
           count++;
+        } else if (remainingGoods.length === 0 && collectedAnyGood) {
+          b.readyBubbles = 0;
         }
       }
-      if (b.storedSickle > 0) {
-        sumG += b.storedSickle;
-        sumX += b.storedXp;
-        b.storedSickle = 0;
-        b.storedXp = 0;
-        b.readyBubbles = remainingGoods.length > 0 ? Math.min(8, remainingGoods.length) : 0;
-        if (it?.grantsButterbeer) {
-          sim.state.stats.butterbeerServed++;
-          sim.recordQuestProgress('serve_butterbeer', undefined, 1);
-        }
-        sim.grantBuildingIngredientDrop(b, it, false);
-        count++;
-      } else if (remainingGoods.length === 0 && collectedAnyGood) {
-        b.readyBubbles = 0;
+      for (const esc of [...sim.escapedCreatures]) {
+        creaturesCatchEscapedCreature(sim, esc.id);
       }
-    }
-    for (const esc of [...sim.escapedCreatures]) {
-      creaturesCatchEscapedCreature(sim, esc.id);
-    }
-    for (let y = 0; y < GRID_SIZE; y++) {
-      for (let x = 0; x < GRID_SIZE; x++) {
-        if (sim.grid[y][x].hasLitter) {
-          sim.grid[y][x].hasLitter = false;
-          sim.stateRevision++;
-          if (sim.state.tileOverrides[`${x},${y}`]) {
-            sim.state.tileOverrides[`${x},${y}`].hasLitter = false;
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          if (sim.grid[y][x].hasLitter) {
+            sim.grid[y][x].hasLitter = false;
+            sim.stateRevision++;
+            if (sim.state.tileOverrides[`${x},${y}`]) {
+              sim.state.tileOverrides[`${x},${y}`].hasLitter = false;
+            }
+            sumX += 3;
           }
-          sumX += 3;
         }
       }
+    } finally {
+      sim.suppressPerActionSave = prevSuppress;
     }
 
     if (count > 0 || sumX > 0) {
-      sim.state.galleons += sumG;
-      sim.state.finance.harvestRevenue += sumG;
-      sim.state.stats.totalSickleHarvested += sumG;
-      sim.addXp(sumX);
       if (sumG > 0) {
+        sim.state.galleons += sumG;
+        sim.state.finance.harvestRevenue += sumG;
+        sim.state.stats.totalSickleHarvested += sumG;
         sim.recordQuestProgress('harvest_galleons', undefined, sumG);
         sim.onRewardFly?.('galleons', sumG);
       }
+      if (sumX > 0) {
+        sim.addXp(sumX);
+      }
+      sim.saveToStorage();
       sim.audio.playSpell();
-      sim.onToast?.(`⚡ Accio! Đã gom sạch ${sumG} Sickle & ${sumX} XP từ ${count} công trình!`, '🪄');
+      const totalToastG = sumG + directG;
+      const totalToastX = sumX + directX;
+      sim.onToast?.(`⚡ Accio! Đã gom sạch ${totalToastG} Sickle & ${totalToastX} XP từ ${count} công trình!`, '🪄');
       sim.onUiChange?.();
     } else {
       sim.onToast?.('Hiện các mái nhà đang tích lũy vàng, chờ thêm chút xíu nhé!', '✨');

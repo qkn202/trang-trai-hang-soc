@@ -147,7 +147,7 @@ export interface ActiveSynergyResult {
   activeIds: Set<string>;
   buildingGoldMult: Map<string, number>;
   buildingXpMult: Map<string, number>;
-  links: Array<{ aUid: string; bUid: string; emoji: string; name: string }>;
+  links: Array<{ id?: string; aUid: string; bUid: string; emoji: string; name: string }>;
 }
 
 export function evaluateDistrictSynergies(
@@ -157,7 +157,7 @@ export function evaluateDistrictSynergies(
   const activeIds = new Set<string>();
   const buildingGoldMult = new Map<string, number>();
   const buildingXpMult = new Map<string, number>();
-  const links: Array<{ aUid: string; bUid: string; emoji: string; name: string }> = [];
+  const links: Array<{ id?: string; aUid: string; bUid: string; emoji: string; name: string }> = [];
 
   const ready = buildings.filter((b) => now >= b.constructEndsAt);
 
@@ -179,7 +179,7 @@ export function evaluateDistrictSynergies(
           buildingGoldMult.set(b.uid, Math.min(1.85, (buildingGoldMult.get(b.uid) ?? 1) + gAdd));
           buildingXpMult.set(a.uid, Math.min(1.85, (buildingXpMult.get(a.uid) ?? 1) + xAdd));
           buildingXpMult.set(b.uid, Math.min(1.85, (buildingXpMult.get(b.uid) ?? 1) + xAdd));
-          links.push({ aUid: a.uid, bUid: b.uid, emoji: syn.emoji, name: syn.name });
+          links.push({ id: syn.id, aUid: a.uid, bUid: b.uid, emoji: syn.emoji, name: syn.name });
         }
       }
     }

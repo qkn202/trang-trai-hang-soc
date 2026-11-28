@@ -308,7 +308,7 @@ export class GameHUD {
   public activeWorkshopTab: 'barn' | 'stand' | 'market' | 'brew' | 'cargo' | 'synergy' = 'barn';
   public selectedStandItemId: FarmItemId = 'ottery_wheat';
   public selectedStandPriceTier: 'bargain' | 'fair' | 'premium' = 'fair';
-  public activeQuestTab: 'orders' | 'quests' = 'orders';
+  public activeQuestTab: 'orders' | 'quests' | 'derby' = 'orders';
   public activeAlbumTab: 'profile' | 'cup' | 'leaderboard' = 'cup';
   public hasShownHouseCupIntro = false;
   public activeProfileSubTab: 'login7' | 'achievements' | 'friendship' | 'almanac' = 'login7';

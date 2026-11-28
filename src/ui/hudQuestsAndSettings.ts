@@ -4,8 +4,11 @@
 import { avatarGlyph } from '../hpvn/emoji';
 import {
   fetchHouseCup,
+  formatAllianceMultiplierVi,
   getActiveHouseCupWeekKey,
+  HOUSE_CUP_DERBY_MIN_TASKS_FOR_POINTS,
   houseCup,
+  houseCupAllianceBalance,
   houseCupAllianceStandings,
   houseCupDisciplineSummaries,
   houseCupFirstPlaceCounts,
@@ -17,7 +20,7 @@ import {
   buildAllianceWeeklyRewardBannerHtml,
   renderFarmExchange,
 } from '../hpvn/exchange';
-import { secondsToVietnamMidnight } from '../sim/neighborSocial'; // HPVN: real countdown to VN midnight
+import { getVietnamCalendarKey, secondsToVietnamMidnight } from '../sim/neighborSocial'; // HPVN: real countdown to VN midnight
 import {
   CATALOG,
   FARM_CROPS,
@@ -167,6 +170,10 @@ import {
   VILLAGER_AFFECTION_GIFT_META,
 } from '../sim/villagerGiftsPetAndStroll';
 import type { StrollRobeId } from '../types/game';
+import {
+  bindWeeklyDerbyTabEvents,
+  renderWeeklyDerbyTabHtml,
+} from './weeklyDerbyPanel';
 import type { GameHUD } from './hud';
 
 export function questsUiOpenHarvestFeastDialog(hud: GameHUD): void {
@@ -488,11 +495,19 @@ const CUP_DISCIPLINE_META: Record<HouseCupDisciplineId, { nameVi: string; sprite
   chess: { nameVi: 'Bắn Cá', spriteIcon: '/game/trang-trai-hang-soc/paintings/plimpy_icon.webp?v=sea2' },
   blocks: { nameVi: 'Sinh Vật', spriteIcon: '/game/trang-trai-hang-soc/sprites/beast_niffler.webp' },
   jigsaw: { nameVi: 'Tranh Ghép', spriteIcon: '/game/trang-trai-hang-soc/sprites/ui_icon_jigsaw.webp' },
+  derby: { nameVi: 'Derby Nông Trại', spriteIcon: '/game/trang-trai-hang-soc/sprites/ui_icon_crop_ottery_wheat.webp' },
 };
 
 function openHouseCupDiscipline(hud: GameHUD, discId: HouseCupDisciplineId): void {
   if (discId === 'match3') {
     hud.openMatch3Dialog();
+  } else if (discId === 'derby') {
+    hud.activeQuestTab = 'derby';
+    questsUiRenderQuestDialog(hud);
+    const qDlg = hud.root.querySelector('#questDialog') as HTMLDialogElement | null;
+    if (qDlg && !qDlg.open) {
+      qDlg.showModal();
+    }
   } else {
     hud.openPuzzleArcadeDialog(discId);
   }
@@ -501,7 +516,8 @@ function openHouseCupDiscipline(hud: GameHUD, discId: HouseCupDisciplineId): voi
 function buildHouseCupDisciplinesHtml(
   playerHouse: HouseName,
   noHouse: boolean,
-  weeklyClearedByDisc?: Partial<Record<HouseCupDisciplineId, number>>
+  weeklyClearedByDisc?: Partial<Record<HouseCupDisciplineId, number>>,
+  isF2Mode = false
 ): string {
   const summaries = houseCupDisciplineSummaries();
   if (summaries.length === 0) return '';
@@ -509,6 +525,10 @@ function buildHouseCupDisciplinesHtml(
   const cardsHtml = summaries
     .map((disc) => {
       const meta = CUP_DISCIPLINE_META[disc.id];
+      const isDerby = disc.id === 'derby';
+      const minRequired = isDerby ? HOUSE_CUP_DERBY_MIN_TASKS_FOR_POINTS : minStages;
+      const unitWeekVi = isDerby ? 'việc tuần' : 'màn tuần';
+      const unitShortVi = isDerby ? 'việc' : 'màn';
       const myRow = disc.byHouse[playerHouse];
       const myWeeklyCleared = Math.max(0, Math.floor(weeklyClearedByDisc?.[disc.id] ?? 0));
       const isLeading = !noHouse && disc.leaderHouse !== null && myRow?.rank === 1 && myRow.rawPoints > 0;
@@ -523,20 +543,31 @@ function buildHouseCupDisciplinesHtml(
       let statusText = 'Chưa phân Nhà';
       if (!noHouse && myRow) {
         if (myRow.rawPoints <= 0) {
-          if (myWeeklyCleared > 0 && myWeeklyCleared < minStages) {
-            statusText = `Bạn: ${myWeeklyCleared}/${minStages} màn tuần · +0 Cúp`;
-          } else if (myWeeklyCleared >= minStages) {
-            statusText = `Nhà bạn: 0 đ · Bạn ${myWeeklyCleared} màn tuần`;
+          if (myWeeklyCleared > 0 && myWeeklyCleared < minRequired) {
+            statusText = isF2Mode
+              ? `Bạn: ${myWeeklyCleared}/${minRequired} ${unitWeekVi} · +0 đ`
+              : `Bạn: ${myWeeklyCleared}/${minRequired} ${unitWeekVi} · +0 Cúp`;
+          } else if (myWeeklyCleared >= minRequired) {
+            statusText = `Nhà bạn: 0 đ · Bạn ${myWeeklyCleared} ${unitWeekVi}`;
           } else {
-            statusText = 'Nhà bạn: 0 đ (+0 Cúp)';
+            statusText = isF2Mode ? 'Nhà bạn: 0 đ' : 'Nhà bạn: 0 đ (+0 Cúp)';
           }
         } else if (myRow.rank === 1) {
-          statusText =
-            myWeeklyCleared > 0 && myWeeklyCleared < minStages
-              ? `Hạng 1 · +${myRow.cupPoints} đ · Bạn ${myWeeklyCleared}/${minStages} màn`
-              : `Hạng 1 · +${myRow.cupPoints} đ Cúp`;
+          if (isF2Mode) {
+            statusText =
+              myWeeklyCleared > 0 && myWeeklyCleared < minRequired
+                ? `Hạng 1 · ${myRow.rawPoints.toLocaleString('vi-VN')} đ · Bạn ${myWeeklyCleared}/${minRequired} ${unitShortVi}`
+                : `Hạng 1 · ${myRow.rawPoints.toLocaleString('vi-VN')} đ`;
+          } else {
+            statusText =
+              myWeeklyCleared > 0 && myWeeklyCleared < minRequired
+                ? `Hạng 1 · +${myRow.cupPoints} đ · Bạn ${myWeeklyCleared}/${minRequired} ${unitShortVi}`
+                : `Hạng 1 · +${myRow.cupPoints} đ Cúp`;
+          }
         } else {
-          statusText = `Hạng ${myRow.rank} (+${myRow.cupPoints} đ) · Kém ${myRow.gapToFirst.toLocaleString('vi-VN')}`;
+          statusText = isF2Mode
+            ? `Hạng ${myRow.rank} (${myRow.rawPoints.toLocaleString('vi-VN')} đ) · Kém ${myRow.gapToFirst.toLocaleString('vi-VN')}`
+            : `Hạng ${myRow.rank} (+${myRow.cupPoints} đ) · Kém ${myRow.gapToFirst.toLocaleString('vi-VN')}`;
         }
       }
 
@@ -585,8 +616,20 @@ function buildHouseCupAlliancesHtml(
 ): string {
   const [first, second] = houseCupAllianceStandings(noHouse ? null : playerHouse);
   const myAlliance = first.isPlayerAlliance ? first : second.isPlayerAlliance ? second : null;
+  const balanceInfo = houseCupAllianceBalance();
+  const winWeeks = balanceInfo?.windowWeeks ?? 3;
+  const maxCapLabel = formatAllianceMultiplierVi(balanceInfo?.multiplierCap ?? 2.5);
   const sideHtml = (a: typeof first, slot: 'a' | 'b') => {
     const [h0, h1] = a.houses;
+    const hasMult = a.balanceMultiplier > 1.005;
+    const multLabel = hasMult ? formatAllianceMultiplierVi(a.balanceMultiplier) : '';
+    const multBadge = hasMult
+      ? `<span class="hs-cup-ally-mult" title="Hệ số cân bằng quân số khóa đầu tuần (TB ${winWeeks} tuần, tối đa ${maxCapLabel}×)">×${multLabel} cân quân số</span>`
+      : '';
+    const rawDetail =
+      cup && hasMult && a.rawPoints > 0
+        ? ` · Gốc ${a.rawPoints.toLocaleString('vi-VN')} đ`
+        : '';
     return `
       <div class="hs-cup-ally-side${a.isPlayerAlliance ? ' is-mine' : ''}" data-slot="${slot}">
         <div class="hs-cup-ally-head">
@@ -596,8 +639,8 @@ function buildHouseCupAlliancesHtml(
           </span>
           <strong class="hs-cup-ally-pts">${cup ? `${a.points.toLocaleString('vi-VN')} đ` : '…'}</strong>
         </div>
-        <div class="hs-cup-ally-name">${escapeHtml(a.nameVi)}${a.isPlayerAlliance ? '<span class="hs-cup-ally-badge">Liên minh bạn</span>' : ''}</div>
-        <div class="hs-cup-ally-houses">${h0} + ${h1}</div>
+        <div class="hs-cup-ally-name">${escapeHtml(a.nameVi)}${a.isPlayerAlliance ? '<span class="hs-cup-ally-badge">Liên minh bạn</span>' : ''}${multBadge}</div>
+        <div class="hs-cup-ally-houses">${h0} + ${h1}${rawDetail}</div>
       </div>`;
   };
 
@@ -629,17 +672,22 @@ function extractLocalWeeklyClearedByDiscipline(
     ? L extends { records?: infer R }
       ? R
       : never
-    : never
+    : never,
+  weeklyDerby?: GameState['weeklyDerby']
 ): Partial<Record<HouseCupDisciplineId, number>> {
   const out: Partial<Record<HouseCupDisciplineId, number>> = {};
-  if (!records) return out;
   const activeWeek = getActiveHouseCupWeekKey();
-  const ids: readonly HouseCupDisciplineId[] = ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw'];
-  for (const id of ids) {
-    const w = records[id]?.weekly;
-    if (w && w.weekKey === activeWeek && w.stagesCleared > 0) {
-      out[id] = Math.floor(w.stagesCleared);
+  if (records) {
+    const ids = ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw'] as const;
+    for (const id of ids) {
+      const w = records[id]?.weekly;
+      if (w && w.weekKey === activeWeek && w.stagesCleared > 0) {
+        out[id] = Math.floor(w.stagesCleared);
+      }
     }
+  }
+  if (weeklyDerby && weeklyDerby.weekKey === activeWeek && weeklyDerby.tasksCompleted > 0) {
+    out.derby = Math.floor(weeklyDerby.tasksCompleted);
   }
   return out;
 }
@@ -660,7 +708,8 @@ function buildHouseCupStandingsHtml(
   bank: number;
 } {
   const summaries = houseCupDisciplineSummaries();
-  const isMedalMode = cup?.mode === 'medals' || summaries.length > 0;
+  const isF2Mode = cup?.mode === 'f2';
+  const isMedalMode = isF2Mode || cup?.mode === 'medals' || summaries.length > 0;
   const firstCounts = isMedalMode ? houseCupFirstPlaceCounts() : null;
   const houses = (['Gryffindor', 'Slytherin', 'Ravenclaw', 'Hufflepuff'] as HouseName[])
     .map((house) => ({ house, pts: houseWeekPoints(house), firsts: firstCounts?.[house] ?? 0 }))
@@ -703,7 +752,7 @@ function buildHouseCupStandingsHtml(
     localPlays,
   });
   const disciplinesHtml = isMedalMode
-    ? buildHouseCupDisciplinesHtml(playerHouse, noHouse, weeklyClearedByDisc)
+    ? buildHouseCupDisciplinesHtml(playerHouse, noHouse, weeklyClearedByDisc, isF2Mode)
     : '';
   return { alliancesHtml, prizeBannerHtml, listHtml, disciplinesHtml, isMedalMode, noHouse, perTier, bank };
 }
@@ -732,12 +781,13 @@ export function questsUiRenderHouseCupIntroDialog(hud: GameHUD): void {
       playerHouse,
       cup,
       hud.sim.state.minigamePlays,
-      extractLocalWeeklyClearedByDiscipline(hud.sim.state.minigameLeaderboard?.records)
+      extractLocalWeeklyClearedByDiscipline(hud.sim.state.minigameLeaderboard?.records, hud.sim.state.weeklyDerby)
     );
   const tierNum = cup?.memberTier ?? 1;
   const dailyCap = cup?.memberDailyCap ?? 0;
   const todayPts = cup?.memberTodayPoints ?? 0;
   const summaries = houseCupDisciplineSummaries();
+  const hasDerbyInGrid = summaries.some((s) => s.id === 'derby');
   const crestSrc = noHouse
     ? '/game/trang-trai-hang-soc/sprites/ui_trophy_cup.webp'
     : `/game/trang-trai-hang-soc/sprites/crest-${playerHouse.toLowerCase()}.webp`;
@@ -769,6 +819,7 @@ export function questsUiRenderHouseCupIntroDialog(hud: GameHUD): void {
 
       <div class="hs-dlg-actions">
         <button id="btnCupIntroPlay" type="button" class="brass-btn">Thi đấu ngay</button>
+        ${hasDerbyInGrid ? '' : '<button type="button" data-cup-play="derby" class="brass-btn">🏆 Derby</button>'}
         <button id="btnCupIntroClose" type="button" class="brass-btn gold-cta">Vào trang trại</button>
       </div>
     </div>
@@ -855,7 +906,7 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
           playerHouse,
           cup,
           st.minigamePlays,
-          extractLocalWeeklyClearedByDiscipline(st.minigameLeaderboard?.records)
+          extractLocalWeeklyClearedByDiscipline(st.minigameLeaderboard?.records, st.weeklyDerby)
         );
       const pts = (v: number) => `${v.toLocaleString('vi-VN')} đ`;
       const row = (lead: string, name: string, value: string, pct: number | null, house = '', mine = false) => `
@@ -985,7 +1036,7 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
         `;
       } else if (hud.activeProfileSubTab === 'friendship') {
         const period = hud.sim.getRealTimePeriod();
-        const todayKey = getLocalDateKey();
+        const todayKey = getVietnamCalendarKey();
         subBodyHtml = `
           <div class="quest-card-mini">
             <h3 class="hs-section-title">Phim cốt truyện</h3>
@@ -1346,7 +1397,8 @@ export function questsUiRenderAlbumDialog(hud: GameHUD): void {
 }
 
 export function questsUiRenderQuestDialog(hud: GameHUD): void {
-    const box = hud.root.querySelector('#questDialogContent') as HTMLElement;
+    const box = hud.root.querySelector('#questDialogContent') as HTMLElement | null;
+    if (!box) return;
     const barn = hud.sim.ensureFarmBarn();
     const story = hud.sim.getActiveStoryQuest();
     const autoAct = hud.sim.getStoryAutoActionPreview();
@@ -1355,6 +1407,9 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
       (story?.completed ? 1 : 0) +
       hud.sim.state.owlQuests.filter((q) => q.completed && !q.claimed).length +
       hud.sim.state.dailyQuests.filter((q) => q.completed && !q.claimed).length;
+    const derbySummary = hud.sim.getWeeklyDerbySummary();
+    const readyDerbyCount =
+      derbySummary.claimableMilestonesCount + (derbySummary.activeTaskReady ? 1 : 0);
 
     if (
       !hud.selectedOwlOrderId ||
@@ -1365,27 +1420,59 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
     }
 
     const tabsSwitchHtml = `
-      <div class="workshop-tabs" role="group" aria-label="Đơn Hàng Cú & Nhiệm Vụ" style="margin-bottom:12px;">
+      <div class="workshop-tabs" role="group" aria-label="Đơn Hàng Cú, Nhiệm Vụ &amp; Derby" style="margin-bottom:12px;">
         <button type="button" data-qtab="orders" data-active="${hud.activeQuestTab === 'orders'}" aria-pressed="${hud.activeQuestTab === 'orders'}" class="brass-btn">
           Đơn Cú <span class="nb-tab-badge">${readyOwlCount}/${barn.owlOrders.length}</span>
         </button>
         <button type="button" data-qtab="quests" data-active="${hud.activeQuestTab === 'quests'}" aria-pressed="${hud.activeQuestTab === 'quests'}" class="brass-btn">
           Nhiệm Vụ ${readyQuestCount > 0 ? `<span class="nb-tab-badge">${readyQuestCount}</span>` : ''}
         </button>
+        <button type="button" data-qtab="derby" data-active="${hud.activeQuestTab === 'derby'}" aria-pressed="${hud.activeQuestTab === 'derby'}" class="brass-btn">
+          🏆 Derby ${readyDerbyCount > 0 ? `<span class="nb-tab-badge">${readyDerbyCount}</span>` : ''}
+        </button>
       </div>
     `;
 
+    if (hud.activeQuestTab === 'derby') {
+      const prevTab = box.dataset?.activeQuestTab;
+      const prevScrollTop = typeof box.scrollTop === 'number' ? box.scrollTop : 0;
+      box.innerHTML = tabsSwitchHtml + renderWeeklyDerbyTabHtml(hud);
+      if (box.dataset) box.dataset.activeQuestTab = 'derby';
+      if (typeof box.scrollTop === 'number') {
+        box.scrollTop = prevTab === 'derby' ? prevScrollTop : 0;
+      }
+      box.querySelectorAll<HTMLButtonElement>('[data-qtab]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          hud.activeQuestTab = btn.dataset.qtab as GameHUD['activeQuestTab'];
+          questsUiRenderQuestDialog(hud);
+        });
+      });
+      bindWeeklyDerbyTabEvents(box, hud, () => questsUiRenderQuestDialog(hud));
+      return;
+    }
+    if (box.dataset) box.dataset.activeQuestTab = hud.activeQuestTab;
+
     if (hud.activeQuestTab === 'orders') {
+      const nowMs = Date.now();
+      hud.sim.tickTrashedOwlOrders(nowMs);
       const selectedOrder =
         barn.owlOrders.find((o) => o.id === hud.selectedOwlOrderId) ?? barn.owlOrders[0];
+      const isSelectedTrashed = Boolean(
+        selectedOrder?.trashedUntilAt && selectedOrder.trashedUntilAt > nowMs
+      );
       const canSendSelected = selectedOrder
         ? hud.sim.canFulfillFarmOwlOrder(selectedOrder)
         : false;
+      const streakMod = (barn.deliveryStreak ?? 0) % 3;
 
       const pinNotesHtml = barn.owlOrders
         .map((order) => {
           const isSel = selectedOrder?.id === order.id;
-          const isReady = hud.sim.canFulfillFarmOwlOrder(order);
+          const isTrashed = Boolean(order.trashedUntilAt && order.trashedUntilAt > nowMs);
+          const isReady = !isTrashed && hud.sim.canFulfillFarmOwlOrder(order);
+          const trashLeftSec = isTrashed
+            ? Math.max(1, Math.ceil((order.trashedUntilAt! - nowMs) / 1000))
+            : 0;
           const safePortraitKey =
             order.portraitSprite && /^[a-z0-9_]+$/i.test(order.portraitSprite)
               ? order.portraitSprite
@@ -1393,27 +1480,30 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
           const avatarHtml = safePortraitKey
             ? `<img src="/game/trang-trai-hang-soc/sprites/${safePortraitKey}.webp" alt="${escapeHtml(order.senderName)}" class="owl-note-portrait" />`
             : `<span class="owl-note-emoji">${escapeHtml(avatarGlyph(order.portraitEmoji, order.senderName))}</span>`;
-          const miniIcons = order.requirements
-            .slice(0, 3)
-            .map((req) => {
-              const m = getFarmItemMeta(req.itemId);
-              return `<img src="${m.iconSrc}" alt="${escapeHtml(m.name)}" title="${req.qty} ${escapeHtml(m.name)}" class="owl-note-mini-item" />`;
-            })
-            .join('');
+          const miniIcons = isTrashed
+            ? `<span style="font-size:11px;font-weight:700;opacity:0.78;">⏳ ${formatDurationCompactVi(trashLeftSec)}</span>`
+            : order.requirements
+                .slice(0, 3)
+                .map((req) => {
+                  const m = getFarmItemMeta(req.itemId);
+                  return `<img src="${m.iconSrc}" alt="${escapeHtml(m.name)}" title="${req.qty} ${escapeHtml(m.name)}" class="owl-note-mini-item" />`;
+                })
+                .join('');
 
           const spBonus = hud.sim.getOwlOrderSpotlightBonus(order);
           return `
             <button
               type="button"
               class="owl-pin-note ${isSel ? 'selected' : ''} ${isReady ? 'ready' : ''}"
+              style="${isTrashed ? 'opacity:0.68;' : ''}"
               data-select-owl="${escapeHtml(order.id)}"
             >
               <div class="owl-note-avatar-box">${avatarHtml}</div>
               <div class="owl-note-info">
-                <div class="owl-note-sender">${escapeHtml(order.senderName)}</div>
+                <div class="owl-note-sender">${isTrashed ? 'Đang gọi đơn mới' : escapeHtml(order.senderName)}</div>
                 <div class="owl-note-mini-row">${miniIcons}</div>
-                ${order.isFeastMarquee ? '<span class="owl-feast-tag">🎪 Tiệc</span>' : ''}
-                ${spBonus.hasSpotlight ? '<span class="owl-spotlight-tag">🎪 +1🌿</span>' : ''}
+                ${!isTrashed && order.isFeastMarquee ? '<span class="owl-feast-tag">🎪 Tiệc</span>' : ''}
+                ${!isTrashed && spBonus.hasSpotlight ? '<span class="owl-spotlight-tag">🎪 +1🌿</span>' : ''}
               </div>
               ${isReady ? '<span class="owl-ready-tick" aria-label="Đủ hàng">✓</span>' : ''}
             </button>
@@ -1423,17 +1513,43 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
 
       const buildDetailHtml = (order: (typeof barn.owlOrders)[number] | undefined): string => {
         if (!order) return '';
+        const detailNow = Date.now();
+        const isTrashed = Boolean(order.trashedUntilAt && order.trashedUntilAt > detailNow);
+        if (isTrashed) {
+          const leftSec = Math.max(1, Math.ceil((order.trashedUntilAt! - detailNow) / 1000));
+          return `
+            <div class="owl-detail-sheet">
+              <div class="owl-detail-head">
+                <div>
+                  <div class="owl-detail-title">Ô Đơn Đang Làm Mới</div>
+                  <div class="owl-detail-sub">🦉 Cú đưa thư đang mang đơn mới tới sau ${formatDurationCountdownVi(leftSec)}</div>
+                </div>
+              </div>
+              <div class="quest-card-mini" style="margin:12px 0;font-size:13px;line-height:1.45;">
+                Đã xé đơn khó không giới hạn lượt! Chờ 5 phút để tự động nhận đơn mới miễn phí, hoặc gọi Cú bay gấp bằng 1 ⏳ Cát Thời Gian.
+              </div>
+              <button type="button" id="btnRestoreTrashedOwlOrder" class="brass-btn gold-cta" style="width:100%;padding:8px 12px;">
+                ⏳ Gọi đơn mới ngay (1 Cát)
+              </button>
+            </div>
+          `;
+        }
         const selSpBonus = hud.sim.getOwlOrderSpotlightBonus(order);
         return `
           <div class="owl-detail-sheet">
             <div class="owl-detail-head">
               <div>
                 <div class="owl-detail-title">${escapeHtml(order.senderName)}</div>
-                <div class="owl-detail-sub">🦉 ${escapeHtml(order.owlName)}</div>
+                <div class="owl-detail-sub">🦉 ${escapeHtml(order.owlName)} · 🔥 Chuỗi ${streakMod}/3 (+20% 🪙 &amp; +1🌿)</div>
               </div>
-              <button type="button" id="btnRefreshOwlOrder" class="brass-btn" style="padding:4px 9px;font-size:12px;" ${hud.sim.getOwlRerollsLeft() > 0 ? `title="Đổi đơn (còn ${hud.sim.getOwlRerollsLeft()} lượt hôm nay)"` : 'disabled title="Hết lượt đổi hôm nay"'}>
-                ${hud.sim.getOwlRerollsLeft() > 0 ? `🔄 Đổi (${hud.sim.getOwlRerollsLeft()})` : 'Hết lượt đổi'}
-              </button>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;">
+                <button type="button" id="btnTrashOwlOrder" class="brass-btn" style="padding:4px 9px;font-size:12px;" title="Xé đơn miễn phí không giới hạn lượt (nhận đơn mới sau 5 phút)">
+                  🧹 Xé (5p)
+                </button>
+                <button type="button" id="btnRefreshOwlOrder" class="brass-btn" style="padding:4px 9px;font-size:12px;" ${hud.sim.getOwlRerollsLeft() > 0 ? `title="Đổi đơn tức thì (còn ${hud.sim.getOwlRerollsLeft()} lượt hôm nay)"` : 'disabled title="Hết lượt đổi tức thì hôm nay — vẫn có thể Xé đơn (5p) miễn phí!"'}>
+                  ${hud.sim.getOwlRerollsLeft() > 0 ? `🔄 Đổi (${hud.sim.getOwlRerollsLeft()})` : 'Hết đổi ngay'}
+                </button>
+              </div>
             </div>
 
             <div class="owl-req-list">
@@ -1500,6 +1616,21 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
       };
 
       const bindOwlDetailSheetEvents = (sheetRoot: ParentNode, order: (typeof barn.owlOrders)[number] | undefined) => {
+        sheetRoot.querySelector('#btnTrashOwlOrder')?.addEventListener('click', () => {
+          if (order) {
+            const res = hud.sim.trashFarmOwlOrder(order.id);
+            hud.showToast(res.msg, res.ok ? '🧹' : '⚠️');
+            questsUiRenderQuestDialog(hud);
+          }
+        });
+        sheetRoot.querySelector('#btnRestoreTrashedOwlOrder')?.addEventListener('click', () => {
+          if (order) {
+            const res = hud.sim.instantRestoreTrashedOwlOrder(order.id);
+            hud.showToast(res.msg, res.ok ? '🦉' : '⏳');
+            questsUiRenderQuestDialog(hud);
+            hud.refreshHeader();
+          }
+        });
         sheetRoot.querySelector('#btnRefreshOwlOrder')?.addEventListener('click', () => {
           if (order) {
             hud.sim.refreshFarmOwlOrder(order.id);
@@ -1541,7 +1672,7 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
               id="btnSendOwlOrder"
               class="owl-green-send-btn ${canSendSelected ? 'ready' : 'not-ready'}"
             >
-              ${canSendSelected ? 'Giao hàng' : 'Mở Kho'}
+              ${isSelectedTrashed ? '⏳ Gọi đơn (1 Cát)' : canSendSelected ? 'Giao hàng' : 'Mở Kho'}
             </button>
           </div>
         </div>
@@ -1549,7 +1680,7 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
 
       box.querySelectorAll<HTMLButtonElement>('[data-qtab]').forEach((btn) => {
         btn.addEventListener('click', () => {
-          hud.activeQuestTab = btn.dataset.qtab as 'orders' | 'quests';
+          hud.activeQuestTab = btn.dataset.qtab as GameHUD['activeQuestTab'];
           questsUiRenderQuestDialog(hud);
         });
       });
@@ -1571,10 +1702,11 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
             curSheet.outerHTML = buildDetailHtml(nextOrder);
             const freshSheet = box.querySelector('.owl-detail-sheet');
             if (freshSheet) bindOwlDetailSheetEvents(freshSheet, nextOrder);
-            const canSendNext = hud.sim.canFulfillFarmOwlOrder(nextOrder);
+            const isNextTrashed = Boolean(nextOrder.trashedUntilAt && nextOrder.trashedUntilAt > Date.now());
+            const canSendNext = !isNextTrashed && hud.sim.canFulfillFarmOwlOrder(nextOrder);
             sendBtn.classList.toggle('ready', canSendNext);
             sendBtn.classList.toggle('not-ready', !canSendNext);
-            sendBtn.textContent = canSendNext ? 'Giao hàng' : 'Mở Kho';
+            sendBtn.textContent = isNextTrashed ? '⏳ Gọi đơn (1 Cát)' : canSendNext ? 'Giao hàng' : 'Mở Kho';
             return;
           }
           questsUiRenderQuestDialog(hud);
@@ -1588,6 +1720,13 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
         const activeOrder =
           curBarn.owlOrders.find((o) => o.id === hud.selectedOwlOrderId) ?? curBarn.owlOrders[0];
         if (!activeOrder) return;
+        if (activeOrder.trashedUntilAt && activeOrder.trashedUntilAt > Date.now()) {
+          const restored = hud.sim.instantRestoreTrashedOwlOrder(activeOrder.id);
+          hud.showToast(restored.msg, restored.ok ? '🦉' : '⏳');
+          questsUiRenderQuestDialog(hud);
+          hud.refreshHeader();
+          return;
+        }
         if (!hud.sim.canFulfillFarmOwlOrder(activeOrder)) {
           const res = hud.sim.fulfillFarmOwlOrder(activeOrder.id);
           hud.showToast(res.msg, '🧺');
@@ -1690,7 +1829,7 @@ export function questsUiRenderQuestDialog(hud: GameHUD): void {
 
     box.querySelectorAll<HTMLButtonElement>('[data-qtab]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        hud.activeQuestTab = btn.dataset.qtab as 'orders' | 'quests';
+        hud.activeQuestTab = btn.dataset.qtab as GameHUD['activeQuestTab'];
         questsUiRenderQuestDialog(hud);
       });
     });

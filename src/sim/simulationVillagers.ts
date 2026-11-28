@@ -788,7 +788,7 @@ export function villagersAdvanceTutorialStep(sim: ParkSimulation, expectedStepId
       sim.onToast?.(
         alreadyClaimed
           ? '🎉 Bạn đã hoàn thành ôn tập Cẩm Nang Trang Trại Hang Sóc cùng Bà Molly!'
-          : '🎉 Chúc mừng Tốt Nghiệp Tân Thủ Hang Sóc! Bà Molly tặng +150 Sickle, +2 🌟 Sao & +1 🔥 Bùa Phượng Hoàng!',
+          : `🎉 Chúc mừng Tốt Nghiệp Tân Thủ Hang Sóc! Bà Molly tặng +${curStep.rewardSickle ?? 30} Sickle, +${curStep.rewardStars ?? 2} 🌟 Sao & +${curStep.rewardTalismans ?? 1} 🔥 Bùa Phượng Hoàng!`,
         '🥧'
       );
       sim.onTutorialStepChanged?.('completed');

@@ -282,6 +282,8 @@ export function lifecycleSyncPlayerPrimitivesToHomeState(sim: ParkSimulation): v
     h.roadsideStand = sim.state.roadsideStand;
     h.seasonalFestivalState = sim.state.seasonalFestivalState;
     h.almanacState = sim.state.almanacState;
+    h.yuleEvent = sim.state.yuleEvent;
+    h.quizRewardDaily = sim.state.quizRewardDaily;
     h.finance = sim.state.finance;
     h.stats = sim.state.stats;
     h.settings = {
@@ -367,6 +369,7 @@ export function lifecycleImportSaveJson(sim: ParkSimulation, jsonStr: string): b
       }
       sim.isHeadmasterPreview = false;
       sim.activeVisitNeighborId = null;
+      sim.activeHonorTourId = null;
       sim.homeStateWhileVisiting = null;
       sim.backupMainStateJson = null;
       sim.state = migrateLoadedState(parsed);
@@ -389,6 +392,7 @@ export function lifecycleImportSaveJson(sim: ParkSimulation, jsonStr: string): b
 export function lifecycleResetNewGame(sim: ParkSimulation): void {
     sim.isHeadmasterPreview = false;
     sim.activeVisitNeighborId = null;
+    sim.activeHonorTourId = null;
     sim.homeStateWhileVisiting = null;
     sim.backupMainStateJson = null;
     sim.state = createInitialGameState();
@@ -733,9 +737,10 @@ export function lifecycleResolveWeatherSlotKind(sim: ParkSimulation, slotIdx: nu
     h ^= h >>> 16;
     const roll = (h >>> 0) % 100;
 
+    const yuleOff = sim.state.settings.yuleThemeMode === 'off';
     const period = lifecycleGetRealTimePeriod(sim, dateAtSlot);
     const fest = lifecycleGetActiveFestival(sim, dateAtSlot);
-    if (fest === 'christmas' || lifecycleIsWinterMainMapActive(sim)) {
+    if (!yuleOff && (fest === 'christmas' || lifecycleIsWinterMainMapActive(sim))) {
       if (roll < 64) return 'snow';
       if (roll < 88) return 'sunny';
       return 'cloudy';

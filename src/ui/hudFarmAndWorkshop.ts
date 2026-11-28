@@ -129,6 +129,7 @@ import {
 import {
   computeRoadsideUnitPrice,
   getRoadsideSaleWaitMs,
+  ROADSIDE_AD_COOLDOWN_MS,
   RoadsidePriceTier,
 } from '../sim/roadsideStandAndEvents';
 import { getVietnamCalendarKey } from '../sim/neighborSocial';
@@ -254,7 +255,7 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
       .map((crop) => {
         const locked = !hud.sim.state.sandboxMode && hud.sim.state.level < crop.unlockLevel;
         const selected = hud.activeSeedCropId === crop.id;
-        const seedCount = hud.sim.getSeedCount(crop.id);
+        const seedCount = hud.sim.getPlantableSeedCount(crop.id);
         const mastery = hud.sim.state.cropMastery?.[crop.id] ?? 0;
         const firstSec = computeStrategicPlotGrowSeconds(0, false, mastery, crop.growSec).growSec;
         const growLabel = formatDurationCompactVi(firstSec);
@@ -293,7 +294,7 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
           <div class="hs-tray-heading">
             <span class="seed-tray-title">${
               activeCrop
-                ? `${escapeHtml(activeCrop.name)} · ×${hud.sim.getSeedCount(activeCrop.id)}`
+                ? `${escapeHtml(activeCrop.name)} · ×${hud.sim.getPlantableSeedCount(activeCrop.id)}`
                 : 'Hạt Giống & Hoa'
             }</span>
             <span class="seed-tray-sub">Trống ${emptyPlotCount}/${totalPlotCount}</span>
@@ -440,7 +441,7 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
           hud.pendingSowPlotUid ??
           (hud.inspectSelection?.kind === 'building' ? hud.inspectSelection.uid : null);
 
-        if (!hud.sim.state.sandboxMode && hud.sim.getSeedCount(cid) <= 0) {
+        if (!hud.sim.state.sandboxMode && hud.sim.getPlantableSeedCount(cid) <= 0) {
           hud.activeSeedCropId = null;
           hud.pendingSowPlotUid = null;
           hud.seedTrayOpen = false;
@@ -465,7 +466,7 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
               return;
             }
             const hasMore =
-              Boolean(hud.sim.state.sandboxMode) || hud.sim.getSeedCount(cid) > 0;
+              Boolean(hud.sim.state.sandboxMode) || hud.sim.getPlantableSeedCount(cid) > 0;
             hud.activeSeedCropId = res.ok && hasMore ? cid : null;
             hud.showToast(res.msg, res.ok ? '🌱' : '🪙');
             hud.refreshAll();
@@ -476,7 +477,7 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
         hud.activeSeedCropId = cid;
         hud.refreshAll();
         hud.showToast(
-          `${c.name} · ${hud.sim.getSeedCount(cid)} hạt`,
+          `${c.name} · ${hud.sim.getPlantableSeedCount(cid)} giống (gieo 1 thu 2)`,
           c.emoji
         );
       });
@@ -531,7 +532,7 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
       const equippedCid = hud.activeSeedCropId;
       if (
         equippedCid &&
-        (hud.sim.state.sandboxMode || hud.sim.getSeedCount(equippedCid) > 0)
+        (hud.sim.state.sandboxMode || hud.sim.getPlantableSeedCount(equippedCid) > 0)
       ) {
         const targetUid = hud.pendingSowPlotUid;
         hud.seedTrayOpen = false;
@@ -541,7 +542,7 @@ export function farmUiRenderSeedTray(hud: GameHUD): void {
           if (selB && getCatalogItem(selB.itemId)?.isFarmlandPlot && !selB.cropId) {
             const res = hud.sim.plantCropOnPlot(selB.uid, equippedCid);
             const hasMore =
-              Boolean(hud.sim.state.sandboxMode) || hud.sim.getSeedCount(equippedCid) > 0;
+              Boolean(hud.sim.state.sandboxMode) || hud.sim.getPlantableSeedCount(equippedCid) > 0;
             hud.activeSeedCropId = res.ok && hasMore ? equippedCid : null;
             hud.showToast(res.msg, res.ok ? '🌱' : '🪙');
           }
@@ -811,6 +812,7 @@ export function farmUiUpdateWorkshopLiveTimers(hud: GameHUD): void {
 }
 
 const workshopDelegatedHudMap = new WeakMap<HTMLElement, GameHUD>();
+let selectedStandQtyCap: 1 | 3 | 5 | 10 = 5;
 
 function ensureWorkshopDelegatedEvents(box: HTMLElement, hud: GameHUD): void {
   workshopDelegatedHudMap.set(box, hud);
@@ -960,10 +962,18 @@ function ensureWorkshopDelegatedEvents(box: HTMLElement, hud: GameHUD): void {
       farmUiRenderWorkshopDialog(activeHud);
       return;
     }
+    if (btn.dataset.standQtyCap) {
+      const parsedCap = Number(btn.dataset.standQtyCap);
+      if (parsedCap === 1 || parsedCap === 3 || parsedCap === 5 || parsedCap === 10) {
+        selectedStandQtyCap = parsedCap;
+        farmUiRenderWorkshopDialog(activeHud);
+      }
+      return;
+    }
     if (btn.dataset.standList) {
       const slotIdx = Number(btn.dataset.standList);
       const have = activeHud.sim.getFarmItemCount(activeHud.selectedStandItemId);
-      const qty = Math.max(1, Math.min(3, st.sandboxMode ? 2 : have));
+      const qty = Math.max(1, Math.min(selectedStandQtyCap, st.sandboxMode ? selectedStandQtyCap : have));
       const res = activeHud.sim.listOnRoadsideStand(
         slotIdx,
         activeHud.selectedStandItemId,
@@ -975,10 +985,44 @@ function ensureWorkshopDelegatedEvents(box: HTMLElement, hud: GameHUD): void {
       activeHud.refreshHeader();
       return;
     }
+    if (btn.dataset.standAdvertise) {
+      const slotIdx = Number(btn.dataset.standAdvertise);
+      const res = activeHud.sim.advertiseRoadsideStandSlot(slotIdx);
+      activeHud.showToast(res.msg, res.ok ? '📰' : '⏳');
+      farmUiRenderWorkshopDialog(activeHud);
+      return;
+    }
     if (btn.dataset.standClaim) {
       const slotIdx = Number(btn.dataset.standClaim);
       const res = activeHud.sim.claimRoadsideStandSlot(slotIdx);
       activeHud.showToast(res.msg, res.ok ? '🪙' : '🧺');
+      farmUiRenderWorkshopDialog(activeHud);
+      activeHud.refreshHeader();
+      return;
+    }
+    if (btn.dataset.visitorAccept) {
+      const res = activeHud.sim.acceptFarmVisitorOffer(btn.dataset.visitorAccept);
+      if (!res.ok) activeHud.showToast(res.msg, '🧺');
+      farmUiRenderWorkshopDialog(activeHud);
+      activeHud.refreshHeader();
+      return;
+    }
+    if (btn.dataset.visitorDismiss) {
+      const res = activeHud.sim.dismissFarmVisitorOffer(btn.dataset.visitorDismiss);
+      if (!res.ok) activeHud.showToast(res.msg, '🦉');
+      farmUiRenderWorkshopDialog(activeHud);
+      return;
+    }
+    if (btn.dataset.newspaperBuy) {
+      const res = activeHud.sim.buyNewspaperClassifiedAd(btn.dataset.newspaperBuy);
+      if (!res.ok) activeHud.showToast(res.msg, '🪙');
+      farmUiRenderWorkshopDialog(activeHud);
+      activeHud.refreshHeader();
+      return;
+    }
+    if (btn.id === 'btnNewspaperRefreshEarly') {
+      const res = activeHud.sim.refreshDailyProphetNewspaperEarly();
+      if (!res.ok) activeHud.showToast(res.msg, '⏳');
       farmUiRenderWorkshopDialog(activeHud);
       activeHud.refreshHeader();
     }
@@ -1017,10 +1061,16 @@ export function patchWorkshopBarnInPlace(box: HTMLElement, hud: GameHUD): boolea
   };
 
   setText('#wsTabBarn .nb-tab-badge', `${barnUsed}/${barn.capacity}`);
-  setText('#wsTabStand .nb-tab-badge', standSoldCount > 0 ? `${standSoldCount} xong` : `${standListedCount}/6`);
+  setText('#wsTabStand .nb-tab-badge', standSoldCount > 0 ? `${standSoldCount} xong` : `${standListedCount}/${stand.slots.length}`);
   setText('#wsTabMarket .nb-tab-badge', marketBadge > 0 ? `${marketBadge} sẵn` : `${spotlightLotsLeft}/3`);
   setText('#wsTabCargo .nb-tab-badge', `${cratesDone}/3`);
   setText('#wsTabSynergy .nb-tab-badge', `${activeSynCount}/12`);
+
+  const wheatingProg = hud.sim.getHayDayWheatingProgress();
+  setText(
+    '[data-wheating-meter]',
+    `✨ Lộc Mùa Vàng: ${wheatingProg.current}/${wheatingProg.threshold} vụ → rơi 🔌/🌿/🧪/⏳ (đã nhặt ${wheatingProg.totalDrops})`
+  );
 
   const capPct = Math.min(100, Math.round((barnUsed / Math.max(1, barn.capacity)) * 100));
   const upgInfo = hud.sim.getBarnUpgradeCostInfo();
@@ -1152,7 +1202,7 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
           <span class="nb-tab-ico">🏡</span> Kho <span class="nb-tab-badge">${barnUsed}/${barn.capacity}</span>
         </button>
         <button type="button" role="tab" id="wsTabStand" data-ws-tab="stand" data-active="${hud.activeWorkshopTab === 'stand'}" aria-selected="${hud.activeWorkshopTab === 'stand'}" class="brass-btn">
-          <span class="nb-tab-ico">🧺</span> <span class="hs-long">Sạp Ngõ</span><span class="hs-short">Sạp</span> <span class="nb-tab-badge">${standSoldCount > 0 ? `${standSoldCount} xong` : `${standListedCount}/6`}</span>
+          <span class="nb-tab-ico">🧺</span> <span class="hs-long">Sạp Ngõ</span><span class="hs-short">Sạp</span> <span class="nb-tab-badge">${standSoldCount > 0 ? `${standSoldCount} xong` : `${standListedCount}/${stand.slots.length}`}</span>
         </button>
         <button type="button" role="tab" id="wsTabMarket" data-ws-tab="market" data-active="${hud.activeWorkshopTab === 'market'}" aria-selected="${hud.activeWorkshopTab === 'market'}" class="brass-btn">
           <span class="nb-tab-ico">🎪</span> <span class="hs-long">Chợ Phiên</span><span class="hs-short">Chợ</span> <span class="nb-tab-badge">${marketBadge > 0 ? `${marketBadge} sẵn` : `${spotlightLotsLeft}/3`}</span>
@@ -1229,21 +1279,21 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
           icon: '🧪',
           label: 'Sương Mai',
           qty: st.sandboxMode ? '∞' : `×${dewCount}`,
-          hint: '🧪 Bình Sương Mai giữ chuỗi & thu 2× mùa vụ — kiếm từ Hộp Mười Vụ, Hộp Quà Đồi Sương, Quà Dân Làng, Mốc Lễ Hội & Bách Khoa!',
+          hint: '🧪 Bình Sương Mai rút ngắn 15 phút giờ chờ xây dựng, ruộng & đồng cỏ — kiếm từ Hộp Mười Vụ, Hộp Quà Đồi Sương, Quà Dân Làng, Mốc Lễ Hội & Bách Khoa!',
         },
         {
           id: 'compost',
           icon: '🌿',
           label: 'Phân Ủ',
           qty: st.sandboxMode ? '∞' : `×${compostCount}`,
-          hint: '🌿 Phân Ủ Thảo Dược giảm 50% thời gian chín ruộng — kiếm từ Sạp Tiêu Điểm, Đơn Cú Tiêu Điểm, Hộp Mười Vụ & Kiện Hàng Chung!',
+          hint: '🌿 Phân Ủ Thảo Dược tăng +2 sản lượng thu hoạch & phục hồi đất/cây táo — kiếm từ Sạp Tiêu Điểm, Đơn Cú Tiêu Điểm, Hộp Mười Vụ & Kiện Hàng Chung!',
         },
         {
           id: 'sand',
           icon: '⏳',
           label: 'Cát',
           qty: st.sandboxMode ? '∞' : `×${sandCount}`,
-          hint: '⏳ Cát Xoay Thời Gian rút ngắn giờ chờ xưởng & xây dựng — kiếm từ Đại Tiệc, Chợ Phiên, Thành Tựu & Kiện Hàng Chung!',
+          hint: '⏳ Cát Xoay Thời Gian rút ngắn giờ chờ chế biến tại xưởng — kiếm từ Đại Tiệc, Chợ Phiên, Thành Tựu & Kiện Hàng Chung!',
         },
         {
           id: 'plug',
@@ -1290,6 +1340,10 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
           <div class="quest-bar" style="height:8px;margin-top:8px;">
             <div class="quest-bar-fill" data-barn-cap-bar style="width:${capPct}%"></div>
           </div>
+          ${(() => {
+            const wp = hud.sim.getHayDayWheatingProgress();
+            return `<div data-wheating-meter style="margin-top:6px;font-size:12px;font-weight:700;color:var(--brand-strong);">✨ Lộc Mùa Vàng: ${wp.current}/${wp.threshold} vụ → rơi 🔌/🌿/🧪/⏳ (đã nhặt ${wp.totalDrops})</div>`;
+          })()}
         </div>
 
         <div class="hs-utility-pouch" role="group" aria-label="Túi Vật Tư Phép Thuật — bấm từng món xem cách kiếm">
@@ -1396,13 +1450,20 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
         hud.selectedStandItemId,
         hud.selectedStandPriceTier
       );
-      const listQty = Math.max(1, Math.min(3, st.sandboxMode ? 2 : selHave));
+      const listQty = Math.max(1, Math.min(selectedStandQtyCap, st.sandboxMode ? selectedStandQtyCap : selHave));
+      const adCooldownLeftSec =
+        stand.lastAdPublishedAt && now - stand.lastAdPublishedAt < ROADSIDE_AD_COOLDOWN_MS
+          ? Math.ceil((ROADSIDE_AD_COOLDOWN_MS - (now - stand.lastAdPublishedAt)) / 1000)
+          : 0;
+      const visitors = hud.sim.getFarmVisitors(now);
+      const newspaper = hud.sim.getDailyProphetNewspaper(now);
+      const paperLeftSec = Math.max(0, Math.ceil((newspaper.nextRefreshAt - now) / 1000));
 
       bodyHtml = `
         <div class="quest-card-mini">
-          <div class="hs-card-title">🧺 Sạp Hàng Đầu Ngõ Hang Sóc (6 Ô)</div>
+          <div class="hs-card-title">🧺 Sạp Hàng Đầu Ngõ Hang Sóc (${stand.slots.length} Ô · Tối đa ×10/ô)</div>
           <div style="font-size:12px;color:var(--ink-soft);margin:4px 0 8px;">
-            Bày nông sản hoặc đặc sản dư trong Kho để khách lữ hành Hogsmeade và hàng xóm ghé mua lấy Sickle!
+            Bày nông sản dư lấy Sickle — bấm <strong>📰 Đăng báo</strong> miễn phí mỗi 3 phút để khách mua nhanh gấp 3 lần!
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             <select id="selStandItem" aria-label="Chọn nông sản bày sạp" style="flex:1;min-width:160px;min-height:38px;padding:4px 8px;border-radius:8px;border:1px solid var(--hs-brass);background:#fffdf7;color:var(--ink);font-weight:700;">
@@ -1414,7 +1475,15 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
                 })
                 .join('')}
             </select>
-            <div style="display:flex;gap:4px;">
+            <div style="display:flex;gap:4px;flex-wrap:wrap;">
+              ${([1, 3, 5, 10] as const)
+                .map(
+                  (cap) =>
+                    `<button type="button" data-stand-qty-cap="${cap}" aria-pressed="${selectedStandQtyCap === cap}" class="brass-btn ${selectedStandQtyCap === cap ? 'gold-cta' : ''}" style="padding:4px 8px;font-size:12px;">×${cap}</button>`
+                )
+                .join('')}
+            </div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;">
               ${(
                 [
                   ['bargain', 'Giá hời (nhanh)'],
@@ -1430,7 +1499,7 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
             </div>
           </div>
           <div style="font-size:12px;font-weight:700;margin-top:6px;">
-            Lô mẫu: <strong>${listQty} × ${escapeHtml(selMeta.name)}</strong> → <strong>+${selUnitPrice * listQty} Sickle</strong>
+            Lô bày: <strong>${listQty} × ${escapeHtml(selMeta.name)}</strong> → <strong>+${selUnitPrice * listQty} Sickle</strong>${adCooldownLeftSec > 0 ? ` · 📰 Đăng báo tiếp sau ${formatDurationCompactVi(adCooldownLeftSec)}` : ' · 📰 Sẵn sàng Đăng báo ×3 miễn phí'}
           </div>
         </div>
 
@@ -1465,11 +1534,12 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
                   </div>
                 `;
               }
-              const waitMs = getRoadsideSaleWaitMs(slot.unitPrice, m.sellValue);
+              const waitMs = getRoadsideSaleWaitMs(slot.unitPrice, m.sellValue, Boolean(slot.advertised));
               const leftSec = Math.max(1, Math.ceil((slot.listedAt + waitMs - now) / 1000));
+              const canAdvertise = !slot.advertised && (st.sandboxMode || adCooldownLeftSec <= 0);
               return `
                 <div class="market-deal-card">
-                  <div class="hs-card-title">Ô Sạp #${slot.slotIndex + 1} · Đang rao</div>
+                  <div class="hs-card-title">Ô Sạp #${slot.slotIndex + 1} · ${slot.advertised ? '📰 Đang lên báo ×3' : 'Đang rao'}</div>
                   <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
                     <img src="${m.iconSrc}" alt="${escapeHtml(m.name)}" style="width:32px;height:32px;object-fit:contain;" />
                     <div>
@@ -1477,6 +1547,94 @@ export function farmUiRenderWorkshopDialog(hud: GameHUD): void {
                       <div style="font-size:12px;color:var(--ink-soft);">Giá ${totalPrice} Sickle · khách ghé ~${formatDurationCompactVi(leftSec)}</div>
                     </div>
                   </div>
+                  ${
+                    slot.advertised
+                      ? `<div style="font-size:12px;font-weight:700;color:#15803d;">✓ Đã đăng lên Nhật Báo (tốc độ ×3)</div>`
+                      : `<button type="button" data-stand-advertise="${slot.slotIndex}" ${!canAdvertise ? 'disabled' : ''} class="brass-btn ${canAdvertise ? 'gold-cta' : ''}" style="width:100%;font-size:12px;padding:5px 8px;">
+                          ${adCooldownLeftSec > 0 && !st.sandboxMode ? `📰 Chờ ${formatDurationCompactVi(adCooldownLeftSec)}` : '📰 Đăng báo (×3 tốc độ)'}
+                        </button>`
+                  }
+                </div>
+              `;
+            })
+            .join('')}
+        </div>
+
+        <h3 class="hs-section-title" style="margin:14px 0 6px;">🦉 Khách Dạo Cổng Hang Sóc (Mua giá cao +18% đến +32%)</h3>
+        <div class="market-deal-grid">
+          ${visitors
+            .map((vis) => {
+              if (vis.arrivesAt && vis.arrivesAt > now) {
+                const waitSec = Math.max(1, Math.ceil((vis.arrivesAt - now) / 1000));
+                return `
+                  <div class="market-deal-card" style="opacity:0.78;">
+                    <div class="hs-card-title">🦉 Đang đón vị khách mới...</div>
+                    <div style="font-size:12px;color:var(--ink-soft);margin-top:4px;">Sẽ ghé cổng Hang Sóc sau ${formatDurationCountdownVi(waitSec)}</div>
+                  </div>
+                `;
+              }
+              const vm = getFarmItemMeta(vis.itemId);
+              const haveV = hud.sim.getFarmItemCount(vis.itemId);
+              const canSellV = st.sandboxMode || haveV >= vis.qty;
+              return `
+                <div class="market-deal-card">
+                  <div class="hs-card-title">${vis.visitorEmoji} ${escapeHtml(vis.visitorName)}</div>
+                  <div style="font-size:12px;color:var(--ink-soft);margin:2px 0 6px;">"${escapeHtml(vis.quoteVi)}"</div>
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                    <img src="${vm.iconSrc}" alt="${escapeHtml(vm.name)}" style="width:32px;height:32px;object-fit:contain;" />
+                    <div style="font-size:13px;font-weight:700;">
+                      Mua ${vis.qty} ${escapeHtml(vm.name)} <span style="opacity:0.8;">(Kho: ${st.sandboxMode ? '∞' : haveV})</span>
+                    </div>
+                  </div>
+                  <div style="display:flex;gap:6px;">
+                    <button type="button" data-visitor-accept="${escapeHtml(vis.id)}" ${!canSellV ? 'disabled' : ''} class="owl-green-send-btn" style="flex:1;padding:6px 8px;font-size:12px;${!canSellV ? 'opacity:0.55;' : ''}">
+                      ✓ Bán +🪙${vis.offerSickle} · +⭐${vis.offerXp}
+                    </button>
+                    <button type="button" data-visitor-dismiss="${escapeHtml(vis.id)}" class="brass-btn" style="padding:6px 10px;font-size:12px;" title="Hẹn dịp khác (đổi khách mới sau 90 giây)">
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              `;
+            })
+            .join('')}
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:14px 0 6px;">
+          <h3 class="hs-section-title" style="margin:0;">📰 Nhật Báo Tiên Tri — Số #${newspaper.editionId} (đổi sau ${formatDurationCompactVi(paperLeftSec)})</h3>
+          <button id="btnNewspaperRefreshEarly" type="button" class="brass-btn" style="padding:4px 10px;font-size:12px;" title="Gọi Cú giao số báo mới sớm (1 Cát)">
+            ⏳ Số mới (1 Cát)
+          </button>
+        </div>
+        <div class="market-deal-grid">
+          ${newspaper.ads
+            .map((ad) => {
+              const titleText =
+                ad.kind === 'farm_item' && ad.itemId
+                  ? `${ad.qty} × ${getFarmItemMeta(ad.itemId).name}`
+                  : ad.kind === 'muggle_plug'
+                    ? `${ad.qty} × 🔌 Bộ Phích Cắm Muggle`
+                    : ad.kind === 'compost'
+                      ? `${ad.qty} × 🌿 Phân Ủ Thảo Dược`
+                      : `${ad.qty} × 🧪 Bình Sương Mai`;
+              const iconHtmlFrag =
+                ad.kind === 'farm_item' && ad.itemId
+                  ? `<img src="${getFarmItemMeta(ad.itemId).iconSrc}" alt="${escapeHtml(titleText)}" style="width:32px;height:32px;object-fit:contain;" />`
+                  : `<span style="font-size:24px;line-height:1;">${ad.kind === 'muggle_plug' ? '🔌' : ad.kind === 'compost' ? '🌿' : '🧪'}</span>`;
+              const canBuy = !ad.sold && (st.sandboxMode || st.galleons >= ad.priceSickle);
+              return `
+                <div class="market-deal-card ${ad.sold ? 'claimed' : ''}" style="${ad.isRareDeal ? 'border-color:#d97706;' : ''}">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                    <div class="hs-card-title">${ad.sellerEmoji} ${escapeHtml(ad.sellerName)}</div>
+                    ${ad.isRareDeal ? '<span class="owl-spotlight-tag">✨ Hàng hiếm</span>' : ''}
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
+                    ${iconHtmlFrag}
+                    <div style="font-size:13px;font-weight:700;">${escapeHtml(titleText)}</div>
+                  </div>
+                  <button type="button" data-newspaper-buy="${escapeHtml(ad.id)}" ${!canBuy ? 'disabled' : ''} class="brass-btn ${canBuy ? 'gold-cta' : ''}" style="width:100%;padding:5px 8px;font-size:12px;">
+                    ${ad.sold ? '✓ Đã mua' : `🪙 Mua (${ad.priceSickle} Sickle)`}
+                  </button>
                 </div>
               `;
             })

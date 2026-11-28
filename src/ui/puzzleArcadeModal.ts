@@ -6,6 +6,7 @@ import {
   createJigsawAtlasBakeCache,
   CREATURE_ONET_SPECIES,
   CreatureOnetEngine,
+  getVisualOnetShiftSpec,
   FISH_ARENA_H,
   FISH_ARENA_W,
   FISH_SPECIES_CATALOG,
@@ -37,6 +38,10 @@ import {
 } from '../sim/puzzleArcadeEngine';
 import { MAX_DAILY_MINIGAME_RESCUES } from '../sim/neighborSocial';
 import {
+  MINIGAME_FARM_SPECIALTIES,
+  type MinigameFarmSpecialtyOutcome,
+} from '../sim/minigameSynergy';
+import {
   isProofOfPlayGameId,
   ProofOfPlayRecorder,
   verifyProofOfPlayEnvelope,
@@ -60,6 +65,7 @@ import {
 import {
   clientToLocalNormalized,
   MINIGAME_ZOOM_STEP,
+  screenDeltaToViewportDelta,
   sharedMinigameViewport,
 } from './minigameViewControls';
 import { compactSickle, liftToolIcons } from '../hpvn/toolIcons';
@@ -528,6 +534,7 @@ export class PuzzleArcadeModalController {
     isMasterReplay?: boolean;
     buildReduction?: BuildReductionResult;
     leaderboardRankUp?: LeaderboardRankChange;
+    specialtyReward?: MinigameFarmSpecialtyOutcome;
   } | null = null;
 
   private canvas: HTMLCanvasElement | null = null;
@@ -689,8 +696,14 @@ export class PuzzleArcadeModalController {
             ? (openDlg.querySelector('.pa-modal-inner') as HTMLElement | null)
             : null;
         const prevLayout = openDlg.dataset?.mgLayout;
+        const prevDockSig = openDlg.dataset?.paDockSig;
         const res = sharedMinigameViewport.applyDialogOrientation(openDlg, modalInner, false);
-        if (prevLayout && prevLayout !== res.effectiveLayout) {
+        const nextFold =
+          res.effectiveLayout === 'portrait' ||
+          Boolean(window.matchMedia?.('(max-height: 450px) and (orientation: landscape)').matches);
+        const nextDesktopWide = Boolean(window.matchMedia?.('(min-width: 980px)').matches);
+        const nextDockSig = `${res.effectiveLayout}:${nextFold ? 1 : 0}:${nextDesktopWide ? 1 : 0}`;
+        if ((prevLayout && prevLayout !== res.effectiveLayout) || (prevDockSig && prevDockSig !== nextDockSig)) {
           this.renderDOM();
           return;
         }
@@ -817,8 +830,18 @@ export class PuzzleArcadeModalController {
           ) {
             e.preventDefault();
             const cur = this.onetCursorCell ?? oe.selected ?? { r: 0, c: 0 };
-            const dr = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
-            const dc = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
+            let screenDr = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
+            let screenDc = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
+            const boardRot = sharedMinigameViewport.getState('blocks').boardQuarterTurns;
+            for (let t = 0; t < boardRot; t++) {
+              const nextR = -screenDc;
+              const nextC = screenDr;
+              screenDr = nextR;
+              screenDc = nextC;
+            }
+            const om = this.computeOnetBoardMetrics(oe);
+            const dr = om.transposed ? screenDc : screenDr;
+            const dc = om.transposed ? screenDr : screenDc;
             this.onetCursorCell = {
               r: (cur.r + dr + oe.rows) % oe.rows,
               c: (cur.c + dc + oe.cols) % oe.cols,
@@ -1281,7 +1304,10 @@ export class PuzzleArcadeModalController {
   }
 
   private isYuleSkinActive(): boolean {
-    return this.sim.isYuleVisualThemeActive();
+    const mode = this.sim.state.settings.yuleThemeMode ?? 'auto';
+    if (mode === 'on') return true;
+    if (mode === 'off') return false;
+    return this.sim.isYuleVisualThemeActive() || this.sim.isWinterMainMapActive();
   }
 
   private ensureYuleArcadeAssetsLoaded(): void {
@@ -1647,11 +1673,19 @@ export class PuzzleArcadeModalController {
             !dataOnly && isOptimalMove
               ? `<span class="pa-review-pill best">Nước ${rev.plyNumber} · chuẩn: ${escapeHtml(rev.recommendedCoordVi)}</span>`
               : `<span class="pa-review-pill">${dataOnly ? '' : `Nước ${rev.plyNumber} · `}${escapeHtml(rev.playedCoordVi)}</span>
-          ${dataOnly ? '' : `<span class="pa-review-pill best">Nên: ${escapeHtml(rev.recommendedCoordVi)}</span>`}`
+          ${dataOnly ? '' : `<span class="pa-review-pill best">${rev.mode === 'chess' ? escapeHtml(rev.recommendedCoordVi) : `Nên: ${escapeHtml(rev.recommendedCoordVi)}`}</span>`}`
           }
         </div>
       </div>
     `;
+  }
+
+  private isActiveEngineWon(): boolean {
+    if (this.mode === 'sudoku') return this.sudokuEngine?.status === 'won';
+    if (this.mode === 'caro') return this.minesEngine?.status === 'won';
+    if (this.mode === 'chess') return this.fishEngine?.status === 'won';
+    if (this.mode === 'jigsaw') return this.jigsawEngine?.status === 'won';
+    return this.onetEngine?.status === 'won';
   }
 
   private getActiveEngineStage(): number {
@@ -1986,7 +2020,11 @@ export class PuzzleArcadeModalController {
           this.companionCharge = Math.max(0, Math.round(pa.jigsawSession.companionCharge ?? 0));
           this.snackPieUsedThisAttempt = Boolean(pa.jigsawSession.snackPieUsed);
           this.lossStreakResetForStage = false;
-          this.ensureRestoredPopRecorder('jigsaw', stage, pa.jigsawSession.movesCount ?? 4);
+          this.ensureRestoredPopRecorder(
+            'jigsaw',
+            stage,
+            Math.max(pa.jigsawSession.movesCount || 0, nextEngine.lockedCount || 0, 1)
+          );
         } else {
           this.resetStageSynergySession();
           if (!rescueStage) {
@@ -2352,9 +2390,14 @@ export class PuzzleArcadeModalController {
     const modalInner = this.root.querySelector(
       '#puzzleArcadeDialog .pa-modal-inner'
     ) as HTMLElement | null;
-    sharedMinigameViewport.applyDialogOrientation(dlg, modalInner, false);
+    const orientRes = sharedMinigameViewport.applyDialogOrientation(dlg, modalInner, false);
     if (dlg?.dataset) {
       dlg.dataset.paActiveMode = this.mode;
+      const curFold =
+        orientRes.effectiveLayout === 'portrait' ||
+        Boolean(globalThis.matchMedia?.('(max-height: 450px) and (orientation: landscape)').matches);
+      const curDesktopWide = Boolean(globalThis.matchMedia?.('(min-width: 980px)').matches);
+      dlg.dataset.paDockSig = `${orientRes.effectiveLayout}:${curFold ? 1 : 0}:${curDesktopWide ? 1 : 0}`;
     }
     modalInner?.classList.toggle('pa-great-hall-mode', this.mode === 'chess');
     modalInner?.classList.toggle('pa-potions-sudoku-mode', this.mode === 'sudoku');
@@ -2611,8 +2654,14 @@ export class PuzzleArcadeModalController {
       statusBannerHtml += this.renderFishMissionsBarHtml(fe);
     } else if (this.mode === 'blocks' && this.onetEngine) {
       const oe = this.onetEngine;
+      const om = this.computeOnetBoardMetrics(oe);
+      const visualShift = getVisualOnetShiftSpec(
+        oe.shiftMode,
+        om.transposed,
+        sharedMinigameViewport.getState('blocks').boardQuarterTurns
+      );
       // the shift direction is the board's rule: it tags the sub line (a fourth cell does not fit 360px beside «Màn 7777/7777»)
-      stageSub = `${oe.rows}×${oe.cols} · <span class="hs-lv-tag">${escapeHtml(oe.shiftBadgeVi)}</span>`;
+      stageSub = `${oe.rows}×${oe.cols} · <span id="paOnetShiftTag" class="hs-lv-tag" data-shift-raw="${escapeHtml(visualShift.badgeVi)}">${escapeHtml(visualShift.badgeVi)}</span>`;
       stageStats =
         lvStat('Thời gian', `<strong id="paOnetTimer" class="${!st.sandboxMode && oe.isTimeCritical ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : oe.formatRemainingTime()}</strong>`, timeIcon) +
         lvStat('Lượt đổi', `<strong id="paOnetLives" class="${!st.sandboxMode && oe.lives <= 2 ? 'pa-err-inline' : ''}">${st.sandboxMode ? '∞' : oe.lives}</strong>`, lvIcon('m3_icon_heart')) +
@@ -2781,6 +2830,11 @@ export class PuzzleArcadeModalController {
                 }
                 ${vs.goldEarned > 0 ? `<span class="m3-reward-chip">+${vs.goldEarned} Sickle</span>` : ''} <!-- HPVN: Sickle reward -->
                 ${
+                  vs.specialtyReward
+                    ? `<span class="m3-reward-chip specialty" title="${escapeHtml(vs.specialtyReward.detailToastVi)}">${escapeHtml(vs.specialtyReward.badgeLabelVi)}</span>`
+                    : ''
+                }
+                ${
                   this.mode === 'jigsaw' && this.jigsawEngine
                     ? `<span class="m3-reward-chip pa-victory-art">${escapeHtml(this.jigsawEngine.artwork.titleVi)}</span>`
                     : ''
@@ -2840,18 +2894,18 @@ export class PuzzleArcadeModalController {
       `;
     }
 
-    const pieQty = this.sim.getFarmItemCount('cinnamon_apple_pie');
+    const paKit = this.sim.getMollySupplyForMinigame(this.mode);
     const paSynergyDockHtml = `
-      <div class="aaa-synergy-dock" role="region" aria-label="Bánh Táo Quế tiếp sức">
+      <div class="aaa-synergy-dock" role="region" aria-label="Hộp Tiếp Tế Bà Molly">
         <button
           id="btnPaSnackApplePie"
           type="button"
           class="aaa-snack-btn"
-          ${this.snackPieUsedThisAttempt || this.victoryClaimed || (!st.sandboxMode && pieQty <= 0) ? 'disabled' : ''}
-          title="Dùng 1 Bánh Táo Quế từ Kho Đỏ (Xoá 1 lỗi / +1 Lùi hoặc Đảo + 1 Gợi Ý)"
+          ${this.snackPieUsedThisAttempt || this.victoryClaimed || !paKit.ready ? 'disabled' : ''}
+          title="${escapeHtml(paKit.tooltipVi)}"
         >
           <img src="/game/trang-trai-hang-soc/sprites/ui_icon_pie_ready.webp" alt="" width="20" height="20" class="aaa-synergy-sprite" />
-          <span><span class="aaa-lbl-full">Bánh Táo </span><strong>${this.snackPieUsedThisAttempt ? '✓' : st.sandboxMode ? '∞' : `×${pieQty}`}</strong></span>
+          <span><span class="aaa-lbl-full">${escapeHtml(paKit.shortLabelVi)} </span><strong>${this.snackPieUsedThisAttempt ? '✓' : st.sandboxMode ? '∞' : `×${paKit.haveQty}`}</strong></span>
         </button>
       </div>
     `;
@@ -2864,6 +2918,7 @@ export class PuzzleArcadeModalController {
       globalThis.matchMedia?.('(max-height: 450px) and (orientation: landscape)').matches;
 
     if (this.mode === 'jigsaw') {
+      this.cleanupJigsawTrayDrag();
       this.captureJigsawTrayScrollState();
     }
 
@@ -2893,9 +2948,9 @@ export class PuzzleArcadeModalController {
                   <span>Noel</span>
                 </button>
               </div>
-              <button id="btnPaOpenLeaderboard" type="button" class="minigame-lb-chip" title="${isScoredMode ? 'Bảng Xếp Hạng môn này' : 'Bảng Xếp Hạng 4 Môn Tính Điểm (Bùa Gặt • Số Học • Sinh Vật • Tranh Ghép)'}">
+              <button id="btnPaOpenLeaderboard" type="button" class="minigame-lb-chip" title="${isScoredMode ? 'Bảng Xếp Hạng môn này' : 'Bảng Xếp Hạng 6 Môn Tính Điểm (Bùa Gặt • Dò Mìn • Số Học • Bắn Cá • Sinh Vật • Tranh Ghép)'}">
                 <img src="/game/trang-trai-hang-soc/sprites/ui_trophy_cup.webp" alt="" class="m3-res-icon" />
-                <strong id="paRankText">${isScoredMode ? `#${compactSickle(activeModeRank)}` : '4 Môn'}</strong>
+                <strong id="paRankText">${isScoredMode ? `#${compactSickle(activeModeRank)}` : '6 Môn'}</strong>
               </button>
               <form method="dialog" class="pa-inline-close-form">
                 <button type="submit" value="close" class="brass-btn pa-inline-close-btn" title="Về Trang Trại (Esc)" aria-label="Về Trang Trại"><img src="/game/trang-trai-hang-soc/sprites/burrow_house_canon.webp" alt="" class="m3-res-icon pa-close-home-ico" aria-hidden="true" /><span class="pa-close-home-lbl">Về vườn</span></button>
@@ -2903,22 +2958,22 @@ export class PuzzleArcadeModalController {
             </div>
 
             <div class="pa-mode-tabs" role="tablist"${globalThis.matchMedia?.('(min-width: 980px)').matches ? ' aria-orientation="vertical"' : ''} aria-label="Chọn môn khảo thí phép thuật Hogwarts" ${this.rescueContext ? 'style="opacity:0.65;pointer-events:none;"' : ''}>
-              <button type="button" role="tab" aria-selected="${this.mode === 'caro'}" data-pa-mode="caro" class="pa-mode-tab ${this.mode === 'caro' ? 'active' : ''}" title="Dò Mìn Phép Thuật">
+              <button type="button" role="tab" aria-selected="${this.mode === 'caro'}" data-pa-mode="caro" class="pa-mode-tab ${this.mode === 'caro' ? 'active' : ''}" title="Dò Mìn Phép Thuật • ${MINIGAME_FARM_SPECIALTIES.caro.shortTagVi}">
                 <span class="pa-tab-name"><span class="pa-tab-name-full">Dò Mìn Phép Thuật</span><span class="pa-tab-name-short"><span class="pa-tab-ico"></span> Dò Mìn</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('caro')}</span>${trialBadgeFor('caro')}</span>
               </button>
-              <button type="button" role="tab" aria-selected="${this.mode === 'sudoku'}" data-pa-mode="sudoku" class="pa-mode-tab ${this.mode === 'sudoku' ? 'active' : ''}" title="Số Học Huyền Bí">
+              <button type="button" role="tab" aria-selected="${this.mode === 'sudoku'}" data-pa-mode="sudoku" class="pa-mode-tab ${this.mode === 'sudoku' ? 'active' : ''}" title="Số Học Huyền Bí • ${MINIGAME_FARM_SPECIALTIES.sudoku.shortTagVi}">
                 <span class="pa-tab-name"><span class="pa-tab-name-full">🔢 Số Học Huyền Bí</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🔢</span> Số Học</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('sudoku')}</span>${trialBadgeFor('sudoku')}</span>
               </button>
-              <button type="button" role="tab" aria-selected="${this.mode === 'chess'}" data-pa-mode="chess" class="pa-mode-tab ${this.mode === 'chess' ? 'active' : ''}" title="Bắn Cá Hồ Đen">
+              <button type="button" role="tab" aria-selected="${this.mode === 'chess'}" data-pa-mode="chess" class="pa-mode-tab ${this.mode === 'chess' ? 'active' : ''}" title="Bắn Cá Hồ Đen • ${MINIGAME_FARM_SPECIALTIES.chess.shortTagVi}">
                 <span class="pa-tab-name"><span class="pa-tab-name-full">Bắn Cá Hồ Đen</span><span class="pa-tab-name-short"><span class="pa-tab-ico"></span> Bắn Cá</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('chess')}</span>${trialBadgeFor('chess')}</span>
               </button>
-              <button type="button" role="tab" aria-selected="${this.mode === 'blocks'}" data-pa-mode="blocks" class="pa-mode-tab ${this.mode === 'blocks' ? 'active' : ''}" title="Sinh Vật Huyền Bí">
+              <button type="button" role="tab" aria-selected="${this.mode === 'blocks'}" data-pa-mode="blocks" class="pa-mode-tab ${this.mode === 'blocks' ? 'active' : ''}" title="Sinh Vật Huyền Bí • ${MINIGAME_FARM_SPECIALTIES.blocks.shortTagVi}">
                 <span class="pa-tab-name"><span class="pa-tab-name-full">🦄 Sinh Vật Huyền Bí</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🦄</span> Sinh Vật</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('blocks')}</span>${trialBadgeFor('blocks')}</span>
               </button>
-              <button type="button" role="tab" aria-selected="${this.mode === 'jigsaw'}" data-pa-mode="jigsaw" class="pa-mode-tab ${this.mode === 'jigsaw' ? 'active' : ''}" title="Tranh Ghép Phép Thuật">
+              <button type="button" role="tab" aria-selected="${this.mode === 'jigsaw'}" data-pa-mode="jigsaw" class="pa-mode-tab ${this.mode === 'jigsaw' ? 'active' : ''}" title="Tranh Ghép Phép Thuật • ${MINIGAME_FARM_SPECIALTIES.jigsaw.shortTagVi}">
                 <span class="pa-tab-name"><span class="pa-tab-name-full">🧩 Tranh Ghép Phép Thuật</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🧩</span> Tranh Ghép</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('jigsaw')}</span>${trialBadgeFor('jigsaw')}</span>
               </button>
-              <button id="btnPaGoMatch3" type="button" role="tab" aria-selected="false" class="pa-mode-tab" title="Bùa Gặt Honeydukes">
+              <button id="btnPaGoMatch3" type="button" role="tab" aria-selected="false" class="pa-mode-tab" title="Bùa Gặt Honeydukes • ${MINIGAME_FARM_SPECIALTIES.match3.shortTagVi}">
                 <span class="pa-tab-name"><span class="pa-tab-name-full">🍬 Bùa Gặt Honeydukes</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🍬</span> Bùa Gặt</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('match3')}</span>${trialBadgeFor('match3')}</span>
               </button>
             </div>
@@ -3415,6 +3470,10 @@ export class PuzzleArcadeModalController {
     });
 
     const handleRestartStage = () => {
+      if (this.isActiveEngineWon() && !this.victoryClaimed) {
+        this.checkAndClaimVictory();
+        return;
+      }
       this.resetInteractionState();
       this.ensureEngineForMode(this.mode, true);
       this.sim.audio.playClick();
@@ -3429,6 +3488,10 @@ export class PuzzleArcadeModalController {
       if (!oe || oe.status !== 'playing') return;
       if (!this.sim.state.sandboxMode && oe.freeHintsLeft <= 0 && oe.paidHintsLeft <= 0) {
         this.showToast('Màn này đã dùng hết lượt Dò Cặp Sinh Vật!', '🔍');
+        return;
+      }
+      if (!oe.findAnyValidPair()) {
+        this.showToast('Không còn cặp nối trực tiếp — hãy Đổi Bàn!', '🔍');
         return;
       }
       if (oe.freeHintsLeft > 0) {
@@ -3583,6 +3646,10 @@ export class PuzzleArcadeModalController {
     });
 
     const handlePhoenixTalisman = () => {
+      if (this.victoryClaimed || this.isActiveEngineWon()) {
+        this.showToast('Màn chơi đã hoàn thành!', '🔥');
+        return;
+      }
       const gate = this.sim.canUsePhoenixTalismanInGame(this.mode);
       if (!gate.ok) {
         this.showToast(gate.msg, '🔥');
@@ -3719,45 +3786,45 @@ export class PuzzleArcadeModalController {
     box.querySelector('#btnPaLossTalisman')?.addEventListener('click', handlePhoenixTalisman);
 
     box.querySelector('#btnPaSnackApplePie')?.addEventListener('click', () => {
-      if (this.victoryClaimed || this.snackPieUsedThisAttempt) return;
-      const res = this.sim.consumeMollyMinigameSnack('cinnamon_apple_pie');
+      if (this.victoryClaimed || this.isActiveEngineWon() || this.snackPieUsedThisAttempt) return;
+      const res = this.sim.consumeMollySupplyKit(this.mode);
       if (!res.ok) {
         this.showToast(res.msg, '🥧');
         return;
       }
       this.snackPieUsedThisAttempt = true;
+      this.bumpCompanionCharge(0x7002);
       let jigsawWonFromPie = false;
       if (this.mode === 'sudoku' && this.sudokuEngine) {
         this.sudokuEngine.mistakesCount = Math.max(0, this.sudokuEngine.mistakesCount - 1);
         if (this.sudokuEngine.status === 'lost') {
           this.sudokuEngine.status = 'playing';
         }
-        this.sudokuEngine.freeHintsLeft += 1;
+        this.sudokuEngine.freeHintsLeft += res.isSignature ? 2 : 1;
+        this.sudokuEngine.peerScanActive = true;
       } else if (this.mode === 'caro' && this.minesEngine) {
         this.minesEngine.applyApplePieBoost();
+        if (res.isSignature) {
+          this.minesEngine.shieldsLeft += 1;
+        }
       } else if (this.mode === 'chess' && this.fishEngine) {
         this.fishEngine.applyApplePieBoost();
+        if (res.isSignature) {
+          this.fishEngine.ammo = Math.min(999, this.fishEngine.ammo + 15);
+        }
       } else if (this.mode === 'blocks' && this.onetEngine) {
         this.onetEngine.reviveWithExtraLives(2, 35);
-        this.onetEngine.freeHintsLeft += 1;
+        this.onetEngine.freeHintsLeft += res.isSignature ? 2 : 1;
       } else if (this.mode === 'jigsaw' && this.jigsawEngine) {
         const boost = this.jigsawEngine.applyApplePieBoost();
+        if (res.isSignature) {
+          this.jigsawEngine.freeHintsLeft += 1;
+        }
         jigsawWonFromPie = boost.won;
       }
       this.persistModeSession(this.mode, true);
       this.onParentRefresh();
-      this.showToast(
-        this.mode === 'blocks'
-          ? '🥧 Bánh Táo Quế Bà Molly: +35s giờ, +2 ❤️ Đổi Bàn & +1 🔍 Dò Cặp!'
-          : this.mode === 'jigsaw'
-            ? '🥧 Bánh Táo Quế Bà Molly: cộng thêm giờ, khớp mảnh tranh & +1 💡 Gợi Ý!'
-            : this.mode === 'caro'
-              ? '🥧 Bánh Táo Quế Bà Molly: +1 Khiên bảo vệ & +1 🪄 Dò An Toàn!'
-              : this.mode === 'chess'
-                ? '🥧 Bánh Táo Quế Bà Molly: +25s giờ, +20 Đạn Ngọc & +1 🌟 Băng Phong!'
-                : '🥧 Bánh Táo Quế Bà Molly: hồi phục lượt trợ giúp & +1 Gợi Ý!',
-        '🥧'
-      );
+      this.showToast(res.msg, '🥧');
       if (jigsawWonFromPie) {
         this.jigsawWinRevealTimer = 0.35;
       }
@@ -4124,10 +4191,12 @@ export class PuzzleArcadeModalController {
       this.showToast('Màn này đã dùng hết lượt Gợi Ý!', '💡');
       return;
     }
-    if (se.freeHintsLeft > 0) {
+    const usedFree = se.freeHintsLeft > 0;
+    const paidCost = usedFree ? 0 : se.hintGoldCost;
+    if (usedFree) {
       se.freeHintsLeft -= 1;
     } else {
-      const pay = this.sim.spendPuzzleHelperGold(se.hintGoldCost);
+      const pay = this.sim.spendPuzzleHelperGold(paidCost);
       if (!pay.ok) {
         this.showToast(pay.msg, '🪙');
         return;
@@ -4137,6 +4206,21 @@ export class PuzzleArcadeModalController {
       }
     }
     const res = se.useMagicHint();
+    if (!res.ok) {
+      // Hoàn lại lượt gợi ý / Sickle nếu không có ô hợp lệ để gợi ý (ví dụ bảng đầy đang chọn ô cho sẵn)
+      if (usedFree) {
+        se.freeHintsLeft += 1;
+      } else {
+        if (!this.sim.state.sandboxMode) {
+          se.paidHintsLeft += 1;
+          this.sim.state.galleons += paidCost;
+          this.sim.saveToStorage();
+        }
+      }
+      this.showToast('Hãy chọn 1 ô bạn đã điền sai (hoặc còn trống) rồi bấm Gợi Ý nhé!', '💡');
+      this.renderDOM();
+      return;
+    }
     if (res.ok) {
       this.bumpCompanionCharge(res.r * 9 + res.c);
       const sm = this.getSudokuLayoutMetrics();
@@ -4317,11 +4401,13 @@ export class PuzzleArcadeModalController {
       const dc = m.transposed ? res.defusedCell.r : res.defusedCell.c;
       const dr = m.transposed ? res.defusedCell.c : res.defusedCell.r;
       this.spawnBurst(m.originX + (dc + 0.5) * m.cellSize, m.originY + (dr + 0.5) * m.cellSize, '#34d399', 18);
-      this.sim.audio.playPowerupBlast();
-      this.showToast(`Khiên Bảo Vệ đỡ giúp 1 mìn! Còn ${me.shieldsLeft} khiên`, '✨');
-      this.persistModeSession('caro', true);
-      this.renderDOM();
-      return;
+      if (!res.lost && !res.won) {
+        this.sim.audio.playPowerupBlast();
+        this.showToast(`Khiên Bảo Vệ đỡ giúp 1 mìn! Còn ${me.shieldsLeft} khiên`, '✨');
+        this.persistModeSession('caro', true);
+        this.renderDOM();
+        return;
+      }
     }
     if (res.lost) {
       const dc = m.transposed ? r : c;
@@ -5063,6 +5149,8 @@ export class PuzzleArcadeModalController {
           this.minesWinRevealTimer = 0;
           this.checkAndClaimVictory();
         }
+      } else if (this.mode === 'caro' && this.minesEngine?.status === 'won' && !this.victoryClaimed) {
+        this.checkAndClaimVictory();
       } else if (this.mode === 'chess') {
         if (this.fishWinRevealTimer > 0) {
           this.fishWinRevealTimer -= dt;
@@ -5148,7 +5236,12 @@ export class PuzzleArcadeModalController {
               this.sim.audio.playCheekyAlert();
               this.renderDOM();
             } else {
-              if (tick.wholeSecondChanged || tick.caughtEvents.length > 0) {
+              if (
+                tick.wholeSecondChanged ||
+                tick.caughtEvents.length > 0 ||
+                Boolean(tick.collectedDrops?.length) ||
+                Boolean(tick.completedMissions?.length)
+              ) {
                 this.updateLiveCountersOnly();
               }
               if (!this.rescueContext) {
@@ -5355,6 +5448,18 @@ export class PuzzleArcadeModalController {
     engine: CreatureOnetEngine
   ): void {
     const m = this.computeOnetBoardMetrics(engine);
+    const shiftTag = this.root.querySelector('#paOnetShiftTag') as HTMLElement | null;
+    if (shiftTag) {
+      const visualShift = getVisualOnetShiftSpec(
+        engine.shiftMode,
+        m.transposed,
+        sharedMinigameViewport.getState('blocks').boardQuarterTurns
+      );
+      if (shiftTag.dataset.shiftRaw !== visualShift.badgeVi) {
+        shiftTag.dataset.shiftRaw = visualShift.badgeVi;
+        shiftTag.textContent = visualShift.badgeVi;
+      }
+    }
     const now = performance.now();
     const isSandbox = Boolean(this.sim.state.sandboxMode);
 
@@ -6278,6 +6383,15 @@ export class PuzzleArcadeModalController {
           ctx.save();
           ctx.lineWidth = 1.4;
           ctx.strokeStyle = 'rgba(180, 83, 9, 0.55)';
+          ctx.strokeRect(cx + 1.5, cy + 1.5, cPx - 3, cPx - 3);
+          ctx.restore();
+        }
+        if (engine.hasVisiblePeerDuplicate(r, c)) {
+          ctx.save();
+          ctx.fillStyle = 'rgba(254, 205, 211, 0.65)';
+          ctx.fillRect(cx + 1, cy + 1, cPx - 2, cPx - 2);
+          ctx.lineWidth = 1.8;
+          ctx.strokeStyle = 'rgba(220, 38, 38, 0.78)';
           ctx.strokeRect(cx + 1.5, cy + 1.5, cPx - 3, cPx - 3);
           ctx.restore();
         }
@@ -9510,8 +9624,10 @@ export class PuzzleArcadeModalController {
       if (!stDrag || stDrag.pointerId !== ev.pointerId || stDrag.pieceIdx !== pIdx) return;
       stDrag.currX = ev.clientX;
       stDrag.currY = ev.clientY;
-      const dx = ev.clientX - stDrag.startX;
-      const dy = ev.clientY - stDrag.startY;
+      const rawDx = ev.clientX - stDrag.startX;
+      const rawDy = ev.clientY - stDrag.startY;
+      const dlgTurn = sharedMinigameViewport.getViewportResolution(false).dialogQuarterTurn;
+      const { vx: dx, vy: dy } = screenDeltaToViewportDelta(rawDx, rawDy, dlgTurn);
       const dist = Math.hypot(dx, dy);
 
       if (stDrag.gesture === 'undecided' && dist > 7) {
@@ -9541,6 +9657,9 @@ export class PuzzleArcadeModalController {
           ghost.width = 76;
           ghost.height = 76;
           ghost.className = 'pa-jigsaw-drag-ghost';
+          if (dlgTurn !== 0) {
+            ghost.style.transform = `rotate(${dlgTurn * 90}deg)`;
+          }
           this.paintSingleJigsawPieceCanvas(ghost, pIdx);
           const hostDlg = this.root.querySelector('#puzzleArcadeDialog') ?? document.body;
           hostDlg.appendChild(ghost);
@@ -9557,9 +9676,11 @@ export class PuzzleArcadeModalController {
       }
 
       if (stDrag.gesture === 'lift' && stDrag.dragging && stDrag.ghostEl) {
-        const liftY = stDrag.pointerType === 'touch' ? 24 : 0;
-        stDrag.ghostEl.style.left = `${Math.round(ev.clientX - 38)}px`;
-        stDrag.ghostEl.style.top = `${Math.round(ev.clientY - 38 - liftY)}px`;
+        const lift = stDrag.pointerType === 'touch' ? 24 : 0;
+        const offX = dlgTurn === 1 ? lift : dlgTurn === 3 ? -lift : 0;
+        const offY = dlgTurn === 0 ? -lift : dlgTurn === 2 ? lift : 0;
+        stDrag.ghostEl.style.left = `${Math.round(ev.clientX - 38 + offX)}px`;
+        stDrag.ghostEl.style.top = `${Math.round(ev.clientY - 38 + offY)}px`;
       }
     });
 
@@ -9597,9 +9718,10 @@ export class PuzzleArcadeModalController {
       ) as HTMLElement | null;
       if (!cvs || !panArea) return;
 
-      const liftY = pointerType === 'touch' ? 24 : 0;
-      const dropClientX = ev.clientX;
-      const dropClientY = ev.clientY - liftY;
+      const dlgTurn = sharedMinigameViewport.getViewportResolution(false).dialogQuarterTurn;
+      const lift = pointerType === 'touch' ? 24 : 0;
+      const dropClientX = ev.clientX + (dlgTurn === 1 ? lift : dlgTurn === 3 ? -lift : 0);
+      const dropClientY = ev.clientY + (dlgTurn === 0 ? -lift : dlgTurn === 2 ? lift : 0);
       const panRect = panArea.getBoundingClientRect();
       if (
         dropClientX < panRect.left ||

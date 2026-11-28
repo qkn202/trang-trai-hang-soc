@@ -3,7 +3,9 @@ import './styles/main.css';
 import './styles/puzzleArcade.css';
 import './styles/hudAndMatch3.css';
 import './styles/minigameHalls.css';
-import { getCatalogItem } from './data/catalog';
+import './styles/hayDayDiegetic.css';
+import './styles/weeklyDerby.css';
+import { FARM_GOODS, getCatalogItem } from './data/catalog';
 import { getLevelInfo } from './data/levels';
 import { MAX_MATCH3_STAGE, MAX_MINIGAME_STAGE } from './data/match3Levels';
 import { TUTORIAL_STEPS } from './data/quests';
@@ -19,7 +21,8 @@ import {
   screenToGrid,
   worldIso,
 } from './engine/isometric';
-import { IsometricRenderer, isTouchOrIOSDevice } from './engine/renderer';
+import { computeAdaptiveDprCap, IsometricRenderer, isTouchOrIOSDevice } from './engine/renderer';
+import type { HayDaySwipeVisualState } from './engine/hayDayWorldOverlay';
 import { SpriteRegistry } from './engine/spriteLoader';
 import { sampleCoasterTrainPositions } from './sim/coaster';
 import { isDragPaintableCatalogItem, isRepeatableCatalogItem, setFarmStore, ParkSimulation } from './sim/simulation';
@@ -30,6 +33,7 @@ import {
   HeatmapMode,
   LeaderboardGameId,
   LeaderboardScope,
+  PlacedBuilding,
   PuzzleArcadeMode,
   QuizFormatKind,
   QuizLanguageId,
@@ -43,12 +47,27 @@ import { accessibility, announce } from './ui/accessibility';
 import { haptic } from './ui/haptics';
 import { GameHUD } from './ui/hud';
 import {
+  HayDayDiegeticOverlayUI,
+  HayDayRadialToolKind,
+} from './ui/hayDayRadialWheel';
+import {
   GamepadController,
   RADIAL_QUICK_SLICES,
   RadialQuickActionId,
 } from './ui/platformAndA11y';
 import { ProductionTelemetryCollector } from './ui/productionShip';
-import { flushFarmSave, identity, isStandaloneLocal, loadFarm, placeShellNav, queueFarmSave, setInboxListener, setSaveStatusListener } from './hpvn/bridge';
+import {
+  flushFarmSave,
+  identity,
+  isStandaloneLocal,
+  loadFarm,
+  placeShellNav,
+  queueFarmSave,
+  registerGpuBeforeCaptureHook,
+  reportClientDiagnostic,
+  setInboxListener,
+  setSaveStatusListener,
+} from './hpvn/bridge';
 import { applyFarmInbox } from './hpvn/inbox';
 import { installCanvasEmojiFilter, installEmojiFilter } from './hpvn/emoji';
 import { installTabCentering } from './hpvn/toolIcons';
@@ -81,14 +100,13 @@ async function bootstrap(): Promise<void> {
 
   // HPVN: the farm lives on the HPVN server; without it nothing starts (a fresh farm must never overwrite a saved one).
   if (!identity) throw Object.assign(new Error('Hãy mở Trang Trại Hang Sóc từ Phòng Sinh Hoạt Chung trên HPVN.'), { hpvn: true });
-  const farmJson = await loadFarm();
+  const audio = new MagicalAudio();
+  const sprites = new SpriteRegistry();
+  // Song song hoá tải dữ liệu nông trại và nạp sprite WebP để cắt 200-600ms thời gian khởi động (TTI)
+  const [farmJson] = await Promise.all([loadFarm(), sprites.loadAll()]);
   if (!isStandaloneLocal) {
     setFarmStore({ read: () => farmJson, write: queueFarmSave });
   }
-
-  const audio = new MagicalAudio();
-  const sprites = new SpriteRegistry();
-  await sprites.loadAll();
 
   const sim = new ParkSimulation(audio);
   if (typeof sim.state.settings.toonEnabled === 'boolean') sprites.setToonEnabled(sim.state.settings.toonEnabled); // HPVN: «Viền nâu» survives a reload
@@ -109,10 +127,32 @@ async function bootstrap(): Promise<void> {
   if (hudTopLeft && !isStandaloneLocal) placeShellNav(hudTopLeft);
 
   accessibility.init(sim);
+  let lastSaveFailed = false;
   setSaveStatusListener((status) => {
-    if (status === 'replaced') showStop('Bạn đang chơi Trang Trại Hang Sóc ở nơi khác', 'Trang trại này không lưu nữa. Tải lại để chơi tiếp ở đây.');
-    else if (status === 'too-big') hud.showToast('Trang trại quá lớn để lưu lên HPVN, hãy dọn bớt đồ trang trí.', '⚠️');
-    else if (status === 'error') hud.showToast('Chưa lưu được lên HPVN, sẽ thử lại.', '⚠️');
+    if (status === 'replaced') {
+      lastSaveFailed = false;
+      showStop('Bạn đang chơi Trang Trại Hang Sóc ở nơi khác', 'Trang trại này không lưu nữa. Tải lại để chơi tiếp ở đây.');
+    } else if (status === 'too-big') {
+      lastSaveFailed = false;
+      hud.showToast('Trang trại quá lớn để lưu lên HPVN, hãy dọn bớt đồ trang trí.', '⚠️');
+    } else if (status === 'error') {
+      lastSaveFailed = true;
+      hud.showToast('Chưa lưu được lên HPVN, hệ thống đang tự động thử lại.', '⚠️');
+    } else if (status === 'saved' && lastSaveFailed) {
+      lastSaveFailed = false;
+      hud.showToast('Đã đồng bộ lưu lại thành công lên HPVN!', '✅');
+    }
+  });
+  window.addEventListener('error', (ev) => {
+    const errObj = ev.error as Error | undefined;
+    const msg = ev.message || errObj?.message || 'Uncaught window error';
+    reportClientDiagnostic('error', msg, errObj?.stack ?? `${ev.filename}:${ev.lineno}`);
+  });
+  window.addEventListener('unhandledrejection', (ev) => {
+    const reason = ev.reason;
+    const msg = reason instanceof Error ? reason.message : String(reason ?? 'Unhandled rejection');
+    const detail = reason instanceof Error ? reason.stack : undefined;
+    reportClientDiagnostic('unhandledrejection', msg, detail);
   });
   // HPVN: helps other members gave this farm (server inbox), applied once to the home farm and saved
   setInboxListener((entries) => {
@@ -212,6 +252,27 @@ async function bootstrap(): Promise<void> {
     window.addEventListener('hangsoc:toon-changed', () => {
       renderer.groundCacheKey = '';
       gpuWorldRenderer?.invalidateSpriteAtlas();
+    });
+    // Ensure screenshots & Floo postcards capture a fresh WebGL2 frame even with preserveDrawingBuffer: false
+    registerGpuBeforeCaptureHook(() => {
+      if (
+        gpuWorldRenderer &&
+        directGpuSettings &&
+        directGpuSettings.mode === 'webgl2' &&
+        !gpuWorldRenderer.gpuDevice.contextLost
+      ) {
+        gpuWorldRenderer.renderFrame(
+          sim,
+          cam,
+          directGpuSettings,
+          ptrWorldScratch,
+          Date.now(),
+          {
+            adaptiveDprCap: renderer.adaptiveDprCap,
+            skipReadyBubbleSprites: true,
+          }
+        );
+      }
     });
   } catch (err) {
     console.warn('[WebGL2 Engine] Thiết bị không hỗ trợ WebGL2, tự động fallback về Canvas2D:', err);
@@ -931,7 +992,7 @@ async function bootstrap(): Promise<void> {
       }
       return false;
     }
-    if (!sim.state.sandboxMode && sim.getSeedCount(seedCropId) <= 0) {
+    if (!sim.state.sandboxMode && sim.getPlantableSeedCount(seedCropId) <= 0) {
       hud.activeSeedCropId = null;
     }
     if (hud.seedTrayOpen) {
@@ -988,6 +1049,72 @@ async function bootstrap(): Promise<void> {
       hud.refreshFloatingBanner();
     }
     return true;
+  };
+
+  const computeStereoPan = (sx: number): number => {
+    const w = Math.max(1, canvas.clientWidth || window.innerWidth || 1024);
+    return Math.max(-0.85, Math.min(0.85, (sx / w) * 2 - 1));
+  };
+
+  const getPlotScreenCenter = (b: PlacedBuilding): { sx: number; sy: number } => {
+    const it = getCatalogItem(b.itemId);
+    const { bw, bh } = it ? sim.getBuildingFootprint(it, b.rotation) : { bw: 1, bh: 1 };
+    const elev = sim.grid[b.gy]?.[b.gx]?.elevation ?? 0;
+    return gridToScreen(
+      b.gx + bw * 0.5,
+      b.gy + bh * 0.5,
+      cam,
+      canvas.clientWidth,
+      canvas.clientHeight,
+      elev * ELEV_PX + 18
+    );
+  };
+
+  const emitWorkshopCollectJuice = (
+    prevGoods: ReadonlyArray<string>,
+    remainingCount: number,
+    srcSx: number,
+    srcSy: number
+  ): void => {
+    const collectedCount = Math.max(0, prevGoods.length - remainingCount);
+    if (collectedCount <= 0) return;
+    const collected = prevGoods.slice(0, collectedCount);
+    const barnAnchor = renderer.getBarnHudAnchor();
+    const pan = computeStereoPan(srcSx);
+    renderer.juiceFx.spawnHarvestBurstRing(srcSx, srcSy, '#fde047');
+    for (let idx = 0; idx < collected.length; idx++) {
+      const goodId = collected[idx];
+      const goodMeta = FARM_GOODS[goodId as keyof typeof FARM_GOODS];
+      const goodSprite = goodMeta ? sprites.get(goodMeta.iconKey) ?? null : null;
+      const spreadX = (idx - (collected.length - 1) * 0.5) * 12;
+      sim.audio.playWorkshopCollectNote(idx, pan);
+      renderer.juiceFx.spawnHarvestFlight(
+        srcSx + spreadX,
+        srcSy,
+        barnAnchor.x,
+        barnAnchor.y,
+        goodSprite,
+        '#fde047',
+        1
+      );
+    }
+  };
+
+  const scrollDailyProphetIntoView = (): void => {
+    requestAnimationFrame(() => {
+      const dlg = hud.root.querySelector('#workshopDialog') as HTMLElement | null;
+      if (!dlg) return;
+      const headings = dlg.querySelectorAll<HTMLElement>('h3.hs-section-title');
+      for (const h of headings) {
+        if (h.textContent?.includes('Nhật Báo Tiên Tri')) {
+          h.scrollIntoView({
+            behavior: renderer.reducedMotion ? 'auto' : 'smooth',
+            block: 'start',
+          });
+          break;
+        }
+      }
+    });
   };
 
   type CareSweepMode = 'harvest_crop' | 'water_crop' | 'harvest_pasture' | 'feed_pasture';
@@ -1054,7 +1181,15 @@ async function bootstrap(): Promise<void> {
     return null;
   };
 
-  const applyCareSweepPlot = (uid: string, mode: CareSweepMode, sx: number, sy: number): boolean => {
+  const applyCareSweepPlot = (
+    uid: string,
+    mode: CareSweepMode,
+    sx: number,
+    sy: number,
+    comboIndex = 0
+  ): boolean => {
+    const b = sim.state.buildings.find((x) => x.uid === uid);
+    const prevCropId = b?.cropId ?? null;
     let ok = false;
     if (mode === 'harvest_crop') {
       ok = sim.harvestCropPlot(uid).ok;
@@ -1066,8 +1201,28 @@ async function bootstrap(): Promise<void> {
       ok = sim.feedAnimalPasture(uid).ok;
     }
     if (ok) {
+      const pt = b ? getPlotScreenCenter(b) : { sx, sy };
+      const pan = computeStereoPan(pt.sx);
+      if (mode === 'harvest_crop') {
+        const barnAnchor = renderer.getBarnHudAnchor();
+        const cropSprite = prevCropId ? renderer.getCropIconImage(prevCropId) ?? null : null;
+        sim.audio.playSwipeHarvestNote(comboIndex, pan);
+        renderer.juiceFx.spawnHarvestFlight(
+          pt.sx,
+          pt.sy,
+          barnAnchor.x,
+          barnAnchor.y,
+          cropSprite,
+          '#fde047',
+          2
+        );
+        renderer.juiceFx.spawnHarvestBurstRing(pt.sx, pt.sy, '#fde047');
+      } else if (mode === 'water_crop') {
+        sim.audio.playSwipeSowNote(comboIndex, pan);
+        renderer.juiceFx.spawnHarvestBurstRing(pt.sx, pt.sy, '#38bdf8');
+      }
       renderer.triggerSquash(uid);
-      renderer.notifyJuice('harvest', sx, sy);
+      renderer.notifyJuice('harvest', pt.sx, pt.sy);
       haptic('light');
     }
     return ok;
@@ -1122,6 +1277,389 @@ async function bootstrap(): Promise<void> {
       pendingTouchPaint = null;
     }
   };
+
+  // Hay Day Diegetic Radial Wheel + Visitor Popover + Fluid Swipe-Harvest/Water/Sow
+  interface ActiveHayDaySwipe {
+    tool: HayDayRadialToolKind;
+    cropId: FarmCropId | null;
+    pointerId: number;
+    comboCount: number;
+    sweptUids: Set<string>;
+    points: HayDaySwipeVisualState['points'];
+  }
+  let activeHayDaySwipe: ActiveHayDaySwipe | null = null;
+  let hayDayOverlayCamSnap: { x: number; y: number; zoom: number; rot: 0 | 1 | 2 | 3 } | null =
+    null;
+
+  const snapshotOverlayCam = (): void => {
+    hayDayOverlayCamSnap = {
+      x: cam.x,
+      y: cam.y,
+      zoom: cam.zoom,
+      rot: cam.viewRot ?? 0,
+    };
+  };
+
+  const isEligibleFarmlandForHayDayTool = (
+    b: PlacedBuilding | undefined,
+    tool: HayDayRadialToolKind,
+    nowMs: number,
+    sweptUids?: Set<string>
+  ): b is PlacedBuilding => {
+    if (!b || nowMs < b.constructEndsAt || b.awaitingUnveil) return false;
+    if (sweptUids?.has(b.uid)) return false;
+    const it = getCatalogItem(b.itemId);
+    if (!it?.isFarmlandPlot) return false;
+    if (tool === 'sickle') {
+      return Boolean(b.cropId && b.cropReadyAt && nowMs >= b.cropReadyAt);
+    }
+    if (tool === 'water') {
+      return Boolean(b.cropId && b.cropReadyAt && nowMs < b.cropReadyAt && !b.cropWateredBoost);
+    }
+    return !b.cropId;
+  };
+
+  const findEligibleFarmlandPlotForSwipe = (
+    gx: number,
+    gy: number,
+    sx: number,
+    sy: number,
+    tool: HayDayRadialToolKind,
+    sweptUids: Set<string>
+  ): PlacedBuilding | null => {
+    const nowMs = Date.now();
+    const directUid = sim.grid[gy]?.[gx]?.buildingUid;
+    if (directUid) {
+      const directB = sim.state.buildings.find((x) => x.uid === directUid);
+      if (isEligibleFarmlandForHayDayTool(directB, tool, nowMs, sweptUids)) {
+        return directB;
+      }
+    }
+    let best: PlacedBuilding | null = null;
+    let bestDist = Infinity;
+    for (let i = renderer.hotspots.length - 1; i >= 0; i--) {
+      const hs = renderer.hotspots[i];
+      if (hs.kind !== 'building' && hs.kind !== 'bubble' && hs.kind !== 'water_crop') continue;
+      const dist = Math.hypot(sx - hs.sx, sy - hs.sy);
+      if (dist <= Math.max(hs.radius * 1.35, 36) && dist < bestDist) {
+        const cand = sim.state.buildings.find((x) => x.uid === hs.id);
+        if (isEligibleFarmlandForHayDayTool(cand, tool, nowMs, sweptUids)) {
+          bestDist = dist;
+          best = cand;
+        }
+      }
+    }
+    if (best) return best;
+
+    const screenFallbackRadius = Math.max(36, 44 * cam.zoom);
+    for (const cand of sim.state.buildings) {
+      if (!isEligibleFarmlandForHayDayTool(cand, tool, nowMs, sweptUids)) continue;
+      const pt = getPlotScreenCenter(cand);
+      const dist = Math.hypot(sx - pt.sx, sy - pt.sy);
+      if (dist <= screenFallbackRadius && dist < bestDist) {
+        bestDist = dist;
+        best = cand;
+      }
+    }
+    return best;
+  };
+
+  const applyHayDayToolToPlot = (
+    b: PlacedBuilding,
+    tool: HayDayRadialToolKind,
+    cropId: FarmCropId | null,
+    comboIndex: number
+  ): { ok: boolean; stopSwipe: boolean; needSeedAcquire?: boolean; plotUid?: string } => {
+    const plotPt = getPlotScreenCenter(b);
+    const pan = computeStereoPan(plotPt.sx);
+    if (tool === 'sickle') {
+      const prevCropId = b.cropId;
+      const res = sim.harvestCropPlot(b.uid);
+      if (!res.ok) {
+        const nowMs = Date.now();
+        if (nowMs - lastSeedWarnAt > 1200) {
+          lastSeedWarnAt = nowMs;
+          hud.showToast(res.msg, '🌾');
+        }
+        return { ok: false, stopSwipe: true };
+      }
+      const barnAnchor = renderer.getBarnHudAnchor();
+      const cropSprite = prevCropId ? renderer.getCropIconImage(prevCropId) ?? null : null;
+      sim.audio.playSwipeHarvestNote(comboIndex, pan);
+      renderer.juiceFx.spawnHarvestFlight(
+        plotPt.sx,
+        plotPt.sy,
+        barnAnchor.x,
+        barnAnchor.y,
+        cropSprite,
+        '#fde047',
+        2
+      );
+      renderer.juiceFx.spawnHarvestBurstRing(plotPt.sx, plotPt.sy, '#fde047');
+      renderer.triggerSquash(b.uid);
+      haptic('light');
+      return { ok: true, stopSwipe: false };
+    }
+    if (tool === 'water') {
+      const res = sim.waterCropPlot(b.uid);
+      if (!res.ok) return { ok: false, stopSwipe: false };
+      sim.audio.playSwipeSowNote(comboIndex, pan);
+      renderer.juiceFx.spawnHarvestBurstRing(plotPt.sx, plotPt.sy, '#38bdf8');
+      renderer.triggerSquash(b.uid);
+      haptic('light');
+      return { ok: true, stopSwipe: false };
+    }
+    if (!cropId) return { ok: false, stopSwipe: true };
+    const res = sim.plantCropOnPlot(b.uid, cropId);
+    if (!res.ok) {
+      if (res.needSeedAcquire) {
+        return { ok: false, stopSwipe: true, needSeedAcquire: true, plotUid: b.uid };
+      }
+      const nowMs = Date.now();
+      if (nowMs - lastSeedWarnAt > 1200) {
+        lastSeedWarnAt = nowMs;
+        hud.showToast(res.msg, '🪙');
+      }
+      return { ok: false, stopSwipe: true };
+    }
+    sim.audio.playSwipeSowNote(comboIndex, pan);
+    renderer.juiceFx.spawnHarvestBurstRing(plotPt.sx, plotPt.sy, '#4ade80');
+    renderer.triggerSquash(b.uid);
+    haptic('light');
+    const outOfSeeds = !sim.state.sandboxMode && sim.getPlantableSeedCount(cropId) <= 0;
+    return { ok: true, stopSwipe: outOfSeeds };
+  };
+
+  const finishHayDaySwipe = (): boolean => {
+    const swipe = activeHayDaySwipe;
+    activeHayDaySwipe = null;
+    renderer.hayDaySwipeVisual = null;
+    if (!swipe) return false;
+    sim.batchOperationActive = false;
+    if (swipe.comboCount > 0) {
+      sim.checkAndToastAchievements();
+      sim.saveToStorage();
+      sim.onUiChange?.();
+      hud.inspectSelection = null;
+      hud.refreshAll();
+    }
+    return true;
+  };
+
+  const startHayDaySwipe = (
+    tool: HayDayRadialToolKind,
+    cropId: FarmCropId | null,
+    startClientX: number,
+    startClientY: number,
+    pointerId: number,
+    initialPlotUid: string
+  ): void => {
+    if (sim.isVisitingNeighbor) return;
+    cancelPendingTouchPaint();
+    cancelLongPressMove();
+    finishCareSweep();
+    isDraggingCam = false;
+    isPointerDown = false;
+    const rect = canvas.getBoundingClientRect();
+    const sx = startClientX - rect.left;
+    const sy = startClientY - rect.top;
+    const nowMs = Date.now();
+    const swipe: ActiveHayDaySwipe = {
+      tool,
+      cropId,
+      pointerId,
+      comboCount: 0,
+      sweptUids: new Set<string>(),
+      points: [{ sx, sy, at: nowMs }],
+    };
+    activeHayDaySwipe = swipe;
+    sim.batchOperationActive = true;
+    renderer.hayDaySwipeVisual = {
+      active: true,
+      tool,
+      cropId,
+      x: sx,
+      y: sy,
+      points: swipe.points,
+      comboCount: 0,
+    };
+
+    // Apply immediately to the originating plot so a quick sweep never misses the first tile
+    const originB = sim.state.buildings.find((x) => x.uid === initialPlotUid);
+    if (isEligibleFarmlandForHayDayTool(originB, tool, nowMs, swipe.sweptUids)) {
+      swipe.sweptUids.add(originB.uid);
+      const res = applyHayDayToolToPlot(originB, tool, cropId, swipe.comboCount);
+      if (res.ok) {
+        swipe.comboCount++;
+        if (renderer.hayDaySwipeVisual) {
+          renderer.hayDaySwipeVisual.comboCount = swipe.comboCount;
+        }
+      }
+      if (res.stopSwipe) {
+        finishHayDaySwipe();
+        if (res.needSeedAcquire && cropId) {
+          const targetPlotUid = res.plotUid ?? initialPlotUid;
+          window.setTimeout(() => {
+            hud.openSeedQuizDialog(cropId, targetPlotUid);
+          }, 0);
+        }
+        return;
+      }
+    }
+
+    // Also check whichever plot sits directly beneath the current drag pointer
+    const gPos = screenToGrid(sx, sy, cam, rect.width, rect.height, sim.grid);
+    const hitB = findEligibleFarmlandPlotForSwipe(gPos.gx, gPos.gy, sx, sy, tool, swipe.sweptUids);
+    if (hitB) {
+      swipe.sweptUids.add(hitB.uid);
+      const res = applyHayDayToolToPlot(hitB, tool, cropId, swipe.comboCount);
+      if (res.ok) {
+        swipe.comboCount++;
+        if (renderer.hayDaySwipeVisual) {
+          renderer.hayDaySwipeVisual.comboCount = swipe.comboCount;
+        }
+      }
+      if (res.stopSwipe) {
+        finishHayDaySwipe();
+        if (res.needSeedAcquire && cropId) {
+          const targetPlotUid = res.plotUid ?? hitB.uid;
+          window.setTimeout(() => {
+            hud.openSeedQuizDialog(cropId, targetPlotUid);
+          }, 0);
+        }
+      }
+    }
+  };
+
+  window.addEventListener('pointermove', (e) => {
+    const swipe = activeHayDaySwipe;
+    if (!swipe) return;
+    if (typeof e.pointerId === 'number' && e.pointerId !== swipe.pointerId) return;
+    const rect = canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    const nowMs = Date.now();
+    swipe.points.push({ sx, sy, at: nowMs });
+    const cutoff = nowMs - 240;
+    while (swipe.points.length > 1 && swipe.points[0].at < cutoff) {
+      swipe.points.shift();
+    }
+    if (swipe.points.length > 48) {
+      swipe.points.splice(0, swipe.points.length - 48);
+    }
+    renderer.hayDaySwipeVisual = {
+      active: true,
+      tool: swipe.tool,
+      cropId: swipe.cropId,
+      x: sx,
+      y: sy,
+      points: swipe.points,
+      comboCount: swipe.comboCount,
+    };
+
+    const gPos = screenToGrid(sx, sy, cam, rect.width, rect.height, sim.grid);
+    const hitB = findEligibleFarmlandPlotForSwipe(
+      gPos.gx,
+      gPos.gy,
+      sx,
+      sy,
+      swipe.tool,
+      swipe.sweptUids
+    );
+    if (!hitB) return;
+    swipe.sweptUids.add(hitB.uid);
+    const res = applyHayDayToolToPlot(hitB, swipe.tool, swipe.cropId, swipe.comboCount);
+    if (res.ok) {
+      swipe.comboCount++;
+      if (renderer.hayDaySwipeVisual) {
+        renderer.hayDaySwipeVisual.comboCount = swipe.comboCount;
+      }
+    }
+    if (res.stopSwipe) {
+      const needCropId = swipe.cropId;
+      finishHayDaySwipe();
+      if (res.needSeedAcquire && needCropId) {
+        const targetPlotUid = res.plotUid ?? hitB.uid;
+        window.setTimeout(() => {
+          hud.openSeedQuizDialog(needCropId, targetPlotUid);
+        }, 0);
+      }
+    }
+  });
+
+  const hayDayOverlay = new HayDayDiegeticOverlayUI(app, sim, {
+    onStartSwipeTool: (tool, cropId, startClientX, startClientY, pointerId, plotUid) => {
+      hayDayOverlayCamSnap = null;
+      startHayDaySwipe(tool, cropId, startClientX, startClientY, pointerId, plotUid);
+    },
+    onTapQuickAction: (tool, cropId, plotUid) => {
+      hayDayOverlayCamSnap = null;
+      const b = sim.state.buildings.find((x) => x.uid === plotUid);
+      if (!b) return;
+      const res = applyHayDayToolToPlot(b, tool, cropId, 0);
+      if (res.needSeedAcquire && cropId) {
+        hud.inspectSelection = null;
+        hud.refreshAll();
+        const targetPlotUid = b.uid;
+        window.setTimeout(() => {
+          hud.openSeedQuizDialog(cropId, targetPlotUid);
+        }, 0);
+        return;
+      }
+      hud.inspectSelection = null;
+      hud.refreshAll();
+    },
+    onOpenFullSeedTray: (plotUid) => {
+      hayDayOverlayCamSnap = null;
+      hud.inspectSelection = null;
+      hud.openSeedTray(undefined, plotUid);
+    },
+    onOpenPlotInspector: (plotUid) => {
+      hayDayOverlayCamSnap = null;
+      hud.clearBuildToolModes();
+      hud.closeSeedTray();
+      hud.closePastureTray();
+      hud.inspectSelection = { kind: 'building', uid: plotUid };
+      hud.refreshAll();
+    },
+    onUseMorningDew: (plotUid) => {
+      hayDayOverlayCamSnap = null;
+      const res = sim.useMorningDewPhial(plotUid);
+      if (res.ok) {
+        const b = sim.state.buildings.find((x) => x.uid === plotUid);
+        renderer.triggerSquash(plotUid);
+        if (b) {
+          const pt = getPlotScreenCenter(b);
+          sim.audio.playSwipeSowNote(2, computeStereoPan(pt.sx));
+          renderer.juiceFx.spawnHarvestBurstRing(pt.sx, pt.sy, '#38bdf8');
+        }
+        haptic('light');
+      } else {
+        hud.showToast(res.msg, '💧');
+      }
+      hud.inspectSelection = null;
+      hud.refreshAll();
+    },
+    onVisitorAccepted: (visitorId) => {
+      hayDayOverlayCamSnap = null;
+      const res = sim.acceptFarmVisitorOffer(visitorId);
+      if (res.ok) {
+        sim.audio.playWorkshopCollectNote(1, 0);
+        hud.showToast(res.msg, '🪙');
+        haptic('light');
+      } else {
+        hud.showToast(res.msg, '🪙');
+      }
+      hud.refreshAll();
+    },
+    onVisitorDismissed: (visitorId) => {
+      hayDayOverlayCamSnap = null;
+      const res = sim.dismissFarmVisitorOffer(visitorId);
+      sim.audio.playClick();
+      hud.showToast(res.msg, '🦉');
+      hud.refreshAll();
+    },
+  });
 
   const SNAP_NEIGHBOR_OFFSETS: ReadonlyArray<[number, number]> = [
     [0, -1],
@@ -1492,11 +2030,14 @@ async function bootstrap(): Promise<void> {
     if (activePointers.has(e.pointerId)) {
       activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     }
+    if (activeHayDaySwipe) return;
 
     const rect = canvas.getBoundingClientRect();
 
     // Handle 2-finger Pinch-to-Zoom!
     if (activePointers.size >= 2) {
+      hayDayOverlay.close();
+      hayDayOverlayCamSnap = null;
       camDirector.cancel();
       cancelPendingTouchPaint();
       cancelLongPressMove();
@@ -1525,10 +2066,15 @@ async function bootstrap(): Promise<void> {
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
 
-    // 1. Cozy Hover-Sweep Bubble Harvesting!
-    if (!sim.isVisitingNeighbor && !isDraggingCam && !hud.movingBuildingUid && !hud.pincerActive) {
+    // 1. Cozy Hover-Sweep Bubble Harvesting (skip ripe farmland plots & ready workshop goods so Hay Day Radial Wheel & collect flights trigger cleanly)
+    if (!sim.isVisitingNeighbor && !isDraggingCam && !activeHayDaySwipe && !hud.movingBuildingUid && !hud.pincerActive) {
       for (const hs of renderer.hotspots) {
         if (hs.kind === 'bubble' && Math.hypot(sx - hs.sx, sy - hs.sy) <= hs.radius) {
+          const hb = sim.state.buildings.find((x) => x.uid === hs.id);
+          const hItem = hb ? getCatalogItem(hb.itemId) : undefined;
+          if (hItem?.isFarmlandPlot || (hb?.readyFarmGoods && hb.readyFarmGoods.length > 0)) {
+            continue;
+          }
           sim.harvestBuildingBubble(hs.id);
         }
       }
@@ -1654,7 +2200,8 @@ async function bootstrap(): Promise<void> {
             pendingCareSweep.initialUid,
             pendingCareSweep.mode,
             pendingCareSweep.initialSx,
-            pendingCareSweep.initialSy
+            pendingCareSweep.initialSy,
+            pendingCareSweep.sweptUids.size
           )
         ) {
           pendingCareSweep.sweptUids.add(pendingCareSweep.initialUid);
@@ -1663,7 +2210,7 @@ async function bootstrap(): Promise<void> {
       if (pendingCareSweep.active) {
         const hit = detectCareablePlotAt(gPos.gx, gPos.gy, sx, sy, pendingCareSweep.mode);
         if (hit && !pendingCareSweep.sweptUids.has(hit.uid)) {
-          if (applyCareSweepPlot(hit.uid, hit.mode, sx, sy)) {
+          if (applyCareSweepPlot(hit.uid, hit.mode, sx, sy, pendingCareSweep.sweptUids.size)) {
             pendingCareSweep.sweptUids.add(hit.uid);
           }
         }
@@ -1681,6 +2228,10 @@ async function bootstrap(): Promise<void> {
     if (Math.hypot(dx, dy) > dragThresholdPx) {
       isDraggingCam = true;
       hud.rideCamUid = null;
+      if (hayDayOverlay.isOpen()) {
+        hayDayOverlay.close();
+        hayDayOverlayCamSnap = null;
+      }
     }
     if (isDraggingCam) {
       introGlide = null;
@@ -1691,8 +2242,11 @@ async function bootstrap(): Promise<void> {
   });
 
   canvas.addEventListener('pointerdown', (e) => {
+    if (activeHayDaySwipe) return;
     activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (activePointers.size >= 2) {
+      hayDayOverlay.close();
+      hayDayOverlayCamSnap = null;
       cancelPendingTouchPaint();
       cancelLongPressMove();
       finishCareSweep();
@@ -1867,6 +2421,9 @@ async function bootstrap(): Promise<void> {
                 hs.kind === 'neighbor_help' ||
                 hs.kind === 'home_lantern' ||
                 hs.kind === 'unveil_building' ||
+                hs.kind === 'hayday_visitor' ||
+                hs.kind === 'hayday_stand' ||
+                hs.kind === 'hayday_newspaper' ||
                 hs.kind === 'bubble') &&
               Math.hypot(sx - hs.sx, sy - hs.sy) <= hs.radius
           );
@@ -1948,6 +2505,9 @@ async function bootstrap(): Promise<void> {
   };
 
   window.addEventListener('pointercancel', (e) => {
+    finishHayDaySwipe();
+    hayDayOverlay.close();
+    hayDayOverlayCamSnap = null;
     cancelPendingTouchPaint();
     cancelLongPressMove();
     finishCareSweep();
@@ -1969,6 +2529,10 @@ async function bootstrap(): Promise<void> {
   window.addEventListener('pointerup', (e) => {
     clearPointer(e.pointerId);
     cancelLongPressMove();
+    if (activeHayDaySwipe && activeHayDaySwipe.pointerId === e.pointerId) {
+      finishHayDaySwipe();
+      return;
+    }
     if (wasPinching) {
       cancelPendingTouchPaint();
       finishCareSweep();
@@ -2062,6 +2626,8 @@ async function bootstrap(): Promise<void> {
 
     // Right click cancels active build / move / pincer / bulldoze / seed brush / inspector cleanly
     if (e.button === 2) {
+      hayDayOverlay.close();
+      hayDayOverlayCamSnap = null;
       hud.clearBuildToolModes();
       hud.closeSeedTray();
       hud.closePastureTray();
@@ -2312,6 +2878,9 @@ async function bootstrap(): Promise<void> {
       'neighbor_help',
       'home_lantern',
       'unveil_building',
+      'hayday_visitor',
+      'hayday_stand',
+      'hayday_newspaper',
       'bubble',
       'water_crop',
       'feed_pasture',
@@ -2437,21 +3006,125 @@ async function bootstrap(): Promise<void> {
           return;
         }
         if (best.kind === 'unveil_building') {
+          hayDayOverlay.close();
+          hayDayOverlayCamSnap = null;
           sim.unveilBuilding(best.id);
           hud.inspectSelection = null;
           hud.refreshAll();
           return;
         }
+        if (best.kind === 'hayday_visitor') {
+          hud.clearBuildToolModes();
+          hud.closeSeedTray();
+          hud.closePastureTray();
+          hud.inspectSelection = null;
+          sim.audio.playClick();
+          hayDayOverlay.openVisitorPopover(best.id, rect.left + best.sx, rect.top + best.sy);
+          snapshotOverlayCam();
+          hud.refreshAll();
+          return;
+        }
+        if (best.kind === 'hayday_stand') {
+          hayDayOverlay.close();
+          hayDayOverlayCamSnap = null;
+          hud.clearBuildToolModes();
+          hud.closeSeedTray();
+          hud.closePastureTray();
+          hud.inspectSelection = null;
+          sim.audio.playClick();
+          // Defer past pointerup/click so native <dialog closedby="any"> does not immediately light-dismiss on the canvas click
+          window.setTimeout(() => {
+            hud.openWorkshopDialog('stand');
+          }, 0);
+          return;
+        }
+        if (best.kind === 'hayday_newspaper') {
+          hayDayOverlay.close();
+          hayDayOverlayCamSnap = null;
+          hud.clearBuildToolModes();
+          hud.closeSeedTray();
+          hud.closePastureTray();
+          hud.inspectSelection = null;
+          sim.audio.playMailboxRustle(computeStereoPan(best.sx));
+          window.setTimeout(() => {
+            hud.openWorkshopDialog('stand');
+            scrollDailyProphetIntoView();
+          }, 0);
+          return;
+        }
         if (best.kind === 'bubble') {
+          const bubbleB = sim.state.buildings.find((x) => x.uid === best.id);
+          const bubbleItem = bubbleB ? getCatalogItem(bubbleB.itemId) : undefined;
+          if (
+            !sim.isVisitingNeighbor &&
+            !sim.strollModeActive &&
+            !hud.activeSeedCropId &&
+            !hud.activePastureAnimalId &&
+            bubbleB &&
+            bubbleItem?.isFarmlandPlot &&
+            bubbleB.cropId &&
+            bubbleB.cropReadyAt &&
+            Date.now() >= bubbleB.cropReadyAt
+          ) {
+            hud.clearBuildToolModes();
+            hud.closeSeedTray();
+            hud.closePastureTray();
+            hud.inspectSelection = null;
+            hayDayOverlay.openPlotWheel(bubbleB.uid, e.clientX, e.clientY);
+            snapshotOverlayCam();
+            hud.refreshAll();
+            return;
+          }
+          const prevGoods = bubbleB?.readyFarmGoods ? [...bubbleB.readyFarmGoods] : [];
           sim.harvestBuildingBubble(best.id);
+          if (bubbleB && prevGoods.length > 0) {
+            emitWorkshopCollectJuice(
+              prevGoods,
+              bubbleB.readyFarmGoods?.length ?? 0,
+              best.sx,
+              best.sy
+            );
+          }
           hud.inspectSelection = null;
           hud.refreshAll();
           return;
         }
         if (best.kind === 'water_crop') {
+          const waterB = sim.state.buildings.find((x) => x.uid === best.id);
+          const waterItem = waterB ? getCatalogItem(waterB.itemId) : undefined;
+          const nowMs = Date.now();
+          if (
+            !sim.isVisitingNeighbor &&
+            !sim.strollModeActive &&
+            !hud.activeSeedCropId &&
+            !hud.activePastureAnimalId &&
+            !hud.selectedCatalogItem &&
+            !hud.bulldozerActive &&
+            !hud.pincerActive &&
+            !hud.moveModeActive &&
+            waterB &&
+            waterItem?.isFarmlandPlot &&
+            nowMs >= waterB.constructEndsAt &&
+            waterB.cropId &&
+            waterB.cropReadyAt &&
+            nowMs < waterB.cropReadyAt &&
+            !waterB.cropWateredBoost
+          ) {
+            renderer.triggerSquash(best.id);
+            hud.clearBuildToolModes();
+            hud.closeSeedTray();
+            hud.closePastureTray();
+            hud.inspectSelection = null;
+            hayDayOverlay.openPlotWheel(waterB.uid, e.clientX, e.clientY);
+            snapshotOverlayCam();
+            hud.refreshAll();
+            return;
+          }
           renderer.triggerSquash(best.id);
           const res = sim.waterCropPlot(best.id);
           if (res.ok) {
+            sim.audio.playSwipeSowNote(0, computeStereoPan(best.sx));
+            renderer.juiceFx.spawnHarvestBurstRing(best.sx, best.sy, '#38bdf8');
             renderer.notifyJuice('harvest', best.sx, best.sy);
           } else {
             hud.showToast(res.msg, '💧');
@@ -2557,27 +3230,8 @@ async function bootstrap(): Promise<void> {
               }
             }
             const bItem = getCatalogItem(b.itemId);
-            if (bItem?.isFarmlandPlot && b.cropId && b.cropReadyAt && Date.now() >= b.cropReadyAt) {
-              sim.harvestCropPlot(b.uid);
-              hud.inspectSelection = null;
-              hud.refreshAll();
-              return;
-            } else if (
-              bItem?.isFarmlandPlot &&
-              b.cropId &&
-              b.cropReadyAt &&
-              Date.now() < b.cropReadyAt &&
-              !b.cropWateredBoost
-            ) {
-              const waterRes = sim.waterCropPlot(b.uid);
-              if (waterRes.ok) {
-                renderer.notifyJuice('harvest', best.sx, best.sy);
-              }
-              hud.inspectSelection = null;
-              hud.refreshAll();
-              return;
-            } else if (bItem?.isFarmlandPlot && !b.cropId && Date.now() >= b.constructEndsAt) {
-              if (hud.activeSeedCropId) {
+            if (bItem?.isFarmlandPlot && Date.now() >= b.constructEndsAt) {
+              if (!b.cropId && hud.activeSeedCropId) {
                 const activeCrop = hud.activeSeedCropId;
                 const sowRes = sim.plantCropOnPlot(b.uid, activeCrop);
                 if (sowRes.needSeedAcquire) {
@@ -2587,19 +3241,56 @@ async function bootstrap(): Promise<void> {
                   hud.openSeedQuizDialog(activeCrop, b.uid);
                   return;
                 }
-                if (!sim.state.sandboxMode && sim.getSeedCount(activeCrop) <= 0) {
+                if (!sim.state.sandboxMode && sim.getPlantableSeedCount(activeCrop) <= 0) {
                   hud.activeSeedCropId = null;
+                }
+                if (sowRes.ok) {
+                  const pt = getPlotScreenCenter(b);
+                  sim.audio.playSwipeSowNote(0, computeStereoPan(pt.sx));
+                  renderer.juiceFx.spawnHarvestBurstRing(pt.sx, pt.sy, '#4ade80');
                 }
                 hud.showToast(sowRes.msg, sowRes.ok ? '🌱' : '🪙');
                 hud.inspectSelection = null;
                 hud.refreshAll();
-              } else if (prevPendingSowPlotUid === b.uid) {
-                hud.inspectSelection = { kind: 'building', uid: b.uid };
-                hud.refreshAll();
-              } else {
-                hud.openSeedTray(undefined, b.uid);
+                return;
               }
-              return;
+              if (
+                !sim.strollModeActive &&
+                !hud.activeSeedCropId &&
+                !hud.activePastureAnimalId
+              ) {
+                if (!b.cropId && prevPendingSowPlotUid === b.uid) {
+                  hayDayOverlay.close();
+                  hayDayOverlayCamSnap = null;
+                  hud.inspectSelection = { kind: 'building', uid: b.uid };
+                  hud.refreshAll();
+                  return;
+                }
+                hud.clearBuildToolModes();
+                hud.closeSeedTray();
+                hud.closePastureTray();
+                hud.inspectSelection = null;
+                hayDayOverlay.openPlotWheel(b.uid, e.clientX, e.clientY);
+                snapshotOverlayCam();
+                hud.refreshAll();
+                return;
+              }
+              if (b.cropId && b.cropReadyAt && Date.now() >= b.cropReadyAt) {
+                applyHayDayToolToPlot(b, 'sickle', null, 0);
+                hud.inspectSelection = null;
+                hud.refreshAll();
+                return;
+              }
+              if (b.cropId && b.cropReadyAt && Date.now() < b.cropReadyAt && !b.cropWateredBoost) {
+                applyHayDayToolToPlot(b, 'water', null, 0);
+                hud.inspectSelection = null;
+                hud.refreshAll();
+                return;
+              }
+              if (!b.cropId) {
+                hud.openSeedTray(undefined, b.uid);
+                return;
+              }
             } else if (
               bItem?.isAnimalPasturePlot &&
               b.pastureAnimalId &&
@@ -2642,7 +3333,16 @@ async function bootstrap(): Promise<void> {
               }
               return;
             } else if (b.storedSickle > 0 || (b.readyFarmGoods && b.readyFarmGoods.length > 0)) {
+              const prevGoods = b.readyFarmGoods ? [...b.readyFarmGoods] : [];
               sim.harvestBuildingBubble(b.uid);
+              if (prevGoods.length > 0) {
+                emitWorkshopCollectJuice(
+                  prevGoods,
+                  b.readyFarmGoods?.length ?? 0,
+                  best.sx,
+                  best.sy
+                );
+              }
             }
           }
           hud.clearBuildToolModes();
@@ -2680,6 +3380,8 @@ async function bootstrap(): Promise<void> {
       return;
     }
 
+    hayDayOverlay.close();
+    hayDayOverlayCamSnap = null;
     hud.inspectSelection = null;
     hud.refreshAll();
   });
@@ -2690,6 +3392,10 @@ async function bootstrap(): Promise<void> {
     'wheel',
     (e) => {
       e.preventDefault();
+      if (hayDayOverlay.isOpen()) {
+        hayDayOverlay.close();
+        hayDayOverlayCamSnap = null;
+      }
       introGlide = null;
       camDirector.cancel();
       const rect = canvas.getBoundingClientRect();
@@ -2778,6 +3484,10 @@ async function bootstrap(): Promise<void> {
     );
     cachedAnyDialogOpen =
       cachedFullscreenModalOpen || allModalDialogs.some((d) => d.open);
+    if (cachedAnyDialogOpen && hayDayOverlay.isOpen()) {
+      hayDayOverlay.close();
+      hayDayOverlayCamSnap = null;
+    }
     if (prevFullscreen && !cachedFullscreenModalOpen && pendingUiRefreshAfterFullscreen) {
       pendingUiRefreshAfterFullscreen = false;
       hud.refreshAll();
@@ -2808,7 +3518,7 @@ async function bootstrap(): Promise<void> {
       return;
     }
     if (now - lastTime < minFrameMs) {
-      requestAnimationFrame(frame);
+      mainRafId = requestAnimationFrame(frame);
       return;
     }
     const dt = (now - lastTime) / 1000;
@@ -2818,13 +3528,12 @@ async function bootstrap(): Promise<void> {
       telemetry.recordFrameFps(1 / dt);
       if (minimapFrame % 90 === 0 && minimapFrame > 0) {
         const health = telemetry.getHealthReport();
-        if (isTouchDevice) {
-          renderer.adaptiveDprCap =
-            health.p5LowFps < 46 ? 1.15 : health.p5LowFps < 54 ? 1.35 : 1.5;
-        } else {
-          renderer.adaptiveDprCap =
-            health.p5LowFps < 46 ? 1.25 : health.p5LowFps < 54 ? 1.5 : 2;
-        }
+        const targetFps = minFrameMs > 0 ? 30 : 60;
+        renderer.adaptiveDprCap = computeAdaptiveDprCap(
+          health.p5LowFps,
+          isTouchDevice,
+          targetFps
+        );
       }
     }
 
@@ -3098,6 +3807,19 @@ async function bootstrap(): Promise<void> {
       renderer.activeSeedBrushCropId = hud.activeSeedCropId;
       renderer.activePastureBrushAnimalId = hud.activePastureAnimalId;
 
+      if (hayDayOverlay.isOpen() && hayDayOverlayCamSnap) {
+        if (
+          sim.isVisitingNeighbor ||
+          Math.abs(cam.x - hayDayOverlayCamSnap.x) > 2 ||
+          Math.abs(cam.y - hayDayOverlayCamSnap.y) > 2 ||
+          Math.abs(cam.zoom - hayDayOverlayCamSnap.zoom) > 0.005 ||
+          (cam.viewRot ?? 0) !== hayDayOverlayCamSnap.rot
+        ) {
+          hayDayOverlay.close();
+          hayDayOverlayCamSnap = null;
+        }
+      }
+
       if (directGpuSettings) {
         const wantWebgl2 =
           !gpuInitFailed &&
@@ -3138,7 +3860,8 @@ async function bootstrap(): Promise<void> {
           hud.bulldozerActive,
           selectedBuildingUid,
           hud.movingBuildingUid,
-          hud.pincerPicked?.label ?? null
+          hud.pincerPicked?.label ?? null,
+          dt
         );
       }
 
@@ -3154,6 +3877,7 @@ async function bootstrap(): Promise<void> {
           } else {
             ptrWorldScratch.active = false;
           }
+          const worldShake = gpuMode === 'webgl2' ? renderer.tickJuice(dt) : { x: 0, y: 0 };
           gpuWorldRenderer.renderFrame(
             sim,
             cam,
@@ -3169,6 +3893,11 @@ async function bootstrap(): Promise<void> {
               movingBuildingUid: hud.movingBuildingUid,
               hotspotsOut: gpuMode === 'webgl2' ? renderer.hotspots : undefined,
               skipReadyBubbleSprites: gpuMode === 'webgl2',
+              adaptiveDprCap: renderer.adaptiveDprCap,
+              squashMap: renderer.squashMap,
+              completionPopMap: renderer.completionPopMap,
+              shakeX: worldShake.x,
+              shakeY: worldShake.y,
             }
           );
           if (gpuMode === 'webgl2') {
@@ -3183,7 +3912,9 @@ async function bootstrap(): Promise<void> {
               hud.selectedCatalogItem,
               hud.rotation,
               hud.bulldozerActive,
-              hud.pincerPicked?.label ?? null
+              hud.pincerPicked?.label ?? null,
+              dt,
+              true
             );
           }
         }
@@ -3194,7 +3925,7 @@ async function bootstrap(): Promise<void> {
         if (heldMs >= 95) {
           const prog = Math.max(0, Math.min(1, (heldMs - 95) / (LONG_PRESS_MOVE_MS - 95)));
           const overlayCtx = renderer.ctx;
-          const dpr = window.devicePixelRatio || 1;
+          const dpr = renderer.dpr;
           overlayCtx.save();
           overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
           overlayCtx.beginPath();

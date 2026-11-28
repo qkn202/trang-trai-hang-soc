@@ -31,9 +31,9 @@ export class PixiGpuDevice {
       alpha: false,
       antialias: false,
       depth: false,
-      stencil: true,
+      stencil: false,
       powerPreference: 'high-performance',
-      preserveDrawingBuffer: options.preserveDrawingBuffer ?? true,
+      preserveDrawingBuffer: options.preserveDrawingBuffer ?? false,
     });
     if (!gl) {
       throw new Error('[PixiGpuDevice] Thiết bị không hỗ trợ WebGL2.');

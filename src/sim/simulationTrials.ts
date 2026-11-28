@@ -168,7 +168,12 @@ import {
   setPlayerHogwartsHouse,
   submitPlayerCloudLeaderboardEntry,
 } from './minigameLeaderboard';
-import type { ProofOfPlayEnvelope } from './proofOfPlay';
+import { verifyProofOfPlayEnvelope, type ProofOfPlayEnvelope } from './proofOfPlay';
+import { enqueueProofOfPlay } from '../hpvn/bridge';
+import {
+  applyMinigameFarmSpecialtyReward,
+  MinigameFarmSpecialtyOutcome,
+} from './minigameSynergy';
 import {
   createInitialPuzzleArcadeState,
   JIGSAW_PAINTINGS,
@@ -660,6 +665,7 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
     isMasterReplay?: boolean;
     buildReduction?: BuildReductionResult;
     leaderboardRankUp?: LeaderboardRankChange;
+    specialtyReward?: MinigameFarmSpecialtyOutcome;
   } {
     const prevLbRank = trialsGetPlayerMinigameRank(sim, 'match3', 'valley');
     sim.state.lastPlayedMinigame = 'match3';
@@ -777,6 +783,7 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
     sim.addXp(xpEarned);
     sim.addHarvestFeastPoints(isFirstClear ? (isBossStage ? 40 : 28) : 14);
     sim.recordQuestProgress('cast_spells', undefined, 3);
+    sim.recordWeeklyDerbyProgress('minigame_win', 1);
     sim.checkAndToastAchievements?.();
     if (isFirstClear && (isBossStage || playedStage === MAX_MATCH3_STAGE)) {
       sim.launchFireworksShow(playedStage === MAX_MATCH3_STAGE ? 18 : 10);
@@ -787,6 +794,10 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
       rawReduceSec,
       'Bùa Gặt Honeydukes'
     );
+    const specialtyReward = applyMinigameFarmSpecialtyReward(sim, 'match3', {
+      isFirstClear,
+      isBossOrFeatured: isBossStage || featuredBonusApplied,
+    });
 
     const sessionPts = Math.max(
       1200 + playedStage * 95 + Math.max(0, Math.round(bonusCoinsFromMoves)) * 12,
@@ -807,6 +818,13 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
     if (sandEarned > 0) sim.onRewardFly?.('sand', sandEarned);
     sim.advanceTutorialStep('earn_magic_star');
     trialsRecordMinigamePlay(sim, 'match3', false, true);
+    if (
+      sessionMetrics?.proofOfPlay &&
+      typeof enqueueProofOfPlay === 'function' &&
+      verifyProofOfPlayEnvelope(sessionMetrics.proofOfPlay, { expectedGameId: 'match3' }).ok
+    ) {
+      enqueueProofOfPlay(sessionMetrics.proofOfPlay);
+    }
     sim.saveToStorage();
     void submitPlayerCloudLeaderboardEntry(sim.state, 'match3');
     sim.onUiChange?.();
@@ -823,6 +841,7 @@ export function trialsCompleteMatch3LevelVictory(sim: ParkSimulation,
       isMasterReplay: !isFirstClear,
       buildReduction,
       leaderboardRankUp,
+      specialtyReward,
     };
 }
 
@@ -1098,6 +1117,7 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
     isMasterReplay?: boolean;
     buildReduction?: BuildReductionResult;
     leaderboardRankUp?: LeaderboardRankChange;
+    specialtyReward?: MinigameFarmSpecialtyOutcome;
   } {
     const isScoredMode = isScoredLeaderboardGame(mode);
     sim.state.lastPlayedMinigame = mode;
@@ -1189,6 +1209,10 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
         '🧪'
       );
     }
+    // Bước B: Bắn Cá Hồ Đen là nguồn Sickle chủ lực (+35% Sickle thưởng)
+    const extraSickleBonus = mode === 'chess' && goldEarned > 0 ? Math.max(1, Math.round(goldEarned * 0.35)) : 0;
+    goldEarned += extraSickleBonus;
+
     sim.state.timeSand += sandEarned;
     sim.state.galleons += goldEarned;
     sim.state.finance.harvestRevenue += goldEarned;
@@ -1233,16 +1257,24 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
     sim.addXp(xpEarned);
     sim.addHarvestFeastPoints(isFirstClear ? (playedStage % 25 === 0 ? 40 : 28) : 14);
     sim.recordQuestProgress('cast_spells', undefined, 2);
+    sim.recordWeeklyDerbyProgress('minigame_win', 1);
     sim.checkAndToastAchievements?.();
     if (isFirstClear && (playedStage === 777 || playedStage === MAX_MINIGAME_STAGE)) {
       sim.launchFireworksShow(playedStage === MAX_MINIGAME_STAGE ? 18 : 10);
     }
 
-    const rawReduceSec = streakInfo.rawReduceSec;
+    // Bước B: Dò Mìn rút giờ xây mạnh ×1.5 (nguồn xây dựng & phân ủ)
+    const rawReduceSec =
+      mode === 'caro' ? Math.round(streakInfo.rawReduceSec * 1.5) : streakInfo.rawReduceSec;
     const buildReduction = sim.applyConstructionReductionFromGameplay(
       rawReduceSec,
       'Đại Sảnh Khảo Thí'
     );
+    const specialtyReward = applyMinigameFarmSpecialtyReward(sim, mode, {
+      isFirstClear,
+      isBossOrFeatured: featuredBonusApplied || playedStage % 25 === 0,
+      extraSickleBonus,
+    });
 
     let leaderboardRankUp: LeaderboardRankChange | undefined;
     if (isScoredMode) {
@@ -1268,6 +1300,13 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
     if (!sessionMetrics?.skipPlayCount) {
       trialsRecordMinigamePlay(sim, mode, false, isFirstClear);
     }
+    if (
+      sessionMetrics?.proofOfPlay &&
+      typeof enqueueProofOfPlay === 'function' &&
+      verifyProofOfPlayEnvelope(sessionMetrics.proofOfPlay, { expectedGameId: mode }).ok
+    ) {
+      enqueueProofOfPlay(sessionMetrics.proofOfPlay);
+    }
     sim.saveToStorage();
     if (isScoredMode) {
       void submitPlayerCloudLeaderboardEntry(sim.state, mode);
@@ -1286,5 +1325,6 @@ export function trialsCompletePuzzleArcadeVictory(sim: ParkSimulation,
       isMasterReplay: !isFirstClear,
       buildReduction,
       leaderboardRankUp,
+      specialtyReward,
     };
 }

@@ -207,6 +207,8 @@ export interface FarmOwlOrder {
   rewardXp: number;
   rewardMugglePlug?: number;
   isFeastMarquee?: boolean;
+  /** Hay Day Truck Board: đơn đã bị xé đang chờ hồi lại sau 5 phút */
+  trashedUntilAt?: number;
 }
 
 export interface WorkshopQueueSlot {
@@ -222,6 +224,8 @@ export interface FarmBarnState {
   capacity: number;
   owlOrders: FarmOwlOrder[];
   ordersDelivered: number;
+  /** Chuỗi giao Đơn Cú liên tiếp (mỗi 3 đơn thưởng thêm +20% Sickle & +1 Phân Ủ) */
+  deliveryStreak?: number;
   lastPlantedCropId?: FarmCropId;
   farmHelperEndsAt?: number;
   farmHelperFreeDayKey?: string;
@@ -236,6 +240,8 @@ export interface RoadsideStandSlot {
   soldAt?: number;
   buyerName?: string;
   buyerEmoji?: string;
+  /** Hay Day Roadside Shop: ô hàng đã đăng lên Nhật Báo Tiên Tri (bán nhanh ×3) */
+  advertised?: boolean;
 }
 
 export interface RoadsideStandState {
@@ -243,6 +249,88 @@ export interface RoadsideStandState {
   dailyFriendBuysDayKey?: string;
   dailyFriendBoughtIds?: string[];
   totalRevenueClaimed?: number;
+  /** Mốc thời gian gần nhất đăng báo miễn phí (hồi mỗi 3 phút) */
+  lastAdPublishedAt?: number;
+}
+
+export interface FarmVisitorOffer {
+  id: string;
+  slotIndex: 0 | 1;
+  visitorName: string;
+  visitorEmoji: string;
+  quoteVi: string;
+  itemId: FarmItemId;
+  qty: number;
+  offerSickle: number;
+  offerXp: number;
+  spawnedAt: number;
+  /** Nếu > Date.now(), vị khách đang trên đường tới (sau 90s kể từ khi khách trước rời đi) */
+  arrivesAt?: number;
+}
+
+export interface NewspaperClassifiedAd {
+  id: string;
+  sellerName: string;
+  sellerEmoji: string;
+  kind: 'farm_item' | 'muggle_plug' | 'compost' | 'morning_dew';
+  itemId?: FarmItemId;
+  qty: number;
+  priceSickle: number;
+  isRareDeal?: boolean;
+  sold?: boolean;
+}
+
+export interface DailyProphetNewspaperState {
+  editionId: number;
+  issuedAt: number;
+  nextRefreshAt: number;
+  ads: NewspaperClassifiedAd[];
+}
+
+export type WeeklyDerbyEventKind =
+  | 'harvest_crop'
+  | 'owl_order'
+  | 'workshop_batch'
+  | 'visitor_sale'
+  | 'cargo_crate'
+  | 'pasture_harvest'
+  | 'minigame_win'
+  | 'molly_supply';
+
+export interface WeeklyDerbyTaskObjective {
+  eventKind: WeeklyDerbyEventKind;
+  labelVi: string;
+  target: number;
+  progress: number;
+}
+
+export interface WeeklyDerbyTask {
+  id: string;
+  slotIndex: number; // 0..7
+  titleVi: string;
+  emoji: string;
+  isHybridCombo: boolean; // true = kết hợp Nông Trại + Mini Game (điểm cao 280-320)
+  points: number; // 110..320
+  durationSec: number; // 6h..24h
+  objectives: WeeklyDerbyTaskObjective[];
+  trashedUntilAt?: number; // 15-min cooldown when trashed from board
+}
+
+export interface WeeklyDerbyActiveTask extends WeeklyDerbyTask {
+  acceptedAt: number;
+  expiresAt: number;
+  completedAt?: number;
+}
+
+export interface WeeklyDerbyState {
+  weekKey: string; // synced with getActiveHouseCupWeekKey() (Fri 17:00 -> Fri 16:00 VN)
+  points: number; // capped at MAX_WEEKLY_DERBY_SCORE (2500)
+  tasksCompleted: number; // max 7 base (+1 bonus via 2 Time Sand = 8 max)
+  bonusSlotUnlocked: boolean;
+  claimedMilestones: number[]; // milestone tiers 1..5 claimed
+  boardSeedOffset: number;
+  boardTasks: WeeklyDerbyTask[]; // 8 slots
+  activeTask: WeeklyDerbyActiveTask | null;
 }
 
 export type FieldMicroEventKind = 'honey_bees' | 'cheeky_gnome' | 'vip_owl';
@@ -479,6 +567,8 @@ export interface PlacedBuilding {
   pastureFedBoost?: boolean;
   pastureGourmetBoost?: boolean; // Đã cho ăn Bữa Thượng Hạng từ nông sản ruộng (×2 sản lượng & +2 Phân Ủ)
   workshopQueue?: WorkshopQueueSlot[];
+  /** Hay Day Machine Slots: số khay mở thêm trên xưởng bằng Sickle (0..3) */
+  extraQueueSlots?: number;
   readyFarmGoods?: FarmGoodId[];
   readyFruitCrops?: FarmCropId[];
   lastPlantedCropId?: FarmCropId;
@@ -1579,6 +1669,18 @@ export interface GameState {
   phoenixTalismans?: number; // 🔥 Bùa Hộ Mệnh Phượng Hoàng (earned via Owl Orders & Language Quiz, never via losing!)
   phoenixTalismanDaily?: PhoenixTalismanDailyUsageState; // Khóa cứng 1 lần/môn/ngày (tối đa 5 lần/ngày trên 5 môn khảo thí)
   quizTalismanProgress?: number; // 0..7 correct quiz answers toward next Phoenix Talisman
+  quizStreakShields?: number; // 🛡️ Khiên Bảo Vệ Chuỗi Học Tập (nhận mỗi 10 lần thu hoạch nông trại, tối đa 3)
+  /** Hay Day Wheating Bonus Drop: bộ đếm thu hoạch tích luỹ rơi vật phẩm hiếm (Phích Cắm, Phân Ủ, Sương Mai, Cát) */
+  hayDayHarvestDropMeter?: number;
+  hayDayHarvestDropsTotal?: number;
+  /** Hay Day Machine Mastery: số mẻ đã chế biến xong theo nhóm xưởng (10->★1, 30->★2, 65->★3 nhanh -15%) */
+  workshopMastery?: Record<string, number>;
+  /** Hay Day Farm Visitors: 2 vị khách hàng xóm ghé cổng Hang Sóc hỏi mua nông sản trực tiếp */
+  farmVisitors?: FarmVisitorOffer[];
+  /** Hay Day Daily Dirt -> Nhật Báo Tiên Tri: 6 tin rao mua hàng làm mới mỗi 3 phút */
+  dailyProphetNewspaper?: DailyProphetNewspaperState;
+  /** Derby Nông Trại 4 Nhà theo tuần (Thứ Sáu 17:00 -> Thứ Sáu 16:00 VN, đồng hành Cúp 4 Nhà) */
+  weeklyDerby?: WeeklyDerbyState;
   cropMastery?: Partial<Record<FarmCropId, number>>; // Account-bound harvests per crop (Tier I..V)
   plotSoilState?: Record<string, PlotSoilStateEntry>; // Persisted by "gx,gy" to prevent bulldoze-plot reset exploit
   herbalCompost?: number; // 🌿 Phân Ủ Thảo Dược (tạo từ chuồng thú, dùng nâng bậc đất & bón ruộng +2 sản lượng)

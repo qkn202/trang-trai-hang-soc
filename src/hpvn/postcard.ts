@@ -1,5 +1,6 @@
 // HPVN: the drawing half of upstream's src/ui/hpvnBridge.ts (postcard + Floo text); its postMessage protocol is
 // replaced by src/hpvn/bridge.ts, which sends the picture to Floo (`farm-share`).
+import { prepareGpuCanvasForCapture } from './bridge';
 import { canvasSpritesReady, fillTextRaw, measureTextRaw } from './emoji';
 
 export interface FlooShareContext {
@@ -210,7 +211,10 @@ export function renderValleyPostcardCanvas(
         typeof document !== 'undefined' && sourceCanvas.id === 'gameCanvas'
           ? (document.getElementById('gpuWorldCanvas') as HTMLCanvasElement | null)
           : null;
-      if (gpuEl && gpuEl.style.display !== 'none' && gpuEl.width > 0 && gpuEl.height > 0) drawCover(gpuEl);
+      if (gpuEl && gpuEl.style.display !== 'none' && gpuEl.width > 0 && gpuEl.height > 0) {
+        prepareGpuCanvasForCapture();
+        drawCover(gpuEl);
+      }
       drawCover(sourceCanvas);
       drewScene = true;
     } catch {

@@ -21,6 +21,42 @@ import {
 } from '../data/levels';
 import { HOUSES } from '../data/names';
 import {
+  getJigsawValleyAuraPct,
+  getMinigameFarmSpecialty,
+  MinigameFarmSpecialtyDef,
+  MinigameFarmSpecialtyOutcome,
+  ResolvedMollySupplyKit,
+  resolveMollySupplyForMinigame,
+} from './minigameSynergy';
+import {
+  acceptFarmVisitorOffer,
+  buyNewspaperClassifiedAd,
+  dismissFarmVisitorOffer,
+  ensureDailyProphetNewspaper,
+  ensureFarmVisitors,
+  expandWorkshopQueueSlot,
+  getActiveFarmVisitorsCount,
+  getEffectiveWorkshopQueueCapacity,
+  getHayDayWheatingProgress,
+  getNextWorkshopExtraSlotCost,
+  getWorkshopMasteryInfo,
+  refreshDailyProphetNewspaperEarly,
+  WorkshopMasteryInfo,
+} from './hayDayFarming';
+import {
+  abandonWeeklyDerbyActiveTask,
+  acceptWeeklyDerbyTask,
+  claimWeeklyDerbyMilestone,
+  completeWeeklyDerbyActiveTask,
+  ensureWeeklyDerbyState,
+  getWeeklyDerbySummary,
+  instantRestoreWeeklyDerbySlot,
+  recordWeeklyDerbyProgress,
+  trashWeeklyDerbyBoardTask,
+  unlockBonusWeeklyDerbySlot,
+  type WeeklyDerbySummary,
+} from './weeklyDerbyEngine';
+import {
   createDailyQuests,
   createOwlOrderQuest,
   HARVEST_FEAST_TIERS,
@@ -76,6 +112,7 @@ import {
   CatalogItem,
   CraftedGoodId,
   CreatureMorphVariant,
+  DailyProphetNewspaperState,
   EscapedCreatureEntity,
   ExpressCargoCrate,
   FarmBarnState,
@@ -83,6 +120,7 @@ import {
   FarmGoodId,
   FarmItemId,
   FarmOwlOrder,
+  FarmVisitorOffer,
   FestivalType,
   FieldMicroEvent,
   FieldMicroEventKind,
@@ -135,6 +173,8 @@ import {
   VerifiedRealPlayerProfile,
   WeatherForecastSlot,
   WeatherKind,
+  WeeklyDerbyEventKind,
+  WeeklyDerbyState,
   ZoneId,
   AlmanacChapterId,
   CoopSupplyCrateState,
@@ -283,6 +323,7 @@ import {
   farmSellFarmItemFromBarn,
   farmEnsureLanguageQuiz,
   farmGetSeedCount,
+  farmGetPlantableSeedCount,
   farmAddCropSeeds,
   farmBuyCropSeedWithGold,
   farmCompleteSeedLanguageQuizAttempt,
@@ -352,6 +393,7 @@ import {
 } from './socialFestivalsAndAlmanac';
 import {
   activateFarmHelper,
+  advertiseRoadsideStandSlot,
   buyVisitedNeighborRoadsideOffer,
   claimFieldMicroEvent,
   claimRoadsideStandSlot,
@@ -500,6 +542,9 @@ import {
   questsFulfillFarmOwlOrder,
   questsRefreshFarmOwlOrder,
   questsGetOwlRerollsLeft,
+  questsTrashFarmOwlOrder,
+  questsTickTrashedOwlOrders,
+  questsInstantRestoreTrashedOwlOrder,
   questsGetBrewDurationSec,
   questsQuickHarvestHerbs,
   questsStartBrewing,
@@ -834,6 +879,9 @@ export class ParkSimulation {
   }
 
   public claimYuleMainDay(day: number, now?: Date): { ok: boolean; msg: string; unlockedAssetIds?: string[] } {
+    if (this.isVisitingNeighbor || this.isHeadmasterPreview || this.isVisitingHonorTour) {
+      return { ok: false, msg: 'Hãy về Trang Trại Hang Sóc để nhận quà Yule nhé!' };
+    }
     const current = this.resolveEffectiveYuleDay(now);
     const def = YULE_SCHEDULE[day - 1];
     if (!def || current === 0 || day > current) return { ok: false, msg: 'Ngày Yule này chưa mở hoặc event đã kết thúc.' };
@@ -851,6 +899,9 @@ export class ParkSimulation {
   }
 
   public claimYuleSideTask(taskId: string, now?: Date): { ok: boolean; msg: string; rewardSickles?: number } {
+    if (this.isVisitingNeighbor || this.isHeadmasterPreview || this.isVisitingHonorTour) {
+      return { ok: false, msg: 'Hãy về Trang Trại Hang Sóc để nhận thưởng nhiệm vụ phụ Yule!' };
+    }
     const current = this.resolveEffectiveYuleDay(now);
     if (current === 0) return { ok: false, msg: 'Event Yule chưa mở hoặc đã kết thúc.' };
     const task = YULE_SCHEDULE.flatMap((d) => d.side).find((t) => t.id === taskId);
@@ -870,6 +921,9 @@ export class ParkSimulation {
   }
 
   public purchaseYuleAsset(itemId: string): { ok: boolean; msg: string } {
+    if (this.isVisitingNeighbor || this.isHeadmasterPreview || this.isVisitingHonorTour) {
+      return { ok: false, msg: 'Hãy về Trang Trại Hang Sóc để mua vật phẩm Yule!' };
+    }
     const item = CATALOG.find((x) => x.id === itemId);
     if (!item?.id.startsWith('yule_')) return { ok: false, msg: 'Asset này không thuộc bộ Yule.' };
     const y = (this.state.yuleEvent ??= {
@@ -1494,6 +1548,7 @@ export class ParkSimulation {
     isMasterReplay?: boolean;
     buildReduction?: BuildReductionResult;
     leaderboardRankUp?: LeaderboardRankChange;
+    specialtyReward?: MinigameFarmSpecialtyOutcome;
   } { return trialsCompleteMatch3LevelVictory(this, bonusCoinsFromMoves, sessionMetrics); }
 
   public spendPuzzleHelperGold(goldCost: number): { ok: boolean; msg: string } { return trialsSpendPuzzleHelperGold(this, goldCost); }
@@ -1552,7 +1607,16 @@ export class ParkSimulation {
     isMasterReplay?: boolean;
     buildReduction?: BuildReductionResult;
     leaderboardRankUp?: LeaderboardRankChange;
+    specialtyReward?: MinigameFarmSpecialtyOutcome;
   } { return trialsCompletePuzzleArcadeVictory(this, mode, reward, sessionMetrics); }
+
+  public getJigsawValleyAuraPct(): number {
+    return getJigsawValleyAuraPct(this.state);
+  }
+
+  public getMinigameFarmSpecialty(gameId: LeaderboardGameId): MinigameFarmSpecialtyDef {
+    return getMinigameFarmSpecialty(gameId);
+  }
 
   public claimOwlPostDelivery(gx: number, gy: number): void { return questsClaimOwlPostDelivery(this, gx, gy); }
 
@@ -1578,6 +1642,62 @@ export class ParkSimulation {
 
   public getSeedCount(cropId: FarmCropId): number { return farmGetSeedCount(this, cropId); }
 
+  public getPlantableSeedCount(cropId: FarmCropId): number { return farmGetPlantableSeedCount(this, cropId); }
+
+  public getHayDayWheatingProgress(): { current: number; threshold: number; totalDrops: number } {
+    return getHayDayWheatingProgress(this);
+  }
+
+  public getWorkshopMastery(workshopGroupId: string): WorkshopMasteryInfo {
+    const count = Math.max(0, Math.floor(this.state.workshopMastery?.[workshopGroupId] ?? 0));
+    return getWorkshopMasteryInfo(count);
+  }
+
+  public getEffectiveWorkshopQueueCapacity(b: Pick<PlacedBuilding, 'stars' | 'extraQueueSlots'>): number {
+    return getEffectiveWorkshopQueueCapacity(b);
+  }
+
+  public getNextWorkshopExtraSlotCost(b: Pick<PlacedBuilding, 'extraQueueSlots'>): number | null {
+    return getNextWorkshopExtraSlotCost(b);
+  }
+
+  public expandWorkshopQueueSlot(uid: string): { ok: boolean; msg: string; newCapacity?: number } {
+    return expandWorkshopQueueSlot(this, uid);
+  }
+
+  public getFarmVisitors(nowMs = Date.now()): FarmVisitorOffer[] {
+    return ensureFarmVisitors(this, nowMs);
+  }
+
+  public getActiveFarmVisitorsCount(nowMs = Date.now()): number {
+    return getActiveFarmVisitorsCount(this, nowMs);
+  }
+
+  public acceptFarmVisitorOffer(
+    visitorId: string,
+    nowMs = Date.now()
+  ): { ok: boolean; msg: string; earnedSickle: number } {
+    return acceptFarmVisitorOffer(this, visitorId, nowMs);
+  }
+
+  public dismissFarmVisitorOffer(visitorId: string, nowMs = Date.now()): { ok: boolean; msg: string } {
+    return dismissFarmVisitorOffer(this, visitorId, nowMs);
+  }
+
+  public getDailyProphetNewspaper(nowMs = Date.now()): DailyProphetNewspaperState {
+    return ensureDailyProphetNewspaper(this, nowMs);
+  }
+
+  public buyNewspaperClassifiedAd(adId: string, nowMs = Date.now()): { ok: boolean; msg: string } {
+    return buyNewspaperClassifiedAd(this, adId, nowMs);
+  }
+
+  public refreshDailyProphetNewspaperEarly(
+    nowMs = Date.now()
+  ): { ok: boolean; msg: string; edition: DailyProphetNewspaperState } {
+    return refreshDailyProphetNewspaperEarly(this, nowMs);
+  }
+
   public addCropSeeds(cropId: FarmCropId, qty: number): number { return farmAddCropSeeds(this, cropId, qty); }
 
   public buyCropSeedWithGold(
@@ -1589,7 +1709,12 @@ export class ParkSimulation {
     cropId: FarmCropId,
     challenge: ActiveQuizChallenge,
     correct: boolean
-  ): QuizAttemptOutcome & { newSeedCount: number; cropName: string } { return farmCompleteSeedLanguageQuizAttempt(this, cropId, challenge, correct); }
+  ): QuizAttemptOutcome & {
+    newSeedCount: number;
+    cropName: string;
+    specialtyReward?: MinigameFarmSpecialtyOutcome;
+    streakShieldConsumed?: boolean;
+  } { return farmCompleteSeedLanguageQuizAttempt(this, cropId, challenge, correct); }
 
   public plantCropOnPlot(
     uid: string,
@@ -1702,6 +1827,10 @@ export class ParkSimulation {
     return claimRoadsideStandSlot(this, slotIndex);
   }
 
+  public advertiseRoadsideStandSlot(slotIndex: number, nowMs = Date.now()): { ok: boolean; msg: string } {
+    return advertiseRoadsideStandSlot(this, slotIndex, nowMs);
+  }
+
   public getNeighborRoadsideOffer(neighbor: NeighborProfileState) {
     return getNeighborRoadsideOffer(neighbor);
   }
@@ -1772,6 +1901,18 @@ export class ParkSimulation {
   public refreshFarmOwlOrder(orderId: string): boolean { return questsRefreshFarmOwlOrder(this, orderId); }
 
   public getOwlRerollsLeft(): number { return questsGetOwlRerollsLeft(this); }
+
+  public trashFarmOwlOrder(orderId: string, nowMs = Date.now()): { ok: boolean; msg: string } {
+    return questsTrashFarmOwlOrder(this, orderId, nowMs);
+  }
+
+  public tickTrashedOwlOrders(nowMs = Date.now()): boolean {
+    return questsTickTrashedOwlOrders(this, nowMs);
+  }
+
+  public instantRestoreTrashedOwlOrder(orderId: string, nowMs = Date.now()): { ok: boolean; msg: string } {
+    return questsInstantRestoreTrashedOwlOrder(this, orderId, nowMs);
+  }
 
   // =========================================================================
   // HỆ THỐNG THAM QUAN, TƯƠNG TRỢ VƯỜN & GIẢI CỨU MÀN KHÓ (1 NGÀY 1 LẦN / BẠN)
@@ -2053,6 +2194,22 @@ export class ParkSimulation {
     return newlyUnlocked;
   }
 
+  /**
+   * Đồng bộ ngược ví nguyên thuỷ & trạng thái lễ hội/bách khoa đã cộng vào `homeStateWhileVisiting`
+   * sang `this.state` trước khi `saveToStorage()` chạy `lifecycleSyncPlayerPrimitivesToHomeState`.
+   */
+  public syncClaimedHomePrimitivesToVisitState(): void {
+    const h = this.homeStateWhileVisiting;
+    if (!h) return;
+    this.state.galleons = h.galleons;
+    this.state.timeSand = h.timeSand;
+    this.state.phoenixTalismans = h.phoenixTalismans;
+    this.state.herbalCompost = h.herbalCompost;
+    this.state.morningDewPhials = h.morningDewPhials;
+    if (h.seasonalFestivalState) this.state.seasonalFestivalState = h.seasonalFestivalState;
+    if (h.almanacState) this.state.almanacState = h.almanacState;
+  }
+
   public claimAchievement(achId: string): {
     ok: boolean;
     msg: string;
@@ -2076,6 +2233,7 @@ export class ParkSimulation {
     if (res.rewardSickle > 0) {
       this.onRewardFly?.('galleons', res.rewardSickle);
     }
+    this.syncClaimedHomePrimitivesToVisitState();
     this.audio.playLevelUp();
     this.saveToStorage();
     this.onUiChange?.();
@@ -2122,6 +2280,7 @@ export class ParkSimulation {
     if (res.totalSickle > 0) {
       this.onRewardFly?.('galleons', res.totalSickle);
     }
+    this.syncClaimedHomePrimitivesToVisitState();
     this.audio.playLevelUp();
     this.saveToStorage();
     this.onUiChange?.();
@@ -2181,6 +2340,7 @@ export class ParkSimulation {
       targetState.match3.totalStarsEarned += res.reward.magicStars;
       this.onRewardFly?.('stars', res.reward.magicStars);
     }
+    this.syncClaimedHomePrimitivesToVisitState();
     this.onRewardFly?.('galleons', res.reward.galleons);
     this.audio.playLevelUp();
     this.saveToStorage();
@@ -2378,6 +2538,7 @@ export class ParkSimulation {
       targetState.match3.totalStarsEarned += def.rewardStars;
       parts.push(`+${def.rewardStars} 🌟`);
     }
+    this.syncClaimedHomePrimitivesToVisitState();
     this.onRewardFly?.('galleons', def.rewardSickle);
     this.audio.playLevelUp();
     this.saveToStorage();
@@ -2462,7 +2623,9 @@ export class ParkSimulation {
     this.state.stashedDecorStars = snap.stashedDecorStars
       ? structuredClone(snap.stashedDecorStars)
       : undefined;
-    this.state.galleons = snap.galleons;
+    // Giữ nguyên số dư Sickle hiện hành để tránh ghi đè thu nhập/chi tiêu không thuộc bố cục
+    this.buildUndoStack = [];
+    this.buildRedoStack = [];
     this.state.settings.showGrid = snap.prevShowGrid;
     this.rebuildGrid();
     this.syncValleyVillagers();
@@ -2681,6 +2844,8 @@ export class ParkSimulation {
       if (
         it &&
         it.category === 'decor' &&
+        !b.isIndestructible &&
+        !b.builtInSandbox &&
         !it.isFlooPortal &&
         !it.isFarmlandPlot &&
         !it.isAnimalPasturePlot &&
@@ -2705,6 +2870,8 @@ export class ParkSimulation {
     this.state.buildings = kept;
     this.state.stashedDecorInventory = stash;
     this.state.stashedDecorStars = stashStars;
+    this.buildUndoStack = [];
+    this.buildRedoStack = [];
     this.rebuildGrid();
     this.audio.playClick();
     this.saveToStorage();
@@ -2777,6 +2944,8 @@ export class ParkSimulation {
     if (placed === 0) {
       return { ok: false, msg: 'Kho Trang Trí đang trống hoặc sân không còn ô trống!', placed: 0 };
     }
+    this.buildUndoStack = [];
+    this.buildRedoStack = [];
     this.audio.playPlace();
     this.saveToStorage();
     this.onUiChange?.();
@@ -2898,6 +3067,66 @@ export class ParkSimulation {
     };
   }
 
+  public boostLowestBondCreature(amount: number): number {
+    const now = Date.now();
+    const habitats: Array<{ b: PlacedBuilding; item: CatalogItem }> = [];
+    for (const b of this.state.buildings) {
+      if (now < b.constructEndsAt) continue;
+      const item = getCatalogItem(b.itemId);
+      if (item?.isCreatureHabitat) {
+        habitats.push({ b, item });
+      }
+    }
+    if (habitats.length === 0) return 0;
+    habitats.sort(
+      (a, c) =>
+        (a.b.creatureBondLevel ?? 1) - (c.b.creatureBondLevel ?? 1) ||
+        (a.b.creatureBondXp ?? 0) - (c.b.creatureBondXp ?? 0)
+    );
+    const pick = habitats[0];
+    const safeAmount = Math.max(1, Math.round(amount));
+    creaturesAddCreatureBondXp(this, pick.b, pick.item, safeAmount);
+    return safeAmount;
+  }
+
+  public getMollySupplyForMinigame(mode: MinigameTrialKind): ResolvedMollySupplyKit {
+    return resolveMollySupplyForMinigame(this, mode);
+  }
+
+  public consumeMollySupplyKit(mode: MinigameTrialKind): {
+    ok: boolean;
+    msg: string;
+    itemId: FarmItemId;
+    isSignature: boolean;
+    remaining: number;
+  } {
+    const kit = resolveMollySupplyForMinigame(this, mode);
+    if (!kit.ready) {
+      return {
+        ok: false,
+        msg: kit.tooltipVi,
+        itemId: kit.itemId,
+        isSignature: false,
+        remaining: kit.haveQty,
+      };
+    }
+    if (!this.state.sandboxMode) {
+      this.consumeFarmItemFromBarn(kit.itemId, kit.qtyNeeded);
+    }
+    this.recordWeeklyDerbyProgress('molly_supply', 1);
+    this.audio.playSpell();
+    this.saveToStorage();
+    this.onUiChange?.();
+    const rem = this.state.sandboxMode ? 99 : this.getFarmItemCount(kit.itemId);
+    return {
+      ok: true,
+      msg: `${kit.itemEmoji} Hộp Tiếp Tế Bà Molly (${kit.shortLabelVi}): ${kit.effectSummaryVi}!`,
+      itemId: kit.itemId,
+      isSignature: kit.isSignature,
+      remaining: rem,
+    };
+  }
+
   public consumeMollyMinigameSnack(
     snackId: 'cinnamon_apple_pie' | 'frothy_butterbeer'
   ): { ok: boolean; msg: string; remaining: number } {
@@ -2927,6 +3156,50 @@ export class ParkSimulation {
       msg: `${meta.emoji} Đã dùng 1 ${meta.name} Bà Molly trợ lực khảo thí!`,
       remaining: Math.max(0, have - 1),
     };
+  }
+
+  public ensureWeeklyDerby(nowMs?: number): WeeklyDerbyState {
+    return ensureWeeklyDerbyState(this, nowMs);
+  }
+
+  public getWeeklyDerbySummary(nowMs?: number): WeeklyDerbySummary {
+    return getWeeklyDerbySummary(this, nowMs);
+  }
+
+  public acceptWeeklyDerbyTask(taskId: string, nowMs?: number): { ok: boolean; msg: string } {
+    return acceptWeeklyDerbyTask(this, taskId, nowMs);
+  }
+
+  public trashWeeklyDerbyBoardTask(taskId: string, nowMs?: number): { ok: boolean; msg: string } {
+    return trashWeeklyDerbyBoardTask(this, taskId, nowMs);
+  }
+
+  public instantRestoreWeeklyDerbySlot(taskId: string, nowMs?: number): { ok: boolean; msg: string } {
+    return instantRestoreWeeklyDerbySlot(this, taskId, nowMs);
+  }
+
+  public abandonWeeklyDerbyActiveTask(nowMs?: number): { ok: boolean; msg: string } {
+    return abandonWeeklyDerbyActiveTask(this, nowMs);
+  }
+
+  public completeWeeklyDerbyActiveTask(nowMs?: number): { ok: boolean; msg: string; pointsEarned: number } {
+    return completeWeeklyDerbyActiveTask(this, nowMs);
+  }
+
+  public unlockBonusWeeklyDerbySlot(nowMs?: number): { ok: boolean; msg: string } {
+    return unlockBonusWeeklyDerbySlot(this, nowMs);
+  }
+
+  public claimWeeklyDerbyMilestone(tier: 1 | 2 | 3 | 4 | 5, nowMs?: number): { ok: boolean; msg: string } {
+    return claimWeeklyDerbyMilestone(this, tier, nowMs);
+  }
+
+  public recordWeeklyDerbyProgress(
+    eventKind: WeeklyDerbyEventKind,
+    amount = 1,
+    nowMs?: number
+  ): { progressed: boolean; justCompleted: boolean } {
+    return recordWeeklyDerbyProgress(this, eventKind, amount, nowMs);
   }
 }
 

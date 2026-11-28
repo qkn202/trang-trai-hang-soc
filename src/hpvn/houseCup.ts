@@ -5,7 +5,7 @@
 import { flushFarmSave, request } from './bridge';
 import type { HouseName } from '../types/game';
 
-export type HouseCupDisciplineId = 'match3' | 'caro' | 'sudoku' | 'chess' | 'blocks' | 'jigsaw';
+export type HouseCupDisciplineId = 'match3' | 'caro' | 'sudoku' | 'chess' | 'blocks' | 'jigsaw' | 'derby';
 
 export const HOUSE_CUP_DISCIPLINE_ORDER: readonly HouseCupDisciplineId[] = [
   'match3',
@@ -15,6 +15,16 @@ export const HOUSE_CUP_DISCIPLINE_ORDER: readonly HouseCupDisciplineId[] = [
   'blocks',
   'jigsaw',
 ];
+
+export const HOUSE_CUP_ALL_DISCIPLINE_ORDER: readonly HouseCupDisciplineId[] = [
+  ...HOUSE_CUP_DISCIPLINE_ORDER,
+  'derby',
+];
+
+/** Giới hạn chống gian lận điểm Derby tuần của mỗi thành viên (Môn #7). */
+export const HOUSE_CUP_DERBY_MAX_WEEKLY_MEMBER_POINTS = 2500;
+/** Thành viên cần hoàn thành tối thiểu 2 nhiệm vụ Derby trong tuần để ghi điểm Nhà cho Môn #7. */
+export const HOUSE_CUP_DERBY_MIN_TASKS_FOR_POINTS = 2;
 
 export const HOUSE_CUP_DEFAULT_MEDAL_POINTS: readonly [number, number, number, number] = [
   100,
@@ -33,6 +43,11 @@ export const HOUSE_CUP_SEASON_START_WEEKDAY_VN = 5; // 5 = Thứ Sáu
 export const HOUSE_CUP_SEASON_START_HOUR_VN = 17;   // 17:00 Thứ Sáu: bắt đầu tính điểm tuần mới
 export const HOUSE_CUP_PAYOUT_WEEKDAY_VN = 5;       // 5 = Thứ Sáu (0=CN..6=T7)
 export const HOUSE_CUP_PAYOUT_HOUR_VN = 16;         // 16:00 Thứ Sáu tuần sau: kết thúc & chốt thưởng (UTC+7)
+
+/** Tham số F2 — Cân bằng quân số Liên Minh khóa cứng từ 17:00 Thứ Sáu đầu tuần (trung bình trượt 3 tuần, sàn 4 người/LM, trần 2.5×). */
+export const HOUSE_CUP_ALLIANCE_ROSTER_WINDOW_WEEKS = 3;
+export const HOUSE_CUP_ALLIANCE_ROSTER_FLOOR = 4;
+export const HOUSE_CUP_ALLIANCE_MULTIPLIER_CAP = 2.5;
 
 export interface HouseCupRankPointTier {
   maxRank: number | null; // null = mọi thứ hạng còn lại miễn đạt >= minStagesForPoints
@@ -169,6 +184,71 @@ export function rankAndScoreDisciplineFromWeeklyPlayers<
 }
 
 /**
+ * Môn #7 (Derby Nông Trại) — Hàm thuần đồng nhất với máy chủ HPVN để xếp hạng thành viên & tính điểm đóng góp Nhà:
+ * - Yêu cầu hoàn thành ít nhất `minTasks` (mặc định 2) nhiệm vụ Derby trong tuần và có điểm > 0.
+ * - Kẹp điểm mỗi thành viên tối đa `maxMemberScore` (mặc định 2.500 đ) trước khi xếp hạng theo đúng luật `rankAndScoreDisciplineFromWeeklyPlayers`.
+ */
+export function computeDerbyDisciplineHouseTotals(
+  entries: ReadonlyArray<{ house: HouseName; weeklyDerbyScore: number; weeklyDerbyTasks: number }>,
+  minTasks = HOUSE_CUP_DERBY_MIN_TASKS_FOR_POINTS,
+  maxMemberScore = HOUSE_CUP_DERBY_MAX_WEEKLY_MEMBER_POINTS,
+  tiers: readonly HouseCupRankPointTier[] = HOUSE_CUP_DEFAULT_RANK_TIERS
+): {
+  houses: Record<HouseName, number>;
+  qualifiedCounts: Record<HouseName, number>;
+  ranked: Array<{
+    house: HouseName;
+    cappedScore: number;
+    weeklyDerbyTasks: number;
+    rank: number;
+    contributionPoints: number;
+  }>;
+} {
+  const safeMinTasks = Math.max(
+    1,
+    Math.floor(Number(minTasks) || HOUSE_CUP_DERBY_MIN_TASKS_FOR_POINTS)
+  );
+  const safeMaxScore = Math.max(
+    0,
+    Math.floor(
+      Number.isFinite(Number(maxMemberScore))
+        ? Number(maxMemberScore)
+        : HOUSE_CUP_DERBY_MAX_WEEKLY_MEMBER_POINTS
+    )
+  );
+
+  const mapped = entries
+    .map((e) => {
+      const weeklyDerbyTasks = Math.max(0, Math.floor(Number(e.weeklyDerbyTasks) || 0));
+      const cappedScore = Math.min(
+        safeMaxScore,
+        Math.max(0, Math.floor(Number(e.weeklyDerbyScore) || 0))
+      );
+      return {
+        house: e.house,
+        cappedScore,
+        weeklyDerbyTasks,
+        weeklyCleared: weeklyDerbyTasks,
+        weeklyWeightedScore: cappedScore,
+      };
+    })
+    .filter((e) => e.cappedScore > 0);
+
+  const scored = rankAndScoreDisciplineFromWeeklyPlayers(mapped, safeMinTasks, tiers);
+  return {
+    houses: scored.houses,
+    qualifiedCounts: scored.qualifiedCounts,
+    ranked: scored.ranked.map((r) => ({
+      house: r.house,
+      cappedScore: r.cappedScore,
+      weeklyDerbyTasks: r.weeklyDerbyTasks,
+      rank: r.rank,
+      contributionPoints: r.contributionPoints,
+    })),
+  };
+}
+
+/**
  * Tính điểm đóng góp cho Nhà từ thứ hạng cá nhân trên BXH & số màn đã vượt qua:
  * - Chưa đủ `minStages` (mặc định 5 màn): 0 đ.
  * - Đạt từ `minStages` màn trở lên: chắc chắn có điểm (tối thiểu bậc sàn +20 đ),
@@ -251,11 +331,31 @@ export interface HouseCupAllianceSpec {
   houses: readonly [HouseName, HouseName];
 }
 
+export interface HouseCupAllianceBalanceEntry {
+  activeAvg: number; // Trung bình số người hoạt động 3 tuần gần nhất của Liên Minh (tổng 2 Nhà)
+  effectiveRoster: number; // Math.max(rosterFloor, activeAvg)
+  multiplier: number; // Hệ số cân bằng quân số khóa đầu tuần (1.0 .. 2.5)
+  rawPoints?: number; // Tổng điểm gốc 6 môn trước khi nhân hệ số
+  scaledPoints?: number; // Math.round(rawPoints * multiplier)
+}
+
+export interface HouseCupAllianceBalanceInfo {
+  windowWeeks: number;
+  rosterFloor: number;
+  multiplierCap: number;
+  lockedAt?: number;
+  houseActiveAvg?: Record<HouseName, number>;
+  byAlliance: Record<'alliance_a' | 'alliance_b', HouseCupAllianceBalanceEntry>;
+}
+
 export interface HouseCupAllianceStanding {
   id: 'alliance_a' | 'alliance_b';
   nameVi: string;
   houses: readonly [HouseName, HouseName];
   points: number;
+  rawPoints: number;
+  balanceMultiplier: number;
+  activeRosterAvg?: number;
   memberHouseScores: readonly [number, number];
   firstPlaceCount: number;
   sharePercent: number;
@@ -295,16 +395,17 @@ export interface HouseCupAllianceRewardInfo {
 
 export interface HouseCupView {
   weekKey?: string;
-  mode?: 'medals' | 'legacy';
+  mode?: 'f2' | 'medals' | 'legacy';
   unlimited?: boolean;
   medalPoints?: readonly [number, number, number, number];
   minStagesForPoints?: number;
   rankTiers?: readonly HouseCupRankPointTier[];
   stageScoreBands?: readonly HouseCupStageScoreBand[];
   alliances?: readonly [HouseCupAllianceSpec, HouseCupAllianceSpec];
+  allianceBalance?: HouseCupAllianceBalanceInfo;
   allianceReward?: HouseCupAllianceRewardInfo;
-  houses?: Record<HouseName, number>; // this week, every member of the house (or medal bracket totals)
-  disciplines?: Partial<Record<HouseCupDisciplineId, Record<HouseName, number>>>; // unlimited raw weekly points per discipline
+  houses?: Record<HouseName, number>; // F2: tổng điểm đóng góp 6 môn mỗi Nhà; medals: tổng huy chương; legacy: tổng phẳng
+  disciplines?: Partial<Record<HouseCupDisciplineId, Record<HouseName, number>>>; // điểm đóng góp theo thứ hạng từng môn của 4 Nhà
   house?: string | null; // the member's HPVN house (null: none, no points)
   memberTodayPoints: number;
   memberDailyCap: number;
@@ -315,7 +416,7 @@ export interface HouseCupView {
 
 const HOUSES: HouseName[] = ['Gryffindor', 'Slytherin', 'Ravenclaw', 'Hufflepuff'];
 const HOUSE_SET = new Set<string>(HOUSES);
-const VALID_DISCIPLINES = new Set<string>(HOUSE_CUP_DISCIPLINE_ORDER);
+const VALID_DISCIPLINES = new Set<string>(HOUSE_CUP_ALL_DISCIPLINE_ORDER);
 
 /**
  * 3 cặp Liên Minh độc nhất được ghép từ 4 Nhà Hogwarts, xoay vòng liên tục mỗi tuần
@@ -340,6 +441,49 @@ export const HOUSE_CUP_ALLIANCE_ROTATION: readonly [
     { id: 'alliance_b', nameVi: 'Liên Minh Tinh Tú', houses: ['Ravenclaw', 'Hufflepuff'] },
   ],
 ];
+
+export type HouseCupAllianceFlooFrameKey =
+  | 'alliance-anh-duong'
+  | 'alliance-lua-va-tri'
+  | 'alliance-ngoc-rung'
+  | 'alliance-nguyet-anh'
+  | 'alliance-song-hung'
+  | 'alliance-tinh-tu';
+
+export interface HouseCupAllianceFlooFrameMeta {
+  key: HouseCupAllianceFlooFrameKey;
+  nameVi: string;
+  houses: readonly [HouseName, HouseName];
+  iconFile: string;
+}
+
+/** Bảng 6 khung bong bóng Mạng Floo riêng biệt thay thế khung `alliance-cup` cũ, tương ứng đủ 6 cặp Liên Minh 2 Nhà. */
+export const HOUSE_CUP_ALLIANCE_FLOO_FRAMES: readonly HouseCupAllianceFlooFrameMeta[] = [
+  { key: 'alliance-anh-duong', nameVi: 'Cúp Liên Minh Ánh Dương', houses: ['Gryffindor', 'Hufflepuff'], iconFile: 'anh-duong.webp' },
+  { key: 'alliance-lua-va-tri', nameVi: 'Cúp Liên Minh Lửa & Trí', houses: ['Gryffindor', 'Ravenclaw'], iconFile: 'lua-va-tri.webp' },
+  { key: 'alliance-ngoc-rung', nameVi: 'Cúp Liên Minh Ngọc Rừng', houses: ['Slytherin', 'Hufflepuff'], iconFile: 'ngoc-rung.webp' },
+  { key: 'alliance-nguyet-anh', nameVi: 'Cúp Liên Minh Nguyệt Ảnh', houses: ['Slytherin', 'Ravenclaw'], iconFile: 'nguyet-anh.webp' },
+  { key: 'alliance-song-hung', nameVi: 'Cúp Liên Minh Song Hùng', houses: ['Gryffindor', 'Slytherin'], iconFile: 'song-hung.webp' },
+  { key: 'alliance-tinh-tu', nameVi: 'Cúp Liên Minh Tinh Tú', houses: ['Ravenclaw', 'Hufflepuff'], iconFile: 'tinh-tu.webp' },
+];
+
+const ALLIANCE_PAIR_TO_FLOO_KEY: Record<string, HouseCupAllianceFlooFrameKey> = {
+  'Gryffindor+Hufflepuff': 'alliance-anh-duong',
+  'Gryffindor+Ravenclaw': 'alliance-lua-va-tri',
+  'Gryffindor+Slytherin': 'alliance-song-hung',
+  'Hufflepuff+Ravenclaw': 'alliance-tinh-tu',
+  'Hufflepuff+Slytherin': 'alliance-ngoc-rung',
+  'Ravenclaw+Slytherin': 'alliance-nguyet-anh',
+};
+
+/** Ánh xạ 2 Nhà của Liên Minh thắng Cúp Tuần (không phân biệt thứ tự) sang đúng mã khung Mạng Floo riêng. */
+export function getAllianceFlooFrameKey(
+  houses: readonly [HouseName, HouseName]
+): HouseCupAllianceFlooFrameKey | null {
+  if (!Array.isArray(houses) || houses.length !== 2) return null;
+  const pairKey = [...houses].sort().join('+');
+  return ALLIANCE_PAIR_TO_FLOO_KEY[pairKey] ?? null;
+}
 
 const HOUSE_CUP_VN_OFFSET_MS = 7 * 3_600_000;
 const HOUSE_CUP_DAY_MS = 86_400_000;
@@ -558,7 +702,7 @@ export function computeDisciplineBracketTotals(
   };
   const summaries: HouseCupDisciplineSummary[] = [];
 
-  for (const id of HOUSE_CUP_DISCIPLINE_ORDER) {
+  for (const id of HOUSE_CUP_ALL_DISCIPLINE_ORDER) {
     const rawMap = disciplines[id];
     if (!rawMap) continue;
     const sorted = HOUSES.map((house) => ({
@@ -647,9 +791,282 @@ export const houseCupAllianceReward = (): HouseCupAllianceRewardInfo => ({
   ...(view?.allianceReward ?? {}),
 });
 
-/** Ordered per-discipline medal standings when the server provides discipline totals, or empty array in legacy mode. */
+function round2(v: number): number {
+  return Math.round(v * 100) / 100;
+}
+
+/** Định dạng hệ số cân bằng quân số gọn gàng theo chuẩn tiếng Việt (VD 1.5 -> "1,5", 2 -> "2"). */
+export function formatAllianceMultiplierVi(multiplier: number): string {
+  const safe = Number.isFinite(multiplier) && multiplier > 0 ? round2(multiplier) : 1;
+  return String(safe).replace('.', ',');
+}
+
+/**
+ * F2 — Tính tổng điểm đóng góp trực tiếp 6 bộ môn cho từng Nhà (`Σ disciplines[disc][house]`),
+ * không nén nhị phân 100/75/50/25 nên 100% đóng góp từ thành viên mới (≥ 5 màn = +20 đ) đều cộng thẳng vào tổng Liên Minh.
+ */
+export function computeF2HouseTotals(
+  disciplines: Partial<Record<HouseCupDisciplineId, Record<HouseName, number>>>
+): {
+  houses: Record<HouseName, number>;
+  firstPlaceCounts: Record<HouseName, number>;
+  summaries: HouseCupDisciplineSummary[];
+} {
+  const houses: Record<HouseName, number> = {
+    Gryffindor: 0,
+    Slytherin: 0,
+    Ravenclaw: 0,
+    Hufflepuff: 0,
+  };
+  const firstPlaceCounts: Record<HouseName, number> = {
+    Gryffindor: 0,
+    Slytherin: 0,
+    Ravenclaw: 0,
+    Hufflepuff: 0,
+  };
+  const summaries: HouseCupDisciplineSummary[] = [];
+
+  for (const id of HOUSE_CUP_ALL_DISCIPLINE_ORDER) {
+    const rawMap = disciplines[id];
+    if (!rawMap) continue;
+    const sorted = HOUSES.map((house) => ({
+      house,
+      rawPoints: n(rawMap[house]),
+    })).sort((a, b) => b.rawPoints - a.rawPoints);
+
+    const leaderRawPoints = sorted[0]?.rawPoints ?? 0;
+    const leaderHouse = leaderRawPoints > 0 ? sorted[0].house : null;
+
+    const rows: HouseCupDisciplineRow[] = [];
+    const byHouse = {} as Record<HouseName, HouseCupDisciplineRow>;
+
+    let activeRank = 0;
+    let prevRaw = -1;
+    for (let i = 0; i < sorted.length; i++) {
+      const entry = sorted[i];
+      if (entry.rawPoints <= 0) {
+        const row: HouseCupDisciplineRow = {
+          house: entry.house,
+          rawPoints: 0,
+          rank: 4,
+          cupPoints: 0,
+          gapToFirst: leaderRawPoints,
+        };
+        rows.push(row);
+        byHouse[entry.house] = row;
+        continue;
+      }
+      if (entry.rawPoints !== prevRaw) {
+        activeRank = i + 1;
+        prevRaw = entry.rawPoints;
+      }
+      houses[entry.house] += entry.rawPoints;
+      if (activeRank === 1) {
+        firstPlaceCounts[entry.house] += 1;
+      }
+      const row: HouseCupDisciplineRow = {
+        house: entry.house,
+        rawPoints: entry.rawPoints,
+        rank: activeRank,
+        cupPoints: entry.rawPoints,
+        gapToFirst: Math.max(0, leaderRawPoints - entry.rawPoints),
+      };
+      rows.push(row);
+      byHouse[entry.house] = row;
+    }
+
+    summaries.push({
+      id,
+      rows,
+      leaderHouse,
+      leaderRawPoints,
+      byHouse,
+    });
+  }
+
+  return { houses, firstPlaceCounts, summaries };
+}
+
+/**
+ * F2 — Tính hệ số cân bằng quân số khóa đầu tuần (17:00 Thứ Sáu) từ trung bình trượt 3 tuần gần nhất
+ * của số thành viên hoạt động từng Nhà:
+ * - Sàn tối thiểu `rosterFloor` (mặc định 4 người/Liên Minh) để tránh hệ số quá ảo khi Nhà siêu vắng.
+ * - Trần tối đa `multiplierCap` (mặc định 2.5×).
+ * - Cold-start (chưa có lịch sử hoạt động của cả 2 Liên Minh): hệ số 1.0× cho cả hai bên.
+ */
+export function computeAllianceHeadcountMultipliers(
+  alliances: readonly [HouseCupAllianceSpec, HouseCupAllianceSpec],
+  houseActiveAvg?: Partial<Record<HouseName, number>> | null,
+  options?: {
+    windowWeeks?: number;
+    rosterFloor?: number;
+    multiplierCap?: number;
+    lockedAt?: number;
+  }
+): HouseCupAllianceBalanceInfo {
+  const windowWeeks = Math.max(
+    1,
+    Math.floor(Number(options?.windowWeeks) || HOUSE_CUP_ALLIANCE_ROSTER_WINDOW_WEEKS)
+  );
+  const rosterFloor = Math.max(
+    1,
+    Number.isFinite(Number(options?.rosterFloor)) && Number(options?.rosterFloor) > 0
+      ? Number(options?.rosterFloor)
+      : HOUSE_CUP_ALLIANCE_ROSTER_FLOOR
+  );
+  const multiplierCap = Math.max(
+    1,
+    Number.isFinite(Number(options?.multiplierCap)) && Number(options?.multiplierCap) >= 1
+      ? Number(options?.multiplierCap)
+      : HOUSE_CUP_ALLIANCE_MULTIPLIER_CAP
+  );
+
+  const safeHouseAvg: Record<HouseName, number> = {
+    Gryffindor: Math.max(0, round2(Number(houseActiveAvg?.Gryffindor) || 0)),
+    Slytherin: Math.max(0, round2(Number(houseActiveAvg?.Slytherin) || 0)),
+    Ravenclaw: Math.max(0, round2(Number(houseActiveAvg?.Ravenclaw) || 0)),
+    Hufflepuff: Math.max(0, round2(Number(houseActiveAvg?.Hufflepuff) || 0)),
+  };
+
+  const avgA = round2(safeHouseAvg[alliances[0].houses[0]] + safeHouseAvg[alliances[0].houses[1]]);
+  const avgB = round2(safeHouseAvg[alliances[1].houses[0]] + safeHouseAvg[alliances[1].houses[1]]);
+  const hasHistory = avgA > 0 || avgB > 0;
+  const effA = hasHistory ? Math.max(rosterFloor, avgA) : rosterFloor;
+  const effB = hasHistory ? Math.max(rosterFloor, avgB) : rosterFloor;
+
+  let multA = 1;
+  let multB = 1;
+  if (hasHistory) {
+    if (effA < effB) {
+      multA = round2(Math.min(multiplierCap, effB / effA));
+    } else if (effB < effA) {
+      multB = round2(Math.min(multiplierCap, effA / effB));
+    }
+  }
+
+  return {
+    windowWeeks,
+    rosterFloor,
+    multiplierCap,
+    ...(typeof options?.lockedAt === 'number' && Number.isFinite(options.lockedAt) && options.lockedAt > 0
+      ? { lockedAt: options.lockedAt }
+      : {}),
+    houseActiveAvg: safeHouseAvg,
+    byAlliance: {
+      [alliances[0].id]: {
+        activeAvg: avgA,
+        effectiveRoster: round2(effA),
+        multiplier: multA,
+      },
+      [alliances[1].id]: {
+        activeAvg: avgB,
+        effectiveRoster: round2(effB),
+        multiplier: multB,
+      },
+    } as Record<'alliance_a' | 'alliance_b', HouseCupAllianceBalanceEntry>,
+  };
+}
+
+/**
+ * F2 — Hàm thuần tính trọn bộ bảng tổng sắp 4 Nhà & 2 Liên Minh từ bảng điểm đóng góp 6 môn + hệ số quân số khóa đầu tuần.
+ */
+export function computeF2AllianceStandingsFromDisciplines(
+  disciplines: Partial<Record<HouseCupDisciplineId, Record<HouseName, number>>>,
+  alliances: readonly [HouseCupAllianceSpec, HouseCupAllianceSpec],
+  options?: {
+    houseActiveAvg?: Partial<Record<HouseName, number>> | null;
+    balance?: HouseCupAllianceBalanceInfo | null;
+    playerHouse?: HouseName | null;
+    windowWeeks?: number;
+    rosterFloor?: number;
+    multiplierCap?: number;
+  }
+): {
+  houses: Record<HouseName, number>;
+  firstPlaceCounts: Record<HouseName, number>;
+  summaries: HouseCupDisciplineSummary[];
+  balance: HouseCupAllianceBalanceInfo;
+  standings: readonly [HouseCupAllianceStanding, HouseCupAllianceStanding];
+} {
+  const { houses, firstPlaceCounts, summaries } = computeF2HouseTotals(disciplines);
+  const baseBalance =
+    options?.balance ??
+    computeAllianceHeadcountMultipliers(alliances, options?.houseActiveAvg, {
+      windowWeeks: options?.windowWeeks,
+      rosterFloor: options?.rosterFloor,
+      multiplierCap: options?.multiplierCap,
+    });
+
+  const enrichedByAlliance = {} as Record<'alliance_a' | 'alliance_b', HouseCupAllianceBalanceEntry>;
+  const rawList = alliances.map((spec) => {
+    const [h0, h1] = spec.houses;
+    const p0 = houses[h0] ?? 0;
+    const p1 = houses[h1] ?? 0;
+    const rawPoints = p0 + p1;
+    const entry = baseBalance.byAlliance[spec.id];
+    const mult = entry && Number.isFinite(entry.multiplier) && entry.multiplier >= 1 ? round2(entry.multiplier) : 1;
+    const points = Math.round(rawPoints * mult);
+    enrichedByAlliance[spec.id] = {
+      activeAvg: entry?.activeAvg ?? 0,
+      effectiveRoster: entry?.effectiveRoster ?? baseBalance.rosterFloor,
+      multiplier: mult,
+      rawPoints,
+      scaledPoints: points,
+    };
+    const isMine = Boolean(options?.playerHouse && (h0 === options.playerHouse || h1 === options.playerHouse));
+    const allyHouse: HouseName | null = isMine ? (h0 === options?.playerHouse ? h1 : h0) : null;
+    return {
+      spec,
+      points,
+      rawPoints,
+      balanceMultiplier: mult,
+      activeRosterAvg: entry?.activeAvg,
+      memberHouseScores: [p0, p1] as readonly [number, number],
+      firstPlaceCount: (firstPlaceCounts[h0] ?? 0) + (firstPlaceCounts[h1] ?? 0),
+      isPlayerAlliance: isMine,
+      allyHouse,
+    };
+  });
+
+  const totalPts = rawList[0].points + rawList[1].points;
+  const sorted = [...rawList].sort(
+    (a, b) =>
+      b.points - a.points ||
+      b.firstPlaceCount - a.firstPlaceCount ||
+      b.rawPoints - a.rawPoints
+  );
+
+  const toStanding = (item: (typeof rawList)[number], rank: 1 | 2): HouseCupAllianceStanding => ({
+    id: item.spec.id,
+    nameVi: item.spec.nameVi,
+    houses: item.spec.houses,
+    points: item.points,
+    rawPoints: item.rawPoints,
+    balanceMultiplier: item.balanceMultiplier,
+    ...(item.activeRosterAvg !== undefined ? { activeRosterAvg: item.activeRosterAvg } : {}),
+    memberHouseScores: item.memberHouseScores,
+    firstPlaceCount: item.firstPlaceCount,
+    sharePercent: totalPts > 0 ? Math.round((item.points / totalPts) * 100) : 50,
+    rank,
+    isPlayerAlliance: item.isPlayerAlliance,
+    allyHouse: item.allyHouse,
+  });
+
+  return {
+    houses,
+    firstPlaceCounts,
+    summaries,
+    balance: { ...baseBalance, byAlliance: enrichedByAlliance },
+    standings: [toStanding(sorted[0], 1), toStanding(sorted[1], 2)],
+  };
+}
+
+/** Ordered per-discipline standings when the server provides discipline totals, or empty array in legacy mode. */
 export function houseCupDisciplineSummaries(): HouseCupDisciplineSummary[] {
   if (!view?.disciplines) return [];
+  if (view.mode === 'f2') {
+    return computeF2HouseTotals(view.disciplines).summaries;
+  }
   return computeDisciplineBracketTotals(
     view.disciplines,
     view.medalPoints ?? HOUSE_CUP_DEFAULT_MEDAL_POINTS
@@ -661,10 +1078,18 @@ export function houseCupFirstPlaceCounts(): Record<HouseName, number> {
   if (!view?.disciplines) {
     return { Gryffindor: 0, Slytherin: 0, Ravenclaw: 0, Hufflepuff: 0 };
   }
+  if (view.mode === 'f2') {
+    return computeF2HouseTotals(view.disciplines).firstPlaceCounts;
+  }
   return computeDisciplineBracketTotals(
     view.disciplines,
     view.medalPoints ?? HOUSE_CUP_DEFAULT_MEDAL_POINTS
   ).firstPlaceCounts;
+}
+
+/** Thông tin hệ số cân bằng quân số Liên Minh (F2) nếu máy chủ gửi xuống. */
+export function houseCupAllianceBalance(): HouseCupAllianceBalanceInfo | null {
+  return view?.allianceBalance ?? null;
 }
 
 /** Active 2 weekly Alliances formed from the 4 Houses (server override if sent, else deterministic weekly rotation). */
@@ -673,22 +1098,41 @@ export function houseCupAlliances(): readonly [HouseCupAllianceSpec, HouseCupAll
   return getWeeklyHouseAlliances(view?.weekKey);
 }
 
-/** Computed standings for the 2 weekly Alliances, combining each Alliance's 2 Houses' Cup points. */
+/** Computed standings for the 2 weekly Alliances, combining each Alliance's 2 Houses' Cup points (with locked F2 balance multiplier when active). */
 export function houseCupAllianceStandings(
   playerHouse?: HouseName | null
 ): readonly [HouseCupAllianceStanding, HouseCupAllianceStanding] {
   const pair = houseCupAlliances();
   const firstCounts = houseCupFirstPlaceCounts();
+  const balance = view?.allianceBalance;
   const raw = pair.map((spec) => {
     const [h0, h1] = spec.houses;
     const p0 = houseWeekPoints(h0);
     const p1 = houseWeekPoints(h1);
-    const points = p0 + p1;
+    const bEntry = balance?.byAlliance?.[spec.id];
+    const rawPoints =
+      bEntry && typeof bEntry.rawPoints === 'number' && Number.isFinite(bEntry.rawPoints)
+        ? Math.max(0, Math.round(bEntry.rawPoints))
+        : p0 + p1;
+    const balanceMultiplier =
+      bEntry && typeof bEntry.multiplier === 'number' && Number.isFinite(bEntry.multiplier) && bEntry.multiplier > 1
+        ? round2(bEntry.multiplier)
+        : 1;
+    const points =
+      bEntry && typeof bEntry.scaledPoints === 'number' && Number.isFinite(bEntry.scaledPoints)
+        ? Math.max(0, Math.round(bEntry.scaledPoints))
+        : Math.round(rawPoints * balanceMultiplier);
     const isMine = Boolean(playerHouse && (h0 === playerHouse || h1 === playerHouse));
     const allyHouse: HouseName | null = isMine ? (h0 === playerHouse ? h1 : h0) : null;
     return {
       spec,
       points,
+      rawPoints,
+      balanceMultiplier,
+      activeRosterAvg:
+        bEntry && typeof bEntry.activeAvg === 'number' && Number.isFinite(bEntry.activeAvg)
+          ? bEntry.activeAvg
+          : undefined,
       memberHouseScores: [p0, p1] as readonly [number, number],
       firstPlaceCount: (firstCounts[h0] ?? 0) + (firstCounts[h1] ?? 0),
       isPlayerAlliance: isMine,
@@ -698,7 +1142,10 @@ export function houseCupAllianceStandings(
 
   const totalPts = raw[0].points + raw[1].points;
   const sorted = [...raw].sort(
-    (a, b) => b.points - a.points || b.firstPlaceCount - a.firstPlaceCount
+    (a, b) =>
+      b.points - a.points ||
+      b.firstPlaceCount - a.firstPlaceCount ||
+      b.rawPoints - a.rawPoints
   );
 
   const toStanding = (
@@ -709,6 +1156,9 @@ export function houseCupAllianceStandings(
     nameVi: item.spec.nameVi,
     houses: item.spec.houses,
     points: item.points,
+    rawPoints: item.rawPoints,
+    balanceMultiplier: item.balanceMultiplier,
+    ...(item.activeRosterAvg !== undefined ? { activeRosterAvg: item.activeRosterAvg } : {}),
     memberHouseScores: item.memberHouseScores,
     firstPlaceCount: item.firstPlaceCount,
     sharePercent: totalPts > 0 ? Math.round((item.points / totalPts) * 100) : 50,
@@ -751,14 +1201,27 @@ export function applyHouseCup(raw: unknown): void {
     nextDisciplines = undefined;
   }
 
-  const nextMode: 'medals' | 'legacy' =
-    r.mode === 'medals' || Boolean(nextDisciplines && Object.keys(nextDisciplines).length > 0)
-      ? 'medals'
-      : 'legacy';
+  const hasDisciplines = Boolean(nextDisciplines && Object.keys(nextDisciplines).length > 0);
+  const nextMode: 'f2' | 'medals' | 'legacy' =
+    r.mode === 'f2'
+      ? 'f2'
+      : r.mode === 'medals'
+        ? 'medals'
+        : r.mode === 'legacy'
+          ? 'legacy'
+          : r.allianceBalance && typeof r.allianceBalance === 'object'
+            ? 'f2'
+            : view?.mode === 'f2' && !('mode' in r)
+              ? 'f2'
+              : hasDisciplines
+                ? 'medals'
+                : 'legacy';
 
   let resolvedHouses = view?.houses;
   if (housesObj) {
     resolvedHouses = Object.fromEntries(HOUSES.map((h) => [h, n(housesObj[h])])) as Record<HouseName, number>;
+  } else if (nextMode === 'f2' && nextDisciplines) {
+    resolvedHouses = computeF2HouseTotals(nextDisciplines).houses;
   } else if (nextMode === 'medals' && nextDisciplines) {
     resolvedHouses = computeDisciplineBracketTotals(nextDisciplines, medalPoints).houses;
   }
@@ -768,14 +1231,96 @@ export function applyHouseCup(raw: unknown): void {
   const nextUnlimited =
     typeof r.unlimited === 'boolean'
       ? r.unlimited
-      : nextMode === 'medals' && rawDailyCap === 0
+      : (nextMode === 'f2' || nextMode === 'medals') && rawDailyCap === 0
         ? true
         : (view?.unlimited ?? false);
 
+  const nextWeekKey = typeof r.weekKey === 'string' ? r.weekKey : view?.weekKey;
   const nextAlliances =
     'alliances' in r
       ? normalizeServerAlliances(r.alliances)
       : view?.alliances;
+
+  let nextAllianceBalance: HouseCupAllianceBalanceInfo | undefined =
+    nextMode === 'f2' ? view?.allianceBalance : undefined;
+  if (r.allianceBalance === null) {
+    nextAllianceBalance = undefined;
+  } else if (r.allianceBalance && typeof r.allianceBalance === 'object') {
+    const ab = r.allianceBalance as Record<string, unknown>;
+    const activePair = nextAlliances ?? getWeeklyHouseAlliances(nextWeekKey);
+    const windowWeeks = Math.max(
+      1,
+      Math.floor(Number(ab.windowWeeks) || HOUSE_CUP_ALLIANCE_ROSTER_WINDOW_WEEKS)
+    );
+    const rosterFloor =
+      typeof ab.rosterFloor === 'number' && Number.isFinite(ab.rosterFloor) && ab.rosterFloor > 0
+        ? ab.rosterFloor
+        : HOUSE_CUP_ALLIANCE_ROSTER_FLOOR;
+    const multiplierCap =
+      typeof ab.multiplierCap === 'number' && Number.isFinite(ab.multiplierCap) && ab.multiplierCap >= 1
+        ? ab.multiplierCap
+        : HOUSE_CUP_ALLIANCE_MULTIPLIER_CAP;
+    const lockedAt =
+      typeof ab.lockedAt === 'number' && Number.isFinite(ab.lockedAt) && ab.lockedAt > 0
+        ? ab.lockedAt
+        : undefined;
+    const rawHouseAvg =
+      ab.houseActiveAvg && typeof ab.houseActiveAvg === 'object'
+        ? (ab.houseActiveAvg as Record<string, unknown>)
+        : null;
+    const parsedHouseAvg: Partial<Record<HouseName, number>> | undefined = rawHouseAvg
+      ? (Object.fromEntries(
+          HOUSES.map((h) => [h, Math.max(0, round2(Number(rawHouseAvg[h]) || 0))])
+        ) as Record<HouseName, number>)
+      : undefined;
+
+    const derived = computeAllianceHeadcountMultipliers(activePair, parsedHouseAvg, {
+      windowWeeks,
+      rosterFloor,
+      multiplierCap,
+      lockedAt,
+    });
+
+    const rawBy =
+      ab.byAlliance && typeof ab.byAlliance === 'object'
+        ? (ab.byAlliance as Record<string, unknown>)
+        : null;
+    if (rawBy) {
+      const mergedBy = { ...derived.byAlliance };
+      for (const aid of ['alliance_a', 'alliance_b'] as const) {
+        const rawEntry = rawBy[aid];
+        if (!rawEntry || typeof rawEntry !== 'object') continue;
+        const e = rawEntry as Record<string, unknown>;
+        const rawMult = Number(e.multiplier);
+        const safeMult =
+          Number.isFinite(rawMult) && rawMult >= 1
+            ? round2(Math.min(multiplierCap, rawMult))
+            : derived.byAlliance[aid].multiplier;
+        const rawAvg = Number(e.activeAvg);
+        const safeAvg =
+          Number.isFinite(rawAvg) && rawAvg >= 0 ? round2(rawAvg) : derived.byAlliance[aid].activeAvg;
+        const rawEff = Number(e.effectiveRoster);
+        const safeEff =
+          Number.isFinite(rawEff) && rawEff > 0
+            ? round2(rawEff)
+            : Math.max(rosterFloor, safeAvg);
+        mergedBy[aid] = {
+          activeAvg: safeAvg,
+          effectiveRoster: safeEff,
+          multiplier: safeMult,
+          ...(typeof e.rawPoints === 'number' && Number.isFinite(e.rawPoints)
+            ? { rawPoints: Math.max(0, Math.round(e.rawPoints)) }
+            : {}),
+          ...(typeof e.scaledPoints === 'number' && Number.isFinite(e.scaledPoints)
+            ? { scaledPoints: Math.max(0, Math.round(e.scaledPoints)) }
+            : {}),
+        };
+      }
+      nextAllianceBalance = { ...derived, byAlliance: mergedBy };
+    } else {
+      nextAllianceBalance = derived;
+    }
+  }
 
   const nextMinStages =
     'minStagesForPoints' in r
@@ -937,15 +1482,16 @@ export function applyHouseCup(raw: unknown): void {
     rankTiers: nextRankTiers,
     stageScoreBands: nextStageScoreBands,
     ...(nextAlliances ? { alliances: nextAlliances } : { alliances: undefined }),
+    ...(nextAllianceBalance ? { allianceBalance: nextAllianceBalance } : { allianceBalance: undefined }),
     ...(nextAllianceReward ? { allianceReward: nextAllianceReward } : {}),
     ...(resolvedHouses ? { houses: resolvedHouses } : {}),
     ...(nextDisciplines ? { disciplines: nextDisciplines } : { disciplines: undefined }),
     ...('house' in r ? { house: typeof r.house === 'string' ? r.house : null } : {}),
-    memberTodayPoints: n(r.memberTodayPoints),
+    memberTodayPoints: 'memberTodayPoints' in r ? n(r.memberTodayPoints) : ('house' in r && r.house === null ? 0 : (view?.memberTodayPoints ?? 0)),
     memberDailyCap: rawDailyCap,
-    memberBank: n(r.memberBank),
-    memberTier: Math.max(1, n(r.memberTier)),
-    perTier: n(r.perTier) || 300,
+    memberBank: 'memberBank' in r ? n(r.memberBank) : ('house' in r && r.house === null ? 0 : (view?.memberBank ?? 0)),
+    memberTier: 'memberTier' in r ? Math.max(1, n(r.memberTier)) : ('house' in r && r.house === null ? 1 : (view?.memberTier ?? 1)),
+    perTier: 'perTier' in r ? (n(r.perTier) || 300) : (view?.perTier ?? 300),
   };
   // Khi phản hồi từ op: 'save' chỉ mang số liệu cá nhân (không kèm houses/disciplines), xoá cache 60s để lần mở Tab Cúp kế tiếp tải bảng tổng 4 Nhà mới nhất ngay.
   if (!housesObj && !(r.disciplines && typeof r.disciplines === 'object')) {

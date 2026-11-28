@@ -1017,63 +1017,82 @@ export function socialUiRenderVisitorDockBar(hud: GameHUD): void {
     });
   });
 
+  const helpLockKey = `${nb.id}:help`;
   bar.querySelector('#btnVisitorFlooHelp')?.addEventListener('click', async () => {
+    if (bar.dataset.flooBusy === helpLockKey) return;
+    bar.dataset.flooBusy = helpLockKey;
     const helpBtn = bar.querySelector('#btnVisitorFlooHelp') as HTMLButtonElement | null;
     if (helpBtn) helpBtn.disabled = true;
 
-    let serverHelpsLeft: number | undefined;
-    if (nb.remoteUserId) {
-      try {
-        const note = getPresetNoteMeta(social.selectedPresetNoteId);
-        const rpcRes = await onlineServices.authoritativeClient.visit({
-          hostUid: nb.remoteUserId,
-          help: true,
-          kind: 'water_crop',
-          noteText: note.textVi,
-        });
-        if (typeof rpcRes.helpsLeft === 'number') {
-          serverHelpsLeft = rpcRes.helpsLeft;
-          hud.flooHelpsLeft = rpcRes.helpsLeft;
+    try {
+      let serverHelpsLeft: number | undefined;
+      if (nb.remoteUserId) {
+        try {
+          const note = getPresetNoteMeta(social.selectedPresetNoteId);
+          const rpcRes = await onlineServices.authoritativeClient.visit({
+            hostUid: nb.remoteUserId,
+            help: true,
+            kind: 'water_crop',
+            noteText: note.textVi,
+          });
+          if (typeof rpcRes.helpsLeft === 'number') {
+            serverHelpsLeft = rpcRes.helpsLeft;
+            hud.flooHelpsLeft = rpcRes.helpsLeft;
+          }
+        } catch (err) {
+          // HPVN: a member's farm is helped only when the server counted it (no offline reward)
+          const refusal = formatServerRefusalVi(err);
+          hud.showToast(`${refusal.icon} ${refusal.text}`, refusal.icon);
+          void socialUiRefreshFlooDirectory(hud, true);
+          hud.refreshAll();
+          return;
         }
-      } catch (err) {
-        // HPVN: a member's farm is helped only when the server counted it (no offline reward)
-        const refusal = formatServerRefusalVi(err);
-        hud.showToast(`${refusal.icon} ${refusal.text}`, refusal.icon);
-        void socialUiRefreshFlooDirectory(hud, true);
+      }
+
+      if (hud.sim.getActiveVisitingNeighbor()?.id !== nb.id) {
+        const markRowHelped = (rows: FlooVisitDirectoryRow[]) =>
+          rows.map((r) => (r.uid === activeHostUid ? { ...r, helped: true } : r));
+        hud.flooDirectoryRows = markRowHelped(hud.flooDirectoryRows);
+        hud.flooQueueRows = markRowHelped(hud.flooQueueRows);
         hud.refreshAll();
         return;
       }
-    }
 
-    const res = hud.sim.helpVisitedFlooMemberWholeGarden({ serverHelpsLeft });
-    if (!res.ok) {
-      hud.showToast(res.msg, '🤝');
-      hud.refreshAll();
-      return;
-    }
-
-    const markRowHelped = (rows: FlooVisitDirectoryRow[]) =>
-      rows.map((r) => (r.uid === activeHostUid ? { ...r, helped: true } : r));
-    hud.flooDirectoryRows = markRowHelped(hud.flooDirectoryRows);
-    hud.flooQueueRows = markRowHelped(hud.flooQueueRows);
-    hud.refreshAll();
-
-    // Tự động chuyển sang vườn cần chăm kế tiếp sau 1.6s (chuẩn UX Bay Floo Hagrid's Garden)
-    if (res.helpsLeft > 0 && hud.flooQueueRows.length > 1) {
-      const nextRow = nextFlooVisit(hud.flooQueueRows, activeHostUid, 1);
-      if (nextRow && nextRow.uid !== activeHostUid && canHelpFlooVisitRow(nextRow)) {
-        if (hud.flooAutoAdvanceTimer) window.clearTimeout(hud.flooAutoAdvanceTimer);
-        hud.flooAutoAdvanceTimer = window.setTimeout(() => {
-          hud.flooAutoAdvanceTimer = 0;
-          if (hud.sim.getActiveVisitingNeighbor()?.id === nb.id) {
-            socialUiEnterFlooMemberVisitFromHud(hud, nextRow.uid, hud.flooQueueRows);
-          }
-        }, 1600);
+      const res = hud.sim.helpVisitedFlooMemberWholeGarden({ serverHelpsLeft });
+      if (!res.ok) {
+        hud.showToast(res.msg, '🤝');
+        hud.refreshAll();
+        return;
       }
+
+      const markRowHelped = (rows: FlooVisitDirectoryRow[]) =>
+        rows.map((r) => (r.uid === activeHostUid ? { ...r, helped: true } : r));
+      hud.flooDirectoryRows = markRowHelped(hud.flooDirectoryRows);
+      hud.flooQueueRows = markRowHelped(hud.flooQueueRows);
+      hud.refreshAll();
+
+      // Tự động chuyển sang vườn cần chăm kế tiếp sau 1.6s (chuẩn UX Bay Floo Hagrid's Garden)
+      if (res.helpsLeft > 0 && hud.flooQueueRows.length > 1) {
+        const nextRow = nextFlooVisit(hud.flooQueueRows, activeHostUid, 1);
+        if (nextRow && nextRow.uid !== activeHostUid && canHelpFlooVisitRow(nextRow)) {
+          if (hud.flooAutoAdvanceTimer) window.clearTimeout(hud.flooAutoAdvanceTimer);
+          hud.flooAutoAdvanceTimer = window.setTimeout(() => {
+            hud.flooAutoAdvanceTimer = 0;
+            if (hud.sim.getActiveVisitingNeighbor()?.id === nb.id) {
+              socialUiEnterFlooMemberVisitFromHud(hud, nextRow.uid, hud.flooQueueRows);
+            }
+          }, 1600);
+        }
+      }
+    } finally {
+      if (bar.dataset.flooBusy === helpLockKey) delete bar.dataset.flooBusy;
     }
   });
 
+  const fireLockKey = `${nb.id}:fire`;
   bar.querySelector('#btnVisitorExtinguish')?.addEventListener('click', async () => {
+    if (bar.dataset.flooBusy === fireLockKey) return;
+    bar.dataset.flooBusy = fireLockKey;
     const extBtn = bar.querySelector('#btnVisitorExtinguish') as HTMLButtonElement | null;
     if (extBtn) extBtn.disabled = true;
     try {
@@ -1108,6 +1127,8 @@ export function socialUiRenderVisitorDockBar(hud: GameHUD): void {
       const refusal = formatServerRefusalVi(err);
       hud.showToast(`${refusal.icon} ${refusal.text}`, refusal.icon);
       if (extBtn) extBtn.disabled = false;
+    } finally {
+      if (bar.dataset.flooBusy === fireLockKey) delete bar.dataset.flooBusy;
     }
   });
 
@@ -1159,11 +1180,25 @@ export function socialUiRenderVisitorDockBar(hud: GameHUD): void {
   bar.querySelector('#btnVisitorReturnHome')?.addEventListener('click', () => {
     socialUiExitVisitFromHud(hud);
   });
+  const standLockKey = `${nb.id}:stand`;
   bar.querySelector('#btnVisitorBuyStand')?.addEventListener('click', () => {
+    if (bar.dataset.flooBusy === standLockKey) return;
     const buyBtn = bar.querySelector('#btnVisitorBuyStand') as HTMLButtonElement | null;
     const offer = hud.sim.getNeighborRoadsideOffer(nb);
     if (nb.remoteUserId && offer.isRealFriendListing && typeof offer.slotIndex === 'number') {
+      const home = hud.sim.homeStateWhileVisiting ?? hud.sim.state;
+      if (!home.sandboxMode && home.galleons < offer.totalSickle) {
+        hud.showToast(`Cần ${offer.totalSickle.toLocaleString('vi-VN')} Sickle để mua Quầy Ven Đường này!`, '🧺');
+        return;
+      }
+      const barnUsed = hud.sim.getBarnTotalUsed();
+      const barnCap = home.farmBarn?.capacity ?? 60;
+      if (barnUsed + offer.qty > barnCap) {
+        hud.showToast(`Kho Đỏ cần còn trống ít nhất ${offer.qty} ô trước khi mua!`, '🧺');
+        return;
+      }
       const slotIdx = offer.slotIndex;
+      bar.dataset.flooBusy = standLockKey;
       if (buyBtn) buyBtn.disabled = true;
       const reqId = `stand_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       void onlineServices.authoritativeClient
@@ -1182,13 +1217,26 @@ export function socialUiRenderVisitorDockBar(hud: GameHUD): void {
             hud.refreshAll();
             return;
           }
+          if (rpc.status !== 'ok') {
+            hud.showToast('🧺 Không thể kết nối máy chủ HPVN để xác thực giao dịch Quầy Ven Đường!', '🧺');
+            hud.refreshAll();
+            return;
+          }
+          if (hud.sim.getActiveVisitingNeighbor()?.id !== nb.id) {
+            markCachedNeighborStandSlotSold(nb, slotIdx, 'Bạn HPVN');
+            hud.refreshAll();
+            return;
+          }
           const res = hud.sim.buyVisitedNeighborRoadsideOffer({
-            atomicServerVerified: rpc.status === 'ok',
+            atomicServerVerified: true,
             expectedSlotIndex: slotIdx,
           });
           if (!res.ok) hud.showToast(res.msg, '🧺');
-          else if (rpc.status === 'ok') void flushFarmSave();
+          else void flushFarmSave();
           hud.refreshAll();
+        })
+        .finally(() => {
+          if (bar.dataset.flooBusy === standLockKey) delete bar.dataset.flooBusy;
         });
       return;
     }
@@ -2276,7 +2324,7 @@ export function socialUiRenderTutorialCoach(hud: GameHUD): void {
       } else {
         const extraActionBtn =
           step.id === 'earn_magic_star'
-            ? `<button id="btnTutorialSecondaryCta" type="button" class="brass-btn">4 Môn</button>`
+            ? `<button id="btnTutorialSecondaryCta" type="button" class="brass-btn">5 Môn</button>`
             : step.id === 'build_and_owl_order'
               ? `<button id="btnTutorialSecondaryCta" type="button" class="brass-btn">${
                   deliverableOwlCount > 0 ? 'Xây' : 'Đơn Cú'

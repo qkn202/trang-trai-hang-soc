@@ -173,7 +173,7 @@ export function getMinMovesForStage(gameId: ProofOfPlayGameId, _stage: number): 
     case 'match3':
       return 1;
     case 'caro':
-      return 2;
+      return 1;
     case 'sudoku':
       return 3;
     case 'chess':

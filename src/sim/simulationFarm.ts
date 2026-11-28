@@ -192,6 +192,12 @@ import {
   sanitizeLanguageQuizState,
 } from './languageQuizEngine';
 import {
+  applySeedQuizStreakRainReward,
+  getJigsawValleyAuraMultiplier,
+  MinigameFarmSpecialtyOutcome,
+} from './minigameSynergy';
+import { advanceHayDayHarvestDropMeter } from './hayDayFarming';
+import {
   BackstageEvaluation,
   BiomeEvaluation,
   evaluateBackstageShielding,
@@ -420,6 +426,11 @@ export function farmGetSeedCount(sim: ParkSimulation, cropId: FarmCropId): numbe
     return Math.max(0, Math.floor(barn.seeds[cropId] ?? 0));
 }
 
+/** Hay Day Crop-as-Seed: tổng số lượng có thể gieo = hạt miễn phí (túi hạt) + nông sản đang trữ trong Kho Đỏ. */
+export function farmGetPlantableSeedCount(sim: ParkSimulation, cropId: FarmCropId): number {
+    return farmGetSeedCount(sim, cropId) + sim.getFarmItemCount(cropId);
+}
+
 export function farmAddCropSeeds(sim: ParkSimulation, cropId: FarmCropId, qty: number): number {
     const barn = sim.ensureFarmBarn();
     if (!barn.seeds) barn.seeds = {};
@@ -476,7 +487,12 @@ export function farmCompleteSeedLanguageQuizAttempt(sim: ParkSimulation,
     cropId: FarmCropId,
     challenge: ActiveQuizChallenge,
     correct: boolean
-  ): QuizAttemptOutcome & { newSeedCount: number; cropName: string } {
+  ): QuizAttemptOutcome & {
+    newSeedCount: number;
+    cropName: string;
+    specialtyReward?: MinigameFarmSpecialtyOutcome;
+    streakShieldConsumed?: boolean;
+  } {
     const quiz = sim.ensureLanguageQuiz();
     const crop = FARM_CROPS[cropId];
     // HPVN: at most QUIZ_DAILY_REWARD_CAP rewarded correct answers per VN day, then practice only
@@ -484,7 +500,16 @@ export function farmCompleteSeedLanguageQuizAttempt(sim: ParkSimulation,
     if (sim.state.quizRewardDaily?.dayKey !== dayKey) sim.state.quizRewardDaily = { dayKey, count: 0 };
     const daily = sim.state.quizRewardDaily;
     const rewarded = daily.count < QUIZ_DAILY_REWARD_CAP;
+    const langProfile = quiz.profiles[challenge.lang];
+    const prevStreakBefore = langProfile?.streak ?? 0;
     const outcome = recordQuizAttempt(quiz, challenge, correct, rewarded);
+    let streakShieldConsumed = false;
+    if (!correct && prevStreakBefore > 0 && langProfile && (sim.state.quizStreakShields ?? 0) > 0) {
+      sim.state.quizStreakShields = Math.max(0, Math.floor(sim.state.quizStreakShields ?? 0) - 1);
+      langProfile.streak = prevStreakBefore;
+      outcome.newStreak = prevStreakBefore;
+      streakShieldConsumed = true;
+    }
     if (correct && rewarded) daily.count += 1;
     let newSeedCount = sim.getSeedCount(cropId);
     if (outcome.seedsAwarded > 0) {
@@ -496,6 +521,7 @@ export function farmCompleteSeedLanguageQuizAttempt(sim: ParkSimulation,
 
     let phoenixTalismanAwarded = 0;
     let buildReduction: BuildReductionResult | undefined;
+    let specialtyReward: MinigameFarmSpecialtyOutcome | undefined;
     const leaderboardRankUp: LeaderboardRankChange | undefined = undefined;
     let talismanProgress = Math.max(0, Math.min(7, Math.floor(sim.state.quizTalismanProgress ?? 0)));
     if (correct && rewarded) {
@@ -513,6 +539,7 @@ export function farmCompleteSeedLanguageQuizAttempt(sim: ParkSimulation,
         quizReduceSec,
         'Học Viện Thần Chú'
       );
+      specialtyReward = applySeedQuizStreakRainReward(sim, outcome.newStreak);
       sim.addHarvestFeastPoints(challenge.tier === 'advanced' ? 12 : 9);
       if (outcome.tierAutoPromoted || phoenixTalismanAwarded > 0) {
         sim.audio.playLevelUp();
@@ -534,6 +561,8 @@ export function farmCompleteSeedLanguageQuizAttempt(sim: ParkSimulation,
       phoenixTalismanAwarded,
       talismanProgress,
       buildReduction,
+      specialtyReward,
+      streakShieldConsumed,
       leaderboardRankUp,
       newSeedCount,
       cropName: crop.name,
@@ -560,19 +589,28 @@ export function farmPlantCropOnPlot(sim: ParkSimulation,
       return { ok: false, msg: `${crop.emoji} ${crop.name} mở khóa ở Cấp ${crop.unlockLevel}!` };
     }
 
+    const barn = sim.ensureFarmBarn();
+    if (!barn.seeds) barn.seeds = {};
     const haveSeeds = sim.getSeedCount(cropId);
-    if (haveSeeds <= 0) {
+    const haveBarnCrops = sim.getFarmItemCount(cropId);
+    if (!sim.state.sandboxMode && haveSeeds <= 0 && haveBarnCrops <= 0) {
       return {
         ok: false,
         needSeedAcquire: true,
-        msg: `Túi chưa có hạt giống ${crop.emoji} ${crop.name} — hãy mua bằng Sickle (${crop.seedCost.toLocaleString('vi-VN')} Sickle/hạt) hoặc Niệm Thần Chú Đa Ngữ (0 Sickle)!`,
+        msg: `Hết giống ${crop.emoji} ${crop.name} trong cả Túi Hạt & Kho Đỏ — hãy mua giống (${crop.seedCost.toLocaleString('vi-VN')} Sickle), săn trên Nhật Báo Tiên Tri hoặc Niệm Thần Chú Đa Ngữ (0 Sickle)!`,
       };
     }
 
-    const barn = sim.ensureFarmBarn();
-    if (!barn.seeds) barn.seeds = {};
-    const leftSeeds = Math.max(0, haveSeeds - 1);
-    barn.seeds[cropId] = leftSeeds;
+    let plantedFromBarn = false;
+    if (!sim.state.sandboxMode) {
+      if (haveSeeds > 0) {
+        barn.seeds[cropId] = Math.max(0, haveSeeds - 1);
+      } else {
+        sim.consumeFarmItemFromBarn(cropId, 1);
+        plantedFromBarn = true;
+      }
+    }
+    const leftSeeds = farmGetPlantableSeedCount(sim, cropId);
 
     const now = Date.now();
     const soilKey = `${b.gx},${b.gy}`;
@@ -629,7 +667,9 @@ export function farmPlantCropOnPlot(sim: ParkSimulation,
     }
     return {
       ok: true,
-      msg: `🌱 Đã gieo 1 hạt ${crop.emoji} ${crop.name} (Túi còn ${leftSeeds} hạt • ${formatDurationCompactVi(Math.round(finalGrowMs / 1000))} chín${rotNote}${rainNote})!`,
+      msg: plantedFromBarn
+        ? `🌾 Đã nhân giống 1 ${crop.emoji} ${crop.name} từ Kho Đỏ (trồng 1 thu 2 • còn ${leftSeeds} giống • ${formatDurationCompactVi(Math.round(finalGrowMs / 1000))} chín${rotNote}${rainNote})!`
+        : `🌱 Đã gieo 1 hạt ${crop.emoji} ${crop.name} (còn ${leftSeeds} giống • ${formatDurationCompactVi(Math.round(finalGrowMs / 1000))} chín${rotNote}${rainNote})!`,
     };
 }
 
@@ -728,8 +768,9 @@ export function farmHarvestCropPlot(sim: ParkSimulation, uid: string): { ok: boo
     const masteryAfter = getCropMasteryTierInfo(nextMastery);
     const weatherGoldMult =
       (curWeather.isRainbow ? 1.15 : 1.0) * (curFest === 'lunar_tet' ? 1.15 : 1.0);
+    const valleyAuraMult = getJigsawValleyAuraMultiplier(sim.state);
     const gold = Math.round(
-      crop.sellValue * masteryBefore.valueMult * soilMeta.harvestGoldXpMult * weatherGoldMult
+      crop.sellValue * masteryBefore.valueMult * soilMeta.harvestGoldXpMult * weatherGoldMult * valleyAuraMult
     );
     const xp = Math.round(
       (crop.xp + (isGoldenRotation ? 4 : 0) + (wasCompost ? 8 : 0)) * soilMeta.harvestGoldXpMult
@@ -776,7 +817,17 @@ export function farmHarvestCropPlot(sim: ParkSimulation, uid: string): { ok: boo
     sim.state.galleons += gold;
     sim.state.finance.harvestRevenue += gold;
     sim.state.stats.totalSickleHarvested += gold;
-    sim.state.stats.farmHarvestsCount = (sim.state.stats.farmHarvestsCount ?? 0) + 1;
+    const nextFarmHarvests = (sim.state.stats.farmHarvestsCount ?? 0) + 1;
+    sim.state.stats.farmHarvestsCount = nextFarmHarvests;
+    if (nextFarmHarvests % 10 === 0 && (sim.state.quizStreakShields ?? 0) < 3) {
+      sim.state.quizStreakShields = Math.min(3, Math.max(0, Math.floor(sim.state.quizStreakShields ?? 0)) + 1);
+      if (!sim.batchOperationActive) {
+        sim.onToast?.(
+          `🛡️ Thu hoạch mốc ${nextFarmHarvests} vụ: Nhận +1 Khiên Chuỗi Học Viện Ngoại Ngữ (${sim.state.quizStreakShields}/3)!`,
+          '🛡️'
+        );
+      }
+    }
     sim.addXp(xp);
     sim.addHarvestFeastPoints(crop.isFlowerCrop ? 7 : 5);
     sim.recordQuestProgress('harvest_galleons', undefined, gold);
@@ -791,6 +842,8 @@ export function farmHarvestCropPlot(sim: ParkSimulation, uid: string): { ok: boo
     sim.audio.playHarvestBubble();
     const cx = b.gx + (item ? item.width * 0.5 : 1);
     const cy = b.gy + (item ? item.height * 0.5 : 1);
+    advanceHayDayHarvestDropMeter(sim, 1, cx, cy);
+    sim.recordWeeklyDerbyProgress('harvest_crop', 1, now);
     sim.onRewardFly?.('galleons', gold, cx, cy);
     sim.spawnFloatingText(
       cx,
@@ -956,7 +1009,7 @@ export function farmHarvestAnimalPasture(sim: ParkSimulation, uid: string): { ok
     const overflowQty = Math.max(0, yieldQty - added);
     const soldDirect = overflowQty > 0 ? getFarmItemMeta(animal.goodId).sellValue * overflowQty : 0;
     const curWeatherP = sim.getCurrentWeather(now);
-    const pastureGoldMult = curWeatherP.kind === 'sunny' ? 1.1 : 1.0;
+    const pastureGoldMult = (curWeatherP.kind === 'sunny' ? 1.1 : 1.0) * getJigsawValleyAuraMultiplier(sim.state);
     const pastureXpMult = curWeatherP.kind === 'cloudy' ? 1.1 : 1.0;
     const gold = Math.round((wasGourmet ? animal.sellValue * 1.5 : animal.sellValue) * pastureGoldMult);
     const xp = Math.round((wasGourmet ? animal.xp * 1.5 : animal.xp) * pastureXpMult);
@@ -978,7 +1031,17 @@ export function farmHarvestAnimalPasture(sim: ParkSimulation, uid: string): { ok
     sim.state.galleons += gold;
     sim.state.finance.harvestRevenue += gold;
     sim.state.stats.totalSickleHarvested += gold;
-    sim.state.stats.farmHarvestsCount = (sim.state.stats.farmHarvestsCount ?? 0) + 1;
+    const nextFarmHarvests = (sim.state.stats.farmHarvestsCount ?? 0) + 1;
+    sim.state.stats.farmHarvestsCount = nextFarmHarvests;
+    if (nextFarmHarvests % 10 === 0 && (sim.state.quizStreakShields ?? 0) < 3) {
+      sim.state.quizStreakShields = Math.min(3, Math.max(0, Math.floor(sim.state.quizStreakShields ?? 0)) + 1);
+      if (!sim.batchOperationActive) {
+        sim.onToast?.(
+          `🛡️ Thu hoạch mốc ${nextFarmHarvests} vụ: Nhận +1 Khiên Chuỗi Học Viện Ngoại Ngữ (${sim.state.quizStreakShields}/3)!`,
+          '🛡️'
+        );
+      }
+    }
     sim.addXp(xp);
     sim.addHarvestFeastPoints(6);
     sim.recordQuestProgress('harvest_galleons', undefined, gold);
@@ -987,6 +1050,8 @@ export function farmHarvestAnimalPasture(sim: ParkSimulation, uid: string): { ok
     sim.audio.playHarvestBubble();
     const cx = b.gx + (item ? item.width * 0.5 : 1);
     const cy = b.gy + (item ? item.height * 0.5 : 1);
+    advanceHayDayHarvestDropMeter(sim, 1, cx, cy);
+    sim.recordWeeklyDerbyProgress('pasture_harvest', 1, now);
     sim.onRewardFly?.('galleons', gold, cx, cy);
     sim.spawnFloatingText(
       cx,

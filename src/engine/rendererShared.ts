@@ -358,6 +358,9 @@ export interface ScreenHotspot {
     | 'neighbor_help'
     | 'visitor_gift'
     | 'home_lantern'
+    | 'hayday_stand'
+    | 'hayday_newspaper'
+    | 'hayday_visitor'
     | 'bubble'
     | 'water_crop'
     | 'feed_pasture'
@@ -371,6 +374,7 @@ export interface ScreenHotspot {
   sx: number;
   sy: number;
   radius: number;
+  priority?: number;
   spriteKey?: string;
   flipX?: boolean;
   boxLeft?: number;
@@ -537,4 +541,23 @@ export function buildLockedSceneryCatalog(): LockedSceneryProp[] {
   }
   return props;
 }
+
+/**
+ * Pure frame-pacing DPR policy aware of mobile 30 FPS throttling vs 60 FPS desktop targets.
+ * Prevents 30 FPS coarse-pointer devices from permanently triggering `< 46 FPS` degradation.
+ */
+export function computeAdaptiveDprCap(
+  p5LowFps: number,
+  isTouch: boolean,
+  targetFps: number = isTouch ? 30 : 60
+): number {
+  const safeTarget = Math.max(20, targetFps);
+  const lowThresh = safeTarget * 0.76; // 22.8 FPS @ 30Hz phone, 45.6 FPS @ 60Hz desktop
+  const midThresh = safeTarget * 0.9;  // 27.0 FPS @ 30Hz phone, 54.0 FPS @ 60Hz desktop
+  if (isTouch) {
+    return p5LowFps < lowThresh ? 1.15 : p5LowFps < midThresh ? 1.35 : 1.5;
+  }
+  return p5LowFps < lowThresh ? 1.25 : p5LowFps < midThresh ? 1.5 : 2;
+}
+
 

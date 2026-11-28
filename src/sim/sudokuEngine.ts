@@ -378,6 +378,15 @@ export class SudokuPuzzleEngine {
     const snap = this.undoStack.pop()!;
     this.grid = snap.grid.map((row) => row.slice());
     this.notes = snap.notes.map((row) => row.slice());
+    // Bảo vệ các ô đã được Gợi ý / Bùa Phượng Hoàng chốt thành clue (given = true)
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (this.given[r][c]) {
+          this.grid[r][c] = this.solution[r][c];
+          this.notes[r][c] = 0;
+        }
+      }
+    }
     this.selected = snap.selected ? { ...snap.selected } : this.selected;
     this.eraseMode = false;
 
@@ -408,8 +417,35 @@ export class SudokuPuzzleEngine {
     return false;
   }
 
-  /** Không hiển thị xung đột đỏ ở từng ô/hàng/cột/khối 3×3 */
+  /** Kính Soi Trùng Ô kích hoạt từ Hộp Tiếp Tế Bà Molly (mặc định tắt để giữ chế độ kiểm tra kín chuẩn). */
+  public peerScanActive = false;
+
+  /** Không hiển thị xung đột đỏ mặc định ở chế độ kiểm tra kín */
   public hasConflict(_r: number, _c: number): boolean {
+    return false;
+  }
+
+  /**
+   * Kiểm tra trùng chữ số trong cùng hàng, cột hoặc khối 3×3 khi người chơi kích hoạt
+   * Kính Soi Trùng Ô từ Hộp Tiếp Tế Bà Molly (không soi đáp án solution, chỉ báo trùng trực quan).
+   */
+  public hasVisiblePeerDuplicate(r: number, c: number): boolean {
+    if (!this.peerScanActive) return false;
+    const val = this.grid[r]?.[c] ?? 0;
+    if (val < 1 || val > 9) return false;
+    for (let i = 0; i < 9; i++) {
+      if (i !== c && this.grid[r][i] === val) return true;
+      if (i !== r && this.grid[i][c] === val) return true;
+    }
+    const br = Math.floor(r / 3) * 3;
+    const bc = Math.floor(c / 3) * 3;
+    for (let dr = 0; dr < 3; dr++) {
+      for (let dc = 0; dc < 3; dc++) {
+        const rr = br + dr;
+        const cc = bc + dc;
+        if ((rr !== r || cc !== c) && this.grid[rr][cc] === val) return true;
+      }
+    }
     return false;
   }
 

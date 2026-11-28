@@ -12,6 +12,7 @@ vi.mock('../../hpvn/bridge', () => ({
   request: bridgeMocks.request,
   flushFarmSave: bridgeMocks.flushFarmSave,
   queueFarmSave: vi.fn(),
+  enqueueProofOfPlay: vi.fn(),
   deliverInbox: bridgeMocks.deliverInbox,
   shareFarmPhoto: vi.fn().mockResolvedValue(undefined),
   MAX_SAVE_BYTES: 1_000_000,
