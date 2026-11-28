@@ -1,6 +1,12 @@
 # Hướng Dẫn Bàn Giao (Handoff): Bộ 6 Khung Chat Động Mạng Floo «Cúp Liên Minh 2 Nhà»
 
-Bộ **6 khung bong bóng chat Huyền Thoại riêng biệt** dành cho 6 cặp Liên Minh xoay vòng của Cúp Nhà Tuần (`HOUSE_CUP_ALLIANCE_ROTATION`), **thay thế hoàn toàn khung `alliance-cup` cũ** — đã chuẩn hoá 100% theo luật hiệu năng & kiến trúc `20-store-appearance.css` / `LEGENDARY_FRAMES` (iOS Safari 16+).
+> [!IMPORTANT]
+> **CHÍNH SÁCH BẮT BUỘC — BỎ HOÀN TOÀN `alliance-cup` CŨ, THAY THẾ BẰNG BỘ 6 CÚP LIÊN MINH RIÊNG BIỆT:**
+> - **BỎ HOÀN TOÀN khung/cúp `alliance-cup` cũ:** Gỡ triệt để key `'alliance-cup'` khỏi `LEGENDARY_FRAMES` (`ShoutMessageRow.ts`), `itemAppearanceKeys.json`, `gringotts-appearance-slots.js`, khối CSS trong `20-store-appearance.css`, và **xoá sạch** ảnh `cup-winged.webp` / `cup-winged-2x.webp` / PNG fallback cũ. **Tuyệt đối không giữ fallback, không ánh xạ ngược và không phát lại cúp `alliance-cup` cũ dưới bất kỳ hình thức nào.**
+> - **THAY THẾ HOÀN TOÀN bằng bộ 6 Cúp Liên Minh riêng biệt:** `alliance-anh-duong`, `alliance-nguyet-anh`, `alliance-lua-va-tri`, `alliance-ngoc-rung`, `alliance-song-hung`, `alliance-tinh-tu`.
+> - **Quy tắc trao thưởng chốt tuần (`16:00 Thứ Sáu` giờ Việt Nam / UTC+7):** Kết thúc tuần Cúp Nhà, **Liên Minh nào đạt Hạng 1 sẽ được trao đúng Cúp Liên Minh tương ứng với cặp 2 Nhà của Liên Minh đó** (ví dụ: `Gryffindor + Hufflepuff` đạt Hạng 1 → trao `alliance-anh-duong`; `Slytherin + Ravenclaw` đạt Hạng 1 → trao `alliance-nguyet-anh`; `Gryffindor + Ravenclaw` → `alliance-lua-va-tri`; `Slytherin + Hufflepuff` → `alliance-ngoc-rung`; `Gryffindor + Slytherin` → `alliance-song-hung`; `Ravenclaw + Hufflepuff` → `alliance-tinh-tu`).
+
+Bộ **6 khung bong bóng chat Huyền Thoại riêng biệt** dành cho 6 cặp Liên Minh xoay vòng của Cúp Nhà Tuần (`HOUSE_CUP_ALLIANCE_ROTATION`), **bỏ hoàn toàn và thay thế triệt để khung `alliance-cup` cũ** — đã chuẩn hoá 100% theo luật hiệu năng & kiến trúc `20-store-appearance.css` / `LEGENDARY_FRAMES` (iOS Safari 16+).
 
 ---
 
@@ -49,12 +55,12 @@ Mỗi cặp 2 Nhà thắng Cúp Tuần nhận đúng **1 khung riêng mang bản
 
 ---
 
-## 4. Tích hợp sang repo `hpvn-archive.net` (thay thế `alliance-cup` cũ)
+## 4. Tích hợp sang repo `hpvn-archive.net` (bỏ hoàn toàn `alliance-cup` cũ, thay bằng 6 Cúp Liên Minh)
 
 > Lưu ý quy trình: thao tác trên **worktree riêng tách từ `codex/production`**, không push trực tiếp lên `codex/production`.
 
-### Bước 1 — Thay thế ảnh trong `client/public/images/floo-items/alliance-cup/`
-Xoá `cup-winged.webp` / `cup-winged-2x.webp` cũ (nếu có) và copy đúng **6 tệp WebP phẳng** vào:
+### Bước 1 — Xoá sạch ảnh `alliance-cup` cũ & chép bộ 6 ảnh mới vào `client/public/images/floo-items/alliance-cup/`
+**Xoá sạch hoàn toàn** các tệp ảnh cũ `cup-winged.webp`, `cup-winged-2x.webp` và mọi tệp PNG fallback cũ của `alliance-cup` (không giữ lại bất kỳ bản sao/fallback nào), rồi copy đúng **6 tệp WebP phẳng** vào:
 
 ```text
 client/public/images/floo-items/alliance-cup/
@@ -66,8 +72,8 @@ client/public/images/floo-items/alliance-cup/
 └── tinh-tu.webp
 ```
 
-### Bước 2 — Cập nhật danh sách mã khung (gỡ `alliance-cup`, thêm 6 mã mới)
-1. **`client/app/components/ShoutMessageRow.ts` (`LEGENDARY_FRAMES`):** thay `'alliance-cup'` bằng 6 key:
+### Bước 2 — Gỡ triệt để key `'alliance-cup'` cũ & đăng ký đủ 6 mã khung mới
+1. **`client/app/components/ShoutMessageRow.ts` (`LEGENDARY_FRAMES`):** **gỡ bỏ hoàn toàn** `'alliance-cup'` và thay thế bằng đúng 6 key mới:
    ```ts
    'alliance-anh-duong',
    'alliance-lua-va-tri',
@@ -76,20 +82,20 @@ client/public/images/floo-items/alliance-cup/
    'alliance-song-hung',
    'alliance-tinh-tu',
    ```
-2. **`client/features/floo/model/itemAppearanceKeys.json`:** thay `"alliance-cup"` bằng 6 key trên (giữ đúng thứ tự bảng chữ cái: `alliance-anh-duong`, `alliance-lua-va-tri`, `alliance-ngoc-rung`, `alliance-nguyet-anh`, `alliance-song-hung`, `alliance-tinh-tu`).
+2. **`client/features/floo/model/itemAppearanceKeys.json`:** **gỡ bỏ hoàn toàn** `"alliance-cup"` và thay bằng 6 key trên (giữ đúng thứ tự bảng chữ cái: `alliance-anh-duong`, `alliance-lua-va-tri`, `alliance-ngoc-rung`, `alliance-nguyet-anh`, `alliance-song-hung`, `alliance-tinh-tu`).
 3. **Phía máy chủ (`functions/`):**
-   - Gỡ CSS/key `alliance-cup` cũ khỏi `gringotts-appearance-slots.js` / bảng ánh xạ thưởng tuần và đăng ký đủ 6 key mới.
-   - Cập nhật `grantWeeklyFlooFrames` theo §8.2 của `docs/handoff/house-cup-discipline-medals/HANDOFF_HPVN_HOUSE_CUP.md` để cấp đúng key theo `winningHouses` (kể cả tuần hoà 2 Liên Minh: cấp khung tương ứng đúng Nhà của từng thành viên).
-   - *(Tuỳ chọn chuyển tiếp mượt trong 7 ngày đầu)*: nếu đang có user còn giữ `alliance-cup` từ tuần trước, ánh xạ fallback về `alliance-lua-va-tri` (hoặc đợi hết hạn 7 ngày rồi bỏ hẳn).
+   - **Gỡ triệt để** key `'alliance-cup'` cũ khỏi `gringotts-appearance-slots.js` và mọi bảng ánh xạ thưởng tuần; đăng ký đủ 6 key mới (`alliance-anh-duong`, `alliance-nguyet-anh`, `alliance-lua-va-tri`, `alliance-ngoc-rung`, `alliance-song-hung`, `alliance-tinh-tu`).
+   - Cập nhật `grantWeeklyFlooFrames` theo §8.2 của `docs/handoff/house-cup-discipline-medals/HANDOFF_HPVN_HOUSE_CUP.md`: chốt tuần Cúp Nhà lúc **`16:00 Thứ Sáu` giờ VN**, **Liên Minh nào đạt Hạng 1 sẽ được trao đúng Cúp Liên Minh tương ứng với cặp 2 Nhà của Liên Minh đó** (ví dụ: `Gryffindor + Hufflepuff` đạt Hạng 1 → trao `alliance-anh-duong`; `Slytherin + Ravenclaw` đạt Hạng 1 → trao `alliance-nguyet-anh`; nếu hoà tuyệt đối 2 Liên Minh: cấp đúng Cúp tương ứng với cặp 2 Nhà của từng thành viên).
+   - **Không giữ fallback hay phát lại `'alliance-cup'` cũ:** bỏ hẳn mọi ánh xạ chuyển tiếp/fallback từ `'alliance-cup'` cũ, tuyệt đối không cấp lại key `'alliance-cup'` trong bất kỳ job hay script phát thưởng nào.
 
-### Bước 3 — Nhúng CSS tách tệp trong `client/app/styles/05-floo/`
-Do `20-store-appearance.css` đang ~1382 dòng (trần `1800` dòng/tệp), nên **tách riêng bộ 6 khung** thành tệp mới:
+### Bước 3 — Gỡ CSS `alliance-cup` cũ & nhúng CSS tách tệp trong `client/app/styles/05-floo/`
+Do `20-store-appearance.css` đang ~1382 dòng (trần `1800` dòng/tệp), **gỡ sạch toàn bộ khối CSS của `alliance-cup` cũ khỏi `20-store-appearance.css`** và **tách riêng bộ 6 khung mới** thành tệp:
 
 ```text
 client/app/styles/05-floo/21-alliance-cup-frames.css
 ```
 
-- Copy nguyên nội dung `docs/handoff/alliance-cup/alliance-cup-floo.css` vào tệp trên (và gỡ khối CSS `alliance-cup` cũ trong `20-store-appearance.css` nếu đã dán trước đó).
+- Copy nguyên nội dung `docs/handoff/alliance-cup/alliance-cup-floo.css` vào tệp trên.
 - Import `21-alliance-cup-frames.css` ngay sau `20-store-appearance.css`.
 - Số lượng `!important` tăng thêm: **`0`** (không vượt trần `1262/1262`).
 

@@ -1,8 +1,12 @@
-# Handoff HPVN Backend — Cúp 4 Nhà: Tổng Điểm 6 Môn × Cân Bằng Quân Số Liên Minh (Phương Án F2)
+# Handoff HPVN Backend — Cúp 4 Nhà: Tổng Điểm 7 Môn (6 Mini-Game + Môn #7 Derby Nông Trại) × Cân Bằng Quân Số Liên Minh (Phương Án F2)
 
-> **Cập nhật chính thức (28/11/2026 — Phương án F2):** Thay thế bước nén huy chương `100/75/50/25` sang **Phương án F2** tại **Mục 11** bên dưới *(giữ nguyên xoay vòng Liên Minh 3 cặp, giữ nguyên xếp hạng Cách A `100/80/65/50/35/20` cho từng môn trong 6 môn, cộng tổng điểm đóng góp 6 môn cho mỗi Nhà/Liên Minh và nhân **Hệ số Cân Bằng Quân Số khóa đầu tuần** theo trung bình trượt `3` tuần gần nhất, sàn `4` người/LM, trần `2.5×`)*. Client (`src/hpvn/houseCup.ts` & `src/ui/hudQuestsAndSettings.ts`) đã triển khai đầy đủ `mode: 'f2'` và vẫn **tương thích ngược 100%** với payload `mode: 'medals'` / `legacy` cũ trong lúc server chưa deploy patch Mục 11.
+> **Cập nhật chính thức (28/11/2026 — Phương án F2 + Môn #7 Derby Nông Trại + Bộ 6 Cúp Liên Minh):**
+> - **Mục 11 (Phương án F2):** Thay thế bước nén huy chương `100/75/50/25` sang cộng tổng điểm đóng góp trực tiếp các bộ môn cho từng Nhà/Liên Minh và nhân **Hệ số Cân Bằng Quân Số khóa đầu tuần** theo trung bình trượt `3` tuần gần nhất, sàn `4` người/LM, trần `2.5×` *(giữ nguyên xoay vòng Liên Minh 3 cặp và xếp hạng Cách A `100/80/65/50/35/20`)*.
+> - **Mục 12 (Môn #7: Derby Nông Trại — `derby` / `farmDerby`):** Mở rộng Cúp Nhà lên **7 đấu trường** bằng **Đua Nông Trại Derby** (client tự gửi `farmDerby: { weekKey, points, tasksCompleted }` trong `op: 'save'`; server kẹp chống gian lận `0..2500 đ/tuần`, `0..8` nhiệm vụ, ngưỡng `>= 2` nhiệm vụ/tuần, xếp hạng theo `computeDerbyDisciplineHouseTotals`).
+> - **Mục 8 (Bộ 6 Cúp Liên Minh Mạng Floo):** **Bỏ hoàn toàn** khung/cúp `alliance-cup` cũ (không giữ fallback hay phát lại) và **thay thế hoàn toàn bằng bộ 6 Cúp Liên Minh riêng biệt** — chốt tuần `16:00 Thứ Sáu` giờ VN, Liên Minh Hạng 1 được trao đúng Cúp tương ứng cặp 2 Nhà của mình.
+> - Client (`src/hpvn/houseCup.ts`, `src/hpvn/bridge.ts`, `src/sim/weeklyDerbyEngine.ts`, `src/ui/hudQuestsAndSettings.ts`) đã triển khai đầy đủ `mode: 'f2'` + Môn #7 `derby` và vẫn **tương thích ngược 100%** với payload 6 môn / `mode: 'medals'` / `legacy` cũ trong lúc server chưa deploy patch Mục 11–12.
 
-Tài liệu này mô tả thay đổi phía máy chủ HPVN (`functions/games/trang-trai-hang-soc-boards.js`) cho Cúp 4 Nhà — tương thích 100% ngược với client `trang-trai-hang-soc` tại `src/hpvn/houseCup.ts` & `src/ui/hudQuestsAndSettings.ts`.
+Tài liệu này mô tả thay đổi phía máy chủ HPVN (`functions/games/trang-trai-hang-soc-boards.js`) cho Cúp 4 Nhà — tương thích 100% ngược với client `trang-trai-hang-soc` tại `src/hpvn/houseCup.ts`, `src/hpvn/bridge.ts` & `src/ui/hudQuestsAndSettings.ts`.
 
 ---
 
@@ -539,19 +543,27 @@ Thêm object `allianceReward` vào phản hồi `op: 'cup'` để **Pop-up Cúp 
 
 ## 8. Trao Thưởng Khung Bong Bóng Mạng Floo Cùng Lúc Chốt Sổ 16:00 Thứ Sáu (Hạn 7 Ngày = 168 Giờ)
 
-Ngay trong cùng job chốt sổ Cúp Tuần lúc **`16:00 Thứ Sáu` (UTC+7 / giờ Việt Nam)** (`payoutHouseCupAllianceWeekly`), ngoài việc chia quỹ `200.000 Galleons`, server phát thêm **7 khung bong bóng Mạng Floo** có thời hạn chuẩn **`7 ngày (168 giờ)`** tính từ đúng mốc chốt sổ **`16:00 Thứ Sáu`** (`cycleKey`) đến `16:00 Thứ Sáu` tuần kế tiếp:
+> [!IMPORTANT]
+> **BẮT BUỘC — BỎ HOÀN TOÀN `alliance-cup` CŨ, THAY THẾ BẰNG BỘ 6 CÚP LIÊN MINH RIÊNG BIỆT:**
+> - **BỎ HOÀN TOÀN khung/cúp `alliance-cup` cũ:** Gỡ triệt để key `'alliance-cup'` khỏi `LEGENDARY_FRAMES` (`ShoutMessageRow.ts`), `itemAppearanceKeys.json`, `gringotts-appearance-slots.js`, khối CSS trong `20-store-appearance.css` và **xoá sạch** ảnh `cup-winged.webp` / `cup-winged-2x.webp` / PNG fallback cũ. **Không giữ fallback, không ánh xạ ngược và không phát lại cúp `alliance-cup` cũ dưới bất kỳ hình thức nào.**
+> - **THAY THẾ HOÀN TOÀN bằng bộ 6 Cúp Liên Minh riêng biệt:** `alliance-anh-duong`, `alliance-nguyet-anh`, `alliance-lua-va-tri`, `alliance-ngoc-rung`, `alliance-song-hung`, `alliance-tinh-tu`.
+> - **Quy tắc trao thưởng chốt tuần (`16:00 Thứ Sáu` giờ VN / UTC+7):** Kết thúc tuần Cúp Nhà, **Liên Minh nào đạt Hạng 1 sẽ được trao đúng Cúp Liên Minh tương ứng với cặp 2 Nhà của Liên Minh đó** (ví dụ: `Gryffindor + Hufflepuff` đạt Hạng 1 → trao `alliance-anh-duong`; `Slytherin + Ravenclaw` đạt Hạng 1 → trao `alliance-nguyet-anh`; `Gryffindor + Ravenclaw` → `alliance-lua-va-tri`; `Slytherin + Hufflepuff` → `alliance-ngoc-rung`; `Gryffindor + Slytherin` → `alliance-song-hung`; `Ravenclaw + Hufflepuff` → `alliance-tinh-tu`).
+
+Ngay trong cùng job chốt sổ Cúp Tuần lúc **`16:00 Thứ Sáu` (UTC+7 / giờ Việt Nam)** (`payoutHouseCupAllianceWeekly`), ngoài việc chia quỹ `200.000 Galleons`, server phát **khung bong bóng Mạng Floo** có thời hạn chuẩn **`7 ngày (168 giờ)`** tính từ đúng mốc chốt sổ **`16:00 Thứ Sáu`** (`cycleKey`) đến `16:00 Thứ Sáu` tuần kế tiếp, gồm **đúng 1 Cúp Liên Minh tương ứng cặp 2 Nhà Hạng 1 (trong bộ 6 Cúp Liên Minh mới)** và **6 khung Quán Quân Hạng 1 của 6 mini-game**:
 
 ### 8.1. Quy tắc trao thưởng chốt
-1. **6 Khung Liên Minh Nhà Thắng Cúp Tuần *(thay thế khung `"alliance-cup"` cũ)*:**
-   - **Tài nguyên & CSS chuẩn `LEGENDARY_FRAMES` / iOS Safari 16+**: `docs/handoff/alliance-cup/` và 6 tệp WebP phẳng `< 12 KB` trong `public/paintings/floo-items/alliance-cup/` — mỗi cặp 2 Nhà thắng Cúp Tuần nhận **khung Huyền Thoại mang sắc màu & Cúp riêng** của đúng Liên Minh đó:
-     - `Gryffindor + Hufflepuff` (**Liên Minh Ánh Dương**) → `"alliance-anh-duong"`
-     - `Slytherin + Ravenclaw` (**Liên Minh Nguyệt Ảnh**) → `"alliance-nguyet-anh"`
-     - `Gryffindor + Ravenclaw` (**Liên Minh Lửa & Trí**) → `"alliance-lua-va-tri"`
-     - `Slytherin + Hufflepuff` (**Liên Minh Ngọc Rừng**) → `"alliance-ngoc-rung"`
-     - `Gryffindor + Slytherin` (**Liên Minh Song Hùng**) → `"alliance-song-hung"`
-     - `Ravenclaw + Hufflepuff` (**Liên Minh Tinh Tú**) → `"alliance-tinh-tu"`
-   - **Đối tượng nhận**: **Đúng danh sách `qualifiedUids`** ở §7.3 (các thành viên thuộc 2 Nhà trong Liên Minh thắng Cúp Tuần đã đạt điều kiện **`>= 5` ván** ở bất kỳ 1 mini-game nào trong chu kỳ — không cấp cho thành viên 2 Nhà thắng chưa đạt `>= 5` ván). Nếu hòa tuyệt đối cả 2 Liên Minh, mỗi thành viên nhận khung ứng với đúng Liên Minh của Nhà mình.
+1. **Bộ 6 Cúp Liên Minh Nhà Thắng Cúp Tuần *(bỏ hoàn toàn và thay thế triệt để `"alliance-cup"` cũ)*:**
+   - **Tài nguyên & CSS chuẩn `LEGENDARY_FRAMES` / iOS Safari 16+**: `docs/handoff/alliance-cup/` và 6 tệp WebP phẳng `< 12 KB` trong `public/paintings/floo-items/alliance-cup/`.
+   - **Quy tắc ánh xạ 1:1 khi chốt tuần `16:00 Thứ Sáu` giờ VN:** **Liên Minh nào đạt Hạng 1 sẽ được trao đúng Cúp Liên Minh tương ứng với cặp 2 Nhà của Liên Minh đó** (tuyệt đối không phát lại `"alliance-cup"` cũ):
+     - `Gryffindor + Hufflepuff` (**Liên Minh Ánh Dương**) đạt Hạng 1 → trao `"alliance-anh-duong"`
+     - `Slytherin + Ravenclaw` (**Liên Minh Nguyệt Ảnh**) đạt Hạng 1 → trao `"alliance-nguyet-anh"`
+     - `Gryffindor + Ravenclaw` (**Liên Minh Lửa & Trí**) đạt Hạng 1 → trao `"alliance-lua-va-tri"`
+     - `Slytherin + Hufflepuff` (**Liên Minh Ngọc Rừng**) đạt Hạng 1 → trao `"alliance-ngoc-rung"`
+     - `Gryffindor + Slytherin` (**Liên Minh Song Hùng**) đạt Hạng 1 → trao `"alliance-song-hung"`
+     - `Ravenclaw + Hufflepuff` (**Liên Minh Tinh Tú**) đạt Hạng 1 → trao `"alliance-tinh-tu"`
+   - **Đối tượng nhận**: **Đúng danh sách `qualifiedUids`** ở §7.3 (các thành viên thuộc 2 Nhà trong Liên Minh đạt Hạng 1 đã đạt điều kiện **`>= 5` ván** ở bất kỳ 1 mini-game nào trong chu kỳ — không cấp cho thành viên 2 Nhà thắng chưa đạt `>= 5` ván). Nếu hòa tuyệt đối cả 2 Liên Minh, mỗi thành viên nhận đúng Cúp Liên Minh ứng với cặp 2 Nhà của Nhà mình.
    - **Thời hạn**: **`7 ngày (168 giờ)` tính từ `16:00 Thứ Sáu` (UTC+7)**.
+   - **Bước dọn dẹp bắt buộc khi tích hợp vào `hpvn-archive.net`:** Gỡ triệt để key `'alliance-cup'` khỏi `LEGENDARY_FRAMES` (`ShoutMessageRow.ts`), `itemAppearanceKeys.json`, `gringotts-appearance-slots.js`, khối CSS trong `20-store-appearance.css`, và xoá sạch `cup-winged.webp` / `cup-winged-2x.webp` / PNG fallback cũ (**không giữ fallback hay phát lại cúp cũ**; xem chi tiết tại `docs/handoff/alliance-cup/HANDOFF_HPVN_FLOO.md`).
 2. **6 Khung Quán Quân Hạng 1 Của 6 Mini-Game (`"champ-match3"`, `"champ-caro"`, `"champ-sudoku"`, `"champ-chess"`, `"champ-blocks"`, `"champ-jigsaw"`)**:
    - **Tài nguyên & CSS**: `public/paintings/floo-items/minigame-champions/`.
    - **Đối tượng nhận**: **Người giữ Hạng 1 cuối tuần** của từng bộ môn (`match3`, `caro`, `sudoku`, `chess`, `blocks`, `jigsaw`) tại thời điểm chốt sổ **`16:00 Thứ Sáu` (UTC+7)**.
@@ -565,6 +577,7 @@ Ngay trong cùng job chốt sổ Cúp Tuần lúc **`16:00 Thứ Sáu` (UTC+7 / 
 const FLOO_FRAME_DURATION_HOURS = 168; // 7 ngày
 const FLOO_FRAME_DURATION_MS = FLOO_FRAME_DURATION_HOURS * 60 * 60 * 1000;
 
+// Thay thế hoàn toàn 'alliance-cup' cũ (tuyệt đối không fallback hay cấp lại 'alliance-cup')
 const ALLIANCE_PAIR_TO_FRAME_KEY = {
   'Gryffindor+Hufflepuff': 'alliance-anh-duong',
   'Gryffindor+Ravenclaw': 'alliance-lua-va-tri',
@@ -575,16 +588,16 @@ const ALLIANCE_PAIR_TO_FRAME_KEY = {
 };
 
 function resolveAllianceFrameKey(houses) {
-  if (!Array.isArray(houses) || houses.length !== 2) return 'alliance-anh-duong';
-  return ALLIANCE_PAIR_TO_FRAME_KEY[[...houses].sort().join('+')] || 'alliance-anh-duong';
+  if (!Array.isArray(houses) || houses.length !== 2) return null;
+  return ALLIANCE_PAIR_TO_FRAME_KEY[[...houses].sort().join('+')] || null;
 }
 
 /**
  * Gọi ngay trong payoutHouseCupAllianceWeekly() tại mốc chốt sổ 16:00 Thứ Sáu (UTC+7).
  * - cycleKey: 'YYYY-MM-DD' (Thứ Sáu chốt sổ, VD '2026-11-27')
- * - winningHouses: [houseA, houseB] của Liên Minh thắng (hoặc cả 4 Nhà nếu hòa tuyệt đối)
- * - alliances: danh sách 2 Liên Minh tuần đó (để tra đúng khung nếu hòa tuyệt đối)
- * - qualifiedMembers: [{ uid, house }] — đúng danh sách thành viên thuộc Liên Minh thắng đạt >= 5 ván (§7.3)
+ * - winningHouses: [houseA, houseB] của Liên Minh đạt Hạng 1 (hoặc cả 4 Nhà nếu hòa tuyệt đối)
+ * - alliances: danh sách 2 Liên Minh tuần đó (để tra đúng Cúp Liên Minh nếu hòa tuyệt đối)
+ * - qualifiedMembers: [{ uid, house }] — đúng danh sách thành viên thuộc Liên Minh Hạng 1 đạt >= 5 ván (§7.3)
  * - top1ByDiscipline: { match3?: uid, caro?: uid, sudoku?: uid, chess?: uid, blocks?: uid, jigsaw?: uid }
  */
 async function grantWeeklyFlooFrames(db, { cycleKey, winningHouses, alliances, qualifiedMembers, top1ByDiscipline }) {
@@ -594,7 +607,7 @@ async function grantWeeklyFlooFrames(db, { cycleKey, winningHouses, alliances, q
 
   const grants = [];
 
-  // 1. Khung Liên Minh riêng theo đúng cặp 2 Nhà thắng cho danh sách qualifiedMembers
+  // 1. Trao đúng 1 trong 6 Cúp Liên Minh tương ứng cặp 2 Nhà đạt Hạng 1 (không phát 'alliance-cup' cũ)
   for (const m of qualifiedMembers) {
     const memberAlliance = Array.isArray(alliances)
       ? alliances.find((a) => Array.isArray(a.houses) && a.houses.includes(m.house))
@@ -602,6 +615,7 @@ async function grantWeeklyFlooFrames(db, { cycleKey, winningHouses, alliances, q
     const frameKey = memberAlliance
       ? resolveAllianceFrameKey(memberAlliance.houses)
       : primaryAllianceFrame;
+    if (!frameKey) continue;
     grants.push({
       uid: m.uid,
       frameKey,
@@ -1301,8 +1315,193 @@ function computeF2RankedAlliances(disciplines, alliances, lockedBalance) {
 }
 ```
 
+---
 
+## 12. Môn #7: Đua Nông Trại Derby (`derby` / `farmDerby`)
 
+Mở rộng Cúp 4 Nhà từ 6 bộ môn mini-game sang **7 đấu trường song hành** (`HOUSE_CUP_ALL_DISCIPLINE_ORDER = ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw', 'derby']`) để hoạt động làm nông nghiệp cốt lõi hằng ngày (thu hoạch ruộng, giao Đơn Cú, chế biến mẻ xưởng, đóng kiện Tàu Tốc Hành, đồng cỏ thú & combo nông trại) đóng góp trực tiếp vào Cúp Nhà cùng 6 mini-game.
 
+Phía Client đã hoàn tất và phát hành khớp 100% tại:
+- `src/sim/weeklyDerbyEngine.ts` (`MAX_WEEKLY_DERBY_TASKS = 7`, `MAX_WEEKLY_DERBY_BONUS_TASKS = 8`, `MAX_WEEKLY_DERBY_SCORE = 2500`, chu kỳ `weekKey` đồng bộ theo `getActiveHouseCupWeekKey()`).
+- `src/hpvn/bridge.ts` (`extractFarmDerbySyncPayload(save)` tự trích xuất & kẹp biên trường `farmDerby` trong mỗi lần `op: 'save'`).
+- `src/hpvn/houseCup.ts` (`HOUSE_CUP_DERBY_MAX_WEEKLY_MEMBER_POINTS = 2500`, `HOUSE_CUP_DERBY_MIN_TASKS_FOR_POINTS = 2`, `computeDerbyDisciplineHouseTotals(...)`, và `computeF2HouseTotals` / `computeDisciplineBracketTotals` tự duyệt đủ 7 môn `HOUSE_CUP_ALL_DISCIPLINE_ORDER`).
+
+### 12.1. Field `farmDerby` Client tự gửi trong `op: 'save'`
+
+Mỗi lần lưu nông trại (`flush()` trong `src/hpvn/bridge.ts`), khi save có trạng thái `weeklyDerby` hợp lệ, client tự đính kèm thêm trường **`farmDerby`** ở cấp cao nhất của payload `op: 'save'`:
+
+```json
+{
+  "op": "save",
+  "save": "<JSON string của nông trại>",
+  "cup": 2,
+  "farmDerby": {
+    "weekKey": "2026-W48",
+    "points": 845,
+    "tasksCompleted": 3
+  }
+}
+```
+
+| Trường | Kiểu | Miền giá trị hợp lệ | Nguồn trên Client |
+|---|---|---|---|
+| `farmDerby.weekKey` | `string` | Trùng `activeWeekKey` (`YYYY-Www`, tối đa 32 ký tự) | `save.weeklyDerby.weekKey` (`getActiveHouseCupWeekKey()`) |
+| `farmDerby.points` | `number` | Số nguyên `0..2500` | `save.weeklyDerby.points` (tổng điểm các nhiệm vụ Derby đã nộp trong tuần) |
+| `farmDerby.tasksCompleted` | `number` | Số nguyên `0..8` | `save.weeklyDerby.tasksCompleted` (`7` nhiệm vụ chuẩn + tối đa `1` lượt thưởng) |
+
+### 12.2. Hằng số & Kiểm duyệt Chống Gian Lận Phía Máy Chủ (`op: 'save'`)
+
+Máy chủ **tuyệt đối không tin số liệu thô từ client** mà luôn xác thực và kẹp biên trên Firestore (`farmMembers/{uid}.cup.derby`):
+
+- **`HOUSE_CUP_DERBY_MAX_WEEKLY_MEMBER_POINTS = 2500`:** Kẹp cứng `points` vào đoạn `0..2500`.
+- **`HOUSE_CUP_DERBY_MAX_WEEKLY_TASKS = 8`:** Kẹp cứng `tasksCompleted` vào đoạn `0..8` (`7` nhiệm vụ cơ bản + `1` nhiệm vụ thưởng).
+- **`HOUSE_CUP_DERBY_MIN_TASKS_FOR_POINTS = 2`:** Thành viên bắt buộc hoàn thành **`>= 2` nhiệm vụ Derby** (và có `points > 0`) trong đúng tuần `activeWeekKey` mới đủ điều kiện ghi điểm Nhà ở Môn #7.
+- **Đơn điệu không giảm theo từng `weekKey`:** Trong cùng `activeWeekKey`, điểm & số nhiệm vụ lưu trên server chỉ tăng hoặc giữ nguyên (`nextPoints >= prevPoints`, `nextTasks >= prevTasks`); khi sang `activeWeekKey` mới tự reset về `0`.
+- **Chặn nhảy cóc chống gian lận (anti-spike per save):** Điểm mỗi nhiệm vụ Derby trong `weeklyDerbyEngine.ts` dao động `140..320 đ`, nên kẹp mức tăng tối đa mỗi lần `op: 'save'` là **`HOUSE_CUP_DERBY_MAX_POINTS_DELTA_PER_SAVE = 640`** (tương đương tối đa 2 nhiệm vụ Hybrid cao nhất nộp liền nhau trong 1 cửa sổ debounce 5 giây) và **`HOUSE_CUP_DERBY_MAX_TASKS_DELTA_PER_SAVE = 2`** nhiệm vụ/lần lưu.
+- **Khóa theo chu kỳ Cúp Nhà:** Chỉ nhận cập nhật khi `sched.phase === 'active'` (`17:00 Thứ Sáu → 16:00 Thứ Sáu tuần kế tiếp`, ICT) và `farmDerby.weekKey === activeWeekKey`. Bỏ qua các gói có `weekKey` khác `activeWeekKey` (tránh bơm điểm từ tuần cũ).
+
+```js
+const ALL_CUP_DISCIPLINES = [...CUP_DISCIPLINES, 'derby']; // 6 mini-game + Môn #7 Derby Nông Trại
+const HOUSE_CUP_DERBY_MAX_WEEKLY_MEMBER_POINTS = 2500;
+const HOUSE_CUP_DERBY_MAX_WEEKLY_TASKS = 8; // 7 nhiệm vụ chuẩn + 1 lượt thưởng
+const HOUSE_CUP_DERBY_MIN_TASKS_FOR_POINTS = 2;
+const HOUSE_CUP_DERBY_MAX_POINTS_DELTA_PER_SAVE = 640; // tối đa 2 nhiệm vụ 320đ/lần save
+const HOUSE_CUP_DERBY_MAX_TASKS_DELTA_PER_SAVE = 2;
+
+/**
+ * Gọi trong op === 'save' khi sched.phase === 'active'.
+ * Ưu tiên đọc req.farmDerby (hoặc fallback sang saveObj.weeklyDerby nếu cần).
+ */
+function applyFarmDerbySyncToMemberCup(memberCup, rawFarmDerby, activeWeekKey) {
+  if (!rawFarmDerby || typeof rawFarmDerby !== 'object') return false;
+  const incomingWeekKey = String(rawFarmDerby.weekKey || '').trim();
+  if (!incomingWeekKey || incomingWeekKey !== activeWeekKey) return false;
+
+  const incomingPoints = Math.max(
+    0,
+    Math.min(HOUSE_CUP_DERBY_MAX_WEEKLY_MEMBER_POINTS, Math.floor(Number(rawFarmDerby.points) || 0))
+  );
+  const incomingTasks = Math.max(
+    0,
+    Math.min(HOUSE_CUP_DERBY_MAX_WEEKLY_TASKS, Math.floor(Number(rawFarmDerby.tasksCompleted) || 0))
+  );
+
+  const prev = memberCup.derby?.weekKey === activeWeekKey
+    ? memberCup.derby
+    : { weekKey: activeWeekKey, points: 0, tasksCompleted: 0 };
+
+  // Đơn điệu không giảm trong cùng tuần + chặn anti-spike mỗi lần lưu
+  const deltaPoints = Math.max(
+    0,
+    Math.min(HOUSE_CUP_DERBY_MAX_POINTS_DELTA_PER_SAVE, incomingPoints - (Number(prev.points) || 0))
+  );
+  const deltaTasks = Math.max(
+    0,
+    Math.min(HOUSE_CUP_DERBY_MAX_TASKS_DELTA_PER_SAVE, incomingTasks - (Number(prev.tasksCompleted) || 0))
+  );
+
+  const nextPoints = Math.min(HOUSE_CUP_DERBY_MAX_WEEKLY_MEMBER_POINTS, (Number(prev.points) || 0) + deltaPoints);
+  const nextTasks = Math.min(HOUSE_CUP_DERBY_MAX_WEEKLY_TASKS, (Number(prev.tasksCompleted) || 0) + deltaTasks);
+
+  memberCup.derby = {
+    weekKey: activeWeekKey,
+    points: nextPoints,
+    tasksCompleted: nextTasks,
+    updatedAtMs: Date.now(),
+  };
+  return deltaPoints > 0 || deltaTasks > 0;
+}
+```
+
+### 12.3. Công thức Xếp Hạng & Tính Điểm Nhà Môn #7 (`computeDerbyDisciplineHouseTotals`)
+
+Tổng hợp **`weekDoc.disciplines.derby`** cho cả 4 Nhà bằng đúng thuật toán của `computeDerbyDisciplineHouseTotals` & `rankAndScoreDisciplineFromWeeklyPlayers` trong `src/hpvn/houseCup.ts` (dùng chung bậc điểm hạng **`100 / 80 / 65 / 50 / 35 / 20`** ở §6.2, đồng hạng kiểu Olympic):
+
+```js
+/**
+ * Khớp 1:1 với computeDerbyDisciplineHouseTotals() trong src/hpvn/houseCup.ts.
+ * - Chỉ tính thành viên thuộc 4 Nhà có weeklyDerbyTasks >= 2 và cappedScore > 0.
+ * - Sắp xếp giảm dần theo cappedScore (0..2500), hòa xét weeklyDerbyTasks giảm dần.
+ * - Đồng hạng Olympic trên cappedScore, cộng bậc hạng RANK_POINT_TIERS (100/80/65/50/35/20).
+ */
+function computeDerbyDisciplineHouseTotals(
+  entries,
+  minTasks = HOUSE_CUP_DERBY_MIN_TASKS_FOR_POINTS,
+  maxMemberScore = HOUSE_CUP_DERBY_MAX_WEEKLY_MEMBER_POINTS,
+  tiers = RANK_POINT_TIERS
+) {
+  const safeMinTasks = Math.max(1, Math.floor(Number(minTasks) || HOUSE_CUP_DERBY_MIN_TASKS_FOR_POINTS));
+  const safeMaxScore = Math.max(0, Math.floor(Number(maxMemberScore) || HOUSE_CUP_DERBY_MAX_WEEKLY_MEMBER_POINTS));
+
+  const eligible = entries
+    .map((e) => ({
+      house: e.house,
+      weeklyDerbyTasks: Math.max(0, Math.floor(Number(e.weeklyDerbyTasks) || 0)),
+      cappedScore: Math.min(safeMaxScore, Math.max(0, Math.floor(Number(e.weeklyDerbyScore) || 0))),
+    }))
+    .filter((e) => HOUSES.includes(e.house) && e.cappedScore > 0 && e.weeklyDerbyTasks >= safeMinTasks)
+    .sort((a, b) => (b.cappedScore - a.cappedScore) || (b.weeklyDerbyTasks - a.weeklyDerbyTasks));
+
+  const byHouse = { Gryffindor: 0, Slytherin: 0, Ravenclaw: 0, Hufflepuff: 0 };
+  let activeRank = 0;
+  let prevScore = -1;
+
+  eligible.forEach((entry, idx) => {
+    if (entry.cappedScore !== prevScore) {
+      activeRank = idx + 1;
+      prevScore = entry.cappedScore;
+    }
+    let pts = 20;
+    for (const tier of tiers) {
+      if (tier.maxRank === null || activeRank <= tier.maxRank) {
+        pts = tier.points;
+        break;
+      }
+    }
+    if (pts > 0) byHouse[entry.house] += pts;
+  });
+
+  return byHouse;
+}
+```
+
+- **Ghi vào `weekDoc.disciplines.derby`:** Sau khi tổng hợp từ toàn bộ thành viên có `cup.derby.weekKey === activeWeekKey` (bỏ qua tài khoản `sandboxTainted`), ghi trực tiếp `{ Gryffindor, Slytherin, Ravenclaw, Hufflepuff }` vào `weekDoc.disciplines.derby`.
+- **Nối vào F2 (§11) & Chốt sổ 16:00 Thứ Sáu (§7.3):** Đổi vòng lặp trong `computeF2HouseTotals(disciplines)` (và `computeBracketHouses(disciplines)`) từ `CUP_DISCIPLINES` (6 môn) sang **`ALL_CUP_DISCIPLINES`** (`7` môn, gồm `'derby'`) để điểm Môn #7 cộng thẳng vào `houses` và `allianceBalance.byAlliance[*].rawPoints / scaledPoints`. *(Lưu ý: `SCORED_BOARD_GAMES` của BXH mini-game `op: 'board'` và 6 khung Quán Quân mini-game ở §8 vẫn giữ nguyên 6 mini-game; Derby đóng góp trực tiếp vào Cúp Nhà & Cúp Liên Minh.)*
+
+### 12.4. Shape Phản Hồi `op: 'cup' | 'load' | 'save'` & Tương Thích Ngược 100%
+
+Chỉ cần thêm trường `"derby"` vào trong object `disciplines` của payload `cup` (trả trong `op: 'cup'`, `op: 'load'` và tùy chọn trong `op: 'save'`):
+
+```json
+{
+  "weekKey": "2026-W48",
+  "mode": "f2",
+  "unlimited": true,
+  "houses": {
+    "Gryffindor": 740,
+    "Slytherin": 610,
+    "Ravenclaw": 560,
+    "Hufflepuff": 435
+  },
+  "disciplines": {
+    "match3": { "Gryffindor": 140, "Slytherin": 120, "Ravenclaw": 100, "Hufflepuff": 80 },
+    "caro":   { "Gryffindor": 110, "Slytherin": 100, "Ravenclaw": 90,  "Hufflepuff": 60 },
+    "sudoku": { "Gryffindor": 100, "Slytherin": 90,  "Ravenclaw": 80,  "Hufflepuff": 50 },
+    "chess":  { "Gryffindor": 110, "Slytherin": 95,  "Ravenclaw": 85,  "Hufflepuff": 55 },
+    "blocks": { "Gryffindor": 95,  "Slytherin": 85,  "Ravenclaw": 75,  "Hufflepuff": 45 },
+    "jigsaw": { "Gryffindor": 85,  "Slytherin": 70,  "Ravenclaw": 65,  "Hufflepuff": 45 },
+    "derby":  { "Gryffindor": 100, "Slytherin": 50,  "Ravenclaw": 65,  "Hufflepuff": 100 }
+  }
+}
+```
+
+- **Tương thích ngược 100%:** Client hiện hành (`src/hpvn/houseCup.ts`) đã bật sẵn `'derby'` trong `VALID_DISCIPLINES` & `HOUSE_CUP_ALL_DISCIPLINE_ORDER`. Nếu backend **chưa** deploy Môn #7 và vẫn trả payload `disciplines` 6 môn cũ (không có key `"derby"`), client tự bỏ qua nhánh `"derby"` và vận hành bình thường không lỗi; ngay khi backend bắt đầu trả `"derby"`, UI Cúp 4 Nhà tự động hiển thị hàng **Môn #7: Derby Nông Trại** cùng tổng F2 mới.
+
+### 12.5. Checklist Kiểm Chứng Backend (4 Mục Bắt Buộc)
+
+1. **Xác thực `op: 'save'` + chống gian lận (`farmDerby`):** Gửi payload giả mạo `{ weekKey: activeWeekKey, points: 9999, tasksCompleted: 42 }` → server chỉ tăng tối đa `+640 đ` & `+2` nhiệm vụ mỗi lần lưu, không vượt trần `2500 đ` & `8` nhiệm vụ, giữ đơn điệu không giảm trong cùng `weekKey`, và bỏ qua gói có `weekKey !== activeWeekKey` hoặc gửi ngoài khung `sched.phase === 'active'`.
+2. **Ngưỡng đủ điều kiện & đồng hạng Olympic (`computeDerbyDisciplineHouseTotals`):** Thành viên có `tasksCompleted = 1` (dù `points = 2500`) hoặc `points = 0` (dù `tasksCompleted = 3`) nhận **`0 đ Nhà`**; hai thành viên cùng đạt trần `2500 đ` (và `>= 2` nhiệm vụ) đồng Hạng 1 (`+100 đ` mỗi Nhà), người kế tiếp xếp Hạng 3 (`+65 đ`).
+3. **Đồng bộ điểm tổng F2 & chốt thưởng `16:00 Thứ Sáu`:** Xác nhận `weekDoc.disciplines.derby` được trả về trong `op: 'cup'` / `op: 'load'` / `op: 'save'`, cộng đúng vào `houses` (tổng 7 môn), phản ánh vào `allianceBalance.byAlliance[*].rawPoints` & `scaledPoints`, và được dùng thống nhất trong `payoutHouseCupAllianceWeekly()` khi chọn Liên Minh Hạng 1.
+4. **Tương thích ngược 6 môn & chuyển tuần mới:** Xác nhận payload `disciplines` chưa có `"derby"` vẫn không lỗi client/server; khi bước sang `activeWeekKey` tuần mới (`17:00 Thứ Sáu`), `memberCup.derby` reset sạch về `0` điểm / `0` nhiệm vụ và không mang điểm Derby tuần cũ sang tuần mới.
 
 
