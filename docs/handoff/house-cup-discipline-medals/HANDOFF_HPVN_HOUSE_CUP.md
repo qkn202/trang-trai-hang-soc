@@ -1,6 +1,8 @@
-# Handoff HPVN Backend — Cúp 4 Nhà: Đua Huy Chương Từng Môn (Không Trần Cứng)
+# Handoff HPVN Backend — Cúp 4 Nhà: Tổng Điểm 6 Môn × Cân Bằng Quân Số Liên Minh (Phương Án F2)
 
-Tài liệu này mô tả thay đổi phía máy chủ HPVN (`functions/games/trang-trai-hang-soc-boards.js`) để chuyển Cúp 4 Nhà sang thể thức **Đua Huy Chương Từng Môn (Discipline Medal Bracket)** — tương thích 100% ngược với client `trang-trai-hang-soc` đã cập nhật tại `src/hpvn/houseCup.ts` & `src/ui/hudQuestsAndSettings.ts`.
+> **Cập nhật chính thức (28/11/2026 — Phương án F2):** Thay thế bước nén huy chương `100/75/50/25` sang **Phương án F2** tại **Mục 11** bên dưới *(giữ nguyên xoay vòng Liên Minh 3 cặp, giữ nguyên xếp hạng Cách A `100/80/65/50/35/20` cho từng môn trong 6 môn, cộng tổng điểm đóng góp 6 môn cho mỗi Nhà/Liên Minh và nhân **Hệ số Cân Bằng Quân Số khóa đầu tuần** theo trung bình trượt `3` tuần gần nhất, sàn `4` người/LM, trần `2.5×`)*. Client (`src/hpvn/houseCup.ts` & `src/ui/hudQuestsAndSettings.ts`) đã triển khai đầy đủ `mode: 'f2'` và vẫn **tương thích ngược 100%** với payload `mode: 'medals'` / `legacy` cũ trong lúc server chưa deploy patch Mục 11.
+
+Tài liệu này mô tả thay đổi phía máy chủ HPVN (`functions/games/trang-trai-hang-soc-boards.js`) cho Cúp 4 Nhà — tương thích 100% ngược với client `trang-trai-hang-soc` tại `src/hpvn/houseCup.ts` & `src/ui/hudQuestsAndSettings.ts`.
 
 ---
 
@@ -540,9 +542,15 @@ Thêm object `allianceReward` vào phản hồi `op: 'cup'` để **Pop-up Cúp 
 Ngay trong cùng job chốt sổ Cúp Tuần lúc **`16:00 Thứ Sáu` (UTC+7 / giờ Việt Nam)** (`payoutHouseCupAllianceWeekly`), ngoài việc chia quỹ `200.000 Galleons`, server phát thêm **7 khung bong bóng Mạng Floo** có thời hạn chuẩn **`7 ngày (168 giờ)`** tính từ đúng mốc chốt sổ **`16:00 Thứ Sáu`** (`cycleKey`) đến `16:00 Thứ Sáu` tuần kế tiếp:
 
 ### 8.1. Quy tắc trao thưởng chốt
-1. **Khung Liên Minh Nhà Thắng Cúp Tuần (`"alliance-cup"`)**:
-   - **Tài nguyên & CSS**: `public/paintings/floo-items/alliance-cup/` (Mẫu F — Gấm Hoàng Gia 4 Sắc + viền 4 màu lồng chỉ vàng kim + Đại Cúp Cánh Phượng đặt ngay giữa viền trên).
-   - **Đối tượng nhận**: **Đúng danh sách `qualifiedUids`** ở §7.3 (các thành viên thuộc 2 Nhà trong Liên Minh thắng Cúp Tuần đã đạt điều kiện **`>= 5` ván** ở bất kỳ 1 mini-game nào trong chu kỳ — không cấp cho thành viên 2 Nhà thắng chưa đạt `>= 5` ván).
+1. **6 Khung Liên Minh Nhà Thắng Cúp Tuần *(thay thế khung `"alliance-cup"` cũ)*:**
+   - **Tài nguyên & CSS chuẩn `LEGENDARY_FRAMES` / iOS Safari 16+**: `docs/handoff/alliance-cup/` và 6 tệp WebP phẳng `< 12 KB` trong `public/paintings/floo-items/alliance-cup/` — mỗi cặp 2 Nhà thắng Cúp Tuần nhận **khung Huyền Thoại mang sắc màu & Cúp riêng** của đúng Liên Minh đó:
+     - `Gryffindor + Hufflepuff` (**Liên Minh Ánh Dương**) → `"alliance-anh-duong"`
+     - `Slytherin + Ravenclaw` (**Liên Minh Nguyệt Ảnh**) → `"alliance-nguyet-anh"`
+     - `Gryffindor + Ravenclaw` (**Liên Minh Lửa & Trí**) → `"alliance-lua-va-tri"`
+     - `Slytherin + Hufflepuff` (**Liên Minh Ngọc Rừng**) → `"alliance-ngoc-rung"`
+     - `Gryffindor + Slytherin` (**Liên Minh Song Hùng**) → `"alliance-song-hung"`
+     - `Ravenclaw + Hufflepuff` (**Liên Minh Tinh Tú**) → `"alliance-tinh-tu"`
+   - **Đối tượng nhận**: **Đúng danh sách `qualifiedUids`** ở §7.3 (các thành viên thuộc 2 Nhà trong Liên Minh thắng Cúp Tuần đã đạt điều kiện **`>= 5` ván** ở bất kỳ 1 mini-game nào trong chu kỳ — không cấp cho thành viên 2 Nhà thắng chưa đạt `>= 5` ván). Nếu hòa tuyệt đối cả 2 Liên Minh, mỗi thành viên nhận khung ứng với đúng Liên Minh của Nhà mình.
    - **Thời hạn**: **`7 ngày (168 giờ)` tính từ `16:00 Thứ Sáu` (UTC+7)**.
 2. **6 Khung Quán Quân Hạng 1 Của 6 Mini-Game (`"champ-match3"`, `"champ-caro"`, `"champ-sudoku"`, `"champ-chess"`, `"champ-blocks"`, `"champ-jigsaw"`)**:
    - **Tài nguyên & CSS**: `public/paintings/floo-items/minigame-champions/`.
@@ -557,25 +565,47 @@ Ngay trong cùng job chốt sổ Cúp Tuần lúc **`16:00 Thứ Sáu` (UTC+7 / 
 const FLOO_FRAME_DURATION_HOURS = 168; // 7 ngày
 const FLOO_FRAME_DURATION_MS = FLOO_FRAME_DURATION_HOURS * 60 * 60 * 1000;
 
+const ALLIANCE_PAIR_TO_FRAME_KEY = {
+  'Gryffindor+Hufflepuff': 'alliance-anh-duong',
+  'Gryffindor+Ravenclaw': 'alliance-lua-va-tri',
+  'Gryffindor+Slytherin': 'alliance-song-hung',
+  'Hufflepuff+Ravenclaw': 'alliance-tinh-tu',
+  'Hufflepuff+Slytherin': 'alliance-ngoc-rung',
+  'Ravenclaw+Slytherin': 'alliance-nguyet-anh',
+};
+
+function resolveAllianceFrameKey(houses) {
+  if (!Array.isArray(houses) || houses.length !== 2) return 'alliance-anh-duong';
+  return ALLIANCE_PAIR_TO_FRAME_KEY[[...houses].sort().join('+')] || 'alliance-anh-duong';
+}
+
 /**
  * Gọi ngay trong payoutHouseCupAllianceWeekly() tại mốc chốt sổ 16:00 Thứ Sáu (UTC+7).
  * - cycleKey: 'YYYY-MM-DD' (Thứ Sáu chốt sổ, VD '2026-11-27')
- * - qualifiedUids: đúng danh sách thành viên 2 Nhà thắng đạt >= 5 ván (§7.3)
+ * - winningHouses: [houseA, houseB] của Liên Minh thắng (hoặc cả 4 Nhà nếu hòa tuyệt đối)
+ * - alliances: danh sách 2 Liên Minh tuần đó (để tra đúng khung nếu hòa tuyệt đối)
+ * - qualifiedMembers: [{ uid, house }] — đúng danh sách thành viên thuộc Liên Minh thắng đạt >= 5 ván (§7.3)
  * - top1ByDiscipline: { match3?: uid, caro?: uid, sudoku?: uid, chess?: uid, blocks?: uid, jigsaw?: uid }
- *   (người giữ Hạng 1 cuối tuần của từng bộ môn tại thời điểm 16:00 Thứ Sáu)
  */
-async function grantWeeklyFlooFrames(db, { cycleKey, qualifiedUids, top1ByDiscipline }) {
+async function grantWeeklyFlooFrames(db, { cycleKey, winningHouses, alliances, qualifiedMembers, top1ByDiscipline }) {
   const grantedAtMs = Date.parse(`${cycleKey}T16:00:00+07:00`) || Date.now();
   const expiresAtMs = grantedAtMs + FLOO_FRAME_DURATION_MS;
+  const primaryAllianceFrame = resolveAllianceFrameKey(winningHouses.slice(0, 2));
 
   const grants = [];
 
-  // 1. Khung Liên Minh cho đúng danh sách qualifiedUids
-  for (const uid of qualifiedUids) {
+  // 1. Khung Liên Minh riêng theo đúng cặp 2 Nhà thắng cho danh sách qualifiedMembers
+  for (const m of qualifiedMembers) {
+    const memberAlliance = Array.isArray(alliances)
+      ? alliances.find((a) => Array.isArray(a.houses) && a.houses.includes(m.house))
+      : null;
+    const frameKey = memberAlliance
+      ? resolveAllianceFrameKey(memberAlliance.houses)
+      : primaryAllianceFrame;
     grants.push({
-      uid,
-      frameKey: 'alliance-cup',
-      leaseId: `house_cup_alliance_${cycleKey}_${uid}`,
+      uid: m.uid,
+      frameKey,
+      leaseId: `house_cup_${frameKey}_${cycleKey}_${m.uid}`,
       reason: 'house_cup_alliance_weekly_frame',
     });
   }
@@ -774,10 +804,11 @@ async function payoutCurrentRavGryAllianceNow(
     await batch.commit();
   }
 
-  // 5. (Tuỳ chọn) Cấp luôn khung Liên Minh alliance-cup 7 ngày (168 giờ) cho đúng danh sách qualifiedUids (§8.2)
+  // 5. (Tuỳ chọn) Cấp luôn khung Liên Minh tương ứng đúng cặp 2 Nhà (7 ngày = 168 giờ) cho danh sách qualifiedUids (§8.2)
   if (alsoGrantAllianceFrame) {
     await grantWeeklyFlooFrames(db, {
       cycleKey,
+      winningHouses: TARGET_HOUSES, // tự phân giải ra 'alliance-lua-va-tri'
       qualifiedUids,
       top1ByDiscipline: {}, // truyền map top1ByDiscipline thực tế nếu muốn phát luôn 6 khung Top 1 môn
     });
@@ -825,6 +856,60 @@ Nếu máy chủ HPVN vẫn còn danh sách 4 môn cũ từ bản ban đầu, **
 // Đảm bảo danh sách whitelist cho CẢ op: 'board' và op: 'save' / op: 'cup' đều có đủ 6 môn:
 const SCORED_BOARD_GAMES = ['match3', 'caro', 'sudoku', 'chess', 'blocks', 'jigsaw'];
 ```
+
+### 9.3. Fix bắt buộc phía Máy chủ cho lỗi «Bắn Cá / Dò Mìn chơi qua màn nhưng không ghi nhận trên bảng điểm Nhà»
+
+Có **3 lỗi thực tế trên `functions/games/trang-trai-hang-soc-boards.js`** khiến người chơi qua màn **Bắn Cá Hồ Đen (`chess`)** (và **Dò Mìn (`caro`)**) bị ghi `0 đ` trên bảng điểm Nhà — cần kiểm tra & vá đủ cả 3:
+
+1. **Kẹt mốc cũ `lastClearedByDiscipline.chess` từ game Cờ Phù Thủy cũ (trước `arcadeDisciplineRev = 2`):**
+   - Trước khi đổi **Cờ Phù Thủy (`chess`) → Bắn Cá Hồ Đen (`chess`)** và **Caro (`caro`) → Dò Mìn (`caro`)**, nhiều tài khoản đã có sẵn `memberCup.lastClearedByDiscipline.chess = N` (VD `N = 10` hoặc `30`) trên Firestore.
+   - Khi client nâng lên `arcadeDisciplineRev = 2`, client đã reset `save.puzzleArcade.chessCleared = 0`, `chessStage = 1`.
+   - Nếu máy chủ **không** kiểm tra `memberCup.arcadeDisciplineRev < 2` để reset `lastClearedByDiscipline.chess = 0` & `lastPlayedByDiscipline.chess = 0`, thì mọi màn Bắn Cá từ Màn `1 → N` đều bị tính `delta = Math.max(0, nextCleared - N) = 0` → **không cộng 1 điểm nào cho Nhà**!
+2. **Nuốt màn đầu tiên khi khởi tạo môn mới (`?? nextCleared[disc]` thay vì `?? 0`):**
+   - Với người chơi cũ chưa từng có key `chess` trong `memberCup.lastClearedByDiscipline`, tuyệt đối **không** khởi tạo `prev = memberCup.lastClearedByDiscipline?.chess ?? nextCleared.chess` (vì lần lưu thắng Màn 1 sẽ thành `1 - 1 = 0`). Phải khởi tạo bằng `0`!
+3. **Danh sách `CUP_DISCIPLINES` thiếu `'chess'` hoặc đọc nhầm tên field (`fishingCleared` thay vì `chessCleared`):**
+   - Trong Save JSON, Bắn Cá Hồ Đen vẫn dùng key lịch sử `save.puzzleArcade.chessCleared` (chỉ đọc khi `arcadeDisciplineRev >= 2`).
+
+**Patch drop-in gọi ngay đầu `op: 'save'` (TRƯỚC vòng `for (const disc of CUP_DISCIPLINES)` tính delta ở §6.2 & §7.2):**
+
+```js
+const CURRENT_ARCADE_DISCIPLINE_REV = 2;
+
+function reconcileMemberCupDisciplineRevision(memberCup, saveObj) {
+  const saveRev = Math.floor(Number(saveObj?.puzzleArcade?.arcadeDisciplineRev) || 0);
+  const memberRev = Math.floor(Number(memberCup.arcadeDisciplineRev) || 0);
+
+  // Khi thành viên lần đầu lưu với save đã migrate sang Dò Mìn & Bắn Cá (rev >= 2):
+  // reset mốc cũ của Caro / Cờ Phù Thủy về 0 để các màn Bắn Cá/Dò Mìn từ Màn 1 đều được cộng điểm!
+  if (saveRev >= CURRENT_ARCADE_DISCIPLINE_REV && memberRev < CURRENT_ARCADE_DISCIPLINE_REV) {
+    memberCup.lastClearedByDiscipline = {
+      ...(memberCup.lastClearedByDiscipline || {}),
+      caro: 0,
+      chess: 0,
+    };
+    memberCup.lastPlayedByDiscipline = {
+      ...(memberCup.lastPlayedByDiscipline || {}),
+      caro: 0,
+      chess: 0,
+    };
+    memberCup.arcadeDisciplineRev = CURRENT_ARCADE_DISCIPLINE_REV;
+  }
+
+  // Khởi tạo mốc = 0 cho mọi môn mới mở trong CUP_DISCIPLINES (không lấy nextCleared làm mốc ban đầu)
+  memberCup.lastClearedByDiscipline = memberCup.lastClearedByDiscipline || {};
+  memberCup.lastPlayedByDiscipline = memberCup.lastPlayedByDiscipline || {};
+  for (const disc of CUP_DISCIPLINES) {
+    if (memberCup.lastClearedByDiscipline[disc] === undefined) {
+      memberCup.lastClearedByDiscipline[disc] = 0;
+    }
+    if (memberCup.lastPlayedByDiscipline[disc] === undefined) {
+      memberCup.lastPlayedByDiscipline[disc] = 0;
+    }
+  }
+}
+```
+
+> **Lưu ý kiểm tra nhanh trên Firestore:** Mở doc `farmMembers/{uid}` của tài khoản báo lỗi và kiểm tra 4 trường: (a) `cup.arcadeDisciplineRev` đã là `2` chưa, (b) `cup.lastClearedByDiscipline.chess` có đang lớn hơn `save.puzzleArcade.chessCleared` không, (c) `cup.weeklyClearedByDiscipline.chess` đã đạt ngưỡng **`>= 5` màn mới trong tuần** (luật Cách A §6.2) chưa, và (d) `gameHouseCupWeeks/{weekKey}.disciplines.chess` đã tồn tại key `'chess'` chưa.
 
 ---
 
@@ -918,6 +1003,301 @@ async function handleWeeklyBoardOp(db, { game }) {
     cycleKey: sched.cycleKey,
     entries: entries.slice(0, 100),
   };
+}
+```
+
+### 10.3. Bảng «Xếp Hạng Tổng» Top 3 Mọi Thời Đại (`op: 'board'`, `period: 'all_time'`)
+
+Tab **Bạn Bè** trong Bảng Xếp Hạng đã được đổi thành **Xếp Hạng Tổng** — xếp hạng **mọi thời đại** theo **tổng số màn chơi user đã vượt qua (`bestStage`)** (không giới hạn trong tuần `weekKey`), và **chỉ lấy đúng Top 3**.
+
+Khi `op: 'board'` nhận `{ game, period: 'all_time', limit: 3 }`:
+
+```js
+async function handleAllTimeTop3BoardOp(db, { game, limit = 3 }) {
+  if (!SCORED_BOARD_GAMES.includes(game)) {
+    return { period: 'all_time', entries: [] };
+  }
+  const topLimit = Math.max(1, Math.min(3, Math.floor(Number(limit) || 3)));
+  const snaps = await db.collection('farmMembers').get();
+
+  const entries = [];
+  snaps.forEach((doc) => {
+    const data = doc.data() || {};
+    if (data.sandboxTainted) return;
+    const cup = data.cup || {};
+    const rev = Math.floor(Number(cup.arcadeDisciplineRev) || 0);
+    let bestStage = Math.max(0, Math.floor(Number(cup.lastClearedByDiscipline?.[game]) || 0));
+
+    // Guard cho 2 môn đổi cơ chế (Dò Mìn caro & Bắn Cá chess): chỉ đọc màn khi arcadeDisciplineRev >= 2
+    if ((game === 'caro' || game === 'chess') && rev < CURRENT_ARCADE_DISCIPLINE_REV) {
+      bestStage = 0;
+    }
+
+    // Fallback đọc từ save JSON nếu lastClearedByDiscipline chưa được ghi
+    if (bestStage <= 0 && typeof data.save === 'string' && data.save.length > 0) {
+      try {
+        const parsed = JSON.parse(data.save);
+        bestStage = Math.max(0, Math.floor(Number(extractClearedByDiscipline(parsed)?.[game]) || 0));
+      } catch {
+        bestStage = 0;
+      }
+    }
+    if (bestStage <= 0) return;
+
+    const house = HOUSES.includes(data.house) ? data.house : 'Gryffindor';
+    entries.push({
+      userId: doc.id,
+      name: data.displayName || data.parkName || 'Phù Thủy',
+      parkName: data.parkName || 'Trang Trại Hang Sóc',
+      friendCode: data.friendCode || '',
+      avatarEmoji: '🧙',
+      ...(data.avatarUrl ? { avatarUrl: data.avatarUrl } : {}),
+      house,
+      bestStage,
+      primaryValue: bestStage,
+      ratingScore: bestStage,
+      totalWins: bestStage,
+      bestStreak: 0,
+      detailLabelVi: `${bestStage} màn tích luỹ`,
+      updatedAt: Number(cup.updatedAtMs || data.updatedAtMs) || Date.now(),
+    });
+  });
+
+  entries.sort(
+    (a, b) =>
+      b.bestStage - a.bestStage ||
+      b.totalWins - a.totalWins ||
+      a.updatedAt - b.updatedAt
+  );
+
+  return {
+    period: 'all_time',
+    entries: entries.slice(0, topLimit),
+  };
+}
+```
+
+> **Điều phối trong `op === 'board'`:** Nếu `req.period === 'all_time'` gọi `handleAllTimeTop3BoardOp(db, req)`; ngược lại gọi `handleWeeklyBoardOp(db, req)`. Phía Client cũng tự tương thích ngược: nếu server chưa kịp triển khai nhánh `period: 'all_time'` (vẫn trả BXH tổng cũ hoặc BXH tuần có kèm `bestStage`), Client tự tách lấy `bestStage`, sắp xếp giảm dần và cắt đúng **Top 3**.
+
+---
+
+## 11. Phương Án F2 — Tổng Điểm Đóng Góp 6 Môn × Hệ Số Cân Bằng Quân Số Khóa Đầu Tuần (`mode: 'f2'`)
+
+Để giải quyết triệt để tình trạng lệch quân số 2:1 giữa 2 Liên Minh trên quy mô cộng đồng thực tế **20–25 người/tuần** (vừa cân bằng 4 Nhà sai số `< 3.5%`, vừa **Phạt Newbie = `0%`**, mọi thành viên mới chơi `≥ 5` màn đều làm tổng điểm Liên Minh tăng ngay lập tức), máy chủ nâng cấp sang **`mode: 'f2'`**:
+
+### 11.1. Quy tắc chốt (đã đồng bộ 1:1 với `src/hpvn/houseCup.ts`)
+1. **Giữ nguyên Xoay vòng Liên Minh 3 cặp (`ALLIANCE_ROTATION` ở §5):** 4 Nhà tiếp tục xoay vòng đổi đồng đội đều nhau qua 3 tuần, không Nhà nào bị kẹt mãi một phe.
+2. **Giữ nguyên xếp hạng cá nhân từng môn theo Cách A (§6):** Mỗi bộ môn trong 6 môn vẫn xếp hạng người chơi đạt `≥ 5` màn mới/tuần theo điểm độ khó (`20/25/30/35 đ/màn`) và cộng bậc điểm đóng góp `100 / 80 / 65 / 50 / 35 / 20` vào `weekDoc.disciplines[disc][house]`. *(Bản thân trần `100 đ/môn` đã chặn việc 1 người cày riêng 1 môn đè 5 môn còn lại.)*
+3. **Bỏ nén nhị phân `100/75/50/25` — Tổng điểm mỗi Nhà = tổng điểm đóng góp trực tiếp 6 môn:**
+   ```text
+   houses[house] = Σ_{disc ∈ 6 môn} weekDoc.disciplines[disc][house]
+   ```
+4. **Hệ số Cân Bằng Quân Số khóa cứng ngay `17:00 Thứ Sáu` đầu tuần (`allianceBalance`):**
+   - **Nguồn sĩ số (`houseActiveAvg`):** Trung bình trượt **`3` tuần gần nhất** (`ALLIANCE_ROSTER_WINDOW_WEEKS = 3`) số thành viên hoạt động của từng Nhà (tính những thành viên đã chơi `≥ 5` ván / đạt điều kiện tính điểm trong tuần đó; chỉ chia cho số tuần thực sự có dữ liệu `1..3`).
+   - **Tuần đầu chưa có lịch sử (cold-start):** Nếu cả 2 Liên Minh đều có `activeAvg === 0`, cả 2 bên mặc định hệ số **`1.0×`**.
+   - **Sàn sĩ số (`ALLIANCE_ROSTER_FLOOR = 4`):** `effectiveRoster = Math.max(4, activeAvg_h0 + activeAvg_h1)`.
+   - **Trần hệ số (`ALLIANCE_MULTIPLIER_CAP = 2.5`):** Liên Minh đông hơn giữ hệ số `1.0`, Liên Minh ít người hơn nhận:
+     ```text
+     multiplier = round2(Math.min(2.5, effectiveRoster_đông / effectiveRoster_ít))
+     ```
+   - **Khóa cứng suốt tuần:** Tính đúng **1 lần duy nhất** khi khởi tạo document tuần `gameHouseCupWeeks/{weekKey}` (lúc `17:00` Thứ Sáu hoặc lần ghi đầu tiên của tuần đó) và lưu cố định trong `weekDoc.allianceBalance`. Nhờ khóa cố định, mọi thành viên mới tham gia giữa tuần chỉ có **cộng thêm điểm**, tuyệt đối không bao giờ làm giảm điểm Liên Minh.
+5. **Điểm xếp hạng 2 Liên Minh (cả live `op: 'cup'` lẫn chốt thưởng `16:00` Thứ Sáu ở §7.3):**
+   ```text
+   rawPoints(alliance)    = houses[h0] + houses[h1]
+   scaledPoints(alliance) = Math.round(rawPoints(alliance) * multiplier(alliance))
+   ```
+   Xếp hạng theo `scaledPoints` giảm dần → hòa xét số môn dẫn đầu `firstPlaceCount` → hòa tiếp xét `rawPoints`.
+
+### 11.2. Code mẫu phía Máy chủ (`functions/games/trang-trai-hang-soc-boards.js`)
+
+```js
+const ALLIANCE_ROSTER_WINDOW_WEEKS = 3;
+const ALLIANCE_ROSTER_FLOOR = 4;
+const ALLIANCE_MULTIPLIER_CAP = 2.5;
+
+function round2(v) {
+  return Math.round(v * 100) / 100;
+}
+
+/** Tổng điểm F2 cho 4 Nhà: cộng trực tiếp điểm đóng góp từ 6 bộ môn (không nén 100/75/50/25). */
+function computeF2HouseTotals(disciplines) {
+  const houses = { Gryffindor: 0, Slytherin: 0, Ravenclaw: 0, Hufflepuff: 0 };
+  const firstPlaceCounts = { Gryffindor: 0, Slytherin: 0, Ravenclaw: 0, Hufflepuff: 0 };
+  for (const disc of CUP_DISCIPLINES) {
+    const rawMap = disciplines?.[disc];
+    if (!rawMap) continue;
+    let maxVal = 0;
+    for (const h of HOUSES) {
+      const val = Math.max(0, Math.floor(Number(rawMap[h]) || 0));
+      houses[h] += val;
+      if (val > maxVal) maxVal = val;
+    }
+    if (maxVal > 0) {
+      for (const h of HOUSES) {
+        if (Math.max(0, Math.floor(Number(rawMap[h]) || 0)) === maxVal) {
+          firstPlaceCounts[h] += 1;
+        }
+      }
+    }
+  }
+  return { houses, firstPlaceCounts };
+}
+
+/**
+ * Tính trung bình trượt 3 tuần gần nhất số thành viên hoạt động của từng Nhà
+ * từ lịch sử `weekDoc.activeCountsByHouse` (được ghi khi chốt sổ 16:00 Thứ Sáu ở §7.3).
+ */
+async function computeHouseRollingActiveAvg(db, currentWeekKey, windowWeeks = ALLIANCE_ROSTER_WINDOW_WEEKS) {
+  const snap = await db
+    .collection('gameHouseCupWeeks')
+    .orderBy('createdAt', 'desc')
+    .limit(windowWeeks + 2)
+    .get();
+
+  const recentCounts = [];
+  snap.forEach((doc) => {
+    if (doc.id === currentWeekKey) return;
+    const counts = doc.data()?.activeCountsByHouse;
+    if (!counts || typeof counts !== 'object') return;
+    const total = HOUSES.reduce((s, h) => s + Math.max(0, Number(counts[h]) || 0), 0);
+    if (total > 0 && recentCounts.length < windowWeeks) {
+      recentCounts.push(counts);
+    }
+  });
+
+  const avg = { Gryffindor: 0, Slytherin: 0, Ravenclaw: 0, Hufflepuff: 0 };
+  if (recentCounts.length === 0) return avg;
+  for (const h of HOUSES) {
+    const sum = recentCounts.reduce((s, c) => s + Math.max(0, Number(c[h]) || 0), 0);
+    avg[h] = round2(sum / recentCounts.length);
+  }
+  return avg;
+}
+
+/** Khóa cứng hệ số cân bằng quân số Liên Minh 1 lần duy nhất cho tuần `weekKey`. */
+function buildLockedAllianceBalance(alliances, houseActiveAvg, lockedAt = Date.now()) {
+  const [aSpec, bSpec] = alliances;
+  const avgA = round2((houseActiveAvg[aSpec.houses[0]] || 0) + (houseActiveAvg[aSpec.houses[1]] || 0));
+  const avgB = round2((houseActiveAvg[bSpec.houses[0]] || 0) + (houseActiveAvg[bSpec.houses[1]] || 0));
+  const hasHistory = avgA > 0 || avgB > 0;
+  const effA = hasHistory ? Math.max(ALLIANCE_ROSTER_FLOOR, avgA) : ALLIANCE_ROSTER_FLOOR;
+  const effB = hasHistory ? Math.max(ALLIANCE_ROSTER_FLOOR, avgB) : ALLIANCE_ROSTER_FLOOR;
+
+  let multA = 1;
+  let multB = 1;
+  if (hasHistory) {
+    if (effA < effB) multA = round2(Math.min(ALLIANCE_MULTIPLIER_CAP, effB / effA));
+    else if (effB < effA) multB = round2(Math.min(ALLIANCE_MULTIPLIER_CAP, effA / effB));
+  }
+
+  return {
+    windowWeeks: ALLIANCE_ROSTER_WINDOW_WEEKS,
+    rosterFloor: ALLIANCE_ROSTER_FLOOR,
+    multiplierCap: ALLIANCE_MULTIPLIER_CAP,
+    lockedAt,
+    houseActiveAvg,
+    byAlliance: {
+      [aSpec.id]: { activeAvg: avgA, effectiveRoster: round2(effA), multiplier: multA },
+      [bSpec.id]: { activeAvg: avgB, effectiveRoster: round2(effB), multiplier: multB },
+    },
+  };
+}
+
+/** Gắn điểm gốc & điểm sau nhân hệ số F2 vào `allianceBalance` để trả cho Client & chốt sổ §7.3. */
+function computeF2RankedAlliances(disciplines, alliances, lockedBalance) {
+  const { houses, firstPlaceCounts } = computeF2HouseTotals(disciplines);
+  const byAlliance = {};
+  const list = alliances.map((spec) => {
+    const [h0, h1] = spec.houses;
+    const rawPoints = (houses[h0] || 0) + (houses[h1] || 0);
+    const entry = lockedBalance?.byAlliance?.[spec.id] || {
+      activeAvg: 0,
+      effectiveRoster: ALLIANCE_ROSTER_FLOOR,
+      multiplier: 1,
+    };
+    const multiplier = Math.min(ALLIANCE_MULTIPLIER_CAP, Math.max(1, round2(Number(entry.multiplier) || 1)));
+    const scaledPoints = Math.round(rawPoints * multiplier);
+    byAlliance[spec.id] = {
+      activeAvg: entry.activeAvg || 0,
+      effectiveRoster: entry.effectiveRoster || ALLIANCE_ROSTER_FLOOR,
+      multiplier,
+      rawPoints,
+      scaledPoints,
+    };
+    return {
+      ...spec,
+      rawPoints,
+      multiplier,
+      points: scaledPoints,
+      firstPlaceCount: (firstPlaceCounts[h0] || 0) + (firstPlaceCounts[h1] || 0),
+    };
+  });
+
+  list.sort(
+    (a, b) =>
+      b.points - a.points ||
+      b.firstPlaceCount - a.firstPlaceCount ||
+      b.rawPoints - a.rawPoints
+  );
+
+  return {
+    houses,
+    firstPlaceCounts,
+    rankedAlliances: list,
+    allianceBalance: {
+      windowWeeks: lockedBalance?.windowWeeks || ALLIANCE_ROSTER_WINDOW_WEEKS,
+      rosterFloor: lockedBalance?.rosterFloor || ALLIANCE_ROSTER_FLOOR,
+      multiplierCap: lockedBalance?.multiplierCap || ALLIANCE_MULTIPLIER_CAP,
+      lockedAt: lockedBalance?.lockedAt || Date.now(),
+      houseActiveAvg: lockedBalance?.houseActiveAvg || { Gryffindor: 0, Slytherin: 0, Ravenclaw: 0, Hufflepuff: 0 },
+      byAlliance,
+    },
+  };
+}
+```
+
+### 11.3. Điểm nối cần sửa trong `op: 'cup'` và `payoutHouseCupAllianceWeekly` (§7.3)
+1. **Khi khởi tạo `gameHouseCupWeeks/{weekKey}` đầu tuần (nếu chưa có `weekDoc.allianceBalance`):**
+   - Gọi `const avg = await computeHouseRollingActiveAvg(db, weekKey);`
+   - Gọi `const lockedBalance = buildLockedAllianceBalance(alliances, avg);` và lưu cố định vào `weekDoc.allianceBalance` (cùng `createdAt: Date.now()`).
+2. **Trong `op: 'cup'` (và `op: 'load'`):**
+   - Gọi `const { houses, allianceBalance } = computeF2RankedAlliances(disciplines, alliances, weekDoc.allianceBalance);`
+   - Trả về payload với **`mode: 'f2'`**, `unlimited: true`, `houses`, `disciplines`, `alliances`, `allianceBalance`, `allianceReward`.
+3. **Trong job chốt sổ `16:00` Thứ Sáu (`payoutHouseCupAllianceWeekly` ở §7.3):**
+   - Thay bước xếp hạng `rankedAlliances` cũ bằng `computeF2RankedAlliances(disciplines, alliances, weekDoc.allianceBalance).rankedAlliances` để xác định đúng Liên Minh thắng theo điểm F2 (`scaledPoints`).
+   - Đồng thời ghi nhận tổng số thành viên hoạt động (`≥ 5` ván bất kỳ môn nào) của **cả 4 Nhà** trong tuần vừa kết thúc vào `weekDoc.activeCountsByHouse = { Gryffindor, Slytherin, Ravenclaw, Hufflepuff }` để làm đầu vào trung bình trượt 3 tuần cho tuần kế tiếp.
+
+### 11.4. Ví dụ payload `op: 'cup'` chế độ F2
+```json
+{
+  "weekKey": "2026-W48",
+  "mode": "f2",
+  "unlimited": true,
+  "houses": {
+    "Gryffindor": 640,
+    "Slytherin": 560,
+    "Ravenclaw": 495,
+    "Hufflepuff": 335
+  },
+  "disciplines": {
+    "match3": { "Gryffindor": 140, "Slytherin": 120, "Ravenclaw": 100, "Hufflepuff": 80 },
+    "caro":   { "Gryffindor": 110, "Slytherin": 100, "Ravenclaw": 90,  "Hufflepuff": 60 },
+    "sudoku": { "Gryffindor": 100, "Slytherin": 90,  "Ravenclaw": 80,  "Hufflepuff": 50 },
+    "chess":  { "Gryffindor": 110, "Slytherin": 95,  "Ravenclaw": 85,  "Hufflepuff": 55 },
+    "blocks": { "Gryffindor": 95,  "Slytherin": 85,  "Ravenclaw": 75,  "Hufflepuff": 45 },
+    "jigsaw": { "Gryffindor": 85,  "Slytherin": 70,  "Ravenclaw": 65,  "Hufflepuff": 45 }
+  },
+  "allianceBalance": {
+    "windowWeeks": 3,
+    "rosterFloor": 4,
+    "multiplierCap": 2.5,
+    "lockedAt": 1795168800000,
+    "houseActiveAvg": { "Gryffindor": 7, "Slytherin": 5, "Ravenclaw": 5, "Hufflepuff": 3 },
+    "byAlliance": {
+      "alliance_a": { "activeAvg": 12, "effectiveRoster": 12, "multiplier": 1,   "rawPoints": 1200, "scaledPoints": 1200 },
+      "alliance_b": { "activeAvg": 8,  "effectiveRoster": 8,  "multiplier": 1.5, "rawPoints": 830,  "scaledPoints": 1245 }
+    }
+  }
 }
 ```
 
