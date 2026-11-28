@@ -1,0 +1,4028 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#381b0c" />
+  <title>Khảm Ngọc Hang Sóc — Block Blast × Tetris</title>
+  <link rel="preload" href="../fonts/be-vietnam-pro-700-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="../fonts/be-vietnam-pro-700-vietnamese.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="../fonts/fonts.css" />
+  <style>
+    /* =====================================================================
+       TRANG TRẠI HANG SÓC — EXACT PALETTE TOKENS (--hs-* & --farm-*)
+       ===================================================================== */
+    :root {
+      color-scheme: light;
+      /* Official HPVN & Hang Sóc tokens from src/styles/main.css */
+      --hs-paper: #fdf4dc;
+      --hs-paper-2: #f6e4b8;
+      --hs-ink: #4a2c16;
+      --hs-ink-soft: #7a5638;
+      --hs-cream: #fff6dc;
+      --hs-wood: #381b0c;
+      --hs-wood-2: #6e391c;
+      --hs-brass: #b07d43;
+      --hs-brass-bright: #f4c668;
+      --hs-gold-bright: #ffe484;
+      --hs-gold: #f5b301;
+      --hs-gold-deep: #c98a00;
+      --hs-forest: #142620;
+      --hs-forest-2: #24483f;
+      --hs-ok: #22780f;
+      --hs-ok-bg: #e7f9d4;
+      --hs-bad: #b93822;
+      --hs-bad-bg: #fff1ed;
+      --hs-shade: rgba(74, 44, 22, 0.34);
+
+      --farm-wood-darkest: #381b0c;
+      --farm-wood-dark: #4f2813;
+      --farm-wood-mid: #6e391c;
+      --farm-wood-warm: #874925;
+      --farm-wood-well: #3f1f0e;
+      --farm-brass-bright: #f4c668;
+      --farm-brass-mid: #d4963b;
+      --farm-brass-dark: #8c5919;
+      --farm-sheet-top: #fffcf4;
+      --farm-sheet-bot: #f4e2bc;
+      --farm-sheet-well: #ecd4a4;
+      --farm-sheet-border: #cfa66b;
+      --farm-ink-title: #4a240d;
+      --farm-ink-body: #633416;
+      --farm-crimson-top: #c92a22;
+      --farm-crimson-mid: #a61919;
+      --farm-crimson-bot: #7a1414;
+      --farm-fire-core: #fff6a6;
+      --farm-fire-mid: #ff851b;
+      --farm-fire-deep: #9c2206;
+      --farm-shadow-deep: rgba(34, 16, 5, 0.52);
+
+      --target-size: 36px;
+    }
+
+    @media (pointer: coarse) {
+      :root { --target-size: 44px; }
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      font-family: 'Be Vietnam Pro', 'Be Vietnam Pro Fallback', system-ui, -apple-system, sans-serif;
+      color: var(--hs-ink);
+      background-color: var(--hs-wood);
+      overflow-wrap: break-word;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    :focus-visible {
+      outline: 3px solid var(--hs-gold);
+      outline-offset: 2px;
+    }
+
+    /* Fullscreen Hang Sóc Parlor Frame */
+    .hs-bb-shell {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100dvh;
+      padding:
+        max(6px, env(safe-area-inset-top, 0px))
+        max(10px, env(safe-area-inset-right, 0px))
+        max(6px, env(safe-area-inset-bottom, 0px))
+        max(10px, env(safe-area-inset-left, 0px));
+      gap: 6px;
+      background:
+        linear-gradient(180deg, rgba(58, 28, 10, 0.34) 0%, rgba(36, 17, 7, 0.54) 100%),
+        url('../paintings/burrow_parlor_bg.webp') center center / cover no-repeat;
+      box-shadow: inset 0 0 0 3px var(--farm-brass-bright);
+      overflow: hidden;
+    }
+
+    /* Top Bar — exact Hang Sóc Forest/Wood + Brass Header */
+    .hs-bb-header {
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 13px;
+      background: linear-gradient(180deg, var(--hs-forest-2) 0%, var(--hs-forest) 100%);
+      border: 2px solid var(--farm-brass-bright);
+      box-shadow: 0 3px 0 var(--hs-wood), 0 6px 16px var(--farm-shadow-deep);
+      color: var(--hs-cream);
+    }
+
+    .hs-bb-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-inline-size: 0;
+    }
+
+    .hs-bb-brand img {
+      width: 26px;
+      height: 26px;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
+      flex: none;
+    }
+
+    .hs-bb-title-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      min-inline-size: 0;
+    }
+
+    .hs-bb-title {
+      margin: 0;
+      font-family: 'Be Vietnam Pro', 'Be Vietnam Pro Fallback', system-ui, -apple-system, sans-serif;
+      font-size: 16px;
+      font-weight: 800;
+      line-height: 1.15;
+      color: var(--hs-cream);
+      text-wrap: balance;
+      letter-spacing: -0.01em;
+    }
+
+    .hs-bb-sub {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--farm-brass-bright);
+      line-height: 1.2;
+    }
+
+    /* Mode segmented tabs matching HPVN .hs-tabs */
+    .hs-bb-modes {
+      display: inline-flex;
+      align-items: stretch;
+      gap: 2px;
+      padding: 2px;
+      border-radius: 11px;
+      border: 1.5px solid var(--hs-brass);
+      background: var(--hs-wood);
+    }
+
+    .hs-bb-mode-btn {
+      min-block-size: var(--target-size);
+      min-inline-size: var(--target-size);
+      padding: 0 11px;
+      border: 0;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--hs-cream);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background-color 0.14s ease, color 0.14s ease;
+    }
+
+    .hs-bb-mode-btn[aria-selected="true"] {
+      background: var(--hs-gold);
+      color: var(--hs-ink);
+    }
+
+    /* Score / Goal / Action Pills */
+    .hs-bb-stats {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .hs-bb-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-block-size: 34px;
+      padding: 3px 9px;
+      border-radius: 10px;
+      border: 1.5px solid var(--hs-brass);
+      background: linear-gradient(180deg, var(--farm-sheet-top) 0%, var(--farm-sheet-bot) 100%);
+      color: var(--hs-ink);
+      font-size: 12px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      box-shadow: 0 2px 0 var(--hs-wood);
+    }
+
+    .hs-bb-pill img {
+      width: 17px;
+      height: 17px;
+      object-fit: contain;
+    }
+
+    .hs-bb-pill.is-combo {
+      background: linear-gradient(180deg, var(--hs-gold-bright) 0%, var(--hs-gold) 100%);
+      border-color: var(--farm-brass-dark);
+      color: var(--farm-ink-title);
+      transition: transform 0.14s ease;
+    }
+
+    .hs-bb-pill.is-combo.pop {
+      transform: scale(1.1);
+    }
+
+    .hs-bb-pill .lbl {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--hs-ink-soft);
+    }
+
+    .hs-bb-icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      min-block-size: var(--target-size);
+      min-inline-size: var(--target-size);
+      padding: 0 10px;
+      border-radius: 10px;
+      border: 2px solid var(--farm-brass-bright);
+      background: linear-gradient(180deg, var(--farm-wood-warm) 0%, var(--farm-wood-dark) 100%);
+      color: var(--hs-cream);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      box-shadow: 0 2.5px 0 var(--hs-wood);
+      transition: transform 0.12s ease, filter 0.14s ease;
+    }
+
+    .hs-bb-icon-btn:active {
+      transform: translateY(1.5px);
+    }
+
+    .hs-bb-icon-btn.is-gold {
+      background: linear-gradient(180deg, var(--hs-gold-bright) 0%, var(--hs-gold) 65%, var(--hs-gold-deep) 100%);
+      border-color: var(--hs-wood);
+      color: var(--farm-ink-title);
+    }
+
+    /* Stage Progress & Goal Bar (exact Hang Sóc Parchment Ribbon) */
+    .hs-bb-goalbar {
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 4px 10px;
+      border-radius: 11px;
+      background: linear-gradient(180deg, var(--hs-paper) 0%, var(--hs-paper-2) 100%);
+      border: 2px solid var(--hs-brass);
+      box-shadow: 0 2.5px 0 var(--hs-wood);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .hs-bb-goal-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-inline-size: 0;
+      flex: 1 1 auto;
+    }
+
+    .hs-bb-stage-badge {
+      flex: none;
+      padding: 3px 9px;
+      border-radius: 8px;
+      background: var(--hs-wood);
+      color: var(--farm-brass-bright);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .hs-bb-progress-wrap {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex: 1 1 130px;
+      min-inline-size: 80px;
+      max-inline-size: 290px;
+    }
+
+    .hs-bb-progress-track {
+      position: relative;
+      flex: 1 1 auto;
+      height: 13px;
+      border-radius: 999px;
+      background: rgba(56, 27, 12, 0.22);
+      border: 1.5px solid var(--hs-brass);
+      overflow: hidden;
+      box-shadow: inset 0 2px 3px rgba(56, 27, 12, 0.28);
+    }
+
+    .hs-bb-progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--farm-fire-mid) 0%, var(--hs-gold) 65%, var(--farm-fire-core) 100%);
+      transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .hs-bb-progress-txt {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--hs-ink);
+      white-space: nowrap;
+    }
+
+    .hs-bb-goal-chips {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: nowrap;
+    }
+
+    .hs-bb-goal-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px;
+      border-radius: 8px;
+      background: rgba(176, 125, 67, 0.16);
+      border: 1px solid rgba(176, 125, 67, 0.45);
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--hs-ink);
+      white-space: nowrap;
+    }
+
+    .hs-bb-goal-chip.is-done {
+      background: var(--hs-ok-bg);
+      border-color: var(--hs-ok);
+      color: var(--hs-ok);
+    }
+
+    .hs-bb-goal-chip img {
+      width: 15px;
+      height: 15px;
+      object-fit: contain;
+    }
+
+    /* Gravity Toggle Pill */
+    .hs-bb-gravity-toggle {
+      flex: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-block-size: var(--target-size);
+      padding: 2px 10px;
+      border-radius: 999px;
+      border: 1.5px solid var(--hs-brass);
+      background: var(--farm-sheet-top);
+      color: var(--hs-ink);
+      font-family: inherit;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .hs-bb-gravity-toggle[aria-pressed="true"] {
+      background: var(--hs-ok-bg);
+      border-color: var(--hs-ok);
+      color: var(--hs-ok);
+    }
+
+    /* Main Arena Container */
+    .hs-bb-stage-area {
+      flex: 1 1 0;
+      min-block-size: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 236px;
+      gap: 10px;
+      align-items: stretch;
+      max-inline-size: 1360px;
+      inline-size: 100%;
+      margin: 0 auto;
+    }
+
+    /* Left: Carved Wood & Brass 8x8 Canvas Arena */
+    .hs-bb-board-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-block-size: 0;
+      min-inline-size: 0;
+    }
+
+    .hs-bb-board-frame {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 7px;
+      border-radius: 18px;
+      background: linear-gradient(180deg, var(--farm-wood-warm) 0%, var(--farm-wood-mid) 52%, var(--farm-wood-dark) 100%);
+      border: 2.5px solid var(--farm-brass-bright);
+      box-shadow:
+        0 5px 0 var(--hs-wood),
+        0 14px 32px var(--farm-shadow-deep),
+        inset 0 2px 0 rgba(255, 246, 220, 0.35);
+    }
+
+    .hs-bb-board-frame.hammer-armed {
+      border-color: var(--farm-fire-mid);
+      box-shadow:
+        0 5px 0 var(--hs-wood),
+        0 0 0 4px rgba(255, 133, 27, 0.55),
+        0 14px 32px var(--farm-shadow-deep);
+    }
+
+    #boardCanvas {
+      display: block;
+      border-radius: 12px;
+      touch-action: none;
+      cursor: pointer;
+    }
+
+    #boardCanvas.is-hammer {
+      cursor: crosshair;
+    }
+
+    /* Right Panel: 3-Piece Wood Tray + Rotate + Boosters */
+    .hs-bb-dock {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-block-size: 0;
+      padding: 8px;
+      border-radius: 16px;
+      background: linear-gradient(180deg, var(--hs-paper) 0%, var(--hs-paper-2) 100%);
+      border: 2.5px solid var(--hs-brass);
+      box-shadow: 0 5px 0 var(--hs-wood), 0 10px 24px var(--farm-shadow-deep);
+    }
+
+    .hs-bb-dock-head {
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .hs-bb-dock-title {
+      font-size: 12.5px;
+      font-weight: 800;
+      color: var(--farm-ink-title);
+      line-height: 1.2;
+    }
+
+    .hs-bb-rotate-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      min-block-size: var(--target-size);
+      padding: 0 10px;
+      border-radius: 10px;
+      border: 2px solid var(--farm-brass-dark);
+      background: linear-gradient(180deg, var(--hs-gold-bright) 0%, var(--hs-gold) 100%);
+      color: var(--farm-ink-title);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 2.5px 0 var(--hs-wood);
+      white-space: nowrap;
+    }
+
+    .hs-bb-rotate-btn:active {
+      transform: translateY(1.5px);
+    }
+
+    .hs-bb-tray {
+      flex: 1 1 0;
+      min-block-size: 0;
+      display: grid;
+      grid-template-rows: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .hs-bb-slot {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-block-size: 0;
+      min-inline-size: 0;
+      border-radius: 13px;
+      background: linear-gradient(180deg, var(--farm-wood-dark) 0%, var(--farm-wood-well) 100%);
+      border: 2px solid var(--hs-brass);
+      box-shadow: inset 0 3px 8px rgba(18, 8, 3, 0.55);
+      cursor: grab;
+      touch-action: none;
+      transition: border-color 0.14s ease, opacity 0.16s ease;
+    }
+
+    .hs-bb-slot:active {
+      cursor: grabbing;
+    }
+
+    .hs-bb-slot.is-selected {
+      border-color: var(--hs-gold);
+      box-shadow: inset 0 3px 8px rgba(18, 8, 3, 0.45), 0 0 0 2.5px rgba(245, 179, 1, 0.52);
+    }
+
+    .hs-bb-slot.is-dragging {
+      opacity: 0.25;
+    }
+
+    .hs-bb-slot.is-empty {
+      opacity: 0.34;
+      cursor: default;
+    }
+
+    .hs-bb-slot.is-blocked {
+      border-color: var(--hs-bad);
+      opacity: 0.72;
+    }
+
+    .hs-bb-slot-key {
+      position: absolute;
+      top: 4px;
+      left: 6px;
+      font-size: 10px;
+      font-weight: 800;
+      color: rgba(244, 198, 104, 0.92);
+      pointer-events: none;
+    }
+
+    .hs-bb-slot-badge {
+      position: absolute;
+      top: 4px;
+      right: 5px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1px 5px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 800;
+      line-height: 1.25;
+      pointer-events: none;
+    }
+
+    .hs-bb-slot.needs-rotate .hs-bb-slot-badge {
+      display: inline-flex;
+      background: var(--hs-gold);
+      color: var(--farm-ink-title);
+    }
+
+    .hs-bb-slot.is-blocked .hs-bb-slot-badge {
+      display: inline-flex;
+      background: var(--farm-crimson-mid);
+      color: var(--hs-cream);
+    }
+
+    @media (pointer: coarse) {
+      .hs-bb-slot-key { display: none; }
+    }
+
+    .hs-bb-slot canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border-radius: 11px;
+      pointer-events: none;
+    }
+
+    /* Footer stack inside Dock (Desktop vertical, Mobile horizontal) */
+    .hs-bb-dock-foot {
+      flex: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    /* Fixed-height Unified Dragon Rage Gauge + CTA Button (ZERO Layout Shift!) */
+    .hs-bb-rage-btn {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      width: 100%;
+      min-block-size: 44px;
+      padding: 0 11px;
+      border-radius: 11px;
+      border: 2px solid var(--hs-brass);
+      background: var(--farm-wood-well);
+      color: var(--hs-cream);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 800;
+      overflow: hidden;
+      cursor: default;
+      box-shadow: inset 0 2px 5px rgba(18, 8, 3, 0.55);
+      transition: border-color 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .hs-bb-rage-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 0%;
+      background: linear-gradient(90deg, var(--farm-crimson-bot) 0%, var(--farm-crimson-top) 55%, var(--farm-fire-mid) 100%);
+      transition: width 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+      pointer-events: none;
+    }
+
+    .hs-bb-rage-label,
+    .hs-bb-rage-pct {
+      position: relative;
+      z-index: 1;
+      text-shadow: 0 1px 2px rgba(28, 12, 4, 0.9);
+      white-space: nowrap;
+    }
+
+    .hs-bb-rage-btn.is-ready {
+      cursor: pointer;
+      border-color: var(--farm-fire-core);
+      box-shadow: 0 3px 0 var(--hs-wood), 0 0 14px rgba(255, 133, 27, 0.65);
+      animation: ragePulse 1s ease-in-out infinite;
+    }
+
+    .hs-bb-rage-btn.is-ready .hs-bb-rage-fill {
+      width: 100% !important;
+      background: linear-gradient(180deg, var(--farm-crimson-top) 0%, var(--farm-crimson-mid) 60%, var(--farm-crimson-bot) 100%);
+    }
+
+    .hs-bb-rage-btn.is-ready .hs-bb-rage-pct {
+      display: none;
+    }
+
+    .hs-bb-rage-btn.is-ready .hs-bb-rage-label {
+      width: 100%;
+      text-align: center;
+      letter-spacing: 0.01em;
+    }
+
+    @keyframes ragePulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.025); }
+    }
+
+    /* Power-Up Spells Row */
+    .hs-bb-spells {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      flex: none;
+    }
+
+    .hs-bb-spell-btn {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      min-block-size: 46px;
+      padding: 5px 7px;
+      border-radius: 11px;
+      border: 2px solid var(--farm-brass-bright);
+      background: linear-gradient(180deg, var(--farm-wood-warm) 0%, var(--farm-wood-dark) 100%);
+      color: var(--hs-cream);
+      font-family: inherit;
+      font-size: 11.5px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 3px 0 var(--hs-wood);
+      transition: transform 0.12s ease, filter 0.14s ease, border-color 0.14s ease;
+    }
+
+    .hs-bb-spell-btn:active {
+      transform: translateY(1.5px);
+    }
+
+    .hs-bb-spell-btn img {
+      width: 22px;
+      height: 22px;
+      object-fit: contain;
+      flex: none;
+    }
+
+    .hs-bb-spell-btn .spell-col {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      line-height: 1.15;
+    }
+
+    .hs-bb-spell-btn .spell-qty {
+      font-size: 10.5px;
+      color: var(--farm-brass-bright);
+      font-weight: 700;
+    }
+
+    .hs-bb-spell-btn.is-armed {
+      background: linear-gradient(180deg, var(--farm-crimson-top) 0%, var(--farm-crimson-bot) 100%);
+      border-color: var(--farm-fire-core);
+      box-shadow: 0 0 0 3px rgba(255, 133, 27, 0.55), 0 3px 0 var(--hs-wood);
+      text-shadow: 0 1px 2px rgba(28, 12, 4, 0.85);
+    }
+
+    .hs-bb-spell-btn.is-hint {
+      box-shadow: 0 0 0 3px rgba(245, 179, 1, 0.7), 0 3px 0 var(--hs-wood);
+    }
+
+    .hs-bb-spell-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      filter: grayscale(0.35);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hs-bb-rage-btn { animation: none; }
+      .hs-bb-progress-fill, .hs-bb-rage-fill { transition: none; }
+    }
+
+    /* Floating Drag Ghost Canvas */
+    #dragGhostCanvas {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 90;
+      display: none;
+    }
+
+    /* Contextual Status Banner over board (Hammer / Toast) */
+    .hs-bb-banner {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      max-inline-size: calc(100% - 20px);
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: var(--hs-forest);
+      border: 2px solid var(--farm-brass-bright);
+      color: var(--hs-cream);
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+      box-shadow: 0 4px 12px var(--farm-shadow-deep);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.16s ease;
+    }
+
+    .hs-bb-banner.is-visible {
+      opacity: 1;
+    }
+
+    /* Native <dialog> Result Modal (modern-web-guidance: dialog + overscroll-behavior) */
+    dialog.hs-bb-dialog {
+      padding: 0;
+      border: 3px solid var(--farm-brass-bright);
+      border-radius: 20px;
+      background: linear-gradient(180deg, var(--hs-paper) 0%, var(--hs-paper-2) 100%);
+      color: var(--hs-ink);
+      inline-size: min(400px, calc(100vw - 28px));
+      max-block-size: calc(100dvh - 28px);
+      box-shadow: 0 8px 0 var(--hs-wood), 0 20px 44px rgba(22, 10, 4, 0.65);
+      overflow: hidden;
+    }
+
+    dialog.hs-bb-dialog[open] {
+      display: flex;
+      flex-direction: column;
+    }
+
+    dialog.hs-bb-dialog:modal {
+      overscroll-behavior: contain;
+    }
+
+    dialog.hs-bb-dialog::backdrop {
+      background: rgba(34, 16, 5, 0.68);
+      overflow: hidden;
+      overscroll-behavior: contain;
+    }
+
+    .hs-bb-dlg-head {
+      flex: none;
+      padding: 11px 16px;
+      background: linear-gradient(180deg, var(--hs-forest-2) 0%, var(--hs-forest) 100%);
+      border-bottom: 2px solid var(--farm-brass-bright);
+      color: var(--hs-cream);
+      text-align: center;
+    }
+
+    .hs-bb-dlg-head h2 {
+      margin: 0;
+      font-family: 'Be Vietnam Pro', 'Be Vietnam Pro Fallback', system-ui, -apple-system, sans-serif;
+      font-size: 20px;
+      font-weight: 800;
+      text-wrap: balance;
+    }
+
+    .hs-bb-dlg-body {
+      flex: 1 1 auto;
+      min-block-size: 0;
+      overflow-y: auto;
+      padding: 14px 16px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 11px;
+      text-align: center;
+    }
+
+    .hs-bb-dlg-score-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .hs-bb-dlg-metric {
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: var(--farm-sheet-top);
+      border: 1.5px solid var(--farm-sheet-border);
+    }
+
+    .hs-bb-dlg-metric .m-lbl {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--hs-ink-soft);
+    }
+
+    .hs-bb-dlg-metric .m-val {
+      display: block;
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--farm-ink-title);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .hs-bb-dlg-note {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--hs-ink-soft);
+      text-wrap: pretty;
+    }
+
+    .hs-bb-dlg-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    .hs-bb-dlg-actions button {
+      flex: 1 1 auto;
+      min-block-size: 44px;
+      font-size: 14px;
+    }
+
+    .hs-bb-dlg-actions button[hidden] {
+      display: none;
+    }
+
+    /* =====================================================================
+       RESPONSIVE: PORTRAIT MOBILE & TABLET (< 840px, tall viewports)
+       ===================================================================== */
+    @media (max-width: 840px) and (min-height: 521px), (max-width: 559px) {
+      .hs-bb-shell {
+        gap: 4px;
+        padding:
+          max(4px, env(safe-area-inset-top, 0px))
+          max(5px, env(safe-area-inset-right, 0px))
+          max(4px, env(safe-area-inset-bottom, 0px))
+          max(5px, env(safe-area-inset-left, 0px));
+      }
+      .hs-bb-header {
+        padding: 5px 7px;
+        gap: 5px;
+      }
+      .hs-bb-brand img { width: 22px; height: 22px; }
+      .hs-bb-sub { display: none; }
+      .hs-bb-title { font-size: 14px; }
+      .hs-bb-mode-btn {
+        padding: 0 9px;
+        font-size: 11.5px;
+        min-block-size: max(36px, var(--target-size));
+      }
+      .hs-bb-stats {
+        width: 100%;
+        justify-content: space-between;
+        gap: 4px;
+      }
+      .hs-bb-pill {
+        min-block-size: 32px;
+        padding: 2px 7px;
+        font-size: 11px;
+        gap: 4px;
+      }
+      .hs-bb-pill .lbl { display: none; }
+      .hs-bb-pill img { width: 15px; height: 15px; }
+      .hs-bb-icon-btn {
+        min-block-size: max(36px, var(--target-size));
+        padding: 0 8px;
+        font-size: 11px;
+      }
+      .hs-bb-goalbar {
+        padding: 4px 7px;
+        gap: 5px;
+        flex-wrap: nowrap;
+      }
+      .hs-bb-goal-left {
+        gap: 5px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .hs-bb-stage-badge { font-size: 11px; padding: 2px 7px; }
+      .hs-bb-progress-wrap {
+        flex: 1 1 95px;
+        min-inline-size: 72px;
+        gap: 5px;
+      }
+      .hs-bb-progress-track { height: 11px; }
+      .hs-bb-progress-txt { font-size: 11px; }
+      .hs-bb-goal-chip { font-size: 10.5px; padding: 2px 5px; }
+      .hs-bb-gravity-toggle {
+        min-block-size: max(36px, var(--target-size));
+        padding: 2px 8px;
+        font-size: 10.5px;
+      }
+      .hs-bb-stage-area {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr) auto;
+        gap: 5px;
+      }
+      .hs-bb-board-frame {
+        padding: 4px;
+        border-width: 2px;
+        border-radius: 14px;
+      }
+      .hs-bb-dock {
+        padding: 6px 7px;
+        gap: 5px;
+        border-radius: 14px;
+      }
+      .hs-bb-dock-title { font-size: 12px; }
+      .hs-bb-rotate-btn {
+        min-block-size: max(38px, var(--target-size));
+        padding: 0 10px;
+        font-size: 11.5px;
+      }
+      .hs-bb-tray {
+        grid-template-rows: none;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        height: 86px;
+        flex: none;
+      }
+      .hs-bb-dock-foot {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 6px;
+        align-items: stretch;
+      }
+      .hs-bb-rage-btn {
+        min-block-size: 44px;
+        font-size: 11.5px;
+        padding: 0 9px;
+      }
+      .hs-bb-spells {
+        grid-template-columns: repeat(2, auto);
+        gap: 5px;
+      }
+      .hs-bb-spell-btn {
+        min-block-size: 44px;
+        padding: 4px 8px;
+        font-size: 11px;
+        gap: 4px;
+      }
+      .hs-bb-spell-btn img { width: 20px; height: 20px; }
+    }
+
+    /* Tablet Portrait (600px–840px & tall) gets a roomier tray proportional to the big board */
+    @media (min-width: 600px) and (max-width: 840px) and (min-height: 860px) {
+      .hs-bb-tray { height: 116px; }
+      .hs-bb-pill .lbl { display: inline; }
+      .hs-bb-stats { width: auto; }
+    }
+
+    /* Compact Portrait Mobile (iPhone SE <= 680px tall or short embed): tighter vertical rhythm for bigger board */
+    @media (max-width: 559px) and (max-height: 700px) {
+      .hs-bb-tray { height: 74px; }
+      .hs-bb-header { padding: 4px 6px; gap: 4px; }
+      .hs-bb-dock { padding: 5px 6px; gap: 4px; }
+      .hs-bb-mode-btn, .hs-bb-icon-btn, .hs-bb-gravity-toggle { min-block-size: 36px; }
+      .hs-bb-rotate-btn { min-block-size: 38px; }
+      .hs-bb-rage-btn, .hs-bb-spell-btn { min-block-size: 42px; }
+    }
+
+    /* =====================================================================
+       RESPONSIVE: MOBILE LANDSCAPE & SHORT WIDE VIEWPORTS (max-height: 520px)
+       ===================================================================== */
+    @media (max-height: 520px) and (min-width: 560px) {
+      .hs-bb-shell {
+        gap: 4px;
+        padding:
+          max(4px, env(safe-area-inset-top, 0px))
+          max(8px, env(safe-area-inset-right, 0px))
+          max(4px, env(safe-area-inset-bottom, 0px))
+          max(8px, env(safe-area-inset-left, 0px));
+      }
+      .hs-bb-header {
+        flex-wrap: nowrap;
+        padding: 3px 8px;
+        gap: 5px;
+        border-radius: 10px;
+      }
+      .hs-bb-brand img { width: 20px; height: 20px; }
+      .hs-bb-title { font-size: 13px; white-space: nowrap; }
+      .hs-bb-sub { display: none; }
+      .hs-bb-mode-btn {
+        min-block-size: 30px;
+        padding: 0 8px;
+        font-size: 11px;
+      }
+      .hs-bb-stats {
+        flex-wrap: nowrap;
+        gap: 4px;
+      }
+      .hs-bb-pill {
+        min-block-size: 28px;
+        padding: 2px 7px;
+        font-size: 11px;
+      }
+      .hs-bb-pill .lbl { display: none; }
+      .hs-bb-pill img { width: 14px; height: 14px; }
+      .hs-bb-icon-btn {
+        min-block-size: 30px;
+        padding: 0 8px;
+        font-size: 11px;
+      }
+      .hs-bb-goalbar {
+        padding: 3px 8px;
+        gap: 6px;
+        border-radius: 9px;
+      }
+      .hs-bb-stage-badge { font-size: 10.5px; padding: 2px 6px; }
+      .hs-bb-progress-track { height: 10px; }
+      .hs-bb-progress-txt, .hs-bb-goal-chip { font-size: 10.5px; }
+      .hs-bb-gravity-toggle {
+        min-block-size: 28px;
+        padding: 2px 8px;
+        font-size: 10.5px;
+      }
+      .hs-bb-stage-area {
+        grid-template-columns: minmax(0, 1fr) minmax(260px, 46vw);
+        grid-template-rows: minmax(0, 1fr);
+        gap: 8px;
+      }
+      .hs-bb-board-frame {
+        padding: 4px;
+        border-width: 2px;
+        border-radius: 13px;
+      }
+      .hs-bb-dock {
+        padding: 6px;
+        gap: 5px;
+        border-radius: 12px;
+      }
+      .hs-bb-dock-title { font-size: 11.5px; }
+      .hs-bb-rotate-btn {
+        min-block-size: 32px;
+        padding: 0 8px;
+        font-size: 11px;
+      }
+      /* Horizontal 3-column tray in landscape so slots stay square & huge! */
+      .hs-bb-tray {
+        grid-template-rows: minmax(0, 1fr);
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 5px;
+        flex: 1 1 0;
+      }
+      .hs-bb-dock-foot {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 5px;
+        align-items: stretch;
+      }
+      .hs-bb-rage-btn {
+        min-block-size: 38px;
+        font-size: 11px;
+        padding: 0 8px;
+      }
+      .hs-bb-spells {
+        grid-template-columns: repeat(2, auto);
+        gap: 4px;
+      }
+      .hs-bb-spell-btn {
+        min-block-size: 38px;
+        padding: 3px 7px;
+        font-size: 10.5px;
+        gap: 4px;
+      }
+      .hs-bb-spell-btn img { width: 18px; height: 18px; }
+    }
+
+    /* =====================================================================
+       HPVN EMBED MODE (?embed=1 inside #puzzleArcadeDialog)
+       ===================================================================== */
+    body.is-embed .hs-bb-shell {
+      padding:
+        max(4px, env(safe-area-inset-top, 0px))
+        max(6px, env(safe-area-inset-right, 0px))
+        max(4px, env(safe-area-inset-bottom, 0px))
+        max(6px, env(safe-area-inset-left, 0px));
+      gap: 4px;
+      box-shadow: none;
+    }
+
+    body.is-embed .hs-bb-header {
+      padding: 4px 8px;
+      gap: 5px;
+      border-radius: 11px;
+      box-shadow: 0 2px 0 var(--hs-wood), 0 4px 10px var(--farm-shadow-deep);
+    }
+
+    body.is-embed .hs-bb-sub {
+      display: none;
+    }
+
+    body.is-embed .hs-bb-goalbar {
+      padding: 3px 8px;
+      gap: 6px;
+      border-radius: 10px;
+    }
+
+    body.is-embed .hs-bb-stage-area {
+      gap: 8px;
+    }
+
+    body.is-embed .hs-bb-board-frame {
+      padding: 5px;
+    }
+
+    body.is-embed .hs-bb-dock {
+      padding: 6px;
+      gap: 5px;
+    }
+
+    @media (max-width: 640px) {
+      body.is-embed .hs-bb-brand {
+        display: none;
+      }
+      body.is-embed .hs-bb-header {
+        padding: 4px 6px;
+        gap: 4px;
+        justify-content: center;
+      }
+      body.is-embed .hs-bb-mode-btn {
+        min-block-size: 32px;
+        padding: 0 8px;
+        font-size: 11px;
+      }
+      body.is-embed .hs-bb-icon-btn {
+        min-block-size: 32px;
+        padding: 0 7px;
+        font-size: 11px;
+      }
+      body.is-embed .hs-bb-pill {
+        min-block-size: 28px;
+        padding: 2px 6px;
+        font-size: 11px;
+      }
+      body.is-embed .hs-bb-goalbar {
+        padding: 3px 6px;
+        gap: 4px;
+      }
+      body.is-embed .hs-bb-gravity-toggle {
+        min-block-size: 30px;
+        padding: 2px 7px;
+        font-size: 10.5px;
+      }
+      body.is-embed .hs-bb-stage-area {
+        gap: 4px;
+      }
+      body.is-embed .hs-bb-board-frame {
+        padding: 3px;
+      }
+      body.is-embed .hs-bb-dock {
+        padding: 5px 6px;
+        gap: 4px;
+      }
+      body.is-embed .hs-bb-rotate-btn {
+        min-block-size: 34px;
+        padding: 0 8px;
+        font-size: 11px;
+      }
+      body.is-embed .hs-bb-tray {
+        height: 70px;
+      }
+      body.is-embed .hs-bb-rage-btn,
+      body.is-embed .hs-bb-spell-btn {
+        min-block-size: 38px;
+        font-size: 11px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="hs-bb-shell">
+    <!-- Top Header -->
+    <header class="hs-bb-header">
+      <div class="hs-bb-brand">
+        <img src="../sprites/m3_sp_bomb.webp" alt="" width="26" height="26" />
+        <div class="hs-bb-title-wrap">
+          <h1 class="hs-bb-title">Khảm Ngọc Hang Sóc</h1>
+          <span class="hs-bb-sub">Block Blast × Tetris · Khảo Thí Hang Sóc</span>
+        </div>
+      </div>
+
+      <div class="hs-bb-modes" role="tablist" aria-label="Chọn chế độ chơi">
+        <button id="btnModeStage" type="button" role="tab" aria-selected="true" class="hs-bb-mode-btn">Màn 1–777</button>
+        <button id="btnModeEndless" type="button" role="tab" aria-selected="false" class="hs-bb-mode-btn">Vô Tận</button>
+      </div>
+
+      <div class="hs-bb-stats">
+        <div class="hs-bb-pill" aria-label="Điểm hiện tại">
+          <img src="../sprites/m3_icon_star.webp" alt="" />
+          <span class="lbl">Điểm</span>
+          <span id="uiScore">0</span>
+        </div>
+        <div class="hs-bb-pill" aria-label="Kỷ lục cao nhất">
+          <img src="../sprites/ui_icon_golden_sickle.webp" alt="" />
+          <span class="lbl">Kỷ lục</span>
+          <span id="uiBest">0</span>
+        </div>
+        <div id="uiComboPill" class="hs-bb-pill is-combo" aria-label="Chuỗi nổ">
+          <span>Combo ×1</span>
+        </div>
+        <button id="btnMute" type="button" class="hs-bb-icon-btn" aria-pressed="false" aria-label="Bật tắt âm thanh">Âm: Bật</button>
+        <button id="btnRestart" type="button" class="hs-bb-icon-btn is-gold">Ván mới</button>
+      </div>
+    </header>
+
+    <!-- Stage Goal & Gravity Ribbon -->
+    <section class="hs-bb-goalbar" aria-label="Mục tiêu màn chơi">
+      <div class="hs-bb-goal-left">
+        <span id="uiStageBadge" class="hs-bb-stage-badge">Màn 1</span>
+        <div class="hs-bb-progress-wrap">
+          <div class="hs-bb-progress-track">
+            <div id="uiProgressFill" class="hs-bb-progress-fill"></div>
+          </div>
+          <span id="uiProgressTxt" class="hs-bb-progress-txt">0 / 1.500</span>
+        </div>
+        <div id="uiGoalChips" class="hs-bb-goal-chips"></div>
+      </div>
+      <button id="btnGravityToggle" type="button" class="hs-bb-gravity-toggle" aria-pressed="true" title="Khi xóa hàng ngang hoặc nổ bom, gạch phía trên sập xuống tạo nổ liên hoàn kiểu Tetris">
+        Sập tầng: BẬT
+      </button>
+    </section>
+
+    <!-- Main Play Area -->
+    <section class="hs-bb-stage-area">
+      <div class="hs-bb-board-wrap" id="boardWrap">
+        <div id="boardBanner" class="hs-bb-banner" role="status">
+          Chạm vào vùng gạch trên bảng để đập Búa 3×3!
+        </div>
+        <div id="boardFrame" class="hs-bb-board-frame">
+          <canvas id="boardCanvas" aria-label="Bàn chơi Khảm Ngọc 8×8"></canvas>
+        </div>
+      </div>
+
+      <!-- Right / Bottom Piece Tray & Boosters -->
+      <aside class="hs-bb-dock" aria-label="Khay khối ngọc và bùa trợ chiến">
+        <div class="hs-bb-dock-head">
+          <span class="hs-bb-dock-title">Khay Ngọc</span>
+          <button id="btnRotate" type="button" class="hs-bb-rotate-btn" title="Xoay khối đang chọn 90° (Phím R)">
+            ↻ Xoay (R)
+          </button>
+        </div>
+
+        <div id="pieceTray" class="hs-bb-tray">
+          <div class="hs-bb-slot" data-slot="0" tabindex="0" role="button" aria-label="Khối ngọc 1">
+            <span class="hs-bb-slot-key">1</span>
+            <span class="hs-bb-slot-badge" aria-hidden="true"></span>
+            <canvas data-slot-canvas="0"></canvas>
+          </div>
+          <div class="hs-bb-slot" data-slot="1" tabindex="0" role="button" aria-label="Khối ngọc 2">
+            <span class="hs-bb-slot-key">2</span>
+            <span class="hs-bb-slot-badge" aria-hidden="true"></span>
+            <canvas data-slot-canvas="1"></canvas>
+          </div>
+          <div class="hs-bb-slot" data-slot="2" tabindex="0" role="button" aria-label="Khối ngọc 3">
+            <span class="hs-bb-slot-key">3</span>
+            <span class="hs-bb-slot-badge" aria-hidden="true"></span>
+            <canvas data-slot-canvas="2"></canvas>
+          </div>
+        </div>
+
+        <div class="hs-bb-dock-foot">
+          <button id="btnDragonBlast" type="button" class="hs-bb-rage-btn" aria-disabled="true" title="Tích đầy 100% Nộ Hỏa Long để quét cháy 2 hàng + 1 cột đầy nhất!">
+            <span id="uiRageFill" class="hs-bb-rage-fill"></span>
+            <span id="uiRageLabel" class="hs-bb-rage-label">Nộ Hỏa Long</span>
+            <span id="uiRagePct" class="hs-bb-rage-pct">25%</span>
+          </button>
+
+          <div class="hs-bb-spells">
+            <button id="btnSpellHammer" type="button" class="hs-bb-spell-btn" title="Nổ tung vùng 3×3 bất kỳ trên bảng">
+              <img src="../sprites/m3_boost_hammer.webp" alt="" />
+              <span class="spell-col">
+                <span>Búa 3×3</span>
+                <span id="uiHammerQty" class="spell-qty">×2</span>
+              </span>
+            </button>
+            <button id="btnSpellShuffle" type="button" class="hs-bb-spell-btn" title="Đổi ngay 3 khối ngọc mới">
+              <img src="../sprites/m3_boost_shuffle.webp" alt="" />
+              <span class="spell-col">
+                <span>Đổi Khay</span>
+                <span id="uiShuffleQty" class="spell-qty">×3</span>
+              </span>
+            </button>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <canvas id="dragGhostCanvas" aria-hidden="true"></canvas>
+  <div id="srLive" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Native Modal Dialog for Stage Clear / Game Over -->
+  <dialog id="resultDialog" class="hs-bb-dialog" aria-labelledby="dlgTitle">
+    <div class="hs-bb-dlg-head">
+      <h2 id="dlgTitle">Hoàn Thành Màn 1!</h2>
+    </div>
+    <div class="hs-bb-dlg-body">
+      <div class="hs-bb-dlg-score-grid">
+        <div class="hs-bb-dlg-metric">
+          <span class="m-lbl">Tổng Điểm</span>
+          <span id="dlgScore" class="m-val">0</span>
+        </div>
+        <div class="hs-bb-dlg-metric">
+          <span class="m-lbl">Chuỗi Nổ Đỉnh</span>
+          <span id="dlgMaxCombo" class="m-val">×1</span>
+        </div>
+        <div class="hs-bb-dlg-metric">
+          <span class="m-lbl">Cú Nổ Lớn Nhất</span>
+          <span id="dlgBiggestBlast" class="m-val">0 ô</span>
+        </div>
+        <div class="hs-bb-dlg-metric">
+          <span class="m-lbl">Kỷ Lục Cá Nhân</span>
+          <span id="dlgBest" class="m-val">0</span>
+        </div>
+      </div>
+      <p id="dlgNote" class="hs-bb-dlg-note"></p>
+      <form method="dialog" class="hs-bb-dlg-actions">
+        <button id="btnDlgSecondary" type="submit" value="retry" class="hs-bb-icon-btn">Chơi lại</button>
+        <button id="btnDlgPrimary" type="submit" value="next" class="hs-bb-icon-btn is-gold" autofocus>Sang Màn 2</button>
+      </form>
+    </div>
+  </dialog>
+
+  <script>
+  (() => {
+    'use strict';
+
+    // =========================================================================
+    // 1. HANG SÓC PALETTE, EMBED BRIDGE, SAFE STORAGE & SPRITES
+    // =========================================================================
+    const GRID = 8;
+    const MAX_STAGE = 777;
+    const ENDLESS_MILESTONE_STEP = 1500;
+    const URL_PARAMS = new URLSearchParams(location.search);
+    const IS_EMBED = URL_PARAMS.get('embed') === '1';
+    const EMBED_TOKEN = URL_PARAMS.get('token') || '';
+    const BONUS_CHANNEL = 'hs-bonus-arcade';
+    const GAME_ID = 'block_blast';
+    let REDUCED_MOTION = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    if (IS_EMBED) {
+      document.body.classList.add('is-embed');
+    }
+
+    const STORAGE_KEYS = {
+      bestStage: 'hangsoc_preview_bb_best_stage_v2',
+      bestEndless: 'hangsoc_preview_bb_best_endless_v2',
+      unlockedStage: 'hangsoc_preview_bb_stage_v2',
+      muted: 'hangsoc_preview_bb_muted_v2',
+    };
+
+    const embedMemoryStore = new Map();
+
+    function safeGet(key, fallback = '') {
+      if (IS_EMBED) {
+        return embedMemoryStore.has(key) ? embedMemoryStore.get(key) : fallback;
+      }
+      try {
+        const val = localStorage.getItem(key);
+        return val === null ? fallback : val;
+      } catch {
+        return fallback;
+      }
+    }
+
+    function safeSet(key, val) {
+      if (IS_EMBED) {
+        embedMemoryStore.set(key, String(val));
+        return;
+      }
+      try {
+        localStorage.setItem(key, String(val));
+      } catch {}
+    }
+
+    function postToParent(type, extra = {}) {
+      if (!window.parent || window.parent === window) return;
+      try {
+        window.parent.postMessage({
+          channel: BONUS_CHANNEL,
+          type,
+          gameId: GAME_ID,
+          token: EMBED_TOKEN,
+          ...extra,
+        }, '*');
+      } catch {}
+    }
+
+    // 5 Hogwarts House Jewel Colors tuned directly to Hang Sóc warm palette
+    const GEM_STYLES = [
+      { id: 'ruby',     name: 'Hồng Ngọc',  top: '#ff7066', mid: '#e03e36', bot: '#99140a' },
+      { id: 'emerald',  name: 'Lục Bảo',    top: '#9df043', mid: '#4ab818', bot: '#226908' },
+      { id: 'sapphire', name: 'Lam Ngọc',   top: '#7ee2ff', mid: '#2e8de0', bot: '#17519c' },
+      { id: 'topaz',    name: 'Hoàng Ngọc', top: '#fff08a', mid: '#f5b301', bot: '#b46900' },
+      { id: 'amethyst', name: 'Thạch Anh',  top: '#e28fff', mid: '#a840dc', bot: '#641894' },
+    ];
+
+    // Load only the real Hang Sóc .webp sprites rendered on Canvas (zero unused fetches)
+    const SPRITE_URLS = {
+      bomb: '../sprites/m3_sp_bomb.webp',
+      crate: '../sprites/m3_obs_box_1.webp',
+    };
+    const SPRITES = {};
+    for (const [k, url] of Object.entries(SPRITE_URLS)) {
+      const img = new Image();
+      img.onload = () => {
+        if (typeof renderTrayCanvases === 'function' && state?.tray) {
+          renderTrayCanvases();
+        }
+      };
+      img.src = url;
+      SPRITES[k] = img;
+    }
+
+    // Classic Block Blast + Tetris piece templates
+    const SHAPES = [
+      { cells: [[0,0]], weight: 4 },
+      { cells: [[0,0],[0,1]], weight: 7 },
+      { cells: [[0,0],[0,1],[0,2]], weight: 8 },
+      { cells: [[0,0],[0,1],[1,0]], weight: 9 },
+      { cells: [[0,0],[0,1],[0,2],[0,3]], weight: 8 },
+      { cells: [[0,0],[0,1],[1,0],[1,1]], weight: 10 },
+      { cells: [[0,0],[0,1],[0,2],[1,1]], weight: 10 },
+      { cells: [[0,0],[1,0],[2,0],[2,1]], weight: 9 },
+      { cells: [[0,1],[1,1],[2,1],[2,0]], weight: 9 },
+      { cells: [[0,0],[0,1],[1,1],[1,2]], weight: 7 },
+      { cells: [[0,1],[0,2],[1,0],[1,1]], weight: 7 },
+      { cells: [[0,0],[0,1],[0,2],[1,0],[2,0]], weight: 5 },
+      { cells: [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]], weight: 4 },
+      { cells: [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]], weight: 2 },
+    ];
+    const SHAPES_ASC = [...SHAPES].sort((a, b) => a.cells.length - b.cells.length);
+
+    // =========================================================================
+    // 2. PROCEDURAL WEB AUDIO SYNTH (Compressor-Protected + Cached Noise)
+    // =========================================================================
+    let audioCtx = null;
+    let masterOut = null;
+    let cachedNoiseBuf = null;
+    let soundEnabled = safeGet(STORAGE_KEYS.muted, '0') !== '1';
+
+    function ensureAudio() {
+      if (!soundEnabled) return null;
+      if (!audioCtx) {
+        try {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return null;
+          audioCtx = new AC();
+          const comp = audioCtx.createDynamicsCompressor();
+          comp.threshold.value = -12;
+          comp.knee.value = 18;
+          comp.ratio.value = 6;
+          comp.connect(audioCtx.destination);
+          masterOut = comp;
+
+          const len = Math.floor(audioCtx.sampleRate * 0.34);
+          cachedNoiseBuf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+          const data = cachedNoiseBuf.getChannelData(0);
+          for (let i = 0; i < len; i++) {
+            data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.8);
+          }
+        } catch {
+          return null;
+        }
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+      }
+      return audioCtx;
+    }
+
+    function playPlaceSfx() {
+      const ctx = ensureAudio();
+      if (!ctx || !masterOut) return;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(220, now);
+      osc.frequency.exponentialRampToValueAtTime(110, now + 0.07);
+      gain.gain.setValueAtTime(0.22, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      osc.connect(gain).connect(masterOut);
+      osc.start(now);
+      osc.stop(now + 0.09);
+    }
+
+    function playInvalidSfx() {
+      const ctx = ensureAudio();
+      if (!ctx || !masterOut) return;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(150, now);
+      osc.frequency.exponentialRampToValueAtTime(92, now + 0.08);
+      gain.gain.setValueAtTime(0.14, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+      osc.connect(gain).connect(masterOut);
+      osc.start(now);
+      osc.stop(now + 0.1);
+    }
+
+    function playRotateSfx() {
+      const ctx = ensureAudio();
+      if (!ctx || !masterOut) return;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(420, now);
+      osc.frequency.exponentialRampToValueAtTime(640, now + 0.06);
+      gain.gain.setValueAtTime(0.14, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+      osc.connect(gain).connect(masterOut);
+      osc.start(now);
+      osc.stop(now + 0.08);
+    }
+
+    function playBlastSfx(combo = 1, isMega = false) {
+      const ctx = ensureAudio();
+      if (!ctx || !masterOut) return;
+      const now = ctx.currentTime;
+
+      const sub = ctx.createOscillator();
+      const subGain = ctx.createGain();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(isMega ? 155 : 130, now);
+      sub.frequency.exponentialRampToValueAtTime(34, now + (isMega ? 0.34 : 0.22));
+      subGain.gain.setValueAtTime(isMega ? 0.4 : 0.28, now);
+      subGain.gain.exponentialRampToValueAtTime(0.001, now + (isMega ? 0.36 : 0.24));
+      sub.connect(subGain).connect(masterOut);
+      sub.start(now);
+      sub.stop(now + 0.38);
+
+      if (cachedNoiseBuf) {
+        const noise = ctx.createBufferSource();
+        noise.buffer = cachedNoiseBuf;
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(isMega ? 720 : 960, now);
+        filter.Q.value = 1.1;
+        const nGain = ctx.createGain();
+        const dur = isMega ? 0.32 : 0.18;
+        nGain.gain.setValueAtTime(isMega ? 0.3 : 0.18, now);
+        nGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+        noise.connect(filter).connect(nGain).connect(masterOut);
+        noise.start(now);
+        noise.stop(now + dur + 0.02);
+      }
+
+      const scale = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5, 1174.66, 1318.5];
+      const baseIdx = Math.min(scale.length - 2, Math.max(0, combo - 1));
+      [scale[baseIdx], scale[Math.min(scale.length - 1, baseIdx + 2)]].forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'triangle';
+        const t = now + idx * 0.055;
+        osc.frequency.setValueAtTime(freq, t);
+        g.gain.setValueAtTime(0.15, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+        osc.connect(g).connect(masterOut);
+        osc.start(t);
+        osc.stop(t + 0.26);
+      });
+    }
+
+    function playWinFanfare() {
+      const ctx = ensureAudio();
+      if (!ctx || !masterOut) return;
+      const now = ctx.currentTime;
+      [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'triangle';
+        const t = now + i * 0.09;
+        osc.frequency.setValueAtTime(f, t);
+        g.gain.setValueAtTime(0.18, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.36);
+        osc.connect(g).connect(masterOut);
+        osc.start(t);
+        osc.stop(t + 0.38);
+      });
+    }
+
+    function playLoseSfx() {
+      const ctx = ensureAudio();
+      if (!ctx || !masterOut) return;
+      const now = ctx.currentTime;
+      [349.23, 311.13, 261.63].forEach((f, i) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'sawtooth';
+        const t = now + i * 0.11;
+        osc.frequency.setValueAtTime(f, t);
+        g.gain.setValueAtTime(0.1, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+        osc.connect(g).connect(masterOut);
+        osc.start(t);
+        osc.stop(t + 0.28);
+      });
+    }
+
+    // =========================================================================
+    // 3. GAME STATE & PROCEDURAL STAGE GENERATOR (1–777)
+    // =========================================================================
+    const initialUnlockedStage = Math.min(MAX_STAGE, Math.max(1, Number(safeGet(STORAGE_KEYS.unlockedStage, '1')) || 1));
+    const state = {
+      mode: 'stage',
+      stage: initialUnlockedStage,
+      unlockedStage: initialUnlockedStage,
+      gravityEnabled: true,
+      grid: createEmptyGrid(),
+      tray: [null, null, null],
+      selectedSlot: 0,
+      score: 0,
+      bestStage: Math.max(0, Number(safeGet(STORAGE_KEYS.bestStage, '0')) || 0),
+      bestEndless: Math.max(0, Number(safeGet(STORAGE_KEYS.bestEndless, '0')) || 0),
+      bestComboAllTime: 0,
+      endlessMilestoneTier: 0,
+      combo: 0,
+      maxCombo: 1,
+      biggestBlast: 0,
+      movesCount: 0,
+      movesSinceSpawn: 0,
+      rage: 25,
+      hammerQty: 2,
+      shuffleQty: 3,
+      hammerArmed: false,
+      stageGoalScore: 1500,
+      stageGoalBombs: 1,
+      stageBombsCleared: 0,
+      stageGoalCrates: 2,
+      stageCratesCleared: 0,
+      status: 'playing',
+      // Juice & animation pools
+      hitStopTimer: 0,
+      shakeTime: 0,
+      shakeMag: 0,
+      flashAlpha: 0,
+      beams: [],
+      particles: [],
+      shockwaves: [],
+      floaters: [],
+      // Pointer, drag & hover state
+      drag: null,
+      hoverCell: null, // { r, c } on board for Hammer reticle & desktop click-place preview
+      cascadePending: null,
+      toastTimer: 0,
+      toastText: '',
+    };
+
+    let runSeq = 0;
+    let suppressDialogCloseAction = false;
+    let lastReportedBestScore = Math.max(state.bestStage, state.bestEndless);
+    let lastReportedBestCombo = 0;
+    let lastReportedUnlockedStage = state.unlockedStage;
+
+    function emitScoreSync(force = false) {
+      const bestScore = Math.max(state.bestStage, state.bestEndless);
+      const bestCombo = Math.max(state.bestComboAllTime || 0, state.maxCombo || 0);
+      const unlockedStage = state.unlockedStage;
+      if (
+        !force &&
+        bestScore <= lastReportedBestScore &&
+        bestCombo <= lastReportedBestCombo &&
+        unlockedStage <= lastReportedUnlockedStage
+      ) {
+        return;
+      }
+      lastReportedBestScore = Math.max(lastReportedBestScore, bestScore);
+      lastReportedBestCombo = Math.max(lastReportedBestCombo, bestCombo);
+      lastReportedUnlockedStage = Math.max(lastReportedUnlockedStage, unlockedStage);
+      postToParent('score', {
+        bestScore,
+        bestCombo,
+        unlockedStage,
+      });
+    }
+
+    function getCurrentBest() {
+      return state.mode === 'stage' ? state.bestStage : state.bestEndless;
+    }
+
+    function updateBestScore() {
+      let improved = false;
+      if (state.mode === 'stage') {
+        if (state.score > state.bestStage) {
+          state.bestStage = state.score;
+          safeSet(STORAGE_KEYS.bestStage, state.bestStage);
+          improved = true;
+        }
+      } else if (state.score > state.bestEndless) {
+        state.bestEndless = state.score;
+        safeSet(STORAGE_KEYS.bestEndless, state.bestEndless);
+        improved = true;
+      }
+      if (improved) {
+        emitScoreSync();
+      }
+    }
+
+    function isDragonRageReady() {
+      return state.rage >= 100 && state.status === 'playing';
+    }
+
+    function createEmptyGrid() {
+      return Array.from({ length: GRID }, () => Array(GRID).fill(null));
+    }
+
+    function normalizeCells(cells) {
+      let minR = Infinity, minC = Infinity;
+      for (const [r, c] of cells) {
+        if (r < minR) minR = r;
+        if (c < minC) minC = c;
+      }
+      return cells.map(([r, c]) => [r - minR, c - minC]);
+    }
+
+    function rotateCellsCW(cells) {
+      return normalizeCells(cells.map(([r, c]) => [c, -r]));
+    }
+
+    function getShapeBounds(cells) {
+      let maxR = 0, maxC = 0;
+      for (const [r, c] of cells) {
+        if (r > maxR) maxR = r;
+        if (c > maxC) maxC = c;
+      }
+      return { rows: maxR + 1, cols: maxC + 1 };
+    }
+
+    function pickWeightedShape(preferSmall = false) {
+      const pool = preferSmall ? SHAPES.filter((s) => s.cells.length <= 4) : SHAPES;
+      const totalW = pool.reduce((sum, s) => sum + s.weight, 0);
+      let roll = Math.random() * totalW;
+      for (const s of pool) {
+        roll -= s.weight;
+        if (roll <= 0) return s.cells.map(([r, c]) => [r, c]);
+      }
+      return pool[0].cells.map(([r, c]) => [r, c]);
+    }
+
+    function makePiece(preferSmall = false, forceSpecial = null) {
+      let cells = pickWeightedShape(preferSmall);
+      const turns = Math.floor(Math.random() * 4);
+      for (let i = 0; i < turns; i++) cells = rotateCellsCW(cells);
+      const colorIdx = Math.floor(Math.random() * GEM_STYLES.length);
+      let special = forceSpecial;
+      if (!special) {
+        const r = Math.random();
+        if (r < 0.14) special = 'bomb';
+        else if (r < 0.24) special = 'lightning';
+      }
+      const specialCellIdx = special ? Math.floor(Math.random() * cells.length) : -1;
+      return { cells, colorIdx, special, specialCellIdx };
+    }
+
+    function canPlacePieceAt(piece, baseR, baseC) {
+      if (!piece) return false;
+      for (const [dr, dc] of piece.cells) {
+        const r = baseR + dr;
+        const c = baseC + dc;
+        if (r < 0 || r >= GRID || c < 0 || c >= GRID) return false;
+        if (state.grid[r][c] !== null) return false;
+      }
+      return true;
+    }
+
+    function getPieceFitStatus(piece) {
+      if (!piece) return 'none';
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
+          if (canPlacePieceAt(piece, r, c)) return 'direct';
+        }
+      }
+      let testCells = piece.cells;
+      for (let t = 1; t < 4; t++) {
+        testCells = rotateCellsCW(testCells);
+        const dummy = { ...piece, cells: testCells };
+        for (let r = 0; r < GRID; r++) {
+          for (let c = 0; c < GRID; c++) {
+            if (canPlacePieceAt(dummy, r, c)) return 'rotated';
+          }
+        }
+      }
+      return 'blocked';
+    }
+
+    function canPieceFitAnywhere(piece, allowRotation = true) {
+      const status = getPieceFitStatus(piece);
+      return allowRotation ? status === 'direct' || status === 'rotated' : status === 'direct';
+    }
+
+    function countActiveBombsOnBoardOrTray() {
+      let count = 0;
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
+          const sp = state.grid[r][c]?.special;
+          if (sp === 'bomb' || sp === 'countdown') count++;
+        }
+      }
+      for (const p of state.tray) {
+        if (p && p.special === 'bomb') count++;
+      }
+      return count;
+    }
+
+    function refillTray(guaranteedPlayable = true) {
+      let filled = 0;
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
+          if (state.grid[r][c]) filled++;
+        }
+      }
+      const crowded = filled > 40;
+      const needStageBomb =
+        state.mode === 'stage' &&
+        state.stageBombsCleared < state.stageGoalBombs &&
+        countActiveBombsOnBoardOrTray() === 0;
+
+      for (let i = 0; i < 3; i++) {
+        const forceBomb = i === 0 && (state.movesCount === 0 || needStageBomb);
+        state.tray[i] = makePiece(crowded, forceBomb ? 'bomb' : null);
+      }
+
+      if (guaranteedPlayable && !state.tray.some((p) => canPieceFitAnywhere(p, true))) {
+        let found = false;
+        for (let attempt = 0; attempt < 25; attempt++) {
+          const candidate = makePiece(true, needStageBomb ? 'bomb' : null);
+          if (canPieceFitAnywhere(candidate, true)) {
+            state.tray[0] = candidate;
+            found = true;
+            break;
+          }
+        }
+        // Deterministic fallback: iterate smallest-to-largest shapes so guaranteedPlayable never fails while any hole exists
+        if (!found) {
+          outer: for (const tpl of SHAPES_ASC) {
+            let cells = tpl.cells.map(([r, c]) => [r, c]);
+            for (let turn = 0; turn < 4; turn++) {
+              const cand = {
+                cells,
+                colorIdx: Math.floor(Math.random() * GEM_STYLES.length),
+                special: needStageBomb ? 'bomb' : null,
+                specialCellIdx: needStageBomb ? 0 : -1,
+              };
+              if (canPieceFitAnywhere(cand, false)) {
+                state.tray[0] = cand;
+                break outer;
+              }
+              cells = rotateCellsCW(cells);
+            }
+          }
+        }
+      }
+
+      state.selectedSlot = state.tray.findIndex((p) => p !== null);
+      if (state.selectedSlot < 0) state.selectedSlot = 0;
+    }
+
+    // Distinct stage patterns cycled across stages 1–777
+    const STAGE_PATTERNS = [
+      // Pattern 0: Hang Sóc Hearth (classic bottom burst with center alley)
+      [
+        [5,0],[5,1],[5,2],[5,4],[5,5],[5,6],
+        [6,1],[6,2],[6,5],[6,6],
+        [7,0],[7,1],[7,2],[7,4],[7,5],[7,7],
+      ],
+      // Pattern 1: Twin Towers (left & right pillars inviting horizontal cross-clears)
+      [
+        [4,0],[4,1],[4,6],[4,7],
+        [5,0],[5,1],[5,2],[5,5],[5,6],[5,7],
+        [6,0],[6,1],[6,3],[6,4],[6,6],[6,7],
+        [7,0],[7,2],[7,5],[7,7],
+      ],
+      // Pattern 2: Cauldron Arch (center cluster + wide base)
+      [
+        [4,2],[4,3],[4,4],[4,5],
+        [5,1],[5,2],[5,5],[5,6],
+        [6,0],[6,1],[6,2],[6,5],[6,6],[6,7],
+        [7,1],[7,3],[7,4],[7,6],
+      ],
+      // Pattern 3: Diagonal Steps (great for Tetris gravity cascade!)
+      [
+        [3,0],[3,1],[4,1],[4,2],[4,3],
+        [5,2],[5,3],[5,4],[5,5],
+        [6,0],[6,3],[6,4],[6,5],[6,6],
+        [7,0],[7,1],[7,4],[7,5],[7,6],[7,7],
+      ],
+    ];
+
+    function setupStage(stageNum) {
+      runSeq++;
+      state.stage = Math.min(MAX_STAGE, Math.max(1, stageNum));
+      state.grid = createEmptyGrid();
+      state.score = 0;
+      state.endlessMilestoneTier = 0;
+      state.combo = 0;
+      state.maxCombo = 1;
+      state.biggestBlast = 0;
+      state.movesCount = 0;
+      state.movesSinceSpawn = 0;
+      state.rage = 25;
+      state.hammerQty = 2;
+      state.shuffleQty = 3;
+      state.hammerArmed = false;
+      state.hoverCell = null;
+      state.drag = null;
+      state.status = 'playing';
+      state.beams = [];
+      state.particles = [];
+      state.shockwaves = [];
+      state.floaters = [];
+      state.cascadePending = null;
+      state.stageBombsCleared = 0;
+      state.stageCratesCleared = 0;
+
+      if (state.mode === 'stage') {
+        state.stageGoalScore = 1500 + (state.stage - 1) * 750;
+        state.stageGoalBombs = Math.min(4, 1 + Math.floor(state.stage / 2));
+        state.stageGoalCrates = state.stage >= 2 ? Math.min(8, 2 + state.stage) : 2;
+
+        const pat = STAGE_PATTERNS[(state.stage - 1) % STAGE_PATTERNS.length];
+        for (const [r, c] of pat) {
+          state.grid[r][c] = {
+            colorIdx: (r + c + state.stage) % GEM_STYLES.length,
+            special: null,
+            dropY: 0,
+            scale: 1,
+          };
+        }
+        // Seed a Fire Bomb right in row 5 so turn 1 can trigger a huge chain!
+        state.grid[5][2] = { colorIdx: 0, special: 'bomb', dropY: 0, scale: 1 };
+        // Seed a Countdown Cross-Bomb for Tetris urgency
+        state.grid[4][3] = { colorIdx: 0, special: 'countdown', timer: 5, dropY: 0, scale: 1 };
+        if (state.stage >= 3) {
+          state.grid[5][5] = { colorIdx: 2, special: 'lightning', dropY: 0, scale: 1 };
+        }
+        // Seed crates matching stageGoalCrates
+        const crateSpots = [[6,0],[6,7],[4,1],[4,6],[3,2],[3,5],[7,3],[7,6]];
+        for (let i = 0; i < Math.min(state.stageGoalCrates, crateSpots.length); i++) {
+          const [r, c] = crateSpots[i];
+          state.grid[r][c] = { colorIdx: 3, special: 'crate', dropY: 0, scale: 1 };
+        }
+      } else {
+        state.stageGoalScore = 0;
+        state.stageGoalBombs = 0;
+        state.stageGoalCrates = 0;
+        state.grid[6][3] = { colorIdx: 0, special: 'bomb', dropY: 0, scale: 1 };
+        state.grid[6][4] = { colorIdx: 3, special: null, dropY: 0, scale: 1 };
+        state.grid[7][3] = { colorIdx: 2, special: 'lightning', dropY: 0, scale: 1 };
+        state.grid[7][4] = { colorIdx: 1, special: null, dropY: 0, scale: 1 };
+      }
+
+      refillTray(true);
+      syncHudDOM();
+      renderTrayCanvases();
+    }
+
+    // =========================================================================
+    // 4. EXPLOSIVE LINE CLEARS, CHAIN BOMBS & TETRIS GRAVITY CASCADE
+    // =========================================================================
+    const boardCanvas = document.getElementById('boardCanvas');
+    const bctx = boardCanvas.getContext('2d');
+    const ghostCanvas = document.getElementById('dragGhostCanvas');
+    const gctx = ghostCanvas.getContext('2d');
+    const boardBgCanvas = document.createElement('canvas');
+    let dpr = Math.min(2, window.devicePixelRatio || 1);
+    let boardCssSize = 480;
+    let ghostVisible = false;
+
+    function getBoardMetrics() {
+      const size = boardCssSize;
+      const pad = Math.max(4, Math.round(size * 0.015));
+      const cell = (size - pad * 2) / GRID;
+      return { size, pad, cell };
+    }
+
+    function cellCenter(r, c) {
+      const { pad, cell } = getBoardMetrics();
+      return {
+        x: pad + (c + 0.5) * cell,
+        y: pad + (r + 0.5) * cell,
+      };
+    }
+
+    function announceSR(msg) {
+      const el = document.getElementById('srLive');
+      if (el) el.textContent = msg;
+    }
+
+    function showToast(msg, durationSec = 1.8) {
+      state.toastText = msg;
+      state.toastTimer = durationSec;
+      syncBannerDOM();
+      announceSR(msg);
+    }
+
+    function spawnExplosionFx(r, c, colorHex, count = 14, mega = false) {
+      const { x, y } = cellCenter(r, c);
+      const n = REDUCED_MOTION ? Math.min(4, count) : count;
+      for (let i = 0; i < n; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = (mega ? 140 : 85) + Math.random() * (mega ? 260 : 165);
+        state.particles.push({
+          x,
+          y,
+          vx: Math.cos(ang) * spd,
+          vy: Math.sin(ang) * spd - (mega ? 90 : 45),
+          size: (mega ? 5 : 3.5) + Math.random() * (mega ? 7 : 5),
+          color: Math.random() < 0.35 ? '#fff6a6' : Math.random() < 0.65 ? '#ff851b' : colorHex,
+          rot: Math.random() * Math.PI * 2,
+          vrot: (Math.random() - 0.5) * 14,
+          age: 0,
+          maxAge: 0.42 + Math.random() * 0.35,
+          shape: Math.random() < 0.55 ? 'diamond' : 'spark',
+        });
+      }
+      if (!REDUCED_MOTION) {
+        state.shockwaves.push({
+          x,
+          y,
+          maxR: mega ? getBoardMetrics().cell * 2.5 : getBoardMetrics().cell * 1.15,
+          age: 0,
+          maxAge: mega ? 0.42 : 0.28,
+          color: mega ? '#ff851b' : '#f4c668',
+        });
+      }
+    }
+
+    function triggerShake(mag, duration = 0.22) {
+      if (REDUCED_MOTION) return;
+      state.shakeMag = Math.max(state.shakeMag, mag);
+      state.shakeTime = Math.max(state.shakeTime, duration);
+    }
+
+    function addFloater(r, c, text, sub = '', color = '#ffe58f', scale = 1) {
+      const { x, y } = cellCenter(r, c);
+      state.floaters.push({ x, y, text, sub, color, scale, age: 0, maxAge: 1.05 });
+    }
+
+    function findFullLines() {
+      const fullRows = [];
+      const fullCols = [];
+      for (let r = 0; r < GRID; r++) {
+        let ok = true;
+        for (let c = 0; c < GRID; c++) {
+          if (!state.grid[r][c]) { ok = false; break; }
+        }
+        if (ok) fullRows.push(r);
+      }
+      for (let c = 0; c < GRID; c++) {
+        let ok = true;
+        for (let r = 0; r < GRID; r++) {
+          if (!state.grid[r][c]) { ok = false; break; }
+        }
+        if (ok) fullCols.push(c);
+      }
+      return { fullRows, fullCols };
+    }
+
+    function previewFullLinesWithPiece(piece, baseR, baseC) {
+      const previewRows = [];
+      const previewCols = [];
+      const placedSet = new Set();
+      for (const [dr, dc] of piece.cells) {
+        placedSet.add(`${baseR + dr},${baseC + dc}`);
+      }
+      for (let r = 0; r < GRID; r++) {
+        let full = true;
+        for (let c = 0; c < GRID; c++) {
+          if (!state.grid[r][c] && !placedSet.has(`${r},${c}`)) { full = false; break; }
+        }
+        if (full) previewRows.push(r);
+      }
+      for (let c = 0; c < GRID; c++) {
+        let full = true;
+        for (let r = 0; r < GRID; r++) {
+          if (!state.grid[r][c] && !placedSet.has(`${r},${c}`)) { full = false; break; }
+        }
+        if (full) previewCols.push(c);
+      }
+      return { previewRows, previewCols };
+    }
+
+    function resolveClearsAndExplosions(anchorR, anchorC, isCascade = false, forcedCells = null, opts = {}) {
+      const { chargeRage = true, customHeadline = '', customSub = '' } = opts;
+      const toClear = new Set();
+      const { fullRows, fullCols } = forcedCells ? { fullRows: [], fullCols: [] } : findFullLines();
+
+      if (forcedCells) {
+        for (const [r, c] of forcedCells) {
+          if (r >= 0 && r < GRID && c >= 0 && c < GRID && state.grid[r][c]) {
+            toClear.add(`${r},${c}`);
+          }
+        }
+      } else {
+        for (const r of fullRows) {
+          state.beams.push({ type: 'row', index: r, age: 0, maxAge: 0.36, color: '#ff851b' });
+          for (let c = 0; c < GRID; c++) toClear.add(`${r},${c}`);
+        }
+        for (const c of fullCols) {
+          state.beams.push({ type: 'col', index: c, age: 0, maxAge: 0.36, color: '#f4c668' });
+          for (let r = 0; r < GRID; r++) toClear.add(`${r},${c}`);
+        }
+      }
+
+      if (toClear.size === 0) {
+        if (!isCascade) state.combo = 0;
+        return 0;
+      }
+
+      // Chain-reaction BFS for Bombs, Countdown Cross-Bombs, and Lightning tiles
+      const processedSpecials = new Set();
+      const queue = Array.from(toClear);
+      let chainBombCount = 0;
+      let lightningTriggered = 0;
+
+      while (queue.length > 0) {
+        const key = queue.shift();
+        if (processedSpecials.has(key)) continue;
+        const [r, c] = key.split(',').map(Number);
+        const cell = state.grid[r]?.[c];
+        if (!cell) continue;
+
+        if (cell.special === 'bomb') {
+          processedSpecials.add(key);
+          chainBombCount++;
+          state.stageBombsCleared++;
+          spawnExplosionFx(r, c, '#ff851b', 24, true);
+          for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+              const nr = r + dr, nc = c + dc;
+              if (nr >= 0 && nr < GRID && nc >= 0 && nc < GRID && state.grid[nr][nc]) {
+                const nk = `${nr},${nc}`;
+                if (!toClear.has(nk)) {
+                  toClear.add(nk);
+                  queue.push(nk);
+                }
+              }
+            }
+          }
+        } else if (cell.special === 'countdown') {
+          processedSpecials.add(key);
+          chainBombCount += 2;
+          state.stageBombsCleared++;
+          state.beams.push({ type: 'row', index: r, age: 0, maxAge: 0.44, color: '#e03e36' });
+          state.beams.push({ type: 'col', index: c, age: 0, maxAge: 0.44, color: '#fff6a6' });
+          spawnExplosionFx(r, c, '#e03e36', 30, true);
+          for (let i = 0; i < GRID; i++) {
+            if (state.grid[r][i]) {
+              const nk = `${r},${i}`;
+              if (!toClear.has(nk)) { toClear.add(nk); queue.push(nk); }
+            }
+            if (state.grid[i][c]) {
+              const nk = `${i},${c}`;
+              if (!toClear.has(nk)) { toClear.add(nk); queue.push(nk); }
+            }
+          }
+        } else if (cell.special === 'lightning') {
+          processedSpecials.add(key);
+          lightningTriggered++;
+          spawnExplosionFx(r, c, '#7ee2ff', 20, true);
+          let bestRow = -1, bestCount = 0;
+          for (let rr = 0; rr < GRID; rr++) {
+            let cnt = 0;
+            for (let cc = 0; cc < GRID; cc++) {
+              if (state.grid[rr][cc] && !toClear.has(`${rr},${cc}`)) cnt++;
+            }
+            if (cnt > bestCount) { bestCount = cnt; bestRow = rr; }
+          }
+          if (bestRow >= 0) {
+            state.beams.push({ type: 'row', index: bestRow, age: 0, maxAge: 0.42, color: '#7ee2ff' });
+            for (let cc = 0; cc < GRID; cc++) {
+              if (state.grid[bestRow][cc]) {
+                const nk = `${bestRow},${cc}`;
+                if (!toClear.has(nk)) { toClear.add(nk); queue.push(nk); }
+              }
+            }
+          }
+        }
+      }
+
+      // Shatter wooden crates directly adjacent to cleared cells
+      const adjacentCrates = [];
+      for (const key of toClear) {
+        const [r, c] = key.split(',').map(Number);
+        for (const [dr, dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+          const nr = r + dr, nc = c + dc;
+          const adj = state.grid[nr]?.[nc];
+          if (adj && adj.special === 'crate' && !toClear.has(`${nr},${nc}`)) {
+            adjacentCrates.push(`${nr},${nc}`);
+          }
+        }
+      }
+      for (const ck of adjacentCrates) toClear.add(ck);
+
+      let clearedCount = 0;
+      let sumR = 0, sumC = 0;
+      for (const key of toClear) {
+        const [r, c] = key.split(',').map(Number);
+        const cell = state.grid[r][c];
+        if (!cell) continue;
+        if (cell.special === 'crate') state.stageCratesCleared++;
+        const colStyle = GEM_STYLES[cell.colorIdx] || GEM_STYLES[3];
+        spawnExplosionFx(r, c, colStyle.mid, toClear.size >= 14 ? 10 : 8, false);
+        state.grid[r][c] = null;
+        clearedCount++;
+        sumR += r;
+        sumC += c;
+      }
+
+      state.combo = Math.max(1, state.combo + 1);
+      if (state.combo > state.maxCombo) state.maxCombo = state.combo;
+      if (state.maxCombo > state.bestComboAllTime) {
+        state.bestComboAllTime = state.maxCombo;
+        emitScoreSync();
+      }
+      if (clearedCount > state.biggestBlast) state.biggestBlast = clearedCount;
+
+      const lineCount = fullRows.length + fullCols.length;
+      const isCross = fullRows.length > 0 && fullCols.length > 0;
+      const isMega = isCross || chainBombCount > 0 || lightningTriggered > 0 || clearedCount >= 14 || isCascade;
+
+      const pts = Math.round(
+        clearedCount * 22 * (1 + (state.combo - 1) * 0.45) +
+        (isCross ? 260 : 0) +
+        chainBombCount * 180 +
+        lightningTriggered * 140 +
+        (isCascade ? 220 : 0)
+      );
+      state.score += pts;
+      updateBestScore();
+
+      // Charge Dragon Rage (disabled during Dragon Rage's own blast so it resets cleanly to 0%!)
+      if (chargeRage) {
+        const nextRage = state.rage + clearedCount * 2.2 + (isMega ? 12 : 0);
+        state.rage = nextRage >= 99.5 ? 100 : Math.min(100, nextRage);
+      }
+
+      if (isMega) {
+        state.hitStopTimer = 0.036;
+        triggerShake(Math.min(11, 4.5 + clearedCount * 0.25), 0.28);
+        state.flashAlpha = 0.24;
+      } else {
+        triggerShake(3.2, 0.16);
+      }
+      playBlastSfx(state.combo, isMega);
+
+      const centerR = clearedCount > 0 ? sumR / clearedCount : anchorR;
+      const centerC = clearedCount > 0 ? sumC / clearedCount : anchorC;
+      const headline = customHeadline || (
+        isCascade
+          ? `SẬP TẦNG ×${state.combo}!`
+          : isCross
+            ? `CHỮ THẬP NỔ ×${state.combo}!`
+            : chainBombCount > 0
+              ? `BÙM LIÊN HOÀN ×${state.combo}!`
+              : lightningTriggered > 0
+                ? `SÉT NỔ HÀNG ×${state.combo}!`
+                : lineCount >= 2
+                  ? `NỔ KÉP ×${state.combo}!`
+                  : state.combo >= 2
+                    ? `COMBO ×${state.combo}!`
+                    : 'NỔ ĐẸP!'
+      );
+      const subText = customSub || `+${pts.toLocaleString('vi-VN')}`;
+      addFloater(centerR, centerC, headline, subText, isMega ? '#fff6a6' : '#ffe58f', isMega ? 1.15 : 1);
+      announceSR(`${headline} ${subText}`);
+
+      // Apply Tetris Gravity Cascade whenever horizontal gaps could exist
+      const shouldDrop =
+        state.gravityEnabled &&
+        (fullRows.length > 0 || chainBombCount > 0 || lightningTriggered > 0 || adjacentCrates.length > 0 || Boolean(forcedCells));
+      if (shouldDrop) {
+        const droppedAny = applyTetrisGravity();
+        if (droppedAny) {
+          state.cascadePending = { timer: 0.26, anchorR: centerR, anchorC: centerC, chargeRage };
+        }
+      }
+
+      return clearedCount;
+    }
+
+    function applyTetrisGravity() {
+      const { cell } = getBoardMetrics();
+      let moved = false;
+      for (let c = 0; c < GRID; c++) {
+        let writeR = GRID - 1;
+        for (let r = GRID - 1; r >= 0; r--) {
+          const item = state.grid[r][c];
+          if (item) {
+            if (writeR !== r) {
+              state.grid[writeR][c] = item;
+              state.grid[r][c] = null;
+              item.dropY = -(writeR - r) * cell;
+              moved = true;
+            }
+            writeR--;
+          }
+        }
+      }
+      return moved;
+    }
+
+    function tickCountdowns() {
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
+          const item = state.grid[r][c];
+          if (item && item.special === 'countdown') {
+            item.timer = (item.timer ?? 4) - 1;
+            if (item.timer <= 0) {
+              item.special = 'crate';
+              delete item.timer;
+              spawnExplosionFx(r, c, '#b93822', 12, false);
+              addFloater(r, c, 'KHÓA THÙNG!', '', '#fda4af', 0.92);
+              triggerShake(4, 0.18);
+            }
+          }
+        }
+      }
+    }
+
+    function maybeSpawnBonusBomb() {
+      const needStageBomb =
+        state.mode === 'stage' &&
+        state.stageBombsCleared < state.stageGoalBombs &&
+        countActiveBombsOnBoardOrTray() === 0;
+      if (!needStageBomb && state.movesSinceSpawn < 6) return;
+
+      const emptyTopCols = [];
+      for (let c = 0; c < GRID; c++) {
+        if (!state.grid[0][c]) emptyTopCols.push(c);
+      }
+      if (emptyTopCols.length === 0) return;
+
+      state.movesSinceSpawn = 0;
+      const col = emptyTopCols[Math.floor(Math.random() * emptyTopCols.length)];
+      let landR = 0;
+      if (state.gravityEnabled) {
+        while (landR + 1 < GRID && !state.grid[landR + 1][col]) landR++;
+      }
+      const isCountdown = needStageBomb || Math.random() < 0.65;
+      state.grid[landR][col] = isCountdown
+        ? { colorIdx: 0, special: 'countdown', timer: 5, dropY: -(landR + 1) * getBoardMetrics().cell, scale: 1 }
+        : { colorIdx: 0, special: 'bomb', dropY: -(landR + 1) * getBoardMetrics().cell, scale: 1 };
+
+      // If the dropped bomb completed a row or column, immediately schedule cascade clear!
+      const { fullRows, fullCols } = findFullLines();
+      if (fullRows.length > 0 || fullCols.length > 0) {
+        state.cascadePending = { timer: 0.22, anchorR: landR, anchorC: col, chargeRage: true };
+      }
+    }
+
+    function placePieceOnBoard(slotIdx, baseR, baseC) {
+      if (state.status !== 'playing' || state.cascadePending) return false;
+      const piece = state.tray[slotIdx];
+      if (!piece || !canPlacePieceAt(piece, baseR, baseC)) return false;
+
+      for (let i = 0; i < piece.cells.length; i++) {
+        const [dr, dc] = piece.cells[i];
+        const r = baseR + dr;
+        const c = baseC + dc;
+        const isSpec = i === piece.specialCellIdx;
+        state.grid[r][c] = {
+          colorIdx: piece.colorIdx,
+          special: isSpec ? piece.special : null,
+          dropY: 0,
+          scale: 0.45,
+        };
+      }
+
+      state.tray[slotIdx] = null;
+      state.movesCount++;
+      state.movesSinceSpawn++;
+      state.score += piece.cells.length * 10;
+      updateBestScore();
+      playPlaceSfx();
+
+      const cleared = resolveClearsAndExplosions(baseR, baseC, false);
+      if (cleared === 0) {
+        tickCountdowns();
+        maybeSpawnBonusBomb();
+      } else if (!state.cascadePending) {
+        maybeSpawnBonusBomb();
+      }
+
+      if (state.tray.every((p) => p === null)) {
+        refillTray(true);
+      } else if (!state.tray[state.selectedSlot]) {
+        const nextIdx = state.tray.findIndex((p) => p !== null);
+        state.selectedSlot = nextIdx >= 0 ? nextIdx : 0;
+      }
+
+      if (!state.cascadePending) {
+        checkWinOrLoss();
+      }
+      syncHudDOM();
+      renderTrayCanvases();
+      return true;
+    }
+
+    function checkWinOrLoss() {
+      if (state.status !== 'playing') return;
+      if (state.mode === 'stage') {
+        const scoreOk = state.score >= state.stageGoalScore;
+        const bombsOk = state.stageBombsCleared >= state.stageGoalBombs;
+        const cratesOk = state.stageCratesCleared >= state.stageGoalCrates;
+        if (scoreOk && bombsOk && cratesOk) {
+          state.status = 'won';
+          const nextStage = Math.min(MAX_STAGE, state.stage + 1);
+          if (nextStage > state.unlockedStage) {
+            state.unlockedStage = nextStage;
+            safeSet(STORAGE_KEYS.unlockedStage, state.unlockedStage);
+            emitScoreSync();
+          }
+          postToParent('victory', {
+            stage: state.stage,
+            score: state.score,
+            combo: state.maxCombo || state.combo || 1,
+            isBoss: state.stage % 5 === 0,
+            runId: `bb_${state.stage}_${Date.now()}`,
+          });
+          playWinFanfare();
+          openResultDialog(true);
+          return;
+        }
+      } else if (state.mode === 'endless') {
+        const reachedTier = Math.floor(state.score / ENDLESS_MILESTONE_STEP);
+        while (state.endlessMilestoneTier < reachedTier) {
+          state.endlessMilestoneTier++;
+          const milestoneStage = state.endlessMilestoneTier;
+          postToParent('victory', {
+            stage: milestoneStage,
+            score: state.score,
+            combo: state.maxCombo || state.combo || 1,
+            isBoss: milestoneStage % 5 === 0,
+            runId: `bb_endless_${runSeq}_m${milestoneStage}_${Date.now()}`,
+          });
+          showToast(`Vượt mốc ${(milestoneStage * ENDLESS_MILESTONE_STEP).toLocaleString('vi-VN')} điểm! Nhận thưởng Hang Sóc!`, 2.0);
+        }
+      }
+      const remaining = state.tray.filter(Boolean);
+      const anyFits = remaining.some((p) => canPieceFitAnywhere(p, true));
+      if (!anyFits && state.hammerQty <= 0 && state.shuffleQty <= 0 && !isDragonRageReady()) {
+        state.status = 'lost';
+        playLoseSfx();
+        openResultDialog(false);
+      }
+    }
+
+    function fireHammerAt(r, c) {
+      if (!state.hammerArmed || state.hammerQty <= 0 || state.status !== 'playing' || state.cascadePending) return;
+      const targets = [];
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          const nr = r + dr, nc = c + dc;
+          if (nr >= 0 && nr < GRID && nc >= 0 && nc < GRID && state.grid[nr][nc]) {
+            targets.push([nr, nc]);
+          }
+        }
+      }
+      if (targets.length === 0) {
+        playInvalidSfx();
+        showToast('Chạm vào vùng có gạch để đập Búa 3×3!');
+        return;
+      }
+      state.hammerQty--;
+      state.hammerArmed = false;
+      spawnExplosionFx(r, c, '#ff851b', 30, true);
+      resolveClearsAndExplosions(r, c, false, targets);
+      if (!state.cascadePending) checkWinOrLoss();
+      syncHudDOM();
+      renderTrayCanvases();
+    }
+
+    function triggerDragonRageBlast() {
+      if (!isDragonRageReady() || state.cascadePending) return;
+      const rowCounts = Array.from({ length: GRID }, (_, r) => ({
+        r,
+        cnt: state.grid[r].filter(Boolean).length,
+      })).sort((a, b) => b.cnt - a.cnt);
+      const colCounts = Array.from({ length: GRID }, (_, c) => {
+        let cnt = 0;
+        for (let r = 0; r < GRID; r++) if (state.grid[r][c]) cnt++;
+        return { c, cnt };
+      }).sort((a, b) => b.cnt - a.cnt);
+
+      const targets = [];
+      const chosenRows = rowCounts.slice(0, 2).filter((x) => x.cnt > 0);
+      const chosenCol = colCounts[0]?.cnt > 0 ? colCounts[0].c : -1;
+      for (const { r } of chosenRows) {
+        for (let c = 0; c < GRID; c++) targets.push([r, c]);
+      }
+      if (chosenCol >= 0) {
+        for (let r = 0; r < GRID; r++) targets.push([r, chosenCol]);
+      }
+
+      if (targets.length === 0) {
+        playInvalidSfx();
+        showToast('Bảng đang trống — đặt thêm gạch rồi hãy kích Hỏa Long!');
+        return;
+      }
+
+      // Only consume Rage after confirming valid targets; prevent self-recharging
+      state.rage = 0;
+      state.hammerArmed = false;
+      for (const { r } of chosenRows) {
+        state.beams.push({ type: 'row', index: r, age: 0, maxAge: 0.52, color: '#ff851b' });
+      }
+      if (chosenCol >= 0) {
+        state.beams.push({ type: 'col', index: chosenCol, age: 0, maxAge: 0.52, color: '#fff6a6' });
+      }
+      resolveClearsAndExplosions(3.5, 3.5, false, targets, {
+        chargeRage: false,
+        customHeadline: 'HỎA LONG QUÉT BẢNG!',
+        customSub: 'SIÊU NỔ!',
+      });
+      if (!state.cascadePending) checkWinOrLoss();
+      syncHudDOM();
+      renderTrayCanvases();
+    }
+
+    function spawnConfettiBurst(centerR, centerC, count = 34) {
+      const { x, y } = cellCenter(centerR, centerC);
+      const palette = ['#ffe484', '#ff851b', '#ff7066', '#9df043', '#7ee2ff', '#e28fff', '#fff6dc'];
+      const n = REDUCED_MOTION ? Math.min(8, count) : count;
+      for (let i = 0; i < n; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = 110 + Math.random() * 250;
+        state.particles.push({
+          x: x + (Math.random() - 0.5) * getBoardMetrics().cell * 4.5,
+          y: y + (Math.random() - 0.5) * getBoardMetrics().cell * 1.4,
+          vx: Math.cos(ang) * spd,
+          vy: Math.sin(ang) * spd - 120,
+          size: 4.5 + Math.random() * 6,
+          color: palette[i % palette.length],
+          rot: Math.random() * Math.PI * 2,
+          vrot: (Math.random() - 0.5) * 16,
+          age: 0,
+          maxAge: 0.58 + Math.random() * 0.42,
+          shape: i % 2 === 0 ? 'diamond' : 'spark',
+        });
+      }
+      if (!REDUCED_MOTION) {
+        state.shockwaves.push({
+          x,
+          y,
+          maxR: getBoardMetrics().cell * 3.2,
+          age: 0,
+          maxAge: 0.48,
+          color: '#ffe484',
+        });
+      }
+    }
+
+    function makeGuaranteedPlaceablePiece(forceBomb = false) {
+      for (let attempt = 0; attempt < 28; attempt++) {
+        const cand = makePiece(true, forceBomb ? 'bomb' : null);
+        if (canPieceFitAnywhere(cand, true)) {
+          return cand;
+        }
+      }
+      for (const tpl of SHAPES_ASC) {
+        let cells = tpl.cells.map(([r, c]) => [r, c]);
+        for (let turn = 0; turn < 4; turn++) {
+          const cand = {
+            cells,
+            colorIdx: Math.floor(Math.random() * GEM_STYLES.length),
+            special: forceBomb ? 'bomb' : null,
+            specialCellIdx: forceBomb ? 0 : -1,
+          };
+          if (canPieceFitAnywhere(cand, false)) {
+            return cand;
+          }
+          cells = rotateCellsCW(cells);
+        }
+      }
+      return makePiece(true, forceBomb ? 'bomb' : null);
+    }
+
+    function refillTrayAllPlaceable() {
+      const needStageBomb =
+        state.mode === 'stage' &&
+        state.stageBombsCleared < state.stageGoalBombs &&
+        countActiveBombsOnBoardOrTray() === 0;
+      for (let i = 0; i < 3; i++) {
+        state.tray[i] = makeGuaranteedPlaceablePiece(i === 0 && needStageBomb);
+      }
+      state.selectedSlot = 0;
+    }
+
+    function applyMollyClearRescue() {
+      // Revive cleanly if player was on game-over modal
+      if (state.status === 'lost') {
+        if (resultDialog.open) {
+          suppressDialogCloseAction = true;
+          resultDialog.close();
+        }
+        state.status = 'playing';
+      }
+      if (state.status !== 'playing') {
+        postToParent('boost-applied', {
+          ok: true,
+          boostKind: 'clear_rescue',
+          msgVi: 'Bánh Táo Bà Molly đã sẵn sàng cho màn tiếp theo!',
+        });
+        return;
+      }
+
+      state.drag = null;
+      state.hammerArmed = false;
+      state.cascadePending = null;
+
+      let bestRow = -1;
+      let bestRowCnt = 0;
+      for (let r = 0; r < GRID; r++) {
+        let cnt = 0;
+        for (let c = 0; c < GRID; c++) if (state.grid[r][c]) cnt++;
+        if (cnt > bestRowCnt) {
+          bestRowCnt = cnt;
+          bestRow = r;
+        }
+      }
+
+      let bestCol = -1;
+      let bestColCnt = 0;
+      if (bestRowCnt === 0) {
+        for (let c = 0; c < GRID; c++) {
+          let cnt = 0;
+          for (let r = 0; r < GRID; r++) if (state.grid[r][c]) cnt++;
+          if (cnt > bestColCnt) {
+            bestColCnt = cnt;
+            bestCol = c;
+          }
+        }
+      }
+
+      const targets = [];
+      let fxR = 3.5;
+      let fxC = 3.5;
+      if (bestRow >= 0 && bestRowCnt > 0) {
+        fxR = bestRow;
+        state.beams.push({ type: 'row', index: bestRow, age: 0, maxAge: 0.56, color: '#ff851b' });
+        for (let c = 0; c < GRID; c++) {
+          if (state.grid[bestRow][c]) targets.push([bestRow, c]);
+        }
+      } else if (bestCol >= 0 && bestColCnt > 0) {
+        fxC = bestCol;
+        state.beams.push({ type: 'col', index: bestCol, age: 0, maxAge: 0.56, color: '#ffe484' });
+        for (let r = 0; r < GRID; r++) {
+          if (state.grid[r][bestCol]) targets.push([r, bestCol]);
+        }
+      }
+
+      if (targets.length > 0) {
+        resolveClearsAndExplosions(fxR, fxC, false, targets, {
+          chargeRage: true,
+          customHeadline: 'BÁNH TÁO BÀ MOLLY!',
+          customSub: '+120 ĐIỂM · ĐỔI KHAY!',
+        });
+        state.score += 120;
+        updateBestScore();
+      } else {
+        state.beams.push({ type: 'row', index: 3, age: 0, maxAge: 0.52, color: '#ffe484' });
+        state.score += 150;
+        updateBestScore();
+        addFloater(3.5, 3.5, 'BÁNH TÁO BÀ MOLLY!', '+150 · ĐỔI KHAY!', '#fff6a6', 1.12);
+        playBlastSfx(2, true);
+        triggerShake(5, 0.22);
+        state.flashAlpha = 0.22;
+      }
+
+      spawnConfettiBurst(fxR, fxC, 38);
+      refillTrayAllPlaceable();
+
+      const rescueMsg = 'Bánh Táo Bà Molly đã quét sạch 1 hàng & đổi 3 khối mới!';
+      if (!IS_EMBED) {
+        showToast(rescueMsg, 2.4);
+      } else {
+        // Suppress duplicate inner DOM toast banner when embedded — parent renders a single toast
+        state.toastTimer = 0;
+        state.toastText = '';
+        syncBannerDOM();
+        announceSR(rescueMsg);
+      }
+
+      if (!state.cascadePending) {
+        checkWinOrLoss();
+      }
+      syncHudDOM();
+      renderTrayCanvases();
+
+      postToParent('boost-applied', {
+        ok: true,
+        boostKind: 'clear_rescue',
+        msgVi: rescueMsg,
+      });
+    }
+
+    // =========================================================================
+    // 5. CANVAS RENDERING (Cached Static Board Well + Crisp 2.5D Hang Sóc Gems)
+    // =========================================================================
+    function roundRectPath(ctx, x, y, w, h, r) {
+      const rr = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + rr, y);
+      ctx.arcTo(x + w, y, x + w, y + h, rr);
+      ctx.arcTo(x + w, y + h, x, y + h, rr);
+      ctx.arcTo(x, y + h, x, y, rr);
+      ctx.arcTo(x, y, x + w, y, rr);
+      ctx.closePath();
+    }
+
+    function rebuildBoardBackgroundCache() {
+      const { size, pad, cell } = getBoardMetrics();
+      boardBgCanvas.width = Math.round(size * dpr);
+      boardBgCanvas.height = Math.round(size * dpr);
+      const ctx = boardBgCanvas.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, size, size);
+
+      const wellGrad = ctx.createLinearGradient(0, 0, 0, size);
+      wellGrad.addColorStop(0, '#492410');
+      wellGrad.addColorStop(1, '#311608');
+      roundRectPath(ctx, 0, 0, size, size, 12);
+      ctx.fillStyle = wellGrad;
+      ctx.fill();
+
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
+          const x = pad + c * cell;
+          const y = pad + r * cell;
+          const isAlt = (r + c) % 2 === 0;
+          roundRectPath(ctx, x + 2, y + 2, cell - 4, cell - 4, 6);
+          ctx.fillStyle = isAlt ? 'rgba(244, 198, 104, 0.09)' : 'rgba(20, 8, 3, 0.26)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(176, 125, 67, 0.22)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      }
+    }
+
+    function resizeBoardCanvas() {
+      dpr = Math.min(2, window.devicePixelRatio || 1);
+      const wrap = document.getElementById('boardWrap');
+      const frame = document.getElementById('boardFrame');
+      const rect = wrap.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const cs = getComputedStyle(frame);
+      const frameX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0)
+        + (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0);
+      const frameY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0)
+        + (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
+      const avail = Math.min(rect.width - frameX - 2, rect.height - frameY - 6, 860);
+      const side = Math.max(120, Math.floor(avail));
+      boardCssSize = side;
+      boardCanvas.style.width = `${side}px`;
+      boardCanvas.style.height = `${side}px`;
+      boardCanvas.width = Math.round(side * dpr);
+      boardCanvas.height = Math.round(side * dpr);
+
+      ghostCanvas.width = Math.round(window.innerWidth * dpr);
+      ghostCanvas.height = Math.round(window.innerHeight * dpr);
+      ghostCanvas.style.width = `${window.innerWidth}px`;
+      ghostCanvas.style.height = `${window.innerHeight}px`;
+
+      rebuildBoardBackgroundCache();
+      renderTrayCanvases();
+    }
+
+    function drawGemTile(ctx, x, y, size, item, alpha = 1, nowSec = 0) {
+      const pad = size >= 34 ? Math.max(1.8, size * 0.05) : Math.max(0.75, size * 0.042);
+      const lineW = size >= 34 ? 2 : Math.max(1.1, size * 0.062);
+      const bx = x + pad;
+      const by = y + pad;
+      const bs = Math.max(4, size - pad * 2);
+      const rad = Math.max(3, bs * 0.2);
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+
+      // Wooden Crate obstacle
+      if (item.special === 'crate') {
+        const g = ctx.createLinearGradient(bx, by, bx, by + bs);
+        g.addColorStop(0, '#c28647');
+        g.addColorStop(1, '#7a451a');
+        roundRectPath(ctx, bx, by, bs, bs, rad);
+        ctx.fillStyle = g;
+        ctx.fill();
+        ctx.lineWidth = lineW;
+        ctx.strokeStyle = '#381b0c';
+        ctx.stroke();
+        if (SPRITES.crate?.complete && SPRITES.crate.naturalWidth > 0) {
+          ctx.drawImage(SPRITES.crate, bx + 2, by + 2, bs - 4, bs - 4);
+        } else {
+          ctx.strokeStyle = '#f4c668';
+          ctx.lineWidth = lineW;
+          ctx.beginPath();
+          ctx.moveTo(bx + 6, by + 6); ctx.lineTo(bx + bs - 6, by + bs - 6);
+          ctx.moveTo(bx + bs - 6, by + 6); ctx.lineTo(bx + 6, by + bs - 6);
+          ctx.stroke();
+        }
+        ctx.restore();
+        return;
+      }
+
+      const st = GEM_STYLES[item.colorIdx] || GEM_STYLES[0];
+
+      // Warm drop shadow
+      roundRectPath(ctx, bx, by + Math.max(1.2, size * 0.05), bs, bs, rad);
+      ctx.fillStyle = 'rgba(22, 9, 3, 0.45)';
+      ctx.fill();
+
+      // Main 2.5D beveled jewel body
+      const grad = ctx.createLinearGradient(bx, by, bx, by + bs);
+      grad.addColorStop(0, st.top);
+      grad.addColorStop(0.52, st.mid);
+      grad.addColorStop(1, st.bot);
+      roundRectPath(ctx, bx, by, bs, bs, rad);
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Inner jewel facet
+      const inset = bs * 0.16;
+      roundRectPath(ctx, bx + inset, by + inset, bs - inset * 2, bs - inset * 2, rad * 0.55);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.lineWidth = Math.max(0.8, lineW * 0.6);
+      ctx.stroke();
+
+      // Specular highlight arc
+      roundRectPath(ctx, bx + bs * 0.14, by + bs * 0.1, bs * 0.72, bs * 0.22, rad * 0.5);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+      ctx.fill();
+
+      // Warm dark wood contour outline
+      roundRectPath(ctx, bx, by, bs, bs, rad);
+      ctx.lineWidth = lineW;
+      ctx.strokeStyle = '#381b0c';
+      ctx.stroke();
+
+      // Special overlays
+      if (item.special === 'bomb') {
+        const pulse = REDUCED_MOTION ? 1 : 1 + Math.sin(nowSec * 9) * 0.06;
+        const cx = bx + bs * 0.5;
+        const cy = by + bs * 0.5;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(pulse, pulse);
+        ctx.beginPath();
+        ctx.arc(0, 0, bs * 0.36, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 246, 166, 0.36)';
+        ctx.fill();
+        if (SPRITES.bomb?.complete && SPRITES.bomb.naturalWidth > 0) {
+          const s = bs * 0.82;
+          ctx.drawImage(SPRITES.bomb, -s / 2, -s / 2, s, s);
+        } else {
+          ctx.beginPath();
+          ctx.arc(0, 2, bs * 0.26, 0, Math.PI * 2);
+          ctx.fillStyle = '#2b1409';
+          ctx.fill();
+          ctx.strokeStyle = '#f4c668';
+          ctx.lineWidth = lineW;
+          ctx.stroke();
+        }
+        ctx.restore();
+      } else if (item.special === 'lightning') {
+        const cx = bx + bs * 0.5;
+        const cy = by + bs * 0.5;
+        ctx.save();
+        // High-contrast electric cyan aura so Lightning pops even on yellow Topaz gems
+        ctx.beginPath();
+        ctx.arc(cx, cy, bs * 0.34, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(14, 165, 233, 0.45)';
+        ctx.fill();
+        ctx.fillStyle = '#e0fbff';
+        ctx.strokeStyle = '#0c2340';
+        ctx.lineWidth = Math.max(0.95, bs * 0.055);
+        ctx.beginPath();
+        ctx.moveTo(cx + bs * 0.06, cy - bs * 0.32);
+        ctx.lineTo(cx - bs * 0.22, cy + bs * 0.04);
+        ctx.lineTo(cx - bs * 0.02, cy + bs * 0.04);
+        ctx.lineTo(cx - bs * 0.09, cy + bs * 0.32);
+        ctx.lineTo(cx + bs * 0.22, cy - bs * 0.05);
+        ctx.lineTo(cx + bs * 0.02, cy - bs * 0.05);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      } else if (item.special === 'countdown') {
+        const cx = bx + bs * 0.5;
+        const cy = by + bs * 0.5;
+        const urgent = (item.timer ?? 5) <= 2;
+        const pulse = urgent && !REDUCED_MOTION ? 1 + Math.sin(nowSec * 14) * 0.09 : 1;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(pulse, pulse);
+        // Subtle golden cross (+) rays signifying cross-blast when defused!
+        ctx.strokeStyle = urgent ? '#fff6a6' : 'rgba(255, 246, 166, 0.78)';
+        ctx.lineWidth = Math.max(1.5, bs * 0.075);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(0, -bs * 0.42); ctx.lineTo(0, bs * 0.42);
+        ctx.moveTo(-bs * 0.42, 0); ctx.lineTo(bs * 0.42, 0);
+        ctx.stroke();
+        // Dark iron bomb badge + timer digit
+        ctx.beginPath();
+        ctx.arc(0, 0, bs * 0.31, 0, Math.PI * 2);
+        ctx.fillStyle = urgent ? '#99140a' : '#381b0c';
+        ctx.fill();
+        ctx.lineWidth = Math.max(1.4, bs * 0.06);
+        ctx.strokeStyle = urgent ? '#fff6a6' : '#f4c668';
+        ctx.stroke();
+        ctx.fillStyle = '#fff6dc';
+        ctx.font = `800 ${Math.round(bs * 0.38)}px "Be Vietnam Pro", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(item.timer ?? 4), 0, 1);
+        ctx.restore();
+      }
+
+      ctx.restore();
+    }
+
+    function renderTrayCanvases() {
+      const slotEls = Array.from(document.querySelectorAll('.hs-bb-slot'));
+      if (slotEls.length === 0) return;
+
+      const slotPad = 6;
+      let minW = Infinity;
+      let minH = Infinity;
+      const slotDims = slotEls.map((slotEl) => {
+        const w = Math.max(24, Math.floor(slotEl.clientWidth || slotEl.getBoundingClientRect().width));
+        const h = Math.max(24, Math.floor(slotEl.clientHeight || slotEl.getBoundingClientRect().height));
+        if (w < minW) minW = w;
+        if (h < minH) minH = h;
+        return { w, h };
+      });
+
+      let uniformCell = 32;
+      for (const piece of state.tray) {
+        if (!piece) continue;
+        const { rows, cols } = getShapeBounds(piece.cells);
+        uniformCell = Math.min(uniformCell, (minW - slotPad * 2) / cols, (minH - slotPad * 2) / rows);
+      }
+      uniformCell = Math.max(10, Math.floor(uniformCell));
+
+      let allBlocked = true;
+      let hasAnyPiece = false;
+
+      slotEls.forEach((slotEl, slotOrder) => {
+        const idx = Number(slotEl.dataset.slot);
+        const piece = state.tray[idx];
+        const canvas = slotEl.querySelector('canvas');
+        const badge = slotEl.querySelector('.hs-bb-slot-badge');
+        const { w, h } = slotDims[slotOrder];
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
+        const ctx = canvas.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, w, h);
+
+        const fit = piece ? getPieceFitStatus(piece) : 'none';
+        if (piece) {
+          hasAnyPiece = true;
+          if (fit !== 'blocked') allBlocked = false;
+        }
+
+        slotEl.classList.toggle('is-empty', !piece);
+        slotEl.classList.toggle('is-selected', Boolean(piece) && state.selectedSlot === idx);
+        slotEl.classList.toggle('is-dragging', Boolean(state.drag?.active && state.drag.slotIdx === idx));
+        slotEl.classList.toggle('needs-rotate', fit === 'rotated');
+        slotEl.classList.toggle('is-blocked', fit === 'blocked');
+        if (badge) {
+          badge.textContent = fit === 'rotated' ? '↻' : fit === 'blocked' ? '✕' : '';
+        }
+
+        if (!piece) return;
+        const { rows, cols } = getShapeBounds(piece.cells);
+        const ox = (w - cols * uniformCell) / 2;
+        const oy = (h - rows * uniformCell) / 2;
+
+        for (let i = 0; i < piece.cells.length; i++) {
+          const [r, c] = piece.cells[i];
+          drawGemTile(
+            ctx,
+            ox + c * uniformCell,
+            oy + r * uniformCell,
+            uniformCell,
+            {
+              colorIdx: piece.colorIdx,
+              special: i === piece.specialCellIdx ? piece.special : null,
+            },
+            1,
+            performance.now() / 1000
+          );
+        }
+      });
+
+      // Highlight rescue spells when all remaining pieces are blocked!
+      const rescueNeeded = hasAnyPiece && allBlocked && state.status === 'playing';
+      btnSpellHammer.classList.toggle('is-hint', rescueNeeded && state.hammerQty > 0 && !state.hammerArmed);
+      btnSpellShuffle.classList.toggle('is-hint', rescueNeeded && state.shuffleQty > 0);
+    }
+
+    function getDragLiftY(pointerType, rows, cell) {
+      return pointerType === 'touch' ? -Math.max(58, rows * cell * 0.52 + 26) : 0;
+    }
+
+    function renderDragGhost(nowSec) {
+      if (!state.drag?.active) {
+        if (ghostVisible) {
+          gctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          gctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+          ghostCanvas.style.display = 'none';
+          ghostVisible = false;
+        }
+        return;
+      }
+      if (!ghostVisible) {
+        ghostCanvas.style.display = 'block';
+        ghostVisible = true;
+      }
+      gctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      gctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+      const piece = state.tray[state.drag.slotIdx];
+      if (!piece) return;
+
+      const { cell } = getBoardMetrics();
+      const { rows, cols } = getShapeBounds(piece.cells);
+      const liftY = getDragLiftY(state.drag.pointerType, rows, cell);
+      const drawX = state.drag.clientX - (cols * cell) / 2;
+      const drawY = state.drag.clientY + liftY - (rows * cell) / 2;
+
+      for (let i = 0; i < piece.cells.length; i++) {
+        const [r, c] = piece.cells[i];
+        drawGemTile(
+          gctx,
+          drawX + c * cell,
+          drawY + r * cell,
+          cell,
+          {
+            colorIdx: piece.colorIdx,
+            special: i === piece.specialCellIdx ? piece.special : null,
+          },
+          0.92,
+          nowSec
+        );
+      }
+    }
+
+    function renderBoard(nowSec) {
+      const { size, pad, cell } = getBoardMetrics();
+      bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      bctx.clearRect(0, 0, size, size);
+
+      bctx.save();
+      if (state.shakeTime > 0 && !REDUCED_MOTION) {
+        const mag = state.shakeMag * (state.shakeTime / 0.25);
+        bctx.translate((Math.random() - 0.5) * mag * 2, (Math.random() - 0.5) * mag * 2);
+      }
+
+      // Blit cached static carved-wood 8×8 grid
+      bctx.drawImage(boardBgCanvas, 0, 0, size, size);
+
+      // Highlight rows/cols that WILL EXPLODE on valid drag snap (or desktop hover preview)
+      const activePreview = state.drag?.active ? state.drag : getHoverSnapPreview();
+      if (activePreview && activePreview.valid) {
+        const pulse = 0.22 + Math.sin(nowSec * 12) * 0.08;
+        bctx.fillStyle = `rgba(245, 179, 1, ${pulse})`;
+        for (const r of activePreview.previewRows) {
+          roundRectPath(bctx, pad, pad + r * cell, cell * GRID, cell, 8);
+          bctx.fill();
+          bctx.strokeStyle = '#ffe58f';
+          bctx.lineWidth = 2;
+          bctx.stroke();
+        }
+        for (const c of activePreview.previewCols) {
+          roundRectPath(bctx, pad + c * cell, pad, cell, cell * GRID, 8);
+          bctx.fill();
+          bctx.strokeStyle = '#ffe58f';
+          bctx.lineWidth = 2;
+          bctx.stroke();
+        }
+      }
+
+      // Existing tiles on grid
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
+          const item = state.grid[r][c];
+          if (!item) continue;
+          const x = pad + c * cell;
+          const y = pad + r * cell + (item.dropY || 0);
+          const sc = item.scale ?? 1;
+          if (sc !== 1) {
+            bctx.save();
+            bctx.translate(x + cell / 2, y + cell / 2);
+            bctx.scale(sc, sc);
+            drawGemTile(bctx, -cell / 2, -cell / 2, cell, item, 1, nowSec);
+            bctx.restore();
+          } else {
+            drawGemTile(bctx, x, y, cell, item, 1, nowSec);
+          }
+          if ((item.dropY || 0) < -6 && !REDUCED_MOTION) {
+            const trailH = Math.min(cell * 1.1, Math.abs(item.dropY));
+            const tg = bctx.createLinearGradient(x, y - trailH, x, y + 4);
+            tg.addColorStop(0, 'rgba(255, 246, 166, 0)');
+            tg.addColorStop(1, 'rgba(245, 179, 1, 0.55)');
+            bctx.fillStyle = tg;
+            bctx.fillRect(x + cell * 0.22, y - trailH, cell * 0.56, trailH);
+          }
+        }
+      }
+
+      // Valid Snap Ghost OR Invalid Red Feedback Cells
+      if (activePreview) {
+        const piece = state.tray[activePreview.slotIdx];
+        if (piece && activePreview.valid) {
+          for (let i = 0; i < piece.cells.length; i++) {
+            const [dr, dc] = piece.cells[i];
+            drawGemTile(
+              bctx,
+              pad + (activePreview.snapC + dc) * cell,
+              pad + (activePreview.snapR + dr) * cell,
+              cell,
+              { colorIdx: piece.colorIdx, special: i === piece.specialCellIdx ? piece.special : null },
+              state.drag?.active ? 0.48 : 0.3,
+              nowSec
+            );
+          }
+        } else if (piece && state.drag?.active && activePreview.overBoard) {
+          bctx.fillStyle = 'rgba(224, 62, 54, 0.36)';
+          bctx.strokeStyle = 'rgba(255, 200, 180, 0.78)';
+          bctx.lineWidth = 2;
+          for (const [dr, dc] of piece.cells) {
+            const rr = activePreview.snapR + dr;
+            const cc = activePreview.snapC + dc;
+            if (rr >= 0 && rr < GRID && cc >= 0 && cc < GRID) {
+              roundRectPath(bctx, pad + cc * cell + 3, pad + rr * cell + 3, cell - 6, cell - 6, 7);
+              bctx.fill();
+              bctx.stroke();
+            }
+          }
+        }
+      }
+
+      // Live Hammer 3×3 Targeting Reticle
+      if (state.hammerArmed && state.hoverCell) {
+        const { r: hr, c: hc } = state.hoverCell;
+        const r0 = Math.max(0, hr - 1), r1 = Math.min(GRID - 1, hr + 1);
+        const c0 = Math.max(0, hc - 1), c1 = Math.min(GRID - 1, hc + 1);
+        const pulse = 0.24 + Math.sin(nowSec * 11) * 0.08;
+        bctx.save();
+        roundRectPath(
+          bctx,
+          pad + c0 * cell + 1,
+          pad + r0 * cell + 1,
+          (c1 - c0 + 1) * cell - 2,
+          (r1 - r0 + 1) * cell - 2,
+          10
+        );
+        bctx.fillStyle = `rgba(255, 133, 27, ${pulse})`;
+        bctx.fill();
+        bctx.lineWidth = 3;
+        bctx.strokeStyle = '#fff6a6';
+        bctx.stroke();
+        bctx.restore();
+      }
+
+      // Blazing Cross-Fire Beams
+      for (const b of state.beams) {
+        const t = 1 - b.age / b.maxAge;
+        bctx.save();
+        bctx.globalCompositeOperation = 'lighter';
+        bctx.globalAlpha = Math.max(0, t);
+        if (b.type === 'row') {
+          const cy = pad + (b.index + 0.5) * cell;
+          const h = cell * (0.4 + t * 0.65);
+          const g = bctx.createLinearGradient(0, cy - h / 2, 0, cy + h / 2);
+          g.addColorStop(0, 'rgba(255,133,27,0)');
+          g.addColorStop(0.35, b.color);
+          g.addColorStop(0.5, '#fff6a6');
+          g.addColorStop(0.65, b.color);
+          g.addColorStop(1, 'rgba(255,133,27,0)');
+          bctx.fillStyle = g;
+          bctx.fillRect(pad - 6, cy - h / 2, cell * GRID + 12, h);
+        } else {
+          const cx = pad + (b.index + 0.5) * cell;
+          const w = cell * (0.4 + t * 0.65);
+          const g = bctx.createLinearGradient(cx - w / 2, 0, cx + w / 2, 0);
+          g.addColorStop(0, 'rgba(255,133,27,0)');
+          g.addColorStop(0.35, b.color);
+          g.addColorStop(0.5, '#fff6a6');
+          g.addColorStop(0.65, b.color);
+          g.addColorStop(1, 'rgba(255,133,27,0)');
+          bctx.fillStyle = g;
+          bctx.fillRect(cx - w / 2, pad - 6, w, cell * GRID + 12);
+        }
+        bctx.restore();
+      }
+
+      // Expanding Shockwave Rings
+      for (const sw of state.shockwaves) {
+        const p = sw.age / sw.maxAge;
+        bctx.save();
+        bctx.globalAlpha = Math.max(0, 1 - p);
+        bctx.strokeStyle = sw.color;
+        bctx.lineWidth = Math.max(1.5, 6 * (1 - p));
+        bctx.beginPath();
+        bctx.arc(sw.x, sw.y, sw.maxR * p, 0, Math.PI * 2);
+        bctx.stroke();
+        bctx.restore();
+      }
+
+      // Crystal Shards & Fiery Embers
+      for (const pt of state.particles) {
+        const p = pt.age / pt.maxAge;
+        bctx.save();
+        bctx.globalAlpha = Math.max(0, 1 - p);
+        bctx.translate(pt.x, pt.y);
+        bctx.rotate(pt.rot);
+        bctx.fillStyle = pt.color;
+        if (pt.shape === 'diamond') {
+          const s = pt.size * (1 - p * 0.35);
+          bctx.beginPath();
+          bctx.moveTo(0, -s);
+          bctx.lineTo(s * 0.75, 0);
+          bctx.lineTo(0, s);
+          bctx.lineTo(-s * 0.75, 0);
+          bctx.closePath();
+          bctx.fill();
+        } else {
+          bctx.beginPath();
+          bctx.arc(0, 0, pt.size * 0.55 * (1 - p * 0.4), 0, Math.PI * 2);
+          bctx.fill();
+        }
+        bctx.restore();
+      }
+
+      // Warm Golden Impact Flash
+      if (state.flashAlpha > 0.005) {
+        bctx.fillStyle = `rgba(255, 246, 166, ${state.flashAlpha})`;
+        bctx.fillRect(0, 0, size, size);
+      }
+
+      // Floating Arcade Combo Callouts (width-measured & clamped so they NEVER clip!)
+      for (const fl of state.floaters) {
+        const p = fl.age / fl.maxAge;
+        const popScale = p < 0.16 ? 0.65 + (p / 0.16) * 0.45 : 1.05 - p * 0.1;
+        const alpha = p < 0.72 ? 1 : Math.max(0, 1 - (p - 0.72) / 0.28);
+        const yOff = -p * 44;
+        bctx.save();
+        bctx.globalAlpha = alpha;
+        bctx.font = '800 20px "Be Vietnam Pro", sans-serif';
+        const measuredW = Math.max(40, bctx.measureText(fl.text).width);
+        const effScale = Math.min(fl.scale * popScale, (size - 24) / measuredW);
+        const halfW = (measuredW * effScale) / 2 + 12;
+        const fx = Math.max(halfW, Math.min(size - halfW, fl.x));
+        const fy = Math.max(28, Math.min(size - 40, fl.y + yOff));
+        bctx.translate(fx, fy);
+        bctx.scale(effScale, effScale);
+        bctx.textAlign = 'center';
+        bctx.textBaseline = 'middle';
+        bctx.lineWidth = 5;
+        bctx.strokeStyle = '#381b0c';
+        bctx.strokeText(fl.text, 0, 0);
+        bctx.fillStyle = fl.color;
+        bctx.fillText(fl.text, 0, 0);
+        if (fl.sub) {
+          bctx.font = '800 15px "Be Vietnam Pro", sans-serif';
+          bctx.lineWidth = 4;
+          bctx.strokeText(fl.sub, 0, 22);
+          bctx.fillStyle = '#fff6dc';
+          bctx.fillText(fl.sub, 0, 22);
+        }
+        bctx.restore();
+      }
+
+      bctx.restore();
+    }
+
+    // =========================================================================
+    // 6. MAIN 60FPS ANIMATION LOOP
+    // =========================================================================
+    let lastTime = performance.now();
+    function frame(now) {
+      const rawDt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
+      lastTime = now;
+
+      let dt = rawDt;
+      if (state.hitStopTimer > 0) {
+        state.hitStopTimer = Math.max(0, state.hitStopTimer - rawDt);
+        dt = rawDt * 0.12;
+      }
+
+      if (state.shakeTime > 0) state.shakeTime = Math.max(0, state.shakeTime - rawDt);
+      if (state.flashAlpha > 0) state.flashAlpha = Math.max(0, state.flashAlpha - rawDt * 1.4);
+      if (state.toastTimer > 0) {
+        state.toastTimer = Math.max(0, state.toastTimer - rawDt);
+        if (state.toastTimer === 0) syncBannerDOM();
+      }
+
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
+          const item = state.grid[r][c];
+          if (!item) continue;
+          if (item.dropY && item.dropY < 0) {
+            item.dropY = Math.min(0, item.dropY + dt * 980);
+          }
+          if (item.scale !== undefined && item.scale < 1) {
+            item.scale = Math.min(1, item.scale + dt * 5.2);
+          }
+        }
+      }
+
+      // Resolve delayed Tetris cascade clear & ALWAYS check win/loss once cascade finishes!
+      if (state.cascadePending) {
+        state.cascadePending.timer -= rawDt;
+        if (state.cascadePending.timer <= 0) {
+          const { anchorR, anchorC, chargeRage } = state.cascadePending;
+          state.cascadePending = null;
+          resolveClearsAndExplosions(anchorR, anchorC, true, null, { chargeRage });
+          if (!state.cascadePending) {
+            maybeSpawnBonusBomb();
+            if (!state.cascadePending) {
+              checkWinOrLoss();
+            }
+          }
+          syncHudDOM();
+          renderTrayCanvases();
+        }
+      }
+
+      for (let i = state.beams.length - 1; i >= 0; i--) {
+        state.beams[i].age += dt;
+        if (state.beams[i].age >= state.beams[i].maxAge) state.beams.splice(i, 1);
+      }
+      for (let i = state.shockwaves.length - 1; i >= 0; i--) {
+        state.shockwaves[i].age += dt;
+        if (state.shockwaves[i].age >= state.shockwaves[i].maxAge) state.shockwaves.splice(i, 1);
+      }
+      for (let i = state.particles.length - 1; i >= 0; i--) {
+        const pt = state.particles[i];
+        pt.age += dt;
+        pt.x += pt.vx * dt;
+        pt.y += pt.vy * dt;
+        pt.vy += 460 * dt;
+        pt.rot += pt.vrot * dt;
+        if (pt.age >= pt.maxAge) state.particles.splice(i, 1);
+      }
+      for (let i = state.floaters.length - 1; i >= 0; i--) {
+        state.floaters[i].age += rawDt;
+        if (state.floaters[i].age >= state.floaters[i].maxAge) state.floaters.splice(i, 1);
+      }
+
+      const nowSec = now / 1000;
+      renderBoard(nowSec);
+      renderDragGhost(nowSec);
+      requestAnimationFrame(frame);
+    }
+
+    // =========================================================================
+    // 7. HUD DOM SYNC & RESULT DIALOG
+    // =========================================================================
+    const uiScore = document.getElementById('uiScore');
+    const uiBest = document.getElementById('uiBest');
+    const uiComboPill = document.getElementById('uiComboPill');
+    const uiStageBadge = document.getElementById('uiStageBadge');
+    const uiProgressFill = document.getElementById('uiProgressFill');
+    const uiProgressTxt = document.getElementById('uiProgressTxt');
+    const uiGoalChips = document.getElementById('uiGoalChips');
+    const uiRageLabel = document.getElementById('uiRageLabel');
+    const uiRagePct = document.getElementById('uiRagePct');
+    const uiRageFill = document.getElementById('uiRageFill');
+    const btnDragonBlast = document.getElementById('btnDragonBlast');
+    const uiHammerQty = document.getElementById('uiHammerQty');
+    const uiShuffleQty = document.getElementById('uiShuffleQty');
+    const btnSpellHammer = document.getElementById('btnSpellHammer');
+    const btnSpellShuffle = document.getElementById('btnSpellShuffle');
+    const boardFrame = document.getElementById('boardFrame');
+    const boardBanner = document.getElementById('boardBanner');
+    const resultDialog = document.getElementById('resultDialog');
+    const btnMute = document.getElementById('btnMute');
+
+    function syncMuteDOM() {
+      btnMute.textContent = soundEnabled ? 'Âm: Bật' : 'Âm: Tắt';
+      btnMute.setAttribute('aria-pressed', String(!soundEnabled));
+    }
+
+    function syncBannerDOM() {
+      if (state.hammerArmed) {
+        boardBanner.textContent = 'Chạm vùng gạch để đập Búa 3×3! (ESC để hủy)';
+        boardBanner.classList.add('is-visible');
+      } else if (state.toastTimer > 0 && state.toastText) {
+        boardBanner.textContent = state.toastText;
+        boardBanner.classList.add('is-visible');
+      } else {
+        boardBanner.classList.remove('is-visible');
+      }
+    }
+
+    function syncHudDOM() {
+      uiScore.textContent = state.score.toLocaleString('vi-VN');
+      uiBest.textContent = getCurrentBest().toLocaleString('vi-VN');
+      uiComboPill.innerHTML = `<span>Combo ×${Math.max(1, state.combo)}</span>`;
+      if (state.combo >= 2) {
+        uiComboPill.classList.add('pop');
+        setTimeout(() => uiComboPill.classList.remove('pop'), 160);
+      }
+
+      if (state.mode === 'stage') {
+        uiStageBadge.textContent = `Màn ${state.stage}`;
+        const pct = Math.min(100, Math.round((state.score / Math.max(1, state.stageGoalScore)) * 100));
+        uiProgressFill.style.width = `${pct}%`;
+        uiProgressTxt.textContent = `${state.score.toLocaleString('vi-VN')} / ${state.stageGoalScore.toLocaleString('vi-VN')}`;
+        const bombDone = state.stageBombsCleared >= state.stageGoalBombs;
+        const crateDone = state.stageCratesCleared >= state.stageGoalCrates;
+        uiGoalChips.innerHTML = `
+          <span class="hs-bb-goal-chip ${bombDone ? 'is-done' : ''}">
+            <img src="../sprites/m3_sp_bomb.webp" alt="" />
+            Bom ${Math.min(state.stageBombsCleared, state.stageGoalBombs)}/${state.stageGoalBombs}
+          </span>
+          <span class="hs-bb-goal-chip ${crateDone ? 'is-done' : ''}">
+            <img src="../sprites/m3_obs_box_1.webp" alt="" />
+            Thùng ${Math.min(state.stageCratesCleared, state.stageGoalCrates)}/${state.stageGoalCrates}
+          </span>
+        `;
+      } else {
+        uiStageBadge.textContent = 'Vô Tận';
+        const milestone = Math.ceil((state.score + 1) / ENDLESS_MILESTONE_STEP) * ENDLESS_MILESTONE_STEP;
+        const pct = Math.min(100, Math.round(((state.score % ENDLESS_MILESTONE_STEP) / ENDLESS_MILESTONE_STEP) * 100));
+        uiProgressFill.style.width = `${pct}%`;
+        uiProgressTxt.textContent = `Mốc ${milestone.toLocaleString('vi-VN')} đ`;
+        uiGoalChips.innerHTML = `
+          <span class="hs-bb-goal-chip">
+            <img src="../sprites/m3_sp_bomb.webp" alt="" />
+            Nổ đỉnh: ${state.biggestBlast} ô
+          </span>
+        `;
+      }
+
+      const rageDisplay = Math.min(100, Math.floor(state.rage));
+      const rageReady = isDragonRageReady();
+      uiRagePct.textContent = `${rageDisplay}%`;
+      uiRageFill.style.width = `${rageDisplay}%`;
+      uiRageLabel.textContent = rageReady ? 'KÍCH NỔ HỎA LONG!' : 'Nộ Hỏa Long';
+      btnDragonBlast.classList.toggle('is-ready', rageReady);
+      btnDragonBlast.setAttribute('aria-disabled', String(!rageReady));
+
+      uiHammerQty.textContent = `×${state.hammerQty}`;
+      uiShuffleQty.textContent = `×${state.shuffleQty}`;
+      btnSpellHammer.disabled = state.hammerQty <= 0 || state.status !== 'playing';
+      btnSpellHammer.classList.toggle('is-armed', state.hammerArmed);
+      btnSpellShuffle.disabled = state.shuffleQty <= 0 || state.status !== 'playing';
+      boardFrame.classList.toggle('hammer-armed', state.hammerArmed);
+      boardCanvas.classList.toggle('is-hammer', state.hammerArmed);
+      syncBannerDOM();
+    }
+
+    function openResultDialog(won) {
+      const isFinalStage = won && state.mode === 'stage' && state.stage >= MAX_STAGE;
+      document.getElementById('dlgTitle').textContent = isFinalStage
+        ? 'Chinh Phục Trọn 777 Màn Hang Sóc!'
+        : won
+          ? `Chiến Thắng Màn ${state.stage}!`
+          : state.mode === 'endless'
+            ? 'Kết Thúc Ván Đua Điểm!'
+            : `Hết Nước Đi · Màn ${state.stage}`;
+      document.getElementById('dlgScore').textContent = state.score.toLocaleString('vi-VN');
+      document.getElementById('dlgMaxCombo').textContent = `×${state.maxCombo}`;
+      document.getElementById('dlgBiggestBlast').textContent = `${state.biggestBlast} ô`;
+      document.getElementById('dlgBest').textContent = getCurrentBest().toLocaleString('vi-VN');
+      document.getElementById('dlgNote').textContent = isFinalStage
+        ? 'Đỉnh cao phù thủy Hang Sóc! Bạn đã hoàn tất toàn bộ 777 màn — thử phá kỷ lục ở chế độ Vô Tận nhé!'
+        : won
+          ? 'Cú nổ dây chuyền quá mãn nhãn! Chuyển tiếp sang màn tiếp theo với bố cục Khối Bom & Thùng Gỗ mới.'
+          : 'Mẹo: Nhấn Xoay (R), dùng Búa 3×3 hoặc tích đầy Nộ Hỏa Long để lật kèo phút chót!';
+
+      const btnPri = document.getElementById('btnDlgPrimary');
+      const btnSec = document.getElementById('btnDlgSecondary');
+      if (isFinalStage) {
+        btnPri.textContent = 'Chơi Vô Tận';
+        btnPri.value = 'endless';
+        btnSec.textContent = 'Chơi lại Màn 777';
+        btnSec.value = 'retry';
+        btnSec.hidden = false;
+      } else if (won) {
+        btnPri.textContent = `Sang Màn ${state.stage + 1}`;
+        btnPri.value = 'next';
+        btnSec.textContent = 'Chơi lại';
+        btnSec.value = 'retry';
+        btnSec.hidden = false;
+      } else {
+        btnPri.textContent = 'Nổ Lại Ngay';
+        btnPri.value = 'retry';
+        if (state.mode === 'stage' && state.stage > 1) {
+          btnSec.textContent = 'Về Màn 1';
+          btnSec.value = 'stage1';
+          btnSec.hidden = false;
+        } else {
+          btnSec.hidden = true;
+        }
+      }
+      if (!resultDialog.open) resultDialog.showModal();
+    }
+
+    resultDialog.addEventListener('close', () => {
+      if (suppressDialogCloseAction) {
+        suppressDialogCloseAction = false;
+        resultDialog.returnValue = '';
+        return;
+      }
+      const action = resultDialog.returnValue;
+      resultDialog.returnValue = '';
+      if (action === 'endless') {
+        switchMode('endless');
+      } else if (action === 'next' && state.status === 'won') {
+        setupStage(Math.min(MAX_STAGE, state.stage + 1));
+      } else if (action === 'stage1') {
+        setupStage(1);
+      } else if (action === 'retry') {
+        setupStage(state.mode === 'stage' ? state.stage : 1);
+      } else if (state.status === 'won') {
+        // ESC pressed on victory modal advances cleanly instead of replaying the cleared stage
+        setupStage(Math.min(MAX_STAGE, state.stage + 1));
+      } else if (state.status === 'lost') {
+        setupStage(state.mode === 'stage' ? state.stage : 1);
+      }
+    });
+
+    // =========================================================================
+    // 8. POINTER DRAG & DROP, HOVER PREVIEW, ROTATION & KEYBOARD ACCESSIBILITY
+    // =========================================================================
+    function computeSnapForClient(piece, clientX, clientY, pointerType) {
+      const rect = boardCanvas.getBoundingClientRect();
+      const { pad, cell } = getBoardMetrics();
+      const { rows, cols } = getShapeBounds(piece.cells);
+      const liftY = getDragLiftY(pointerType, rows, cell);
+      const localX = clientX - rect.left - (cols * cell) / 2;
+      const localY = clientY + liftY - rect.top - (rows * cell) / 2;
+      const rawC = (localX - pad) / cell;
+      const rawR = (localY - pad) / cell;
+      const snapC = Math.round(rawC);
+      const snapR = Math.round(rawR);
+
+      // Reject drops dragged outside the board so dragging back to dock cleanly cancels!
+      const overBoard =
+        rawC >= -0.6 && rawC <= GRID - cols + 0.6 &&
+        rawR >= -0.6 && rawR <= GRID - rows + 0.6;
+      if (!overBoard) {
+        return { snapR, snapC, valid: false, overBoard: false, previewRows: [], previewCols: [] };
+      }
+
+      // Distance-sorted +/-1 magnetic search so snapping picks the truly closest valid slot
+      const candidates = [
+        [snapR, snapC],
+        [snapR, snapC - 1], [snapR, snapC + 1],
+        [snapR - 1, snapC], [snapR + 1, snapC],
+      ].sort((a, b) => {
+        const da = (a[0] - rawR) ** 2 + (a[1] - rawC) ** 2;
+        const db = (b[0] - rawR) ** 2 + (b[1] - rawC) ** 2;
+        return da - db;
+      });
+
+      for (const [r, c] of candidates) {
+        if (canPlacePieceAt(piece, r, c)) {
+          const { previewRows, previewCols } = previewFullLinesWithPiece(piece, r, c);
+          return { snapR: r, snapC: c, valid: true, overBoard: true, previewRows, previewCols };
+        }
+      }
+      return { snapR, snapC, valid: false, overBoard: true, previewRows: [], previewCols: [] };
+    }
+
+    function computeClickSnapOnBoard(piece, cellR, cellC) {
+      const { rows, cols } = getShapeBounds(piece.cells);
+      const baseR = Math.max(0, Math.min(GRID - rows, cellR - Math.floor(rows / 2)));
+      const baseC = Math.max(0, Math.min(GRID - cols, cellC - Math.floor(cols / 2)));
+      const candidates = [
+        [baseR, baseC],
+        [baseR, baseC - 1], [baseR, baseC + 1],
+        [baseR - 1, baseC], [baseR + 1, baseC],
+      ];
+      for (const [r, c] of candidates) {
+        if (canPlacePieceAt(piece, r, c)) {
+          const { previewRows, previewCols } = previewFullLinesWithPiece(piece, r, c);
+          return { snapR: r, snapC: c, valid: true, overBoard: true, previewRows, previewCols };
+        }
+      }
+      return null;
+    }
+
+    function getHoverSnapPreview() {
+      if (!state.hoverCell || state.hammerArmed || state.status !== 'playing' || state.cascadePending) return null;
+      const piece = state.tray[state.selectedSlot];
+      if (!piece) return null;
+      const snap = computeClickSnapOnBoard(piece, state.hoverCell.r, state.hoverCell.c);
+      return snap ? { slotIdx: state.selectedSlot, ...snap } : null;
+    }
+
+    function rotateSlot(slotIdx) {
+      const piece = state.tray[slotIdx];
+      if (!piece || state.status !== 'playing') return;
+      piece.cells = rotateCellsCW(piece.cells);
+      playRotateSfx();
+      renderTrayCanvases();
+    }
+
+    document.querySelectorAll('.hs-bb-slot').forEach((slotEl) => {
+      const idx = Number(slotEl.dataset.slot);
+      let downX = 0, downY = 0, wasSelected = false;
+
+      slotEl.addEventListener('pointerdown', (e) => {
+        if (state.status !== 'playing' || state.cascadePending) return;
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        if (state.drag) return; // Ignore secondary fingers during active drag
+        const piece = state.tray[idx];
+        if (!piece) return;
+        ensureAudio();
+        if (state.hammerArmed) {
+          state.hammerArmed = false;
+          syncHudDOM();
+        }
+        wasSelected = state.selectedSlot === idx;
+        state.selectedSlot = idx;
+        downX = e.clientX;
+        downY = e.clientY;
+        slotEl.setPointerCapture(e.pointerId);
+        state.drag = {
+          slotIdx: idx,
+          pointerId: e.pointerId,
+          pointerType: e.pointerType,
+          clientX: e.clientX,
+          clientY: e.clientY,
+          active: false, // Activates only after moving > 8px (zero flash on quick tap!)
+          snapR: -1,
+          snapC: -1,
+          valid: false,
+          overBoard: false,
+          previewRows: [],
+          previewCols: [],
+        };
+        renderTrayCanvases();
+      });
+
+      slotEl.addEventListener('pointermove', (e) => {
+        if (!state.drag || state.drag.slotIdx !== idx || state.drag.pointerId !== e.pointerId) return;
+        const piece = state.tray[idx];
+        if (!piece) return;
+        const dist = Math.hypot(e.clientX - downX, e.clientY - downY);
+        if (!state.drag.active && dist > 8) {
+          state.drag.active = true;
+          renderTrayCanvases();
+        }
+        if (!state.drag.active) return;
+        const snap = computeSnapForClient(piece, e.clientX, e.clientY, e.pointerType);
+        state.drag.clientX = e.clientX;
+        state.drag.clientY = e.clientY;
+        state.drag.snapR = snap.snapR;
+        state.drag.snapC = snap.snapC;
+        state.drag.valid = snap.valid;
+        state.drag.overBoard = snap.overBoard;
+        state.drag.previewRows = snap.previewRows;
+        state.drag.previewCols = snap.previewCols;
+      });
+
+      const endDrag = (e) => {
+        if (!state.drag || state.drag.slotIdx !== idx || state.drag.pointerId !== e.pointerId) return;
+        const drag = state.drag;
+        state.drag = null;
+        if (drag.active && drag.valid) {
+          placePieceOnBoard(idx, drag.snapR, drag.snapC);
+        } else if (!drag.active) {
+          if (wasSelected) {
+            rotateSlot(idx);
+          } else {
+            renderTrayCanvases();
+          }
+        } else {
+          if (drag.overBoard) playInvalidSfx();
+          renderTrayCanvases();
+        }
+      };
+
+      slotEl.addEventListener('pointerup', endDrag);
+      slotEl.addEventListener('pointercancel', () => {
+        if (state.drag && state.drag.slotIdx === idx) {
+          state.drag = null;
+          renderTrayCanvases();
+        }
+      });
+
+      // Keyboard accessibility on tray slots (Enter / Space)
+      slotEl.addEventListener('keydown', (e) => {
+        if (state.status !== 'playing' || state.cascadePending) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const piece = state.tray[idx];
+          if (!piece) return;
+          ensureAudio();
+          if (state.selectedSlot === idx) {
+            rotateSlot(idx);
+          } else {
+            state.selectedSlot = idx;
+            renderTrayCanvases();
+          }
+        }
+      });
+    });
+
+    function clientToBoardCell(clientX, clientY) {
+      const rect = boardCanvas.getBoundingClientRect();
+      const { pad, cell } = getBoardMetrics();
+      const c = Math.floor((clientX - rect.left - pad) / cell);
+      const r = Math.floor((clientY - rect.top - pad) / cell);
+      if (r < 0 || r >= GRID || c < 0 || c >= GRID) return null;
+      return { r, c };
+    }
+
+    boardCanvas.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'touch') return;
+      state.hoverCell = clientToBoardCell(e.clientX, e.clientY);
+    });
+
+    boardCanvas.addEventListener('pointerleave', () => {
+      state.hoverCell = null;
+    });
+
+    boardCanvas.addEventListener('pointerdown', (e) => {
+      if (state.status !== 'playing' || state.cascadePending) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      ensureAudio();
+      const pos = clientToBoardCell(e.clientX, e.clientY);
+      if (!pos) return;
+
+      if (state.hammerArmed) {
+        fireHammerAt(pos.r, pos.c);
+        return;
+      }
+      const piece = state.tray[state.selectedSlot];
+      if (piece) {
+        const snap = computeClickSnapOnBoard(piece, pos.r, pos.c);
+        if (snap && snap.valid) {
+          placePieceOnBoard(state.selectedSlot, snap.snapR, snap.snapC);
+        } else {
+          playInvalidSfx();
+        }
+      }
+    });
+
+    // Toolbar controls
+    document.getElementById('btnRotate').addEventListener('click', () => {
+      ensureAudio();
+      rotateSlot(state.selectedSlot);
+    });
+
+    btnSpellHammer.addEventListener('click', () => {
+      if (state.hammerQty <= 0 || state.status !== 'playing' || state.cascadePending) return;
+      ensureAudio();
+      state.hammerArmed = !state.hammerArmed;
+      syncHudDOM();
+    });
+
+    btnSpellShuffle.addEventListener('click', () => {
+      if (state.shuffleQty <= 0 || state.status !== 'playing' || state.cascadePending) return;
+      ensureAudio();
+      state.shuffleQty--;
+      state.hammerArmed = false;
+      refillTray(true);
+      playRotateSfx();
+      checkWinOrLoss();
+      syncHudDOM();
+      renderTrayCanvases();
+    });
+
+    btnDragonBlast.addEventListener('click', () => {
+      if (!isDragonRageReady() || state.cascadePending) return;
+      ensureAudio();
+      triggerDragonRageBlast();
+    });
+
+    document.getElementById('btnRestart').addEventListener('click', () => {
+      ensureAudio();
+      setupStage(state.mode === 'stage' ? state.stage : 1);
+    });
+
+    function applySoundEnabled(nextEnabled) {
+      soundEnabled = Boolean(nextEnabled);
+      safeSet(STORAGE_KEYS.muted, soundEnabled ? '0' : '1');
+      if (!soundEnabled && audioCtx?.state === 'running') {
+        audioCtx.suspend().catch(() => {});
+      }
+      syncMuteDOM();
+    }
+
+    btnMute.addEventListener('click', () => {
+      applySoundEnabled(!soundEnabled);
+    });
+
+    const btnModeStage = document.getElementById('btnModeStage');
+    const btnModeEndless = document.getElementById('btnModeEndless');
+    function switchMode(mode) {
+      state.mode = mode;
+      btnModeStage.setAttribute('aria-selected', String(mode === 'stage'));
+      btnModeEndless.setAttribute('aria-selected', String(mode === 'endless'));
+      const savedStage = Math.min(MAX_STAGE, Math.max(1, state.unlockedStage || Number(safeGet(STORAGE_KEYS.unlockedStage, '1')) || 1));
+      setupStage(mode === 'stage' ? savedStage : 1);
+    }
+    btnModeStage.addEventListener('click', () => switchMode('stage'));
+    btnModeEndless.addEventListener('click', () => switchMode('endless'));
+
+    const btnGravityToggle = document.getElementById('btnGravityToggle');
+    btnGravityToggle.addEventListener('click', () => {
+      state.gravityEnabled = !state.gravityEnabled;
+      btnGravityToggle.setAttribute('aria-pressed', String(state.gravityEnabled));
+      btnGravityToggle.textContent = state.gravityEnabled ? 'Sập tầng: BẬT' : 'Sập tầng: TẮT';
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (state.status !== 'playing') return;
+      if (e.code === 'KeyR' || e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        const targetIdx = state.drag ? state.drag.slotIdx : state.selectedSlot;
+        rotateSlot(targetIdx);
+        if (state.drag?.active && state.tray[targetIdx]) {
+          const snap = computeSnapForClient(
+            state.tray[targetIdx],
+            state.drag.clientX,
+            state.drag.clientY,
+            state.drag.pointerType
+          );
+          Object.assign(state.drag, snap);
+        }
+      } else if (e.key === '1' || e.key === '2' || e.key === '3') {
+        const idx = Number(e.key) - 1;
+        if (state.tray[idx]) {
+          state.selectedSlot = idx;
+          renderTrayCanvases();
+        }
+      } else if (e.key === 'Escape') {
+        if (state.drag) {
+          state.drag = null;
+          renderTrayCanvases();
+        } else if (state.hammerArmed) {
+          state.hammerArmed = false;
+          syncHudDOM();
+        }
+      }
+    });
+
+    // =========================================================================
+    // 9. HPVN BONUS ARCADE TWO-WAY postMessage BRIDGE
+    // =========================================================================
+    window.addEventListener('message', (ev) => {
+      const data = ev?.data;
+      if (!data || typeof data !== 'object') return;
+      if (data.channel !== BONUS_CHANNEL || data.gameId !== GAME_ID) return;
+      if (EMBED_TOKEN && data.token && data.token !== EMBED_TOKEN) return;
+
+      if (data.type === 'init') {
+        const rec = (data.record && typeof data.record === 'object')
+          ? data.record
+          : (data.state && typeof data.state === 'object')
+            ? data.state
+            : data;
+
+        const incomingStage = Number(rec.unlockedStage ?? data.unlockedStage);
+        if (Number.isFinite(incomingStage) && incomingStage >= 1) {
+          const clamped = Math.min(MAX_STAGE, Math.floor(incomingStage));
+          state.unlockedStage = Math.max(state.unlockedStage, clamped);
+          safeSet(STORAGE_KEYS.unlockedStage, state.unlockedStage);
+        }
+
+        const incomingBestScore = Number(rec.bestScore ?? data.bestScore);
+        const incomingBestStage = Number(rec.bestStage ?? data.bestStage ?? incomingBestScore);
+        const incomingBestEndless = Number(rec.bestEndless ?? data.bestEndless ?? incomingBestScore);
+        if (Number.isFinite(incomingBestStage) && incomingBestStage > state.bestStage) {
+          state.bestStage = Math.floor(incomingBestStage);
+          safeSet(STORAGE_KEYS.bestStage, state.bestStage);
+        }
+        if (Number.isFinite(incomingBestEndless) && incomingBestEndless > state.bestEndless) {
+          state.bestEndless = Math.floor(incomingBestEndless);
+          safeSet(STORAGE_KEYS.bestEndless, state.bestEndless);
+        }
+
+        const incomingBestCombo = Number(rec.bestCombo ?? data.bestCombo);
+        if (Number.isFinite(incomingBestCombo) && incomingBestCombo > state.bestComboAllTime) {
+          state.bestComboAllTime = Math.floor(incomingBestCombo);
+        }
+
+        const incomingSound = typeof data.soundEnabled === 'boolean'
+          ? data.soundEnabled
+          : (typeof rec.soundEnabled === 'boolean' ? rec.soundEnabled : null);
+        if (incomingSound !== null) {
+          applySoundEnabled(incomingSound);
+        }
+
+        if (typeof data.reducedMotion === 'boolean') {
+          REDUCED_MOTION = REDUCED_MOTION || data.reducedMotion;
+        }
+
+        lastReportedBestScore = Math.max(lastReportedBestScore, state.bestStage, state.bestEndless);
+        lastReportedBestCombo = Math.max(lastReportedBestCombo, state.bestComboAllTime);
+        lastReportedUnlockedStage = Math.max(lastReportedUnlockedStage, state.unlockedStage);
+
+        if (state.mode === 'stage' && state.movesCount === 0 && state.status === 'playing' && state.stage !== state.unlockedStage) {
+          setupStage(state.unlockedStage);
+        } else {
+          syncHudDOM();
+          renderTrayCanvases();
+        }
+      } else if (data.type === 'audio-sync') {
+        const nextSound = typeof data.soundEnabled === 'boolean'
+          ? data.soundEnabled
+          : (typeof data.muted === 'boolean' ? !data.muted : !soundEnabled);
+        applySoundEnabled(nextSound);
+      } else if (data.type === 'molly-boost') {
+        if (!data.boostKind || data.boostKind === 'clear_rescue') {
+          applyMollyClearRescue();
+        }
+      }
+    });
+
+    window.addEventListener('resize', resizeBoardCanvas);
+    if (typeof ResizeObserver === 'function') {
+      const ro = new ResizeObserver(() => resizeBoardCanvas());
+      ro.observe(document.getElementById('boardWrap'));
+      ro.observe(document.getElementById('pieceTray'));
+    }
+
+    // Boot!
+    syncMuteDOM();
+    resizeBoardCanvas();
+    setupStage(state.stage);
+    requestAnimationFrame(frame);
+    postToParent('ready');
+  })();
+  </script>
+</body>
+</html>
