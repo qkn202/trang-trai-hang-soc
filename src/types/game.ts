@@ -1200,6 +1200,19 @@ export interface PuzzleArcadeState {
   jigsawSession?: SavedJigsawSession | null;
 }
 
+export type BonusArcadeGameId = 'block_blast' | 'suika' | 'pvz';
+
+export interface BonusArcadeGameRecord {
+  unlockedStage: number; // >= 1
+  clearedStages: number; // >= 0
+  bestScore: number;     // >= 0
+  bestCombo: number;     // max combo / highest fruit tier / max wave
+  winsCount: number;     // total victories / milestones claimed
+  lastPlayedAt?: number;
+}
+
+export type BonusArcadeState = Record<BonusArcadeGameId, BonusArcadeGameRecord>;
+
 export interface Match3ProgressionState {
   stars: number; // 🌟 Sao Phép Thuật (Gardenscapes / Royal Match central progression currency)
   totalStarsEarned: number;
@@ -1662,6 +1675,7 @@ export interface GameState {
   suitcase: SuitcaseSanctuaryState;
   match3: Match3ProgressionState;
   puzzleArcade: PuzzleArcadeState;
+  bonusArcade?: BonusArcadeState;
   lastPlayedMinigame?: LeaderboardGameId;
   levelUpTrialCompletedLevel?: number;
   puzzleLevelWinsProgress?: number;

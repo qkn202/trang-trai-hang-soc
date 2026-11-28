@@ -57,6 +57,16 @@ import {
   type WeeklyDerbySummary,
 } from './weeklyDerbyEngine';
 import {
+  completeBonusArcadeVictory,
+  consumeBonusArcadeMollySupply,
+  ensureBonusArcadeState,
+  recordBonusArcadeScore,
+  resolveBonusArcadeMollySupply,
+  type BonusArcadeMollyBoostKind,
+  type BonusArcadeVictoryOutcome,
+  type ResolvedBonusMollySupply,
+} from './bonusArcadeGames';
+import {
   createDailyQuests,
   createOwlOrderQuest,
   HARVEST_FEAST_TIERS,
@@ -108,6 +118,8 @@ import { CATALOG } from '../data/catalog';
 import { MagicalAudio } from '../engine/audio';
 import { findNextStepOnPaths, getRandomUnlockedPathTile } from '../engine/pathfinding';
 import {
+  BonusArcadeGameId,
+  BonusArcadeGameRecord,
   BuildReductionResult,
   CatalogItem,
   CraftedGoodId,
@@ -3200,6 +3212,34 @@ export class ParkSimulation {
     nowMs?: number
   ): { progressed: boolean; justCompleted: boolean } {
     return recordWeeklyDerbyProgress(this, eventKind, amount, nowMs);
+  }
+
+  public getBonusArcadeRecord(gameId: BonusArcadeGameId): BonusArcadeGameRecord {
+    return ensureBonusArcadeState(this.state)[gameId];
+  }
+
+  public recordBonusArcadeScore(
+    gameId: BonusArcadeGameId,
+    payload: { bestScore?: number; bestCombo?: number; unlockedStage?: number }
+  ): BonusArcadeGameRecord {
+    return recordBonusArcadeScore(this, gameId, payload);
+  }
+
+  public completeBonusArcadeVictory(
+    gameId: BonusArcadeGameId,
+    payload: { stage?: number; score?: number; combo?: number; isBoss?: boolean; runId?: string } = {}
+  ): BonusArcadeVictoryOutcome {
+    return completeBonusArcadeVictory(this, gameId, payload);
+  }
+
+  public getBonusArcadeMollySupply(gameId: BonusArcadeGameId): ResolvedBonusMollySupply {
+    return resolveBonusArcadeMollySupply(this, gameId);
+  }
+
+  public consumeBonusArcadeMollySupply(
+    gameId: BonusArcadeGameId
+  ): { ok: boolean; msg: string; boostKind?: BonusArcadeMollyBoostKind; remaining: number } {
+    return consumeBonusArcadeMollySupply(this, gameId);
   }
 }
 

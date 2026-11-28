@@ -1,6 +1,7 @@
 import './styles/fonts.css';
 import './styles/main.css';
 import './styles/puzzleArcade.css';
+import './styles/puzzleArcadeBonus.css';
 import './styles/hudAndMatch3.css';
 import './styles/minigameHalls.css';
 import './styles/hayDayDiegetic.css';
@@ -26,6 +27,7 @@ import type { HayDaySwipeVisualState } from './engine/hayDayWorldOverlay';
 import { SpriteRegistry } from './engine/spriteLoader';
 import { sampleCoasterTrainPositions } from './sim/coaster';
 import { isDragPaintableCatalogItem, isRepeatableCatalogItem, setFarmStore, ParkSimulation } from './sim/simulation';
+import { isBonusArcadeGameId } from './sim/bonusArcadeGames';
 import { worldGetStashedDecorCount } from './sim/simulationWorld';
 import {
   CatalogItem,
@@ -78,7 +80,82 @@ const isDragPaintableItem = isDragPaintableCatalogItem;
 // HPVN: brush items (paths & 1x1 fences) stay armed between strokes; non-brush buildings confirm/disarm cleanly
 const isBrushItem = (item: CatalogItem): boolean => isDragPaintableItem(item);
 
+export interface HangSocRuntimeHealthSnapshot {
+  frameTimeP95Ms: number;
+  avgFrameTimeMs: number;
+  sampleCount: number;
+  rendererMode: 'webgl2' | 'canvas';
+  webglContextLossCount: number;
+  bootDurationMs: number;
+}
+
+declare global {
+  interface Window {
+    readonly __hangSocRuntimeHealth?: HangSocRuntimeHealthSnapshot;
+  }
+}
+
+const RUNTIME_HEALTH_RING_SIZE = 120;
+const runtimeFrameMsRing = new Float32Array(RUNTIME_HEALTH_RING_SIZE);
+const runtimeFrameMsScratch = new Float32Array(RUNTIME_HEALTH_RING_SIZE);
+let runtimeFrameWriteIdx = 0;
+let runtimeFrameSampleCount = 0;
+let runtimeRendererMode: 'webgl2' | 'canvas' = 'canvas';
+let runtimeWebglContextLossCount = 0;
+let runtimeBootDurationMs = 0;
+
+function recordRuntimeFrameMs(frameMs: number): void {
+  if (!Number.isFinite(frameMs) || frameMs <= 0 || frameMs >= 500) return;
+  runtimeFrameMsRing[runtimeFrameWriteIdx] = frameMs;
+  runtimeFrameWriteIdx = (runtimeFrameWriteIdx + 1) % RUNTIME_HEALTH_RING_SIZE;
+  if (runtimeFrameSampleCount < RUNTIME_HEALTH_RING_SIZE) {
+    runtimeFrameSampleCount += 1;
+  }
+}
+
+export function getHangSocRuntimeHealth(): HangSocRuntimeHealthSnapshot {
+  const count = runtimeFrameSampleCount;
+  let avgFrameTimeMs = 0;
+  let frameTimeP95Ms = 0;
+  if (count > 0) {
+    let sum = 0;
+    for (let i = 0; i < count; i++) {
+      const v = runtimeFrameMsRing[i];
+      runtimeFrameMsScratch[i] = v;
+      sum += v;
+    }
+    for (let i = 1; i < count; i++) {
+      const key = runtimeFrameMsScratch[i];
+      let j = i - 1;
+      while (j >= 0 && runtimeFrameMsScratch[j] > key) {
+        runtimeFrameMsScratch[j + 1] = runtimeFrameMsScratch[j];
+        j -= 1;
+      }
+      runtimeFrameMsScratch[j + 1] = key;
+    }
+    const p95Idx = Math.min(count - 1, Math.max(0, Math.ceil(count * 0.95) - 1));
+    avgFrameTimeMs = Math.round((sum / count) * 100) / 100;
+    frameTimeP95Ms = Math.round(runtimeFrameMsScratch[p95Idx] * 100) / 100;
+  }
+  return {
+    frameTimeP95Ms,
+    avgFrameTimeMs,
+    sampleCount: count,
+    rendererMode: runtimeRendererMode,
+    webglContextLossCount: runtimeWebglContextLossCount,
+    bootDurationMs: runtimeBootDurationMs,
+  };
+}
+
 async function bootstrap(): Promise<void> {
+  const bootStartMs = performance.now();
+  if (import.meta.env.DEV && typeof window !== 'undefined') {
+    Object.defineProperty(window, '__hangSocRuntimeHealth', {
+      configurable: true,
+      enumerable: false,
+      get: getHangSocRuntimeHealth,
+    });
+  }
   const app = document.getElementById('app')!;
   installEmojiFilter(); // HPVN: no emoji on screen (owner 14/11)
   installTabCentering(); // HPVN: a re-rendered tab row keeps its current tab in view
@@ -232,6 +309,14 @@ async function bootstrap(): Promise<void> {
     canvas.insertAdjacentElement('beforebegin', gpuCanvas);
     gpuWorldRenderer = new WebGL2WorldRenderer(gpuCanvas, sprites);
     directGpuCanvas = gpuCanvas;
+    gpuCanvas.addEventListener(
+      'webglcontextlost',
+      () => {
+        runtimeWebglContextLossCount += 1;
+        runtimeRendererMode = 'canvas';
+      },
+      false
+    );
     directGpuSettings = {
       mode: (sim.state.settings.rendererMode ?? 'webgl2') === 'canvas' ? 'canvas' : 'webgl2',
       splitRatio: 0.5,
@@ -241,6 +326,7 @@ async function bootstrap(): Promise<void> {
       bloomIntensity: 0.72,
       normalStrength: 1.12,
     };
+    runtimeRendererMode = directGpuSettings.mode === 'webgl2' ? 'webgl2' : 'canvas';
     if (directGpuSettings.mode === 'webgl2') {
       canvas.style.position = 'relative';
       canvas.style.zIndex = '1';
@@ -281,6 +367,7 @@ async function bootstrap(): Promise<void> {
     gpuWorldRenderer = null;
     directGpuSettings = null;
     gpuInitFailed = true;
+    runtimeRendererMode = 'canvas';
     sim.state.settings.rendererMode = 'canvas';
   }
   const hasExplicitCamParam = Boolean(
@@ -502,38 +589,45 @@ async function bootstrap(): Promise<void> {
     dlgParam === 'blocks' ||
     dlgParam === 'jigsaw' ||
     dlgParam === 'pikachu' ||
-    dlgParam === 'onet'
+    dlgParam === 'onet' ||
+    dlgParam === 'block_blast' ||
+    dlgParam === 'suika' ||
+    dlgParam === 'pvz'
   ) {
     const rawPmode = dlgParam === 'puzzle' ? params.get('pmode') : dlgParam;
-    const pmode =
-      rawPmode === 'pikachu' || rawPmode === 'onet'
-        ? 'blocks'
-        : rawPmode === 'mines' || rawPmode === 'minesweeper' || rawPmode === 'domin'
-          ? 'caro'
-          : rawPmode === 'fishing' || rawPmode === 'fish' || rawPmode === 'banca'
-            ? 'chess'
-            : rawPmode;
-    const validMode: PuzzleArcadeMode | undefined =
-      pmode === 'caro' ||
-      pmode === 'sudoku' ||
-      pmode === 'chess' ||
-      pmode === 'blocks' ||
-      pmode === 'jigsaw'
-        ? pmode
-        : undefined;
-    const pStageParam = Number(params.get('pstage') || 0);
-    const clearedForMode = validMode ? sim.getDisciplineStageInfo(validMode).clearedStages : 0;
-    const maxAllowedPa = isDevHostAllowed
-      ? MAX_MINIGAME_STAGE
-      : Math.min(MAX_MINIGAME_STAGE, clearedForMode + 1);
-    const safePStage =
-      validMode && Number.isFinite(pStageParam) && pStageParam >= 1
-        ? Math.min(maxAllowedPa, Math.floor(pStageParam))
-        : undefined;
-    const allowPaDevJump = Boolean(
-      isDevHostAllowed && validMode && safePStage && safePStage > clearedForMode + 1
-    );
-    hud.openPuzzleArcadeDialog(validMode, safePStage, allowPaDevJump);
+    if (isBonusArcadeGameId(rawPmode)) {
+      hud.openPuzzleArcadeDialog(rawPmode);
+    } else {
+      const pmode =
+        rawPmode === 'pikachu' || rawPmode === 'onet'
+          ? 'blocks'
+          : rawPmode === 'mines' || rawPmode === 'minesweeper' || rawPmode === 'domin'
+            ? 'caro'
+            : rawPmode === 'fishing' || rawPmode === 'fish' || rawPmode === 'banca'
+              ? 'chess'
+              : rawPmode;
+      const validMode: PuzzleArcadeMode | undefined =
+        pmode === 'caro' ||
+        pmode === 'sudoku' ||
+        pmode === 'chess' ||
+        pmode === 'blocks' ||
+        pmode === 'jigsaw'
+          ? pmode
+          : undefined;
+      const pStageParam = Number(params.get('pstage') || 0);
+      const clearedForMode = validMode ? sim.getDisciplineStageInfo(validMode).clearedStages : 0;
+      const maxAllowedPa = isDevHostAllowed
+        ? MAX_MINIGAME_STAGE
+        : Math.min(MAX_MINIGAME_STAGE, clearedForMode + 1);
+      const safePStage =
+        validMode && Number.isFinite(pStageParam) && pStageParam >= 1
+          ? Math.min(maxAllowedPa, Math.floor(pStageParam))
+          : undefined;
+      const allowPaDevJump = Boolean(
+        isDevHostAllowed && validMode && safePStage && safePStage > clearedForMode + 1
+      );
+      hud.openPuzzleArcadeDialog(validMode, safePStage, allowPaDevJump);
+    }
   } else if (dlgParam === 'neighbors' || dlgParam === 'friends') {
     hud.openNeighborDialog();
   } else if (dlgParam === 'feast') {
@@ -698,6 +792,7 @@ async function bootstrap(): Promise<void> {
     hud.panCameraToTutorialTarget();
   }
   hud.refreshAll();
+  runtimeBootDurationMs = Math.max(0, Math.round(performance.now() - bootStartMs));
 
   window.addEventListener('hpvn:toast', (ev) => {
     const detail = (ev as CustomEvent<{ text?: string }>).detail;
@@ -3525,6 +3620,7 @@ async function bootstrap(): Promise<void> {
     lastTime = now;
 
     if (!cachedAnyDialogOpen && dt > 0.002 && dt < 0.5) {
+      recordRuntimeFrameMs(dt * 1000);
       telemetry.recordFrameFps(1 / dt);
       if (minimapFrame % 90 === 0 && minimapFrame > 0) {
         const health = telemetry.getHealthReport();
@@ -3848,6 +3944,7 @@ async function bootstrap(): Promise<void> {
         gpuWorldRenderer && !gpuWorldRenderer.gpuDevice.contextLost
           ? (activeGpuSettings?.mode ?? 'canvas')
           : 'canvas';
+      runtimeRendererMode = gpuMode === 'webgl2' ? 'webgl2' : 'canvas';
       const selectedBuildingUid =
         hud.inspectSelection?.kind === 'building' ? hud.inspectSelection.uid : null;
       if (gpuMode !== 'webgl2') {

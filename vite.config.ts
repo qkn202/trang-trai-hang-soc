@@ -142,7 +142,8 @@ export default defineConfig({
             id.includes('/src/sim/buildTransactions') ||
             id.includes('/src/sim/minigameSynergy') ||
             id.includes('/src/sim/hayDayFarming') ||
-            id.includes('/src/sim/weeklyDerbyEngine')
+            id.includes('/src/sim/weeklyDerbyEngine') ||
+            id.includes('/src/sim/bonusArcadeGames')
           ) {
             return 'sim-foundation';
           }

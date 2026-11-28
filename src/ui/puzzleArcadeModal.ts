@@ -55,7 +55,16 @@ import {
   ParkSimulation,
 } from '../sim/simulation';
 import {
+  BONUS_ARCADE_META,
+  isBonusArcadeGameId,
+} from '../sim/bonusArcadeGames';
+import {
+  BonusArcadeBridgeController,
+  scrollActiveArcadeTabIntoView,
+} from './bonusArcadeBridge';
+import {
   ActiveMinigameResumeRecord,
+  BonusArcadeGameId,
   BuildReductionResult,
   JigsawTrayFilter,
   LeaderboardRankChange,
@@ -427,6 +436,7 @@ export class PuzzleArcadeModalController {
   private yuleCaroBgImage: HTMLImageElement | null = null;
 
   public mode: PuzzleArcadeMode = 'caro';
+  private readonly bonusBridge: BonusArcadeBridgeController;
   public sudokuDisplayMode: SudokuDisplayMode = 'num_only';
   public sudokuEngine: SudokuPuzzleEngine | null = null;
   public minesEngine: MinesweeperEngine | null = null;
@@ -491,9 +501,18 @@ export class PuzzleArcadeModalController {
     }
   }
 
+  private get activeBonusGame(): BonusArcadeGameId | null {
+    return this.bonusBridge.activeGame;
+  }
+
+  public syncBonusArcadeAudio(soundEnabled?: boolean): void {
+    this.bonusBridge.syncAudio(soundEnabled);
+  }
+
   public resetSession(): void {
     this.cancelMinesLongPress();
     this.stopLoop();
+    this.bonusBridge.deactivate();
     this.cleanupJigsawTrayDrag();
     this.sudokuEngine = null;
     this.minesEngine = null;
@@ -590,13 +609,17 @@ export class PuzzleArcadeModalController {
     this.showToast = showToast;
     this.onSwitchToMatch3 = onSwitchToMatch3;
     this.sprites = sprites;
+    this.bonusBridge = new BonusArcadeBridgeController(root, sim, {
+      onParentRefresh,
+      showToast,
+    });
     this.preloadAssets();
 
     const dlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
     if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
       const mql = window.matchMedia('(max-width: 740px)');
       mql.addEventListener?.('change', () => {
-        if (dlg?.open) {
+        if (dlg?.open && !this.activeBonusGame) {
           this.renderDOM();
         }
       });
@@ -604,25 +627,31 @@ export class PuzzleArcadeModalController {
     dlg?.addEventListener('close', () => {
       if (dlg.open) return;
       dlg.returnValue = '';
+      const wasBonusGame = this.activeBonusGame !== null;
+      if (wasBonusGame) {
+        this.bonusBridge.deactivate();
+      }
       this.cancelMinesLongPress();
       this.hitStopTimer = 0;
       this.inspectingTurningPoint = false;
       this.cleanupJigsawTrayDrag();
-      if ((this.minesWinRevealTimer > 0 || (this.mode === 'caro' && this.minesEngine?.status === 'won')) && !this.victoryClaimed) {
-        this.minesWinRevealTimer = 0;
-        this.checkAndClaimVictory();
-      }
-      if ((this.fishWinRevealTimer > 0 || (this.mode === 'chess' && this.fishEngine?.status === 'won')) && !this.victoryClaimed) {
-        this.fishWinRevealTimer = 0;
-        this.checkAndClaimVictory();
-      }
-      if ((this.onetWinRevealTimer > 0 || (this.mode === 'blocks' && this.onetEngine?.status === 'won')) && !this.victoryClaimed) {
-        this.onetWinRevealTimer = 0;
-        this.checkAndClaimVictory();
-      }
-      if ((this.jigsawWinRevealTimer > 0 || (this.mode === 'jigsaw' && this.jigsawEngine?.status === 'won')) && !this.victoryClaimed) {
-        this.jigsawWinRevealTimer = 0;
-        this.checkAndClaimVictory();
+      if (!wasBonusGame) {
+        if ((this.minesWinRevealTimer > 0 || (this.mode === 'caro' && this.minesEngine?.status === 'won')) && !this.victoryClaimed) {
+          this.minesWinRevealTimer = 0;
+          this.checkAndClaimVictory();
+        }
+        if ((this.fishWinRevealTimer > 0 || (this.mode === 'chess' && this.fishEngine?.status === 'won')) && !this.victoryClaimed) {
+          this.fishWinRevealTimer = 0;
+          this.checkAndClaimVictory();
+        }
+        if ((this.onetWinRevealTimer > 0 || (this.mode === 'blocks' && this.onetEngine?.status === 'won')) && !this.victoryClaimed) {
+          this.onetWinRevealTimer = 0;
+          this.checkAndClaimVictory();
+        }
+        if ((this.jigsawWinRevealTimer > 0 || (this.mode === 'jigsaw' && this.jigsawEngine?.status === 'won')) && !this.victoryClaimed) {
+          this.jigsawWinRevealTimer = 0;
+          this.checkAndClaimVictory();
+        }
       }
       if (typeof document === 'undefined' || !document.hidden) {
         this.clearActiveModalResumeMarker();
@@ -639,7 +668,7 @@ export class PuzzleArcadeModalController {
         this.sim.saveToStorage();
       } else if (this.devJumpReturnStage) {
         this.restoreDevJumpStageIfAny(true);
-      } else {
+      } else if (!wasBonusGame) {
         this.persistModeSession(this.mode, true);
       }
       const modalInner =
@@ -655,11 +684,13 @@ export class PuzzleArcadeModalController {
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
-          this.flushArcadeAndModalBeforeHide();
+          if (!this.activeBonusGame) {
+            this.flushArcadeAndModalBeforeHide();
+          }
         } else {
           this.lastFrameTs = performance.now();
           const openDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
-          if (openDlg?.open) {
+          if (openDlg?.open && !this.activeBonusGame) {
             if (!this.rafId) {
               this.startLoop();
             }
@@ -672,7 +703,9 @@ export class PuzzleArcadeModalController {
 
     if (typeof window !== 'undefined') {
       const flushOnHide = () => {
-        this.flushArcadeAndModalBeforeHide();
+        if (!this.activeBonusGame) {
+          this.flushArcadeAndModalBeforeHide();
+        }
       };
       window.addEventListener('pagehide', flushOnHide);
       window.addEventListener('beforeunload', flushOnHide);
@@ -680,7 +713,7 @@ export class PuzzleArcadeModalController {
       window.addEventListener('pageshow', () => {
         this.lastFrameTs = performance.now();
         const openDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
-        if (openDlg?.open) {
+        if (openDlg?.open && !this.activeBonusGame) {
           if (!this.rafId) {
             this.startLoop();
           }
@@ -703,6 +736,12 @@ export class PuzzleArcadeModalController {
           Boolean(window.matchMedia?.('(max-height: 450px) and (orientation: landscape)').matches);
         const nextDesktopWide = Boolean(window.matchMedia?.('(min-width: 980px)').matches);
         const nextDockSig = `${res.effectiveLayout}:${nextFold ? 1 : 0}:${nextDesktopWide ? 1 : 0}`;
+        if (this.activeBonusGame) {
+          if (openDlg.dataset) {
+            openDlg.dataset.paDockSig = nextDockSig;
+          }
+          return;
+        }
         if ((prevLayout && prevLayout !== res.effectiveLayout) || (prevDockSig && prevDockSig !== nextDockSig)) {
           this.renderDOM();
           return;
@@ -716,7 +755,7 @@ export class PuzzleArcadeModalController {
     if (typeof window !== 'undefined') {
       window.addEventListener('keydown', (e) => {
       const openDlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
-      if (!openDlg?.open || this.victoryClaimed) return;
+      if (!openDlg?.open || this.victoryClaimed || this.activeBonusGame) return;
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (e.key === '+' || e.key === '=') {
@@ -1474,10 +1513,36 @@ export class PuzzleArcadeModalController {
     }
   }
 
-  public open(initialMode?: PuzzleArcadeMode, overrideStage?: number, allowDevJump = false): void {
+  public open(
+    initialMode?: PuzzleArcadeMode | BonusArcadeGameId,
+    overrideStage?: number,
+    allowDevJump = false
+  ): void {
     this.restoreDevJumpStageIfAny(false);
     this.rescueContext = null;
     this.rescueVictoryOutcome = null;
+
+    if (isBonusArcadeGameId(initialMode)) {
+      this.stopLoop();
+      sharedMinigameViewport.unbindStageInteractions('arcade');
+      this.bonusBridge.activate(initialMode);
+      this.clearActiveModalResumeMarker();
+
+      const dlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
+      if (!dlg) return;
+      this.renderDOM();
+      if (!dlg.open) {
+        dlg.showModal();
+      }
+      scrollActiveArcadeTabIntoView(
+        this.root.querySelector('#puzzleArcadeDialogContent') as HTMLElement | null,
+        true
+      );
+      this.onParentRefresh();
+      return;
+    }
+
+    this.bonusBridge.deactivate();
     const rawMode = initialMode ?? this.sim.state.puzzleArcade?.activeMode ?? 'caro';
     const targetMode: PuzzleArcadeMode =
       rawMode === 'sudoku' ||
@@ -1529,6 +1594,10 @@ export class PuzzleArcadeModalController {
     if (!dlg.open) {
       dlg.showModal();
     }
+    scrollActiveArcadeTabIntoView(
+      this.root.querySelector('#puzzleArcadeDialogContent') as HTMLElement | null,
+      false
+    );
     if (!this.rescueContext && !this.devJumpReturnStage) {
       this.persistModeSession(targetMode, true);
       this.persistActiveModalResumeMarker();
@@ -1546,6 +1615,7 @@ export class PuzzleArcadeModalController {
       this.showToast(check.reason ?? 'Không thể giải cứu màn này lúc này!', '🦉');
       return;
     }
+    this.bonusBridge.deactivate();
     this.clearActiveModalResumeMarker();
     this.rescueContext = { ...ctx };
     this.rescueVictoryOutcome = null;
@@ -1563,29 +1633,75 @@ export class PuzzleArcadeModalController {
     this.onParentRefresh();
   }
 
+  public switchBonusGame(gameId: BonusArcadeGameId): void {
+    if (this.rescueContext) return;
+    if (this.activeBonusGame === gameId) return;
+
+    if (!this.activeBonusGame) {
+      if (
+        (this.minesWinRevealTimer > 0 ||
+          this.fishWinRevealTimer > 0 ||
+          this.onetWinRevealTimer > 0 ||
+          this.jigsawWinRevealTimer > 0 ||
+          (this.mode === 'caro' && this.minesEngine?.status === 'won') ||
+          (this.mode === 'chess' && this.fishEngine?.status === 'won') ||
+          (this.mode === 'blocks' && this.onetEngine?.status === 'won') ||
+          (this.mode === 'jigsaw' && this.jigsawEngine?.status === 'won')) &&
+        !this.victoryClaimed
+      ) {
+        this.minesWinRevealTimer = 0;
+        this.fishWinRevealTimer = 0;
+        this.onetWinRevealTimer = 0;
+        this.jigsawWinRevealTimer = 0;
+        this.checkAndClaimVictory();
+      }
+      if (!this.rescueContext && !this.devJumpReturnStage) {
+        this.persistModeSession(this.mode, false);
+      }
+      this.restoreDevJumpStageIfAny(false);
+      this.stopLoop();
+      sharedMinigameViewport.unbindStageInteractions('arcade');
+    }
+
+    this.bonusBridge.activate(gameId);
+    this.clearActiveModalResumeMarker();
+    this.sim.audio.playClick();
+    this.renderDOM();
+    scrollActiveArcadeTabIntoView(
+      this.root.querySelector('#puzzleArcadeDialogContent') as HTMLElement | null,
+      true
+    );
+    this.onParentRefresh();
+  }
+
   public switchMode(nextMode: PuzzleArcadeMode): void {
     if (this.rescueContext) return;
-    if (
-      (this.minesWinRevealTimer > 0 ||
-        this.fishWinRevealTimer > 0 ||
-        this.onetWinRevealTimer > 0 ||
-        this.jigsawWinRevealTimer > 0 ||
-        (this.mode === 'caro' && this.minesEngine?.status === 'won') ||
-        (this.mode === 'chess' && this.fishEngine?.status === 'won') ||
-        (this.mode === 'blocks' && this.onetEngine?.status === 'won') ||
-        (this.mode === 'jigsaw' && this.jigsawEngine?.status === 'won')) &&
-      !this.victoryClaimed
-    ) {
-      this.minesWinRevealTimer = 0;
-      this.fishWinRevealTimer = 0;
-      this.onetWinRevealTimer = 0;
-      this.jigsawWinRevealTimer = 0;
-      this.checkAndClaimVictory();
+    const wasBonusGame = this.activeBonusGame !== null;
+    if (wasBonusGame) {
+      this.bonusBridge.deactivate();
+    } else {
+      if (
+        (this.minesWinRevealTimer > 0 ||
+          this.fishWinRevealTimer > 0 ||
+          this.onetWinRevealTimer > 0 ||
+          this.jigsawWinRevealTimer > 0 ||
+          (this.mode === 'caro' && this.minesEngine?.status === 'won') ||
+          (this.mode === 'chess' && this.fishEngine?.status === 'won') ||
+          (this.mode === 'blocks' && this.onetEngine?.status === 'won') ||
+          (this.mode === 'jigsaw' && this.jigsawEngine?.status === 'won')) &&
+        !this.victoryClaimed
+      ) {
+        this.minesWinRevealTimer = 0;
+        this.fishWinRevealTimer = 0;
+        this.onetWinRevealTimer = 0;
+        this.jigsawWinRevealTimer = 0;
+        this.checkAndClaimVictory();
+      }
+      if (!this.rescueContext && !this.devJumpReturnStage) {
+        this.persistModeSession(this.mode, false);
+      }
+      this.restoreDevJumpStageIfAny(false);
     }
-    if (!this.rescueContext && !this.devJumpReturnStage) {
-      this.persistModeSession(this.mode, false);
-    }
-    this.restoreDevJumpStageIfAny(false);
     this.mode = nextMode;
     this.sim.state.puzzleArcade.activeMode = nextMode;
     this.sim.setLastPlayedMinigame(nextMode);
@@ -1599,6 +1715,13 @@ export class PuzzleArcadeModalController {
     }
     this.sim.saveToStorage();
     this.renderDOM();
+    scrollActiveArcadeTabIntoView(
+      this.root.querySelector('#puzzleArcadeDialogContent') as HTMLElement | null,
+      true
+    );
+    if (wasBonusGame || !this.rafId) {
+      this.startLoop();
+    }
     this.onParentRefresh();
   }
 
@@ -2391,25 +2514,30 @@ export class PuzzleArcadeModalController {
       '#puzzleArcadeDialog .pa-modal-inner'
     ) as HTMLElement | null;
     const orientRes = sharedMinigameViewport.applyDialogOrientation(dlg, modalInner, false);
+    const activeBonus = this.activeBonusGame;
+    const activeBonusMeta = activeBonus ? BONUS_ARCADE_META[activeBonus] : null;
     if (dlg?.dataset) {
-      dlg.dataset.paActiveMode = this.mode;
+      dlg.dataset.paActiveMode = activeBonus ?? this.mode;
       const curFold =
         orientRes.effectiveLayout === 'portrait' ||
         Boolean(globalThis.matchMedia?.('(max-height: 450px) and (orientation: landscape)').matches);
       const curDesktopWide = Boolean(globalThis.matchMedia?.('(min-width: 980px)').matches);
       dlg.dataset.paDockSig = `${orientRes.effectiveLayout}:${curFold ? 1 : 0}:${curDesktopWide ? 1 : 0}`;
     }
-    modalInner?.classList.toggle('pa-great-hall-mode', this.mode === 'chess');
-    modalInner?.classList.toggle('pa-potions-sudoku-mode', this.mode === 'sudoku');
-    modalInner?.classList.toggle('pa-marauder-caro-mode', this.mode === 'caro');
+    modalInner?.classList.toggle('pa-great-hall-mode', !activeBonus && this.mode === 'chess');
+    modalInner?.classList.toggle('pa-potions-sudoku-mode', !activeBonus && this.mode === 'sudoku');
+    modalInner?.classList.toggle('pa-marauder-caro-mode', !activeBonus && this.mode === 'caro');
+    modalInner?.classList.toggle('pa-bonus-embed-mode', Boolean(activeBonus));
 
     const modalTitle = this.root.querySelector('#puzzleArcadeDialogTitle') as HTMLElement | null;
     if (modalTitle) {
       if (this.isYuleSkinActive()) {
-      this.ensureYuleArcadeAssetsLoaded();
-    }
+        this.ensureYuleArcadeAssetsLoaded();
+      }
 
-    if (this.mode === 'chess') {
+      if (activeBonusMeta) {
+        modalTitle.innerHTML = `<img src="${activeBonusMeta.spriteIcon}" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));" />${escapeHtml(activeBonusMeta.titleVi)}`;
+      } else if (this.mode === 'chess') {
         modalTitle.innerHTML =
           '<img src="/game/trang-trai-hang-soc/paintings/plimpy_icon.webp?v=sea2" alt="" style="width:28px;height:28px;object-fit:contain;vertical-align:-7px;margin-right:6px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5));" />Bắn Cá Hồ Đen';
       } else if (this.mode === 'sudoku') {
@@ -2871,11 +2999,12 @@ export class PuzzleArcadeModalController {
     };
 
     const isFailedNow =
-      (this.mode === 'sudoku' && this.sudokuEngine?.status === 'lost') ||
-      (this.mode === 'blocks' && this.onetEngine?.status === 'lost') ||
-      (this.mode === 'jigsaw' && this.jigsawEngine?.status === 'lost') ||
-      (this.mode === 'caro' && this.minesEngine?.status === 'lost') ||
-      (this.mode === 'chess' && this.fishEngine?.status === 'lost');
+      !activeBonus &&
+      ((this.mode === 'sudoku' && this.sudokuEngine?.status === 'lost') ||
+        (this.mode === 'blocks' && this.onetEngine?.status === 'lost') ||
+        (this.mode === 'jigsaw' && this.jigsawEngine?.status === 'lost') ||
+        (this.mode === 'caro' && this.minesEngine?.status === 'lost') ||
+        (this.mode === 'chess' && this.fishEngine?.status === 'lost'));
     if (isFailedNow && !this.lossStreakResetForStage && !this.rescueContext) {
       this.lossStreakResetForStage = true;
       this.sim.resetExamWinStreak();
@@ -2895,7 +3024,9 @@ export class PuzzleArcadeModalController {
     }
 
     const paKit = this.sim.getMollySupplyForMinigame(this.mode);
-    const paSynergyDockHtml = `
+    const paSynergyDockHtml = activeBonus
+      ? ''
+      : `
       <div class="aaa-synergy-dock" role="region" aria-label="Hộp Tiếp Tế Bà Molly">
         <button
           id="btnPaSnackApplePie"
@@ -2917,13 +3048,51 @@ export class PuzzleArcadeModalController {
       globalThis.matchMedia?.('(min-width: 980px)').matches ||
       globalThis.matchMedia?.('(max-height: 450px) and (orientation: landscape)').matches;
 
-    if (this.mode === 'jigsaw') {
+    if (!activeBonus && this.mode === 'jigsaw') {
       this.cleanupJigsawTrayDrag();
       this.captureJigsawTrayScrollState();
     }
 
+    const bonusTabsHtml = this.bonusBridge.buildTabsHtml();
+    const bonusMarkup = activeBonus ? this.bonusBridge.buildViewMarkup() : null;
+
+    let renderedLevelBarHtml = '';
+    let renderedStageViewportHtml = '';
+    let renderedControlsBarHtml = '';
+
+    if (activeBonus && bonusMarkup) {
+      renderedLevelBarHtml = bonusMarkup.levelBarHtml;
+      renderedStageViewportHtml = bonusMarkup.stageViewportHtml;
+      renderedControlsBarHtml = bonusMarkup.controlsBarHtml;
+    } else {
+      renderedLevelBarHtml = levelBarHtml({
+        stage: `Màn ${activeStageNum}/${MAX_MINIGAME_STAGE}`,
+        sub: `${trialBadgeFor(this.mode) ? 'Đề cử · ' : ''}${stageSub}`,
+        stats: stageStats,
+        alert: stageAlert,
+        action: stageAction,
+      });
+      renderedStageViewportHtml = `
+        <div class="pa-stage-viewport ${this.mode === 'jigsaw' ? 'pa-jigsaw-stage-viewport' : ''}">
+          <div class="mg-stage-pan-area">
+            <div class="pa-canvas-shell" data-pa-board-mode="${this.mode}">
+              <canvas id="paBoardCanvas" width="${this.getVirtualCanvasSize().w}" height="${this.getVirtualCanvasSize().h}" aria-label="Bàn chơi Đại Sảnh Khảo Thí Phép Thuật"></canvas>
+              ${inspectReturnBarHtml}
+            </div>
+          </div>
+          ${this.mode === 'jigsaw' ? '<div id="paJigsawTrayDock" class="pa-jigsaw-tray-dock" role="region" aria-label="Khay mảnh ghép thông minh"></div>' : ''}
+        </div>
+      `;
+      renderedControlsBarHtml = `
+        <div class="pa-controls-bar">
+          ${controlsHtml}
+          ${synergyInControls ? paSynergyDockHtml : ''}
+        </div>
+      `;
+    }
+
     box.innerHTML = `
-      <div class="pa-layout-shell" data-pa-active-mode="${this.mode}">
+      <div class="pa-layout-shell" data-pa-active-mode="${activeBonus ?? this.mode}" data-pa-bonus-active="${activeBonus ? 'true' : 'false'}">
         <aside class="pa-side-dock" aria-label="Bảng chọn trò chơi và công cụ">
           <div class="pa-top-bar">
             <div class="pa-dock-head-row">
@@ -2957,61 +3126,54 @@ export class PuzzleArcadeModalController {
               </form>
             </div>
 
-            <div class="pa-mode-tabs" role="tablist"${globalThis.matchMedia?.('(min-width: 980px)').matches ? ' aria-orientation="vertical"' : ''} aria-label="Chọn môn khảo thí phép thuật Hogwarts" ${this.rescueContext ? 'style="opacity:0.65;pointer-events:none;"' : ''}>
-              <button type="button" role="tab" aria-selected="${this.mode === 'caro'}" data-pa-mode="caro" class="pa-mode-tab ${this.mode === 'caro' ? 'active' : ''}" title="Dò Mìn Phép Thuật • ${MINIGAME_FARM_SPECIALTIES.caro.shortTagVi}">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">Dò Mìn Phép Thuật</span><span class="pa-tab-name-short"><span class="pa-tab-ico"></span> Dò Mìn</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('caro')}</span>${trialBadgeFor('caro')}</span>
-              </button>
-              <button type="button" role="tab" aria-selected="${this.mode === 'sudoku'}" data-pa-mode="sudoku" class="pa-mode-tab ${this.mode === 'sudoku' ? 'active' : ''}" title="Số Học Huyền Bí • ${MINIGAME_FARM_SPECIALTIES.sudoku.shortTagVi}">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🔢 Số Học Huyền Bí</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🔢</span> Số Học</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('sudoku')}</span>${trialBadgeFor('sudoku')}</span>
-              </button>
-              <button type="button" role="tab" aria-selected="${this.mode === 'chess'}" data-pa-mode="chess" class="pa-mode-tab ${this.mode === 'chess' ? 'active' : ''}" title="Bắn Cá Hồ Đen • ${MINIGAME_FARM_SPECIALTIES.chess.shortTagVi}">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">Bắn Cá Hồ Đen</span><span class="pa-tab-name-short"><span class="pa-tab-ico"></span> Bắn Cá</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('chess')}</span>${trialBadgeFor('chess')}</span>
-              </button>
-              <button type="button" role="tab" aria-selected="${this.mode === 'blocks'}" data-pa-mode="blocks" class="pa-mode-tab ${this.mode === 'blocks' ? 'active' : ''}" title="Sinh Vật Huyền Bí • ${MINIGAME_FARM_SPECIALTIES.blocks.shortTagVi}">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🦄 Sinh Vật Huyền Bí</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🦄</span> Sinh Vật</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('blocks')}</span>${trialBadgeFor('blocks')}</span>
-              </button>
-              <button type="button" role="tab" aria-selected="${this.mode === 'jigsaw'}" data-pa-mode="jigsaw" class="pa-mode-tab ${this.mode === 'jigsaw' ? 'active' : ''}" title="Tranh Ghép Phép Thuật • ${MINIGAME_FARM_SPECIALTIES.jigsaw.shortTagVi}">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🧩 Tranh Ghép Phép Thuật</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🧩</span> Tranh Ghép</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('jigsaw')}</span>${trialBadgeFor('jigsaw')}</span>
-              </button>
-              <button id="btnPaGoMatch3" type="button" role="tab" aria-selected="false" class="pa-mode-tab" title="Bùa Gặt Honeydukes • ${MINIGAME_FARM_SPECIALTIES.match3.shortTagVi}">
-                <span class="pa-tab-name"><span class="pa-tab-name-full">🍬 Bùa Gặt Honeydukes</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🍬</span> Bùa Gặt</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('match3')}</span>${trialBadgeFor('match3')}</span>
-              </button>
+            <div class="pa-mode-tabs-wrap">
+              <div class="pa-mode-tabs" role="tablist"${globalThis.matchMedia?.('(min-width: 980px)').matches ? ' aria-orientation="vertical"' : ''} aria-label="Chọn môn khảo thí phép thuật Hogwarts" ${this.rescueContext ? 'style="opacity:0.65;pointer-events:none;"' : ''}>
+                <span class="pa-tab-group-label" aria-hidden="true">Cúp 4 Nhà (6)</span>
+                <button type="button" role="tab" aria-selected="${!activeBonus && this.mode === 'caro'}" data-pa-mode="caro" class="pa-mode-tab ${!activeBonus && this.mode === 'caro' ? 'active' : ''}" title="Dò Mìn Phép Thuật • ${MINIGAME_FARM_SPECIALTIES.caro.shortTagVi}">
+                  <span class="pa-tab-name"><span class="pa-tab-name-full">Dò Mìn Phép Thuật</span><span class="pa-tab-name-short"><span class="pa-tab-ico"></span> Dò Mìn</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('caro')}</span>${trialBadgeFor('caro')}</span>
+                </button>
+                <button type="button" role="tab" aria-selected="${!activeBonus && this.mode === 'sudoku'}" data-pa-mode="sudoku" class="pa-mode-tab ${!activeBonus && this.mode === 'sudoku' ? 'active' : ''}" title="Số Học Huyền Bí • ${MINIGAME_FARM_SPECIALTIES.sudoku.shortTagVi}">
+                  <span class="pa-tab-name"><span class="pa-tab-name-full">🔢 Số Học Huyền Bí</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🔢</span> Số Học</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('sudoku')}</span>${trialBadgeFor('sudoku')}</span>
+                </button>
+                <button type="button" role="tab" aria-selected="${!activeBonus && this.mode === 'chess'}" data-pa-mode="chess" class="pa-mode-tab ${!activeBonus && this.mode === 'chess' ? 'active' : ''}" title="Bắn Cá Hồ Đen • ${MINIGAME_FARM_SPECIALTIES.chess.shortTagVi}">
+                  <span class="pa-tab-name"><span class="pa-tab-name-full">Bắn Cá Hồ Đen</span><span class="pa-tab-name-short"><span class="pa-tab-ico"></span> Bắn Cá</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('chess')}</span>${trialBadgeFor('chess')}</span>
+                </button>
+                <button type="button" role="tab" aria-selected="${!activeBonus && this.mode === 'blocks'}" data-pa-mode="blocks" class="pa-mode-tab ${!activeBonus && this.mode === 'blocks' ? 'active' : ''}" title="Sinh Vật Huyền Bí • ${MINIGAME_FARM_SPECIALTIES.blocks.shortTagVi}">
+                  <span class="pa-tab-name"><span class="pa-tab-name-full">🦄 Sinh Vật Huyền Bí</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🦄</span> Sinh Vật</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('blocks')}</span>${trialBadgeFor('blocks')}</span>
+                </button>
+                <button type="button" role="tab" aria-selected="${!activeBonus && this.mode === 'jigsaw'}" data-pa-mode="jigsaw" class="pa-mode-tab ${!activeBonus && this.mode === 'jigsaw' ? 'active' : ''}" title="Tranh Ghép Phép Thuật • ${MINIGAME_FARM_SPECIALTIES.jigsaw.shortTagVi}">
+                  <span class="pa-tab-name"><span class="pa-tab-name-full">🧩 Tranh Ghép Phép Thuật</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🧩</span> Tranh Ghép</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('jigsaw')}</span>${trialBadgeFor('jigsaw')}</span>
+                </button>
+                <button id="btnPaGoMatch3" type="button" role="tab" aria-selected="false" class="pa-mode-tab" title="Bùa Gặt Honeydukes • ${MINIGAME_FARM_SPECIALTIES.match3.shortTagVi}">
+                  <span class="pa-tab-name"><span class="pa-tab-name-full">🍬 Bùa Gặt Honeydukes</span><span class="pa-tab-name-short"><span class="pa-tab-ico">🍬</span> Bùa Gặt</span></span> <span class="pa-tab-badges"><span class="pa-tab-lv">${fmtTabLv('match3')}</span>${trialBadgeFor('match3')}</span>
+                </button>
+                <span class="pa-tab-group-label is-bonus" aria-hidden="true">Giải Trí Mới (3)</span>
+                ${bonusTabsHtml}
+              </div>
             </div>
           </div>
 
-          ${levelBarHtml({
-            stage: `Màn ${activeStageNum}/${MAX_MINIGAME_STAGE}`,
-            sub: `${trialBadgeFor(this.mode) ? 'Đề cử · ' : ''}${stageSub}`,
-            stats: stageStats,
-            alert: stageAlert,
-            action: stageAction,
-          })}
+          ${renderedLevelBarHtml}
 
-          ${statusBannerHtml}
-          ${synergyInControls ? '' : paSynergyDockHtml}
+          ${activeBonus ? '' : statusBannerHtml}
+          ${synergyInControls || activeBonus ? '' : paSynergyDockHtml}
         </aside>
 
-        <div class="pa-stage-viewport ${this.mode === 'jigsaw' ? 'pa-jigsaw-stage-viewport' : ''}">
-          <div class="mg-stage-pan-area">
-            <div class="pa-canvas-shell" data-pa-board-mode="${this.mode}">
-              <canvas id="paBoardCanvas" width="${this.getVirtualCanvasSize().w}" height="${this.getVirtualCanvasSize().h}" aria-label="Bàn chơi Đại Sảnh Khảo Thí Phép Thuật"></canvas>
-              ${inspectReturnBarHtml}
-            </div>
-          </div>
-          ${this.mode === 'jigsaw' ? '<div id="paJigsawTrayDock" class="pa-jigsaw-tray-dock" role="region" aria-label="Khay mảnh ghép thông minh"></div>' : ''}
-        </div>
+        ${renderedStageViewportHtml}
 
-        <div class="pa-controls-bar">
-          ${controlsHtml}
-          ${synergyInControls ? paSynergyDockHtml : ''}
-        </div>
-        ${victoryOverlayHtml}
+        ${renderedControlsBarHtml}
+        ${activeBonus ? '' : victoryOverlayHtml}
       </div>
     `;
 
     liftToolIcons(box);
     this.bindDOMControls(box);
-    this.mountCanvas(box);
+    if (activeBonus) {
+      this.canvas = null;
+      sharedMinigameViewport.unbindStageInteractions('arcade');
+    } else {
+      this.mountCanvas(box);
+    }
   }
 
   private updateLiveCountersOnly(): void {
@@ -3260,13 +3422,20 @@ export class PuzzleArcadeModalController {
     box.querySelectorAll<HTMLButtonElement>('[data-pa-mode]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const m = btn.dataset.paMode as PuzzleArcadeMode;
-        if (m && m !== this.mode) {
+        if (m && (this.activeBonusGame !== null || m !== this.mode)) {
           this.switchMode(m);
         }
       });
     });
 
+    this.bonusBridge.bindControls(box, (gid) => {
+      this.switchBonusGame(gid);
+    });
+
     box.querySelector('#btnPaGoMatch3')?.addEventListener('click', () => {
+      if (this.activeBonusGame) {
+        this.bonusBridge.deactivate();
+      }
       const dlg = this.root.querySelector('#puzzleArcadeDialog') as HTMLDialogElement | null;
       dlg?.close();
       this.onSwitchToMatch3();
@@ -3288,7 +3457,13 @@ export class PuzzleArcadeModalController {
       }
       this.forceImmediateRedraw = true;
       this.onParentRefresh();
-      this.renderDOM();
+      if (this.activeBonusGame) {
+        const toggleBtn = box.querySelector('#btnPaToggleYuleSkin');
+        toggleBtn?.classList.toggle('is-yule-active', active);
+        toggleBtn?.setAttribute('aria-pressed', String(active));
+      } else {
+        this.renderDOM();
+      }
     });
 
     box.querySelector('#btnPaVictoryLeaderboard')?.addEventListener('click', () => {

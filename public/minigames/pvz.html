@@ -1,0 +1,5394 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#381b0c" />
+  <title>Vườn Thủ Hang Sóc — PvZ Fusion 2026</title>
+  <link rel="preload" href="../fonts/be-vietnam-pro-700-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="../fonts/be-vietnam-pro-700-vietnamese.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="../fonts/fonts.css" />
+  <style>
+    /* =====================================================================
+       TRANG TRẠI HANG SÓC — EXACT PALETTE TOKENS (--hs-* & --farm-*)
+       ===================================================================== */
+    :root {
+      color-scheme: light;
+      /* Official HPVN & Hang Sóc tokens */
+      --hs-paper: #fdf4dc;
+      --hs-paper-2: #f6e4b8;
+      --hs-ink: #4a2c16;
+      --hs-ink-soft: #7a5638;
+      --hs-cream: #fff6dc;
+      --hs-wood: #381b0c;
+      --hs-wood-2: #6e391c;
+      --hs-brass: #b07d43;
+      --hs-brass-bright: #f4c668;
+      --hs-gold-bright: #ffe484;
+      --hs-gold: #f5b301;
+      --hs-gold-deep: #c98a00;
+      --hs-forest: #142620;
+      --hs-forest-2: #24483f;
+      --hs-ok: #22780f;
+      --hs-ok-bg: #e7f9d4;
+      --hs-bad: #b93822;
+      --hs-bad-bg: #fff1ed;
+      --hs-shade: rgba(74, 44, 22, 0.34);
+
+      --farm-wood-darkest: #381b0c;
+      --farm-wood-dark: #4f2813;
+      --farm-wood-mid: #6e391c;
+      --farm-wood-warm: #874925;
+      --farm-wood-well: #3f1f0e;
+      --farm-brass-bright: #f4c668;
+      --farm-brass-mid: #d4963b;
+      --farm-brass-dark: #8c5919;
+      --farm-sheet-top: #fffcf4;
+      --farm-sheet-bot: #f4e2bc;
+      --farm-sheet-well: #ecd4a4;
+      --farm-sheet-border: #cfa66b;
+      --farm-ink-title: #4a240d;
+      --farm-ink-body: #633416;
+      --farm-crimson-top: #c92a22;
+      --farm-crimson-mid: #a61919;
+      --farm-crimson-bot: #7a1414;
+      --farm-fire-core: #fff6a6;
+      --farm-fire-mid: #ff851b;
+      --farm-fire-deep: #9c2206;
+      --farm-shadow-deep: rgba(34, 16, 5, 0.52);
+
+      /* Derived semantic translucencies (zero hardcoded hex outside :root) */
+      --pvz-vignette-top: rgba(34, 18, 8, 0.42);
+      --pvz-vignette-bot: rgba(20, 12, 6, 0.64);
+      --pvz-backdrop-dim: rgba(28, 14, 5, 0.72);
+      --pvz-shadow-hard: rgba(20, 9, 3, 0.65);
+      --pvz-shadow-soft: rgba(18, 8, 3, 0.42);
+      --pvz-inset-light: rgba(255, 246, 220, 0.38);
+      --pvz-track-bg: rgba(56, 27, 12, 0.24);
+      --pvz-chip-bg: rgba(176, 125, 67, 0.16);
+      --pvz-chip-border: rgba(176, 125, 67, 0.48);
+      --pvz-cd-curtain: rgba(34, 16, 5, 0.66);
+      --pvz-selected-ring: rgba(245, 179, 1, 0.62);
+      --pvz-overdrive-ring: rgba(74, 210, 90, 0.62);
+      --pvz-danger-ring: rgba(255, 133, 27, 0.58);
+      --pvz-emerald-top: #2f8f33;
+      --pvz-emerald-mid: #1f6b24;
+      --pvz-emerald-bot: #154d19;
+      --pvz-frost-tint: #d8f4ff;
+      --pvz-frost-ink: #125874;
+      --pvz-tier3-top: #ffdf6e;
+      --pvz-tier3-bot: #e38617;
+
+      --target-size: 36px;
+    }
+
+    @media (pointer: coarse) {
+      :root { --target-size: 44px; }
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      max-width: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      font-family: 'Be Vietnam Pro', 'Be Vietnam Pro Fallback', system-ui, -apple-system, sans-serif;
+      color: var(--hs-ink);
+      background-color: var(--hs-wood);
+      overflow-wrap: break-word;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    :focus-visible {
+      outline: 3px solid var(--hs-gold);
+      outline-offset: 2px;
+    }
+
+    /* =====================================================================
+       FULLSCREEN HANG SÓC CONSERVATORY SHELL
+       ===================================================================== */
+    .hs-pvz-shell {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100dvh;
+      padding:
+        max(6px, env(safe-area-inset-top, 0px))
+        max(10px, env(safe-area-inset-right, 0px))
+        max(6px, env(safe-area-inset-bottom, 0px))
+        max(10px, env(safe-area-inset-left, 0px));
+      gap: 6px;
+      background:
+        linear-gradient(180deg, var(--pvz-vignette-top) 0%, var(--pvz-vignette-bot) 100%),
+        url('../paintings/jigsaw_herbology_conservatory.webp') center center / cover no-repeat;
+      box-shadow: inset 0 0 0 3px var(--farm-brass-bright);
+      overflow: hidden;
+    }
+
+    /* =====================================================================
+       TOP FOREST HEADER BAR (FIXED COMPACT HEIGHT — ZERO LAYOUT SHIFT)
+       ===================================================================== */
+    .hs-pvz-header {
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 13px;
+      background: linear-gradient(180deg, var(--hs-forest-2) 0%, var(--hs-forest) 100%);
+      border: 2px solid var(--farm-brass-bright);
+      box-shadow: 0 3px 0 var(--hs-wood), 0 6px 16px var(--farm-shadow-deep);
+      color: var(--hs-cream);
+    }
+
+    .hs-pvz-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-inline-size: 0;
+    }
+
+    .hs-pvz-brand img {
+      width: 28px;
+      height: 28px;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 3px var(--pvz-shadow-soft));
+      flex: none;
+    }
+
+    .hs-pvz-title-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      min-inline-size: 0;
+    }
+
+    .hs-pvz-title {
+      margin: 0;
+      font-family: 'Be Vietnam Pro', 'Be Vietnam Pro Fallback', system-ui, -apple-system, sans-serif;
+      font-size: 16px;
+      font-weight: 800;
+      line-height: 1.15;
+      color: var(--hs-cream);
+      text-wrap: balance;
+      letter-spacing: -0.01em;
+    }
+
+    .hs-pvz-sub {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--farm-brass-bright);
+      line-height: 1.2;
+    }
+
+    /* Mode Segmented Tabs */
+    .hs-pvz-modes {
+      display: inline-flex;
+      align-items: stretch;
+      gap: 2px;
+      padding: 2px;
+      border-radius: 11px;
+      border: 1.5px solid var(--hs-brass);
+      background: var(--hs-wood);
+    }
+
+    .hs-pvz-mode-btn {
+      min-block-size: var(--target-size);
+      min-inline-size: var(--target-size);
+      padding: 0 11px;
+      border: 0;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--hs-cream);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background-color 0.14s ease, color 0.14s ease;
+    }
+
+    .hs-pvz-mode-btn[aria-selected="true"] {
+      background: var(--hs-gold);
+      color: var(--hs-ink);
+    }
+
+    /* Header Action Buttons */
+    .hs-pvz-actions {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+
+    .hs-pvz-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      min-block-size: var(--target-size);
+      min-inline-size: var(--target-size);
+      padding: 0 10px;
+      border-radius: 10px;
+      border: 2px solid var(--farm-brass-bright);
+      background: linear-gradient(180deg, var(--farm-wood-warm) 0%, var(--farm-wood-dark) 100%);
+      color: var(--hs-cream);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      box-shadow: 0 2.5px 0 var(--hs-wood);
+      transition: transform 0.12s ease, filter 0.14s ease, border-color 0.14s ease;
+    }
+
+    .hs-pvz-btn:active {
+      transform: translateY(1.5px);
+    }
+
+    .hs-pvz-btn.is-gold {
+      background: linear-gradient(180deg, var(--hs-gold-bright) 0%, var(--hs-gold) 65%, var(--hs-gold-deep) 100%);
+      border-color: var(--hs-wood);
+      color: var(--farm-ink-title);
+    }
+
+    .hs-pvz-btn.is-active {
+      background: linear-gradient(180deg, var(--pvz-emerald-top) 0%, var(--pvz-emerald-bot) 100%);
+      border-color: var(--hs-gold-bright);
+      color: var(--hs-cream);
+    }
+
+    .hs-pvz-btn.is-almanac {
+      background: linear-gradient(180deg, var(--hs-paper) 0%, var(--hs-paper-2) 100%);
+      border-color: var(--farm-brass-mid);
+      color: var(--farm-ink-title);
+    }
+
+    .hs-pvz-btn img {
+      width: 16px;
+      height: 16px;
+      object-fit: contain;
+      flex: none;
+    }
+
+    /* =====================================================================
+       PARCHMENT RIBBON BAR (SUN + STAGE + WAVE FLAGS + SCORE — FIXED HEIGHT)
+       ===================================================================== */
+    .hs-pvz-ribbon {
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-block-size: 42px;
+      padding: 4px 10px;
+      border-radius: 11px;
+      background: linear-gradient(180deg, var(--hs-paper) 0%, var(--hs-paper-2) 100%);
+      border: 2px solid var(--hs-brass);
+      box-shadow: 0 2.5px 0 var(--hs-wood);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .hs-pvz-ribbon-left {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex: none;
+    }
+
+    .hs-pvz-sun-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-inline-size: 86px;
+      min-block-size: 32px;
+      padding: 2px 10px;
+      border-radius: 999px;
+      border: 2px solid var(--farm-brass-dark);
+      background: linear-gradient(180deg, var(--hs-gold-bright) 0%, var(--hs-gold) 100%);
+      color: var(--farm-ink-title);
+      font-size: 14px;
+      font-weight: 800;
+      box-shadow: 0 2px 0 var(--hs-wood);
+      transition: transform 0.14s ease;
+    }
+
+    .hs-pvz-sun-pill.pop {
+      transform: scale(1.09);
+    }
+
+    .hs-pvz-sun-pill img {
+      width: 19px;
+      height: 19px;
+      object-fit: contain;
+      flex: none;
+    }
+
+    .hs-pvz-stage-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 9px;
+      border-radius: 8px;
+      background: var(--hs-wood);
+      color: var(--farm-brass-bright);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .hs-pvz-stage-nav {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .hs-pvz-mini-step {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-inline-size: 30px;
+      min-block-size: 30px;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 1.5px solid var(--hs-brass);
+      border-radius: 7px;
+      background: var(--farm-sheet-top);
+      color: var(--hs-ink);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    @media (pointer: coarse) {
+      .hs-pvz-mini-step {
+        min-inline-size: 40px;
+        min-block-size: 40px;
+        width: 40px;
+        height: 40px;
+        font-size: 15px;
+      }
+    }
+
+    .hs-pvz-mini-step[hidden] {
+      display: none;
+    }
+
+    .hs-pvz-mini-step:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    /* Wave Progress Track with Flag Markers */
+    .hs-pvz-wave-wrap {
+      flex: 1 1 160px;
+      min-inline-size: 72px;
+      max-inline-size: 360px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hs-pvz-wave-track {
+      position: relative;
+      flex: 1 1 auto;
+      height: 14px;
+      border-radius: 999px;
+      background: var(--pvz-track-bg);
+      border: 1.5px solid var(--hs-brass);
+      box-shadow: inset 0 2px 3px var(--pvz-shadow-soft);
+      overflow: visible;
+    }
+
+    .hs-pvz-wave-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--pvz-emerald-top) 0%, var(--hs-gold) 65%, var(--farm-fire-mid) 100%);
+      transition: width 0.22s ease;
+    }
+
+    .hs-pvz-wave-flags {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .hs-pvz-flag {
+      position: absolute;
+      top: -6px;
+      width: 14px;
+      height: 22px;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      font-size: 11px;
+      line-height: 1;
+      filter: drop-shadow(0 1px 1px var(--pvz-shadow-soft));
+    }
+
+    .hs-pvz-flag.is-passed {
+      opacity: 0.45;
+      transform: translateX(-50%) scale(0.9);
+    }
+
+    .hs-pvz-wave-txt {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--hs-ink);
+      white-space: nowrap;
+    }
+
+    .hs-pvz-ribbon-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: none;
+    }
+
+    .hs-pvz-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-block-size: 30px;
+      padding: 2px 8px;
+      border-radius: 8px;
+      border: 1.5px solid var(--hs-brass);
+      background: linear-gradient(180deg, var(--farm-sheet-top) 0%, var(--farm-sheet-bot) 100%);
+      color: var(--hs-ink);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .hs-pvz-pill .lbl {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--hs-ink-soft);
+    }
+
+    .hs-pvz-tip {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--hs-ink-soft);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-inline-size: 380px;
+    }
+
+    @media (max-width: 1080px) {
+      .hs-pvz-tip { display: none; }
+    }
+
+    .hs-pvz-tip strong {
+      color: var(--farm-ink-title);
+      font-weight: 800;
+    }
+
+    /* =====================================================================
+       MAIN STAGE AREA (BOARD + SEED & TOOL DOCK)
+       ===================================================================== */
+    .hs-pvz-stage {
+      flex: 1 1 0;
+      min-block-size: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: 100%;
+      max-inline-size: 1360px;
+      margin: 0 auto;
+    }
+
+    .hs-pvz-board-wrap {
+      position: relative;
+      flex: 1 1 0;
+      min-block-size: 0;
+      min-inline-size: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .hs-pvz-board-frame {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px;
+      border-radius: 16px;
+      background: linear-gradient(180deg, var(--farm-wood-warm) 0%, var(--farm-wood-mid) 52%, var(--farm-wood-dark) 100%);
+      border: 2.5px solid var(--farm-brass-bright);
+      box-shadow:
+        0 5px 0 var(--hs-wood),
+        0 14px 32px var(--farm-shadow-deep),
+        inset 0 2px 0 var(--pvz-inset-light);
+      overflow: hidden;
+    }
+
+    .hs-pvz-board-frame.is-overdrive-armed {
+      border-color: var(--hs-gold-bright);
+      box-shadow:
+        0 5px 0 var(--hs-wood),
+        0 0 0 3px var(--pvz-overdrive-ring),
+        0 14px 32px var(--farm-shadow-deep);
+    }
+
+    .hs-pvz-board-frame.is-shovel-armed {
+      border-color: var(--farm-fire-mid);
+      box-shadow:
+        0 5px 0 var(--hs-wood),
+        0 0 0 3px var(--pvz-danger-ring),
+        0 14px 32px var(--farm-shadow-deep);
+    }
+
+    #gardenCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border-radius: 11px;
+      touch-action: none;
+      cursor: pointer;
+    }
+
+    #gardenCanvas.is-shovel {
+      cursor: crosshair;
+    }
+
+    /* =====================================================================
+       FIXED-HEIGHT SEED & TOOLS DOCK (ZERO LAYOUT SHIFT)
+       ===================================================================== */
+    .hs-pvz-dock {
+      flex: none;
+      display: flex;
+      align-items: stretch;
+      justify-content: space-between;
+      gap: 8px;
+      height: 86px;
+      padding: 6px 8px;
+      border-radius: 14px;
+      background: linear-gradient(180deg, var(--hs-paper) 0%, var(--hs-paper-2) 100%);
+      border: 2.5px solid var(--hs-brass);
+      box-shadow: 0 4px 0 var(--hs-wood), 0 10px 22px var(--farm-shadow-deep);
+    }
+
+    .hs-pvz-seeds {
+      flex: 1 1 0;
+      min-inline-size: 0;
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .hs-pvz-seed {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1px;
+      min-block-size: var(--target-size);
+      padding: 4px 5px 3px;
+      border-radius: 11px;
+      border: 2px solid var(--hs-brass);
+      background: linear-gradient(180deg, var(--farm-sheet-top) 0%, var(--farm-sheet-bot) 100%);
+      color: var(--hs-ink);
+      font-family: inherit;
+      cursor: pointer;
+      overflow: hidden;
+      box-shadow: 0 2.5px 0 var(--hs-wood);
+      transition: transform 0.12s ease, border-color 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
+    }
+
+    .hs-pvz-seed:hover:not(:disabled) {
+      transform: translateY(-2px);
+      border-color: var(--farm-brass-dark);
+    }
+
+    .hs-pvz-seed:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
+    .hs-pvz-seed.is-selected {
+      background: linear-gradient(180deg, var(--hs-gold-bright) 0%, var(--hs-paper) 100%);
+      border-color: var(--hs-gold-deep);
+      box-shadow: 0 0 0 3px var(--pvz-selected-ring), 0 3px 0 var(--hs-wood);
+      transform: translateY(-2px);
+    }
+
+    .hs-pvz-seed.is-unaffordable {
+      opacity: 0.58;
+      filter: grayscale(0.35);
+    }
+
+    .hs-pvz-seed.is-cooling {
+      opacity: 0.76;
+    }
+
+    .hs-pvz-seed-key {
+      position: absolute;
+      top: 3px;
+      left: 5px;
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--hs-ink-soft);
+      line-height: 1;
+      pointer-events: none;
+    }
+
+    .hs-pvz-seed-fuse-dot {
+      position: absolute;
+      top: 3px;
+      right: 5px;
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--hs-gold-deep);
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      pointer-events: none;
+    }
+
+    .hs-pvz-seed.has-fusion-target .hs-pvz-seed-fuse-dot {
+      opacity: 1;
+    }
+
+    .hs-pvz-seed img {
+      width: 34px;
+      height: 34px;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 2px var(--pvz-shadow-soft));
+      pointer-events: none;
+    }
+
+    .hs-pvz-seed-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-inline-size: 0;
+      max-inline-size: 100%;
+    }
+
+    .hs-pvz-seed-name {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--farm-ink-title);
+      line-height: 1.1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-inline-size: 100%;
+    }
+
+    .hs-pvz-seed-cost {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--hs-ink-soft);
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+    }
+
+    .hs-pvz-seed-cd {
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 0%;
+      background: var(--pvz-cd-curtain);
+      pointer-events: none;
+    }
+
+    /* Tools Cluster (Plant Food Overdrive + Shovel) */
+    .hs-pvz-tools {
+      flex: none;
+      display: flex;
+      align-items: stretch;
+      gap: 6px;
+      padding-left: 8px;
+      border-left: 2px dashed var(--farm-sheet-border);
+    }
+
+    .hs-pvz-tool {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      min-inline-size: 88px;
+      min-block-size: var(--target-size);
+      padding: 4px 8px;
+      border-radius: 11px;
+      border: 2px solid var(--farm-brass-bright);
+      background: linear-gradient(180deg, var(--farm-wood-warm) 0%, var(--farm-wood-dark) 100%);
+      color: var(--hs-cream);
+      font-family: inherit;
+      font-size: 11.5px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 2.5px 0 var(--hs-wood);
+      transition: transform 0.12s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+    }
+
+    .hs-pvz-tool:active {
+      transform: translateY(1.5px);
+    }
+
+    .hs-pvz-tool img {
+      width: 26px;
+      height: 26px;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 3px var(--pvz-shadow-soft));
+    }
+
+    .hs-pvz-tool .tool-sub {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--farm-brass-bright);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .hs-pvz-tool-key {
+      position: absolute;
+      top: 3px;
+      left: 5px;
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--farm-brass-bright);
+      pointer-events: none;
+    }
+
+    .hs-pvz-tool.is-overdrive-ready {
+      background: linear-gradient(180deg, var(--pvz-emerald-top) 0%, var(--pvz-emerald-mid) 65%, var(--pvz-emerald-bot) 100%);
+      border-color: var(--hs-gold-bright);
+    }
+
+    .hs-pvz-tool.is-armed {
+      background: linear-gradient(180deg, var(--farm-crimson-top) 0%, var(--farm-crimson-bot) 100%);
+      border-color: var(--farm-fire-core);
+      box-shadow: 0 0 0 3px var(--pvz-danger-ring), 0 3px 0 var(--hs-wood);
+    }
+
+    .hs-pvz-tool.is-overdrive-ready.is-armed {
+      background: linear-gradient(180deg, var(--hs-gold) 0%, var(--farm-fire-mid) 100%);
+      color: var(--farm-ink-title);
+      border-color: var(--farm-fire-core);
+      box-shadow: 0 0 0 3px var(--pvz-overdrive-ring), 0 3px 0 var(--hs-wood);
+    }
+
+    .hs-pvz-tool.is-overdrive-ready.is-armed .tool-sub,
+    .hs-pvz-tool.is-overdrive-ready.is-armed .hs-pvz-tool-key {
+      color: var(--farm-ink-title);
+    }
+
+    .hs-pvz-tool:disabled {
+      opacity: 0.48;
+      cursor: not-allowed;
+      filter: grayscale(0.35);
+    }
+
+    @media (pointer: coarse) {
+      .hs-pvz-seed-key, .hs-pvz-tool-key { display: none; }
+    }
+
+    /* =====================================================================
+       NATIVE <dialog> MODALS (ALMANAC & VICTORY/DEFEAT)
+       ===================================================================== */
+    dialog.hs-pvz-dialog {
+      padding: 0;
+      border: 3px solid var(--farm-brass-bright);
+      border-radius: 20px;
+      background: linear-gradient(180deg, var(--hs-paper) 0%, var(--hs-paper-2) 100%);
+      color: var(--hs-ink);
+      inline-size: min(460px, calc(100vw - 24px));
+      max-block-size: calc(100dvh - 24px);
+      box-shadow: 0 8px 0 var(--hs-wood), 0 20px 44px var(--pvz-shadow-hard);
+      overflow: hidden;
+    }
+
+    dialog.hs-pvz-dialog.is-wide {
+      inline-size: min(760px, calc(100vw - 24px));
+    }
+
+    dialog.hs-pvz-dialog[open] {
+      display: flex;
+      flex-direction: column;
+    }
+
+    dialog.hs-pvz-dialog:modal {
+      overscroll-behavior: contain;
+    }
+
+    dialog.hs-pvz-dialog::backdrop {
+      background: var(--pvz-backdrop-dim);
+      overflow: hidden;
+      overscroll-behavior: contain;
+    }
+
+    .hs-pvz-dlg-head {
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 11px 16px;
+      background: linear-gradient(180deg, var(--hs-forest-2) 0%, var(--hs-forest) 100%);
+      border-bottom: 2px solid var(--farm-brass-bright);
+      color: var(--hs-cream);
+    }
+
+    .hs-pvz-dlg-head h2 {
+      margin: 0;
+      font-family: 'Be Vietnam Pro', 'Be Vietnam Pro Fallback', system-ui, -apple-system, sans-serif;
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1.2;
+      text-wrap: balance;
+    }
+
+    .hs-pvz-dlg-sub {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--farm-brass-bright);
+      white-space: nowrap;
+    }
+
+    .hs-pvz-dlg-body {
+      flex: 1 1 auto;
+      min-block-size: 0;
+      overflow-y: auto;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .hs-pvz-dlg-foot {
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 16px 12px;
+      border-top: 1.5px solid var(--farm-sheet-border);
+      background: var(--farm-sheet-well);
+    }
+
+    .hs-pvz-dlg-foot button {
+      flex: 1 1 auto;
+      max-inline-size: 210px;
+      min-block-size: 44px;
+      font-size: 14px;
+    }
+
+    .hs-pvz-dlg-foot button[hidden] {
+      display: none;
+    }
+
+    .hs-pvz-dlg-note {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--hs-ink-soft);
+      text-wrap: pretty;
+    }
+
+    /* Fusion Almanac Cards */
+    .hs-pvz-almanac-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+      gap: 9px;
+    }
+
+    .hs-pvz-recipe {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px 11px;
+      border-radius: 13px;
+      background: var(--farm-sheet-top);
+      border: 2px solid var(--farm-sheet-border);
+      box-shadow: 0 2px 0 var(--hs-shade);
+    }
+
+    .hs-pvz-recipe.is-titan {
+      background: linear-gradient(180deg, var(--hs-paper) 0%, var(--hs-gold-bright) 100%);
+      border-color: var(--hs-gold-deep);
+    }
+
+    .hs-pvz-recipe.is-super {
+      background: linear-gradient(180deg, var(--farm-sheet-top) 0%, var(--pvz-frost-tint) 100%);
+      border-color: var(--hs-brass);
+    }
+
+    .hs-pvz-recipe-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .hs-pvz-recipe-name {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--farm-ink-title);
+      line-height: 1.2;
+    }
+
+    .hs-pvz-recipe-badge {
+      flex: none;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 10.5px;
+      font-weight: 800;
+      background: var(--pvz-chip-bg);
+      border: 1px solid var(--pvz-chip-border);
+      color: var(--hs-ink);
+      white-space: nowrap;
+    }
+
+    .hs-pvz-recipe-badge.is-crafted {
+      background: var(--hs-ok-bg);
+      border-color: var(--hs-ok);
+      color: var(--hs-ok);
+    }
+
+    .hs-pvz-recipe-formula {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding: 5px 8px;
+      border-radius: 9px;
+      background: var(--hs-paper-2);
+      border: 1px solid var(--farm-sheet-border);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--farm-ink-body);
+    }
+
+    .hs-pvz-recipe-formula img {
+      width: 24px;
+      height: 24px;
+      object-fit: contain;
+    }
+
+    .hs-pvz-combo-icon {
+      display: inline-flex;
+      align-items: center;
+      flex: none;
+    }
+
+    .hs-pvz-combo-icon img + img {
+      margin-left: -8px;
+    }
+
+    .hs-pvz-recipe-desc {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--hs-ink-soft);
+      text-wrap: pretty;
+    }
+
+    /* Result Modal Metrics */
+    .hs-pvz-score-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      text-align: center;
+    }
+
+    .hs-pvz-metric {
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: var(--farm-sheet-top);
+      border: 1.5px solid var(--farm-sheet-border);
+    }
+
+    .hs-pvz-metric .m-lbl {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--hs-ink-soft);
+    }
+
+    .hs-pvz-metric .m-val {
+      display: block;
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--farm-ink-title);
+      font-variant-numeric: tabular-nums;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hs-pvz-wave-fill, .hs-pvz-sun-pill, .hs-pvz-seed, .hs-pvz-btn { transition: none; }
+    }
+
+    /* =====================================================================
+       RESPONSIVE: TABLET & PORTRAIT MOBILE (<= 840px, tall viewports or narrow embeds)
+       ===================================================================== */
+    @media (max-width: 840px) and (min-height: 521px), (max-width: 559px) {
+      .hs-pvz-shell {
+        gap: 5px;
+        padding:
+          max(4px, env(safe-area-inset-top, 0px))
+          max(6px, env(safe-area-inset-right, 0px))
+          max(4px, env(safe-area-inset-bottom, 0px))
+          max(6px, env(safe-area-inset-left, 0px));
+      }
+      .hs-pvz-header {
+        padding: 4px 7px;
+        gap: 5px;
+      }
+      .hs-pvz-brand img { width: 23px; height: 23px; }
+      .hs-pvz-sub { display: none; }
+      .hs-pvz-title { font-size: 14.5px; }
+      .hs-pvz-actions {
+        width: 100%;
+        justify-content: space-between;
+        gap: 4px;
+      }
+      .hs-pvz-btn {
+        padding: 0 8px;
+        font-size: 11.5px;
+        flex: 1 1 auto;
+      }
+      .hs-pvz-ribbon {
+        padding: 4px 7px;
+        gap: 6px;
+        min-block-size: 50px;
+      }
+      .hs-pvz-mini-step {
+        min-inline-size: 40px;
+        min-block-size: 40px;
+        width: 40px;
+        height: 40px;
+        font-size: 15px;
+      }
+      .hs-pvz-tip { display: none; }
+      .hs-pvz-sun-pill {
+        min-inline-size: 74px;
+        padding: 2px 8px;
+        font-size: 13px;
+      }
+      .hs-pvz-stage-badge { font-size: 11px; padding: 3px 7px; }
+      .hs-pvz-pill .lbl { display: none; }
+      .hs-pvz-board-frame {
+        padding: 4px;
+        border-width: 2px;
+        border-radius: 13px;
+      }
+      .hs-pvz-dock {
+        flex-direction: column;
+        height: auto;
+        padding: 6px;
+        gap: 6px;
+        border-radius: 13px;
+      }
+      .hs-pvz-seeds {
+        gap: 4px;
+      }
+      .hs-pvz-seed {
+        padding: 4px 2px 3px;
+        min-block-size: 66px;
+      }
+      .hs-pvz-seed img { width: 28px; height: 28px; }
+      .hs-pvz-seed-name { font-size: 10px; }
+      .hs-pvz-seed-cost { font-size: 10px; }
+      .hs-pvz-tools {
+        border-left: 0;
+        border-top: 1.5px dashed var(--farm-sheet-border);
+        padding-left: 0;
+        padding-top: 5px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .hs-pvz-tool {
+        flex-direction: row;
+        justify-content: center;
+        gap: 6px;
+        min-inline-size: 0;
+        min-block-size: max(44px, var(--target-size));
+        padding: 4px 8px;
+      }
+      .hs-pvz-tool img { width: 22px; height: 22px; }
+    }
+
+    /* Compact Portrait Mobile (375x667, 390x844 & 393x852 embed) */
+    @media (max-width: 480px) {
+      .hs-pvz-shell {
+        padding:
+          max(4px, env(safe-area-inset-top, 0px))
+          max(4px, env(safe-area-inset-right, 0px))
+          max(4px, env(safe-area-inset-bottom, 0px))
+          max(4px, env(safe-area-inset-left, 0px));
+      }
+      .hs-pvz-actions {
+        flex-wrap: nowrap;
+        gap: 3px;
+      }
+      .hs-pvz-btn {
+        font-size: 10.5px;
+        padding: 0 5px;
+        gap: 3px;
+        min-inline-size: 40px;
+        min-block-size: max(40px, var(--target-size));
+      }
+      .hs-pvz-btn img { width: 13px; height: 13px; }
+      .hs-pvz-mode-btn {
+        padding: 0 8px;
+        font-size: 11px;
+        min-inline-size: 40px;
+        min-block-size: max(40px, var(--target-size));
+      }
+      .hs-pvz-ribbon {
+        padding: 3px 5px;
+        gap: 4px;
+      }
+      .hs-pvz-ribbon-left { gap: 4px; }
+      .hs-pvz-sun-pill {
+        min-inline-size: 54px;
+        padding: 2px 6px;
+        gap: 3px;
+        font-size: 12px;
+      }
+      .hs-pvz-sun-pill img { width: 15px; height: 15px; }
+      .hs-pvz-stage-badge { font-size: 10.5px; padding: 3px 5px; }
+      .hs-pvz-wave-wrap {
+        flex: 1 1 56px;
+        min-inline-size: 52px;
+        gap: 4px;
+      }
+      .hs-pvz-wave-track { height: 12px; }
+      .hs-pvz-wave-txt { font-size: 10.5px; }
+      .hs-pvz-pill { padding: 2px 6px; font-size: 11px; }
+    }
+
+    @media (max-width: 480px) and (max-height: 700px) {
+      .hs-pvz-seed { min-block-size: 58px; }
+      .hs-pvz-seed img { width: 24px; height: 24px; }
+      .hs-pvz-seed-name { font-size: 9.5px; }
+      .hs-pvz-btn, .hs-pvz-mode-btn { min-block-size: 40px; }
+    }
+
+    /* =====================================================================
+       RESPONSIVE: MOBILE LANDSCAPE & SHORT WIDE VIEWPORTS (max-height: 520px, min-width: 560px)
+       ===================================================================== */
+    @media (max-height: 520px) and (min-width: 560px) {
+      .hs-pvz-shell {
+        gap: 3px;
+        padding:
+          max(3px, env(safe-area-inset-top, 0px))
+          max(8px, env(safe-area-inset-right, 0px))
+          max(3px, env(safe-area-inset-bottom, 0px))
+          max(8px, env(safe-area-inset-left, 0px));
+      }
+      .hs-pvz-header {
+        flex-wrap: nowrap;
+        padding: 3px 7px;
+        gap: 5px;
+        border-radius: 10px;
+      }
+      .hs-pvz-brand img { width: 20px; height: 20px; }
+      .hs-pvz-title { font-size: 13px; white-space: nowrap; }
+      .hs-pvz-sub { display: none; }
+      .hs-pvz-mode-btn {
+        min-block-size: 38px;
+        min-inline-size: 40px;
+        padding: 0 8px;
+        font-size: 11px;
+      }
+      .hs-pvz-actions {
+        flex-wrap: nowrap;
+        gap: 4px;
+      }
+      .hs-pvz-btn {
+        min-block-size: 38px;
+        min-inline-size: 40px;
+        padding: 0 7px;
+        font-size: 11px;
+      }
+      .hs-pvz-btn img { width: 14px; height: 14px; }
+      .hs-pvz-ribbon {
+        min-block-size: 46px;
+        padding: 2px 8px;
+        gap: 6px;
+        border-radius: 9px;
+      }
+      .hs-pvz-sun-pill {
+        min-inline-size: 66px;
+        min-block-size: 28px;
+        padding: 1px 7px;
+        font-size: 12px;
+      }
+      .hs-pvz-sun-pill img { width: 15px; height: 15px; }
+      .hs-pvz-stage-badge { font-size: 10.5px; padding: 2px 6px; }
+      .hs-pvz-mini-step {
+        min-inline-size: 38px;
+        min-block-size: 38px;
+        width: 38px;
+        height: 38px;
+        font-size: 13px;
+      }
+      .hs-pvz-wave-track { height: 11px; }
+      .hs-pvz-wave-txt { font-size: 11px; }
+      .hs-pvz-pill { min-block-size: 28px; padding: 1px 6px; font-size: 11px; }
+      .hs-pvz-pill .lbl { display: none; }
+      .hs-pvz-tip { display: none; }
+
+      /* Landscape 2-column playfield: huge 5x9 lawn on left + 2x3 seed dock on right */
+      .hs-pvz-stage {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) clamp(204px, 27vw, 240px);
+        grid-template-rows: minmax(0, 1fr);
+        gap: 6px;
+      }
+      .hs-pvz-board-frame {
+        padding: 4px;
+        border-width: 2px;
+        border-radius: 12px;
+      }
+      .hs-pvz-dock {
+        flex-direction: column;
+        height: 100%;
+        padding: 5px;
+        gap: 5px;
+        border-radius: 12px;
+      }
+      .hs-pvz-seeds {
+        flex: 1 1 0;
+        min-block-size: 0;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-rows: repeat(3, minmax(0, 1fr));
+        gap: 4px;
+      }
+      .hs-pvz-seed {
+        min-block-size: 0;
+        padding: 2px 4px;
+        flex-direction: row;
+        justify-content: flex-start;
+        gap: 4px;
+      }
+      .hs-pvz-seed img { width: 24px; height: 24px; flex: none; }
+      .hs-pvz-seed-meta {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        min-inline-size: 0;
+      }
+      .hs-pvz-seed-name { font-size: 10px; }
+      .hs-pvz-seed-cost { font-size: 10px; }
+      .hs-pvz-tools {
+        border-left: 0;
+        border-top: 1.5px dashed var(--farm-sheet-border);
+        padding-left: 0;
+        padding-top: 4px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 4px;
+      }
+      .hs-pvz-tool {
+        min-inline-size: 0;
+        min-block-size: 40px;
+        padding: 3px 5px;
+        font-size: 10.5px;
+        gap: 2px;
+      }
+      .hs-pvz-tool img { width: 18px; height: 18px; }
+      .hs-pvz-tool .tool-sub { font-size: 9.5px; }
+      .hs-pvz-almanac-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    /* =====================================================================
+       HPVN EMBED MODE (?embed=1) — COMPACT FIT INSIDE #puzzleArcadeDialog
+       ===================================================================== */
+    body.is-embed .hs-pvz-shell {
+      padding: 4px 6px;
+      gap: 4px;
+      box-shadow: none;
+    }
+
+    body.is-embed .hs-pvz-brand {
+      display: none;
+    }
+
+    body.is-embed .hs-pvz-header {
+      padding: 4px 7px;
+      gap: 5px;
+      border-radius: 10px;
+      border-width: 1.5px;
+      box-shadow: 0 2px 0 var(--hs-wood);
+      min-inline-size: 0;
+      max-inline-size: 100%;
+    }
+
+    body.is-embed .hs-pvz-ribbon {
+      min-block-size: 36px;
+      padding: 3px 8px;
+      gap: 6px;
+      border-radius: 9px;
+      border-width: 1.5px;
+      box-shadow: 0 2px 0 var(--hs-wood);
+      min-inline-size: 0;
+      max-inline-size: 100%;
+    }
+
+    body.is-embed .hs-pvz-stage {
+      gap: 5px;
+      max-inline-size: 100%;
+      min-inline-size: 0;
+    }
+
+    body.is-embed .hs-pvz-board-frame {
+      padding: 4px;
+      border-width: 2px;
+      border-radius: 12px;
+      box-shadow:
+        0 3px 0 var(--hs-wood),
+        0 8px 18px var(--farm-shadow-deep),
+        inset 0 1.5px 0 var(--pvz-inset-light);
+    }
+
+    body.is-embed dialog.hs-pvz-dialog {
+      inline-size: min(460px, calc(100vw - 16px));
+      max-block-size: calc(100dvh - 16px);
+    }
+
+    body.is-embed dialog.hs-pvz-dialog.is-wide {
+      inline-size: min(740px, calc(100vw - 16px));
+    }
+
+    @media (min-width: 841px) and (min-height: 521px) {
+      body.is-embed .hs-pvz-btn,
+      body.is-embed .hs-pvz-mode-btn {
+        min-block-size: 32px;
+        font-size: 11.5px;
+      }
+      body.is-embed .hs-pvz-dock {
+        height: 76px;
+        padding: 5px 7px;
+        border-radius: 12px;
+        border-width: 2px;
+      }
+      body.is-embed .hs-pvz-seed img {
+        width: 28px;
+        height: 28px;
+      }
+      body.is-embed .hs-pvz-tool img {
+        width: 22px;
+        height: 22px;
+      }
+    }
+
+    @media (max-width: 559px) {
+      body.is-embed .hs-pvz-shell {
+        padding: 3px 4px;
+        gap: 4px;
+      }
+      body.is-embed .hs-pvz-header {
+        padding: 3px 5px;
+        gap: 4px;
+      }
+      body.is-embed .hs-pvz-modes {
+        flex: 1 1 auto;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      body.is-embed .hs-pvz-mode-btn {
+        min-block-size: 34px;
+        min-inline-size: 0;
+        padding: 0 6px;
+        font-size: 11px;
+      }
+      body.is-embed .hs-pvz-actions {
+        width: 100%;
+        flex-wrap: nowrap;
+        gap: 3px;
+        min-inline-size: 0;
+      }
+      body.is-embed .hs-pvz-btn {
+        flex: 1 1 auto;
+        min-inline-size: 0;
+        min-block-size: 34px;
+        padding: 0 4px;
+        font-size: 10.5px;
+        gap: 2px;
+        overflow: hidden;
+      }
+      body.is-embed #btnAlmanac {
+        flex: 1.35 1 auto;
+      }
+      body.is-embed .hs-pvz-btn img {
+        width: 12px;
+        height: 12px;
+      }
+      body.is-embed .hs-pvz-ribbon {
+        min-block-size: 36px;
+        padding: 2px 5px;
+        gap: 4px;
+      }
+      body.is-embed .hs-pvz-mini-step {
+        min-inline-size: 30px;
+        min-block-size: 30px;
+        width: 30px;
+        height: 30px;
+        font-size: 13px;
+      }
+      body.is-embed .hs-pvz-dock {
+        height: auto;
+        padding: 4px 5px;
+        gap: 4px;
+        border-radius: 11px;
+        border-width: 2px;
+      }
+      body.is-embed .hs-pvz-seeds {
+        gap: 3px;
+      }
+      body.is-embed .hs-pvz-seed {
+        min-block-size: 52px;
+        padding: 3px 2px 2px;
+      }
+      body.is-embed .hs-pvz-seed img {
+        width: 22px;
+        height: 22px;
+      }
+      body.is-embed .hs-pvz-seed-name,
+      body.is-embed .hs-pvz-seed-cost {
+        font-size: 9.5px;
+      }
+      body.is-embed .hs-pvz-tools {
+        padding-top: 4px;
+        gap: 4px;
+      }
+      body.is-embed .hs-pvz-tool {
+        min-block-size: 36px;
+        padding: 3px 6px;
+        font-size: 10.5px;
+        gap: 4px;
+      }
+      body.is-embed .hs-pvz-tool img {
+        width: 18px;
+        height: 18px;
+      }
+      body.is-embed .hs-pvz-almanac-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="hs-pvz-shell">
+    <!-- Top Hang Sóc Forest Header -->
+    <header class="hs-pvz-header">
+      <div class="hs-pvz-brand">
+        <img src="../sprites/ui_icon_crop_hedge_sunflower.webp" alt="" width="28" height="28" />
+        <div class="hs-pvz-title-wrap">
+          <h1 class="hs-pvz-title">Vườn Thủ Hang Sóc</h1>
+          <span class="hs-pvz-sub">PvZ Fusion 2026 · Lai Tạo Thực Vật Phép Thuật</span>
+        </div>
+      </div>
+
+      <div class="hs-pvz-modes" role="tablist" aria-label="Chọn chế độ chơi">
+        <button id="btnModeAdv" type="button" role="tab" aria-selected="true" class="hs-pvz-mode-btn">Màn 1–10</button>
+        <button id="btnModeEndless" type="button" role="tab" aria-selected="false" class="hs-pvz-mode-btn">Vô Tận</button>
+      </div>
+
+      <div class="hs-pvz-actions">
+        <button id="btnAlmanac" type="button" class="hs-pvz-btn is-almanac" title="Mở Sổ Lai Tạo 9 công thức">
+          <img src="../sprites/res_clover_luck.webp" alt="" />
+          <span>Sổ Lai Tạo</span>
+        </button>
+        <button id="btnSpeed" type="button" class="hs-pvz-btn" aria-pressed="false" title="Đổi tốc độ 1× / 2×">1×</button>
+        <button id="btnPause" type="button" class="hs-pvz-btn" aria-pressed="false" title="Tạm dừng (Phím Space)">Tạm dừng</button>
+        <button id="btnMute" type="button" class="hs-pvz-btn" aria-pressed="false" aria-label="Bật tắt âm thanh">Âm: Bật</button>
+        <button id="btnRestart" type="button" class="hs-pvz-btn is-gold">Chơi lại</button>
+      </div>
+    </header>
+
+    <!-- Fixed-Height Parchment Ribbon: Sun + Stage + Wave Flags + Score -->
+    <section class="hs-pvz-ribbon" aria-label="Thông số khu vườn">
+      <div class="hs-pvz-ribbon-left">
+        <div id="uiSunPill" class="hs-pvz-sun-pill" aria-label="Nắng hiện có">
+          <img src="../sprites/m3_icon_star.webp" alt="" />
+          <span id="uiSunVal">175</span>
+        </div>
+        <div class="hs-pvz-stage-nav" id="uiStageNav">
+          <button id="btnPrevStage" type="button" class="hs-pvz-mini-step" aria-label="Màn trước">‹</button>
+          <span id="uiStageBadge" class="hs-pvz-stage-badge">Màn 1</span>
+          <button id="btnNextStage" type="button" class="hs-pvz-mini-step" aria-label="Màn sau">›</button>
+        </div>
+      </div>
+
+      <div class="hs-pvz-wave-wrap" aria-label="Tiến độ đợt tấn công">
+        <div class="hs-pvz-wave-track">
+          <div id="uiWaveFill" class="hs-pvz-wave-fill"></div>
+          <div id="uiWaveFlags" class="hs-pvz-wave-flags"></div>
+        </div>
+        <span id="uiWaveTxt" class="hs-pvz-wave-txt">Đợt 1 / 2</span>
+      </div>
+
+      <div class="hs-pvz-ribbon-right">
+        <span id="uiContextTip" class="hs-pvz-tip"><strong>Mẹo:</strong> Trồng chồng cây phát sáng vàng để Lai Tạo!</span>
+        <div class="hs-pvz-pill" aria-label="Điểm và kỷ lục">
+          <span class="lbl">Điểm</span>
+          <span id="uiScoreVal">0</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Play Arena + Seed/Tool Dock -->
+    <section class="hs-pvz-stage">
+      <div class="hs-pvz-board-wrap">
+        <div id="boardFrame" class="hs-pvz-board-frame">
+          <canvas id="gardenCanvas" aria-label="Khu vườn Hang Sóc 5 hàng 9 cột"></canvas>
+        </div>
+      </div>
+
+      <aside class="hs-pvz-dock" aria-label="Khay hạt giống và công cụ">
+        <div id="seedBar" class="hs-pvz-seeds">
+          <!-- Populated dynamically with exact 6 base Hang Sóc seeds -->
+        </div>
+        <div class="hs-pvz-tools">
+          <button id="btnPlantFood" type="button" class="hs-pvz-tool is-overdrive-ready" title="Kích hoạt Tinh Hoa Siêu Nạp lên bất kỳ cây nào (Phím F)">
+            <span class="hs-pvz-tool-key">F</span>
+            <img src="../sprites/res_clover_luck.webp" alt="" />
+            <span>Tinh Hoa</span>
+            <span id="uiPfQty" class="tool-sub">1 / 3</span>
+          </button>
+          <button id="btnShovel" type="button" class="hs-pvz-tool" title="Đào bỏ cây, hoàn trả 50% Nắng (Phím Q)">
+            <span class="hs-pvz-tool-key">Q</span>
+            <img src="../sprites/ui_icon_golden_sickle.webp" alt="" />
+            <span>Xẻng</span>
+            <span class="tool-sub">Hoàn 50%</span>
+          </button>
+        </div>
+      </aside>
+    </section>
+
+    <div id="srAnnounce" class="sr-only" aria-live="polite"></div>
+  </main>
+
+  <!-- Native <dialog>: Fusion Almanac (Sổ Lai Tạo) -->
+  <dialog id="almanacDialog" class="hs-pvz-dialog is-wide" aria-labelledby="almanacTitle">
+    <header class="hs-pvz-dlg-head">
+      <h2 id="almanacTitle">Sổ Lai Tạo Hang Sóc — 9 Công Thức</h2>
+      <span id="uiCraftedCount" class="hs-pvz-dlg-sub">Đã tạo: 0 / 9</span>
+    </header>
+    <div class="hs-pvz-dlg-body">
+      <p class="hs-pvz-dlg-note">
+        Chọn một hạt giống bất kỳ: mọi ô cây tương thích trên vườn sẽ <strong>phát sáng vòng vàng</strong>. Chạm trực tiếp lên cây đó để <strong>Lai Tạo ngay tại chỗ</strong>, hồi đầy máu và mở khóa sức mạnh mới!
+      </p>
+      <div id="almanacGrid" class="hs-pvz-almanac-grid"></div>
+    </div>
+    <footer class="hs-pvz-dlg-foot">
+      <button id="btnCloseAlmanac" type="button" class="hs-pvz-btn is-gold">Tiếp tục giữ vườn</button>
+    </footer>
+  </dialog>
+
+  <!-- Native <dialog>: Victory / Game Over Modal -->
+  <dialog id="resultDialog" class="hs-pvz-dialog" aria-labelledby="uiResultTitle">
+    <header class="hs-pvz-dlg-head">
+      <h2 id="uiResultTitle">Chiến Thắng!</h2>
+      <span id="uiResultSub" class="hs-pvz-dlg-sub">Màn 1</span>
+    </header>
+    <div class="hs-pvz-dlg-body">
+      <p id="uiResultMsg" class="hs-pvz-dlg-note">
+        Khu vườn Hang Sóc đã được bảo vệ an toàn trước lũ Yêu Tinh!
+      </p>
+      <div class="hs-pvz-score-grid">
+        <div class="hs-pvz-metric">
+          <span class="m-lbl">Điểm trận này</span>
+          <span id="uiResScore" class="m-val">0</span>
+        </div>
+        <div class="hs-pvz-metric">
+          <span class="m-lbl">Kỷ lục cao nhất</span>
+          <span id="uiResBest" class="m-val">0</span>
+        </div>
+        <div class="hs-pvz-metric">
+          <span class="m-lbl">Số lần Lai Tạo</span>
+          <span id="uiResFusions" class="m-val">0</span>
+        </div>
+        <div class="hs-pvz-metric">
+          <span class="m-lbl" id="uiResExtraLbl">Xe Đẩy Táo còn</span>
+          <span id="uiResExtraVal" class="m-val">5 / 5</span>
+        </div>
+      </div>
+    </div>
+    <footer class="hs-pvz-dlg-foot">
+      <button id="btnResNext" type="button" class="hs-pvz-btn is-gold">Màn tiếp theo</button>
+      <button id="btnResReplay" type="button" class="hs-pvz-btn">Chơi lại</button>
+      <button id="btnResEndless" type="button" class="hs-pvz-btn is-almanac" hidden>Chế độ Vô Tận</button>
+    </footer>
+  </dialog>
+
+  <script>
+  (() => {
+    'use strict';
+
+    /* =====================================================================
+       EMBED BRIDGE CONFIG & CONSTANTS
+       ===================================================================== */
+    const BRIDGE_CHANNEL = 'hs-bonus-arcade';
+    const GAME_ID = 'pvz';
+    const URL_PARAMS = new URLSearchParams(location.search);
+    const IS_EMBED = URL_PARAMS.get('embed') === '1';
+    const EMBED_TOKEN = URL_PARAMS.get('token') || '';
+
+    if (IS_EMBED) {
+      document.body.classList.add('is-embed');
+    }
+
+    function postToParent(payload) {
+      if (!IS_EMBED || !window.parent || window.parent === window) return;
+      try {
+        window.parent.postMessage({
+          channel: BRIDGE_CHANNEL,
+          gameId: GAME_ID,
+          token: EMBED_TOKEN,
+          ...payload,
+        }, '*');
+      } catch {
+        // Ignore cross-origin postMessage errors gracefully
+      }
+    }
+
+    const ROWS = 5;
+    const COLS = 9;
+    const STORAGE_KEY = 'hs_pvz_fusion_2026_v1';
+
+    const SPRITE_PATHS = {
+      sunflower: '../sprites/ui_icon_crop_hedge_sunflower.webp',
+      peashooter: '../sprites/ui_icon_crop_golden_corn.webp',
+      wallnut: '../sprites/ui_icon_crop_garden_pumpkin.webp',
+      snowpea: '../sprites/ui_icon_crop_yule_snowdrop.webp',
+      fireflower: '../sprites/ui_icon_crop_phoenix_fireflower.webp',
+      mandrake: '../sprites/ui_icon_crop_baby_mandrake.webp',
+      sun: '../sprites/m3_icon_star.webp',
+      shovel: '../sprites/ui_icon_golden_sickle.webp',
+      clover: '../sprites/res_clover_luck.webp',
+      bomb: '../sprites/m3_sp_bomb.webp',
+      gnome: '../sprites/guest_ron_gnome.webp',
+      barrel: '../sprites/m3_obs_box_1.webp',
+    };
+
+    const BASE_SEEDS = [
+      {
+        id: 'sunflower',
+        name: 'Hoa Mặt Trời',
+        short: 'Mặt Trời',
+        cost: 50,
+        cd: 5.5,
+        hp: 300,
+        sprite: 'sunflower',
+        role: 'sun',
+        desc: 'Tạo 25 Nắng đều đặn để trồng & lai tạo.'
+      },
+      {
+        id: 'peashooter',
+        name: 'Đậu Bắp Phép',
+        short: 'Đậu Bắp',
+        cost: 100,
+        cd: 4.8,
+        hp: 300,
+        sprite: 'peashooter',
+        role: 'shooter',
+        desc: 'Bắn hạt bắp phép tốc độ cao theo hàng.'
+      },
+      {
+        id: 'wallnut',
+        name: 'Bí Ngô Giáp',
+        short: 'Bí Ngô',
+        cost: 50,
+        cd: 10.5,
+        hp: 1250,
+        sprite: 'wallnut',
+        role: 'wall',
+        desc: 'Tường phòng thủ máu dày chặn Yêu Tinh.'
+      },
+      {
+        id: 'snowpea',
+        name: 'Bông Tuyết Băng',
+        short: 'Tuyết',
+        cost: 125,
+        cd: 5.8,
+        hp: 300,
+        sprite: 'snowpea',
+        role: 'shooter',
+        desc: 'Bắn đạn băng làm chậm Yêu Tinh 50%.'
+      },
+      {
+        id: 'fireflower',
+        name: 'Hoa Lửa Phượng',
+        short: 'Hoa Lửa',
+        cost: 150,
+        cd: 7.2,
+        hp: 320,
+        sprite: 'fireflower',
+        role: 'shooter',
+        desc: 'Bắn cầu lửa nổ lan gây cháy nhiều mục tiêu.'
+      },
+      {
+        id: 'mandrake',
+        name: 'Nhân Sâm Hét',
+        short: 'Sâm Hét',
+        cost: 75,
+        cd: 6.2,
+        hp: 440,
+        sprite: 'mandrake',
+        role: 'sonic',
+        desc: 'Phát sóng âm tầm gần gây sát thương + đẩy lùi!'
+      }
+    ];
+
+    const PLANT_DEFS = {
+      // Base 6
+      sunflower:  { id: 'sunflower',  name: 'Hoa Mặt Trời',         tier: 1, hp: 300,  invested: 50,  sprites: ['sunflower'],                    aura: '#f5b301', role: 'sun' },
+      peashooter: { id: 'peashooter', name: 'Đậu Bắp Phép',         tier: 1, hp: 300,  invested: 100, sprites: ['peashooter'],                   aura: '#7fd13b', role: 'shooter' },
+      wallnut:    { id: 'wallnut',    name: 'Bí Ngô Giáp',          tier: 1, hp: 1250, invested: 50,  sprites: ['wallnut'],                      aura: '#e08924', role: 'wall' },
+      snowpea:    { id: 'snowpea',    name: 'Bông Tuyết Băng',      tier: 1, hp: 300,  invested: 125, sprites: ['snowpea'],                      aura: '#5ed3ff', role: 'shooter' },
+      fireflower: { id: 'fireflower', name: 'Hoa Lửa Phượng',       tier: 1, hp: 320,  invested: 150, sprites: ['fireflower'],                   aura: '#ff6c24', role: 'shooter' },
+      mandrake:   { id: 'mandrake',   name: 'Nhân Sâm Hét',         tier: 1, hp: 440,  invested: 75,  sprites: ['mandrake'],                     aura: '#9c78ff', role: 'sonic' },
+
+      // 9 Signature Fusions
+      sunshooter:    { id: 'sunshooter',    name: 'Mặt Trời Bắn Tia',      tier: 2, hp: 500,  invested: 150, sprites: ['sunflower', 'peashooter'],  aura: '#ffd447', role: 'hybrid_sun_shoot' },
+      twin_gatling:  { id: 'twin_gatling',  name: 'Đại Bác Đậu Đôi',       tier: 2, hp: 480,  invested: 200, sprites: ['peashooter', 'peashooter'], aura: '#a8e84d', role: 'shooter' },
+      pyro_pea:      { id: 'pyro_pea',      name: 'Đậu Hỏa Long',          tier: 2, hp: 520,  invested: 250, sprites: ['peashooter', 'fireflower'], aura: '#ff5d1a', role: 'shooter' },
+      frost_pea:     { id: 'frost_pea',     name: 'Đậu Băng Giá',          tier: 2, hp: 500,  invested: 225, sprites: ['peashooter', 'snowpea'],    aura: '#4ee2ff', role: 'shooter' },
+      inferno_nut:   { id: 'inferno_nut',   name: 'Bí Ngô Gai Lửa',        tier: 2, hp: 1850, invested: 200, sprites: ['wallnut', 'fireflower'],    aura: '#ff4818', role: 'wall' },
+      solar_nut:     { id: 'solar_nut',     name: 'Bí Ngô Hoàng Kim',      tier: 2, hp: 1700, invested: 100, sprites: ['wallnut', 'sunflower'],     aura: '#ffe052', role: 'wall_sun' },
+      quake_nut:     { id: 'quake_nut',     name: 'Bí Ngô Chấn Địa',       tier: 2, hp: 1900, invested: 125, sprites: ['wallnut', 'mandrake'],      aura: '#b68cff', role: 'wall' },
+      thermal_nova:  { id: 'thermal_nova',  name: 'Cầu Sấm Hơi Nước',      tier: 2.5, hp: 580, invested: 275, sprites: ['fireflower', 'snowpea'],    aura: '#7ef2ff', role: 'shooter' },
+      solar_phoenix: { id: 'solar_phoenix', name: 'Phượng Hoàng Mặt Trời', tier: 3, hp: 780,  invested: 300, sprites: ['sunflower', 'peashooter', 'fireflower'], aura: '#ffbe2e', role: 'titan' },
+    };
+
+    const FUSION_RECIPES = [
+      {
+        result: 'sunshooter',
+        a: 'sunflower', aLabel: 'Hoa Mặt Trời',
+        b: 'peashooter', bLabel: 'Đậu Bắp Phép',
+        tierTag: 'Bậc 2',
+        kind: 'normal',
+        desc: 'Vừa sản xuất 25 Nắng đều đặn, vừa bắn cặp hạt năng lượng vàng theo hàng.'
+      },
+      {
+        result: 'twin_gatling',
+        a: 'peashooter', aLabel: 'Đậu Bắp Phép',
+        b: 'peashooter', bLabel: 'Đậu Bắp Phép',
+        tierTag: 'Bậc 2',
+        kind: 'normal',
+        desc: 'Đại bác hai nòng xả loạt 2 viên siêu nhanh, xuyên phá đội hình cực gắt.'
+      },
+      {
+        result: 'pyro_pea',
+        a: 'peashooter', aLabel: 'Đậu Bắp Phép',
+        b: 'fireflower', bLabel: 'Hoa Lửa Phượng',
+        tierTag: 'Bậc 2',
+        kind: 'normal',
+        desc: 'Bắn cầu hỏa long rực cháy, nổ lan 3×3 kèm thiêu đốt kéo dài.'
+      },
+      {
+        result: 'frost_pea',
+        a: 'peashooter', aLabel: 'Đậu Bắp Phép',
+        b: 'snowpea', bLabel: 'Bông Tuyết Băng',
+        tierTag: 'Bậc 2',
+        kind: 'normal',
+        desc: 'Bắn mũi tên băng xuyên tối đa 3 mục tiêu, làm chậm 55% trong 4,5 giây.'
+      },
+      {
+        result: 'inferno_nut',
+        a: 'wallnut', aLabel: 'Bí Ngô Giáp',
+        b: 'fireflower', bLabel: 'Hoa Lửa Phượng',
+        tierTag: 'Bậc 2',
+        kind: 'normal',
+        desc: 'Giáp dày 1.850 máu, phản sát thương lửa mỗi cú cắn & nổ bom 3×3 khi vỡ!'
+      },
+      {
+        result: 'solar_nut',
+        a: 'wallnut', aLabel: 'Bí Ngô Giáp',
+        b: 'sunflower', bLabel: 'Hoa Mặt Trời',
+        tierTag: 'Bậc 2',
+        kind: 'normal',
+        desc: 'Giáp hoàng kim 1.700 máu, tự sinh 25 Nắng định kỳ và rơi 25 Nắng khi bị cắn!'
+      },
+      {
+        result: 'quake_nut',
+        a: 'wallnut', aLabel: 'Bí Ngô Giáp',
+        b: 'mandrake', bLabel: 'Nhân Sâm Hét',
+        tierTag: 'Bậc 2',
+        kind: 'normal',
+        desc: 'Giáp chấn địa 1.900 máu, định kỳ dậm sóng địa chấn 3×3 hất văng Yêu Tinh!'
+      },
+      {
+        result: 'thermal_nova',
+        a: 'fireflower', aLabel: 'Hoa Lửa Phượng',
+        b: 'snowpea', bLabel: 'Bông Tuyết Băng',
+        tierTag: 'Siêu Lai',
+        kind: 'super',
+        desc: 'Bắn luân phiên cầu Lửa & Băng; kích nổ Sốc Nhiệt hơi nước cực mạnh kèm choáng!'
+      },
+      {
+        result: 'solar_phoenix',
+        a: 'sunshooter', aLabel: 'Mặt Trời Bắn Tia (Bậc 2)',
+        b: 'fireflower', bLabel: 'Hoa Lửa Phượng',
+        tierTag: 'Bậc 3 Thần Thoại',
+        kind: 'titan',
+        desc: 'Rơi đôi 50 Nắng và bắn thiên thạch mặt trời xuyên thủng cả 3 hàng cùng lúc!'
+      }
+    ];
+
+    function getFusionResult(existingType, seedId) {
+      if ((existingType === 'sunshooter' && seedId === 'fireflower') ||
+          (existingType === 'pyro_pea' && seedId === 'sunflower')) {
+        return 'solar_phoenix';
+      }
+      const key = [existingType, seedId].sort().join('+');
+      switch (key) {
+        case 'peashooter+sunflower': return 'sunshooter';
+        case 'peashooter+peashooter': return 'twin_gatling';
+        case 'fireflower+peashooter': return 'pyro_pea';
+        case 'peashooter+snowpea': return 'frost_pea';
+        case 'fireflower+wallnut': return 'inferno_nut';
+        case 'sunflower+wallnut': return 'solar_nut';
+        case 'mandrake+wallnut': return 'quake_nut';
+        case 'fireflower+snowpea': return 'thermal_nova';
+        default: return null;
+      }
+    }
+
+    const INVADER_TYPES = {
+      basic:    { id: 'basic',    name: 'Yêu Tinh Vườn',         hp: 195,  speed: 0.34, dps: 46, score: 60,  scale: 1.00 },
+      bucket:   { id: 'bucket',   name: 'Yêu Tinh Xô Gỗ',        hp: 440,  speed: 0.32, dps: 52, score: 110, scale: 1.04 },
+      barrel:   { id: 'barrel',   name: 'Yêu Tinh Giáp Thùng',   hp: 840,  speed: 0.25, dps: 64, score: 180, scale: 1.12 },
+      sprinter: { id: 'sprinter', name: 'Yêu Tinh Chạy Nước Rút',hp: 225,  speed: 0.64, dps: 56, score: 130, scale: 0.96 },
+      boss:     { id: 'boss',     name: 'Trùm Yêu Tinh Khổng Lồ',hp: 2100, speed: 0.19, dps: 130,score: 900, scale: 1.48, isBoss: true },
+    };
+
+    // 10 handcrafted Adventure stages (2–3 escalating waves + final wave Boss)
+    const STAGES = [
+      { stage: 1,  startSun: 175, waves: 2, bossHp: 1350, counts: [6, 9],      weights: { basic: 60, bucket: 28, barrel: 0,  sprinter: 12 } },
+      { stage: 2,  startSun: 175, waves: 2, bossHp: 1750, counts: [8, 11],     weights: { basic: 48, bucket: 28, barrel: 12, sprinter: 12 } },
+      { stage: 3,  startSun: 200, waves: 3, bossHp: 2100, counts: [7, 10, 12], weights: { basic: 38, bucket: 30, barrel: 16, sprinter: 16 } },
+      { stage: 4,  startSun: 200, waves: 3, bossHp: 2450, counts: [8, 11, 14], weights: { basic: 32, bucket: 28, barrel: 20, sprinter: 20 } },
+      { stage: 5,  startSun: 200, waves: 3, bossHp: 2850, counts: [9, 12, 16], weights: { basic: 26, bucket: 28, barrel: 24, sprinter: 22 } },
+      { stage: 6,  startSun: 225, waves: 3, bossHp: 3250, counts: [10, 14, 17],weights: { basic: 22, bucket: 26, barrel: 28, sprinter: 24 } },
+      { stage: 7,  startSun: 225, waves: 3, bossHp: 3650, counts: [11, 15, 19],weights: { basic: 18, bucket: 26, barrel: 30, sprinter: 26 } },
+      { stage: 8,  startSun: 225, waves: 3, bossHp: 4100, counts: [12, 16, 21],weights: { basic: 15, bucket: 25, barrel: 32, sprinter: 28 } },
+      { stage: 9,  startSun: 250, waves: 3, bossHp: 4600, counts: [13, 18, 23],weights: { basic: 12, bucket: 24, barrel: 34, sprinter: 30 } },
+      { stage: 10, startSun: 250, waves: 3, bossHp: 5200, counts: [15, 20, 26],weights: { basic: 10, bucket: 22, barrel: 36, sprinter: 32 } },
+    ];
+
+    /* =====================================================================
+       SAFE PERSISTENCE (ZERO-localStorage IN EMBED MODE — IN-MEMORY MAP)
+       ===================================================================== */
+    const memoryStore = new Map();
+
+    function readRawStore() {
+      if (IS_EMBED) {
+        return memoryStore.get(STORAGE_KEY) ?? null;
+      }
+      try {
+        return window.localStorage.getItem(STORAGE_KEY);
+      } catch {
+        return memoryStore.get(STORAGE_KEY) ?? null;
+      }
+    }
+
+    function writeRawStore(raw) {
+      memoryStore.set(STORAGE_KEY, raw);
+      if (IS_EMBED) return;
+      try {
+        window.localStorage.setItem(STORAGE_KEY, raw);
+      } catch {
+        // Ignore private browsing / quota errors gracefully
+      }
+    }
+
+    function loadSave() {
+      const fallback = {
+        unlockedStage: 1,
+        currentStage: 1,
+        bestScoreAdv: 0,
+        bestScoreEndless: 0,
+        bestWaveEndless: 0,
+        muted: false,
+        crafted: {},
+      };
+      try {
+        const raw = readRawStore();
+        if (!raw) return fallback;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return fallback;
+        return {
+          unlockedStage: Math.max(1, Math.min(10, Number(parsed.unlockedStage) || 1)),
+          currentStage: Math.max(1, Math.min(10, Number(parsed.currentStage) || 1)),
+          bestScoreAdv: Math.max(0, Number(parsed.bestScoreAdv) || 0),
+          bestScoreEndless: Math.max(0, Number(parsed.bestScoreEndless) || 0),
+          bestWaveEndless: Math.max(0, Number(parsed.bestWaveEndless) || 0),
+          muted: Boolean(parsed.muted),
+          crafted: parsed.crafted && typeof parsed.crafted === 'object' ? parsed.crafted : {},
+        };
+      } catch {
+        return fallback;
+      }
+    }
+
+    function writeSave(data) {
+      try {
+        writeRawStore(JSON.stringify(data));
+      } catch {
+        // Ignore serialization / quota errors gracefully
+      }
+    }
+
+    const saveData = loadSave();
+
+    /* =====================================================================
+       PROCEDURAL WEB AUDIO ENGINE (DynamicsCompressorNode + Mute)
+       ===================================================================== */
+    const sfx = (() => {
+      let ctx = null;
+      let master = null;
+      let muted = saveData.muted;
+      let lastSfxTime = {};
+
+      function ensure() {
+        if (muted) return null;
+        try {
+          if (!ctx) {
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) return null;
+            ctx = new AC();
+            const comp = ctx.createDynamicsCompressor();
+            comp.threshold.value = -16;
+            comp.knee.value = 18;
+            comp.ratio.value = 8;
+            comp.attack.value = 0.004;
+            comp.release.value = 0.14;
+            master = ctx.createGain();
+            master.gain.value = 0.34;
+            comp.connect(master);
+            master.connect(ctx.destination);
+            ctx._comp = comp;
+          }
+          if (ctx.state === 'suspended') {
+            ctx.resume().catch(() => {});
+          }
+          return ctx;
+        } catch {
+          return null;
+        }
+      }
+
+      function throttle(key, minGap) {
+        const now = performance.now();
+        if (lastSfxTime[key] && now - lastSfxTime[key] < minGap) return false;
+        lastSfxTime[key] = now;
+        return true;
+      }
+
+      function tone(freq, endFreq, dur, type = 'sine', gain = 0.22, delay = 0) {
+        const c = ensure();
+        if (!c) return;
+        try {
+          const t = c.currentTime + delay;
+          const osc = c.createOscillator();
+          const g = c.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, t);
+          if (endFreq !== freq) {
+            osc.frequency.exponentialRampToValueAtTime(Math.max(24, endFreq), t + dur);
+          }
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.linearRampToValueAtTime(gain, t + 0.01);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+          osc.connect(g);
+          g.connect(c._comp);
+          osc.start(t);
+          osc.stop(t + dur + 0.02);
+        } catch {}
+      }
+
+      function noise(dur, filterFreq, gain = 0.18, delay = 0) {
+        const c = ensure();
+        if (!c) return;
+        try {
+          const t = c.currentTime + delay;
+          const len = Math.max(1, Math.floor(c.sampleRate * dur));
+          const buf = c.createBuffer(1, len, c.sampleRate);
+          const ch = buf.getChannelData(0);
+          for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / len);
+          const src = c.createBufferSource();
+          src.buffer = buf;
+          const flt = c.createBiquadFilter();
+          flt.type = 'bandpass';
+          flt.frequency.setValueAtTime(filterFreq, t);
+          flt.Q.value = 1.2;
+          const g = c.createGain();
+          g.gain.setValueAtTime(gain, t);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+          src.connect(flt);
+          flt.connect(g);
+          g.connect(c._comp);
+          src.start(t);
+        } catch {}
+      }
+
+      return {
+        isMuted: () => muted,
+        setMuted(nextMuted) {
+          muted = Boolean(nextMuted);
+          saveData.muted = muted;
+          writeSave(saveData);
+          return muted;
+        },
+        toggleMute() {
+          muted = !muted;
+          saveData.muted = muted;
+          writeSave(saveData);
+          if (!muted) {
+            ensure();
+            tone(523.25, 659.25, 0.12, 'triangle', 0.16);
+          }
+          return muted;
+        },
+        dispose() {
+          if (ctx) {
+            try { ctx.close(); } catch {}
+            ctx = null;
+            master = null;
+          }
+        },
+        plant() {
+          tone(180, 310, 0.11, 'triangle', 0.22);
+          noise(0.09, 900, 0.12);
+        },
+        shovel() {
+          noise(0.12, 650, 0.20);
+          tone(280, 140, 0.12, 'sawtooth', 0.12);
+        },
+        fusion(isTitan = false) {
+          const notes = isTitan
+            ? [523.25, 659.25, 783.99, 1046.5, 1318.5]
+            : [440, 554.37, 659.25, 880];
+          notes.forEach((n, i) => {
+            tone(n, n * 1.02, 0.28, 'triangle', 0.22, i * 0.055);
+            tone(n * 2, n * 2, 0.18, 'sine', 0.08, i * 0.055);
+          });
+        },
+        sun() {
+          if (!throttle('sun', 45)) return;
+          tone(680, 1020, 0.14, 'sine', 0.18);
+          tone(1020, 1360, 0.12, 'triangle', 0.10, 0.05);
+        },
+        clover() {
+          [587.33, 783.99, 1174.66].forEach((f, i) => tone(f, f * 1.03, 0.20, 'triangle', 0.20, i * 0.05));
+        },
+        overdrive() {
+          [392, 523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, f * 1.04, 0.34, 'sawtooth', 0.14, i * 0.045));
+          noise(0.24, 1800, 0.14, 0.06);
+        },
+        shoot(kind) {
+          if (!throttle('sh_' + kind, 55)) return;
+          if (kind === 'ice') {
+            tone(880, 560, 0.09, 'sine', 0.11);
+          } else if (kind === 'fire' || kind === 'meteor') {
+            tone(260, 120, 0.12, 'sawtooth', 0.12);
+            noise(0.08, 600, 0.10);
+          } else if (kind === 'sonic') {
+            tone(420, 160, 0.22, 'sawtooth', 0.17);
+            tone(840, 320, 0.18, 'triangle', 0.10);
+          } else {
+            tone(520, 300, 0.07, 'triangle', 0.11);
+          }
+        },
+        hit(heavy = false) {
+          if (!throttle('hit', 45)) return;
+          tone(heavy ? 140 : 210, 90, 0.07, 'square', heavy ? 0.11 : 0.07);
+        },
+        boom(big = false) {
+          if (!throttle('boom', 70)) return;
+          noise(big ? 0.34 : 0.18, big ? 380 : 520, big ? 0.30 : 0.18);
+          tone(big ? 130 : 180, 42, big ? 0.32 : 0.16, 'sawtooth', big ? 0.24 : 0.15);
+        },
+        chomp() {
+          if (!throttle('chomp', 240)) return;
+          noise(0.06, 750, 0.10);
+          tone(160, 110, 0.06, 'square', 0.08);
+        },
+        cart() {
+          tone(220, 460, 0.16, 'sawtooth', 0.20);
+          noise(0.32, 480, 0.20, 0.06);
+        },
+        wave(isBoss = false) {
+          if (isBoss) {
+            tone(196, 146.83, 0.42, 'sawtooth', 0.24);
+            tone(146.83, 110, 0.50, 'sawtooth', 0.24, 0.28);
+          } else {
+            tone(329.63, 440, 0.22, 'triangle', 0.18);
+            tone(440, 523.25, 0.28, 'triangle', 0.18, 0.18);
+          }
+        },
+        victory() {
+          [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
+            tone(f, f, 0.34, 'triangle', 0.22, i * 0.11);
+          });
+        },
+        defeat() {
+          [349.23, 311.13, 277.18, 220].forEach((f, i) => {
+            tone(f, f * 0.96, 0.36, 'sawtooth', 0.16, i * 0.15);
+          });
+        },
+        err() {
+          tone(175, 130, 0.11, 'square', 0.12);
+        }
+      };
+    })();
+
+    /* =====================================================================
+       SPRITE LOADER
+       ===================================================================== */
+    const sprites = {};
+    let spritesLoadedCount = 0;
+    const totalSprites = Object.keys(SPRITE_PATHS).length;
+
+    function loadAllSprites() {
+      for (const [key, src] of Object.entries(SPRITE_PATHS)) {
+        const img = new Image();
+        img.decoding = 'async';
+        img.onload = () => {
+          sprites[key] = img;
+          spritesLoadedCount++;
+          markBgDirty();
+        };
+        img.src = src;
+      }
+    }
+
+    /* =====================================================================
+       DOM REFERENCES
+       ===================================================================== */
+    const canvas = document.getElementById('gardenCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    const boardFrame = document.getElementById('boardFrame');
+    const seedBarEl = document.getElementById('seedBar');
+
+    const uiSunPill = document.getElementById('uiSunPill');
+    const uiSunVal = document.getElementById('uiSunVal');
+    const uiStageNav = document.getElementById('uiStageNav');
+    const uiStageBadge = document.getElementById('uiStageBadge');
+    const btnPrevStage = document.getElementById('btnPrevStage');
+    const btnNextStage = document.getElementById('btnNextStage');
+    const uiWaveFill = document.getElementById('uiWaveFill');
+    const uiWaveFlags = document.getElementById('uiWaveFlags');
+    const uiWaveTxt = document.getElementById('uiWaveTxt');
+    const uiScoreVal = document.getElementById('uiScoreVal');
+    const uiContextTip = document.getElementById('uiContextTip');
+    const uiPfQty = document.getElementById('uiPfQty');
+    const srAnnounce = document.getElementById('srAnnounce');
+
+    const btnModeAdv = document.getElementById('btnModeAdv');
+    const btnModeEndless = document.getElementById('btnModeEndless');
+    const btnAlmanac = document.getElementById('btnAlmanac');
+    const btnSpeed = document.getElementById('btnSpeed');
+    const btnPause = document.getElementById('btnPause');
+    const btnMute = document.getElementById('btnMute');
+    const btnRestart = document.getElementById('btnRestart');
+    const btnPlantFood = document.getElementById('btnPlantFood');
+    const btnShovel = document.getElementById('btnShovel');
+
+    const almanacDialog = document.getElementById('almanacDialog');
+    const almanacGrid = document.getElementById('almanacGrid');
+    const uiCraftedCount = document.getElementById('uiCraftedCount');
+    const btnCloseAlmanac = document.getElementById('btnCloseAlmanac');
+
+    const resultDialog = document.getElementById('resultDialog');
+    const uiResultTitle = document.getElementById('uiResultTitle');
+    const uiResultSub = document.getElementById('uiResultSub');
+    const uiResultMsg = document.getElementById('uiResultMsg');
+    const uiResScore = document.getElementById('uiResScore');
+    const uiResBest = document.getElementById('uiResBest');
+    const uiResFusions = document.getElementById('uiResFusions');
+    const uiResExtraLbl = document.getElementById('uiResExtraLbl');
+    const uiResExtraVal = document.getElementById('uiResExtraVal');
+    const btnResNext = document.getElementById('btnResNext');
+    const btnResReplay = document.getElementById('btnResReplay');
+    const btnResEndless = document.getElementById('btnResEndless');
+
+    let reducedMotion = Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+    /* =====================================================================
+       CANVAS LAYOUT & CACHED STATIC LAWN OFFSCREEN CANVAS
+       ===================================================================== */
+    const bgCanvas = document.createElement('canvas');
+    const bgCtx = bgCanvas.getContext('2d');
+    let bgDirty = true;
+
+    const layout = {
+      w: 800,
+      h: 450,
+      dpr: 1,
+      boardX: 60,
+      boardY: 26,
+      tileW: 72,
+      tileH: 76,
+      cartBayW: 54,
+      hedgeW: 44,
+    };
+
+    function markBgDirty() {
+      bgDirty = true;
+    }
+
+    function computeLayout(cssW, cssH) {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+      layout.w = Math.max(240, Math.floor(cssW));
+      layout.h = Math.max(170, Math.floor(cssH));
+      layout.dpr = dpr;
+
+      canvas.width = Math.round(layout.w * dpr);
+      canvas.height = Math.round(layout.h * dpr);
+
+      const padX = Math.max(6, Math.round(layout.w * 0.012));
+      const padTop = Math.max(14, Math.round(layout.h * 0.055));
+      const padBot = Math.max(10, Math.round(layout.h * 0.035));
+
+      const availW = layout.w - padX * 2;
+      const availH = layout.h - padTop - padBot;
+
+      // Total horizontal grid units: cartBay (0.85) + 9 tiles + right spawn hedge (0.55) = 10.4
+      const totalGridW = COLS + 1.40;
+      let tileW = availW / totalGridW;
+      let tileH = availH / ROWS;
+
+      // Keep tile proportions pleasant across ultra-wide desktop & narrow mobile portrait
+      const maxAspect = 1.24; // tileW / tileH max
+      const minAspect = 0.72; // tileW / tileH min (gives tall tap-friendly rows on portrait phones!)
+      if (tileW / tileH > maxAspect) {
+        tileW = tileH * maxAspect;
+      } else if (tileW / tileH < minAspect) {
+        tileH = tileW / minAspect;
+      }
+
+      const cartBayW = tileW * 0.85;
+      const hedgeW = tileW * 0.55;
+      const usedW = cartBayW + tileW * COLS + hedgeW;
+      const usedH = tileH * ROWS;
+
+      layout.tileW = tileW;
+      layout.tileH = tileH;
+      layout.cartBayW = cartBayW;
+      layout.hedgeW = hedgeW;
+      layout.boardX = Math.round((layout.w - usedW) * 0.5 + cartBayW);
+      layout.boardY = Math.round((layout.h - usedH) * 0.5 + (padTop - padBot) * 0.3);
+
+      bgCanvas.width = canvas.width;
+      bgCanvas.height = canvas.height;
+      bgDirty = true;
+    }
+
+    function gridToPx(col, row) {
+      return {
+        x: layout.boardX + col * layout.tileW,
+        y: layout.boardY + row * layout.tileH,
+      };
+    }
+
+    function pxToGrid(px, py) {
+      const col = (px - layout.boardX) / layout.tileW;
+      const row = (py - layout.boardY) / layout.tileH;
+      return { col, row };
+    }
+
+    // Deterministic pseudo-random for static flowers/grass specks
+    function hash2(a, b) {
+      let n = Math.sin(a * 127.1 + b * 311.7) * 43758.5453123;
+      return n - Math.floor(n);
+    }
+
+    function renderStaticBg() {
+      bgDirty = false;
+      const c = bgCtx;
+      const { w, h, dpr, boardX, boardY, tileW, tileH, cartBayW, hedgeW } = layout;
+      c.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // 1. Deep cozy sunlit meadow base
+      const bgGrad = c.createLinearGradient(0, 0, 0, h);
+      bgGrad.addColorStop(0, '#496e2c');
+      bgGrad.addColorStop(0.5, '#3b5c23');
+      bgGrad.addColorStop(1, '#2c461a');
+      c.fillStyle = bgGrad;
+      c.fillRect(0, 0, w, h);
+
+      // Subtle top timber garden border & bottom soil path
+      const lawnLeft = boardX - cartBayW;
+      const lawnRight = boardX + COLS * tileW + hedgeW;
+      const lawnTop = boardY;
+      const lawnBot = boardY + ROWS * tileH;
+
+      // Cobblestone Hang Sóc Cart Apron (left side)
+      const apronGrad = c.createLinearGradient(lawnLeft, 0, boardX, 0);
+      apronGrad.addColorStop(0, '#7c6549');
+      apronGrad.addColorStop(0.65, '#9d8461');
+      apronGrad.addColorStop(1, '#6f593f');
+      c.fillStyle = apronGrad;
+      c.fillRect(lawnLeft, lawnTop, cartBayW, ROWS * tileH);
+
+      // Cobble lines in apron
+      c.strokeStyle = 'rgba(56, 27, 12, 0.28)';
+      c.lineWidth = 1;
+      for (let r = 0; r < ROWS; r++) {
+        const y = boardY + r * tileH;
+        c.beginPath();
+        c.moveTo(lawnLeft, y);
+        c.lineTo(boardX, y);
+        c.stroke();
+        // Brick accents
+        c.fillStyle = 'rgba(255, 244, 212, 0.14)';
+        c.fillRect(lawnLeft + 4, y + 5, cartBayW * 0.45, tileH * 0.35);
+        c.fillRect(lawnLeft + cartBayW * 0.42, y + tileH * 0.52, cartBayW * 0.48, tileH * 0.36);
+      }
+
+      // Wood curb separating cart bay & grass
+      c.fillStyle = '#5c3318';
+      c.fillRect(boardX - 4, lawnTop - 2, 5, ROWS * tileH + 4);
+      c.fillStyle = '#cfa66b';
+      c.fillRect(boardX - 2, lawnTop - 2, 1.5, ROWS * tileH + 4);
+
+      // Right woodland spawn strip (where gnomes emerge)
+      const rightGrad = c.createLinearGradient(boardX + COLS * tileW, 0, lawnRight + 24, 0);
+      rightGrad.addColorStop(0, '#4c732c');
+      rightGrad.addColorStop(0.55, '#3b5c22');
+      rightGrad.addColorStop(1, '#263d15');
+      c.fillStyle = rightGrad;
+      c.fillRect(boardX + COLS * tileW, lawnTop, w - (boardX + COLS * tileW), ROWS * tileH);
+
+      // 2. 5x9 Alternating Sunlit Hang Sóc Grass Tiles
+      for (let r = 0; r < ROWS; r++) {
+        for (let col = 0; col < COLS; col++) {
+          const x = boardX + col * tileW;
+          const y = boardY + r * tileH;
+          const alt = (r + col) % 2 === 0;
+          const g = c.createLinearGradient(x, y, x, y + tileH);
+          if (alt) {
+            g.addColorStop(0, '#85b948');
+            g.addColorStop(1, '#73a63b');
+          } else {
+            g.addColorStop(0, '#72a73c');
+            g.addColorStop(1, '#619331');
+          }
+          c.fillStyle = g;
+          c.fillRect(x, y, tileW + 0.5, tileH + 0.5);
+
+          // Soft sunlit top bevel & subtle grass seam
+          c.fillStyle = 'rgba(255, 248, 214, 0.08)';
+          c.fillRect(x + 1, y + 1, tileW - 2, 2);
+          c.strokeStyle = 'rgba(42, 72, 20, 0.16)';
+          c.lineWidth = 1;
+          c.strokeRect(x + 0.5, y + 0.5, tileW - 1, tileH - 1);
+
+          // Tiny grass tufts & cozy Hang Sóc wildflowers
+          const h1 = hash2(col * 3 + 1, r * 5 + 2);
+          const h2 = hash2(col * 7 + 4, r * 2 + 9);
+          c.strokeStyle = alt ? 'rgba(65, 110, 26, 0.42)' : 'rgba(54, 92, 22, 0.42)';
+          c.lineWidth = 1.2;
+          const tx = x + tileW * (0.2 + h1 * 0.6);
+          const ty = y + tileH * (0.25 + h2 * 0.55);
+          c.beginPath();
+          c.moveTo(tx, ty);
+          c.lineTo(tx - 3, ty - 5);
+          c.moveTo(tx, ty);
+          c.lineTo(tx + 2.5, ty - 6);
+          c.stroke();
+
+          if (h1 > 0.72) {
+            const fx = x + tileW * (0.16 + h2 * 0.68);
+            const fy = y + tileH * (0.18 + h1 * 0.62);
+            c.fillStyle = h2 > 0.5 ? 'rgba(255, 240, 148, 0.72)' : 'rgba(255, 250, 232, 0.65)';
+            c.beginPath();
+            c.arc(fx, fy, 2.2, 0, Math.PI * 2);
+            c.fill();
+            c.fillStyle = '#e59a16';
+            c.beginPath();
+            c.arc(fx, fy, 0.9, 0, Math.PI * 2);
+            c.fill();
+          }
+        }
+      }
+
+      // 3. Cozy wooden fence posts along top & bottom lawn borders
+      const postStep = Math.max(36, tileW * 0.85);
+      // Top rail
+      c.fillStyle = '#5c3116';
+      c.fillRect(0, Math.max(0, lawnTop - 10), w, 8);
+      c.fillStyle = '#8b512b';
+      c.fillRect(0, Math.max(0, lawnTop - 10), w, 3);
+      // Bottom rail
+      c.fillStyle = '#4c2711';
+      c.fillRect(0, lawnBot + 2, w, 8);
+      c.fillStyle = '#7c4522';
+      c.fillRect(0, lawnBot + 2, w, 2.5);
+
+      for (let px = lawnLeft + 8; px < lawnRight + 20; px += postStep) {
+        c.fillStyle = '#6e391c';
+        c.fillRect(px - 4, Math.max(0, lawnTop - 14), 8, 14);
+        c.fillStyle = '#cfa66b';
+        c.fillRect(px - 3, Math.max(0, lawnTop - 14), 6, 2.5);
+      }
+
+      // Right bush clusters along spawn border
+      for (let r = 0; r < ROWS; r++) {
+        const bx = boardX + COLS * tileW + hedgeW * 0.65;
+        const by = boardY + (r + 0.5) * tileH;
+        c.fillStyle = 'rgba(30, 56, 18, 0.65)';
+        c.beginPath();
+        c.arc(bx + 8, by - tileH * 0.22, tileH * 0.28, 0, Math.PI * 2);
+        c.arc(bx + 12, by + tileH * 0.16, tileH * 0.30, 0, Math.PI * 2);
+        c.fill();
+        c.fillStyle = 'rgba(78, 126, 42, 0.45)';
+        c.beginPath();
+        c.arc(bx + 5, by - tileH * 0.25, tileH * 0.16, 0, Math.PI * 2);
+        c.fill();
+      }
+
+      // Warm golden corner glow from morning conservatory sun
+      const sunWash = c.createRadialGradient(0, 0, 10, 0, 0, w * 0.65);
+      sunWash.addColorStop(0, 'rgba(255, 240, 178, 0.16)');
+      sunWash.addColorStop(1, 'rgba(255, 240, 178, 0)');
+      c.fillStyle = sunWash;
+      c.fillRect(0, 0, w, h);
+    }
+
+    /* =====================================================================
+       GAME STATE
+       ===================================================================== */
+    let nextUid = 1;
+
+    const state = {
+      mode: 'adventure', // 'adventure' | 'endless'
+      stage: saveData.currentStage,
+      sun: 175,
+      score: 0,
+      fusionsCount: 0,
+      plantFood: 1,
+      maxPlantFood: 3,
+      speedMult: 1,
+      paused: false,
+      pauseBeforeDialog: false,
+      ended: false,
+      victory: false,
+
+      selectedSeed: null, // seed id or null
+      tool: null,         // 'shovel' | 'plantfood' | null
+      hoverTile: null,    // { row, col } or null
+
+      time: 0,
+      hitStop: 0,
+      shakeTime: 0,
+      shakeMag: 0,
+
+      // Grid: 5x9 array of plant objects or null
+      grid: [],
+      cooldowns: {}, // seedId -> remaining seconds
+      carts: [],     // 5 Apple Carts
+      invaders: [],
+      projectiles: [],
+      orbs: [],      // sun & plantfood drops
+      particles: [],
+      rings: [],
+      floats: [],
+
+      // Sky sun cadence
+      skySunTimer: 2.2,
+
+      // Wave spawner
+      waveIndex: 0,
+      totalWaves: 2,
+      endlessWave: 1,
+      waveQueue: [],
+      totalSpawnsInStage: 1,
+      spawnedInStage: 0,
+      spawnTimer: 4.0,
+      waveBreakTimer: 0,
+      waveBannerText: '',
+      waveBannerTimer: 0,
+      waveFlagPositions: [], // 0..1 normalized markers
+      stageHadBoss: false,
+    };
+
+    function announce(msg) {
+      srAnnounce.textContent = '';
+      requestAnimationFrame(() => { srAnnounce.textContent = msg; });
+    }
+
+    function addShake(mag, dur) {
+      if (reducedMotion) return;
+      state.shakeMag = Math.max(state.shakeMag, mag);
+      state.shakeTime = Math.max(state.shakeTime, dur);
+    }
+
+    function addFloat(col, row, text, color = '#fff6dc', size = 14, dur = 1.05) {
+      state.floats.push({
+        col,
+        row,
+        text,
+        color,
+        size,
+        life: dur,
+        maxLife: dur,
+      });
+    }
+
+    function addRing(col, row, maxR, color, lineW = 3, dur = 0.42) {
+      state.rings.push({ col, row, r: 0.12, maxR, color, lineW, life: dur, maxLife: dur });
+    }
+
+    function spawnParticles(col, row, count, color, speed = 1.8, size = 4, life = 0.55) {
+      const n = reducedMotion ? Math.min(4, count) : count;
+      for (let i = 0; i < n; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = speed * (0.35 + Math.random() * 0.85);
+        state.particles.push({
+          col,
+          row,
+          vx: Math.cos(ang) * spd,
+          vy: Math.sin(ang) * spd - 0.35,
+          color,
+          size: size * (0.65 + Math.random() * 0.7),
+          life: life * (0.6 + Math.random() * 0.5),
+          maxLife: life,
+          grav: 1.9,
+        });
+      }
+    }
+
+    /* =====================================================================
+       WAVE GENERATION (ADVENTURE 1–10 & ODYSSEY ENDLESS)
+       ===================================================================== */
+    function pickWeighted(weights) {
+      const entries = Object.entries(weights).filter(([, w]) => w > 0);
+      const sum = entries.reduce((acc, [, w]) => acc + w, 0);
+      let roll = Math.random() * sum;
+      for (const [k, w] of entries) {
+        roll -= w;
+        if (roll <= 0) return k;
+      }
+      return entries[0][0];
+    }
+
+    function buildWaveQueueForAdventure(stageNum) {
+      const cfg = STAGES[Math.max(0, Math.min(STAGES.length - 1, stageNum - 1))];
+      const queue = [];
+      const flags = [];
+      let total = 0;
+
+      for (let w = 0; w < cfg.waves; w++) {
+        const count = cfg.counts[w] || 10;
+        const isFinal = w === cfg.waves - 1;
+        // Guarantee 1-2 glowing Tinh Hoa invaders per wave
+        const pfIndices = new Set();
+        pfIndices.add(Math.max(1, Math.floor(count * 0.45)));
+        if (count >= 11) pfIndices.add(Math.floor(count * 0.8));
+
+        for (let i = 0; i < count; i++) {
+          let type = pickWeighted(cfg.weights);
+          // First 2 invaders of Wave 1 are gentle warmups
+          if (w === 0 && i < 2) type = 'basic';
+          if (w === 0 && i === 2 && stageNum >= 2) type = 'bucket';
+          const delay = i === 0
+            ? (w === 0 ? 4.2 : 3.2)
+            : Math.max(0.75, (w === 0 ? 3.9 : isFinal ? 2.1 : 2.7) - stageNum * 0.11 + (Math.random() * 0.9 - 0.3));
+          queue.push({
+            type,
+            wave: w,
+            delay,
+            isWaveStart: i === 0 && w > 0,
+            isFinalWave: isFinal && i === 0,
+            hasPlantFood: pfIndices.has(i),
+            hpScale: 1 + (stageNum - 1) * 0.06,
+          });
+          total++;
+        }
+
+        if (isFinal) {
+          queue.push({
+            type: 'boss',
+            wave: w,
+            delay: 2.2,
+            isBossEntry: true,
+            hasPlantFood: false,
+            customHp: cfg.bossHp,
+          });
+          total++;
+        }
+        flags.push(total);
+      }
+
+      state.totalWaves = cfg.waves;
+      state.totalSpawnsInStage = Math.max(1, total);
+      state.spawnedInStage = 0;
+      state.waveFlagPositions = flags.map((cnt) => Math.min(0.98, cnt / total));
+      return queue;
+    }
+
+    function buildEndlessWave(waveNum) {
+      const count = 8 + Math.min(28, waveNum * 3);
+      const isBossWave = waveNum % 3 === 0;
+      const weights = {
+        basic: Math.max(8, 46 - waveNum * 4),
+        bucket: 26,
+        barrel: Math.min(36, 8 + waveNum * 4),
+        sprinter: Math.min(32, 12 + waveNum * 3),
+      };
+      const queue = [];
+      const pf1 = Math.max(1, Math.floor(count * 0.35));
+      const pf2 = Math.max(2, Math.floor(count * 0.72));
+      const hpScale = 1 + (waveNum - 1) * 0.12;
+
+      for (let i = 0; i < count; i++) {
+        let type = (waveNum === 1 && i < 2) ? 'basic' : pickWeighted(weights);
+        const delay = i === 0
+          ? (waveNum === 1 ? 3.8 : 2.6)
+          : Math.max(0.58, 3.0 - waveNum * 0.16 + (Math.random() * 0.75 - 0.25));
+        queue.push({
+          type,
+          wave: waveNum - 1,
+          delay,
+          isWaveStart: i === 0 && waveNum > 1,
+          isFinalWave: isBossWave && i === 0,
+          hasPlantFood: i === pf1 || i === pf2,
+          hpScale,
+        });
+      }
+
+      if (isBossWave) {
+        queue.push({
+          type: 'boss',
+          wave: waveNum - 1,
+          delay: 2.0,
+          isBossEntry: true,
+          hasPlantFood: true,
+          customHp: Math.round(2000 + waveNum * 480),
+        });
+      }
+
+      state.totalSpawnsInStage = queue.length;
+      state.spawnedInStage = 0;
+      state.waveFlagPositions = [0.5, 0.96];
+      return queue;
+    }
+
+    /* =====================================================================
+       INIT / RESET RUN
+       ===================================================================== */
+    function startRun(mode = state.mode, stageNum = state.stage) {
+      state.pauseBeforeDialog = false;
+      if (resultDialog.open) resultDialog.close();
+      if (almanacDialog.open) almanacDialog.close();
+
+      state.mode = mode;
+      state.stage = Math.max(1, Math.min(STAGES.length, stageNum));
+      if (mode === 'adventure') {
+        saveData.currentStage = state.stage;
+        writeSave(saveData);
+      }
+
+      const cfg = STAGES[state.stage - 1];
+      state.sun = mode === 'adventure' ? cfg.startSun : 200;
+      state.score = 0;
+      state.fusionsCount = 0;
+      state.plantFood = 1;
+      state.paused = false;
+      state.ended = false;
+      state.victory = false;
+      state.selectedSeed = null;
+      state.tool = null;
+      state.time = 0;
+      state.hitStop = 0;
+      state.shakeTime = 0;
+      state.shakeMag = 0;
+      state.skySunTimer = 2.4;
+      state.waveIndex = 0;
+      state.endlessWave = 1;
+      state.waveBreakTimer = 0;
+      state.stageHadBoss = false;
+      state.waveBannerText = mode === 'adventure'
+        ? `Màn ${state.stage} — Bảo Vệ Vườn Hang Sóc!`
+        : 'Vô Tận — Đợt 1 Bắt Đầu!';
+      state.waveBannerTimer = 2.6;
+
+      state.grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+      state.cooldowns = {};
+      for (const s of BASE_SEEDS) state.cooldowns[s.id] = 0;
+
+      state.carts = Array.from({ length: ROWS }, (_, r) => ({
+        row: r,
+        col: -0.46,
+        state: 'ready', // 'ready' | 'running' | 'gone'
+        wheelRot: 0,
+      }));
+
+      state.invaders = [];
+      state.projectiles = [];
+      state.orbs = [];
+      state.particles = [];
+      state.rings = [];
+      state.floats = [];
+
+      state.waveQueue = mode === 'adventure'
+        ? buildWaveQueueForAdventure(state.stage)
+        : buildEndlessWave(1);
+      state.spawnTimer = state.waveQueue.length ? state.waveQueue[0].delay : 3.5;
+
+      renderWaveFlags();
+      syncHudAll();
+      announce(state.waveBannerText);
+    }
+
+    /* =====================================================================
+       PLANT CREATION, FUSION & OVERDRIVE
+       ===================================================================== */
+    function createPlant(typeId, row, col, investedSun) {
+      const def = PLANT_DEFS[typeId];
+      return {
+        uid: nextUid++,
+        type: typeId,
+        row,
+        col,
+        hp: def.hp,
+        maxHp: def.hp,
+        shield: 0,
+        invested: investedSun != null ? investedSun : def.invested,
+        age: 0,
+        popScale: 1.28,
+        recoil: 0,
+        hitFlash: 0,
+        actionTimer: typeId === 'sunflower' ? 4.2 : 0.6,
+        sunTimer: (typeId === 'sunshooter' || typeId === 'solar_nut' || typeId === 'solar_phoenix') ? 5.2 : 0,
+        biteSunCd: 0,
+        burstLeft: 0,
+        burstTimer: 0,
+        altToggle: false, // for Thermal Nova alternating Fire / Frost
+        overdrive: 0,     // remaining seconds of Overdrive
+        overdriveShotTimer: 0,
+      };
+    }
+
+    function selectSeed(seedId) {
+      if (state.ended) return;
+      if (state.selectedSeed === seedId) {
+        state.selectedSeed = null;
+      } else {
+        state.selectedSeed = seedId;
+        state.tool = null;
+      }
+      syncDockState();
+      updateContextTip();
+    }
+
+    function toggleTool(toolName) {
+      if (state.ended) return;
+      if (toolName === 'plantfood' && state.plantFood <= 0) {
+        sfx.err();
+        return;
+      }
+      if (state.tool === toolName) {
+        state.tool = null;
+      } else {
+        state.tool = toolName;
+        state.selectedSeed = null;
+      }
+      syncDockState();
+      updateContextTip();
+    }
+
+    function cancelSelection() {
+      state.selectedSeed = null;
+      state.tool = null;
+      syncDockState();
+      updateContextTip();
+    }
+
+    function tryPlaceOrFuse(row, col) {
+      if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return false;
+      const existing = state.grid[row][col];
+
+      // 1. Shovel tool
+      if (state.tool === 'shovel') {
+        if (!existing) return false;
+        const refund = Math.round(existing.invested * 0.5);
+        state.grid[row][col] = null;
+        addSun(refund, false);
+        spawnParticles(col + 0.5, row + 0.5, 14, '#7a5029', 2.0, 4.5, 0.55);
+        addFloat(col + 0.5, row + 0.35, `+${refund} ☀`, '#ffe484', 14);
+        sfx.shovel();
+        state.tool = null;
+        syncHudAll();
+        return true;
+      }
+
+      // 2. Plant Food (Tinh Hoa) Overdrive
+      if (state.tool === 'plantfood') {
+        if (!existing || state.plantFood <= 0) return false;
+        triggerOverdrive(existing);
+        state.plantFood--;
+        state.tool = null;
+        syncHudAll();
+        return true;
+      }
+
+      // 3. Planting or Direct Tile-Stacking FUSION
+      if (!state.selectedSeed) return false;
+      const seed = BASE_SEEDS.find((s) => s.id === state.selectedSeed);
+      if (!seed) return false;
+
+      if ((state.cooldowns[seed.id] || 0) > 0.02) {
+        sfx.err();
+        addFloat(col + 0.5, row + 0.35, 'Đang hồi hạt!', '#ffd484', 12);
+        return false;
+      }
+      if (state.sun < seed.cost) {
+        sfx.err();
+        addFloat(col + 0.5, row + 0.35, 'Thiếu Nắng!', '#ff9d7a', 13);
+        return false;
+      }
+
+      if (!existing) {
+        // Place base plant on empty grass tile
+        state.sun -= seed.cost;
+        state.cooldowns[seed.id] = seed.cd;
+        state.grid[row][col] = createPlant(seed.id, row, col, seed.cost);
+        spawnParticles(col + 0.5, row + 0.62, 10, '#a8e858', 1.6, 3.8, 0.45);
+        addRing(col + 0.5, row + 0.55, 0.55, '#d8f58a', 2.5, 0.30);
+        sfx.plant();
+        state.selectedSeed = null;
+        syncHudAll();
+        return true;
+      }
+
+      // Direct Tile-Stacking FUSION check!
+      const fusedId = getFusionResult(existing.type, seed.id);
+      if (!fusedId) {
+        sfx.err();
+        addFloat(col + 0.5, row + 0.35, 'Không thể lai cặp này', '#ffd8a8', 12);
+        return false;
+      }
+
+      state.sun -= seed.cost;
+      state.cooldowns[seed.id] = seed.cd;
+      const totalInvested = existing.invested + seed.cost;
+      const fusedPlant = createPlant(fusedId, row, col, totalInvested);
+      fusedPlant.popScale = 1.48;
+      state.grid[row][col] = fusedPlant;
+      state.fusionsCount++;
+
+      const fDef = PLANT_DEFS[fusedId];
+      const isTitan = fDef.tier >= 3;
+      const isSuper = fDef.tier === 2.5;
+      state.score += isTitan ? 450 : isSuper ? 260 : 150;
+      syncScoreToParent(false);
+
+      // Record discovered fusion in Almanac
+      if (!saveData.crafted[fusedId]) {
+        saveData.crafted[fusedId] = true;
+        writeSave(saveData);
+      }
+
+      // Signature golden starburst + hit-stop + celestial chime!
+      state.hitStop = isTitan ? 0.055 : 0.036;
+      addShake(isTitan ? 7 : 4.2, isTitan ? 0.32 : 0.22);
+      addRing(col + 0.5, row + 0.5, isTitan ? 1.8 : 1.15, '#ffe484', isTitan ? 5 : 3.5, 0.55);
+      addRing(col + 0.5, row + 0.5, isTitan ? 1.2 : 0.78, fDef.aura, 3, 0.42);
+      spawnParticles(col + 0.5, row + 0.5, isTitan ? 32 : 20, '#ffe484', isTitan ? 3.2 : 2.5, 5.2, 0.72);
+      spawnParticles(col + 0.5, row + 0.5, 12, fDef.aura, 2.2, 4.2, 0.58);
+      addFloat(col + 0.5, row + 0.22, `✦ ${fDef.name}!`, isTitan ? '#fff28a' : '#ffe484', isTitan ? 16 : 14);
+      sfx.fusion(isTitan);
+      announce(`Lai tạo thành công ${fDef.name}`);
+
+      state.selectedSeed = null;
+      syncHudAll();
+      return true;
+    }
+
+    function triggerOverdrive(plant) {
+      const def = PLANT_DEFS[plant.type];
+      plant.hp = plant.maxHp;
+      plant.popScale = 1.45;
+      plant.overdrive = 3.0;
+      plant.overdriveShotTimer = 0.05;
+
+      state.hitStop = 0.04;
+      addShake(5.5, 0.28);
+      addRing(plant.col + 0.5, plant.row + 0.5, 1.6, '#7dff8e', 4.5, 0.55);
+      addRing(plant.col + 0.5, plant.row + 0.5, 1.1, '#ffe484', 3.5, 0.45);
+      spawnParticles(plant.col + 0.5, plant.row + 0.5, 26, '#8eff95', 2.8, 4.8, 0.65);
+      spawnParticles(plant.col + 0.5, plant.row + 0.5, 16, '#ffe484', 2.2, 4.2, 0.60);
+      sfx.overdrive();
+      addFloat(plant.col + 0.5, plant.row + 0.2, '★ TINH HOA SIÊU NẠP!', '#9dff9e', 15);
+      announce(`Kích hoạt Tinh Hoa Siêu Nạp lên ${def.name}`);
+
+      // Immediate signature Overdrive burst by role
+      if (plant.type === 'sunflower' || plant.type === 'solar_nut' || plant.type === 'sunshooter' || plant.type === 'solar_phoenix') {
+        const count = (plant.type === 'sunflower' || plant.type === 'solar_nut') ? 6 : 4;
+        for (let i = 0; i < count; i++) {
+          spawnOrb('sun', plant.col + 0.5, plant.row + 0.4,
+            plant.col + 0.5 + (Math.random() - 0.5) * 1.4,
+            Math.max(0.4, Math.min(ROWS - 0.4, plant.row + 0.5 + (Math.random() - 0.5) * 1.0)),
+            25);
+        }
+      }
+
+      if (def.role === 'wall' || def.role === 'wall_sun') {
+        plant.shield = Math.max(plant.shield, 900);
+        // Shockwave pushes & damages nearby invaders!
+        const rad = plant.type === 'quake_nut' ? 2.6 : 1.9;
+        for (const z of state.invaders) {
+          if (z.dead) continue;
+          const dist = Math.hypot(z.col - (plant.col + 0.5), z.row - plant.row);
+          if (dist <= rad) {
+            damageInvader(z, plant.type === 'inferno_nut' ? 180 : 120, plant.type === 'inferno_nut' ? 'fire' : 'sonic');
+            z.col = Math.min(COLS + 0.35, z.col + (z.isBoss ? 0.38 : 1.15));
+          }
+        }
+        addRing(plant.col + 0.5, plant.row + 0.5, rad, plant.type === 'inferno_nut' ? '#ff6a22' : '#ffe484', 5, 0.5);
+        sfx.boom(true);
+      }
+
+      if (plant.type === 'mandrake') {
+        // Immediate massive lane-clearing sonic roar!
+        for (const z of state.invaders) {
+          if (z.dead) continue;
+          if (Math.abs(z.row - plant.row) <= 1 && z.col >= plant.col - 0.4 && z.col <= plant.col + 4.5) {
+            damageInvader(z, 130, 'sonic');
+            z.col = Math.min(COLS + 0.35, z.col + (z.isBoss ? 0.35 : 1.4));
+          }
+        }
+        addRing(plant.col + 0.5, plant.row + 0.5, 3.2, '#c8a6ff', 5, 0.55);
+      }
+    }
+
+    /* =====================================================================
+       SUN & TINH HOA ORBS (HOVER/CLICK + AUTO-COLLECT BEFORE FADE)
+       ===================================================================== */
+    function addSun(amount, pop = true) {
+      state.sun = Math.min(9999, state.sun + amount);
+      uiSunVal.textContent = String(state.sun);
+      if (pop && !reducedMotion) {
+        uiSunPill.classList.remove('pop');
+        void uiSunPill.offsetWidth;
+        uiSunPill.classList.add('pop');
+      }
+      syncDockState();
+    }
+
+    function spawnOrb(kind, startCol, startRow, targetCol, targetRow, value = 25) {
+      state.orbs.push({
+        uid: nextUid++,
+        kind, // 'sun' | 'plantfood'
+        col: startCol,
+        row: startRow,
+        startCol,
+        startRow,
+        targetCol: Math.max(0.35, Math.min(COLS - 0.35, targetCol)),
+        targetRow: Math.max(0.35, Math.min(ROWS - 0.35, targetRow)),
+        arcT: 0,
+        arcDur: kind === 'sun' && startRow < 0 ? 2.6 : 0.65,
+        isSky: startRow < 0,
+        value,
+        life: 10.5,
+        collecting: false,
+        collectT: 0,
+        collectStartCol: 0,
+        collectStartRow: 0,
+        bobPhase: Math.random() * Math.PI * 2,
+      });
+    }
+
+    function collectOrb(orb) {
+      if (orb.collecting) return;
+      orb.collecting = true;
+      orb.collectT = 0;
+      orb.collectStartCol = orb.col;
+      orb.collectStartRow = orb.row;
+      if (orb.kind === 'sun') {
+        sfx.sun();
+      } else {
+        sfx.clover();
+      }
+    }
+
+    /* =====================================================================
+       COMBAT: PROJECTILES, SPLASH, THERMAL SHOCK & INVADER DAMAGE
+       ===================================================================== */
+    function fireProjectile(row, col, kind, dmg, extra = {}) {
+      state.projectiles.push({
+        row,
+        col,
+        kind, // 'pea' | 'solar' | 'ice' | 'frost_pierce' | 'fire' | 'pyro' | 'thermal_fire' | 'thermal_ice' | 'meteor'
+        dmg,
+        speed: extra.speed || 6.4,
+        pierce: extra.pierce || 1,
+        hitSet: new Set(),
+        splash: extra.splash || 0,
+        splashDmg: extra.splashDmg || 0,
+        chill: extra.chill || 0,
+        chillDur: extra.chillDur || 0,
+        burn: extra.burn || 0,
+        thermal: extra.thermal || null, // 'fire' | 'ice'
+        age: 0,
+      });
+    }
+
+    function damageInvader(z, amount, element = 'normal') {
+      if (z.dead) return;
+      z.hp -= amount;
+      z.hitFlash = 0.14;
+
+      if (element === 'ice') {
+        z.chillTimer = Math.max(z.chillTimer, 4.2);
+        z.chillFactor = Math.min(z.chillFactor, 0.50);
+      } else if (element === 'frost_pierce') {
+        z.chillTimer = Math.max(z.chillTimer, 4.6);
+        z.chillFactor = Math.min(z.chillFactor, 0.45);
+      } else if (element === 'fire') {
+        z.burnTimer = Math.max(z.burnTimer, 3.2);
+        z.burnDps = Math.max(z.burnDps, 12);
+      } else if (element === 'pyro') {
+        z.burnTimer = Math.max(z.burnTimer, 3.8);
+        z.burnDps = Math.max(z.burnDps, 16);
+      }
+
+      // Visual armor break burst (bucket / barrel)
+      if (!z.armorBroken && (z.type === 'bucket' || z.type === 'barrel') && z.hp <= z.maxHp * 0.42) {
+        z.armorBroken = true;
+        spawnParticles(z.col, z.row + 0.35, 14, '#b87a3d', 2.4, 4.5, 0.6);
+        sfx.hit(true);
+      }
+
+      if (z.hp <= 0) {
+        killInvader(z);
+      }
+    }
+
+    function killInvader(z) {
+      if (z.dead) return;
+      z.dead = true;
+      state.score += z.score;
+      syncScoreToParent(false);
+      spawnParticles(z.col, z.row + 0.45, z.isBoss ? 36 : 12, z.isBoss ? '#ffd858' : '#d6a468', z.isBoss ? 3.5 : 2.1, z.isBoss ? 5.5 : 4, 0.65);
+
+      if (z.isBoss) {
+        addShake(9, 0.45);
+        addRing(z.col, z.row + 0.5, 2.5, '#ffe484', 6, 0.7);
+        addFloat(z.col, z.row + 0.15, '👑 HẠ GỤC TRÙM! +900', '#ffe484', 17);
+        sfx.boom(true);
+        // Drop celebratory sun shower
+        for (let i = 0; i < 4; i++) {
+          spawnOrb('sun', z.col, z.row + 0.4,
+            Math.max(0.8, Math.min(COLS - 0.8, z.col + (Math.random() - 0.5) * 2.2)),
+            Math.max(0.5, Math.min(ROWS - 0.5, z.row + 0.5 + (Math.random() - 0.5) * 1.4)),
+            25);
+        }
+      }
+
+      if (z.hasPlantFood) {
+        spawnOrb('plantfood', z.col, z.row + 0.4,
+          Math.max(0.6, Math.min(COLS - 0.6, z.col - 0.2)),
+          z.row + 0.55,
+          1);
+        addFloat(z.col, z.row + 0.25, '🍀 Rơi Tinh Hoa!', '#9dff9e', 13);
+      }
+    }
+
+    function detonateSplash(col, row, radius, dmg, element, color, big = false) {
+      addRing(col, row + 0.5, radius, color, big ? 4.5 : 3, big ? 0.45 : 0.32);
+      spawnParticles(col, row + 0.5, big ? 22 : 11, color, big ? 2.8 : 2.1, big ? 5 : 3.8, 0.52);
+      for (const z of state.invaders) {
+        if (z.dead) continue;
+        const d = Math.hypot(z.col - col, z.row - row);
+        if (d <= radius) {
+          damageInvader(z, dmg, element);
+        }
+      }
+    }
+
+    /* =====================================================================
+       SPAWN INVADER
+       ===================================================================== */
+    function spawnInvader(spec) {
+      const def = INVADER_TYPES[spec.type];
+      // Choose row fairly (avoid piling all on 1 lane early)
+      let row = Math.floor(Math.random() * ROWS);
+      if (spec.type === 'boss') {
+        row = 2; // Center lane dramatic entrance!
+      } else if (state.invaders.length > 0 && Math.random() < 0.65) {
+        // Favor lanes with fewest invaders
+        const laneCounts = [0, 0, 0, 0, 0];
+        for (const z of state.invaders) if (!z.dead) laneCounts[z.row]++;
+        const minC = Math.min(...laneCounts);
+        const candidates = [];
+        for (let r = 0; r < ROWS; r++) if (laneCounts[r] === minC) candidates.push(r);
+        row = candidates[Math.floor(Math.random() * candidates.length)];
+      }
+
+      const maxHp = Math.round(spec.customHp || def.hp * (spec.hpScale || 1));
+      state.invaders.push({
+        uid: nextUid++,
+        type: spec.type,
+        name: def.name,
+        isBoss: Boolean(def.isBoss),
+        row,
+        col: COLS + 0.45,
+        hp: maxHp,
+        maxHp,
+        speed: def.speed * (0.94 + Math.random() * 0.12),
+        dps: def.dps,
+        score: def.score,
+        scale: def.scale,
+        hasPlantFood: Boolean(spec.hasPlantFood),
+        armorBroken: false,
+        walkPhase: Math.random() * Math.PI * 2,
+        eating: false,
+        biteTimer: 0,
+        hitFlash: 0,
+        chillTimer: 0,
+        chillFactor: 1,
+        burnTimer: 0,
+        burnDps: 0,
+        stunTimer: 0,
+        bossSlamTimer: 5.5,
+        dead: false,
+      });
+
+      if (spec.isWaveStart) {
+        state.waveIndex = spec.wave;
+        state.waveBannerText = spec.isFinalWave
+          ? (state.mode === 'adventure' ? '⚠ ĐỢT CUỐI — YÊU TINH ĐỔ BỘ!' : `⚠ ĐỢT ${state.endlessWave} — ĐỢT TRÙM!`)
+          : `Đợt ${spec.wave + 1} đang tiến vào vườn!`;
+        state.waveBannerTimer = 2.6;
+        sfx.wave(false);
+        announce(state.waveBannerText);
+      }
+      if (spec.isBossEntry || def.isBoss) {
+        state.stageHadBoss = true;
+        state.waveBannerText = '👑 TRÙM YÊU TINH KHỔNG LỒ XUẤT HIỆN!';
+        state.waveBannerTimer = 3.2;
+        addShake(6, 0.35);
+        sfx.wave(true);
+        announce(state.waveBannerText);
+      }
+    }
+
+    /* =====================================================================
+       MAIN SIMULATION UPDATE (FIXED-CAP DT)
+       ===================================================================== */
+    function hasInvaderAhead(row, col, maxRange = 99) {
+      for (const z of state.invaders) {
+        if (!z.dead && z.row === row && z.col >= col - 0.15 && z.col <= col + maxRange) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function hasInvaderNear3x3(row, col, rangeX = 2.2) {
+      for (const z of state.invaders) {
+        if (!z.dead && Math.abs(z.row - row) <= 1 && Math.abs(z.col - (col + 0.5)) <= rangeX) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function updateSim(rawDt) {
+      if (state.paused || state.ended) return;
+
+      const dt = Math.min(rawDt, 0.05) * state.speedMult;
+
+      if (state.hitStop > 0) {
+        state.hitStop = Math.max(0, state.hitStop - rawDt);
+        return;
+      }
+
+      state.time += dt;
+      if (state.shakeTime > 0) state.shakeTime = Math.max(0, state.shakeTime - rawDt);
+      if (state.waveBannerTimer > 0) state.waveBannerTimer = Math.max(0, state.waveBannerTimer - rawDt);
+
+      // 1. Seed cooldowns
+      let cdChanged = false;
+      for (const s of BASE_SEEDS) {
+        if (state.cooldowns[s.id] > 0) {
+          state.cooldowns[s.id] = Math.max(0, state.cooldowns[s.id] - dt);
+          cdChanged = true;
+        }
+      }
+
+      // 2. Auto-falling sky sun orbs
+      state.skySunTimer -= dt;
+      if (state.skySunTimer <= 0) {
+        state.skySunTimer = 7.4 + Math.random() * 1.6;
+        const c = 0.7 + Math.random() * (COLS - 1.4);
+        const r = 0.6 + Math.random() * (ROWS - 1.2);
+        spawnOrb('sun', c, -0.45, c, r, 25);
+      }
+
+      // 3. Wave Spawner
+      if (state.waveQueue.length > 0) {
+        state.spawnTimer -= dt;
+        if (state.spawnTimer <= 0) {
+          const next = state.waveQueue.shift();
+          spawnInvader(next);
+          state.spawnedInStage++;
+          state.spawnTimer = state.waveQueue.length ? state.waveQueue[0].delay : 0;
+        }
+      } else if (state.invaders.every((z) => z.dead)) {
+        if (state.mode === 'adventure') {
+          finishGame(true);
+          return;
+        } else {
+          // Endless: advance to next wave after breather
+          if (state.waveBreakTimer <= 0) {
+            const clearedWave = state.endlessWave;
+            const waveHadBoss = Boolean(state.stageHadBoss || clearedWave % 3 === 0);
+            state.score += 300 * clearedWave;
+            addSun(50, true);
+            addFloat(4.5, 2.2, `Hoàn thành Đợt ${clearedWave}! +50 ☀`, '#ffe484', 16);
+            if (state.score > saveData.bestScoreEndless) {
+              saveData.bestScoreEndless = state.score;
+            }
+            if (clearedWave > saveData.bestWaveEndless) {
+              saveData.bestWaveEndless = clearedWave;
+              uiStageBadge.textContent = `Vô Tận · KL ${Math.max(1, saveData.bestWaveEndless)}`;
+            }
+            writeSave(saveData);
+            postToParent({
+              type: 'victory',
+              stage: clearedWave,
+              score: state.score,
+              combo: clearedWave,
+              isBoss: waveHadBoss,
+              runId: `pvz_${clearedWave}_${Date.now()}`,
+            });
+            syncScoreToParent(true);
+            state.endlessWave++;
+            state.waveBreakTimer = 3.2;
+          } else {
+            state.waveBreakTimer -= dt;
+            if (state.waveBreakTimer <= 0) {
+              state.stageHadBoss = false;
+              state.waveQueue = buildEndlessWave(state.endlessWave);
+              state.spawnTimer = state.waveQueue[0].delay;
+              state.waveBannerText = `Vô Tận — Đợt ${state.endlessWave} Bắt Đầu!`;
+              state.waveBannerTimer = 2.4;
+              renderWaveFlags();
+              sfx.wave(false);
+            }
+          }
+        }
+      }
+
+      // 4. Update Plants
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const p = state.grid[r][c];
+          if (!p) continue;
+          p.age += dt;
+          if (p.popScale > 1) p.popScale = Math.max(1, p.popScale - dt * 2.2);
+          if (p.recoil > 0) p.recoil = Math.max(0, p.recoil - dt * 4.5);
+          if (p.hitFlash > 0) p.hitFlash = Math.max(0, p.hitFlash - dt);
+          if (p.biteSunCd > 0) p.biteSunCd = Math.max(0, p.biteSunCd - dt);
+
+          // Active Overdrive 3s hyper-mode
+          if (p.overdrive > 0) {
+            p.overdrive = Math.max(0, p.overdrive - dt);
+            p.overdriveShotTimer -= dt;
+            if (p.overdriveShotTimer <= 0) {
+              runOverdriveTick(p);
+            }
+            continue;
+          }
+
+          // Passive Sun Producers (Sunflower, Sunshooter, Solar-Nut, Solar Phoenix)
+          if (p.type === 'sunflower') {
+            p.actionTimer -= dt;
+            if (p.actionTimer <= 0) {
+              p.actionTimer = 10.2;
+              p.popScale = 1.18;
+              spawnOrb('sun', c + 0.5, r + 0.38, c + 0.5 + (Math.random() - 0.5) * 0.7, r + 0.62, 25);
+            }
+          } else if (p.type === 'sunshooter' || p.type === 'solar_nut' || p.type === 'solar_phoenix') {
+            p.sunTimer -= dt;
+            if (p.sunTimer <= 0) {
+              p.sunTimer = p.type === 'sunshooter' ? 9.2 : p.type === 'solar_nut' ? 10.5 : 9.4;
+              p.popScale = 1.16;
+              const orbs = p.type === 'solar_phoenix' ? 2 : 1;
+              for (let k = 0; k < orbs; k++) {
+                spawnOrb('sun', c + 0.5, r + 0.35, c + 0.5 + (Math.random() - 0.5) * 0.9, r + 0.62, 25);
+              }
+            }
+          }
+
+          // Burst follow-up shots (Sunshooter & Twin-Gatling)
+          if (p.burstLeft > 0) {
+            p.burstTimer -= dt;
+            if (p.burstTimer <= 0) {
+              p.burstLeft--;
+              p.burstTimer = 0.11;
+              p.recoil = 0.24;
+              if (p.type === 'sunshooter') {
+                fireProjectile(r, c + 0.78, 'solar', 25, { speed: 6.8 });
+                sfx.shoot('pea');
+              } else if (p.type === 'twin_gatling') {
+                fireProjectile(r, c + 0.78, 'pea', 29, { speed: 7.2 });
+                sfx.shoot('pea');
+              }
+            }
+          }
+
+          // Offensive & Special Plant Actions
+          updatePlantCombat(p, dt);
+        }
+      }
+
+      // 5. Update Apple Carts (Xe Đẩy Táo — Lane Sweepers)
+      for (const cart of state.carts) {
+        if (cart.state === 'running') {
+          cart.col += dt * 7.8;
+          cart.wheelRot += dt * 22;
+          spawnParticles(cart.col - 0.25, cart.row + 0.65, 1, '#f4c668', 1.1, 3.2, 0.28);
+          for (const z of state.invaders) {
+            if (!z.dead && z.row === cart.row && Math.abs(z.col - cart.col) < 0.72) {
+              killInvader(z);
+              addShake(3.5, 0.14);
+            }
+          }
+          if (cart.col > COLS + 1.1) {
+            cart.state = 'gone';
+          }
+        }
+      }
+
+      // 6. Update Projectiles
+      for (let i = state.projectiles.length - 1; i >= 0; i--) {
+        const pr = state.projectiles[i];
+        pr.age += dt;
+        pr.col += pr.speed * dt;
+        if (pr.col > COLS + 0.9) {
+          state.projectiles.splice(i, 1);
+          continue;
+        }
+
+        // Check collision with invaders in same lane
+        let consumed = false;
+        for (const z of state.invaders) {
+          if (z.dead || z.row !== pr.row || pr.hitSet.has(z.uid)) continue;
+          if (Math.abs(z.col - pr.col) < 0.42) {
+            pr.hitSet.add(z.uid);
+            handleProjectileHit(pr, z);
+            pr.pierce--;
+            if (pr.pierce <= 0) {
+              consumed = true;
+              break;
+            }
+          }
+        }
+        if (consumed) state.projectiles.splice(i, 1);
+      }
+
+      // 7. Update Invaders
+      for (let i = state.invaders.length - 1; i >= 0; i--) {
+        const z = state.invaders[i];
+        if (z.dead) {
+          state.invaders.splice(i, 1);
+          continue;
+        }
+        if (z.hitFlash > 0) z.hitFlash = Math.max(0, z.hitFlash - dt);
+        if (z.chillTimer > 0) {
+          z.chillTimer = Math.max(0, z.chillTimer - dt);
+          if (z.chillTimer <= 0) z.chillFactor = 1;
+        }
+        if (z.burnTimer > 0) {
+          z.burnTimer = Math.max(0, z.burnTimer - dt);
+          z.hp -= z.burnDps * dt;
+          if (Math.random() < dt * 8) {
+            spawnParticles(z.col, z.row + 0.35, 1, '#ff7722', 0.9, 3.2, 0.3);
+          }
+          if (z.hp <= 0) {
+            killInvader(z);
+            state.invaders.splice(i, 1);
+            continue;
+          }
+        }
+        if (z.stunTimer > 0) {
+          z.stunTimer = Math.max(0, z.stunTimer - dt);
+          continue;
+        }
+
+        const speedScale = z.chillTimer > 0 ? z.chillFactor : 1;
+
+        // Check plant directly blocking invader
+        const checkCol = Math.floor(z.col - 0.16);
+        let blocker = null;
+        if (checkCol >= 0 && checkCol < COLS) {
+          const candidate = state.grid[z.row][checkCol];
+          if (candidate && z.col - (checkCol + 0.5) < 0.52 && z.col - (checkCol + 0.5) > -0.35) {
+            blocker = candidate;
+          }
+        }
+
+        if (blocker) {
+          z.eating = true;
+          z.biteTimer += dt * speedScale;
+          const biteDamage = z.dps * speedScale * dt;
+          applyDamageToPlant(blocker, biteDamage, z);
+          if (z.biteTimer >= 0.45) {
+            z.biteTimer = 0;
+            sfx.chomp();
+            // Bite reflection hooks (Inferno-Nut & Solar-Nut!)
+            if (blocker.type === 'inferno_nut') {
+              damageInvader(z, 26, 'fire');
+              spawnParticles(z.col, z.row + 0.45, 5, '#ff681c', 1.6, 3.4, 0.35);
+            } else if (blocker.type === 'solar_nut' && blocker.biteSunCd <= 0) {
+              blocker.biteSunCd = 3.2;
+              spawnOrb('sun', blocker.col + 0.5, blocker.row + 0.35,
+                blocker.col + 0.5 + (Math.random() - 0.5) * 0.7, blocker.row + 0.65, 25);
+              addFloat(blocker.col + 0.5, blocker.row + 0.25, '+25 ☀', '#ffe484', 12);
+            }
+          }
+        } else {
+          z.eating = false;
+          z.col -= z.speed * speedScale * dt;
+          z.walkPhase += dt * (4.8 + z.speed * 7) * speedScale;
+        }
+
+        // Boss periodic ground stomp pulse
+        if (z.isBoss && z.col < COLS - 0.2) {
+          z.bossSlamTimer -= dt * speedScale;
+          if (z.bossSlamTimer <= 0) {
+            z.bossSlamTimer = 7.5;
+            addShake(5, 0.22);
+            addRing(z.col, z.row + 0.55, 1.35, '#ff9a3c', 3.5, 0.42);
+            // Damages adjacent plant in front slightly
+            const frontCol = Math.floor(z.col - 0.4);
+            if (frontCol >= 0 && frontCol < COLS && state.grid[z.row][frontCol]) {
+              applyDamageToPlant(state.grid[z.row][frontCol], 95, z);
+            }
+          }
+        }
+
+        // Left-edge Apple Cart trigger OR House breach (Game Over)
+        if (z.col <= 0.05) {
+          const cart = state.carts[z.row];
+          if (cart && cart.state === 'ready') {
+            cart.state = 'running';
+            sfx.cart();
+            addShake(6, 0.28);
+            addFloat(0.6, z.row + 0.35, '🍎 XE ĐẨY TÁO XUẤT KÍCH!', '#ffe484', 14);
+            announce(`Xe Đẩy Táo hàng ${z.row + 1} xuất kích!`);
+          } else if (z.col <= -0.35) {
+            finishGame(false);
+            return;
+          }
+        }
+      }
+
+      // 8. Update Orbs (Sun & Tinh Hoa)
+      for (let i = state.orbs.length - 1; i >= 0; i--) {
+        const o = state.orbs[i];
+        o.bobPhase += dt * 4;
+        if (o.collecting) {
+          o.collectT += dt * 2.5;
+          const t = Math.min(1, o.collectT);
+          const ease = 1 - Math.pow(1 - t, 3);
+          const destCol = o.kind === 'sun' ? 0.3 : 8.2;
+          const destRow = o.kind === 'sun' ? -0.35 : ROWS + 0.2;
+          o.col = o.collectStartCol + (destCol - o.collectStartCol) * ease;
+          o.row = o.collectStartRow + (destRow - o.collectStartRow) * ease;
+          if (t >= 1) {
+            if (o.kind === 'sun') {
+              addSun(o.value, true);
+            } else {
+              if (state.plantFood < state.maxPlantFood) {
+                state.plantFood++;
+                syncDockState();
+              } else {
+                addSun(75, true);
+                addFloat(4.5, 2.5, 'Tinh Hoa đầy → +75 ☀', '#ffe484', 13);
+              }
+            }
+            state.orbs.splice(i, 1);
+          }
+          continue;
+        }
+
+        if (o.arcT < 1) {
+          o.arcT = Math.min(1, o.arcT + dt / o.arcDur);
+          const t = o.arcT;
+          o.col = o.startCol + (o.targetCol - o.startCol) * t;
+          if (o.isSky) {
+            o.row = o.startRow + (o.targetRow - o.startRow) * t;
+          } else {
+            const hop = Math.sin(t * Math.PI) * 0.55;
+            o.row = o.startRow + (o.targetRow - o.startRow) * t - hop;
+          }
+        } else {
+          o.life -= dt;
+          // Auto-collect smoothly just before fade so mobile players never lose Sun/Tinh Hoa unfairly!
+          if (o.life <= 1.35) {
+            collectOrb(o);
+          }
+        }
+      }
+
+      // 9. Update Visual FX (Particles, Rings, Floating Text)
+      for (let i = state.particles.length - 1; i >= 0; i--) {
+        const pt = state.particles[i];
+        pt.life -= dt;
+        if (pt.life <= 0) {
+          state.particles.splice(i, 1);
+          continue;
+        }
+        pt.vy += pt.grav * dt;
+        pt.col += pt.vx * dt;
+        pt.row += pt.vy * dt;
+      }
+
+      for (let i = state.rings.length - 1; i >= 0; i--) {
+        const rg = state.rings[i];
+        rg.life -= dt;
+        if (rg.life <= 0) {
+          state.rings.splice(i, 1);
+          continue;
+        }
+        const prog = 1 - rg.life / rg.maxLife;
+        rg.r = rg.maxR * (1 - Math.pow(1 - prog, 2.4));
+      }
+
+      for (let i = state.floats.length - 1; i >= 0; i--) {
+        const fl = state.floats[i];
+        fl.life -= rawDt;
+        fl.row -= rawDt * 0.55;
+        if (fl.life <= 0) state.floats.splice(i, 1);
+      }
+
+      // 10. Periodic DOM HUD updates (score, wave progress, cooldown curtains)
+      syncLiveHud(cdChanged);
+    }
+
+    function updatePlantCombat(p, dt) {
+      const { row, col } = p;
+      p.actionTimer -= dt;
+      if (p.actionTimer > 0) return;
+
+      switch (p.type) {
+        case 'peashooter':
+          if (hasInvaderAhead(row, col)) {
+            p.actionTimer = 1.32;
+            p.recoil = 0.22;
+            fireProjectile(row, col + 0.78, 'pea', 27, { speed: 6.6 });
+            sfx.shoot('pea');
+          } else p.actionTimer = 0.2;
+          break;
+
+        case 'snowpea':
+          if (hasInvaderAhead(row, col)) {
+            p.actionTimer = 1.42;
+            p.recoil = 0.22;
+            fireProjectile(row, col + 0.78, 'ice', 25, { speed: 6.4, chill: 0.50, chillDur: 4.2 });
+            sfx.shoot('ice');
+          } else p.actionTimer = 0.2;
+          break;
+
+        case 'fireflower':
+          if (hasInvaderAhead(row, col)) {
+            p.actionTimer = 1.82;
+            p.recoil = 0.28;
+            fireProjectile(row, col + 0.78, 'fire', 42, { speed: 5.8, splash: 1.05, splashDmg: 22, burn: 12 });
+            sfx.shoot('fire');
+          } else p.actionTimer = 0.2;
+          break;
+
+        case 'mandrake':
+          if (hasInvaderAhead(row, col, 2.45)) {
+            p.actionTimer = 2.1;
+            p.popScale = 1.32;
+            addRing(col + 0.75, row + 0.5, 2.3, '#b894ff', 3.5, 0.38);
+            spawnParticles(col + 0.85, row + 0.5, 10, '#d2b8ff', 2.4, 3.6, 0.4);
+            sfx.shoot('sonic');
+            for (const z of state.invaders) {
+              if (!z.dead && z.row === row && z.col >= col - 0.25 && z.col <= col + 2.65) {
+                damageInvader(z, 46, 'sonic');
+                z.col = Math.min(COLS + 0.35, z.col + (z.isBoss ? 0.22 : 0.72));
+              }
+            }
+          } else p.actionTimer = 0.2;
+          break;
+
+        case 'sunshooter':
+          if (hasInvaderAhead(row, col)) {
+            p.actionTimer = 1.35;
+            p.recoil = 0.24;
+            fireProjectile(row, col + 0.78, 'solar', 25, { speed: 6.8 });
+            p.burstLeft = 1;
+            p.burstTimer = 0.13;
+            sfx.shoot('pea');
+          } else p.actionTimer = 0.2;
+          break;
+
+        case 'twin_gatling':
+          if (hasInvaderAhead(row, col)) {
+            p.actionTimer = 0.90;
+            p.recoil = 0.26;
+            fireProjectile(row, col + 0.78, 'pea', 29, { speed: 7.2 });
+            p.burstLeft = 1;
+            p.burstTimer = 0.11;
+            sfx.shoot('pea');
+          } else p.actionTimer = 0.2;
+          break;
+
+        case 'pyro_pea':
+          if (hasInvaderAhead(row, col)) {
+            p.actionTimer = 1.32;
+            p.recoil = 0.30;
+            fireProjectile(row, col + 0.78, 'pyro', 54, { speed: 6.2, splash: 1.35, splashDmg: 34, burn: 16 });
+            sfx.shoot('fire');
+          } else p.actionTimer = 0.2;
+          break;
+
+        case 'frost_pea':
+          if (hasInvaderAhead(row, col)) {
+            p.actionTimer = 1.12;
+            p.recoil = 0.24;
+            fireProjectile(row, col + 0.78, 'frost_pierce', 36, { speed: 7.4, pierce: 3, chill: 0.45, chillDur: 4.6 });
+            sfx.shoot('ice');
+          } else p.actionTimer = 0.2;
+          break;
+
+        case 'quake_nut':
+          if (hasInvaderNear3x3(row, col, 2.15)) {
+            p.actionTimer = 3.1;
+            p.popScale = 1.28;
+            addShake(4.2, 0.2);
+            addRing(col + 0.5, row + 0.5, 2.05, '#c59cff', 4, 0.46);
+            spawnParticles(col + 0.5, row + 0.7, 14, '#b894ff', 2.2, 4, 0.45);
+            sfx.boom(false);
+            for (const z of state.invaders) {
+              if (!z.dead && Math.abs(z.row - row) <= 1 && Math.abs(z.col - (col + 0.5)) <= 2.15) {
+                damageInvader(z, 52, 'sonic');
+                z.col = Math.min(COLS + 0.35, z.col + (z.isBoss ? 0.24 : 0.80));
+              }
+            }
+          } else p.actionTimer = 0.25;
+          break;
+
+        case 'thermal_nova':
+          if (hasInvaderAhead(row, col)) {
+            p.actionTimer = 1.08;
+            p.recoil = 0.28;
+            p.altToggle = !p.altToggle;
+            const thermal = p.altToggle ? 'fire' : 'ice';
+            fireProjectile(row, col + 0.78, thermal === 'fire' ? 'thermal_fire' : 'thermal_ice', 46, {
+              speed: 6.4,
+              thermal,
+              splash: 1.45,
+              splashDmg: 40,
+            });
+            sfx.shoot(thermal);
+          } else p.actionTimer = 0.2;
+          break;
+
+        case 'solar_phoenix':
+          if (hasInvaderAhead(row, col) ||
+              (row > 0 && hasInvaderAhead(row - 1, col)) ||
+              (row < ROWS - 1 && hasInvaderAhead(row + 1, col))) {
+            p.actionTimer = 1.22;
+            p.recoil = 0.34;
+            p.popScale = 1.20;
+            for (const dr of [-1, 0, 1]) {
+              const nr = row + dr;
+              if (nr >= 0 && nr < ROWS) {
+                fireProjectile(nr, col + 0.78, 'meteor', 58, { speed: 7.4, pierce: 99, burn: 18 });
+              }
+            }
+            sfx.shoot('meteor');
+          } else p.actionTimer = 0.2;
+          break;
+      }
+    }
+
+    function runOverdriveTick(p) {
+      const { row, col } = p;
+      p.recoil = 0.25;
+      switch (p.type) {
+        case 'peashooter':
+        case 'twin_gatling':
+        case 'sunshooter':
+          p.overdriveShotTimer = 0.14;
+          fireProjectile(row, col + 0.8, p.type === 'sunshooter' ? 'solar' : 'pea', 34, { speed: 8.2 });
+          sfx.shoot('pea');
+          break;
+        case 'snowpea':
+        case 'frost_pea':
+          p.overdriveShotTimer = 0.17;
+          fireProjectile(row, col + 0.8, 'frost_pierce', 38, { speed: 8.2, pierce: 4, chill: 0.42, chillDur: 5.5 });
+          sfx.shoot('ice');
+          break;
+        case 'fireflower':
+        case 'pyro_pea':
+          p.overdriveShotTimer = 0.26;
+          fireProjectile(row, col + 0.8, 'pyro', 62, { speed: 7.2, splash: 1.45, splashDmg: 42, burn: 18 });
+          sfx.shoot('fire');
+          break;
+        case 'thermal_nova':
+          p.overdriveShotTimer = 0.22;
+          p.altToggle = !p.altToggle;
+          fireProjectile(row, col + 0.8, p.altToggle ? 'thermal_fire' : 'thermal_ice', 56, {
+            speed: 7.4,
+            thermal: p.altToggle ? 'fire' : 'ice',
+            splash: 1.6,
+            splashDmg: 54,
+          });
+          sfx.shoot(p.altToggle ? 'fire' : 'ice');
+          break;
+        case 'solar_phoenix':
+          p.overdriveShotTimer = 0.24;
+          for (const dr of [-1, 0, 1]) {
+            const nr = row + dr;
+            if (nr >= 0 && nr < ROWS) {
+              fireProjectile(nr, col + 0.8, 'meteor', 72, { speed: 8.5, pierce: 99, burn: 22 });
+            }
+          }
+          sfx.shoot('meteor');
+          break;
+        case 'mandrake':
+          p.overdriveShotTimer = 0.55;
+          addRing(col + 0.7, row + 0.5, 3.0, '#d2b8ff', 4, 0.4);
+          sfx.shoot('sonic');
+          for (const z of state.invaders) {
+            if (!z.dead && Math.abs(z.row - row) <= 1 && z.col >= col - 0.3 && z.col <= col + 3.4) {
+              damageInvader(z, 55, 'sonic');
+              z.col = Math.min(COLS + 0.35, z.col + (z.isBoss ? 0.25 : 0.85));
+            }
+          }
+          break;
+        default:
+          p.overdriveShotTimer = 0.6;
+          spawnParticles(col + 0.5, row + 0.5, 6, '#ffe484', 1.6, 3.5, 0.45);
+          break;
+      }
+    }
+
+    function handleProjectileHit(pr, z) {
+      if (pr.kind === 'thermal_fire' || pr.kind === 'thermal_ice') {
+        const oppositeTriggered =
+          (pr.thermal === 'fire' && z.chillTimer > 0) ||
+          (pr.thermal === 'ice' && z.burnTimer > 0);
+        const elem = pr.thermal === 'fire' ? 'fire' : 'ice';
+        damageInvader(z, pr.dmg, elem);
+        const bonusDmg = oppositeTriggered ? 92 : pr.splashDmg;
+        detonateSplash(z.col, z.row, pr.splash, bonusDmg, elem, oppositeTriggered ? '#94f7ff' : (pr.thermal === 'fire' ? '#ff7c2b' : '#6be3ff'), oppositeTriggered);
+        if (oppositeTriggered) {
+          // Thermal Shock Steam-Lightning Stun!
+          for (const t of state.invaders) {
+            if (!t.dead && Math.hypot(t.col - z.col, t.row - z.row) <= pr.splash) {
+              t.stunTimer = Math.max(t.stunTimer, t.isBoss ? 0.35 : 0.85);
+            }
+          }
+          addFloat(z.col, z.row + 0.15, '⚡ SỐC NHIỆT!', '#aaf8ff', 14);
+          addShake(4.5, 0.22);
+          sfx.boom(true);
+        } else {
+          sfx.boom(false);
+        }
+        return;
+      }
+
+      if (pr.kind === 'fire' || pr.kind === 'pyro') {
+        damageInvader(z, pr.dmg, pr.kind);
+        detonateSplash(z.col, z.row, pr.splash, pr.splashDmg, pr.kind, '#ff6e20', pr.kind === 'pyro');
+        sfx.boom(pr.kind === 'pyro');
+        return;
+      }
+
+      if (pr.kind === 'meteor') {
+        damageInvader(z, pr.dmg, 'pyro');
+        spawnParticles(z.col, z.row + 0.45, 7, '#ffbe38', 2.0, 3.8, 0.42);
+        sfx.hit(true);
+        return;
+      }
+
+      if (pr.kind === 'ice' || pr.kind === 'frost_pierce') {
+        damageInvader(z, pr.dmg, pr.kind);
+        spawnParticles(z.col, z.row + 0.45, 6, '#7be7ff', 1.6, 3.2, 0.38);
+        sfx.hit(false);
+        return;
+      }
+
+      damageInvader(z, pr.dmg, 'normal');
+      spawnParticles(z.col, z.row + 0.45, 5, pr.kind === 'solar' ? '#ffe484' : '#d2f56e', 1.5, 3, 0.34);
+      sfx.hit(false);
+    }
+
+    function applyDamageToPlant(plant, amount) {
+      plant.hitFlash = 0.14;
+      if (plant.shield > 0) {
+        const absorb = Math.min(plant.shield, amount);
+        plant.shield -= absorb;
+        amount -= absorb;
+      }
+      if (amount > 0) {
+        plant.hp -= amount;
+      }
+      if (plant.hp <= 0) {
+        state.grid[plant.row][plant.col] = null;
+        spawnParticles(plant.col + 0.5, plant.row + 0.5, 14, '#7bb842', 2.0, 4, 0.5);
+
+        // Inferno-Nut explodes in massive 3x3 fire blast on destruction!
+        if (plant.type === 'inferno_nut') {
+          addShake(8, 0.36);
+          detonateSplash(plant.col + 0.5, plant.row, 1.85, 310, 'pyro', '#ff4d18', true);
+          addFloat(plant.col + 0.5, plant.row + 0.25, '💥 BÍ NGÔ BÙNG NỔ!', '#ffb86b', 15);
+          sfx.boom(true);
+        }
+      }
+    }
+
+    /* =====================================================================
+       END GAME & RESULT DIALOG
+       ===================================================================== */
+    function finishGame(isWin) {
+      state.ended = true;
+      state.victory = isWin;
+      cancelSelection();
+
+      const cartsLeft = state.carts.filter((c) => c.state === 'ready').length;
+      if (isWin) {
+        state.score += cartsLeft * 200;
+        if (state.mode === 'adventure' && state.stage >= saveData.unlockedStage && state.stage < STAGES.length) {
+          saveData.unlockedStage = state.stage + 1;
+        }
+      }
+
+      let bestVal = 0;
+      if (state.mode === 'adventure') {
+        if (state.score > saveData.bestScoreAdv) saveData.bestScoreAdv = state.score;
+        bestVal = saveData.bestScoreAdv;
+      } else {
+        if (state.score > saveData.bestScoreEndless) saveData.bestScoreEndless = state.score;
+        if (state.endlessWave > saveData.bestWaveEndless) saveData.bestWaveEndless = state.endlessWave;
+        bestVal = saveData.bestScoreEndless;
+      }
+      writeSave(saveData);
+      syncHudAll();
+
+      if (isWin && state.mode === 'adventure') {
+        const currentStageNum = state.stage;
+        const wavesCleared = state.totalWaves;
+        postToParent({
+          type: 'victory',
+          stage: currentStageNum,
+          score: state.score,
+          combo: wavesCleared,
+          isBoss: Boolean(state.stageHadBoss || currentStageNum % 3 === 0),
+          runId: `pvz_${currentStageNum}_${Date.now()}`,
+        });
+      }
+      syncScoreToParent(true);
+
+      if (isWin) sfx.victory();
+      else sfx.defeat();
+
+      uiResultTitle.textContent = isWin ? 'Chiến Thắng Rực Rỡ!' : 'Khu Vườn Thất Thủ!';
+      uiResultSub.textContent = state.mode === 'adventure'
+        ? `Màn ${state.stage} / ${STAGES.length}`
+        : `Vô Tận · Đợt ${state.endlessWave}`;
+      uiResultMsg.textContent = isWin
+        ? (state.stage >= STAGES.length
+            ? 'Xuất sắc! Bạn đã chinh phục trọn vẹn cả 10 màn Vườn Thủ Hang Sóc — thử sức ngay chế độ Vô Tận!'
+            : 'Lũ Yêu Tinh đã bị quét sạch khỏi Hang Sóc! Sẵn sàng cho thử thách mới với nhiều cây Lai Tạo hơn nhé.')
+        : 'Yêu Tinh đã đột nhập vào hiên nhà Hang Sóc! Hãy thử lai tạo Bí Ngô Chấn Địa hoặc Đậu Hỏa Long để giữ hàng.';
+
+      uiResScore.textContent = state.score.toLocaleString('vi-VN');
+      uiResBest.textContent = bestVal.toLocaleString('vi-VN');
+      uiResFusions.textContent = String(state.fusionsCount);
+      if (state.mode === 'adventure') {
+        uiResExtraLbl.textContent = 'Xe Đẩy Táo còn';
+        uiResExtraVal.textContent = `${cartsLeft} / ${ROWS}`;
+      } else {
+        uiResExtraLbl.textContent = 'Đợt cao nhất';
+        uiResExtraVal.textContent = `Đợt ${saveData.bestWaveEndless}`;
+      }
+
+      const canGoNext = isWin && state.mode === 'adventure' && state.stage < STAGES.length;
+      btnResNext.hidden = !canGoNext;
+      btnResEndless.hidden = !(isWin && state.mode === 'adventure' && state.stage === STAGES.length);
+
+      announce(uiResultTitle.textContent);
+      if (!resultDialog.open) {
+        resultDialog.showModal();
+      }
+    }
+
+    /* =====================================================================
+       CANVAS 2D RENDERER (60FPS CRISP SPRITES + FUSION GLOW + BOSS BAR)
+       ===================================================================== */
+    function renderFrame() {
+      if (bgDirty) renderStaticBg();
+      const { w, h, dpr, boardX, boardY, tileW, tileH } = layout;
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // Optional micro screen shake
+      let sx = 0, sy = 0;
+      if (state.shakeTime > 0 && !reducedMotion) {
+        sx = (Math.random() - 0.5) * state.shakeMag * 2;
+        sy = (Math.random() - 0.5) * state.shakeMag * 2;
+      }
+      ctx.save();
+      ctx.translate(sx, sy);
+
+      // 1. Cached Static Lawn Blit
+      ctx.drawImage(bgCanvas, 0, 0, w, h);
+
+      // 2. Interactive Tile Highlights & Golden Fusion Rings!
+      drawTileAffordances();
+
+      // 3. Apple Carts (Xe Đẩy Táo)
+      drawCarts();
+
+      // 4. Expanding Shockwave Rings
+      drawRings();
+
+      // 5. Plants across 5x9 grid
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const p = state.grid[r][c];
+          if (p) drawPlant(p);
+        }
+      }
+
+      // 6. Invaders (sorted by lane then x for crisp overlap)
+      const sortedInvaders = state.invaders.slice().sort((a, b) => (a.row - b.row) || (a.col - b.col));
+      for (const z of sortedInvaders) {
+        if (!z.dead) drawInvader(z);
+      }
+
+      // 7. Projectiles
+      drawProjectiles();
+
+      // 8. Particles
+      drawParticles();
+
+      // 9. Orbs (Sun & Tinh Hoa)
+      drawOrbs();
+
+      // 10. Floating combat / fusion texts
+      drawFloats();
+
+      // 11. Hover Fusion Preview Pill on Canvas
+      drawHoverFusionBadge();
+
+      // 12. Boss HP Bar (drawn cleanly inside canvas top edge — ZERO DOM layout shift!)
+      drawBossBar();
+
+      // 13. Wave Announcement Banner
+      drawWaveBanner();
+
+      // 14. Pause Overlay
+      if (state.paused && !almanacDialog.open && !resultDialog.open) {
+        drawPauseOverlay();
+      }
+
+      ctx.restore();
+    }
+
+    function drawTileAffordances() {
+      const { boardX, boardY, tileW, tileH } = layout;
+      const pulse = 0.5 + 0.5 * Math.sin(state.time * 6.5);
+
+      if (state.selectedSeed) {
+        const seed = BASE_SEEDS.find((s) => s.id === state.selectedSeed);
+        const canPay = seed && state.sun >= seed.cost && (state.cooldowns[seed.id] || 0) <= 0.02;
+
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            const x = boardX + c * tileW;
+            const y = boardY + r * tileH;
+            const existing = state.grid[r][c];
+
+            if (!existing) {
+              // Highlight empty plantable tile subtly
+              ctx.fillStyle = canPay ? 'rgba(231, 249, 212, 0.14)' : 'rgba(255, 220, 180, 0.06)';
+              ctx.fillRect(x + 2, y + 2, tileW - 4, tileH - 4);
+              ctx.strokeStyle = canPay ? 'rgba(244, 198, 104, 0.45)' : 'rgba(255, 200, 160, 0.2)';
+              ctx.lineWidth = 1.25;
+              ctx.strokeRect(x + 2.5, y + 2.5, tileW - 5, tileH - 5);
+            } else {
+              const fusedId = getFusionResult(existing.type, state.selectedSeed);
+              if (fusedId) {
+                // GOLDEN PULSING FUSION RING!
+                const cx = x + tileW * 0.5;
+                const cy = y + tileH * 0.54;
+                const rx = tileW * (0.40 + pulse * 0.05);
+                const ry = tileH * (0.36 + pulse * 0.045);
+                ctx.save();
+                ctx.fillStyle = `rgba(255, 228, 132, ${0.18 + pulse * 0.18})`;
+                ctx.fillRect(x + 2, y + 2, tileW - 4, tileH - 4);
+                ctx.strokeStyle = `rgba(255, 232, 118, ${0.72 + pulse * 0.28})`;
+                ctx.lineWidth = 2.8;
+                ctx.beginPath();
+                ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // Mini fusion spark star badge at top-right of tile
+                ctx.fillStyle = '#381b0c';
+                ctx.beginPath();
+                ctx.arc(x + tileW - 11, y + 11, 8.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#ffe484';
+                ctx.font = '800 11px "Be Vietnam Pro", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('✦', x + tileW - 11, y + 11.5);
+                ctx.restore();
+              }
+            }
+          }
+        }
+      } else if (state.tool === 'plantfood') {
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            if (!state.grid[r][c]) continue;
+            const x = boardX + c * tileW;
+            const y = boardY + r * tileH;
+            ctx.fillStyle = `rgba(122, 255, 132, ${0.16 + pulse * 0.16})`;
+            ctx.fillRect(x + 2, y + 2, tileW - 4, tileH - 4);
+            ctx.strokeStyle = `rgba(170, 255, 148, ${0.75 + pulse * 0.25})`;
+            ctx.lineWidth = 2.4;
+            ctx.strokeRect(x + 3, y + 3, tileW - 6, tileH - 6);
+          }
+        }
+      } else if (state.tool === 'shovel') {
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            if (!state.grid[r][c]) continue;
+            const x = boardX + c * tileW;
+            const y = boardY + r * tileH;
+            ctx.strokeStyle = 'rgba(255, 133, 27, 0.72)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x + 3, y + 3, tileW - 6, tileH - 6);
+          }
+        }
+      }
+
+      // Hover tile outline
+      if (state.hoverTile) {
+        const { row, col } = state.hoverTile;
+        const x = boardX + col * tileW;
+        const y = boardY + row * tileH;
+        ctx.strokeStyle = '#fff6dc';
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(x + 2, y + 2, tileW - 4, tileH - 4);
+      }
+    }
+
+    function drawCarts() {
+      const { tileW, tileH } = layout;
+      for (const cart of state.carts) {
+        if (cart.state === 'gone') continue;
+        const pos = gridToPx(cart.col, cart.row + 0.55);
+        const w = tileW * 0.62;
+        const h = tileH * 0.44;
+        ctx.save();
+        ctx.translate(pos.x, pos.y);
+
+        // Soft shadow
+        ctx.fillStyle = 'rgba(24, 12, 4, 0.35)';
+        ctx.beginPath();
+        ctx.ellipse(0, h * 0.42, w * 0.56, h * 0.22, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Cozy Hang Sóc Wooden Apple Cart body
+        ctx.fillStyle = '#6e391c';
+        ctx.strokeStyle = '#f4c668';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(-w * 0.48, -h * 0.42, w * 0.96, h * 0.64, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        // Pile of bright Hang Sóc apples inside cart
+        const appleColors = ['#d93226', '#f24c36', '#e0a924'];
+        for (let i = -1; i <= 1; i++) {
+          ctx.fillStyle = appleColors[i + 1];
+          ctx.beginPath();
+          ctx.arc(i * w * 0.22, -h * 0.42, h * 0.22, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Front brass bumper plow
+        ctx.fillStyle = '#f4c668';
+        ctx.beginPath();
+        ctx.moveTo(w * 0.44, -h * 0.3);
+        ctx.lineTo(w * 0.64, h * 0.16);
+        ctx.lineTo(w * 0.42, h * 0.22);
+        ctx.closePath();
+        ctx.fill();
+
+        // Wooden spoke wheels
+        for (const wx of [-w * 0.28, w * 0.26]) {
+          ctx.save();
+          ctx.translate(wx, h * 0.26);
+          ctx.rotate(cart.wheelRot);
+          ctx.fillStyle = '#381b0c';
+          ctx.strokeStyle = '#d4963b';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(0, 0, h * 0.24, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(-h * 0.18, 0); ctx.lineTo(h * 0.18, 0);
+          ctx.moveTo(0, -h * 0.18); ctx.lineTo(0, h * 0.18);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        ctx.restore();
+      }
+    }
+
+    function drawPlant(p) {
+      const def = PLANT_DEFS[p.type];
+      const { tileW, tileH } = layout;
+      const center = gridToPx(p.col + 0.5, p.row + 0.55);
+      const sway = Math.sin(state.time * 3.4 + p.uid) * 0.04;
+      const baseSize = Math.min(tileW, tileH) * 0.78;
+      const scaleX = p.popScale * (1 - p.recoil * 0.18) * (1 + sway * 0.5);
+      const scaleY = p.popScale * (1 + p.recoil * 0.12) * (1 - sway * 0.5);
+
+      ctx.save();
+      ctx.translate(center.x - p.recoil * tileW * 0.09, center.y);
+
+      // Ground contact shadow
+      ctx.fillStyle = 'rgba(22, 34, 10, 0.34)';
+      ctx.beginPath();
+      ctx.ellipse(0, baseSize * 0.34, baseSize * 0.42, baseSize * 0.15, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Fusion Tier Aura / Golden Base Ring
+      if (def.tier >= 2) {
+        const pulse = 0.5 + 0.5 * Math.sin(state.time * 5 + p.uid);
+        ctx.save();
+        ctx.strokeStyle = def.tier >= 3 ? '#ffe484' : def.aura;
+        ctx.lineWidth = def.tier >= 3 ? 3 : 2;
+        ctx.globalAlpha = 0.65 + pulse * 0.3;
+        ctx.beginPath();
+        ctx.ellipse(0, baseSize * 0.28, baseSize * (0.44 + pulse * 0.04), baseSize * 0.18, 0, 0, Math.PI * 2);
+        ctx.stroke();
+
+        if (def.tier >= 3) {
+          // Titan Solar Phoenix rotating radiant halo!
+          ctx.rotate(state.time * 1.4);
+          ctx.strokeStyle = 'rgba(255, 224, 102, 0.72)';
+          ctx.lineWidth = 2.2;
+          ctx.setLineDash([6, 6]);
+          ctx.beginPath();
+          ctx.arc(0, -baseSize * 0.04, baseSize * 0.52, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        } else if (def.tier === 2.5) {
+          // Super Fusion Thermal Nova dual fire/ice orbital sparks
+          const a = state.time * 3.8 + p.uid;
+          ctx.fillStyle = '#ff7224';
+          ctx.beginPath();
+          ctx.arc(Math.cos(a) * baseSize * 0.46, Math.sin(a) * baseSize * 0.26 - 4, 4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#6ce8ff';
+          ctx.beginPath();
+          ctx.arc(Math.cos(a + Math.PI) * baseSize * 0.46, Math.sin(a + Math.PI) * baseSize * 0.26 - 4, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      // Overdrive Golden-Emerald Pillar Aura
+      if (p.overdrive > 0) {
+        const g = ctx.createRadialGradient(0, 0, 4, 0, 0, baseSize * 0.66);
+        g.addColorStop(0, 'rgba(190, 255, 165, 0.72)');
+        g.addColorStop(0.6, 'rgba(255, 228, 118, 0.45)');
+        g.addColorStop(1, 'rgba(255, 228, 118, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(0, -baseSize * 0.04, baseSize * 0.66, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Plant Sprite(s) — distinct composite visuals for every single Fusion!
+      ctx.save();
+      ctx.scale(scaleX, scaleY);
+      ctx.rotate(sway);
+
+      if (p.type === 'twin_gatling') {
+        drawSpriteCentered('peashooter', -baseSize * 0.16, -baseSize * 0.06, baseSize * 0.80);
+        drawSpriteCentered('peashooter', baseSize * 0.18, -baseSize * 0.02, baseSize * 0.80);
+      } else if (p.type === 'solar_phoenix') {
+        // Tier 3 Titan: Sunflower halo behind + Fireflower wings + Golden Corn core
+        drawSpriteCentered('sunflower', -baseSize * 0.18, -baseSize * 0.14, baseSize * 0.76);
+        drawSpriteCentered('fireflower', baseSize * 0.20, -baseSize * 0.12, baseSize * 0.76);
+        drawSpriteCentered('peashooter', 0, baseSize * 0.05, baseSize * 0.82);
+      } else if (def.sprites.length === 2) {
+        // Tier 2 Dual-Sprite Composite
+        drawSpriteCentered(def.sprites[0], -baseSize * 0.14, -baseSize * 0.04, baseSize * 0.84);
+        drawSpriteCentered(def.sprites[1], baseSize * 0.18, -baseSize * 0.12, baseSize * 0.68);
+      } else {
+        drawSpriteCentered(def.sprites[0], 0, -baseSize * 0.04, baseSize * 0.94);
+      }
+
+      // Wallnut / Shield Brass Rim if fortified
+      if (p.shield > 0) {
+        ctx.strokeStyle = '#ffe484';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, -baseSize * 0.04, baseSize * 0.44, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Bite white flash
+      if (p.hitFlash > 0) {
+        ctx.fillStyle = 'rgba(255, 245, 220, 0.48)';
+        ctx.beginPath();
+        ctx.arc(0, -baseSize * 0.04, baseSize * 0.42, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // Fusion Tier Crown / Star Badge
+      if (def.tier >= 2) {
+        const badgeTxt = def.tier >= 3 ? '★★★' : def.tier === 2.5 ? '✦✦' : '★★';
+        const by = -baseSize * 0.46;
+        ctx.fillStyle = def.tier >= 3 ? '#7a1414' : '#381b0c';
+        ctx.strokeStyle = '#f4c668';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.roundRect(-16, by - 7, 32, 13, 6);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#ffe484';
+        ctx.font = '800 9px "Be Vietnam Pro", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(badgeTxt, 0, by);
+      }
+
+      // Plant HP bar (only when damaged or shielded)
+      if (p.hp < p.maxHp || p.shield > 0) {
+        const bw = tileW * 0.68;
+        const bh = 5;
+        const bx = -bw * 0.5;
+        const by = baseSize * 0.36;
+        ctx.fillStyle = 'rgba(34, 16, 5, 0.72)';
+        ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+        const ratio = Math.max(0, p.hp / p.maxHp);
+        ctx.fillStyle = ratio > 0.5 ? '#6be048' : ratio > 0.25 ? '#f5b301' : '#e03b24';
+        ctx.fillRect(bx, by, bw * ratio, bh);
+        if (p.shield > 0) {
+          ctx.fillStyle = '#ffe484';
+          ctx.fillRect(bx, by - 2.5, bw * Math.min(1, p.shield / 900), 2);
+        }
+      }
+
+      ctx.restore();
+    }
+
+    function drawInvader(z) {
+      const { tileW, tileH } = layout;
+      const pos = gridToPx(z.col, z.row + 0.56);
+      const baseSize = Math.min(tileW, tileH) * 0.80 * z.scale;
+      const bob = z.eating ? Math.sin(z.biteTimer * 18) * 3.5 : Math.abs(Math.sin(z.walkPhase)) * 4.5;
+      const tilt = z.eating ? -0.14 * Math.abs(Math.sin(z.biteTimer * 18)) : Math.sin(z.walkPhase) * 0.08;
+
+      ctx.save();
+      ctx.translate(pos.x, pos.y);
+
+      // Contact shadow
+      ctx.fillStyle = 'rgba(20, 14, 6, 0.38)';
+      ctx.beginPath();
+      ctx.ellipse(0, baseSize * 0.35, baseSize * 0.36, baseSize * 0.13, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Golden Tinh Hoa Carrier Aura!
+      if (z.hasPlantFood) {
+        const pulse = 0.5 + 0.5 * Math.sin(state.time * 8 + z.uid);
+        const g = ctx.createRadialGradient(0, -baseSize * 0.06, 3, 0, -baseSize * 0.06, baseSize * 0.62);
+        g.addColorStop(0, `rgba(148, 255, 134, ${0.42 + pulse * 0.26})`);
+        g.addColorStop(0.65, `rgba(255, 226, 94, ${0.32 + pulse * 0.22})`);
+        g.addColorStop(1, 'rgba(255, 226, 94, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(0, -baseSize * 0.06, baseSize * 0.62, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.save();
+      ctx.translate(0, -bob);
+      ctx.rotate(tilt);
+
+      // Sprinter speed lines
+      if (z.type === 'sprinter' && !z.eating) {
+        ctx.strokeStyle = 'rgba(255, 232, 160, 0.7)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(baseSize * 0.32, -baseSize * 0.12); ctx.lineTo(baseSize * 0.62, -baseSize * 0.12);
+        ctx.moveTo(baseSize * 0.36, baseSize * 0.05);  ctx.lineTo(baseSize * 0.68, baseSize * 0.05);
+        ctx.stroke();
+      }
+
+      // Gnome base sprite (flipped to face left toward house)
+      ctx.save();
+      ctx.scale(-1, 1);
+      drawSpriteCentered('gnome', 0, -baseSize * 0.06, baseSize * 0.94);
+      ctx.restore();
+
+      // Archetype Armor / Accessories
+      if (z.type === 'bucket' && !z.armorBroken) {
+        // Wooden Farm Pail Helmet with brass hoops
+        ctx.save();
+        ctx.translate(0, -baseSize * 0.34);
+        ctx.fillStyle = '#8b512b';
+        ctx.strokeStyle = '#381b0c';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(-baseSize * 0.20, baseSize * 0.12);
+        ctx.lineTo(-baseSize * 0.14, -baseSize * 0.16);
+        ctx.lineTo(baseSize * 0.14, -baseSize * 0.16);
+        ctx.lineTo(baseSize * 0.20, baseSize * 0.12);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = '#f4c668';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-baseSize * 0.18, 0);
+        ctx.lineTo(baseSize * 0.18, 0);
+        ctx.stroke();
+        ctx.restore();
+      } else if (z.type === 'barrel' && !z.armorBroken) {
+        // Heavy Oak Barrel Armor using verified m3_obs_box_1.webp!
+        drawSpriteCentered('barrel', -baseSize * 0.16, baseSize * 0.04, baseSize * 0.62);
+      } else if (z.type === 'sprinter') {
+        // Crimson Headband + Flowing Tail
+        ctx.fillStyle = '#c92a22';
+        ctx.fillRect(-baseSize * 0.22, -baseSize * 0.28, baseSize * 0.44, baseSize * 0.09);
+        ctx.beginPath();
+        ctx.moveTo(baseSize * 0.20, -baseSize * 0.25);
+        ctx.lineTo(baseSize * 0.44, -baseSize * 0.30 + Math.sin(state.time * 16) * 4);
+        ctx.lineTo(baseSize * 0.40, -baseSize * 0.17 + Math.sin(state.time * 16) * 4);
+        ctx.closePath();
+        ctx.fill();
+      } else if (z.isBoss) {
+        // Giant Boss: Oak Barrel Shield + Royal Golden Spiked Crown!
+        drawSpriteCentered('barrel', -baseSize * 0.24, baseSize * 0.08, baseSize * 0.56);
+        ctx.save();
+        ctx.translate(0, -baseSize * 0.44);
+        ctx.fillStyle = '#f5b301';
+        ctx.strokeStyle = '#381b0c';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-baseSize * 0.22, baseSize * 0.08);
+        ctx.lineTo(-baseSize * 0.24, -baseSize * 0.14);
+        ctx.lineTo(-baseSize * 0.08, -baseSize * 0.03);
+        ctx.lineTo(0, -baseSize * 0.19);
+        ctx.lineTo(baseSize * 0.08, -baseSize * 0.03);
+        ctx.lineTo(baseSize * 0.24, -baseSize * 0.14);
+        ctx.lineTo(baseSize * 0.22, baseSize * 0.08);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Elemental status overlays (Chill / Burn / Stun / Hit flash)
+      if (z.chillTimer > 0) {
+        ctx.fillStyle = 'rgba(104, 224, 255, 0.35)';
+        ctx.beginPath();
+        ctx.arc(0, -baseSize * 0.04, baseSize * 0.40, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (z.burnTimer > 0) {
+        ctx.fillStyle = 'rgba(255, 118, 30, 0.34)';
+        ctx.beginPath();
+        ctx.arc(0, -baseSize * 0.02, baseSize * 0.38, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (z.stunTimer > 0) {
+        ctx.fillStyle = '#aaf8ff';
+        ctx.font = '800 13px "Be Vietnam Pro", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('⚡', 0, -baseSize * 0.48);
+      }
+      if (z.hitFlash > 0) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.46)';
+        ctx.beginPath();
+        ctx.arc(0, -baseSize * 0.04, baseSize * 0.42, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Tinh Hoa mini clover marker above carrier
+      if (z.hasPlantFood) {
+        drawSpriteCentered('clover', baseSize * 0.24, -baseSize * 0.42, baseSize * 0.34);
+      }
+
+      ctx.restore();
+
+      // Invader HP Bar (when damaged, or always for heavy/boss)
+      if (!z.isBoss && (z.hp < z.maxHp || z.type === 'barrel')) {
+        const bw = tileW * 0.56;
+        const bh = 4.5;
+        const bx = -bw * 0.5;
+        const by = -baseSize * 0.54;
+        ctx.fillStyle = 'rgba(26, 12, 4, 0.78)';
+        ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+        const r = Math.max(0, z.hp / z.maxHp);
+        ctx.fillStyle = z.chillTimer > 0 ? '#65e0ff' : r > 0.45 ? '#e85b35' : '#ff2e2e';
+        ctx.fillRect(bx, by, bw * r, bh);
+      }
+
+      ctx.restore();
+    }
+
+    function drawProjectiles() {
+      const { tileW, tileH } = layout;
+      const unit = Math.min(tileW, tileH);
+
+      for (const pr of state.projectiles) {
+        const pos = gridToPx(pr.col, pr.row + 0.46);
+        ctx.save();
+        ctx.translate(pos.x, pos.y);
+
+        if (pr.kind === 'meteor') {
+          // Piercing Solar Phoenix Meteor!
+          const r = unit * 0.22;
+          const tail = ctx.createLinearGradient(-r * 3.2, 0, r, 0);
+          tail.addColorStop(0, 'rgba(255, 120, 20, 0)');
+          tail.addColorStop(0.6, 'rgba(255, 165, 36, 0.75)');
+          tail.addColorStop(1, '#fff6a6');
+          ctx.fillStyle = tail;
+          ctx.beginPath();
+          ctx.moveTo(-r * 3.2, 0);
+          ctx.lineTo(0, -r * 0.95);
+          ctx.lineTo(r * 1.1, 0);
+          ctx.lineTo(0, r * 0.95);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = '#fff9cc';
+          ctx.beginPath();
+          ctx.arc(0, 0, r * 0.62, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (pr.kind === 'fire' || pr.kind === 'pyro' || pr.kind === 'thermal_fire') {
+          const r = unit * (pr.kind === 'pyro' ? 0.19 : 0.16);
+          const grad = ctx.createRadialGradient(-r * 0.2, 0, 1, 0, 0, r * 1.35);
+          grad.addColorStop(0, '#fff7b2');
+          grad.addColorStop(0.5, '#ff861c');
+          grad.addColorStop(1, 'rgba(180, 32, 8, 0)');
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(0, 0, r * 1.35, 0, Math.PI * 2);
+          ctx.fill();
+          if (pr.kind === 'pyro' && sprites.bomb) {
+            drawSpriteCentered('bomb', 0, 0, r * 1.5);
+          }
+        } else if (pr.kind === 'ice' || pr.kind === 'frost_pierce' || pr.kind === 'thermal_ice') {
+          const r = unit * (pr.kind === 'frost_pierce' ? 0.18 : 0.15);
+          ctx.fillStyle = '#d9f8ff';
+          ctx.strokeStyle = '#29b6e6';
+          ctx.lineWidth = 2;
+          if (pr.kind === 'frost_pierce') {
+            // Piercing Ice Spear
+            ctx.beginPath();
+            ctx.moveTo(r * 1.4, 0);
+            ctx.lineTo(-r * 1.1, -r * 0.65);
+            ctx.lineTo(-r * 0.6, 0);
+            ctx.lineTo(-r * 1.1, r * 0.65);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          } else {
+            ctx.beginPath();
+            ctx.arc(0, 0, r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          }
+        } else if (pr.kind === 'solar') {
+          const r = unit * 0.145;
+          ctx.fillStyle = '#ffe878';
+          ctx.strokeStyle = '#c98a00';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(0, 0, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          // Golden Corn Kernel
+          const r = unit * 0.135;
+          ctx.fillStyle = '#ffd942';
+          ctx.strokeStyle = '#6e391c';
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, r * 1.15, r * 0.85, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#fff9d6';
+          ctx.beginPath();
+          ctx.arc(-r * 0.25, -r * 0.2, r * 0.3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.restore();
+      }
+    }
+
+    function drawOrbs() {
+      const unit = Math.min(layout.tileW, layout.tileH);
+      for (const o of state.orbs) {
+        const pos = gridToPx(o.col, o.row);
+        const bob = o.collecting ? 0 : Math.sin(o.bobPhase) * 3.5;
+        const r = unit * (o.kind === 'sun' ? 0.30 : 0.32);
+
+        ctx.save();
+        ctx.translate(pos.x, pos.y + bob);
+        const fade = (!o.collecting && o.life < 2.2) ? (0.65 + 0.35 * Math.sin(state.time * 16)) : 1;
+        ctx.globalAlpha = fade;
+
+        // Radiant glow
+        const g = ctx.createRadialGradient(0, 0, 2, 0, 0, r * 1.45);
+        if (o.kind === 'sun') {
+          g.addColorStop(0, 'rgba(255, 246, 178, 0.95)');
+          g.addColorStop(0.55, 'rgba(245, 179, 1, 0.55)');
+          g.addColorStop(1, 'rgba(245, 179, 1, 0)');
+        } else {
+          g.addColorStop(0, 'rgba(195, 255, 170, 0.95)');
+          g.addColorStop(0.55, 'rgba(54, 198, 72, 0.62)');
+          g.addColorStop(1, 'rgba(54, 198, 72, 0)');
+        }
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 1.45, 0, Math.PI * 2);
+        ctx.fill();
+
+        drawSpriteCentered(o.kind === 'sun' ? 'sun' : 'clover', 0, 0, r * 1.65);
+
+        if (o.kind === 'sun' && !o.collecting) {
+          ctx.fillStyle = '#381b0c';
+          ctx.font = '800 10px "Be Vietnam Pro", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('+' + o.value, 0, r * 0.92);
+        }
+        ctx.restore();
+      }
+    }
+
+    function drawRings() {
+      const unit = Math.min(layout.tileW, layout.tileH);
+      for (const rg of state.rings) {
+        const pos = gridToPx(rg.col, rg.row);
+        const alpha = Math.max(0, rg.life / rg.maxLife);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = rg.color;
+        ctx.lineWidth = rg.lineW;
+        ctx.beginPath();
+        ctx.ellipse(pos.x, pos.y, rg.r * layout.tileW, rg.r * unit * 0.72, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    function drawParticles() {
+      for (const pt of state.particles) {
+        const pos = gridToPx(pt.col, pt.row);
+        const a = Math.max(0, pt.life / pt.maxLife);
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.fillStyle = pt.color;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, pt.size * (0.4 + a * 0.6), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    function drawFloats() {
+      for (const fl of state.floats) {
+        const pos = gridToPx(fl.col, fl.row);
+        const a = Math.min(1, fl.life / (fl.maxLife * 0.45));
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, a);
+        ctx.font = `800 ${fl.size}px "Be Vietnam Pro", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.lineWidth = 3.5;
+        ctx.strokeStyle = 'rgba(38, 18, 6, 0.92)';
+        ctx.strokeText(fl.text, pos.x, pos.y);
+        ctx.fillStyle = fl.color;
+        ctx.fillText(fl.text, pos.x, pos.y);
+        ctx.restore();
+      }
+    }
+
+    function drawHoverFusionBadge() {
+      if (!state.hoverTile || !state.selectedSeed) return;
+      const { row, col } = state.hoverTile;
+      const existing = state.grid[row][col];
+      if (!existing) return;
+      const fusedId = getFusionResult(existing.type, state.selectedSeed);
+      if (!fusedId) return;
+
+      const fDef = PLANT_DEFS[fusedId];
+      const label = `✦ LAI TẠO: ${fDef.name}`;
+      const pos = gridToPx(col + 0.5, row);
+      ctx.save();
+      ctx.font = '800 12px "Be Vietnam Pro", sans-serif';
+      const tw = ctx.measureText(label).width;
+      const pw = tw + 18;
+      const ph = 24;
+      const px = Math.max(8, Math.min(layout.w - pw - 8, pos.x - pw * 0.5));
+      const py = Math.max(6, pos.y - ph - 4);
+
+      ctx.fillStyle = '#142620';
+      ctx.strokeStyle = '#ffe484';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(px, py, pw, ph, 12);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffe484';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, px + pw * 0.5, py + ph * 0.5 + 0.5);
+      ctx.restore();
+    }
+
+    function drawBossBar() {
+      const boss = state.invaders.find((z) => z.isBoss && !z.dead);
+      if (!boss) return;
+      const barW = Math.min(340, layout.w * 0.62);
+      const barH = 18;
+      const bx = (layout.w - barW) * 0.5;
+      const by = 8;
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(34, 16, 5, 0.88)';
+      ctx.strokeStyle = '#f4c668';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(bx - 4, by - 3, barW + 8, barH + 6, 10);
+      ctx.fill();
+      ctx.stroke();
+
+      const ratio = Math.max(0, boss.hp / boss.maxHp);
+      const grad = ctx.createLinearGradient(bx, by, bx + barW, by);
+      grad.addColorStop(0, '#c92a22');
+      grad.addColorStop(0.6, '#ff681c');
+      grad.addColorStop(1, '#f5b301');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.roundRect(bx, by, barW * ratio, barH, 7);
+      ctx.fill();
+
+      ctx.fillStyle = '#fff6dc';
+      ctx.font = '800 11px "Be Vietnam Pro", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`👑 TRÙM YÊU TINH KHỔNG LỒ · ${Math.ceil(boss.hp)} / ${boss.maxHp}`, bx + barW * 0.5, by + barH * 0.5 + 0.5);
+      ctx.restore();
+    }
+
+    function drawWaveBanner() {
+      if (state.waveBannerTimer <= 0 || !state.waveBannerText) return;
+      const alpha = Math.min(1, state.waveBannerTimer / 0.45);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      const fontSize = Math.max(13, Math.min(18, Math.round(layout.w * 0.022)));
+      ctx.font = `800 ${fontSize}px "Be Vietnam Pro", sans-serif`;
+      const tw = ctx.measureText(state.waveBannerText).width;
+      const pw = Math.min(layout.w - 24, tw + 34);
+      const ph = fontSize + 18;
+      const bx = (layout.w - pw) * 0.5;
+      const by = layout.h * 0.42 - ph * 0.5;
+
+      ctx.fillStyle = 'rgba(20, 38, 32, 0.92)';
+      ctx.strokeStyle = '#f4c668';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.roundRect(bx, by, pw, ph, 14);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffe484';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(state.waveBannerText, layout.w * 0.5, by + ph * 0.5 + 1, pw - 16);
+      ctx.restore();
+    }
+
+    function drawPauseOverlay() {
+      ctx.save();
+      ctx.fillStyle = 'rgba(20, 12, 5, 0.56)';
+      ctx.fillRect(0, 0, layout.w, layout.h);
+
+      const pw = Math.min(280, layout.w - 32);
+      const ph = 92;
+      const bx = (layout.w - pw) * 0.5;
+      const by = (layout.h - ph) * 0.5;
+
+      ctx.fillStyle = '#fdf4dc';
+      ctx.strokeStyle = '#b07d43';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(bx, by, pw, ph, 16);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#4a240d';
+      ctx.font = '800 20px "Be Vietnam Pro", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Đang Tạm Dừng', layout.w * 0.5, by + 34);
+
+      ctx.fillStyle = '#7a5638';
+      ctx.font = '700 12.5px "Be Vietnam Pro", sans-serif';
+      ctx.fillText('Chạm màn hình hoặc nhấn Space để tiếp tục', layout.w * 0.5, by + 64);
+      ctx.restore();
+    }
+
+    function drawSpriteCentered(key, x, y, size) {
+      const img = sprites[key];
+      if (img && img.complete && img.naturalWidth > 0) {
+        const aspect = img.naturalWidth / img.naturalHeight;
+        let dw = size, dh = size;
+        if (aspect > 1) dh = size / aspect;
+        else dw = size * aspect;
+        ctx.drawImage(img, x - dw * 0.5, y - dh * 0.5, dw, dh);
+      } else {
+        ctx.fillStyle = '#f5b301';
+        ctx.beginPath();
+        ctx.arc(x, y, size * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    /* =====================================================================
+       DOM HUD & SEED BAR SYNCHRONIZATION
+       ===================================================================== */
+    const seedCardEls = {};
+
+    function buildSeedBar() {
+      seedBarEl.innerHTML = '';
+      BASE_SEEDS.forEach((seed, idx) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'hs-pvz-seed';
+        btn.dataset.seed = seed.id;
+        btn.title = `${seed.name} (${seed.cost} Nắng) — ${seed.desc} [Phím ${idx + 1}]`;
+        btn.innerHTML = `
+          <span class="hs-pvz-seed-key">${idx + 1}</span>
+          <span class="hs-pvz-seed-fuse-dot" aria-hidden="true">✦</span>
+          <img src="${SPRITE_PATHS[seed.sprite]}" alt="" />
+          <div class="hs-pvz-seed-meta">
+            <span class="hs-pvz-seed-name">${seed.short}</span>
+            <span class="hs-pvz-seed-cost">☀ ${seed.cost}</span>
+          </div>
+          <span class="hs-pvz-seed-cd" aria-hidden="true"></span>
+        `;
+        btn.addEventListener('click', () => selectSeed(seed.id));
+        seedBarEl.appendChild(btn);
+        seedCardEls[seed.id] = {
+          btn,
+          cdEl: btn.querySelector('.hs-pvz-seed-cd'),
+        };
+      });
+    }
+
+    function renderWaveFlags() {
+      uiWaveFlags.innerHTML = '';
+      for (const pos of state.waveFlagPositions) {
+        const flag = document.createElement('span');
+        flag.className = 'hs-pvz-flag';
+        flag.style.left = `${Math.round(pos * 100)}%`;
+        flag.textContent = '🚩';
+        flag.dataset.pos = String(pos);
+        uiWaveFlags.appendChild(flag);
+      }
+    }
+
+    function hasAnyFusionTargetForSeed(seedId) {
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const p = state.grid[r][c];
+          if (p && getFusionResult(p.type, seedId)) return true;
+        }
+      }
+      return false;
+    }
+
+    function syncDockState() {
+      for (const seed of BASE_SEEDS) {
+        const entry = seedCardEls[seed.id];
+        if (!entry) continue;
+        const cdRem = state.cooldowns[seed.id] || 0;
+        const pct = Math.min(100, Math.max(0, (cdRem / seed.cd) * 100));
+        entry.cdEl.style.height = pct > 0.2 ? `${pct.toFixed(1)}%` : '0%';
+        entry.btn.classList.toggle('is-selected', state.selectedSeed === seed.id);
+        entry.btn.classList.toggle('is-unaffordable', state.sun < seed.cost);
+        entry.btn.classList.toggle('is-cooling', cdRem > 0.02);
+        entry.btn.classList.toggle('has-fusion-target', hasAnyFusionTargetForSeed(seed.id));
+      }
+
+      uiPfQty.textContent = `${state.plantFood} / ${state.maxPlantFood}`;
+      btnPlantFood.disabled = state.plantFood <= 0;
+      btnPlantFood.classList.toggle('is-overdrive-ready', state.plantFood > 0);
+      btnPlantFood.classList.toggle('is-armed', state.tool === 'plantfood');
+      btnShovel.classList.toggle('is-armed', state.tool === 'shovel');
+
+      boardFrame.classList.toggle('is-overdrive-armed', state.tool === 'plantfood');
+      boardFrame.classList.toggle('is-shovel-armed', state.tool === 'shovel');
+      canvas.classList.toggle('is-shovel', state.tool === 'shovel');
+    }
+
+    function updateContextTip() {
+      if (state.tool === 'shovel') {
+        uiContextTip.innerHTML = '<strong>Xẻng:</strong> Chạm vào cây cần đào để hoàn 50% Nắng.';
+      } else if (state.tool === 'plantfood') {
+        uiContextTip.innerHTML = '<strong>Tinh Hoa:</strong> Chạm bất kỳ cây nào để Siêu Nạp 3 giây!';
+      } else if (state.selectedSeed) {
+        const s = BASE_SEEDS.find((x) => x.id === state.selectedSeed);
+        uiContextTip.innerHTML = `<strong>${s.name}:</strong> Trồng ô trống hoặc chạm cây phát sáng vàng để Lai Tạo!`;
+      } else {
+        uiContextTip.innerHTML = '<strong>Mẹo:</strong> Trồng chồng cây phát sáng vàng để Lai Tạo!';
+      }
+    }
+
+    let lastScoreShown = -1;
+    let lastWavePct = -1;
+    let lastWaveLabel = '';
+
+    function syncLiveHud(forceDock = false) {
+      if (state.score !== lastScoreShown) {
+        lastScoreShown = state.score;
+        uiScoreVal.textContent = state.score.toLocaleString('vi-VN');
+      }
+
+      const progress = Math.min(1, state.spawnedInStage / Math.max(1, state.totalSpawnsInStage));
+      const pct = Math.round(progress * 100);
+      if (pct !== lastWavePct) {
+        lastWavePct = pct;
+        uiWaveFill.style.width = `${pct}%`;
+        for (const el of uiWaveFlags.children) {
+          el.classList.toggle('is-passed', progress >= Number(el.dataset.pos));
+        }
+      }
+
+      const wLbl = state.mode === 'adventure'
+        ? `Đợt ${Math.min(state.totalWaves, state.waveIndex + 1)}/${state.totalWaves}`
+        : `Đợt ${state.endlessWave}`;
+      if (wLbl !== lastWaveLabel) {
+        lastWaveLabel = wLbl;
+        uiWaveTxt.textContent = wLbl;
+      }
+
+      if (forceDock) syncDockState();
+    }
+
+    function syncHudAll() {
+      btnModeAdv.setAttribute('aria-selected', String(state.mode === 'adventure'));
+      btnModeEndless.setAttribute('aria-selected', String(state.mode === 'endless'));
+      uiSunVal.textContent = String(state.sun);
+
+      if (state.mode === 'adventure') {
+        uiStageBadge.textContent = `Màn ${state.stage}`;
+        btnPrevStage.hidden = false;
+        btnNextStage.hidden = false;
+        btnPrevStage.disabled = state.stage <= 1;
+        btnNextStage.disabled = state.stage >= Math.min(STAGES.length, saveData.unlockedStage);
+      } else {
+        uiStageBadge.textContent = `Vô Tận · KL ${Math.max(1, saveData.bestWaveEndless)}`;
+        btnPrevStage.hidden = true;
+        btnNextStage.hidden = true;
+      }
+
+      btnSpeed.textContent = state.speedMult === 2 ? '2×' : '1×';
+      btnSpeed.setAttribute('aria-pressed', String(state.speedMult === 2));
+      btnSpeed.classList.toggle('is-active', state.speedMult === 2);
+
+      btnPause.textContent = state.paused ? 'Tiếp tục' : 'Tạm dừng';
+      btnPause.setAttribute('aria-pressed', String(state.paused));
+      btnPause.classList.toggle('is-active', state.paused);
+
+      btnMute.textContent = sfx.isMuted() ? 'Âm: Tắt' : 'Âm: Bật';
+      btnMute.setAttribute('aria-pressed', String(sfx.isMuted()));
+
+      lastScoreShown = -1;
+      lastWavePct = -1;
+      lastWaveLabel = '';
+      syncLiveHud(true);
+      updateContextTip();
+    }
+
+    /* =====================================================================
+       FUSION ALMANAC DIALOG (SỔ LAI TẠO)
+       ===================================================================== */
+    function renderAlmanac() {
+      almanacGrid.innerHTML = '';
+      let craftedCount = 0;
+      for (const rec of FUSION_RECIPES) {
+        const resDef = PLANT_DEFS[rec.result];
+        const crafted = Boolean(saveData.crafted[rec.result]);
+        if (crafted) craftedCount++;
+
+        const iconAHtml = rec.a === 'sunshooter'
+          ? `<span class="hs-pvz-combo-icon"><img src="${SPRITE_PATHS.sunflower}" alt="" /><img src="${SPRITE_PATHS.peashooter}" alt="" /></span>`
+          : `<img src="${SPRITE_PATHS[rec.a]}" alt="" />`;
+        const iconB = SPRITE_PATHS[rec.b];
+        const card = document.createElement('article');
+        card.className = 'hs-pvz-recipe' +
+          (rec.kind === 'titan' ? ' is-titan' : rec.kind === 'super' ? ' is-super' : '');
+        card.innerHTML = `
+          <div class="hs-pvz-recipe-top">
+            <span class="hs-pvz-recipe-name">${resDef.name}</span>
+            <span class="hs-pvz-recipe-badge ${crafted ? 'is-crafted' : ''}">
+              ${crafted ? '✓ Đã tạo · ' : ''}${rec.tierTag}
+            </span>
+          </div>
+          <div class="hs-pvz-recipe-formula">
+            ${iconAHtml}
+            <span>${rec.aLabel}</span>
+            <span>+</span>
+            <img src="${iconB}" alt="" />
+            <span>${rec.bLabel}</span>
+          </div>
+          <p class="hs-pvz-recipe-desc">${rec.desc}</p>
+        `;
+        almanacGrid.appendChild(card);
+      }
+      uiCraftedCount.textContent = `Đã tạo: ${craftedCount} / ${FUSION_RECIPES.length}`;
+    }
+
+    function openAlmanac() {
+      if (almanacDialog.open) return;
+      state.pauseBeforeDialog = state.paused;
+      state.paused = true;
+      renderAlmanac();
+      syncHudAll();
+      almanacDialog.showModal();
+    }
+
+    almanacDialog.addEventListener('click', (ev) => {
+      if (ev.target === almanacDialog) almanacDialog.close();
+    });
+
+    almanacDialog.addEventListener('close', () => {
+      almanacDialog.returnValue = '';
+      if (almanacDialog.open) return;
+      state.paused = state.pauseBeforeDialog;
+      syncHudAll();
+    });
+
+    resultDialog.addEventListener('close', () => {
+      resultDialog.returnValue = '';
+    });
+
+    /* =====================================================================
+       POINTER, TOUCH & KEYBOARD INPUTS
+       ===================================================================== */
+    function getCanvasCoords(ev) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        px: ev.clientX - rect.left,
+        py: ev.clientY - rect.top,
+      };
+    }
+
+    function tryMagnetOrbsAt(px, py, radiusScale = 0.65) {
+      const unit = Math.min(layout.tileW, layout.tileH);
+      const hitDist = unit * radiusScale;
+      let hitAny = false;
+      for (const o of state.orbs) {
+        if (o.collecting) continue;
+        const pos = gridToPx(o.col, o.row);
+        if (Math.hypot(pos.x - px, pos.y - py) <= hitDist) {
+          collectOrb(o);
+          hitAny = true;
+        }
+      }
+      return hitAny;
+    }
+
+    canvas.addEventListener('pointermove', (ev) => {
+      const { px, py } = getCanvasCoords(ev);
+      // Effortless hover/swipe magnet collection of Sun & Tinh Hoa!
+      if (!state.paused && !state.ended) {
+        tryMagnetOrbsAt(px, py, 0.56);
+      }
+      const g = pxToGrid(px, py);
+      const col = Math.floor(g.col);
+      const row = Math.floor(g.row);
+      if (row >= 0 && row < ROWS && col >= 0 && col < COLS) {
+        state.hoverTile = { row, col };
+      } else {
+        state.hoverTile = null;
+      }
+    });
+
+    canvas.addEventListener('pointerleave', () => {
+      state.hoverTile = null;
+    });
+
+    canvas.addEventListener('contextmenu', (ev) => {
+      ev.preventDefault();
+      cancelSelection();
+    });
+
+    canvas.addEventListener('pointerdown', (ev) => {
+      if (ev.button === 2) {
+        cancelSelection();
+        return;
+      }
+      if (state.ended) return;
+      if (state.paused) {
+        state.paused = false;
+        syncHudAll();
+        return;
+      }
+
+      const { px, py } = getCanvasCoords(ev);
+
+      // Always prioritize tapping Sun / Tinh Hoa orbs before planting!
+      if (tryMagnetOrbsAt(px, py, 0.72)) {
+        return;
+      }
+
+      const g = pxToGrid(px, py);
+      const col = Math.floor(g.col);
+      const row = Math.floor(g.row);
+      if (row >= 0 && row < ROWS && col >= 0 && col < COLS) {
+        state.hoverTile = { row, col };
+        if (state.selectedSeed || state.tool) {
+          tryPlaceOrFuse(row, col);
+        } else {
+          // Tapping an existing plant while idle shows its name & quick hint
+          const p = state.grid[row][col];
+          if (p) {
+            const def = PLANT_DEFS[p.type];
+            addFloat(col + 0.5, row + 0.25, def.name, '#fff6dc', 12);
+          }
+        }
+      } else {
+        cancelSelection();
+      }
+    });
+
+    // Header & Tool Button Listeners
+    btnModeAdv.addEventListener('click', () => {
+      if (state.mode !== 'adventure') startRun('adventure', saveData.currentStage);
+    });
+    btnModeEndless.addEventListener('click', () => {
+      if (state.mode !== 'endless') startRun('endless', state.stage);
+    });
+    btnPrevStage.addEventListener('click', () => {
+      if (state.mode === 'adventure' && state.stage > 1) startRun('adventure', state.stage - 1);
+    });
+    btnNextStage.addEventListener('click', () => {
+      if (state.mode === 'adventure' && state.stage < Math.min(STAGES.length, saveData.unlockedStage)) {
+        startRun('adventure', state.stage + 1);
+      }
+    });
+    btnAlmanac.addEventListener('click', openAlmanac);
+    btnCloseAlmanac.addEventListener('click', () => almanacDialog.close());
+
+    btnSpeed.addEventListener('click', () => {
+      state.speedMult = state.speedMult === 1 ? 2 : 1;
+      syncHudAll();
+    });
+    btnPause.addEventListener('click', () => {
+      if (state.ended) return;
+      state.paused = !state.paused;
+      syncHudAll();
+    });
+    btnMute.addEventListener('click', () => {
+      sfx.toggleMute();
+      syncHudAll();
+    });
+    btnRestart.addEventListener('click', () => startRun(state.mode, state.stage));
+    btnPlantFood.addEventListener('click', () => toggleTool('plantfood'));
+    btnShovel.addEventListener('click', () => toggleTool('shovel'));
+
+    btnResNext.addEventListener('click', () => {
+      const next = Math.min(STAGES.length, state.stage + 1);
+      resultDialog.close();
+      startRun('adventure', next);
+    });
+    btnResReplay.addEventListener('click', () => {
+      resultDialog.close();
+      startRun(state.mode, state.stage);
+    });
+    btnResEndless.addEventListener('click', () => {
+      resultDialog.close();
+      startRun('endless', state.stage);
+    });
+
+    // Keyboard Shortcuts: 1–6 seeds, Q Shovel, F Tinh Hoa, Space Pause, Esc cancel
+    window.addEventListener('keydown', (ev) => {
+      if (almanacDialog.open || resultDialog.open) return;
+      if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+
+      const key = ev.key.toLowerCase();
+      if (key >= '1' && key <= '6') {
+        const seed = BASE_SEEDS[Number(key) - 1];
+        if (seed) {
+          ev.preventDefault();
+          selectSeed(seed.id);
+        }
+      } else if (key === 'q') {
+        ev.preventDefault();
+        toggleTool('shovel');
+      } else if (key === 'f') {
+        ev.preventDefault();
+        toggleTool('plantfood');
+      } else if (ev.code === 'Space' || key === ' ') {
+        ev.preventDefault();
+        if (!state.ended) {
+          state.paused = !state.paused;
+          syncHudAll();
+        }
+      } else if (key === 'escape') {
+        if (state.selectedSeed || state.tool) {
+          ev.preventDefault();
+          cancelSelection();
+        }
+      }
+    });
+
+    /* =====================================================================
+       RESIZE OBSERVER & 60FPS RAF LOOP
+       ===================================================================== */
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const cr = entry.contentRect;
+        if (cr.width > 0 && cr.height > 0) {
+          computeLayout(cr.width, cr.height);
+        }
+      }
+    });
+    ro.observe(canvas);
+
+    let lastTs = 0;
+    function loop(ts) {
+      if (!lastTs) lastTs = ts;
+      const rawDt = Math.min(0.1, Math.max(0, (ts - lastTs) / 1000));
+      lastTs = ts;
+
+      updateSim(rawDt);
+      renderFrame();
+      requestAnimationFrame(loop);
+    }
+
+    /* =====================================================================
+       HS-BONUS-ARCADE TWO-WAY POSTMESSAGE BRIDGE & MOLLY SUN SURGE BOOST
+       ===================================================================== */
+    let lastReportedBestScore = Math.max(saveData.bestScoreAdv, saveData.bestScoreEndless);
+    let lastReportedUnlockedStage = saveData.unlockedStage;
+    let lastReportedBestCombo = saveData.bestWaveEndless;
+    let lastScorePostTs = 0;
+
+    function hasAnyPlacedPlant() {
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          if (state.grid[r] && state.grid[r][c]) return true;
+        }
+      }
+      return false;
+    }
+
+    function syncScoreToParent(force = false) {
+      if (!IS_EMBED) return;
+      const bestScore = Math.max(saveData.bestScoreAdv, saveData.bestScoreEndless, state.score);
+      const nextUnlockedStage = saveData.unlockedStage;
+      const wavesCleared = state.mode === 'adventure'
+        ? (state.victory ? state.totalWaves : Math.max(0, state.waveIndex))
+        : Math.max(saveData.bestWaveEndless, Math.max(0, state.endlessWave - 1));
+      const bestCombo = Math.max(saveData.bestWaveEndless, wavesCleared);
+
+      const improved =
+        bestScore > lastReportedBestScore ||
+        nextUnlockedStage > lastReportedUnlockedStage ||
+        bestCombo > lastReportedBestCombo;
+      if (!improved) return;
+
+      const now = performance.now();
+      if (!force && now - lastScorePostTs < 2500) return;
+
+      lastReportedBestScore = Math.max(lastReportedBestScore, bestScore);
+      lastReportedUnlockedStage = Math.max(lastReportedUnlockedStage, nextUnlockedStage);
+      lastReportedBestCombo = Math.max(lastReportedBestCombo, bestCombo);
+      lastScorePostTs = now;
+
+      postToParent({
+        type: 'score',
+        bestScore: lastReportedBestScore,
+        bestCombo: lastReportedBestCombo,
+        unlockedStage: lastReportedUnlockedStage,
+      });
+    }
+
+    function applyMollySunSurge() {
+      addSun(250, true);
+      for (const s of BASE_SEEDS) {
+        state.cooldowns[s.id] = 0;
+      }
+
+      // Celebratory golden sun burst on the live lawn!
+      addShake(4.5, 0.24);
+      addRing(4.5, 2.5, 3.6, '#ffe484', 5, 0.72);
+      addRing(4.5, 2.5, 2.3, '#f5b301', 4, 0.56);
+      addRing(4.5, 2.5, 1.3, '#fff6a6', 3.5, 0.42);
+      spawnParticles(4.5, 2.5, 34, '#ffe484', 3.4, 5.4, 0.78);
+      spawnParticles(4.5, 2.5, 18, '#f5b301', 2.6, 4.4, 0.65);
+      addFloat(4.5, 2.1, '🍲 SÚP ÁNH DƯƠNG BÀ MOLLY!', '#fff6a6', 17, 1.85);
+      addFloat(4.5, 2.65, '+250 ☀ · HỒI TOÀN BỘ HẠT GIỐNG!', '#ffe484', 14, 1.85);
+      sfx.fusion(true);
+      syncHudAll();
+      const surgeMsg = 'Súp Nấm Bà Molly: +250 Ánh Dương & hồi toàn bộ hạt giống cây!';
+      if (!IS_EMBED) {
+        // Standalone mode displays an inner lawn banner; embedded mode relies on the parent single toast + in-canvas floats
+        state.waveBannerText = surgeMsg;
+        state.waveBannerTimer = 2.2;
+      }
+      announce(surgeMsg);
+
+      postToParent({
+        type: 'boost-applied',
+        ok: true,
+        boostKind: 'sun_surge',
+        msgVi: surgeMsg,
+      });
+    }
+
+    function handleBridgeMessage(ev) {
+      const msg = ev && ev.data;
+      if (!msg || typeof msg !== 'object') return;
+      if (msg.channel !== BRIDGE_CHANNEL) return;
+      if (msg.gameId && msg.gameId !== GAME_ID) return;
+      if (EMBED_TOKEN && msg.token && msg.token !== EMBED_TOKEN) return;
+
+      if (msg.type === 'init') {
+        const rec = (msg.state && typeof msg.state === 'object')
+          ? msg.state
+          : (msg.record && typeof msg.record === 'object' ? msg.record : msg);
+
+        if (Number.isFinite(Number(rec.unlockedStage))) {
+          const hydratedUnlocked = Math.max(1, Math.min(STAGES.length, Math.floor(Number(rec.unlockedStage))));
+          saveData.unlockedStage = Math.max(saveData.unlockedStage, hydratedUnlocked);
+          if (saveData.currentStage > saveData.unlockedStage) {
+            saveData.currentStage = saveData.unlockedStage;
+          }
+        }
+        if (Number.isFinite(Number(rec.bestScore))) {
+          const hydratedBest = Math.max(0, Math.floor(Number(rec.bestScore)));
+          saveData.bestScoreAdv = Math.max(saveData.bestScoreAdv, hydratedBest);
+          saveData.bestScoreEndless = Math.max(saveData.bestScoreEndless, hydratedBest);
+        }
+        if (Number.isFinite(Number(rec.bestCombo))) {
+          const hydratedWave = Math.max(0, Math.floor(Number(rec.bestCombo)));
+          saveData.bestWaveEndless = Math.max(saveData.bestWaveEndless, hydratedWave);
+        }
+        if (typeof msg.soundEnabled === 'boolean') {
+          sfx.setMuted(!msg.soundEnabled);
+        }
+        if (typeof msg.reducedMotion === 'boolean') {
+          reducedMotion = msg.reducedMotion;
+        }
+
+        lastReportedBestScore = Math.max(lastReportedBestScore, saveData.bestScoreAdv, saveData.bestScoreEndless);
+        lastReportedUnlockedStage = Math.max(lastReportedUnlockedStage, saveData.unlockedStage);
+        lastReportedBestCombo = Math.max(lastReportedBestCombo, saveData.bestWaveEndless);
+        writeSave(saveData);
+
+        if (
+          state.mode === 'adventure' &&
+          !state.ended &&
+          state.score === 0 &&
+          state.time < 2.5 &&
+          !hasAnyPlacedPlant() &&
+          saveData.unlockedStage > state.stage
+        ) {
+          saveData.currentStage = saveData.unlockedStage;
+          writeSave(saveData);
+          startRun('adventure', saveData.currentStage);
+        } else {
+          syncHudAll();
+        }
+        return;
+      }
+
+      if (msg.type === 'audio-sync') {
+        if (typeof msg.soundEnabled === 'boolean') {
+          sfx.setMuted(!msg.soundEnabled);
+        } else if (typeof msg.muted === 'boolean') {
+          sfx.setMuted(msg.muted);
+        }
+        syncHudAll();
+        return;
+      }
+
+      if (msg.type === 'molly-boost' && msg.boostKind === 'sun_surge') {
+        applyMollySunSurge();
+      }
+    }
+
+    window.addEventListener('message', handleBridgeMessage);
+    window.addEventListener('pagehide', () => sfx.dispose());
+
+    // Bootstrap
+    loadAllSprites();
+    buildSeedBar();
+    const initialRect = canvas.getBoundingClientRect();
+    computeLayout(initialRect.width || 800, initialRect.height || 420);
+    startRun('adventure', saveData.currentStage);
+    postToParent({ type: 'ready' });
+    requestAnimationFrame(loop);
+  })();
+  </script>
+</body>
+</html>

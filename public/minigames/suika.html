@@ -1,0 +1,4398 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#381b0c" />
+  <title>Hợp Quả Hang Sóc — Suika Game 2026</title>
+  <link rel="icon" type="image/webp" href="../sprites/m3_farm_pumpkin.webp" />
+  <link rel="preload" href="../fonts/be-vietnam-pro-700-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="../fonts/be-vietnam-pro-700-vietnamese.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="../fonts/fonts.css" />
+  <style>
+    /* =====================================================================
+       TRANG TRẠI HANG SÓC — EXACT PALETTE TOKENS (--hs-* & --farm-*)
+       Zero hardcoded hex colors outside :root
+       ===================================================================== */
+    :root {
+      color-scheme: light;
+      /* Official HPVN & Hang Sóc tokens from src/styles/main.css */
+      --hs-paper: #fdf4dc;
+      --hs-paper-2: #f6e4b8;
+      --hs-ink: #4a2c16;
+      --hs-ink-soft: #7a5638;
+      --hs-cream: #fff6dc;
+      --hs-wood: #381b0c;
+      --hs-wood-2: #6e391c;
+      --hs-brass: #b07d43;
+      --hs-brass-bright: #f4c668;
+      --hs-gold-bright: #ffe484;
+      --hs-gold: #f5b301;
+      --hs-gold-deep: #c98a00;
+      --hs-forest: #142620;
+      --hs-forest-2: #24483f;
+      --hs-ok: #22780f;
+      --hs-ok-bg: #e7f9d4;
+      --hs-bad: #b93822;
+      --hs-bad-bg: #fff1ed;
+      --hs-shade: rgba(74, 44, 22, 0.34);
+
+      --farm-wood-darkest: #381b0c;
+      --farm-wood-dark: #4f2813;
+      --farm-wood-mid: #6e391c;
+      --farm-wood-warm: #874925;
+      --farm-wood-well: #3f1f0e;
+      --farm-brass-bright: #f4c668;
+      --farm-brass-mid: #d4963b;
+      --farm-brass-dark: #8c5919;
+      --farm-sheet-top: #fffcf4;
+      --farm-sheet-bot: #f4e2bc;
+      --farm-sheet-well: #ecd4a4;
+      --farm-sheet-border: #cfa66b;
+      --farm-ink-title: #4a240d;
+      --farm-ink-body: #633416;
+      --farm-crimson-top: #c92a22;
+      --farm-crimson-mid: #a61919;
+      --farm-crimson-bot: #7a1414;
+      --farm-fire-core: #fff6a6;
+      --farm-fire-mid: #ff851b;
+      --farm-fire-deep: #9c2206;
+      --farm-shadow-deep: rgba(34, 16, 5, 0.52);
+
+      /* 11-Tier Harvest Orb Tokens for Evolution Ladder */
+      --orb-0: #4c64d4;
+      --orb-1: #e03c52;
+      --orb-2: #8a49c4;
+      --orb-3: #f29a1f;
+      --orb-4: #e64935;
+      --orb-5: #c92b2b;
+      --orb-6: #9ec92a;
+      --orb-7: #c98f4a;
+      --orb-8: #f5c316;
+      --orb-9: #3ba655;
+      --orb-10: #ff8811;
+
+      --target-size: 36px;
+    }
+
+    @media (pointer: coarse) {
+      :root { --target-size: 44px; }
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      font-family: 'Be Vietnam Pro', 'Be Vietnam Pro Fallback', system-ui, -apple-system, sans-serif;
+      color: var(--hs-ink);
+      background-color: var(--hs-wood);
+      overflow-wrap: break-word;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    :focus-visible {
+      outline: 3px solid var(--hs-gold);
+      outline-offset: 2px;
+    }
+
+    /* Fullscreen Hang Sóc Autumn Parlor Shell */
+    .hs-sk-shell {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100dvh;
+      padding:
+        max(6px, env(safe-area-inset-top, 0px))
+        max(10px, env(safe-area-inset-right, 0px))
+        max(6px, env(safe-area-inset-bottom, 0px))
+        max(10px, env(safe-area-inset-left, 0px));
+      gap: 6px;
+      background:
+        radial-gradient(circle at 50% 42%, rgba(56, 27, 12, 0.24) 0%, rgba(28, 13, 5, 0.68) 100%),
+        linear-gradient(180deg, rgba(56, 27, 12, 0.34) 0%, rgba(30, 14, 5, 0.56) 100%),
+        url('../paintings/jigsaw_burrow_autumn.webp') center center / cover no-repeat;
+      box-shadow: inset 0 0 0 3px var(--farm-brass-bright);
+      overflow: hidden;
+    }
+
+    /* Top Header — exact Hang Sóc Forest-Green + Brass Header */
+    .hs-sk-header {
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 13px;
+      background: linear-gradient(180deg, var(--hs-forest-2) 0%, var(--hs-forest) 100%);
+      border: 2px solid var(--farm-brass-bright);
+      box-shadow: 0 3px 0 var(--hs-wood), 0 6px 16px var(--farm-shadow-deep);
+      color: var(--hs-cream);
+    }
+
+    .hs-sk-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-inline-size: 0;
+    }
+
+    .hs-sk-brand img {
+      width: 28px;
+      height: 28px;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
+      flex: none;
+    }
+
+    .hs-sk-title-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      min-inline-size: 0;
+    }
+
+    .hs-sk-title {
+      margin: 0;
+      font-family: 'Be Vietnam Pro', 'Be Vietnam Pro Fallback', system-ui, -apple-system, sans-serif;
+      font-size: 16px;
+      font-weight: 800;
+      line-height: 1.15;
+      color: var(--hs-cream);
+      text-wrap: balance;
+      letter-spacing: -0.01em;
+    }
+
+    .hs-sk-sub {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--farm-brass-bright);
+      line-height: 1.2;
+    }
+
+    /* Mode Segmented Tabs (Thùng Gỗ 2026 vs Hành Tinh 360°) */
+    .hs-sk-modes {
+      display: inline-flex;
+      align-items: stretch;
+      gap: 2px;
+      padding: 2px;
+      border-radius: 11px;
+      border: 1.5px solid var(--hs-brass);
+      background: var(--hs-wood);
+    }
+
+    .hs-sk-mode-btn {
+      min-block-size: var(--target-size);
+      min-inline-size: var(--target-size);
+      padding: 0 11px;
+      border: 0;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--hs-cream);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background-color 0.14s ease, color 0.14s ease;
+    }
+
+    .hs-sk-mode-btn[aria-selected="true"] {
+      background: var(--hs-gold);
+      color: var(--hs-ink);
+    }
+
+    /* Score / Best / Combo / Action Controls */
+    .hs-sk-stats {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .hs-sk-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-block-size: 34px;
+      padding: 3px 9px;
+      border-radius: 10px;
+      border: 1.5px solid var(--hs-brass);
+      background: linear-gradient(180deg, var(--farm-sheet-top) 0%, var(--farm-sheet-bot) 100%);
+      color: var(--hs-ink);
+      font-size: 12px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      box-shadow: 0 2px 0 var(--hs-wood);
+    }
+
+    .hs-sk-pill img {
+      width: 17px;
+      height: 17px;
+      object-fit: contain;
+    }
+
+    .hs-sk-pill .lbl {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--hs-ink-soft);
+    }
+
+    .hs-sk-pill.is-combo {
+      min-inline-size: 86px;
+      justify-content: center;
+      background: linear-gradient(180deg, var(--hs-gold-bright) 0%, var(--hs-gold) 100%);
+      border-color: var(--farm-brass-dark);
+      color: var(--farm-ink-title);
+      transition: transform 0.14s ease;
+    }
+
+    .hs-sk-pill.is-combo.is-fever {
+      background: linear-gradient(180deg, var(--farm-fire-core) 0%, var(--farm-fire-mid) 100%);
+      border-color: var(--farm-crimson-mid);
+      color: var(--farm-ink-title);
+    }
+
+    .hs-sk-pill.is-combo.pop {
+      transform: scale(1.1);
+    }
+
+    .hs-sk-icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      min-block-size: var(--target-size);
+      min-inline-size: var(--target-size);
+      padding: 0 10px;
+      border-radius: 10px;
+      border: 2px solid var(--farm-brass-bright);
+      background: linear-gradient(180deg, var(--farm-wood-warm) 0%, var(--farm-wood-dark) 100%);
+      color: var(--hs-cream);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      box-shadow: 0 2.5px 0 var(--hs-wood);
+      transition: transform 0.12s ease, filter 0.14s ease;
+    }
+
+    .hs-sk-icon-btn:active {
+      transform: translateY(1.5px);
+    }
+
+    .hs-sk-icon-btn.is-gold {
+      background: linear-gradient(180deg, var(--hs-gold-bright) 0%, var(--hs-gold) 65%, var(--hs-gold-deep) 100%);
+      border-color: var(--hs-wood);
+      color: var(--farm-ink-title);
+    }
+
+    /* 11-Tier Harvest Evolution Ladder Ribbon */
+    .hs-sk-evo-bar {
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 4px 10px;
+      border-radius: 11px;
+      background: linear-gradient(180deg, var(--hs-paper) 0%, var(--hs-paper-2) 100%);
+      border: 2px solid var(--hs-brass);
+      box-shadow: 0 2.5px 0 var(--hs-wood);
+    }
+
+    .hs-sk-evo-label {
+      flex: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 9px;
+      border-radius: 8px;
+      background: var(--hs-wood);
+      color: var(--farm-brass-bright);
+      font-size: 11.5px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .hs-sk-evo-track {
+      flex: 1 1 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      min-inline-size: 0;
+    }
+
+    .hs-sk-evo-node {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 2px solid var(--hs-brass);
+      background: var(--farm-sheet-top);
+      box-shadow: inset 0 -3px 6px rgba(56, 27, 12, 0.22), 0 1.5px 3px rgba(56, 27, 12, 0.24);
+      opacity: 0.62;
+      transition: transform 0.18s ease, opacity 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+      flex: none;
+    }
+
+    .hs-sk-evo-node::before {
+      content: '';
+      position: absolute;
+      inset: 2px;
+      border-radius: 50%;
+      background: var(--node-color, var(--hs-gold));
+      opacity: 0.28;
+    }
+
+    .hs-sk-evo-node img {
+      position: relative;
+      z-index: 1;
+      width: 22px;
+      height: 22px;
+      object-fit: contain;
+      filter: drop-shadow(0 1px 1px rgba(56, 27, 12, 0.35));
+    }
+
+    .hs-sk-evo-node .evo-num {
+      position: absolute;
+      bottom: -3px;
+      right: -3px;
+      z-index: 2;
+      min-width: 14px;
+      height: 14px;
+      padding: 0 2px;
+      border-radius: 999px;
+      background: var(--hs-wood);
+      color: var(--hs-cream);
+      font-size: 8.5px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .hs-sk-evo-node.is-reached {
+      opacity: 1;
+      border-color: var(--farm-brass-dark);
+    }
+
+    .hs-sk-evo-node.is-reached::before {
+      opacity: 0.42;
+    }
+
+    .hs-sk-evo-node.is-highest {
+      opacity: 1;
+      transform: scale(1.14);
+      border-color: var(--hs-gold);
+      box-shadow: 0 0 0 2.5px var(--hs-gold), 0 3px 8px rgba(245, 179, 1, 0.55);
+      z-index: 3;
+    }
+
+    .hs-sk-evo-node.is-highest .evo-num {
+      background: var(--farm-crimson-mid);
+      color: var(--farm-fire-core);
+    }
+
+    .hs-sk-evo-sep {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--hs-brass);
+      line-height: 1;
+      flex: none;
+    }
+
+    .hs-sk-evo-peak {
+      flex: none;
+      font-size: 11.5px;
+      font-weight: 800;
+      color: var(--farm-ink-title);
+      white-space: nowrap;
+      padding: 2px 8px;
+      border-radius: 8px;
+      background: rgba(176, 125, 67, 0.16);
+      border: 1px solid rgba(176, 125, 67, 0.45);
+    }
+
+    /* Main Arena Container */
+    .hs-sk-stage-area {
+      flex: 1 1 0;
+      min-block-size: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 262px;
+      gap: 10px;
+      align-items: stretch;
+      max-inline-size: 1220px;
+      inline-size: 100%;
+      margin: 0 auto;
+    }
+
+    /* Canvas Playfield Frame */
+    .hs-sk-board-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-block-size: 0;
+      min-inline-size: 0;
+    }
+
+    .hs-sk-board-frame {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 7px;
+      border-radius: 20px;
+      background: linear-gradient(180deg, var(--farm-wood-warm) 0%, var(--farm-wood-mid) 52%, var(--farm-wood-dark) 100%);
+      border: 2.5px solid var(--farm-brass-bright);
+      box-shadow:
+        0 5px 0 var(--hs-wood),
+        0 14px 32px var(--farm-shadow-deep),
+        inset 0 2px 0 rgba(255, 246, 220, 0.35);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .hs-sk-board-frame.is-fever {
+      border-color: var(--farm-fire-core);
+      box-shadow:
+        0 5px 0 var(--hs-wood),
+        0 0 0 3px rgba(245, 179, 1, 0.72),
+        0 0 28px rgba(255, 133, 27, 0.65);
+    }
+
+    .hs-sk-board-frame.is-danger {
+      border-color: var(--farm-crimson-top);
+      box-shadow:
+        0 5px 0 var(--hs-wood),
+        0 0 0 3.5px rgba(201, 42, 34, 0.78),
+        0 0 24px rgba(185, 56, 34, 0.65);
+    }
+
+    #gameCanvas {
+      display: block;
+      border-radius: 13px;
+      touch-action: none;
+      cursor: crosshair;
+    }
+
+    /* Contextual Status Toast Banner over Playfield */
+    .hs-sk-banner {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      inline-size: max-content;
+      max-inline-size: calc(100% - 20px);
+      padding: 6px 14px;
+      border-radius: 14px;
+      background: var(--hs-forest);
+      border: 2px solid var(--farm-brass-bright);
+      color: var(--hs-cream);
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.3;
+      text-align: center;
+      text-wrap: balance;
+      white-space: normal;
+      box-shadow: 0 4px 12px var(--farm-shadow-deep);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.18s ease;
+    }
+
+    .hs-sk-banner.is-visible {
+      opacity: 1;
+    }
+
+    /* Right / Bottom Parchment Strategy Dock */
+    .hs-sk-dock {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-block-size: 0;
+      padding: 9px;
+      border-radius: 16px;
+      background: linear-gradient(180deg, var(--hs-paper) 0%, var(--hs-paper-2) 100%);
+      border: 2.5px solid var(--hs-brass);
+      box-shadow: 0 5px 0 var(--hs-wood), 0 10px 24px var(--farm-shadow-deep);
+    }
+
+    /* Next + Hold Wells Pair */
+    .hs-sk-preview-pair {
+      flex: none;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px;
+    }
+
+    .hs-sk-well {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      padding: 7px 6px 6px;
+      min-block-size: 112px;
+      border-radius: 13px;
+      background: linear-gradient(180deg, var(--farm-wood-dark) 0%, var(--farm-wood-well) 100%);
+      border: 2px solid var(--hs-brass);
+      box-shadow: inset 0 3px 8px rgba(18, 8, 3, 0.55);
+      color: var(--hs-cream);
+      font-family: inherit;
+      text-align: center;
+    }
+
+    button.hs-sk-well {
+      cursor: pointer;
+      transition: border-color 0.14s ease, transform 0.12s ease, opacity 0.14s ease;
+    }
+
+    button.hs-sk-well:hover:not(:disabled) {
+      border-color: var(--farm-brass-bright);
+    }
+
+    button.hs-sk-well:active:not(:disabled) {
+      transform: translateY(1.5px);
+    }
+
+    button.hs-sk-well.is-used {
+      opacity: 0.62;
+      border-color: var(--farm-brass-dark);
+    }
+
+    .hs-sk-well-head {
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: var(--farm-brass-bright);
+      line-height: 1.1;
+    }
+
+    .hs-sk-well-orb {
+      position: relative;
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 32% 28%, rgba(255, 246, 220, 0.35), rgba(56, 27, 12, 0.35));
+      border: 2px dashed rgba(244, 198, 104, 0.45);
+    }
+
+    .hs-sk-well-orb.has-fruit {
+      border-style: solid;
+      border-color: var(--farm-brass-bright);
+      background: radial-gradient(circle at 32% 28%, var(--hs-cream) 0%, var(--well-color, var(--hs-gold)) 52%, var(--hs-wood) 100%);
+      box-shadow: 0 3px 8px rgba(18, 8, 3, 0.55), inset 0 2px 5px rgba(255, 255, 255, 0.4);
+    }
+
+    .hs-sk-well-orb.is-wildcard {
+      border-color: var(--farm-fire-core);
+      background: radial-gradient(circle at 32% 28%, var(--farm-fire-core) 0%, var(--hs-gold) 45%, var(--farm-fire-mid) 100%);
+      box-shadow: 0 0 14px rgba(245, 179, 1, 0.85), inset 0 2px 6px rgba(255, 255, 255, 0.6);
+    }
+
+    .hs-sk-well-orb img {
+      width: 36px;
+      height: 36px;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 3px rgba(18, 8, 3, 0.5));
+    }
+
+    .hs-sk-well-orb.is-empty img {
+      width: 24px;
+      height: 24px;
+      opacity: 0.58;
+    }
+
+    .hs-sk-well-name {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--hs-cream);
+      line-height: 1.15;
+      max-inline-size: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Fixed-Height Zero-Layout-Shift Super Evolution (Fever) Gauge & CTA */
+    .hs-sk-fever-btn {
+      position: relative;
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      width: 100%;
+      block-size: 46px;
+      padding: 0 11px;
+      border-radius: 12px;
+      border: 2px solid var(--hs-brass);
+      background: var(--farm-wood-well);
+      color: var(--hs-cream);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 800;
+      overflow: hidden;
+      cursor: default;
+      box-shadow: inset 0 2px 5px rgba(18, 8, 3, 0.55);
+      transition: border-color 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .hs-sk-fever-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 0%;
+      background: linear-gradient(90deg, var(--farm-crimson-bot) 0%, var(--farm-fire-mid) 58%, var(--hs-gold) 100%);
+      transition: width 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+      pointer-events: none;
+    }
+
+    .hs-sk-fever-btn.is-active .hs-sk-fever-fill {
+      background: linear-gradient(90deg, var(--hs-gold-deep) 0%, var(--hs-gold) 55%, var(--farm-fire-core) 100%);
+      transition: width 0.08s linear;
+    }
+
+    .hs-sk-fever-left {
+      position: relative;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-inline-size: 0;
+    }
+
+    .hs-sk-fever-left img {
+      width: 20px;
+      height: 20px;
+      object-fit: contain;
+      flex: none;
+      filter: drop-shadow(0 1px 2px rgba(28, 12, 4, 0.8));
+    }
+
+    .hs-sk-fever-label,
+    .hs-sk-fever-pct {
+      position: relative;
+      z-index: 1;
+      text-shadow: 0 1px 2px rgba(28, 12, 4, 0.92);
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .hs-sk-fever-btn.is-ready {
+      cursor: pointer;
+      border-color: var(--farm-fire-core);
+      box-shadow: 0 3px 0 var(--hs-wood), 0 0 16px rgba(255, 133, 27, 0.72);
+      animation: feverPulse 1s ease-in-out infinite;
+    }
+
+    .hs-sk-fever-btn.is-ready .hs-sk-fever-fill {
+      width: 100%;
+      background: linear-gradient(180deg, var(--farm-crimson-top) 0%, var(--farm-crimson-mid) 62%, var(--farm-crimson-bot) 100%);
+    }
+
+    .hs-sk-fever-btn.is-active {
+      border-color: var(--farm-fire-core);
+      box-shadow: 0 3px 0 var(--hs-wood), 0 0 18px rgba(245, 179, 1, 0.82);
+    }
+
+    .hs-sk-fever-btn.is-active .hs-sk-fever-label,
+    .hs-sk-fever-btn.is-active .hs-sk-fever-pct {
+      color: var(--farm-ink-title);
+      text-shadow: 0 1px 0 rgba(255, 246, 220, 0.65);
+    }
+
+    @keyframes feverPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.022); }
+    }
+
+    /* Active Strategy Buttons Row (Hold + Shake) */
+    .hs-sk-tools {
+      flex: none;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .hs-sk-tool-btn {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      block-size: 48px;
+      padding: 4px 8px;
+      border-radius: 11px;
+      border: 2px solid var(--farm-brass-bright);
+      background: linear-gradient(180deg, var(--farm-wood-warm) 0%, var(--farm-wood-dark) 100%);
+      color: var(--hs-cream);
+      font-family: inherit;
+      font-size: 11.5px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 3px 0 var(--hs-wood);
+      transition: transform 0.12s ease, filter 0.14s ease, border-color 0.14s ease;
+    }
+
+    .hs-sk-tool-btn:active:not(:disabled) {
+      transform: translateY(1.5px);
+    }
+
+    .hs-sk-tool-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      filter: grayscale(0.35);
+    }
+
+    .hs-sk-tool-btn img {
+      width: 22px;
+      height: 22px;
+      object-fit: contain;
+      flex: none;
+    }
+
+    .hs-sk-tool-col {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      line-height: 1.15;
+      min-inline-size: 0;
+    }
+
+    .hs-sk-tool-sub {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--farm-brass-bright);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Cozy Parchment Strategy Guide Card (Desktop) */
+    .hs-sk-guide {
+      flex: 1 1 0;
+      min-block-size: 0;
+      overflow-y: auto;
+      padding: 9px 10px;
+      border-radius: 12px;
+      background: linear-gradient(180deg, var(--farm-sheet-top) 0%, var(--farm-sheet-well) 100%);
+      border: 1.5px solid var(--farm-sheet-border);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 11.5px;
+      line-height: 1.42;
+      color: var(--farm-ink-body);
+    }
+
+    .hs-sk-guide h2 {
+      margin: 0;
+      font-family: 'Be Vietnam Pro', 'Be Vietnam Pro Fallback', system-ui, -apple-system, sans-serif;
+      font-size: 13.5px;
+      font-weight: 800;
+      color: var(--farm-ink-title);
+      text-wrap: balance;
+    }
+
+    .hs-sk-guide p {
+      margin: 0;
+      text-wrap: pretty;
+    }
+
+    .hs-sk-key-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .hs-sk-key-list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 3px 6px;
+      border-radius: 7px;
+      background: rgba(176, 125, 67, 0.14);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .hs-sk-kbd {
+      padding: 1px 6px;
+      border-radius: 5px;
+      background: var(--hs-wood);
+      color: var(--farm-brass-bright);
+      font-size: 10px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .hs-sk-jackpot-note {
+      padding: 6px 8px;
+      border-radius: 9px;
+      background: var(--hs-ok-bg);
+      border: 1px solid var(--hs-ok);
+      color: var(--hs-ok);
+      font-size: 11px;
+      font-weight: 700;
+      text-wrap: pretty;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hs-sk-fever-btn { animation: none; }
+      .hs-sk-fever-fill, .hs-sk-evo-node { transition: none; }
+    }
+
+    /* Native <dialog> Game Over Modal */
+    dialog.hs-sk-dialog {
+      padding: 0;
+      border: 3px solid var(--farm-brass-bright);
+      border-radius: 20px;
+      background: linear-gradient(180deg, var(--hs-paper) 0%, var(--hs-paper-2) 100%);
+      color: var(--hs-ink);
+      inline-size: min(410px, calc(100vw - 28px));
+      max-block-size: calc(100dvh - 28px);
+      box-shadow: 0 8px 0 var(--hs-wood), 0 20px 44px rgba(22, 10, 4, 0.65);
+      overflow: hidden;
+    }
+
+    dialog.hs-sk-dialog[open] {
+      display: flex;
+      flex-direction: column;
+    }
+
+    dialog.hs-sk-dialog:modal {
+      overscroll-behavior: contain;
+    }
+
+    dialog.hs-sk-dialog::backdrop {
+      background: rgba(34, 16, 5, 0.72);
+      overflow: hidden;
+      overscroll-behavior: contain;
+    }
+
+    .hs-sk-dlg-head {
+      flex: none;
+      padding: 12px 16px;
+      background: linear-gradient(180deg, var(--hs-forest-2) 0%, var(--hs-forest) 100%);
+      border-bottom: 2px solid var(--farm-brass-bright);
+      color: var(--hs-cream);
+      text-align: center;
+    }
+
+    .hs-sk-dlg-head h2 {
+      margin: 0;
+      font-family: 'Be Vietnam Pro', 'Be Vietnam Pro Fallback', system-ui, -apple-system, sans-serif;
+      font-size: 20px;
+      font-weight: 800;
+      text-wrap: balance;
+    }
+
+    .hs-sk-dlg-body {
+      flex: 1 1 auto;
+      min-block-size: 0;
+      overflow-y: auto;
+      padding: 14px 16px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 11px;
+      text-align: center;
+    }
+
+    .hs-sk-dlg-hero {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 13px;
+      background: var(--farm-sheet-top);
+      border: 1.5px solid var(--farm-sheet-border);
+    }
+
+    .hs-sk-dlg-hero img {
+      width: 44px;
+      height: 44px;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 4px rgba(56, 27, 12, 0.35));
+    }
+
+    .hs-sk-dlg-hero-txt {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      text-align: left;
+    }
+
+    .hs-sk-dlg-hero-lbl {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--hs-ink-soft);
+    }
+
+    .hs-sk-dlg-hero-val {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--farm-ink-title);
+    }
+
+    .hs-sk-dlg-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .hs-sk-dlg-metric {
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: var(--farm-sheet-top);
+      border: 1.5px solid var(--farm-sheet-border);
+    }
+
+    .hs-sk-dlg-metric .m-lbl {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--hs-ink-soft);
+    }
+
+    .hs-sk-dlg-metric .m-val {
+      display: block;
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--farm-ink-title);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .hs-sk-dlg-note {
+      margin: 0;
+      font-size: 12.5px;
+      line-height: 1.45;
+      color: var(--hs-ink-soft);
+      text-wrap: pretty;
+    }
+
+    .hs-sk-dlg-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    .hs-sk-dlg-actions button {
+      flex: 1 1 auto;
+      min-block-size: 44px;
+      font-size: 13.5px;
+    }
+
+    /* =====================================================================
+       RESPONSIVE: PORTRAIT MOBILE & TABLET (<= 840px, tall or narrow viewports)
+       ===================================================================== */
+    @media (max-width: 840px) and (min-height: 521px), (max-width: 560px) {
+      .hs-sk-shell {
+        gap: 4px;
+        padding:
+          max(4px, env(safe-area-inset-top, 0px))
+          max(5px, env(safe-area-inset-right, 0px))
+          max(4px, env(safe-area-inset-bottom, 0px))
+          max(5px, env(safe-area-inset-left, 0px));
+      }
+      .hs-sk-header {
+        padding: 4px 7px;
+        gap: 5px;
+      }
+      .hs-sk-brand img { width: 22px; height: 22px; }
+      .hs-sk-sub { display: none; }
+      .hs-sk-title { font-size: 14px; }
+      .hs-sk-mode-btn {
+        padding: 0 9px;
+        font-size: 11.5px;
+        min-block-size: max(36px, var(--target-size));
+      }
+      .hs-sk-stats {
+        width: 100%;
+        flex-wrap: nowrap;
+        justify-content: space-between;
+        gap: 3px;
+      }
+      .hs-sk-pill {
+        min-block-size: 32px;
+        min-inline-size: 0;
+        padding: 2px 6px;
+        font-size: 11px;
+        gap: 3px;
+        white-space: nowrap;
+      }
+      .hs-sk-pill .lbl { display: none; }
+      .hs-sk-pill img { width: 14px; height: 14px; flex: none; }
+      .hs-sk-pill.is-combo { min-inline-size: 62px; }
+      .hs-sk-icon-btn {
+        min-block-size: max(36px, var(--target-size));
+        min-inline-size: 0;
+        padding: 0 7px;
+        font-size: 11px;
+      }
+      .hs-sk-banner {
+        bottom: 8px;
+        max-inline-size: calc(100% - 14px);
+        padding: 5px 10px;
+        font-size: 11px;
+      }
+      .hs-sk-evo-bar {
+        padding: 3px 5px;
+        gap: 4px;
+      }
+      .hs-sk-evo-label,
+      .hs-sk-evo-peak { display: none; }
+      .hs-sk-evo-track { gap: 2px; }
+      .hs-sk-evo-node { width: 26px; height: 26px; }
+      .hs-sk-evo-node img { width: 19px; height: 19px; }
+      .hs-sk-evo-node .evo-num { min-width: 12px; height: 12px; font-size: 7.5px; }
+      .hs-sk-evo-sep { display: none; }
+
+      .hs-sk-stage-area {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr) auto;
+        gap: 5px;
+      }
+      .hs-sk-board-frame {
+        padding: 4px;
+        border-width: 2px;
+        border-radius: 15px;
+      }
+      .hs-sk-dock {
+        padding: 6px 7px;
+        gap: 5px;
+        border-radius: 14px;
+      }
+      .hs-sk-guide { display: none; }
+      .hs-sk-preview-pair {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 5px;
+      }
+      .hs-sk-well {
+        flex-direction: row;
+        justify-content: flex-start;
+        gap: 7px;
+        min-block-size: 46px;
+        padding: 4px 8px;
+        text-align: left;
+      }
+      .hs-sk-well-orb {
+        width: 34px;
+        height: 34px;
+        flex: none;
+      }
+      .hs-sk-well-orb img { width: 24px; height: 24px; }
+      .hs-sk-well-orb.is-empty img { width: 18px; height: 18px; }
+      .hs-sk-well-meta {
+        display: flex;
+        flex-direction: column;
+        min-inline-size: 0;
+      }
+      .hs-sk-fever-btn {
+        block-size: 44px;
+        font-size: 11.5px;
+      }
+      .hs-sk-tool-btn {
+        block-size: 44px;
+        font-size: 11px;
+      }
+      .hs-sk-tool-btn img { width: 20px; height: 20px; }
+    }
+
+    /* Tablet Portrait (600px–840px & tall) */
+    @media (min-width: 600px) and (max-width: 840px) and (min-height: 860px) {
+      .hs-sk-pill .lbl { display: inline; }
+      .hs-sk-stats { width: auto; }
+      .hs-sk-evo-label { display: inline-flex; }
+      .hs-sk-evo-node { width: 32px; height: 32px; }
+      .hs-sk-evo-node img { width: 24px; height: 24px; }
+      .hs-sk-dock {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+        align-items: center;
+        gap: 8px;
+      }
+      .hs-sk-dock-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+    }
+
+    /* Compact Portrait Mobile (iPhone SE <= 700px tall) */
+    @media (max-width: 480px) and (min-height: 521px) and (max-height: 700px) {
+      .hs-sk-header { padding: 3px 6px; gap: 3px; }
+      .hs-sk-title { font-size: 13.5px; }
+      .hs-sk-mode-btn { min-block-size: max(36px, var(--target-size)); padding: 0 8px; font-size: 11px; }
+      .hs-sk-icon-btn { min-block-size: max(36px, var(--target-size)); padding: 0 6px; font-size: 10.5px; }
+      .hs-sk-pill { padding: 2px 5px; font-size: 10.5px; }
+      .hs-sk-pill.is-combo { min-inline-size: 58px; }
+      .hs-sk-evo-node { width: 24px; height: 24px; }
+      .hs-sk-evo-node img { width: 17px; height: 17px; }
+      .hs-sk-dock { padding: 5px 6px; gap: 4px; }
+      .hs-sk-well { min-block-size: max(42px, var(--target-size)); padding: 3px 6px; }
+      .hs-sk-well-orb { width: 30px; height: 30px; }
+      .hs-sk-well-orb img { width: 21px; height: 21px; }
+      .hs-sk-fever-btn { block-size: max(42px, var(--target-size)); }
+      .hs-sk-tool-btn { block-size: max(42px, var(--target-size)); }
+    }
+
+    /* =====================================================================
+       RESPONSIVE: MOBILE LANDSCAPE & SHORT VIEWPORTS (max-height: 520px)
+       ===================================================================== */
+    @media (max-height: 520px) and (min-width: 561px) {
+      .hs-sk-shell {
+        gap: 4px;
+        padding:
+          max(4px, env(safe-area-inset-top, 0px))
+          max(8px, env(safe-area-inset-right, 0px))
+          max(4px, env(safe-area-inset-bottom, 0px))
+          max(8px, env(safe-area-inset-left, 0px));
+      }
+      .hs-sk-header {
+        flex-wrap: nowrap;
+        padding: 3px 8px;
+        gap: 5px;
+        border-radius: 10px;
+      }
+      .hs-sk-brand img { width: 20px; height: 20px; }
+      .hs-sk-title { font-size: 13px; white-space: nowrap; }
+      .hs-sk-sub { display: none; }
+      .hs-sk-mode-btn {
+        min-block-size: 40px;
+        padding: 0 9px;
+        font-size: 11px;
+      }
+      .hs-sk-stats {
+        flex-wrap: nowrap;
+        gap: 4px;
+      }
+      .hs-sk-pill {
+        min-block-size: 30px;
+        padding: 2px 7px;
+        font-size: 11px;
+      }
+      .hs-sk-pill .lbl { display: none; }
+      .hs-sk-pill img { width: 14px; height: 14px; }
+      .hs-sk-pill.is-combo { min-inline-size: 68px; }
+      .hs-sk-icon-btn {
+        min-block-size: 40px;
+        padding: 0 8px;
+        font-size: 11px;
+      }
+      .hs-sk-evo-bar {
+        padding: 2px 8px;
+        gap: 5px;
+        border-radius: 9px;
+      }
+      .hs-sk-evo-label { font-size: 10px; padding: 2px 6px; }
+      .hs-sk-evo-peak { display: none; }
+      .hs-sk-evo-node { width: 23px; height: 23px; }
+      .hs-sk-evo-node img { width: 16px; height: 16px; }
+      .hs-sk-evo-node .evo-num { display: none; }
+      .hs-sk-evo-sep { font-size: 9px; }
+
+      .hs-sk-stage-area {
+        grid-template-columns: minmax(0, 1fr) minmax(236px, min(264px, 38vw));
+        grid-template-rows: minmax(0, 1fr);
+        gap: 8px;
+      }
+      .hs-sk-board-frame {
+        padding: 4px;
+        border-width: 2px;
+        border-radius: 13px;
+      }
+      .hs-sk-dock {
+        padding: 6px;
+        gap: 5px;
+        border-radius: 12px;
+        justify-content: space-between;
+      }
+      .hs-sk-guide { display: none; }
+      .hs-sk-well {
+        min-block-size: 86px;
+        padding: 5px 5px;
+      }
+      .hs-sk-well-orb { width: 40px; height: 40px; }
+      .hs-sk-well-orb img { width: 28px; height: 28px; }
+      .hs-sk-well-name { font-size: 10px; }
+      .hs-sk-fever-btn {
+        block-size: 40px;
+        font-size: 11px;
+        padding: 0 8px;
+      }
+      .hs-sk-tool-btn {
+        block-size: 40px;
+        font-size: 10.5px;
+        padding: 3px 6px;
+        gap: 4px;
+      }
+      .hs-sk-tool-btn img { width: 18px; height: 18px; }
+    }
+
+    @media (max-height: 520px) and (min-width: 561px) and (max-width: 740px) {
+      .hs-sk-title-wrap { display: none; }
+      .hs-sk-mode-btn { padding: 0 7px; font-size: 10.5px; }
+      .hs-sk-icon-btn { padding: 0 7px; font-size: 10.5px; }
+    }
+
+    /* Helper wrapper for dock meta layout */
+    .hs-sk-well-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      min-inline-size: 0;
+      max-inline-size: 100%;
+    }
+
+    @media (max-width: 840px) and (min-height: 521px), (max-width: 560px) {
+      .hs-sk-well-meta { align-items: flex-start; }
+    }
+
+    .hs-sk-dock-actions {
+      flex: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    /* =====================================================================
+       HPVN EMBED MODE (?embed=1) — Compact Fit Inside #puzzleArcadeDialog
+       ===================================================================== */
+    body.is-embed .hs-sk-shell {
+      padding: 5px 7px;
+      gap: 5px;
+      box-shadow: none;
+    }
+
+    body.is-embed .hs-sk-header {
+      padding: 4px 8px;
+      gap: 5px;
+      border-radius: 11px;
+    }
+
+    body.is-embed .hs-sk-brand {
+      display: none;
+    }
+
+    body.is-embed .hs-sk-evo-bar {
+      padding: 3px 8px;
+      gap: 6px;
+      border-radius: 10px;
+    }
+
+    body.is-embed .hs-sk-evo-node {
+      width: 26px;
+      height: 26px;
+    }
+
+    body.is-embed .hs-sk-evo-node img {
+      width: 19px;
+      height: 19px;
+    }
+
+    body.is-embed .hs-sk-board-frame {
+      padding: 5px;
+      border-radius: 16px;
+    }
+
+    body.is-embed .hs-sk-dock {
+      padding: 7px;
+      gap: 6px;
+      border-radius: 14px;
+    }
+
+    @media (min-width: 841px) and (min-height: 521px) {
+      body.is-embed .hs-sk-stage-area {
+        grid-template-columns: minmax(0, 1fr) 244px;
+        gap: 8px;
+      }
+      body.is-embed .hs-sk-well {
+        min-block-size: 94px;
+        padding: 5px;
+      }
+      body.is-embed .hs-sk-well-orb {
+        width: 44px;
+        height: 44px;
+      }
+      body.is-embed .hs-sk-well-orb img {
+        width: 30px;
+        height: 30px;
+      }
+      body.is-embed .hs-sk-fever-btn {
+        block-size: 42px;
+      }
+      body.is-embed .hs-sk-tool-btn {
+        block-size: 44px;
+      }
+    }
+
+    @media (max-height: 520px) and (min-width: 561px) {
+      body.is-embed .hs-sk-shell {
+        padding: 3px 6px;
+        gap: 3px;
+      }
+      body.is-embed .hs-sk-stage-area {
+        grid-template-columns: minmax(0, 1fr) minmax(228px, min(252px, 36vw));
+        gap: 6px;
+      }
+      body.is-embed .hs-sk-dock {
+        padding: 5px;
+        gap: 4px;
+      }
+      body.is-embed .hs-sk-well {
+        min-block-size: 76px;
+        padding: 4px;
+      }
+      body.is-embed .hs-sk-well-orb {
+        width: 36px;
+        height: 36px;
+      }
+      body.is-embed .hs-sk-well-orb img {
+        width: 24px;
+        height: 24px;
+      }
+      body.is-embed .hs-sk-fever-btn {
+        block-size: 38px;
+      }
+      body.is-embed .hs-sk-tool-btn {
+        block-size: 38px;
+      }
+    }
+
+    @media (max-width: 600px) {
+      body.is-embed .hs-sk-shell {
+        padding: 3px 4px;
+        gap: 3px;
+      }
+      body.is-embed .hs-sk-header {
+        padding: 3px 5px;
+        gap: 4px;
+        justify-content: center;
+      }
+      body.is-embed .hs-sk-modes {
+        width: 100%;
+        justify-content: center;
+      }
+      body.is-embed .hs-sk-mode-btn {
+        flex: 1 1 0;
+        min-block-size: 32px;
+        padding: 0 6px;
+        font-size: 11px;
+      }
+      body.is-embed .hs-sk-stats {
+        width: 100%;
+        gap: 3px;
+      }
+      body.is-embed .hs-sk-pill {
+        min-block-size: 28px;
+        padding: 2px 5px;
+        font-size: 10.5px;
+      }
+      body.is-embed .hs-sk-pill.is-combo {
+        min-inline-size: 54px;
+      }
+      body.is-embed .hs-sk-icon-btn {
+        min-block-size: 30px;
+        padding: 0 6px;
+        font-size: 10.5px;
+      }
+      body.is-embed .hs-sk-evo-bar {
+        padding: 2px 4px;
+      }
+      body.is-embed .hs-sk-evo-node {
+        width: 23px;
+        height: 23px;
+      }
+      body.is-embed .hs-sk-evo-node img {
+        width: 16px;
+        height: 16px;
+      }
+      body.is-embed .hs-sk-evo-node .evo-num {
+        display: none;
+      }
+      body.is-embed .hs-sk-stage-area {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr) auto;
+        gap: 4px;
+      }
+      body.is-embed .hs-sk-board-frame {
+        padding: 3px;
+        border-radius: 13px;
+      }
+      body.is-embed .hs-sk-dock {
+        padding: 4px 5px;
+        gap: 4px;
+        border-radius: 12px;
+      }
+      body.is-embed .hs-sk-well {
+        min-block-size: 38px;
+        padding: 3px 6px;
+        gap: 5px;
+      }
+      body.is-embed .hs-sk-well-orb {
+        width: 28px;
+        height: 28px;
+      }
+      body.is-embed .hs-sk-well-orb img {
+        width: 20px;
+        height: 20px;
+      }
+      body.is-embed .hs-sk-well-head {
+        font-size: 9.5px;
+      }
+      body.is-embed .hs-sk-well-name {
+        font-size: 10.5px;
+      }
+      body.is-embed .hs-sk-dock-actions {
+        gap: 4px;
+      }
+      body.is-embed .hs-sk-fever-btn {
+        block-size: 36px;
+        font-size: 11px;
+        padding: 0 8px;
+      }
+      body.is-embed .hs-sk-tool-btn {
+        block-size: 38px;
+        font-size: 10.5px;
+        padding: 2px 6px;
+      }
+      body.is-embed .hs-sk-tool-btn img {
+        width: 18px;
+        height: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="hs-sk-shell">
+    <!-- Top Header -->
+    <header class="hs-sk-header">
+      <div class="hs-sk-brand">
+        <img src="../sprites/m3_farm_pumpkin.webp" alt="" width="28" height="28" />
+        <div class="hs-sk-title-wrap">
+          <h1 class="hs-sk-title">Hợp Quả Hang Sóc</h1>
+          <span class="hs-sk-sub">Suika Game 2026 · Thùng Gỗ &amp; Hành Tinh 360°</span>
+        </div>
+      </div>
+
+      <div class="hs-sk-modes" role="tablist" aria-label="Chọn chế độ chơi">
+        <button id="btnModeClassic" type="button" role="tab" aria-selected="true" class="hs-sk-mode-btn">Thùng Gỗ 2026</button>
+        <button id="btnModePlanet" type="button" role="tab" aria-selected="false" class="hs-sk-mode-btn">Hành Tinh 360°</button>
+      </div>
+
+      <div class="hs-sk-stats">
+        <div class="hs-sk-pill" aria-label="Điểm hiện tại">
+          <img src="../sprites/m3_icon_star.webp" alt="" />
+          <span class="lbl">Điểm</span>
+          <span id="uiScore">0</span>
+        </div>
+        <div class="hs-sk-pill" aria-label="Kỷ lục cao nhất">
+          <img src="../sprites/ui_icon_golden_sickle.webp" alt="" />
+          <span class="lbl">Kỷ lục</span>
+          <span id="uiBest">0</span>
+        </div>
+        <div id="uiComboPill" class="hs-sk-pill is-combo" aria-label="Chuỗi hợp quả">
+          <span id="uiComboTxt">Combo ×1</span>
+        </div>
+        <button id="btnMute" type="button" class="hs-sk-icon-btn" aria-pressed="false" aria-label="Bật tắt âm thanh">Âm: Bật</button>
+        <button id="btnRestart" type="button" class="hs-sk-icon-btn is-gold">Ván mới</button>
+      </div>
+    </header>
+
+    <!-- 11-Tier Harvest Evolution Wheel / Ladder Ribbon -->
+    <section class="hs-sk-evo-bar" aria-label="Vòng tiến hóa 11 nông sản Hang Sóc">
+      <span class="hs-sk-evo-label">Vòng Tiến Hóa 1→11</span>
+      <div id="uiEvoTrack" class="hs-sk-evo-track"></div>
+      <span id="uiEvoPeak" class="hs-sk-evo-peak">Đỉnh: Việt Quất Sương</span>
+    </section>
+
+    <!-- Main Arena -->
+    <section class="hs-sk-stage-area">
+      <div class="hs-sk-board-wrap" id="boardWrap">
+        <div id="boardBanner" class="hs-sk-banner" role="status"></div>
+        <div id="boardFrame" class="hs-sk-board-frame">
+          <canvas id="gameCanvas" aria-label="Khu vực chơi Hợp Quả Hang Sóc"></canvas>
+        </div>
+      </div>
+
+      <!-- Fixed-Height Strategy Dock -->
+      <aside class="hs-sk-dock" aria-label="Bảng dự báo quả và kỹ năng chiến thuật">
+        <div class="hs-sk-preview-pair">
+          <div class="hs-sk-well" aria-label="Quả kế tiếp">
+            <div id="uiNextOrb" class="hs-sk-well-orb has-fruit">
+              <img id="uiNextImg" src="../sprites/m3_farm_blueberry.webp" alt="" />
+            </div>
+            <div class="hs-sk-well-meta">
+              <span class="hs-sk-well-head">Kế Tiếp</span>
+              <span id="uiNextName" class="hs-sk-well-name">Việt Quất Sương</span>
+            </div>
+          </div>
+
+          <button id="btnHoldWell" type="button" class="hs-sk-well" title="Giữ hoặc đổi quả hiện tại (Phím C · 1 lần/lượt thả)">
+            <div id="uiHoldOrb" class="hs-sk-well-orb is-empty">
+              <img id="uiHoldImg" src="../sprites/m3_boost_shuffle.webp" alt="" />
+            </div>
+            <div class="hs-sk-well-meta">
+              <span class="hs-sk-well-head">Giữ Quả (C)</span>
+              <span id="uiHoldName" class="hs-sk-well-name">Trống</span>
+            </div>
+          </button>
+        </div>
+
+        <div class="hs-sk-dock-actions">
+          <!-- Fixed-Height Super Evolution Gauge + CTA (ZERO Layout Shift) -->
+          <button id="btnFever" type="button" class="hs-sk-fever-btn" aria-disabled="true" title="Tích đầy 100% Siêu Tiến Hóa để kích hoạt 10 giây ×2 điểm, +1 Lắc Thùng và Quả Cầu Vồng vạn năng! (Phím F)">
+            <span id="uiFeverFill" class="hs-sk-fever-fill"></span>
+            <span class="hs-sk-fever-left">
+              <img src="../sprites/m3_sp_snitch.webp" alt="" />
+              <span id="uiFeverLabel" class="hs-sk-fever-label">Siêu Tiến Hóa</span>
+            </span>
+            <span id="uiFeverPct" class="hs-sk-fever-pct">0%</span>
+          </button>
+
+          <!-- Hold + Shake Strategy Buttons -->
+          <div class="hs-sk-tools">
+            <button id="btnHold" type="button" class="hs-sk-tool-btn" title="Giữ quả hiện tại hoặc đổi với quả đang giữ (Phím C)">
+              <img src="../sprites/m3_boost_shuffle.webp" alt="" />
+              <span class="hs-sk-tool-col">
+                <span>Giữ / Đổi</span>
+                <span id="uiHoldStatus" class="hs-sk-tool-sub">Phím C</span>
+              </span>
+            </button>
+            <button id="btnShake" type="button" class="hs-sk-tool-btn" title="Lắc mạnh để gỡ quả kẹt và kích hoạt chuỗi hợp quả! Hồi +1 khi đạt Bắp Vàng Phép hoặc kích hoạt Siêu Tiến Hóa (Phím S)">
+              <img src="../sprites/m3_boost_hammer.webp" alt="" />
+              <span class="hs-sk-tool-col">
+                <span>Lắc Thùng</span>
+                <span id="uiShakeQty" class="hs-sk-tool-sub">×3 (S)</span>
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Cozy Parchment Guide (Desktop) -->
+        <div class="hs-sk-guide">
+          <h2>Mẹo Mùa Gặt 2026</h2>
+          <p id="uiModeTip">Kéo hoặc chạm thả quả vào thùng gỗ. Hai quả cùng bậc chạm nhau sẽ hợp thành nông sản bậc cao hơn!</p>
+          <ul class="hs-sk-key-list">
+            <li><span>Di chuyển / Xoay quỹ đạo</span><span class="hs-sk-kbd">Chuột · ← →</span></li>
+            <li><span>Thả / Phóng quả</span><span class="hs-sk-kbd">Click · Space</span></li>
+            <li><span>Giữ quả / Lắc thùng</span><span class="hs-sk-kbd">C · S</span></li>
+            <li><span>Siêu Tiến Hóa (Quả Cầu Vồng)</span><span class="hs-sk-kbd">F</span></li>
+          </ul>
+          <div class="hs-sk-jackpot-note">
+            Hợp 2 <strong>Bí Ngô Hoàng Kim</strong> nổ <strong>SIÊU THU HOẠCH +3.000</strong> và dọn trống diện tích!
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <div id="srLive" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Native <dialog> Game Over Modal -->
+  <dialog id="gameOverDialog" class="hs-sk-dialog" aria-labelledby="dlgTitle">
+    <div class="hs-sk-dlg-head">
+      <h2 id="dlgTitle">Tổng Kết Mùa Gặt Hang Sóc</h2>
+    </div>
+    <div class="hs-sk-dlg-body">
+      <div class="hs-sk-dlg-hero">
+        <img id="dlgPeakImg" src="../sprites/m3_farm_pumpkin.webp" alt="" />
+        <div class="hs-sk-dlg-hero-txt">
+          <span class="hs-sk-dlg-hero-lbl">Nông sản bậc cao nhất</span>
+          <span id="dlgPeakName" class="hs-sk-dlg-hero-val">Việt Quất Sương (Bậc 1)</span>
+        </div>
+      </div>
+
+      <div class="hs-sk-dlg-grid">
+        <div class="hs-sk-dlg-metric">
+          <span class="m-lbl">Tổng Điểm</span>
+          <span id="dlgScore" class="m-val">0</span>
+        </div>
+        <div class="hs-sk-dlg-metric">
+          <span class="m-lbl">Kỷ Lục Chế Độ</span>
+          <span id="dlgBest" class="m-val">0</span>
+        </div>
+        <div class="hs-sk-dlg-metric">
+          <span class="m-lbl">Chuỗi Hợp Đỉnh</span>
+          <span id="dlgMaxCombo" class="m-val">×1</span>
+        </div>
+        <div class="hs-sk-dlg-metric">
+          <span class="m-lbl">Lượt Hợp Quả</span>
+          <span id="dlgMerges" class="m-val">0</span>
+        </div>
+      </div>
+
+      <p id="dlgNote" class="hs-sk-dlg-note"></p>
+
+      <form method="dialog" class="hs-sk-dlg-actions">
+        <button id="btnDlgSwitch" type="submit" value="switch" class="hs-sk-icon-btn">Đổi Chế Độ</button>
+        <button id="btnDlgReplay" type="submit" value="replay" class="hs-sk-icon-btn is-gold" autofocus>Chơi Lại Ngay</button>
+      </form>
+    </div>
+  </dialog>
+
+  <script>
+  (() => {
+    'use strict';
+
+    // =========================================================================
+    // 1. CONSTANTS, EMBED BRIDGE, 11-TIER HANG SÓC HARVEST RING & SAFE STORAGE
+    // =========================================================================
+    const URL_PARAMS = new URLSearchParams(location.search);
+    const IS_EMBED = URL_PARAMS.get('embed') === '1';
+    const EMBED_TOKEN = URL_PARAMS.get('token') || '';
+    const BRIDGE_CHANNEL = 'hs-bonus-arcade';
+    const GAME_ID = 'suika';
+    const SCORE_MILESTONES = [1000, 2500, 5000, 8000];
+    const PUMPKIN_MILESTONE_IDX = 5;
+
+    if (IS_EMBED) {
+      document.body.classList.add('is-embed');
+    }
+
+    let reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    const STORAGE_KEYS = {
+      bestClassic: 'hangsoc_suika_best_classic_v1',
+      bestPlanet: 'hangsoc_suika_best_planet_v1',
+      muted: 'hangsoc_suika_muted_v1',
+    };
+
+    const embedMemoryStore = new Map();
+
+    function safeGet(key, fallback = '') {
+      if (IS_EMBED) {
+        return embedMemoryStore.has(key) ? embedMemoryStore.get(key) : fallback;
+      }
+      try {
+        const val = localStorage.getItem(key);
+        return val === null ? fallback : val;
+      } catch {
+        return fallback;
+      }
+    }
+
+    function safeSet(key, val) {
+      if (IS_EMBED) {
+        embedMemoryStore.set(key, String(val));
+        return;
+      }
+      try {
+        localStorage.setItem(key, String(val));
+      } catch {}
+    }
+
+    function postBridgeMessage(type, payload = {}) {
+      if (!IS_EMBED || !window.parent || window.parent === window) return;
+      try {
+        window.parent.postMessage(
+          {
+            channel: BRIDGE_CHANNEL,
+            type,
+            gameId: GAME_ID,
+            token: EMBED_TOKEN,
+            ...payload,
+          },
+          '*'
+        );
+      } catch {}
+    }
+
+    // 11-Tier Hang Sóc Harvest Evolution Ring
+    const TIERS = [
+      {
+        tier: 0, rank: 1, name: 'Việt Quất Sương', r: 16, score: 0,
+        sprite: '../sprites/m3_farm_blueberry.webp',
+        orbTop: '#95b2ff', orbMid: '#4c64d4', orbBot: '#212d78', rim: '#1a2257', cssVar: '--orb-0',
+      },
+      {
+        tier: 1, rank: 2, name: 'Dâu Hồng Ngọc', r: 21, score: 10,
+        sprite: '../sprites/m3_farm_strawberry.webp',
+        orbTop: '#ff96a6', orbMid: '#e03c52', orbBot: '#8f162b', rim: '#610c1c', cssVar: '--orb-1',
+      },
+      {
+        tier: 2, rank: 3, name: 'Mận Khí Cầu', r: 26, score: 25,
+        sprite: '../sprites/m3_farm_plum.webp',
+        orbTop: '#d7a8ff', orbMid: '#8a49c4', orbBot: '#4d1f7c', rim: '#351159', cssVar: '--orb-2',
+      },
+      {
+        tier: 3, rank: 4, name: 'Quất Vàng', r: 32, score: 50,
+        sprite: '../sprites/ui_icon_crop_vn_noel_golden_kumquat.webp',
+        orbTop: '#ffe082', orbMid: '#f29a1f', orbBot: '#b35b00', rim: '#783a00', cssVar: '--orb-3',
+      },
+      {
+        tier: 4, rank: 5, name: 'Cà Chua Đỏ', r: 38, score: 100,
+        sprite: '../sprites/ui_icon_crop_ruby_tomato.webp',
+        orbTop: '#ff9b85', orbMid: '#e64935', orbBot: '#991e12', rim: '#661108', cssVar: '--orb-4',
+      },
+      {
+        tier: 5, rank: 6, name: 'Táo Hang Sóc', r: 45, score: 180,
+        sprite: '../sprites/ui_icon_crop_burrow_apple.webp',
+        orbTop: '#ff8a8a', orbMid: '#c92b2b', orbBot: '#7a0f14', rim: '#4f080b', cssVar: '--orb-5',
+      },
+      {
+        tier: 6, rank: 7, name: 'Lê Mật Vàng', r: 53, score: 300,
+        sprite: '../sprites/m3_farm_pear.webp',
+        orbTop: '#e7ff87', orbMid: '#9ec92a', orbBot: '#557d0c', rim: '#365405', cssVar: '--orb-6',
+      },
+      {
+        tier: 7, rank: 8, name: 'Khoai Tây Khổng Lồ', r: 61, score: 500,
+        sprite: '../sprites/ui_icon_crop_burrow_potato.webp',
+        orbTop: '#f5d29c', orbMid: '#c98f4a', orbBot: '#7d4d1d', rim: '#54300d', cssVar: '--orb-7',
+      },
+      {
+        tier: 8, rank: 9, name: 'Bắp Vàng Phép', r: 70, score: 800,
+        sprite: '../sprites/ui_icon_crop_golden_corn.webp',
+        orbTop: '#fff59d', orbMid: '#f5c316', orbBot: '#b57b00', rim: '#784e00', cssVar: '--orb-8',
+      },
+      {
+        tier: 9, rank: 10, name: 'Bắp Cải Giòn', r: 80, score: 1300,
+        sprite: '../sprites/ui_icon_crop_crisp_cabbage.webp',
+        orbTop: '#9ef5aa', orbMid: '#3ba655', orbBot: '#18632d', rim: '#0d401b', cssVar: '--orb-9',
+      },
+      {
+        tier: 10, rank: 11, name: 'Bí Ngô Hoàng Kim', r: 92, score: 2000,
+        sprite: '../sprites/m3_farm_pumpkin.webp',
+        orbTop: '#fff4a3', orbMid: '#ff8811', orbBot: '#b83c00', rim: '#6b1e00', cssVar: '--orb-10',
+      },
+    ];
+
+    const WILDCARD_TIER = -1;
+    const WILDCARD_BASE_R = 26;
+    const JACKPOT_SCORE = 3000;
+    const PLANET_SCALE = 0.72;
+    const MAX_SHAKES = 5;
+    const OVERFLOW_LIMIT = 5.0;
+    const DROP_COOLDOWN = 0.38;
+    const FEVER_DURATION = 10.0;
+    const COMBO_WINDOW = 1.45;
+    const FIXED_DT = 1 / 60;
+    const SUBSTEPS = 8;
+
+    // Virtual World Geometry (resolution-independent physics!)
+    const CLASSIC_WORLD = {
+      w: 480,
+      h: 660,
+      boxLeft: 20,
+      boxRight: 460,
+      boxTop: 108,
+      boxBottom: 638,
+      dangerY: 128,
+      spawnY: 54,
+      gravity: 1120,
+    };
+
+    const PLANET_WORLD = {
+      w: 640,
+      h: 640,
+      cx: 320,
+      cy: 320,
+      coreVisualR: 26,
+      dangerR: 236,
+      orbitR: 278,
+      outerWallR: 306,
+      gravity: 780,
+      launchSpeed: 280,
+    };
+
+    // Preload all sprites for Canvas2D
+    const SPRITE_IMG = new Map();
+    for (const t of TIERS) {
+      const img = new Image();
+      img.src = t.sprite;
+      SPRITE_IMG.set(t.tier, img);
+    }
+    const SNITCH_IMG = new Image();
+    SNITCH_IMG.src = '../sprites/m3_sp_snitch.webp';
+    SPRITE_IMG.set(WILDCARD_TIER, SNITCH_IMG);
+
+    // =========================================================================
+    // 2. WEB AUDIO SYNTHESIZER (DynamicsCompressorNode + Cached Noise)
+    // =========================================================================
+    let audioCtx = null;
+    let masterOut = null;
+    let cachedNoiseBuf = null;
+    let soundEnabled = safeGet(STORAGE_KEYS.muted, '0') !== '1';
+    let lastThudTime = 0;
+
+    function ensureAudio() {
+      if (!soundEnabled) return null;
+      if (!audioCtx) {
+        try {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return null;
+          audioCtx = new AC();
+          const comp = audioCtx.createDynamicsCompressor();
+          comp.threshold.value = -12;
+          comp.knee.value = 18;
+          comp.ratio.value = 6;
+          comp.connect(audioCtx.destination);
+          masterOut = comp;
+
+          const len = Math.floor(audioCtx.sampleRate * 0.36);
+          cachedNoiseBuf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+          const ch = cachedNoiseBuf.getChannelData(0);
+          for (let i = 0; i < len; i++) {
+            ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.5);
+          }
+        } catch {
+          return null;
+        }
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+      }
+      return audioCtx;
+    }
+
+    function playDropSfx(isWildcard) {
+      const ctx = ensureAudio();
+      if (!ctx || !masterOut) return;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = isWildcard ? 'sine' : 'triangle';
+      osc.frequency.setValueAtTime(isWildcard ? 660 : 320, now);
+      osc.frequency.exponentialRampToValueAtTime(isWildcard ? 990 : 148, now + 0.085);
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.095);
+      osc.connect(gain).connect(masterOut);
+      osc.start(now);
+      osc.stop(now + 0.1);
+    }
+
+    function playSoftThud(intensity) {
+      const ctx = ensureAudio();
+      if (!ctx || !masterOut) return;
+      const nowMs = performance.now();
+      if (nowMs - lastThudTime < 55) return;
+      lastThudTime = nowMs;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const vol = Math.min(0.11, 0.025 + intensity * 0.07);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(125 + intensity * 45, now);
+      osc.frequency.exponentialRampToValueAtTime(58, now + 0.055);
+      gain.gain.setValueAtTime(vol, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+      osc.connect(gain).connect(masterOut);
+      osc.start(now);
+      osc.stop(now + 0.065);
+    }
+
+    // Ascending warm Hang Sóc marimba + pop scale mapped to tier & combo
+    const MERGE_NOTES = [293.66, 329.63, 392.00, 440.00, 523.25, 587.33, 659.25, 783.99, 880.00, 1046.50, 1174.66];
+    function playMergeSfx(newTier, combo) {
+      const ctx = ensureAudio();
+      if (!ctx || !masterOut) return;
+      const now = ctx.currentTime;
+      const baseFreq = MERGE_NOTES[Math.min(MERGE_NOTES.length - 1, Math.max(0, newTier))];
+      const comboLift = Math.pow(1.045, Math.min(8, Math.max(0, combo - 1)));
+      const freq = baseFreq * comboLift;
+
+      // Warm marimba fundamental
+      const osc1 = ctx.createOscillator();
+      const g1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(freq * 0.84, now);
+      osc1.frequency.exponentialRampToValueAtTime(freq, now + 0.03);
+      g1.gain.setValueAtTime(0.24, now);
+      g1.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+      osc1.connect(g1).connect(masterOut);
+      osc1.start(now);
+      osc1.stop(now + 0.25);
+
+      // Crisp woody overtone pop
+      const osc2 = ctx.createOscillator();
+      const g2 = ctx.createGain();
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(freq * 2.0, now);
+      osc2.frequency.exponentialRampToValueAtTime(freq * 1.5, now + 0.09);
+      g2.gain.setValueAtTime(0.11, now);
+      g2.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+      osc2.connect(g2).connect(masterOut);
+      osc2.start(now);
+      osc2.stop(now + 0.12);
+
+      // Extra bell chime on Tier 7+
+      if (newTier >= 6) {
+        const osc3 = ctx.createOscillator();
+        const g3 = ctx.createGain();
+        osc3.type = 'sine';
+        osc3.frequency.setValueAtTime(freq * 1.5, now + 0.035);
+        g3.gain.setValueAtTime(0.14, now + 0.035);
+        g3.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+        osc3.connect(g3).connect(masterOut);
+        osc3.start(now + 0.035);
+        osc3.stop(now + 0.4);
+      }
+    }
+
+    function playJackpotSfx() {
+      const ctx = ensureAudio();
+      if (!ctx || !masterOut) return;
+      const now = ctx.currentTime;
+      const chord = [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98];
+      chord.forEach((f, idx) => {
+        const t = now + idx * 0.055;
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = idx % 2 === 0 ? 'triangle' : 'sine';
+        osc.frequency.setValueAtTime(f, t);
+        g.gain.setValueAtTime(0.2, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.42);
+        osc.connect(g).connect(masterOut);
+        osc.start(t);
+        osc.stop(t + 0.44);
+      });
+    }
+
+    function playHoldSfx() {
+      const ctx = ensureAudio();
+      if (!ctx || !masterOut) return;
+      const now = ctx.currentTime;
+      [340, 480].forEach((f, i) => {
+        const t = now + i * 0.045;
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(f, t);
+        g.gain.setValueAtTime(0.15, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.075);
+        osc.connect(g).connect(masterOut);
+        osc.start(t);
+        osc.stop(t + 0.08);
+      });
+    }
+
+    function playShakeSfx() {
+      const ctx = ensureAudio();
+      if (!ctx || !masterOut) return;
+      const now = ctx.currentTime;
+      if (cachedNoiseBuf) {
+        const src = ctx.createBufferSource();
+        src.buffer = cachedNoiseBuf;
+        const flt = ctx.createBiquadFilter();
+        flt.type = 'bandpass';
+        flt.frequency.setValueAtTime(220, now);
+        flt.Q.value = 1.4;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.32, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+        src.connect(flt).connect(g).connect(masterOut);
+        src.start(now);
+        src.stop(now + 0.3);
+      }
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(115, now);
+      osc.frequency.exponentialRampToValueAtTime(52, now + 0.18);
+      g.gain.setValueAtTime(0.14, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+      osc.connect(g).connect(masterOut);
+      osc.start(now);
+      osc.stop(now + 0.21);
+    }
+
+    function playFeverSfx() {
+      const ctx = ensureAudio();
+      if (!ctx || !masterOut) return;
+      const now = ctx.currentTime;
+      const notes = [440, 554.37, 659.25, 880, 1108.73];
+      notes.forEach((f, i) => {
+        const t = now + i * 0.05;
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(f, t);
+        g.gain.setValueAtTime(0.19, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.34);
+        osc.connect(g).connect(masterOut);
+        osc.start(t);
+        osc.stop(t + 0.36);
+      });
+    }
+
+    function playDangerTickSfx(secsLeft) {
+      const ctx = ensureAudio();
+      if (!ctx || !masterOut) return;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'triangle';
+      const pitch = 440 + (5 - secsLeft) * 75;
+      osc.frequency.setValueAtTime(pitch, now);
+      osc.frequency.exponentialRampToValueAtTime(pitch * 0.72, now + 0.07);
+      g.gain.setValueAtTime(0.16, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      osc.connect(g).connect(masterOut);
+      osc.start(now);
+      osc.stop(now + 0.09);
+    }
+
+    function playGameOverSfx() {
+      const ctx = ensureAudio();
+      if (!ctx || !masterOut) return;
+      const now = ctx.currentTime;
+      [392, 349.23, 311.13, 261.63].forEach((f, i) => {
+        const t = now + i * 0.12;
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(f, t);
+        g.gain.setValueAtTime(0.17, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+        osc.connect(g).connect(masterOut);
+        osc.start(t);
+        osc.stop(t + 0.3);
+      });
+    }
+
+    // =========================================================================
+    // 3. DOM REFERENCES & EVOLUTION LADDER BUILDER
+    // =========================================================================
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const boardWrap = document.getElementById('boardWrap');
+    const boardFrame = document.getElementById('boardFrame');
+    const boardBanner = document.getElementById('boardBanner');
+    const srLive = document.getElementById('srLive');
+
+    const btnModeClassic = document.getElementById('btnModeClassic');
+    const btnModePlanet = document.getElementById('btnModePlanet');
+    const uiScore = document.getElementById('uiScore');
+    const uiBest = document.getElementById('uiBest');
+    const uiComboPill = document.getElementById('uiComboPill');
+    const uiComboTxt = document.getElementById('uiComboTxt');
+    const btnMute = document.getElementById('btnMute');
+    const btnRestart = document.getElementById('btnRestart');
+
+    const uiEvoTrack = document.getElementById('uiEvoTrack');
+    const uiEvoPeak = document.getElementById('uiEvoPeak');
+
+    const uiNextOrb = document.getElementById('uiNextOrb');
+    const uiNextImg = document.getElementById('uiNextImg');
+    const uiNextName = document.getElementById('uiNextName');
+
+    const btnHoldWell = document.getElementById('btnHoldWell');
+    const uiHoldOrb = document.getElementById('uiHoldOrb');
+    const uiHoldImg = document.getElementById('uiHoldImg');
+    const uiHoldName = document.getElementById('uiHoldName');
+
+    const btnFever = document.getElementById('btnFever');
+    const uiFeverFill = document.getElementById('uiFeverFill');
+    const uiFeverLabel = document.getElementById('uiFeverLabel');
+    const uiFeverPct = document.getElementById('uiFeverPct');
+
+    const btnHold = document.getElementById('btnHold');
+    const uiHoldStatus = document.getElementById('uiHoldStatus');
+    const btnShake = document.getElementById('btnShake');
+    const uiShakeQty = document.getElementById('uiShakeQty');
+    const uiModeTip = document.getElementById('uiModeTip');
+
+    const gameOverDialog = document.getElementById('gameOverDialog');
+    const dlgTitle = document.getElementById('dlgTitle');
+    const dlgPeakImg = document.getElementById('dlgPeakImg');
+    const dlgPeakName = document.getElementById('dlgPeakName');
+    const dlgScore = document.getElementById('dlgScore');
+    const dlgBest = document.getElementById('dlgBest');
+    const dlgMaxCombo = document.getElementById('dlgMaxCombo');
+    const dlgMerges = document.getElementById('dlgMerges');
+    const dlgNote = document.getElementById('dlgNote');
+    const btnDlgSwitch = document.getElementById('btnDlgSwitch');
+
+    const evoNodes = [];
+    for (let i = 0; i < TIERS.length; i++) {
+      const t = TIERS[i];
+      const node = document.createElement('div');
+      node.className = 'hs-sk-evo-node';
+      node.style.setProperty('--node-color', `var(${t.cssVar})`);
+      node.title = `Bậc ${t.rank}: ${t.name}${t.score > 0 ? ` (+${t.score.toLocaleString('vi-VN')} điểm)` : ''}`;
+      node.innerHTML = `<img src="${t.sprite}" alt="${t.name}" /><span class="evo-num">${t.rank}</span>`;
+      uiEvoTrack.appendChild(node);
+      evoNodes.push(node);
+      if (i < TIERS.length - 1) {
+        const sep = document.createElement('span');
+        sep.className = 'hs-sk-evo-sep';
+        sep.setAttribute('aria-hidden', 'true');
+        sep.textContent = '›';
+        uiEvoTrack.appendChild(sep);
+      }
+    }
+
+    // =========================================================================
+    // 4. GAME STATE & HELPERS
+    // =========================================================================
+    let nextBodyId = 1;
+    let bannerTimer = 0;
+
+    const state = {
+      mode: 'classic', // 'classic' | 'planet'
+      status: 'playing', // 'playing' | 'gameover'
+      score: 0,
+      bestClassic: Math.max(0, Number(safeGet(STORAGE_KEYS.bestClassic, '0')) || 0),
+      bestPlanet: Math.max(0, Number(safeGet(STORAGE_KEYS.bestPlanet, '0')) || 0),
+      highestTier: 0,
+      mergesCount: 0,
+      jackpots: 0,
+      dropCount: 0,
+      combo: 0,
+      maxCombo: 1,
+      comboTimer: 0,
+
+      // Ready / Next / Hold orbs (tier index 0..4 or WILDCARD_TIER = -1)
+      currentTier: 0,
+      nextTier: 1,
+      holdTier: null,
+      holdUsedThisDrop: false,
+      lastSpawnTier: -1,
+      sameSpawnStreak: 0,
+
+      // Aiming & drop cadence
+      aimX: CLASSIC_WORLD.w / 2,
+      aimAngle: -Math.PI / 2,
+      dropCooldown: 0,
+      pointerActive: false,
+      keys: { left: false, right: false },
+
+      // Active Strategy Tools
+      shakes: 3,
+      shakeCooldown: 0,
+      shakeDir: 1,
+      feverGauge: 0,     // 0..100
+      feverActive: false,
+      feverTimer: 0,
+
+      // 5-Second Forgiving Overflow Countdown
+      overflowTimer: 0,
+      lastTickSec: 6,
+      dangerBodyIds: new Set(),
+
+      // Physics bodies & VFX
+      bodies: [],
+      particles: [],
+      shockwaves: [],
+      popups: [],
+      hitStopTimer: 0,
+      screenShake: 0,
+      crateJoltX: 0,
+      crateJoltY: 0,
+      crateJoltRot: 0,
+      simTime: 0,
+    };
+
+    function getWorld() {
+      return state.mode === 'classic' ? CLASSIC_WORLD : PLANET_WORLD;
+    }
+
+    function getBestForMode() {
+      return state.mode === 'classic' ? state.bestClassic : state.bestPlanet;
+    }
+
+    function getRadiusForTier(tier, mode = state.mode) {
+      const base = tier === WILDCARD_TIER ? WILDCARD_BASE_R : TIERS[tier].r;
+      return mode === 'planet' ? base * PLANET_SCALE : base;
+    }
+
+    function getTierLabel(tier) {
+      if (tier === WILDCARD_TIER) return 'Quả Cầu Vồng';
+      return TIERS[tier].name;
+    }
+
+    function getTierSpriteUrl(tier) {
+      if (tier === WILDCARD_TIER) return '../sprites/m3_sp_snitch.webp';
+      return TIERS[tier].sprite;
+    }
+
+    function rollSpawnTier() {
+      let maxIdx = 2;
+      if (state.dropCount >= 3 || state.highestTier >= 3) maxIdx = 3;
+      if (state.dropCount >= 6 || state.highestTier >= 4) maxIdx = 4;
+      const weights = [29, 26, 21, 15, 9];
+      let total = 0;
+      for (let i = 0; i <= maxIdx; i++) total += weights[i];
+
+      let chosen = 0;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        let r = Math.random() * total;
+        chosen = 0;
+        for (let i = 0; i <= maxIdx; i++) {
+          r -= weights[i];
+          if (r <= 0) {
+            chosen = i;
+            break;
+          }
+        }
+        if (chosen !== state.lastSpawnTier || state.sameSpawnStreak < 2) break;
+      }
+      if (chosen === state.lastSpawnTier) {
+        state.sameSpawnStreak++;
+      } else {
+        state.lastSpawnTier = chosen;
+        state.sameSpawnStreak = 1;
+      }
+      return chosen;
+    }
+
+    function showBanner(msg, duration = 2.0) {
+      boardBanner.textContent = msg;
+      boardBanner.classList.add('is-visible');
+      bannerTimer = duration;
+      srLive.textContent = msg;
+    }
+
+    let runCounter = 0;
+    const awardedMilestones = new Set();
+    let lastReportedBestScore = Math.max(state.bestClassic, state.bestPlanet);
+    let lastReportedBestCombo = 1;
+
+    function checkAndEmitMilestones(synthesizedTier = -1) {
+      const maxTierReached = state.highestTier;
+      for (let i = 0; i < SCORE_MILESTONES.length; i++) {
+        const threshold = SCORE_MILESTONES[i];
+        const milestoneIdx = i + 1;
+        if (state.score >= threshold && !awardedMilestones.has(milestoneIdx)) {
+          awardedMilestones.add(milestoneIdx);
+          postBridgeMessage('victory', {
+            stage: milestoneIdx,
+            score: state.score,
+            combo: maxTierReached + 1,
+            isBoss: maxTierReached >= 9,
+            runId: `sk_${runCounter}_m${milestoneIdx}`,
+          });
+        }
+      }
+      if (
+        (synthesizedTier === 10 || maxTierReached >= 10) &&
+        !awardedMilestones.has(PUMPKIN_MILESTONE_IDX)
+      ) {
+        awardedMilestones.add(PUMPKIN_MILESTONE_IDX);
+        postBridgeMessage('victory', {
+          stage: PUMPKIN_MILESTONE_IDX,
+          score: state.score,
+          combo: maxTierReached + 1,
+          isBoss: true,
+          runId: `sk_${runCounter}_m${PUMPKIN_MILESTONE_IDX}`,
+        });
+      }
+    }
+
+    function emitScoreIfImproved(forceTierChanged = false) {
+      const currentBestScore = Math.max(state.bestClassic, state.bestPlanet, state.score);
+      const currentBestCombo = state.highestTier + 1;
+      const scoreBeat = currentBestScore > lastReportedBestScore;
+      const tierBeat = forceTierChanged || currentBestCombo > lastReportedBestCombo;
+      if (!scoreBeat && !tierBeat) return;
+      if (scoreBeat) lastReportedBestScore = currentBestScore;
+      if (currentBestCombo > lastReportedBestCombo) lastReportedBestCombo = currentBestCombo;
+      postBridgeMessage('score', {
+        bestScore: currentBestScore,
+        bestCombo: Math.max(lastReportedBestCombo, currentBestCombo),
+      });
+    }
+
+    function addScore(points, synthesizedTier = -1, tierImproved = false) {
+      state.score += points;
+      if (state.mode === 'classic' && state.score > state.bestClassic) {
+        state.bestClassic = state.score;
+        safeSet(STORAGE_KEYS.bestClassic, state.bestClassic);
+      } else if (state.mode === 'planet' && state.score > state.bestPlanet) {
+        state.bestPlanet = state.score;
+        safeSet(STORAGE_KEYS.bestPlanet, state.bestPlanet);
+      }
+      checkAndEmitMilestones(synthesizedTier);
+      emitScoreIfImproved(tierImproved);
+    }
+
+    // =========================================================================
+    // 5. RESPONSIVE CANVAS SIZING (ResizeObserver + live DPR)
+    // =========================================================================
+    let viewScale = 1;
+    let cssW = CLASSIC_WORLD.w;
+    let cssH = CLASSIC_WORLD.h;
+
+    function resizeCanvas() {
+      const world = getWorld();
+      const wrapRect = boardWrap.getBoundingClientRect();
+      if (wrapRect.width <= 0 || wrapRect.height <= 0) return;
+
+      const framePad = IS_EMBED
+        ? (window.innerWidth <= 600 ? 10 : 14)
+        : (window.innerWidth <= 840 || window.innerHeight <= 520 ? 12 : 18);
+      const availW = Math.max(160, wrapRect.width - framePad);
+      const availH = Math.max(160, wrapRect.height - framePad);
+
+      const scale = Math.min(availW / world.w, availH / world.h);
+      viewScale = scale;
+      cssW = Math.floor(world.w * scale);
+      cssH = Math.floor(world.h * scale);
+
+      const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+      canvas.style.width = `${cssW}px`;
+      canvas.style.height = `${cssH}px`;
+      const targetW = Math.max(1, Math.round(cssW * dpr));
+      const targetH = Math.max(1, Math.round(cssH * dpr));
+      if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
+      }
+    }
+
+    function clientToWorld(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect();
+      const world = getWorld();
+      if (rect.width <= 0 || rect.height <= 0) return { x: world.w / 2, y: world.h / 2 };
+      return {
+        x: ((clientX - rect.left) / rect.width) * world.w,
+        y: ((clientY - rect.top) / rect.height) * world.h,
+      };
+    }
+
+    // =========================================================================
+    // 6. VFX HELPERS (Particles, Shockwaves, Floating Popups)
+    // =========================================================================
+    function spawnMergeParticles(x, y, colorA, colorB, count, speedScale = 1) {
+      const n = reducedMotion ? Math.min(8, count) : count;
+      for (let i = 0; i < n; i++) {
+        const ang = (Math.PI * 2 * i) / n + (Math.random() - 0.5) * 0.45;
+        const spd = (75 + Math.random() * 195) * speedScale;
+        state.particles.push({
+          x,
+          y,
+          vx: Math.cos(ang) * spd,
+          vy: Math.sin(ang) * spd - (state.mode === 'classic' ? 40 : 0),
+          size: 3 + Math.random() * 4.8,
+          color: i % 2 === 0 ? colorA : colorB,
+          life: 0.42 + Math.random() * 0.38,
+          maxLife: 0.8,
+          star: i % 3 === 0,
+        });
+      }
+    }
+
+    function spawnShockwave(x, y, maxR, color) {
+      state.shockwaves.push({
+        x, y,
+        r: maxR * 0.25,
+        maxR,
+        color,
+        life: 0.34,
+        maxLife: 0.34,
+      });
+    }
+
+    function spawnPopup(x, y, text, color = '#ffe484', size = 18) {
+      state.popups.push({
+        x, y,
+        vy: -54,
+        text,
+        color,
+        size,
+        life: 1.05,
+        maxLife: 1.05,
+      });
+    }
+
+    // =========================================================================
+    // 7. GAME ACTIONS (Start, Drop, Hold, Shake, Fever)
+    // =========================================================================
+    function createBody(tier, x, y, vx = 0, vy = 0, initialAge = 0) {
+      const r = getRadiusForTier(tier);
+      const mass = r * r;
+      const inertia = 0.5 * mass * r * r;
+      return {
+        id: nextBodyId++,
+        tier,
+        x,
+        y,
+        vx,
+        vy,
+        r,
+        mass,
+        invMass: 1 / mass,
+        invI: 1 / inertia,
+        theta: (Math.random() - 0.5) * 0.45,
+        omega: (Math.random() - 0.5) * 0.6,
+        age: initialAge,
+        popScale: initialAge === 0 ? 0.92 : 0.52,
+        popVel: initialAge === 0 ? 1.8 : 6.2,
+        mergeFlash: initialAge > 0 ? 1.0 : 0,
+        merged: false,
+      };
+    }
+
+    function startNewGame(mode = state.mode) {
+      runCounter++;
+      awardedMilestones.clear();
+      state.mode = mode;
+      state.status = 'playing';
+      state.score = 0;
+      state.highestTier = 0;
+      state.mergesCount = 0;
+      state.jackpots = 0;
+      state.dropCount = 0;
+      state.combo = 0;
+      state.maxCombo = 1;
+      state.comboTimer = 0;
+      state.lastSpawnTier = -1;
+      state.sameSpawnStreak = 0;
+
+      state.currentTier = rollSpawnTier();
+      state.nextTier = rollSpawnTier();
+      state.holdTier = null;
+      state.holdUsedThisDrop = false;
+
+      state.aimX = CLASSIC_WORLD.w / 2;
+      state.aimAngle = -Math.PI / 2;
+      state.dropCooldown = 0;
+
+      state.shakes = 3;
+      state.shakeCooldown = 0;
+      state.shakeDir = 1;
+      state.feverGauge = 0;
+      state.feverActive = false;
+      state.feverTimer = 0;
+
+      state.overflowTimer = 0;
+      state.lastTickSec = 6;
+      state.dangerBodyIds.clear();
+
+      state.bodies = [];
+      state.particles = [];
+      state.shockwaves = [];
+      state.popups = [];
+      state.hitStopTimer = 0;
+      state.screenShake = 0;
+      state.crateJoltX = 0;
+      state.crateJoltY = 0;
+      state.crateJoltRot = 0;
+
+      btnModeClassic.setAttribute('aria-selected', String(mode === 'classic'));
+      btnModePlanet.setAttribute('aria-selected', String(mode === 'planet'));
+      uiModeTip.textContent = mode === 'classic'
+        ? 'Kéo hoặc chạm thả quả vào thùng gỗ. Hai quả cùng bậc chạm nhau sẽ hợp thành nông sản bậc cao hơn!'
+        : 'Quay 360° quanh vòng đồng thau và phóng quả hướng tâm về Lõi Lò Sưởi Hang Sóc!';
+
+      if (gameOverDialog.open) {
+        gameOverDialog.close('');
+      }
+      resizeCanvas();
+      syncHudDOM(true);
+      showBanner(
+        mode === 'classic'
+          ? 'Thùng Gỗ 2026 sẵn sàng — hợp quả lên Bí Ngô Hoàng Kim!'
+          : 'Hành Tinh 360° — xoay vòng và phóng quả về Lõi Hang Sóc!',
+        2.4
+      );
+    }
+
+    function clampAimX(x, tier = state.currentTier) {
+      const r = getRadiusForTier(tier, 'classic');
+      const minX = CLASSIC_WORLD.boxLeft + r + 3;
+      const maxX = CLASSIC_WORLD.boxRight - r - 3;
+      return Math.max(minX, Math.min(maxX, x));
+    }
+
+    function dropCurrentFruit() {
+      if (state.status !== 'playing' || state.dropCooldown > 0) return;
+      ensureAudio();
+
+      const tier = state.currentTier;
+      const isWild = tier === WILDCARD_TIER;
+      let body;
+
+      if (state.mode === 'classic') {
+        const x = clampAimX(state.aimX, tier);
+        body = createBody(tier, x, CLASSIC_WORLD.spawnY, (Math.random() - 0.5) * 6, 38, 0);
+      } else {
+        const w = PLANET_WORLD;
+        const sx = w.cx + Math.cos(state.aimAngle) * w.orbitR;
+        const sy = w.cy + Math.sin(state.aimAngle) * w.orbitR;
+        const vx = -Math.cos(state.aimAngle) * w.launchSpeed;
+        const vy = -Math.sin(state.aimAngle) * w.launchSpeed;
+        body = createBody(tier, sx, sy, vx, vy, 0);
+      }
+
+      state.bodies.push(body);
+      state.dropCount++;
+      state.dropCooldown = DROP_COOLDOWN;
+      state.holdUsedThisDrop = false;
+
+      if (!isWild && tier > state.highestTier) {
+        state.highestTier = tier;
+        emitScoreIfImproved(true);
+      }
+
+      state.currentTier = state.nextTier;
+      state.nextTier = rollSpawnTier();
+      if (state.mode === 'classic') {
+        state.aimX = clampAimX(state.aimX, state.currentTier);
+      }
+
+      playDropSfx(isWild);
+      syncHudDOM(false);
+    }
+
+    function triggerHoldSwap() {
+      if (state.status !== 'playing' || state.holdUsedThisDrop) return;
+      ensureAudio();
+
+      if (state.holdTier === null) {
+        state.holdTier = state.currentTier;
+        state.currentTier = state.nextTier;
+        state.nextTier = rollSpawnTier();
+      } else {
+        const tmp = state.currentTier;
+        state.currentTier = state.holdTier;
+        state.holdTier = tmp;
+      }
+      state.holdUsedThisDrop = true;
+      if (state.mode === 'classic') {
+        state.aimX = clampAimX(state.aimX, state.currentTier);
+      }
+      playHoldSfx();
+      syncHudDOM(false);
+      showBanner(`Đã đổi sang ${getTierLabel(state.currentTier)}!`, 1.4);
+    }
+
+    function triggerShake() {
+      if (state.status !== 'playing' || state.shakes <= 0 || state.shakeCooldown > 0 || state.bodies.length === 0) return;
+      ensureAudio();
+      state.shakes--;
+      state.shakeCooldown = 0.65;
+      state.shakeDir *= -1;
+      const dir = state.shakeDir;
+
+      if (state.mode === 'classic') {
+        for (const b of state.bodies) {
+          const massFactor = Math.max(0.58, 1.12 - b.r / 150);
+          b.vx += dir * (135 + Math.random() * 115) * massFactor;
+          b.vy -= (185 + Math.random() * 145) * massFactor;
+          b.omega += dir * (2.6 + Math.random() * 3.0);
+        }
+        state.crateJoltX = dir * 15;
+        state.crateJoltY = -9;
+        state.crateJoltRot = dir * 0.032;
+      } else {
+        const w = PLANET_WORLD;
+        for (const b of state.bodies) {
+          const dx = b.x - w.cx;
+          const dy = b.y - w.cy;
+          const dist = Math.hypot(dx, dy) || 1;
+          const nx = dx / dist;
+          const ny = dy / dist;
+          const tx = -ny * dir;
+          const ty = nx * dir;
+          const massFactor = Math.max(0.62, 1.12 - b.r / 110);
+          // Tangential orbital swirl + inward squeeze to spark chain merges!
+          b.vx += (tx * (195 + Math.random() * 90) - nx * (65 + Math.random() * 45)) * massFactor;
+          b.vy += (ty * (195 + Math.random() * 90) - ny * (65 + Math.random() * 45)) * massFactor;
+          b.omega += dir * (3.2 + Math.random() * 2.5);
+        }
+        state.crateJoltRot = dir * 0.065;
+      }
+
+      state.screenShake = reducedMotion ? 0 : 9;
+      playShakeSfx();
+      syncHudDOM(false);
+      showBanner('Lắc mạnh! Các quả đang dồn lại hợp chuỗi!', 1.5);
+    }
+
+    function triggerFever() {
+      if (state.status !== 'playing' || state.feverActive || state.feverGauge < 100) return;
+      ensureAudio();
+
+      state.feverActive = true;
+      state.feverTimer = FEVER_DURATION;
+      state.feverGauge = 100;
+      if (state.shakes < MAX_SHAKES) {
+        state.shakes++;
+      }
+
+      // Preserve current planned fruit into Next, load glowing Wildcard Snitch Orb immediately!
+      if (state.currentTier !== WILDCARD_TIER) {
+        state.nextTier = state.currentTier;
+        state.currentTier = WILDCARD_TIER;
+      }
+
+      const w = getWorld();
+      spawnMergeParticles(w.w / 2, w.h * 0.35, '#fff6a6', '#f5b301', 28, 1.35);
+      spawnShockwave(w.w / 2, w.h * 0.45, 220, '#ffe484');
+      playFeverSfx();
+      syncHudDOM(false);
+      showBanner('SIÊU TIẾN HÓA 10s! ×2 Điểm · +1 Lắc Thùng · Quả Cầu Vồng sẵn sàng!', 2.8);
+    }
+
+    function applyMollyUpgradeOrbBoost() {
+      if (state.status !== 'playing') {
+        startNewGame(state.mode);
+      }
+      ensureAudio();
+
+      // 1. Gentle upward/lateral settle shake on all active orbs in the jar
+      state.shakeDir *= -1;
+      const dir = state.shakeDir;
+      if (state.bodies.length > 0) {
+        if (state.mode === 'classic') {
+          for (const b of state.bodies) {
+            if (b.merged) continue;
+            const massFactor = Math.max(0.58, 1.1 - b.r / 155);
+            b.vx += dir * (72 + Math.random() * 58) * massFactor;
+            b.vy -= (110 + Math.random() * 75) * massFactor;
+            b.omega += dir * (1.6 + Math.random() * 1.8);
+          }
+          state.crateJoltX = dir * 10;
+          state.crateJoltY = -6;
+          state.crateJoltRot = dir * 0.022;
+        } else {
+          const w = PLANET_WORLD;
+          for (const b of state.bodies) {
+            if (b.merged) continue;
+            const dx = b.x - w.cx;
+            const dy = b.y - w.cy;
+            const dist = Math.hypot(dx, dy) || 1;
+            const nx = dx / dist;
+            const ny = dy / dist;
+            const tx = -ny * dir;
+            const ty = nx * dir;
+            const massFactor = Math.max(0.62, 1.1 - b.r / 115);
+            b.vx += (tx * (115 + Math.random() * 55) - nx * (42 + Math.random() * 28)) * massFactor;
+            b.vy += (ty * (115 + Math.random() * 55) - ny * (42 + Math.random() * 28)) * massFactor;
+            b.omega += dir * (2.0 + Math.random() * 1.8);
+          }
+          state.crateJoltRot = dir * 0.04;
+        }
+        state.screenShake = reducedMotion ? 0 : 6;
+      }
+
+      // 2. Find lowest-tier orb (< 8 preferred, else < 10) in the jar to upgrade by +1 tier
+      let candidates = state.bodies.filter((b) => !b.merged && b.tier >= 0 && b.tier < 8);
+      if (candidates.length === 0) {
+        candidates = state.bodies.filter((b) => !b.merged && b.tier >= 0 && b.tier < TIERS.length - 1);
+      }
+
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => (a.tier - b.tier) || (b.age - a.age));
+        const target = candidates[0];
+        const newTier = Math.min(TIERS.length - 1, target.tier + 1);
+        const tierDef = TIERS[newTier];
+        const newR = getRadiusForTier(newTier);
+        const newMass = newR * newR;
+        const newInertia = 0.5 * newMass * newR * newR;
+
+        target.tier = newTier;
+        target.r = newR;
+        target.mass = newMass;
+        target.invMass = 1 / newMass;
+        target.invI = 1 / newInertia;
+        target.popScale = 0.56;
+        target.popVel = 6.4;
+        target.mergeFlash = 1.0;
+
+        const pos = clampPositionToBounds(target.x, target.y, newR);
+        target.x = pos.x;
+        target.y = pos.y;
+
+        applyMergeShockwave(pos.x, pos.y, newR, 76 + newTier * 10);
+        spawnShockwave(pos.x, pos.y, newR * 2.25, '#ffe484');
+        spawnShockwave(pos.x, pos.y, newR * 1.45, '#fff6a6');
+        spawnMergeParticles(pos.x, pos.y, '#fff6a6', tierDef.orbTop, 26, 1.15);
+        spawnPopup(pos.x, pos.y - newR * 0.65, `↑ ${tierDef.name}!`, '#fff6a6', 16);
+
+        let tierImproved = false;
+        if (newTier > state.highestTier) {
+          state.highestTier = newTier;
+          tierImproved = true;
+        }
+        const pts = Math.max(10, Math.round(tierDef.score * (state.feverActive ? 2 : 1)));
+        addScore(pts, newTier, tierImproved);
+        playShakeSfx();
+        playMergeSfx(newTier, Math.max(2, state.combo));
+        const upgradeMsg = `Nước Táo Bà Molly đã lắc bình & thăng cấp lên ${tierDef.name}!`;
+        if (!IS_EMBED) {
+          showBanner(upgradeMsg, 2.5);
+        } else {
+          // Suppress duplicate inner DOM toast banner when embedded — parent renders a single toast
+          bannerTimer = 0;
+          boardBanner.classList.remove('is-visible');
+          srLive.textContent = upgradeMsg;
+        }
+      } else {
+        // Empty jar (or only max-tier orbs): upgrade currently held ready fruit (or next fruit) by +1 tier
+        let upgradedTier = -1;
+        if (state.currentTier >= 0 && state.currentTier < TIERS.length - 1) {
+          state.currentTier = Math.min(TIERS.length - 1, state.currentTier + 1);
+          upgradedTier = state.currentTier;
+          if (state.mode === 'classic') {
+            state.aimX = clampAimX(state.aimX, state.currentTier);
+          }
+        } else if (state.nextTier >= 0 && state.nextTier < TIERS.length - 1) {
+          state.nextTier = Math.min(TIERS.length - 1, state.nextTier + 1);
+          upgradedTier = state.nextTier;
+        }
+
+        const safeTier = upgradedTier >= 0 ? upgradedTier : 1;
+        const tierDef = TIERS[safeTier];
+        const r = getRadiusForTier(safeTier);
+        let vx, vy;
+        if (state.mode === 'classic') {
+          vx = clampAimX(state.aimX, state.currentTier);
+          vy = CLASSIC_WORLD.spawnY;
+          state.crateJoltX = dir * 6;
+          state.crateJoltY = -4;
+        } else {
+          const w = PLANET_WORLD;
+          vx = w.cx + Math.cos(state.aimAngle) * w.orbitR;
+          vy = w.cy + Math.sin(state.aimAngle) * w.orbitR;
+          state.crateJoltRot = dir * 0.03;
+        }
+
+        spawnShockwave(vx, vy, r * 2.4, '#ffe484');
+        spawnShockwave(vx, vy, r * 1.5, '#fff6a6');
+        spawnMergeParticles(vx, vy, '#fff6a6', tierDef.orbTop, 22, 1.05);
+        spawnPopup(vx, vy + r + 18, `↑ ${tierDef.name}!`, '#fff6a6', 15);
+
+        if (upgradedTier > state.highestTier) {
+          state.highestTier = upgradedTier;
+          emitScoreIfImproved(true);
+        }
+        playMergeSfx(safeTier, 2);
+        const upgradeMsg = `Nước Táo Bà Molly đã thăng cấp quả sắp thả lên ${tierDef.name}!`;
+        if (!IS_EMBED) {
+          showBanner(upgradeMsg, 2.5);
+        } else {
+          // Suppress duplicate inner DOM toast banner when embedded — parent renders a single toast
+          bannerTimer = 0;
+          boardBanner.classList.remove('is-visible');
+          srLive.textContent = upgradeMsg;
+        }
+      }
+
+      syncHudDOM(false);
+      postBridgeMessage('boost-applied', {
+        ok: true,
+        boostKind: 'upgrade_orb',
+        msgVi: 'Nước Táo Bà Molly đã lắc bình & thăng cấp 1 quả lên bậc cao hơn!',
+      });
+    }
+
+    // =========================================================================
+    // 8. SUB-STEPPED 2D CIRCLE PHYSICS ENGINE (8 substeps/frame)
+    // =========================================================================
+    function applyMergeShockwave(cx, cy, radius, power) {
+      const reach = radius * 2.45;
+      for (const b of state.bodies) {
+        if (b.merged) continue;
+        const dx = b.x - cx;
+        const dy = b.y - cy;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 0.01 && dist < reach) {
+          const falloff = 1 - dist / reach;
+          const kick = power * falloff * Math.max(0.45, 1.0 - b.r / 160);
+          b.vx += (dx / dist) * kick;
+          b.vy += (dy / dist) * kick;
+        }
+      }
+    }
+
+    function clampPositionToBounds(x, y, r) {
+      if (state.mode === 'classic') {
+        const w = CLASSIC_WORLD;
+        return {
+          x: Math.max(w.boxLeft + r, Math.min(w.boxRight - r, x)),
+          y: Math.min(w.boxBottom - r, y),
+        };
+      } else {
+        const w = PLANET_WORLD;
+        const dx = x - w.cx;
+        const dy = y - w.cy;
+        const dist = Math.hypot(dx, dy);
+        const maxDist = w.outerWallR - r;
+        if (dist > maxDist && dist > 0.001) {
+          return {
+            x: w.cx + (dx / dist) * maxDist,
+            y: w.cy + (dy / dist) * maxDist,
+          };
+        }
+        return { x, y };
+      }
+    }
+
+    function handleMergePair(a, b, newlySpawned) {
+      a.merged = true;
+      b.merged = true;
+
+      // Combo chain tracking
+      state.combo = state.comboTimer > 0 ? state.combo + 1 : 1;
+      state.comboTimer = COMBO_WINDOW;
+      if (state.combo > state.maxCombo) state.maxCombo = state.combo;
+      state.mergesCount++;
+
+      // Determine target tier (Wildcard evolves whatever fruit it touches!)
+      let isWildMerge = false;
+      let baseTier;
+      let mx, my;
+      if (a.tier === WILDCARD_TIER && b.tier === WILDCARD_TIER) {
+        isWildMerge = true;
+        baseTier = 5;
+        mx = (a.x + b.x) * 0.5;
+        my = (a.y + b.y) * 0.5;
+      } else if (a.tier === WILDCARD_TIER) {
+        isWildMerge = true;
+        baseTier = b.tier;
+        mx = b.x;
+        my = b.y;
+      } else if (b.tier === WILDCARD_TIER) {
+        isWildMerge = true;
+        baseTier = a.tier;
+        mx = a.x;
+        my = a.y;
+      } else {
+        baseTier = a.tier;
+        mx = (a.x + b.x) * 0.5;
+        my = (a.y + b.y) * 0.5;
+      }
+
+      const comboBonus = 1 + (state.combo - 1) * 0.25;
+      const feverMult = state.feverActive ? 2 : 1;
+
+      // DOUBLE PUMPKIN (or Wildcard on Pumpkin) -> SIÊU THU HOẠCH +3.000!
+      if (baseTier >= TIERS.length - 1) {
+        state.jackpots++;
+        const pts = Math.round(JACKPOT_SCORE * feverMult);
+        addScore(pts, 10, false);
+        if (state.shakes < MAX_SHAKES) state.shakes++;
+        if (!state.feverActive) {
+          state.feverGauge = Math.min(100, state.feverGauge + 45);
+        }
+        applyMergeShockwave(mx, my, 120, 260);
+        spawnMergeParticles(mx, my, '#fff6a6', '#ff8811', 42, 1.55);
+        spawnShockwave(mx, my, 210, '#ffe484');
+        spawnShockwave(mx, my, 145, '#ff851b');
+        spawnPopup(mx, my - 12, `SIÊU THU HOẠCH +${pts.toLocaleString('vi-VN')}!`, '#fff6a6', 23);
+        state.hitStopTimer = reducedMotion ? 0 : 0.055;
+        state.screenShake = reducedMotion ? 0 : 12;
+        playJackpotSfx();
+        showBanner(`SIÊU THU HOẠCH +${pts.toLocaleString('vi-VN')}! Giải phóng không gian & +1 Lắc Thùng!`, 3.0);
+        triggerComboPop();
+        syncHudDOM(false);
+        return;
+      }
+
+      const newTier = baseTier + 1;
+      const tierDef = TIERS[newTier];
+      const newR = getRadiusForTier(newTier);
+      const pos = clampPositionToBounds(mx, my, newR);
+
+      // Inherit gentle velocity and preserve realistic settled age so high stacks can't stall overflow forever
+      const inheritedAge = isWildMerge
+        ? Math.max(0.55, a.tier === WILDCARD_TIER ? b.age : a.age)
+        : Math.max(0.45, Math.min(a.age, b.age));
+
+      const mergedBody = createBody(
+        newTier,
+        pos.x,
+        pos.y,
+        (a.vx + b.vx) * 0.3,
+        (a.vy + b.vy) * 0.3 - (state.mode === 'classic' ? 28 : 0),
+        inheritedAge
+      );
+      mergedBody.omega = (a.omega + b.omega) * 0.35;
+      newlySpawned.push(mergedBody);
+
+      let tierImproved = false;
+      if (newTier > state.highestTier) {
+        state.highestTier = newTier;
+        tierImproved = true;
+        if (newTier === 10) {
+          showBanner('CHÚC MỪNG! Đạt BÍ NGÔ HOÀNG KIM — Hợp 2 quả để nổ SIÊU THU HOẠCH!', 3.2);
+        }
+      }
+
+      // Replenish +1 Shake on Tier 9+ creation (Bắp Vàng Phép idx 8, Bắp Cải idx 9, Bí Ngô idx 10)
+      if (newTier >= 8 && state.shakes < MAX_SHAKES) {
+        state.shakes++;
+        spawnPopup(pos.x, pos.y - newR - 22, '+1 Lắc Thùng!', '#e7f9d4', 14);
+      }
+
+      // Score & Fever Gauge charge
+      const pts = Math.round(tierDef.score * comboBonus * feverMult);
+      addScore(pts, newTier, tierImproved);
+      if (!state.feverActive) {
+        const gain = 6.5 + newTier * 2.1 + (state.combo > 1 ? state.combo * 4.5 : 0);
+        const wasReady = state.feverGauge >= 100;
+        state.feverGauge = Math.min(100, state.feverGauge + gain);
+        if (!wasReady && state.feverGauge >= 100) {
+          showBanner('Siêu Tiến Hóa đã đầy 100%! Nhấn nút hoặc phím F để kích hoạt!', 2.6);
+        }
+      }
+
+      // Outward pop shockwave + Juice VFX
+      applyMergeShockwave(pos.x, pos.y, newR, 95 + newTier * 16);
+      const pCount = isWildMerge ? 24 : 10 + newTier * 2;
+      spawnMergeParticles(
+        pos.x,
+        pos.y,
+        isWildMerge ? '#fff6a6' : tierDef.orbTop,
+        tierDef.orbMid,
+        pCount,
+        0.82 + newTier * 0.06
+      );
+      spawnShockwave(pos.x, pos.y, newR * 1.95, isWildMerge ? '#fff6a6' : tierDef.orbTop);
+
+      const label = state.combo >= 2
+        ? `+${pts.toLocaleString('vi-VN')} (×${state.combo})`
+        : `+${pts.toLocaleString('vi-VN')}`;
+      spawnPopup(pos.x, pos.y - newR * 0.55, label, state.feverActive ? '#fff6a6' : '#ffe484', newTier >= 7 ? 20 : 15);
+
+      // 32ms hit-stop on Tier 7+ merges (index >= 6, Lê Mật Vàng and up)
+      if (newTier >= 6 && !reducedMotion) {
+        state.hitStopTimer = Math.max(state.hitStopTimer, 0.032);
+        state.screenShake = Math.max(state.screenShake, 3.5 + (newTier - 6) * 1.4);
+      }
+
+      playMergeSfx(newTier, state.combo);
+      triggerComboPop();
+      syncHudDOM(false);
+    }
+
+    function resolveWallClassic(b) {
+      const w = CLASSIC_WORLD;
+      const restitution = 0.22;
+      const mu = 0.26;
+
+      // Left wall (normal pointing into wall: -1, 0; outward into box: +1, 0)
+      if (b.x - b.r < w.boxLeft) {
+        b.x = w.boxLeft + b.r;
+        if (b.vx < 0) {
+          const speed = -b.vx;
+          if (speed > 130) playSoftThud(Math.min(1, speed / 500));
+          const e = speed > 36 ? restitution : 0;
+          const jn = -(1 + e) * b.vx * b.mass;
+          b.vx = -b.vx * e;
+          // Tangential friction along wall (+y)
+          const vt = b.vy - b.omega * b.r;
+          const jt = Math.max(-mu * jn, Math.min(mu * jn, -vt / (b.invMass + b.r * b.r * b.invI)));
+          b.vy += jt * b.invMass;
+          b.omega -= jt * b.r * b.invI;
+        }
+      }
+      // Right wall
+      if (b.x + b.r > w.boxRight) {
+        b.x = w.boxRight - b.r;
+        if (b.vx > 0) {
+          const speed = b.vx;
+          if (speed > 130) playSoftThud(Math.min(1, speed / 500));
+          const e = speed > 36 ? restitution : 0;
+          const jn = (1 + e) * b.vx * b.mass;
+          b.vx = -b.vx * e;
+          const vt = b.vy + b.omega * b.r;
+          const jt = Math.max(-mu * jn, Math.min(mu * jn, -vt / (b.invMass + b.r * b.r * b.invI)));
+          b.vy += jt * b.invMass;
+          b.omega += jt * b.r * b.invI;
+        }
+      }
+      // Bottom floor
+      if (b.y + b.r > w.boxBottom) {
+        b.y = w.boxBottom - b.r;
+        if (b.vy > 0) {
+          const speed = b.vy;
+          if (speed > 120) playSoftThud(Math.min(1, speed / 520));
+          const e = speed > 36 ? restitution : 0;
+          const jn = (1 + e) * b.vy * b.mass;
+          b.vy = -b.vy * e;
+          // Floor contact at (0, +r): contact velocity along +x is vx - omega * r
+          const vt = b.vx - b.omega * b.r;
+          const jt = Math.max(-mu * jn, Math.min(mu * jn, -vt / (b.invMass + b.r * b.r * b.invI)));
+          b.vx += jt * b.invMass;
+          b.omega -= jt * b.r * b.invI;
+        }
+      }
+    }
+
+    function resolveWallPlanet(b) {
+      const w = PLANET_WORLD;
+      const dx = b.x - w.cx;
+      const dy = b.y - w.cy;
+      const dist = Math.hypot(dx, dy);
+      const maxDist = w.outerWallR - b.r;
+      if (dist > maxDist && dist > 0.001) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        b.x = w.cx + nx * maxDist;
+        b.y = w.cy + ny * maxDist;
+        const vn = b.vx * nx + b.vy * ny;
+        if (vn > 0) {
+          const e = vn > 36 ? 0.22 : 0;
+          b.vx -= (1 + e) * vn * nx;
+          b.vy -= (1 + e) * vn * ny;
+        }
+      }
+    }
+
+    function stepPhysics(dt) {
+      const sdt = dt / SUBSTEPS;
+      const isPlanet = state.mode === 'planet';
+      const w = getWorld();
+      const newlySpawned = [];
+
+      for (let step = 0; step < SUBSTEPS; step++) {
+        // 1. Integrate forces & velocities
+        for (let i = 0; i < state.bodies.length; i++) {
+          const b = state.bodies[i];
+          if (b.merged) continue;
+          b.age += sdt;
+
+          if (!isPlanet) {
+            b.vy += w.gravity * sdt;
+          } else {
+            const dx = w.cx - b.x;
+            const dy = w.cy - b.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > 0.001) {
+              const falloff = dist < 18 ? dist / 18 : 1;
+              const accel = w.gravity * falloff;
+              b.vx += (dx / dist) * accel * sdt;
+              b.vy += (dy / dist) * accel * sdt;
+            }
+          }
+
+          // Gentle velocity & angular damping + micro-sleep settle
+          const spdSq = b.vx * b.vx + b.vy * b.vy;
+          if (spdSq < 144 && Math.abs(b.omega) < 0.28) {
+            b.vx *= 0.986;
+            b.vy *= 0.986;
+            b.omega *= 0.96;
+          } else {
+            b.vx *= isPlanet ? 0.9992 : 0.9996;
+            b.vy *= isPlanet ? 0.9992 : 0.9996;
+            b.omega *= 0.9965;
+          }
+
+          // Clamp runaway speeds for anti-tunneling safety
+          const maxSpd = 1250;
+          if (spdSq > maxSpd * maxSpd) {
+            const inv = maxSpd / Math.sqrt(spdSq);
+            b.vx *= inv;
+            b.vy *= inv;
+          }
+
+          b.x += b.vx * sdt;
+          b.y += b.vy * sdt;
+          b.theta += b.omega * sdt;
+
+          if (isPlanet) {
+            resolveWallPlanet(b);
+          } else {
+            resolveWallClassic(b);
+          }
+        }
+
+        // 2. Circle-Circle contacts, impulses, rolling spin & instant merges
+        let anyMerged = false;
+        const len = state.bodies.length;
+        for (let i = 0; i < len; i++) {
+          const a = state.bodies[i];
+          if (a.merged) continue;
+          for (let j = i + 1; j < len; j++) {
+            const b = state.bodies[j];
+            if (b.merged) continue;
+
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const minDist = a.r + b.r;
+            const distSq = dx * dx + dy * dy;
+
+            if (distSq < (minDist + 0.65) * (minDist + 0.65)) {
+              // Check same-tier or Wildcard instant merge!
+              if (a.tier === b.tier || a.tier === WILDCARD_TIER || b.tier === WILDCARD_TIER) {
+                handleMergePair(a, b, newlySpawned);
+                anyMerged = true;
+                break;
+              }
+            }
+
+            if (distSq >= minDist * minDist) continue;
+
+            let dist = Math.sqrt(distSq);
+            let nx, ny;
+            if (dist < 0.0001) {
+              nx = 1;
+              ny = 0;
+              dist = 0.0001;
+            } else {
+              nx = dx / dist;
+              ny = dy / dist;
+            }
+
+            // Positional correction (Baumgarte / projection with slop)
+            const pen = minDist - dist;
+            const slop = 0.22;
+            const percent = 0.8;
+            const invMassSum = a.invMass + b.invMass;
+            if (pen > slop) {
+              const corr = ((pen - slop) / invMassSum) * percent;
+              a.x -= nx * corr * a.invMass;
+              a.y -= ny * corr * a.invMass;
+              b.x += nx * corr * b.invMass;
+              b.y += ny * corr * b.invMass;
+            }
+
+            // Normal impulse with restitution = 0.22
+            const rvx = b.vx - a.vx;
+            const rvy = b.vy - a.vy;
+            const vn = rvx * nx + rvy * ny;
+            if (vn >= 0) continue;
+
+            const impactSpeed = -vn;
+            if (impactSpeed > 140) {
+              playSoftThud(Math.min(1, impactSpeed / 520));
+            }
+            const e = impactSpeed > 32 ? 0.22 : 0;
+            const jn = -(1 + e) * vn / invMassSum;
+            const impX = jn * nx;
+            const impY = jn * ny;
+            a.vx -= impX * a.invMass;
+            a.vy -= impY * a.invMass;
+            b.vx += impX * b.invMass;
+            b.vy += impY * b.invMass;
+
+            // Tangential Coulomb friction + rolling angular impulse
+            const tx = -ny;
+            const ty = nx;
+            const vt = (b.vx - a.vx) * tx + (b.vy - a.vy) * ty - (a.omega * a.r + b.omega * b.r);
+            const invMassT = invMassSum + (a.r * a.r) * a.invI + (b.r * b.r) * b.invI;
+            const mu = 0.26;
+            const maxFriction = mu * jn;
+            const jt = Math.max(-maxFriction, Math.min(maxFriction, -vt / invMassT));
+
+            a.vx -= jt * tx * a.invMass;
+            a.vy -= jt * ty * a.invMass;
+            b.vx += jt * tx * b.invMass;
+            b.vy += jt * ty * b.invMass;
+
+            a.omega -= jt * a.r * a.invI;
+            b.omega -= jt * b.r * b.invI;
+          }
+        }
+
+        // Flush newly merged fruits & prune consumed ones after each substep (including double-pumpkin clears!)
+        if (anyMerged || newlySpawned.length > 0) {
+          state.bodies = state.bodies.filter((b) => !b.merged);
+          for (const nb of newlySpawned) state.bodies.push(nb);
+          newlySpawned.length = 0;
+          syncHudDOM(false);
+        }
+      }
+
+      // Final wall safety clamp after substep loop
+      for (const b of state.bodies) {
+        if (isPlanet) resolveWallPlanet(b);
+        else resolveWallClassic(b);
+      }
+    }
+
+    // =========================================================================
+    // 9. OVERFLOW 5-SECOND FORGIVING COUNTDOWN & GAME OVER
+    // =========================================================================
+    function updateOverflow(dt) {
+      state.dangerBodyIds.clear();
+      let overflowing = false;
+
+      if (state.mode === 'classic') {
+        const limitY = CLASSIC_WORLD.dangerY;
+        for (const b of state.bodies) {
+          if (b.age > 1.2 && (b.y - b.r) < limitY - 2) {
+            overflowing = true;
+            state.dangerBodyIds.add(b.id);
+          }
+        }
+      } else {
+        const w = PLANET_WORLD;
+        for (const b of state.bodies) {
+          if (b.age > 1.2) {
+            const dist = Math.hypot(b.x - w.cx, b.y - w.cy);
+            if (dist + b.r > w.dangerR + 2) {
+              overflowing = true;
+              state.dangerBodyIds.add(b.id);
+            }
+          }
+        }
+      }
+
+      if (overflowing) {
+        state.overflowTimer = Math.min(OVERFLOW_LIMIT, state.overflowTimer + dt);
+        const secsLeft = Math.ceil(OVERFLOW_LIMIT - state.overflowTimer);
+        if (secsLeft < state.lastTickSec && secsLeft >= 1 && secsLeft <= 5) {
+          state.lastTickSec = secsLeft;
+          playDangerTickSfx(secsLeft);
+        }
+        if (state.overflowTimer >= OVERFLOW_LIMIT) {
+          triggerGameOver();
+        }
+      } else {
+        if (state.overflowTimer > 0) {
+          state.overflowTimer = Math.max(0, state.overflowTimer - dt * 3.5);
+          state.lastTickSec = state.overflowTimer === 0
+            ? 6
+            : Math.min(6, Math.ceil(OVERFLOW_LIMIT - state.overflowTimer) + 1);
+        }
+      }
+      boardFrame.classList.toggle('is-danger', state.overflowTimer > 0.05 && state.status === 'playing');
+    }
+
+    function triggerGameOver() {
+      if (state.status === 'gameover') return;
+      state.status = 'gameover';
+      state.feverActive = false;
+      boardFrame.classList.remove('is-danger', 'is-fever');
+      playGameOverSfx();
+
+      const peak = TIERS[state.highestTier];
+      dlgTitle.textContent = state.highestTier >= 10
+        ? 'Mùa Gặt Hoàng Kim Huyền Thoại!'
+        : (state.mode === 'classic' ? 'Thùng Gỗ Đã Đầy Ắp!' : 'Hành Tinh Đã Vượt Vòng!');
+      dlgPeakImg.src = peak.sprite;
+      dlgPeakName.textContent = `${peak.name} (Bậc ${peak.rank}/11)`;
+      dlgScore.textContent = state.score.toLocaleString('vi-VN');
+      dlgBest.textContent = getBestForMode().toLocaleString('vi-VN');
+      dlgMaxCombo.textContent = `×${state.maxCombo}`;
+      dlgMerges.textContent = state.mergesCount.toLocaleString('vi-VN');
+
+      const otherModeLabel = state.mode === 'classic' ? 'Thử Hành Tinh 360°' : 'Thử Thùng Gỗ 2026';
+      btnDlgSwitch.textContent = otherModeLabel;
+
+      if (state.jackpots > 0) {
+        dlgNote.textContent = `Xuất sắc! Bạn đã kích hoạt ${state.jackpots} lần SIÊU THU HOẠCH từ cặp Bí Ngô Hoàng Kim!`;
+      } else if (state.highestTier >= 9) {
+        dlgNote.textContent = 'Chỉ còn một bước nữa tới Bí Ngô Hoàng Kim! Dùng Lắc Thùng (S) & Quả Cầu Vồng đúng nhịp nhé!';
+      } else {
+        dlgNote.textContent = 'Mẹo: Giữ quả lớn ở đáy (hoặc gần lõi), xếp quả nhỏ cạnh nhau để kích chuỗi hợp quả nạp Siêu Tiến Hóa nhanh!';
+      }
+
+      syncHudDOM(true);
+      if (!gameOverDialog.open) {
+        gameOverDialog.showModal();
+      }
+    }
+
+    // =========================================================================
+    // 10. RAY-CAST AIM PREVIEW (Exact Landing Point!)
+    // =========================================================================
+    function computeClassicLandingY(x, r) {
+      let landingY = CLASSIC_WORLD.boxBottom - r;
+      for (const b of state.bodies) {
+        const dx = Math.abs(b.x - x);
+        const sumR = b.r + r;
+        if (dx < sumR) {
+          const hitY = b.y - Math.sqrt(sumR * sumR - dx * dx);
+          if (hitY > CLASSIC_WORLD.spawnY && hitY < landingY) {
+            landingY = hitY;
+          }
+        }
+      }
+      return landingY;
+    }
+
+    function computePlanetImpactPoint(angle, r) {
+      const w = PLANET_WORLD;
+      const ox = w.cx + Math.cos(angle) * w.orbitR;
+      const oy = w.cy + Math.sin(angle) * w.orbitR;
+      const dx = -Math.cos(angle);
+      const dy = -Math.sin(angle);
+      let bestT = w.orbitR; // lands at center (cx, cy) if unobstructed
+
+      for (const b of state.bodies) {
+        const fx = ox - b.x;
+        const fy = oy - b.y;
+        const sumR = b.r + r;
+        const proj = fx * dx + fy * dy;
+        const c = fx * fx + fy * fy - sumR * sumR;
+        const disc = proj * proj - c;
+        if (disc >= 0) {
+          const t = -proj - Math.sqrt(disc);
+          if (t > 4 && t < bestT) {
+            bestT = t;
+          }
+        }
+      }
+      return {
+        ox,
+        oy,
+        tx: ox + dx * bestT,
+        ty: oy + dy * bestT,
+      };
+    }
+
+    // =========================================================================
+    // 11. CANVAS2D COZY HANG SÓC RENDERER (60fps)
+    // =========================================================================
+    function drawFruitOrb(x, y, r, tier, theta, popScale = 1, mergeFlash = 0, isDanger = false, ghostAlpha = 1) {
+      ctx.save();
+      ctx.globalAlpha = ghostAlpha;
+      ctx.translate(x, y);
+      const drawR = r * popScale;
+
+      if (tier === WILDCARD_TIER) {
+        // Glowing Wildcard Rainbow Snitch Orb
+        const pulse = 1 + Math.sin(state.simTime * 7) * 0.05;
+        const halo = ctx.createRadialGradient(0, 0, drawR * 0.4, 0, 0, drawR * 1.45 * pulse);
+        halo.addColorStop(0, 'rgba(255, 246, 166, 0.72)');
+        halo.addColorStop(0.55, 'rgba(245, 179, 1, 0.35)');
+        halo.addColorStop(1, 'rgba(255, 133, 27, 0)');
+        ctx.fillStyle = halo;
+        ctx.beginPath();
+        ctx.arc(0, 0, drawR * 1.45 * pulse, 0, Math.PI * 2);
+        ctx.fill();
+
+        const grad = ctx.createRadialGradient(-drawR * 0.3, -drawR * 0.32, drawR * 0.1, 0, 0, drawR);
+        grad.addColorStop(0, '#fffce0');
+        grad.addColorStop(0.35, '#ffe484');
+        grad.addColorStop(0.7, '#ff9824');
+        grad.addColorStop(1, '#c92a76');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(0, 0, drawR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Rotating dashed golden orbit ring
+        ctx.save();
+        ctx.rotate(state.simTime * 2.4);
+        ctx.strokeStyle = '#fff6a6';
+        ctx.lineWidth = 2.2;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.arc(0, 0, drawR * 0.9, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        const img = SPRITE_IMG.get(WILDCARD_TIER);
+        if (img && img.complete && img.naturalWidth > 0) {
+          ctx.save();
+          ctx.rotate(Math.sin(state.simTime * 5) * 0.14);
+          const s = drawR * 1.48;
+          ctx.drawImage(img, -s / 2, -s / 2, s, s);
+          ctx.restore();
+        }
+        ctx.strokeStyle = '#fff6a6';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.arc(0, 0, drawR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+
+      const def = TIERS[tier];
+
+      // Ambient contact shadow
+      ctx.fillStyle = 'rgba(42, 20, 8, 0.24)';
+      ctx.beginPath();
+      ctx.arc(drawR * 0.08, drawR * 0.12, drawR * 1.01, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Tier 11 Bí Ngô Hoàng Kim royal crown shimmer aura!
+      if (tier === 10) {
+        ctx.save();
+        ctx.rotate(state.simTime * 0.65);
+        const rays = 12;
+        for (let k = 0; k < rays; k++) {
+          const ang = (Math.PI * 2 * k) / rays;
+          ctx.fillStyle = k % 2 === 0 ? 'rgba(255, 228, 132, 0.26)' : 'rgba(255, 165, 24, 0.16)';
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.arc(0, 0, drawR * 1.15, ang, ang + Math.PI / rays);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      // 2.5D colored enamel-glass orb gradient
+      const orbGrad = ctx.createRadialGradient(-drawR * 0.32, -drawR * 0.34, drawR * 0.12, 0, 0, drawR);
+      orbGrad.addColorStop(0, def.orbTop);
+      orbGrad.addColorStop(0.55, def.orbMid);
+      orbGrad.addColorStop(1, def.orbBot);
+      ctx.fillStyle = orbGrad;
+      ctx.beginPath();
+      ctx.arc(0, 0, drawR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Subtle inner gold filigree rim for Tier 8+
+      if (tier >= 7) {
+        ctx.strokeStyle = tier === 10 ? 'rgba(255, 246, 166, 0.75)' : 'rgba(255, 244, 210, 0.34)';
+        ctx.lineWidth = tier === 10 ? 2.6 : 1.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, drawR * 0.88, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Real Hang Sóc sprite rotating naturally with theta
+      const img = SPRITE_IMG.get(tier);
+      if (img && img.complete && img.naturalWidth > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(0, 0, drawR * 0.94, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.rotate(theta);
+        const spriteSize = drawR * 1.54;
+        ctx.drawImage(img, -spriteSize / 2, -spriteSize / 2, spriteSize, spriteSize);
+        ctx.restore();
+      }
+
+      // Static top-left glossy highlight (marble sheen)
+      ctx.save();
+      ctx.translate(-drawR * 0.3, -drawR * 0.32);
+      ctx.rotate(-0.65);
+      ctx.fillStyle = 'rgba(255, 252, 240, 0.36)';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, drawR * 0.34, drawR * 0.17, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Crisp warm orb rim outline
+      ctx.strokeStyle = tier === 10 ? '#ffe484' : def.rim;
+      ctx.lineWidth = tier >= 8 ? 2.2 : 1.7;
+      ctx.beginPath();
+      ctx.arc(0, 0, drawR - 0.6, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Merge flash ring
+      if (mergeFlash > 0.02) {
+        ctx.fillStyle = `rgba(255, 248, 210, ${mergeFlash * 0.55})`;
+        ctx.beginPath();
+        ctx.arc(0, 0, drawR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Danger pulsing crimson halo when fruit causes overflow
+      if (isDanger) {
+        const pulse = 0.55 + 0.45 * Math.sin(state.simTime * 14);
+        ctx.strokeStyle = `rgba(230, 46, 36, ${pulse})`;
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, drawR + 3, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    function drawClassicScene() {
+      const w = CLASSIC_WORLD;
+
+      // Warm cozy parchment-wood backdrop above & around crate
+      const bg = ctx.createLinearGradient(0, 0, 0, w.h);
+      bg.addColorStop(0, '#4a2612');
+      bg.addColorStop(0.2, '#5e3219');
+      bg.addColorStop(1, '#381b0c');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, w.w, w.h);
+
+      // Subtle brass rail at spawn top
+      ctx.strokeStyle = 'rgba(244, 198, 104, 0.32)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(w.boxLeft + 8, w.spawnY);
+      ctx.lineTo(w.boxRight - 8, w.spawnY);
+      ctx.stroke();
+
+      // Crate interior cavity (warm sunlit Hang Sóc parchment)
+      const crateGrad = ctx.createLinearGradient(w.boxLeft, w.boxTop, w.boxLeft, w.boxBottom);
+      crateGrad.addColorStop(0, state.feverActive ? '#fff8d9' : '#fdf4dc');
+      crateGrad.addColorStop(0.65, state.feverActive ? '#fce7a4' : '#f4e0b3');
+      crateGrad.addColorStop(1, state.feverActive ? '#f5cf78' : '#e6c991');
+      ctx.fillStyle = crateGrad;
+      ctx.fillRect(w.boxLeft, w.boxTop, w.boxRight - w.boxLeft, w.boxBottom - w.boxTop);
+
+      // Cozy vertical oak slat wood lines inside crate
+      ctx.strokeStyle = 'rgba(138, 88, 38, 0.13)';
+      ctx.lineWidth = 1.5;
+      const slats = 7;
+      const slatW = (w.boxRight - w.boxLeft) / slats;
+      for (let i = 1; i < slats; i++) {
+        const sx = w.boxLeft + i * slatW;
+        ctx.beginPath();
+        ctx.moveTo(sx, w.boxTop);
+        ctx.lineTo(sx, w.boxBottom);
+        ctx.stroke();
+      }
+
+      // Fever golden shimmer aura inside crate
+      if (state.feverActive) {
+        const glow = ctx.createLinearGradient(0, w.boxTop, 0, w.boxBottom);
+        glow.addColorStop(0, 'rgba(245, 179, 1, 0.24)');
+        glow.addColorStop(0.5, 'rgba(255, 246, 166, 0.08)');
+        glow.addColorStop(1, 'rgba(255, 133, 27, 0.22)');
+        ctx.fillStyle = glow;
+        ctx.fillRect(w.boxLeft, w.boxTop, w.boxRight - w.boxLeft, w.boxBottom - w.boxTop);
+      }
+
+      // Danger line (dashed crimson-gold, pulses brightly when overflowing)
+      const dangerPulse = state.overflowTimer > 0 ? 0.55 + 0.45 * Math.sin(state.simTime * 14) : 0.62;
+      ctx.save();
+      ctx.strokeStyle = state.overflowTimer > 0
+        ? `rgba(218, 38, 28, ${dangerPulse})`
+        : 'rgba(185, 56, 34, 0.58)';
+      ctx.lineWidth = state.overflowTimer > 0 ? 3.2 : 2;
+      ctx.setLineDash([9, 6]);
+      ctx.beginPath();
+      ctx.moveTo(w.boxLeft + 4, w.dangerY);
+      ctx.lineTo(w.boxRight - 4, w.dangerY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = "700 10px 'Be Vietnam Pro', system-ui, sans-serif";
+      ctx.fillStyle = state.overflowTimer > 0 ? `rgba(218, 38, 28, ${dangerPulse})` : 'rgba(185, 56, 34, 0.62)';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText('VẠCH TRÀN', w.boxRight - 8, w.dangerY - 4);
+      ctx.restore();
+
+      // Aiming dashed guide line & ready fruit (when playing & ready)
+      if (state.status === 'playing') {
+        const aimX = clampAimX(state.aimX, state.currentTier);
+        const readyR = getRadiusForTier(state.currentTier, 'classic');
+        const landY = computeClassicLandingY(aimX, readyR);
+
+        // Dashed gold vertical laser line down to exact landing spot
+        ctx.save();
+        ctx.strokeStyle = state.currentTier === WILDCARD_TIER
+          ? 'rgba(255, 246, 166, 0.85)'
+          : 'rgba(176, 125, 67, 0.65)';
+        ctx.lineWidth = 2.2;
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.moveTo(aimX, w.spawnY + readyR * 0.8);
+        ctx.lineTo(aimX, landY);
+        ctx.stroke();
+
+        // Subtle landing target circle
+        ctx.setLineDash([]);
+        ctx.strokeStyle = state.currentTier === WILDCARD_TIER
+          ? 'rgba(245, 179, 1, 0.55)'
+          : 'rgba(176, 125, 67, 0.32)';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.arc(aimX, landY, readyR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        // Cute brass sliding dropper claw
+        ctx.fillStyle = '#f4c668';
+        ctx.strokeStyle = '#381b0c';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(aimX - 14, 10, 28, 12, 5);
+        ctx.fill();
+        ctx.stroke();
+
+        // Ready fruit waiting to drop (slightly faded during short 0.38s cooldown)
+        const readyAlpha = state.dropCooldown > 0 ? 0.42 : 1;
+        drawFruitOrb(aimX, w.spawnY, readyR, state.currentTier, 0, 1, 0, false, readyAlpha);
+      }
+
+      // Physics fruits
+      for (const b of state.bodies) {
+        drawFruitOrb(
+          b.x,
+          b.y,
+          b.r,
+          b.tier,
+          b.theta,
+          b.popScale,
+          b.mergeFlash,
+          state.dangerBodyIds.has(b.id)
+        );
+      }
+
+      // Carved Oak & Brass Crate Walls (Left, Right, Bottom)
+      const wallGrad = ctx.createLinearGradient(0, w.boxTop, 0, w.h);
+      wallGrad.addColorStop(0, '#874925');
+      wallGrad.addColorStop(0.55, '#6e391c');
+      wallGrad.addColorStop(1, '#3f1f0e');
+      ctx.fillStyle = wallGrad;
+
+      // Left wall
+      ctx.fillRect(0, w.boxTop, w.boxLeft, w.h - w.boxTop);
+      // Right wall
+      ctx.fillRect(w.boxRight, w.boxTop, w.w - w.boxRight, w.h - w.boxTop);
+      // Bottom slab
+      ctx.fillRect(0, w.boxBottom, w.w, w.h - w.boxBottom);
+
+      // Brass inner trim on crate U-frame
+      ctx.strokeStyle = state.feverActive ? '#fff6a6' : '#f4c668';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(w.boxLeft, w.boxTop);
+      ctx.lineTo(w.boxLeft, w.boxBottom);
+      ctx.lineTo(w.boxRight, w.boxBottom);
+      ctx.lineTo(w.boxRight, w.boxTop);
+      ctx.stroke();
+
+      // Brass corner rivets
+      const rivets = [
+        [10, w.boxTop + 12],
+        [w.w - 10, w.boxTop + 12],
+        [10, w.boxBottom + 11],
+        [w.w - 10, w.boxBottom + 11],
+      ];
+      for (const [rx, ry] of rivets) {
+        ctx.fillStyle = '#f4c668';
+        ctx.beginPath();
+        ctx.arc(rx, ry, 4.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#381b0c';
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+      }
+    }
+
+    function drawPlanetScene() {
+      const w = PLANET_WORLD;
+      const { cx, cy } = w;
+
+      // Cozy Hang Sóc Celestial Autumn Night Hearth backdrop
+      const bg = ctx.createRadialGradient(cx, cy, 24, cx, cy, w.w * 0.58);
+      bg.addColorStop(0, state.feverActive ? '#4a3114' : '#24483f');
+      bg.addColorStop(0.56, state.feverActive ? '#2d1c0c' : '#162b24');
+      bg.addColorStop(1, '#120a05');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, w.w, w.h);
+
+      // Faint decorative brass astrolabe gravity rings
+      ctx.save();
+      ctx.strokeStyle = 'rgba(244, 198, 104, 0.14)';
+      ctx.lineWidth = 1.2;
+      for (const rr of [76, 134, 188]) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Animated inward gravity ripple wave pulling toward Hearth Core
+      const ripplePhase = 1 - ((state.simTime * 0.45) % 1);
+      const rippleR = 26 + ripplePhase * (w.dangerR - 34);
+      ctx.strokeStyle = state.feverActive
+        ? `rgba(255, 228, 132, ${0.22 * (1 - ripplePhase)})`
+        : `rgba(244, 198, 104, ${0.18 * (1 - ripplePhase)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rippleR, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Subtle warm parchment disc inside the Danger Ring so fruits pop clearly
+      const disc = ctx.createRadialGradient(cx, cy, 10, cx, cy, w.dangerR);
+      disc.addColorStop(0, 'rgba(255, 232, 165, 0.25)');
+      disc.addColorStop(0.68, 'rgba(246, 228, 184, 0.11)');
+      disc.addColorStop(1, 'rgba(244, 198, 104, 0.04)');
+      ctx.fillStyle = disc;
+      ctx.beginPath();
+      ctx.arc(cx, cy, w.dangerR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Glowing Hang Sóc Hearth Core at center (cx, cy)
+      const corePulse = 1 + Math.sin(state.simTime * 3.5) * 0.08;
+      const coreGlow = ctx.createRadialGradient(cx, cy, 2, cx, cy, w.coreVisualR * 2.2 * corePulse);
+      coreGlow.addColorStop(0, 'rgba(255, 246, 166, 0.92)');
+      coreGlow.addColorStop(0.38, 'rgba(255, 165, 36, 0.48)');
+      coreGlow.addColorStop(1, 'rgba(255, 133, 27, 0)');
+      ctx.fillStyle = coreGlow;
+      ctx.beginPath();
+      ctx.arc(cx, cy, w.coreVisualR * 2.2 * corePulse, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffe484';
+      ctx.strokeStyle = '#f5b301';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 11 * corePulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Glowing Brass Danger Ring (pulses crimson during 5.0s overflow!)
+      const dangerPulse = state.overflowTimer > 0 ? 0.55 + 0.45 * Math.sin(state.simTime * 14) : 0.78;
+      ctx.strokeStyle = state.overflowTimer > 0
+        ? `rgba(235, 52, 42, ${dangerPulse})`
+        : (state.feverActive ? 'rgba(255, 246, 166, 0.85)' : 'rgba(244, 198, 104, 0.72)');
+      ctx.lineWidth = state.overflowTimer > 0 ? 4 : 2.6;
+      ctx.setLineDash([12, 8]);
+      ctx.beginPath();
+      ctx.arc(cx, cy, w.dangerR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Outer Orbital Brass Halo Track
+      ctx.strokeStyle = 'rgba(244, 198, 104, 0.36)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, w.orbitR, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // 12 Astrolabe tick marks around orbital ring
+      for (let i = 0; i < 12; i++) {
+        const ang = (Math.PI * 2 * i) / 12;
+        ctx.strokeStyle = 'rgba(244, 198, 104, 0.45)';
+        ctx.lineWidth = i % 3 === 0 ? 2.4 : 1.3;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(ang) * (w.orbitR - 6), cy + Math.sin(ang) * (w.orbitR - 6));
+        ctx.lineTo(cx + Math.cos(ang) * (w.orbitR + 6), cy + Math.sin(ang) * (w.orbitR + 6));
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // 360° Aim Laser Line & Orbiting Ready Fruit
+      if (state.status === 'playing') {
+        const readyR = getRadiusForTier(state.currentTier, 'planet');
+        const hit = computePlanetImpactPoint(state.aimAngle, readyR);
+
+        ctx.save();
+        ctx.strokeStyle = state.currentTier === WILDCARD_TIER
+          ? 'rgba(255, 246, 166, 0.9)'
+          : 'rgba(244, 198, 104, 0.72)';
+        ctx.lineWidth = 2.4;
+        ctx.setLineDash([7, 6]);
+        ctx.beginPath();
+        ctx.moveTo(hit.ox, hit.oy);
+        ctx.lineTo(hit.tx, hit.ty);
+        ctx.stroke();
+
+        // Impact ghost ring
+        ctx.setLineDash([]);
+        ctx.strokeStyle = 'rgba(255, 228, 132, 0.45)';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.arc(hit.tx, hit.ty, readyR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        // Brass launch cradle + inward aim chevron behind orbiting fruit
+        ctx.save();
+        ctx.translate(hit.ox, hit.oy);
+        ctx.rotate(state.aimAngle);
+        ctx.strokeStyle = '#f4c668';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, readyR + 5, -0.85, 0.85);
+        ctx.stroke();
+        ctx.fillStyle = '#ffe484';
+        ctx.beginPath();
+        ctx.moveTo(-(readyR + 13), 0);
+        ctx.lineTo(-(readyR + 5), -5);
+        ctx.lineTo(-(readyR + 5), 5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        const readyAlpha = state.dropCooldown > 0 ? 0.42 : 1;
+        drawFruitOrb(hit.ox, hit.oy, readyR, state.currentTier, state.aimAngle + Math.PI / 2, 1, 0, false, readyAlpha);
+      }
+
+      // Physics fruits orbiting/clustering around Hearth Core
+      for (const b of state.bodies) {
+        drawFruitOrb(
+          b.x,
+          b.y,
+          b.r,
+          b.tier,
+          b.theta,
+          b.popScale,
+          b.mergeFlash,
+          state.dangerBodyIds.has(b.id)
+        );
+      }
+    }
+
+    function drawVfxAndOverlays() {
+      const w = getWorld();
+
+      // Shockwave rings
+      for (const sw of state.shockwaves) {
+        const p = 1 - sw.life / sw.maxLife;
+        const currR = sw.r + (sw.maxR - sw.r) * p;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, (1 - p) * 0.82);
+        ctx.strokeStyle = sw.color;
+        ctx.lineWidth = 4 * (1 - p) + 1;
+        ctx.beginPath();
+        ctx.arc(sw.x, sw.y, currR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Particles (juice drops & golden stars)
+      for (const pt of state.particles) {
+        const alpha = Math.max(0, pt.life / pt.maxLife);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = pt.color;
+        if (pt.star) {
+          ctx.translate(pt.x, pt.y);
+          ctx.rotate(pt.life * 6);
+          const s = pt.size * (0.6 + alpha * 0.5);
+          ctx.beginPath();
+          ctx.moveTo(0, -s);
+          ctx.lineTo(s * 0.35, -s * 0.35);
+          ctx.lineTo(s, 0);
+          ctx.lineTo(s * 0.35, s * 0.35);
+          ctx.lineTo(0, s);
+          ctx.lineTo(-s * 0.35, s * 0.35);
+          ctx.lineTo(-s, 0);
+          ctx.lineTo(-s * 0.35, -s * 0.35);
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, pt.size * alpha, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      // Floating score & jackpot callouts
+      for (const pop of state.popups) {
+        const alpha = Math.min(1, (pop.life / pop.maxLife) * 1.45);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.font = `800 ${pop.size}px 'Be Vietnam Pro', system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.lineWidth = 4.5;
+        ctx.strokeStyle = 'rgba(42, 18, 6, 0.92)';
+        ctx.strokeText(pop.text, pop.x, pop.y);
+        ctx.fillStyle = pop.color;
+        ctx.fillText(pop.text, pop.x, pop.y);
+        ctx.restore();
+      }
+
+      // Dramatic 5.0-Second Forgiving Overflow Countdown Badge on Canvas
+      if (state.overflowTimer > 0.05 && state.status === 'playing') {
+        const remain = Math.max(0, OVERFLOW_LIMIT - state.overflowTimer);
+        const pct = remain / OVERFLOW_LIMIT;
+        const bx = w.w / 2;
+        const by = state.mode === 'classic' ? CLASSIC_WORLD.dangerY + 34 : 52;
+        const pulse = 1 + Math.sin(state.simTime * 14) * 0.045;
+
+        ctx.save();
+        ctx.translate(bx, by);
+        ctx.scale(pulse, pulse);
+
+        ctx.fillStyle = 'rgba(130, 18, 16, 0.93)';
+        ctx.strokeStyle = '#fff6a6';
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.roundRect(-102, -21, 204, 42, 21);
+        ctx.fill();
+        ctx.stroke();
+
+        // Mini countdown ring on left
+        ctx.strokeStyle = 'rgba(255, 246, 166, 0.25)';
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.arc(-74, 0, 12, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#ffe484';
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.arc(-74, 0, 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
+        ctx.stroke();
+
+        ctx.font = "800 14px 'Be Vietnam Pro', system-ui, sans-serif";
+        ctx.fillStyle = '#fff6dc';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`SẮP TRÀN · ${remain.toFixed(1)}s`, -52, 1);
+        ctx.restore();
+      }
+    }
+
+    function render() {
+      const world = getWorld();
+      const scaleX = canvas.width / world.w;
+      const scaleY = canvas.height / world.h;
+
+      ctx.save();
+      ctx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
+
+      // Screen shake & crate jolt transform
+      let ox = state.crateJoltX;
+      let oy = state.crateJoltY;
+      if (state.screenShake > 0.1 && !reducedMotion) {
+        ox += (Math.random() - 0.5) * state.screenShake * 1.6;
+        oy += (Math.random() - 0.5) * state.screenShake * 1.6;
+      }
+      if (ox !== 0 || oy !== 0 || Math.abs(state.crateJoltRot) > 0.0005) {
+        ctx.translate(world.w / 2 + ox, world.h / 2 + oy);
+        ctx.rotate(state.crateJoltRot);
+        ctx.translate(-world.w / 2, -world.h / 2);
+      }
+
+      if (state.mode === 'classic') {
+        drawClassicScene();
+      } else {
+        drawPlanetScene();
+      }
+      drawVfxAndOverlays();
+
+      ctx.restore();
+    }
+
+    // =========================================================================
+    // 12. HUD DOM SYNCHRONIZATION (Zero-Layout-Shift)
+    // =========================================================================
+    function triggerComboPop() {
+      uiComboPill.classList.remove('pop');
+      void uiComboPill.offsetWidth;
+      uiComboPill.classList.add('pop');
+      setTimeout(() => uiComboPill.classList.remove('pop'), 180);
+    }
+
+    function syncMuteDOM() {
+      btnMute.textContent = soundEnabled ? 'Âm: Bật' : 'Âm: Tắt';
+      btnMute.setAttribute('aria-pressed', String(!soundEnabled));
+    }
+
+    function updateWellVisual(orbEl, imgEl, nameEl, tier) {
+      orbEl.classList.remove('has-fruit', 'is-empty', 'is-wildcard');
+      if (tier === null || tier === undefined) {
+        orbEl.classList.add('is-empty');
+        orbEl.style.removeProperty('--well-color');
+        imgEl.src = '../sprites/m3_boost_shuffle.webp';
+        nameEl.textContent = 'Trống';
+        return;
+      }
+      if (tier === WILDCARD_TIER) {
+        orbEl.classList.add('has-fruit', 'is-wildcard');
+        imgEl.src = '../sprites/m3_sp_snitch.webp';
+        nameEl.textContent = 'Quả Cầu Vồng';
+        return;
+      }
+      const def = TIERS[tier];
+      orbEl.classList.add('has-fruit');
+      orbEl.style.setProperty('--well-color', `var(${def.cssVar})`);
+      imgEl.src = def.sprite;
+      nameEl.textContent = def.name;
+    }
+
+    function syncHudDOM(full = false) {
+      uiScore.textContent = state.score.toLocaleString('vi-VN');
+      uiBest.textContent = getBestForMode().toLocaleString('vi-VN');
+
+      const displayCombo = Math.max(1, state.combo);
+      uiComboTxt.textContent = state.feverActive
+        ? `×2 · ×${displayCombo}`
+        : `Combo ×${displayCombo}`;
+      uiComboPill.classList.toggle('is-fever', state.feverActive);
+
+      // Evolution ladder highlight
+      for (let i = 0; i < evoNodes.length; i++) {
+        evoNodes[i].classList.toggle('is-reached', i <= state.highestTier);
+        evoNodes[i].classList.toggle('is-highest', i === state.highestTier);
+      }
+      uiEvoPeak.textContent = `Đỉnh: ${TIERS[state.highestTier].name}`;
+
+      // Next & Hold wells
+      updateWellVisual(uiNextOrb, uiNextImg, uiNextName, state.nextTier);
+      updateWellVisual(uiHoldOrb, uiHoldImg, uiHoldName, state.holdTier);
+
+      const holdDisabled = state.holdUsedThisDrop || state.status !== 'playing';
+      btnHoldWell.classList.toggle('is-used', holdDisabled);
+      btnHoldWell.disabled = holdDisabled;
+      btnHold.disabled = holdDisabled;
+      uiHoldStatus.textContent = state.holdUsedThisDrop ? 'Chờ thả' : 'Phím C';
+
+      btnShake.disabled = state.shakes <= 0 || state.status !== 'playing' || state.bodies.length === 0;
+      uiShakeQty.textContent = `×${state.shakes} (S)`;
+
+      // Fixed-height Super Evolution Gauge / CTA
+      const ready = !state.feverActive && state.feverGauge >= 100 && state.status === 'playing';
+      btnFever.classList.toggle('is-ready', ready);
+      btnFever.classList.toggle('is-active', state.feverActive);
+      btnFever.setAttribute('aria-disabled', String(!ready));
+      boardFrame.classList.toggle('is-fever', state.feverActive);
+
+      if (state.feverActive) {
+        const pct = Math.max(0, (state.feverTimer / FEVER_DURATION) * 100);
+        uiFeverFill.style.width = `${pct.toFixed(1)}%`;
+        uiFeverLabel.textContent = 'SIÊU TIẾN HÓA · ×2';
+        uiFeverPct.textContent = `${state.feverTimer.toFixed(1)}s`;
+      } else if (ready) {
+        uiFeverFill.style.width = '100%';
+        uiFeverLabel.textContent = 'KÍCH HOẠT SIÊU TIẾN HÓA!';
+        uiFeverPct.textContent = 'F';
+      } else {
+        const pct = Math.round(state.feverGauge);
+        uiFeverFill.style.width = `${pct}%`;
+        uiFeverLabel.textContent = 'Siêu Tiến Hóa';
+        uiFeverPct.textContent = `${pct}%`;
+      }
+
+      if (full) syncMuteDOM();
+    }
+
+    // =========================================================================
+    // 13. MAIN 60FPS FIXED-TIMESTEP LOOP
+    // =========================================================================
+    let lastTime = performance.now();
+    let accumulator = 0;
+
+    function updateFixed(dt) {
+      state.simTime += dt;
+
+      // Smooth keyboard aiming
+      if (state.status === 'playing') {
+        const dir = (state.keys.right ? 1 : 0) - (state.keys.left ? 1 : 0);
+        if (dir !== 0) {
+          if (state.mode === 'classic') {
+            state.aimX = clampAimX(state.aimX + dir * 320 * dt);
+          } else {
+            state.aimAngle += dir * 2.15 * dt;
+          }
+        }
+      }
+
+      // Cooldowns & timers
+      if (state.dropCooldown > 0) state.dropCooldown = Math.max(0, state.dropCooldown - dt);
+      if (state.shakeCooldown > 0) state.shakeCooldown = Math.max(0, state.shakeCooldown - dt);
+      if (state.comboTimer > 0) {
+        state.comboTimer -= dt;
+        if (state.comboTimer <= 0) {
+          state.combo = 0;
+          syncHudDOM(false);
+        }
+      }
+
+      // Fever countdown
+      if (state.feverActive) {
+        state.feverTimer -= dt;
+        if (state.feverTimer <= 0) {
+          state.feverActive = false;
+          state.feverTimer = 0;
+          state.feverGauge = 0;
+          showBanner('Siêu Tiến Hóa kết thúc — tiếp tục tích chuỗi hợp quả!', 1.8);
+        }
+        syncHudDOM(false);
+      }
+
+      // Banner auto-hide
+      if (bannerTimer > 0) {
+        bannerTimer -= dt;
+        if (bannerTimer <= 0) {
+          boardBanner.classList.remove('is-visible');
+        }
+      }
+
+      // Spring decay for screen shake & crate jolt
+      state.screenShake *= Math.pow(0.015, dt);
+      state.crateJoltX *= Math.pow(0.002, dt);
+      state.crateJoltY *= Math.pow(0.002, dt);
+      state.crateJoltRot *= Math.pow(0.002, dt);
+
+      // Update VFX even during brief hit-stop
+      for (let i = state.particles.length - 1; i >= 0; i--) {
+        const pt = state.particles[i];
+        pt.life -= dt;
+        if (pt.life <= 0) {
+          state.particles.splice(i, 1);
+          continue;
+        }
+        pt.x += pt.vx * dt;
+        pt.y += pt.vy * dt;
+        if (state.mode === 'classic') pt.vy += 380 * dt;
+        pt.vx *= 0.96;
+        pt.vy *= 0.96;
+      }
+
+      for (let i = state.shockwaves.length - 1; i >= 0; i--) {
+        const sw = state.shockwaves[i];
+        sw.life -= dt;
+        if (sw.life <= 0) state.shockwaves.splice(i, 1);
+      }
+
+      for (let i = state.popups.length - 1; i >= 0; i--) {
+        const pop = state.popups[i];
+        pop.life -= dt;
+        if (pop.life <= 0) {
+          state.popups.splice(i, 1);
+          continue;
+        }
+        pop.y += pop.vy * dt;
+        pop.vy *= 0.95;
+      }
+
+      // Squash-pop spring animation on fruits
+      for (const b of state.bodies) {
+        if (b.popScale !== 1 || Math.abs(b.popVel) > 0.01) {
+          const force = (1 - b.popScale) * 210;
+          b.popVel = (b.popVel + force * dt) * Math.pow(0.012, dt);
+          b.popScale += b.popVel * dt;
+          if (Math.abs(1 - b.popScale) < 0.003 && Math.abs(b.popVel) < 0.02) {
+            b.popScale = 1;
+            b.popVel = 0;
+          }
+        }
+        if (b.mergeFlash > 0) {
+          b.mergeFlash = Math.max(0, b.mergeFlash - dt * 4.5);
+        }
+      }
+
+      if (state.status !== 'playing') return;
+
+      // Hit-stop freeze frames on big Tier 7+ merges
+      if (state.hitStopTimer > 0) {
+        state.hitStopTimer = Math.max(0, state.hitStopTimer - dt);
+        return;
+      }
+
+      stepPhysics(dt);
+      updateOverflow(dt);
+    }
+
+    function loop(now) {
+      const frameDt = Math.min(0.05, Math.max(0, (now - lastTime) / 1000));
+      lastTime = now;
+      accumulator += frameDt;
+
+      let steps = 0;
+      while (accumulator >= FIXED_DT && steps < 3) {
+        updateFixed(FIXED_DT);
+        accumulator -= FIXED_DT;
+        steps++;
+      }
+      if (steps === 3) accumulator = 0;
+
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    // =========================================================================
+    // 14. INPUT HANDLERS (Mouse, Touch Pointer, Keyboard, Buttons, Dialog)
+    // =========================================================================
+    function updateAimFromClient(clientX, clientY) {
+      const pt = clientToWorld(clientX, clientY);
+      if (state.mode === 'classic') {
+        state.aimX = clampAimX(pt.x);
+      } else {
+        const dx = pt.x - PLANET_WORLD.cx;
+        const dy = pt.y - PLANET_WORLD.cy;
+        if (dx * dx + dy * dy > 16) {
+          state.aimAngle = Math.atan2(dy, dx);
+        }
+      }
+    }
+
+    canvas.addEventListener('pointerdown', (e) => {
+      if (state.status !== 'playing') return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (document.activeElement && document.activeElement.tagName === 'BUTTON') {
+        document.activeElement.blur();
+      }
+      ensureAudio();
+      state.pointerActive = true;
+      canvas.setPointerCapture?.(e.pointerId);
+      updateAimFromClient(e.clientX, e.clientY);
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+      if (state.status !== 'playing') return;
+      if (e.pointerType === 'mouse' || state.pointerActive) {
+        updateAimFromClient(e.clientX, e.clientY);
+      }
+    });
+
+    canvas.addEventListener('pointerup', (e) => {
+      if (!state.pointerActive) return;
+      state.pointerActive = false;
+      try { canvas.releasePointerCapture?.(e.pointerId); } catch {}
+      if (state.status !== 'playing') return;
+      updateAimFromClient(e.clientX, e.clientY);
+      dropCurrentFruit();
+    });
+
+    canvas.addEventListener('pointercancel', () => {
+      state.pointerActive = false;
+    });
+
+    // Mode tabs & HUD buttons
+    btnModeClassic.addEventListener('click', () => {
+      ensureAudio();
+      if (state.mode !== 'classic') startNewGame('classic');
+    });
+
+    btnModePlanet.addEventListener('click', () => {
+      ensureAudio();
+      if (state.mode !== 'planet') startNewGame('planet');
+    });
+
+    btnHoldWell.addEventListener('click', triggerHoldSwap);
+    btnHold.addEventListener('click', triggerHoldSwap);
+    btnShake.addEventListener('click', triggerShake);
+    btnFever.addEventListener('click', triggerFever);
+
+    btnRestart.addEventListener('click', () => {
+      ensureAudio();
+      startNewGame(state.mode);
+    });
+
+    function applySoundEnabled(enabled) {
+      soundEnabled = Boolean(enabled);
+      safeSet(STORAGE_KEYS.muted, soundEnabled ? '0' : '1');
+      if (!soundEnabled && audioCtx?.state === 'running') {
+        audioCtx.suspend().catch(() => {});
+      }
+      syncMuteDOM();
+    }
+
+    btnMute.addEventListener('click', () => {
+      applySoundEnabled(!soundEnabled);
+    });
+
+    // =========================================================================
+    // 15. HPVN BONUS ARCADE TWO-WAY postMessage BRIDGE (hs-bonus-arcade)
+    // =========================================================================
+    window.addEventListener('message', (ev) => {
+      const data = ev.data;
+      if (!data || typeof data !== 'object') return;
+      if (data.channel !== BRIDGE_CHANNEL || data.gameId !== GAME_ID) return;
+      if (EMBED_TOKEN && data.token && data.token !== EMBED_TOKEN) return;
+
+      if (data.type === 'init') {
+        const rec = data.state && typeof data.state === 'object'
+          ? data.state
+          : (data.record && typeof data.record === 'object' ? data.record : data);
+        const incomingBest = Math.max(0, Number(rec?.bestScore) || 0);
+        if (incomingBest > 0) {
+          state.bestClassic = Math.max(state.bestClassic, incomingBest);
+          state.bestPlanet = Math.max(state.bestPlanet, incomingBest);
+          safeSet(STORAGE_KEYS.bestClassic, state.bestClassic);
+          safeSet(STORAGE_KEYS.bestPlanet, state.bestPlanet);
+          lastReportedBestScore = Math.max(lastReportedBestScore, incomingBest);
+        }
+        const incomingBestCombo = Math.max(0, Number(rec?.bestCombo) || 0);
+        if (incomingBestCombo > 0) {
+          lastReportedBestCombo = Math.max(lastReportedBestCombo, incomingBestCombo);
+        }
+        if (typeof data.soundEnabled === 'boolean') {
+          applySoundEnabled(data.soundEnabled);
+        } else if (typeof data.muted === 'boolean') {
+          applySoundEnabled(!data.muted);
+        }
+        if (typeof data.reducedMotion === 'boolean') {
+          reducedMotion = data.reducedMotion;
+        }
+        syncHudDOM(true);
+      } else if (data.type === 'audio-sync') {
+        if (typeof data.soundEnabled === 'boolean') {
+          applySoundEnabled(data.soundEnabled);
+        } else if (typeof data.muted === 'boolean') {
+          applySoundEnabled(!data.muted);
+        }
+      } else if (data.type === 'molly-boost' && data.boostKind === 'upgrade_orb') {
+        applyMollyUpgradeOrbBoost();
+      }
+    });
+
+    // Native <dialog> close lifecycle (reset returnValue cleanly)
+    gameOverDialog.addEventListener('close', () => {
+      if (gameOverDialog.open) return;
+      const action = gameOverDialog.returnValue;
+      gameOverDialog.returnValue = '';
+      if (action === 'switch') {
+        startNewGame(state.mode === 'classic' ? 'planet' : 'classic');
+      } else if (action === 'replay') {
+        startNewGame(state.mode);
+      }
+    });
+
+    // Keyboard controls
+    window.addEventListener('keydown', (e) => {
+      if (gameOverDialog.open || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'ArrowLeft' || e.code === 'KeyA') {
+        state.keys.left = true;
+      } else if (e.key === 'ArrowRight' || e.code === 'KeyD') {
+        state.keys.right = true;
+      } else if (e.code === 'Space' || e.key === 'ArrowDown' || e.key === 'Enter') {
+        if (document.activeElement && document.activeElement.tagName === 'BUTTON') return;
+        e.preventDefault();
+        dropCurrentFruit();
+      } else if (e.code === 'KeyC') {
+        e.preventDefault();
+        triggerHoldSwap();
+      } else if (e.code === 'KeyS') {
+        e.preventDefault();
+        triggerShake();
+      } else if (e.code === 'KeyF') {
+        e.preventDefault();
+        triggerFever();
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'ArrowLeft' || e.code === 'KeyA') state.keys.left = false;
+      if (e.key === 'ArrowRight' || e.code === 'KeyD') state.keys.right = false;
+    });
+
+    window.addEventListener('blur', () => {
+      state.keys.left = false;
+      state.keys.right = false;
+      state.pointerActive = false;
+    });
+
+    // ResizeObserver + window resize
+    window.addEventListener('resize', resizeCanvas);
+    if (typeof ResizeObserver === 'function') {
+      const ro = new ResizeObserver(() => resizeCanvas());
+      ro.observe(boardWrap);
+    }
+
+    // Boot!
+    syncMuteDOM();
+    startNewGame('classic');
+    requestAnimationFrame(() => resizeCanvas());
+    postBridgeMessage('ready');
+    requestAnimationFrame(loop);
+  })();
+  </script>
+</body>
+</html>

@@ -94,6 +94,7 @@ import {
 } from './retentionAndNarrative';
 import { sanitizeRoadsideStandState } from './roadsideStandAndEvents';
 import { sanitizeWeeklyDerbyState } from './weeklyDerbyEngine';
+import { sanitizeBonusArcadeState } from './bonusArcadeGames';
 import {
   BuildReductionResult,
   CatalogItem,
@@ -2220,6 +2221,7 @@ export function migrateLoadedState(parsed: GameState): GameState {
     collectedCards: parsed.collectedCards ?? {},
     farmBarn: safeBarn,
     weeklyDerby: sanitizeWeeklyDerbyState(parsed.weeklyDerby),
+    bonusArcade: sanitizeBonusArcadeState(parsed.bonusArcade),
     roadsideStand: parsed.roadsideStand ? sanitizeRoadsideStandState(parsed.roadsideStand) : undefined,
     hayDayHarvestDropMeter:
       typeof parsed.hayDayHarvestDropMeter === 'number' && Number.isFinite(parsed.hayDayHarvestDropMeter)

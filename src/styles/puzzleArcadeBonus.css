@@ -1,0 +1,1180 @@
+/* ==========================================================================
+   Bonus Arcade Embedded Minigames, 2-Group Đại Sảnh Tabs & Extracted Modal Polish
+   Split out from src/styles/main.css (unlayered, loaded after main.css).
+   All colors derived from :root tokens in main.css; Be Vietnam Pro only;
+   zero nested @media (iOS Safari 16+ safe).
+   ========================================================================== */
+
+/* ===== 1. Học Viện Thần Chú (#seedQuizDialog — extracted from main.css đợt 8) ===== */
+#seedQuizDialog .modal-header {
+  display: flex;
+  align-items: center;
+  gap: var(--hs-space-2);
+  min-block-size: 44px;
+  margin-block-end: 6px;
+  padding-block-end: 6px;
+}
+#seedQuizDialog .modal-header .modal-title {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+#seedQuizDialog .sq-header-subview-btn {
+  flex: none;
+  min-inline-size: 72px;
+  min-block-size: 40px;
+  block-size: 40px;
+  padding: 0 12px;
+  border: var(--hs-line) solid var(--hs-brass);
+  border-radius: var(--hs-radius-m);
+  background: var(--hs-cream);
+  color: var(--hs-ink);
+  font-size: var(--hs-text-13);
+  font-weight: var(--hs-weight-label);
+  box-shadow: none;
+}
+#seedQuizDialog .sq-header-subview-btn[aria-pressed='true'] {
+  border-color: var(--hs-gold-deep);
+  background: var(--hs-gold);
+  color: var(--hs-ink);
+}
+#seedQuizDialog .sq-root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-inline: 2px;
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+#seedQuizDialog[open] .sq-lang-tabs > .sq-lang-tab {
+  flex: 1 1 0%;
+  min-inline-size: 48px;
+  min-block-size: 40px;
+  padding: 6px 8px;
+  font-size: var(--hs-text-13);
+  font-weight: var(--hs-weight-label);
+  white-space: nowrap;
+}
+#seedQuizDialog :is(.sq-setup-row, .sq-buy-row, .sq-tools-row) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-block-size: 40px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+#seedQuizDialog .sq-buy-row {
+  flex-wrap: wrap;
+}
+#seedQuizDialog .sq-buy-pill {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--hs-space-1);
+}
+#seedQuizDialog .sq-buy-pill[data-unaffordable='true'] {
+  opacity: 0.65;
+}
+#seedQuizDialog .sq-sickle-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hs-space-1);
+  min-block-size: 40px;
+  padding: 0 10px;
+  border: var(--hs-line) solid var(--hs-brass);
+  border-radius: var(--hs-radius-m);
+  background: var(--hs-paper-2);
+  color: var(--hs-ink);
+  font-size: var(--hs-text-12);
+  font-weight: var(--hs-weight-label);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+#seedQuizDialog .sq-sickle-chip .g-coin {
+  inline-size: 16px;
+  block-size: 16px;
+  filter: none;
+}
+#seedQuizDialog .sq-setup-row > .sq-crop-pill-img {
+  flex: none;
+  inline-size: 24px;
+  block-size: 24px;
+  object-fit: contain;
+}
+#seedQuizDialog .sq-select-shell {
+  position: relative;
+  box-sizing: border-box;
+  min-inline-size: 64px;
+  min-block-size: 40px;
+  block-size: 40px;
+  border: var(--hs-line) solid var(--hs-brass);
+  border-radius: var(--hs-radius-m);
+  background-color: var(--hs-cream);
+  color: var(--hs-ink);
+}
+#seedQuizDialog .sq-select-shell:has(> .sq-select:focus-visible) {
+  outline: 3px solid var(--focus-color);
+  outline-offset: 2px;
+}
+#seedQuizDialog .sq-select-face {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  inline-size: 100%;
+  block-size: 100%;
+  padding: 0 10px;
+  pointer-events: none;
+}
+#seedQuizDialog .sq-select-label {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--hs-ink);
+  font-size: var(--hs-text-13);
+  font-weight: var(--hs-weight-label);
+  line-height: 1.25;
+}
+#seedQuizDialog .sq-select-caret {
+  flex: 0 0 12px;
+  inline-size: 12px;
+  block-size: 12px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%236b4423' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+}
+#seedQuizDialog .sq-select {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--hs-text-16);
+}
+#seedQuizDialog .sq-crop-select {
+  flex: 1 1 0%;
+  min-inline-size: 0;
+  max-inline-size: none;
+}
+#seedQuizDialog .sq-tier-select {
+  flex: 0 0 auto;
+  inline-size: 98px;
+}
+#seedQuizDialog .sq-format-select {
+  flex: 1 1 0%;
+  min-inline-size: 0;
+}
+#seedQuizDialog .sq-sow-cta {
+  flex: none;
+  min-inline-size: 64px;
+  min-block-size: 40px;
+  block-size: 40px;
+  padding: 0 10px;
+  font-size: var(--hs-text-12);
+}
+#seedQuizDialog .sq-tool-pill {
+  flex: none;
+  min-inline-size: 48px;
+  min-block-size: 40px;
+  block-size: 40px;
+  padding: 6px 10px;
+  border: var(--hs-line) solid var(--hs-brass);
+  border-radius: var(--hs-radius-m);
+  background: var(--hs-cream);
+  color: var(--hs-ink);
+  font-size: var(--hs-text-12);
+  font-weight: var(--hs-weight-label);
+  white-space: nowrap;
+  box-shadow: none;
+}
+#seedQuizDialog .sq-tool-pill[aria-pressed='true'] {
+  border-color: var(--hs-gold-deep);
+  background: var(--hs-gold);
+  color: var(--hs-ink);
+}
+#seedQuizDialog .sq-stage-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+#seedQuizDialog .sq-prompt-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: var(--hs-line) solid rgba(176, 125, 67, 0.45);
+  border-radius: var(--hs-radius-m);
+  background: var(--hs-cream);
+}
+#seedQuizDialog .sq-prompt-img {
+  flex: none;
+  inline-size: 40px;
+  block-size: 40px;
+  object-fit: contain;
+}
+#seedQuizDialog .sq-prompt-copy {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+#seedQuizDialog .sq-prompt-word {
+  color: var(--hs-ink);
+  font-size: var(--hs-text-16);
+  font-weight: var(--hs-weight-title);
+  line-height: 1.25;
+}
+#seedQuizDialog .sq-prompt-ph {
+  color: var(--hs-ink-soft);
+  font-size: var(--hs-text-12);
+  font-weight: var(--hs-weight-body);
+  line-height: 1.2;
+}
+#seedQuizDialog .sq-audio-btn {
+  flex: none;
+  min-inline-size: 60px;
+  min-block-size: 40px;
+  block-size: 40px;
+  padding: 6px 12px;
+  font-size: var(--hs-text-13);
+  font-weight: var(--hs-weight-label);
+}
+#seedQuizDialog .sq-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+@media (min-width: 780px) {
+  #seedQuizDialog[data-mg-layout='landscape'] .sq-choice-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+#seedQuizDialog .sq-choice-grid > .sq-choice-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-block-size: 70px;
+  padding: 8px 10px;
+  border: var(--hs-line) solid var(--hs-brass);
+  border-radius: var(--hs-radius-m);
+  background: var(--hs-cream);
+  color: var(--hs-ink);
+  box-shadow: 0 2px 0 var(--hs-shade);
+  text-align: center;
+  transform: none;
+}
+#seedQuizDialog .sq-choice-grid > .sq-choice-btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 1px 0 var(--hs-shade);
+}
+#seedQuizDialog .sq-choice-grid > .sq-choice-btn.is-correct {
+  border-width: var(--hs-line-shell);
+  border-color: var(--hs-ok);
+  background: var(--hs-ok-bg);
+}
+#seedQuizDialog .sq-choice-grid > .sq-choice-btn.is-wrong {
+  border-width: var(--hs-line-shell);
+  border-color: var(--hs-bad);
+  background: var(--hs-bad-bg);
+}
+#seedQuizDialog .sq-kid-card-img {
+  inline-size: 36px;
+  block-size: 36px;
+  object-fit: contain;
+}
+#seedQuizDialog .sq-choice-main {
+  color: var(--hs-ink);
+  font-size: var(--hs-text-14);
+  font-weight: var(--hs-weight-label);
+  line-height: 1.25;
+}
+#seedQuizDialog .sq-choice-ph {
+  color: var(--hs-ink-soft);
+  font-size: var(--hs-text-11);
+  font-weight: var(--hs-weight-body);
+  line-height: 1.2;
+}
+#seedQuizDialog .sq-sentence-slots {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-block-size: 48px;
+  padding: 8px 10px;
+  border: var(--hs-line) dashed var(--hs-brass);
+  border-radius: var(--hs-radius-m);
+  background: var(--hs-cream);
+}
+#seedQuizDialog .sq-slot-placeholder {
+  color: var(--hs-ink-soft);
+  font-size: var(--hs-text-13);
+}
+#seedQuizDialog :is(.sq-word-bank, .sq-sentence-actions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+#seedQuizDialog :is(.sq-word-chip, .sq-kid-slot-filled),
+#seedQuizDialog .sq-sentence-actions > .brass-btn {
+  min-inline-size: 48px;
+  min-block-size: 40px;
+  padding: 6px 12px;
+  font-size: var(--hs-text-13);
+}
+#seedQuizDialog .sq-sentence-actions > .gold-cta {
+  margin-inline-start: auto;
+}
+#seedQuizDialog :is(.sq-pairs-board, .sq-pairs-wrap) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+#seedQuizDialog .sq-pairs-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+#seedQuizDialog .sq-pair-btn {
+  min-block-size: 44px;
+  padding: 8px 10px;
+}
+#seedQuizDialog .sq-explain-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border: var(--hs-line) solid rgba(176, 125, 67, 0.45);
+  border-radius: var(--hs-radius-m);
+  background: var(--hs-cream);
+}
+#seedQuizDialog .sq-explain-card:is(.is-ok, .is-pass) {
+  border-color: var(--hs-ok);
+  background: var(--hs-ok-bg);
+}
+#seedQuizDialog .sq-explain-card:is(.is-bad, .is-review) {
+  border-color: var(--hs-bad);
+  background: var(--hs-bad-bg);
+}
+#seedQuizDialog .sq-explain-main {
+  flex: 1 1 180px;
+  min-inline-size: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--hs-text-13);
+}
+#seedQuizDialog .sq-explain-word {
+  color: var(--hs-ink);
+  font-weight: var(--hs-weight-label);
+}
+#seedQuizDialog .sq-explain-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-inline-start: auto;
+}
+#seedQuizDialog .sq-explain-actions > .brass-btn {
+  min-inline-size: 60px;
+  min-block-size: 40px;
+  padding: 6px 12px;
+  font-size: var(--hs-text-13);
+}
+#seedQuizDialog .sq-codex-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+#seedQuizDialog .sq-codex-toolbar {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+#seedQuizDialog .sq-codex-search {
+  flex: 1 1 180px;
+  block-size: 40px;
+  min-block-size: 40px;
+  max-block-size: 42px;
+  padding: 0 12px;
+  border: var(--hs-line) solid var(--hs-brass);
+  border-radius: var(--hs-radius-m);
+  background: var(--hs-cream);
+  color: var(--hs-ink);
+  font-family: inherit;
+  font-size: var(--hs-text-13);
+}
+#seedQuizDialog .sq-codex-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+#seedQuizDialog .sq-codex-filters > .sq-format-chip {
+  min-inline-size: 52px;
+  min-block-size: 40px;
+  padding: 6px 10px;
+  border: var(--hs-line) solid var(--hs-brass);
+  border-radius: var(--hs-radius-m);
+  background: var(--hs-cream);
+  color: var(--hs-ink);
+  font-size: var(--hs-text-12);
+  font-weight: var(--hs-weight-label);
+}
+#seedQuizDialog .sq-codex-filters > .sq-format-chip.active {
+  border-color: var(--hs-gold-deep);
+  background: var(--hs-gold);
+}
+#seedQuizDialog .sq-codex-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+#seedQuizDialog .sq-codex-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: var(--hs-line) solid rgba(176, 125, 67, 0.4);
+  border-radius: var(--hs-radius-m);
+  background: var(--hs-cream);
+}
+#seedQuizDialog .sq-codex-img {
+  flex: none;
+  inline-size: 32px;
+  block-size: 32px;
+  object-fit: contain;
+}
+#seedQuizDialog .sq-codex-main {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+#seedQuizDialog .sq-codex-ph {
+  color: var(--hs-ink-soft);
+  font-size: var(--hs-text-12);
+}
+#seedQuizDialog .sq-codex-vi {
+  color: var(--hs-ink);
+  font-size: var(--hs-text-13);
+}
+#seedQuizDialog .sq-vocab-speak {
+  flex: none;
+  min-inline-size: 56px;
+  min-block-size: 40px;
+  padding: 6px 12px;
+}
+
+/* ===== 2. Cúp 4 Nhà Hogwarts (#houseCupIntroDialog, Liên Minh 2v2 & Đấu trường từng môn) ===== */
+.hs-cup-kicker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--hs-space-2);
+}
+.hs-cup-info-btn {
+  min-block-size: 36px;
+  padding: 0 var(--hs-space-3);
+  font-size: var(--hs-text-12);
+  text-transform: none;
+  letter-spacing: 0;
+}
+#houseCupIntroDialogContent .hs-cup-intro {
+  gap: var(--hs-space-3);
+  padding-block-end: var(--hs-space-2);
+}
+.hs-cup-intro-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--hs-space-3);
+  padding: var(--hs-space-3);
+  border: var(--hs-line) solid rgba(176, 125, 67, 0.45);
+  border-radius: var(--hs-radius-m);
+  background: var(--hs-cream);
+}
+.hs-cup-intro-crest {
+  flex: none;
+  inline-size: 40px;
+  block-size: 40px;
+  object-fit: contain;
+}
+.hs-cup-intro-copy {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hs-cup-intro-title {
+  color: var(--hs-ink);
+  font-size: var(--hs-text-16);
+  font-weight: var(--hs-weight-title);
+  line-height: var(--hs-leading-label);
+}
+.hs-cup-intro-sub {
+  color: var(--hs-ink-soft);
+  font-size: var(--hs-text-12);
+  line-height: var(--hs-leading-body);
+}
+.hs-cup-intro-rules {
+  margin: 0;
+}
+.hs-cup-intro-rules .hs-section-title {
+  margin: 0 0 var(--hs-space-2);
+  font-size: var(--hs-text-14);
+}
+.hs-cup-intro-points {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hs-space-2);
+  margin: 0;
+  padding-inline-start: var(--hs-space-4);
+  color: var(--hs-ink);
+  font-size: var(--hs-text-13);
+  line-height: var(--hs-leading-body);
+}
+#houseCupIntroDialogContent .hs-dlg-actions > .brass-btn {
+  font-size: var(--hs-text-14);
+}
+
+.hs-cup-alliances { display: flex; flex-direction: column; gap: var(--hs-space-2); padding: 10px 12px; border: var(--hs-line) solid rgba(176, 125, 67, 0.45); border-radius: var(--hs-radius-m); background: var(--hs-cream); }
+.hs-cup-ally-title-row, .hs-cup-disc-title-row { display: flex; align-items: center; justify-content: space-between; gap: var(--hs-space-2); }
+.hs-cup-ally-vs { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: stretch; gap: 8px; }
+.hs-cup-ally-divider { align-self: center; padding: 3px 6px; border-radius: var(--radius-pill); background: rgba(122, 86, 56, 0.14); color: var(--hs-ink-soft); font-size: var(--hs-text-11); font-weight: var(--hs-weight-title); letter-spacing: 0.04em; }
+.hs-cup-ally-side { display: flex; flex-direction: column; gap: 3px; min-inline-size: 0; padding: 8px 9px; border: var(--hs-line) solid rgba(176, 125, 67, 0.36); border-radius: var(--hs-radius-s); background: var(--hs-paper); }
+.hs-cup-ally-side.is-mine { border-color: var(--farm-green-soft-border); background: var(--farm-green-soft-bg); }
+.hs-cup-ally-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.hs-cup-ally-crests { display: inline-flex; align-items: center; gap: 3px; flex: none; }
+.hs-cup-ally-crests img { inline-size: 22px; block-size: 22px; object-fit: contain; }
+.hs-cup-ally-pts { color: var(--hs-ink); font-size: var(--hs-text-14); font-weight: var(--hs-weight-title); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hs-cup-ally-name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; color: var(--hs-ink); font-size: var(--hs-text-12); font-weight: var(--hs-weight-title); line-height: 1.25; }
+.hs-cup-ally-badge { padding: 1px 6px; border-radius: var(--radius-pill); background: var(--farm-green-text); color: var(--hs-cream); font-size: 10px; font-weight: var(--hs-weight-label); white-space: nowrap; }
+.hs-cup-ally-mult { padding: 1px 6px; border-radius: var(--radius-pill); border: var(--hs-line) solid rgba(176, 125, 67, 0.45); background: rgba(176, 125, 67, 0.16); color: var(--hs-ink); font-size: 10px; font-weight: var(--hs-weight-title); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hs-cup-ally-houses { color: var(--hs-ink-soft); font-size: var(--hs-text-11); line-height: 1.25; font-variant-numeric: tabular-nums; }
+.hs-cup-tugbar { display: flex; gap: 3px; block-size: 8px; border-radius: var(--radius-pill); overflow: hidden; background: rgba(122, 86, 56, 0.14); }
+.hs-cup-tugbar > i { display: block; block-size: 100%; transition: width 0.35s ease; }
+.hs-cup-tugbar > i.is-a { background: var(--hs-brass); border-radius: var(--radius-pill) 0 0 var(--radius-pill); }
+.hs-cup-tugbar > i.is-b { background: var(--ink-soft); border-radius: 0 var(--radius-pill) var(--radius-pill) 0; }
+.hs-cup-ally-foot { color: var(--hs-ink-soft); font-size: var(--hs-text-11); line-height: 1.3; }
+.hs-cup-medals { margin-inline-start: auto; padding: 2px 7px; border-radius: var(--radius-pill); background: rgba(176, 125, 67, 0.16); color: var(--hs-ink); font-size: var(--hs-text-11); font-weight: var(--hs-weight-label); white-space: nowrap; }
+.hs-cup-disciplines { display: flex; flex-direction: column; gap: var(--hs-space-2); padding-top: var(--hs-space-2); border-top: var(--hs-line) solid rgba(122, 86, 56, 0.22); }
+.hs-cup-disc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--hs-space-2); }
+.hs-cup-disc-card { display: flex; flex-direction: column; align-items: stretch; gap: 5px; min-block-size: 82px; padding: 9px 10px; border: var(--hs-line) solid rgba(176, 125, 67, 0.45); border-radius: var(--hs-radius-m); background: var(--hs-cream); color: var(--hs-ink); text-align: start; cursor: pointer; transition: border-color 0.14s ease, transform 0.12s ease, background-color 0.14s ease; }
+.hs-cup-disc-card:hover { border-color: var(--hs-brass); background: var(--hs-paper); }
+.hs-cup-disc-card:active { transform: translateY(1px); }
+.hs-cup-disc-card.is-leading { border-color: var(--farm-green-soft-border); background: var(--farm-green-soft-bg); }
+.hs-cup-disc-head { display: flex; align-items: center; gap: 6px; min-inline-size: 0; }
+.hs-cup-disc-ico { flex: none; inline-size: 22px; block-size: 22px; object-fit: contain; }
+.hs-cup-disc-name { flex: 1 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--hs-text-13); font-weight: var(--hs-weight-title); color: var(--hs-ink); }
+.hs-cup-disc-cta { flex: none; padding: 2px 8px; border-radius: var(--radius-pill); background: rgba(176, 125, 67, 0.2); color: var(--hs-ink); font-size: var(--hs-text-11); font-weight: var(--hs-weight-label); }
+.hs-cup-disc-lead { display: flex; align-items: center; gap: 5px; min-inline-size: 0; font-size: var(--hs-text-12); color: var(--hs-house, var(--hs-ink)); }
+.hs-cup-disc-lead[data-house='Gryffindor'] { --hs-house: #b3373b; }
+.hs-cup-disc-lead[data-house='Slytherin'] { --hs-house: #1f8a5c; }
+.hs-cup-disc-lead[data-house='Ravenclaw'] { --hs-house: #3a68ad; }
+.hs-cup-disc-lead[data-house='Hufflepuff'] { --hs-house: #b7862a; }
+.hs-cup-disc-lead.is-empty { color: var(--hs-ink-soft); }
+.hs-cup-disc-lead > strong { margin-inline-start: auto; font-weight: var(--hs-weight-label); font-variant-numeric: tabular-nums; }
+.hs-cup-disc-crest { flex: none; inline-size: 16px; block-size: 16px; object-fit: contain; }
+.hs-cup-disc-me { font-size: var(--hs-text-11); font-weight: var(--hs-weight-label); color: var(--hs-ink-soft); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hs-cup-disc-card.is-leading .hs-cup-disc-me { color: var(--farm-green-text); }
+.hs-cup-rank-box { display: flex; flex-direction: column; gap: 6px; padding: 9px 11px; border: var(--hs-line) solid rgba(176, 125, 67, 0.38); border-radius: var(--hs-radius-m); background: var(--hs-cream); }
+.hs-cup-rank-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.hs-cup-rank-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border-radius: var(--hs-radius-s); border: var(--hs-line) solid rgba(176, 125, 67, 0.32); background: var(--hs-paper); color: var(--hs-ink-soft); font-size: var(--hs-text-11); font-variant-numeric: tabular-nums; }
+.hs-cup-rank-chip > strong { color: var(--hs-ink); font-weight: var(--hs-weight-title); }
+.hs-cup-stage-note { font-size: var(--hs-text-11); color: var(--hs-ink-soft); margin-top: 2px; line-height: 1.35; }
+.hs-lb-house-pts { color: var(--farm-green-text); font-weight: var(--hs-weight-label); font-size: var(--hs-text-11); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hs-lb-block > .hs-lb-house-pts { display: block; margin-top: 2px; padding: 1px 5px; border-radius: var(--radius-pill); background: rgba(255, 250, 238, 0.85); color: var(--farm-green-text); font-size: 10px; }
+.hs-lb-house-need { color: var(--hs-ink-soft); font-size: var(--hs-text-11); white-space: nowrap; }
+.hpvn-exchange .hs-gringotts-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px; font-size: var(--hs-text-14); font-weight: var(--hs-weight-title); margin-bottom: 8px; color: var(--hs-ink); }
+.hpvn-exchange .hs-gringotts-packs { display: flex; flex-wrap: wrap; gap: 6px; }
+.hpvn-exchange .hs-gringotts-reverse { margin-top: 12px; padding-top: 10px; border-top: var(--hs-line) solid rgba(122, 86, 56, 0.24); }
+.hpvn-exchange .hs-gringotts-note { font-size: var(--hs-text-12); margin-top: 6px; color: var(--hs-ink-soft); }
+.hpvn-exchange .hs-gringotts-warn { font-size: var(--hs-text-12); font-weight: var(--hs-weight-label); margin-top: 6px; color: var(--hs-bad); }
+.hpvn-exchange .hs-gringotts-prize { margin-top: 10px; padding: 8px 10px; border-radius: var(--hs-radius-s); border: var(--hs-line) solid rgba(176, 125, 67, 0.36); background: rgba(255, 248, 224, 0.72); font-size: var(--hs-text-12); line-height: 1.4; color: var(--hs-ink); }
+.hs-cup-prize { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: var(--hs-line) solid rgba(176, 125, 67, 0.48); border-radius: var(--hs-radius-m); background: linear-gradient(180deg, rgba(255, 248, 224, 0.92), var(--hs-cream)); }
+.hs-cup-prize-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; font-size: var(--hs-text-13); color: var(--hs-ink); }
+.hs-cup-prize-pill { padding: 2px 8px; border-radius: var(--radius-pill); background: rgba(176, 125, 67, 0.16); color: var(--hs-ink); font-size: var(--hs-text-11); font-weight: var(--hs-weight-label); font-variant-numeric: tabular-nums; }
+.hs-cup-prize-desc { font-size: var(--hs-text-12); line-height: 1.42; color: var(--hs-ink); }
+.hs-cup-prize-meta { font-size: var(--hs-text-11); color: var(--hs-ink-soft); font-variant-numeric: tabular-nums; }
+.hs-cup-prize-status { font-size: var(--hs-text-12); font-weight: var(--hs-weight-label); padding: 5px 8px; border-radius: var(--hs-radius-s); background: rgba(176, 125, 67, 0.12); color: var(--hs-ink); }
+.hs-cup-prize-status.is-ok { background: rgba(21, 128, 61, 0.12); color: var(--farm-green-text); }
+@media (max-width: 440px) {
+  .hs-cup-ally-vs { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .hs-cup-ally-divider { justify-self: center; }
+  .hs-cup-name { font-size: 14px; gap: 5px; }
+  .hs-cup-medals { padding: 2px 6px; }
+  .hs-cup-disc-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ===== 3. Sub-980px Landscape Minigame Side Dock & AAA Multi-Viewport Polish ===== */
+@media (max-width: 979px) {
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .pa-mode-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3px;
+    overflow: visible;
+  }
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .pa-mode-tabs > .pa-mode-tab {
+    min-inline-size: 0;
+    min-block-size: 32px;
+    padding: 2px 6px;
+    font-size: var(--hs-text-11);
+  }
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell > .pa-controls-bar :is(button, .pa-tool-btn, .m3-booster-btn) {
+    position: relative;
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 2px 4px;
+    block-size: auto;
+    min-block-size: 40px;
+    max-block-size: none;
+    padding: 4px 5px;
+    line-height: 1.15;
+  }
+  #match3Dialog[data-mg-layout='landscape'] .pa-layout-shell > .pa-controls-bar .m3-booster-btn .m3-booster-qty {
+    position: absolute;
+    top: 2px;
+    right: 3px;
+    margin: 0;
+    padding: 0 4px;
+    font-size: var(--hs-text-11);
+    line-height: 14px;
+  }
+  #puzzleArcadeDialog[data-mg-layout='landscape'] .pa-layout-shell > .pa-controls-bar .pa-tool-btn .pa-cost-pill {
+    position: static;
+    margin: 0;
+    padding: 0 5px;
+    font-size: var(--hs-text-11);
+    line-height: 15px;
+  }
+  body:has(:is(#puzzleArcadeDialog, #match3Dialog)[open][data-mg-layout='landscape']) .owl-toast-stack[popover] {
+    inset: 8px auto auto calc(50% + 96px);
+    max-inline-size: calc(100vw - 232px);
+  }
+}
+
+@media (max-width: 680px) {
+  #secondaryMapToolsBar.secondary-map-tools-bar:not(.hidden) {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    inline-size: 100%;
+    max-inline-size: calc(100vw - 16px);
+    box-sizing: border-box;
+    padding: 5px;
+  }
+  #secondaryMapToolsBar.secondary-map-tools-bar:not(.hidden) > .build-toolbar-group {
+    display: contents;
+  }
+  #secondaryMapToolsBar.secondary-map-tools-bar:not(.hidden) > .build-toolbar-sep {
+    display: none;
+  }
+  #secondaryMapToolsBar.secondary-map-tools-bar:not(.hidden) .brass-btn {
+    min-inline-size: 0;
+    min-block-size: 40px;
+    padding: 0 6px;
+    font-size: var(--hs-text-12);
+    justify-content: center;
+    white-space: nowrap;
+  }
+}
+
+@media (max-height: 720px) and (orientation: landscape) {
+  #puzzleArcadeDialog[data-mg-layout='landscape'][data-pa-active-mode='chess'] .pa-layout-shell .pa-side-dock {
+    min-block-size: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  #puzzleArcadeDialog[data-mg-layout='landscape'][data-pa-active-mode='chess'] .pa-layout-shell .pa-side-dock::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (max-height: 460px) and (orientation: landscape) {
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock {
+    min-block-size: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+    gap: 2px;
+    padding-block: 3px 2px;
+  }
+  :is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock::-webkit-scrollbar {
+    display: none;
+  }
+  #match3Dialog[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .m3-dock-hud {
+    gap: 2px;
+  }
+  #match3Dialog[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .m3-dock-hud .m3-moves-crest {
+    min-block-size: 28px;
+    padding: 2px 6px;
+  }
+  #match3Dialog[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .m3-dock-hud .m3-goals-list {
+    gap: 2px;
+  }
+  #match3Dialog[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .m3-dock-hud .m3-goal-pill {
+    min-block-size: 26px;
+    padding: 2px 6px;
+  }
+  #match3Dialog[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .m3-dock-hud .m3-rainbow-meter {
+    min-block-size: 26px;
+    padding: 2px 6px;
+  }
+  #match3Dialog[data-mg-layout='landscape'] .pa-layout-shell > .pa-controls-bar:has(> .pa-more-btn) :is(.m3-booster-btn, .pa-more-btn) {
+    min-block-size: 36px;
+    block-size: 36px;
+  }
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog)[data-mg-layout='portrait'] .pa-layout-shell .pa-side-dock .pa-mode-tabs > .pa-mode-tab {
+  font-size: var(--hs-text-11);
+}
+
+#puzzleArcadeDialog .pa-controls-bar .pa-submode-switch > .pa-mini-pill:not(.active) {
+  color: var(--hs-cream);
+  opacity: 0.96;
+}
+
+:is(#puzzleArcadeDialog, #match3Dialog) .pa-controls-bar :is(.pa-tool-btn, .m3-booster-btn):disabled {
+  opacity: 0.6;
+}
+
+#puzzleArcadeDialog .pa-jigsaw-filter-scroll {
+  scrollbar-width: none;
+  padding-inline-end: 8px;
+}
+
+#puzzleArcadeDialog .pa-jigsaw-filter-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* ===== 4. Bonus Arcade Embedded Minigames & 2-Group Đại Sảnh Tab Layout ===== */
+#puzzleArcadeDialog .pa-mode-tab[data-pa-bonus='block_blast'] {
+  --hs-tab-sprite: url('/game/trang-trai-hang-soc/sprites/res_brick.webp');
+}
+#puzzleArcadeDialog .pa-mode-tab[data-pa-bonus='suika'] {
+  --hs-tab-sprite: url('/game/trang-trai-hang-soc/sprites/ui_icon_crop_garden_pumpkin.webp');
+}
+#puzzleArcadeDialog .pa-mode-tab[data-pa-bonus='pvz'] {
+  --hs-tab-sprite: url('/game/trang-trai-hang-soc/sprites/ui_icon_seed_sack.webp');
+}
+
+/* Tab wrapper with right-edge scroll hint on narrow/portrait mobile */
+.pa-mode-tabs-wrap {
+  position: relative;
+  flex: none;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  box-sizing: border-box;
+}
+
+/* 2-Group micro-headings inside .pa-mode-tabs (non-interactive; override đợt 3b `> *` button rules) */
+#puzzleArcadeDialog[open] .pa-layout-shell .pa-side-dock .pa-mode-tabs > .pa-tab-group-label {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 20px;
+  block-size: auto;
+  margin: 0;
+  padding: 3px var(--hs-space-2) 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--hs-brass-bright);
+  font-size: var(--hs-text-11);
+  font-weight: var(--hs-weight-label);
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0.9;
+  pointer-events: none;
+  user-select: none;
+  cursor: default;
+  box-shadow: none;
+}
+
+#puzzleArcadeDialog[open] .pa-layout-shell .pa-side-dock .pa-mode-tabs > .pa-tab-group-label.is-bonus {
+  margin-block-start: 4px;
+  padding-block-start: 6px;
+  border-block-start: var(--hs-line) solid rgba(244, 198, 104, 0.28);
+  color: var(--hs-gold);
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  #puzzleArcadeDialog[open] .pa-layout-shell .pa-side-dock .pa-mode-tabs > .pa-tab-group-label:hover {
+    background: transparent;
+    color: var(--hs-brass-bright);
+  }
+  #puzzleArcadeDialog[open] .pa-layout-shell .pa-side-dock .pa-mode-tabs > .pa-tab-group-label.is-bonus:hover {
+    background: transparent;
+    color: var(--hs-gold);
+  }
+}
+
+/* Bonus tab visual distinction: warm gold accent bar on the 3 new games */
+#puzzleArcadeDialog[open] .pa-layout-shell .pa-side-dock .pa-mode-tabs > .pa-mode-tab:is(.is-bonus-tab, .pa-mode-tab-bonus) {
+  background: rgba(245, 179, 1, 0.07);
+  box-shadow: inset 3px 0 0 rgba(245, 179, 1, 0.72);
+}
+
+#puzzleArcadeDialog[open] .pa-layout-shell .pa-side-dock .pa-mode-tabs > .pa-mode-tab:is(.is-bonus-tab, .pa-mode-tab-bonus):is(.active, [aria-selected='true']) {
+  background: var(--hs-gold);
+  color: var(--hs-ink);
+  box-shadow: inset 3px 0 0 var(--hs-gold-deep);
+}
+
+@media (hover: hover) {
+  #puzzleArcadeDialog[open] .pa-layout-shell .pa-side-dock .pa-mode-tabs > .pa-mode-tab:is(.is-bonus-tab, .pa-mode-tab-bonus):not(.active, [aria-selected='true']):hover {
+    background: var(--hs-paper);
+    color: var(--hs-ink);
+    box-shadow: inset 3px 0 0 var(--hs-gold);
+  }
+}
+
+/* Portrait / Mobile horizontal scroll strip with pill group separators & right-edge scroll fade */
+#puzzleArcadeDialog[open][data-mg-layout='portrait'] .pa-mode-tabs-wrap {
+  border-radius: var(--hs-radius-m);
+  overflow: hidden;
+}
+
+#puzzleArcadeDialog[open][data-mg-layout='portrait'] .pa-mode-tabs-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 1px 1px 1px auto;
+  inline-size: 32px;
+  border-radius: 0 calc(var(--hs-radius-m) - 1px) calc(var(--hs-radius-m) - 1px) 0;
+  background: linear-gradient(90deg, rgba(58, 36, 23, 0) 0%, var(--hs-wood) 88%);
+  pointer-events: none;
+  z-index: 2;
+}
+
+#puzzleArcadeDialog[data-mg-layout='portrait'] .pa-layout-shell .pa-side-dock .pa-mode-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 3px;
+  max-inline-size: 100%;
+  padding: 2px 28px 2px 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+#puzzleArcadeDialog[data-mg-layout='portrait'] .pa-layout-shell .pa-side-dock .pa-mode-tabs > .pa-mode-tab {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+#puzzleArcadeDialog[open][data-mg-layout='portrait'] .pa-layout-shell .pa-side-dock .pa-mode-tabs > .pa-tab-group-label {
+  flex: 0 0 auto;
+  align-self: center;
+  justify-content: center;
+  inline-size: auto;
+  min-inline-size: 0;
+  min-block-size: 26px;
+  block-size: 26px;
+  margin: 0 1px;
+  padding: 0 8px;
+  border: var(--hs-line) solid rgba(244, 198, 104, 0.36);
+  border-radius: var(--radius-pill);
+  background: rgba(244, 198, 104, 0.14);
+  color: var(--hs-brass-bright);
+  letter-spacing: 0.01em;
+  text-transform: none;
+  opacity: 0.96;
+}
+
+#puzzleArcadeDialog[open][data-mg-layout='portrait'] .pa-layout-shell .pa-side-dock .pa-mode-tabs > .pa-tab-group-label.is-bonus {
+  margin-block-start: 0;
+  margin-inline-start: 5px;
+  padding-block-start: 0;
+  border-color: rgba(245, 179, 1, 0.6);
+  background: rgba(245, 179, 1, 0.2);
+  color: var(--hs-gold);
+}
+
+#puzzleArcadeDialog[open][data-mg-layout='portrait'] .pa-layout-shell .pa-side-dock .pa-mode-tabs > .pa-mode-tab:is(.is-bonus-tab, .pa-mode-tab-bonus) {
+  background: rgba(245, 179, 1, 0.08);
+  box-shadow: inset 0 -2px 0 rgba(245, 179, 1, 0.78);
+}
+
+#puzzleArcadeDialog[open][data-mg-layout='portrait'] .pa-layout-shell .pa-side-dock .pa-mode-tabs > .pa-mode-tab:is(.is-bonus-tab, .pa-mode-tab-bonus):is(.active, [aria-selected='true']) {
+  background: var(--hs-gold);
+  color: var(--hs-ink);
+  box-shadow: inset 0 -2px 0 var(--hs-gold-deep);
+}
+
+@media (max-width: 979px) {
+  #puzzleArcadeDialog[open]:not([data-mg-layout='landscape']) .pa-mode-tabs-wrap {
+    border-radius: var(--hs-radius-m);
+    overflow: hidden;
+  }
+  #puzzleArcadeDialog[open]:not([data-mg-layout='landscape']) .pa-mode-tabs-wrap::after {
+    content: '';
+    position: absolute;
+    inset: 1px 1px 1px auto;
+    inline-size: 32px;
+    border-radius: 0 calc(var(--hs-radius-m) - 1px) calc(var(--hs-radius-m) - 1px) 0;
+    background: linear-gradient(90deg, rgba(58, 36, 23, 0) 0%, var(--hs-wood) 88%);
+    pointer-events: none;
+    z-index: 2;
+  }
+  #puzzleArcadeDialog[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock {
+    min-block-size: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  #puzzleArcadeDialog[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock::-webkit-scrollbar {
+    display: none;
+  }
+  #puzzleArcadeDialog[open][data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .pa-mode-tabs > .pa-tab-group-label {
+    grid-column: 1 / -1;
+    min-block-size: 18px;
+    padding: 2px 6px 1px;
+  }
+}
+
+@media (min-width: 980px) and (max-height: 860px) {
+  #puzzleArcadeDialog[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .pa-mode-tabs > .pa-mode-tab {
+    min-block-size: 34px;
+    padding-block: 0;
+  }
+  #puzzleArcadeDialog[data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .pa-mode-tabs > .pa-mode-tab::before {
+    inline-size: 20px;
+    block-size: 20px;
+  }
+}
+
+@media (min-width: 980px) and (max-height: 620px) {
+  #puzzleArcadeDialog[open][data-mg-layout='landscape'] .pa-layout-shell .pa-side-dock .pa-mode-tabs > .pa-tab-group-label {
+    grid-column: 1 / -1;
+    min-block-size: 18px;
+    padding: 2px 6px 1px;
+  }
+}
+
+/* Embedded Bonus Arcade Stage & Controls Bar */
+#puzzleArcadeDialog .pa-stage-viewport.pa-bonus-stage-viewport {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  min-block-size: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.pa-bonus-iframe-shell {
+  position: relative;
+  flex: 1 1 0;
+  min-inline-size: 0;
+  min-block-size: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  display: flex;
+  overflow: hidden;
+  box-sizing: border-box;
+  border: var(--hs-line-shell) solid var(--hs-brass-bright);
+  border-radius: var(--hs-radius-l);
+  background: var(--hs-wood);
+}
+
+#puzzleArcadeDialog[data-mg-layout='portrait'] .pa-bonus-iframe-shell {
+  border-inline: 0;
+  border-radius: 0;
+}
+
+.pa-bonus-iframe {
+  display: block;
+  flex: 1 1 auto;
+  inline-size: 100%;
+  block-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 0;
+  border: 0;
+  background: transparent;
+}
+
+.pa-bonus-specialty-badge {
+  color: var(--hs-gold);
+  font-weight: var(--hs-weight-label);
+}
+
+.pa-bonus-stats-text {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--hs-text-12);
+  font-weight: var(--hs-weight-label);
+  color: var(--hs-cream);
+}
+
+#puzzleArcadeDialog .pa-controls-bar:is(.pa-bonus-controls-bar, .pa-bonus-controls-row) {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--hs-space-2);
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow: hidden;
+}
+
+#puzzleArcadeDialog .pa-controls-bar:is(.pa-bonus-controls-bar, .pa-bonus-controls-row) .pa-bonus-molly-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: var(--hs-space-2);
+  min-block-size: 40px;
+  padding: 4px var(--hs-space-3);
+  white-space: nowrap;
+}
+
+#puzzleArcadeDialog .pa-controls-bar:is(.pa-bonus-controls-bar, .pa-bonus-controls-row) .pa-bonus-molly-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hs-space-1);
+}
+
+#puzzleArcadeDialog .pa-controls-bar:is(.pa-bonus-controls-bar, .pa-bonus-controls-row) :is(.pa-bonus-specialty-pill, .pa-bonus-spec-pill) {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--hs-space-2);
+  min-block-size: 40px;
+  padding: 4px var(--hs-space-3);
+  border: var(--hs-line) solid var(--hs-brass);
+  border-radius: var(--hs-radius-m);
+  background: var(--hs-wood);
+  color: var(--hs-cream);
+  font-size: var(--hs-text-12);
+  line-height: 1.25;
+  overflow: hidden;
+}
+
+#puzzleArcadeDialog .pa-controls-bar:is(.pa-bonus-controls-bar, .pa-bonus-controls-row) .pa-bonus-specialty-tag {
+  flex: 0 0 auto;
+  color: var(--hs-gold);
+  font-weight: var(--hs-weight-label);
+  white-space: nowrap;
+}
+
+#puzzleArcadeDialog .pa-controls-bar:is(.pa-bonus-controls-bar, .pa-bonus-controls-row) .pa-bonus-specialty-desc {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--hs-cream);
+  opacity: 0.92;
+}
+
+#puzzleArcadeDialog[data-mg-layout='landscape'] .pa-layout-shell > .pa-controls-bar:is(.pa-bonus-controls-bar, .pa-bonus-controls-row) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--hs-space-1);
+}
+
+#puzzleArcadeDialog[data-mg-layout='landscape'] .pa-layout-shell > .pa-controls-bar:is(.pa-bonus-controls-bar, .pa-bonus-controls-row) .pa-bonus-molly-btn {
+  inline-size: 100%;
+  justify-content: space-between;
+  padding: 6px var(--hs-space-2);
+  font-size: var(--hs-text-12);
+}
+
+#puzzleArcadeDialog[data-mg-layout='landscape'] .pa-layout-shell > .pa-controls-bar:is(.pa-bonus-controls-bar, .pa-bonus-controls-row) :is(.pa-bonus-specialty-pill, .pa-bonus-spec-pill) {
+  flex: none;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-block-size: 0;
+  padding: 6px var(--hs-space-2);
+}
+
+#puzzleArcadeDialog[data-mg-layout='landscape'] .pa-layout-shell > .pa-controls-bar:is(.pa-bonus-controls-bar, .pa-bonus-controls-row) .pa-bonus-specialty-desc {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+#puzzleArcadeDialog[data-mg-layout='portrait'] .pa-layout-shell > .pa-controls-bar:is(.pa-bonus-controls-bar, .pa-bonus-controls-row) {
+  padding-block: 4px;
+}
+
+#puzzleArcadeDialog[data-mg-layout='portrait'] .pa-layout-shell > .pa-controls-bar:is(.pa-bonus-controls-bar, .pa-bonus-controls-row) .pa-bonus-molly-btn {
+  max-inline-size: 62%;
+  padding: 4px var(--hs-space-2);
+  font-size: var(--hs-text-12);
+}
+
+#puzzleArcadeDialog[data-mg-layout='portrait'] .pa-layout-shell > .pa-controls-bar:is(.pa-bonus-controls-bar, .pa-bonus-controls-row) :is(.pa-bonus-specialty-pill, .pa-bonus-spec-pill) {
+  padding: 4px var(--hs-space-2);
+  font-size: var(--hs-text-11);
+}
+
+#puzzleArcadeDialog[data-mg-layout='portrait'] .pa-layout-shell > .pa-controls-bar:is(.pa-bonus-controls-bar, .pa-bonus-controls-row) .pa-bonus-specialty-tag {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-inline-size: 100%;
+}
+
+#puzzleArcadeDialog[data-mg-layout='portrait'] .pa-layout-shell > .pa-controls-bar:is(.pa-bonus-controls-bar, .pa-bonus-controls-row) .pa-bonus-specialty-desc {
+  display: none;
+}

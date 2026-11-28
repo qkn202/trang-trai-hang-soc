@@ -82,8 +82,10 @@ import {
   MAX_DAILY_OWL_HELP_REQUESTS,
   NEIGHBOR_PRESET_NOTES,
 } from '../sim/neighborSocial';
+import { isBonusArcadeGameId } from '../sim/bonusArcadeGames';
 import {
   AchievementCategory,
+  BonusArcadeGameId,
   BuildingCategory,
   CatalogItem,
   CraftedGoodId,
@@ -893,13 +895,13 @@ export class GameHUD {
   }
 
   public openPuzzleArcadeDialog(
-    mode?: PuzzleArcadeMode,
+    mode?: PuzzleArcadeMode | BonusArcadeGameId,
     overrideStage?: number,
     allowDevJump = false
   ): void {
     this.closeHudPopovers();
     this.hideOpenFloatingTrays();
-    if (mode) {
+    if (mode && !isBonusArcadeGameId(mode)) {
       this.sim.setLastPlayedMinigame(mode);
     }
     void this.getPuzzleArcadeModal().then((m) => {
